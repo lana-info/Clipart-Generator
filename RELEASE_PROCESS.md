@@ -4,7 +4,7 @@
 
 ### Шаг 1. Собрать релиз в `Clipart-Generator`
 1. Убедитесь, что все изменения закоммичены в `main`. Скрипт `scripts/refresh_updates_repo.ps1` находит проект по пути `D:\Projects\Clipart Generator`, вызывает `Release Multi Platform`, обновляет `version.json`, скачивает готовые `.exe` и `.zip` и копирует артефакты в `_updates_repo_tmp`.
-2. Запустите `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath .. -UpdatesRepoPath ..\Clipart-Generator-Updates` внутри `D:\Projects\Clipart Generator`, при необходимости добавьте `-AppVersion <версия>` (по умолчанию берётся из `release/VERSION.txt`). Скрипт сам ждёт GitHub Action, скачивает артефакты и копирует их.
+2. Запустите (в PowerShell) полную команду `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath .. -UpdatesRepoPath ..\Clipart-Generator-Updates` внутри `D:\Projects\Clipart Generator`. Если нужно указать конкретную версию, добавьте `-AppVersion <версия>` (по умолчанию берётся из `release/VERSION.txt`). Скрипт сам ждёт GitHub Action, скачивает артефакты и копирует их.
     - Пример пошагового запуска:
       1. Откройте PowerShell.
       2. Введите `cd "D:\Projects\Clipart Generator"` и нажмите Enter.
