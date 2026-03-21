@@ -33,9 +33,13 @@ doc_*.html
 main_restored.py
 *.bak
 
+
 # Папка релизных артефактов
 release/*.exe
 release/*.msi
+
+# Локальный клон репозитория обновлений
+_updates_repo_tmp/
 
 
 
