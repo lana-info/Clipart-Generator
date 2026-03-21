@@ -1,104 +1,159 @@
 # Release automation helper for Clipart Generator.
+# Modes:
+#   full       - update version.json, run workflow, download artifacts, copy to _updates_repo_tmp
+#   copy       - download artifacts from an existing release, then copy to _updates_repo_tmp
+#   post-build - skip workflow and downloads, use files already present in release/
+
 param(
-    [Parameter(Mandatory)][string]$PrivateRepoPath,
-    [Parameter(Mandatory)][string]$UpdatesRepoPath,
+    [Parameter(Mandatory)]
+    [string]$PrivateRepoPath,
+
+    [Parameter(Mandatory)]
+    [string]$UpdatesRepoPath,
+
     [string]$AppVersion,
-    [ValidateSet('full','copy','post-build')][string]$Mode = 'full'
+
+    [ValidateSet('full','copy','post-build')]
+    [string]$Mode = 'full'
 )
 
 Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $projectRoot = (Get-Location).ProviderPath
 
-function Normalize-Path([string]$relativePath) {
-    if ([string]::IsNullOrWhiteSpace($relativePath)) {
-        throw 'Не задан путь.'
+function Normalize-Path {
+    param([string]$RelativePath)
+
+    if ([string]::IsNullOrWhiteSpace($RelativePath)) {
+        throw 'Path is empty.'
     }
-    if ([System.IO.Path]::IsPathRooted($relativePath)) {
-        return $relativePath
+
+    if ([System.IO.Path]::IsPathRooted($RelativePath)) {
+        return $RelativePath
     }
-    return Join-Path -Path $projectRoot -ChildPath $relativePath
+
+    return (Join-Path -Path $projectRoot -ChildPath $RelativePath)
 }
 
-$ghCommand = Get-Command gh -ErrorAction SilentlyContinue
-if (-not $ghCommand) {
-    throw 'GitHub CLI (gh) не найден. Установите его с https://cli.github.com/ и повторите запуск.'
-}
+function Ensure-Command {
+    param([string]$Name, [string]$InstallHint)
 
-$privateRoot = Normalize-Path $PrivateRepoPath
-$updatesRoot = Normalize-Path $UpdatesRepoPath
-
-$versionFileDefault = Join-Path -Path $projectRoot -ChildPath 'release\VERSION.txt'
-if (-not $AppVersion) {
-    if (-not (Test-Path -LiteralPath $versionFileDefault)) {
-        throw "Невозможно определить версию: $versionFileDefault отсутствует и -AppVersion не задан."
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if (-not $command) {
+        throw "Required command not found: $Name. $InstallHint"
     }
-    $AppVersion = (Get-Content -Raw $versionFileDefault).Trim()
 }
 
-function Start-Workflow([string]$version) {
-    Write-Host "Dispatching workflow release-multi-platform.yml for $version..."
-    & gh workflow run release-multi-platform.yml --ref main --field "app_version=$version"
+function Ensure-DefaultRepo {
+    $repoInfo = & gh repo view --json nameWithOwner 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoInfo)) {
+        throw 'GitHub CLI default repository is not configured. Run: gh repo set-default lana-info/Clipart-Generator'
+    }
+}
+
+function Start-Workflow {
+    param([string]$Version)
+
+    Write-Host "Dispatching workflow release-multi-platform.yml for version $Version..."
+    & gh workflow run release-multi-platform.yml --ref main --field "app_version=$Version"
+
     $deadline = (Get-Date).AddMinutes(30)
     while ((Get-Date) -lt $deadline) {
-        Start-Sleep -Seconds 6
-        $runsJson = & gh run list --workflow release-multi-platform.yml --branch main --limit 5 --json databaseId,event,status,createdAt
-        if ([string]::IsNullOrWhiteSpace($runsJson)) { continue }
+        Start-Sleep -Seconds 8
+        $runsJson = & gh run list --workflow release-multi-platform.yml --branch main --limit 10 --json databaseId,event,createdAt,status,displayTitle
+        if ([string]::IsNullOrWhiteSpace($runsJson)) {
+            continue
+        }
+
         $runs = $runsJson | ConvertFrom-Json
         foreach ($run in $runs) {
-            if ($run.event -ne 'workflow_dispatch') { continue }
+            if ($run.event -ne 'workflow_dispatch') {
+                continue
+            }
+
             $createdAt = [datetime]::Parse($run.createdAt).ToUniversalTime()
-            if ($createdAt -lt (Get-Date).ToUniversalTime().AddMinutes(-5)) { continue }
-            Write-Host "Waiting for workflow run #$($run.databaseId)..."
+            if ($createdAt -lt (Get-Date).ToUniversalTime().AddMinutes(-10)) {
+                continue
+            }
+
+            Write-Host "Watching workflow run #$($run.databaseId)..."
             & gh run watch $run.databaseId --exit-status
             return
         }
     }
-    throw 'Превышено время ожидания завершения workflow.'
+
+    throw 'Timed out while waiting for the workflow to finish.'
 }
 
-function Download-Artifacts([string]$version) {
-    Write-Host "Downloading artifacts for v$version into release/..."
-    try {
-        & gh release download "v$version" --pattern "ClipartGenerator-Setup-$version.exe" -D "${projectRoot}\release"
-        & gh release download "v$version" --pattern "ClipartGenerator-macOS-$version.zip" -D "${projectRoot}\release"
-    } catch {
-        throw "Не удалось скачать артефакты v$version: $_"
+function Download-Artifacts {
+    param([string]$Version)
+
+    Write-Host "Downloading release artifacts for v$Version into release/..."
+    & gh release download "v$Version" --pattern "ClipartGenerator-Setup-$Version.exe" -D "$projectRoot\release"
+    & gh release download "v$Version" --pattern "ClipartGenerator-macOS-$Version.zip" -D "$projectRoot\release"
+}
+
+Ensure-Command -Name 'gh' -InstallHint 'Install GitHub CLI from https://cli.github.com/'
+Ensure-DefaultRepo
+
+$privateRoot = Normalize-Path -RelativePath $PrivateRepoPath
+$updatesRoot = Normalize-Path -RelativePath $UpdatesRepoPath
+
+$versionFileDefault = Join-Path -Path $projectRoot -ChildPath 'release\VERSION.txt'
+if ([string]::IsNullOrWhiteSpace($AppVersion)) {
+    if (-not (Test-Path -LiteralPath $versionFileDefault)) {
+        throw "Cannot determine AppVersion. File not found: $versionFileDefault"
     }
+
+    $AppVersion = (Get-Content -LiteralPath $versionFileDefault -Raw).Trim()
 }
 
-Write-Host "Режим выполнения: $Mode (версия $AppVersion)."
+Write-Host "Mode: $Mode"
+Write-Host "Version: $AppVersion"
+Write-Host "Project root: $projectRoot"
+Write-Host "Updates repo path: $updatesRoot"
+
 switch ($Mode) {
     'full' {
-        Write-Host 'Mode=full: обновляю version.json, отправляю workflow и загружаю артефакты.'
-        & powershell -ExecutionPolicy Bypass -File "${projectRoot}\update_version.ps1" -AppVersion $AppVersion
-        Start-Workflow $AppVersion
-        Download-Artifacts $AppVersion
+        Write-Host 'Step 1/4: update version.json'
+        & powershell -ExecutionPolicy Bypass -File "$projectRoot\update_version.ps1" -AppVersion $AppVersion
+
+        Write-Host 'Step 2/4: run GitHub Actions workflow'
+        Start-Workflow -Version $AppVersion
+
+        Write-Host 'Step 3/4: download release artifacts'
+        Download-Artifacts -Version $AppVersion
     }
     'copy' {
-        Write-Host 'Mode=copy: скачиваем только артефакты из релиза.'
-        Download-Artifacts $AppVersion
+        Write-Host 'Step 1/2: download release artifacts'
+        Download-Artifacts -Version $AppVersion
     }
     'post-build' {
-        Write-Host 'Mode=post-build: артефакты уже в release/, пропускаем сборку/загрузку.'
+        Write-Host 'Step 1/1: use existing local files from release/'
     }
 }
 
 $versionJsonSrc = Join-Path -Path $projectRoot -ChildPath 'version.json'
 $exeSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-Setup-$AppVersion.exe"
 $macSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-macOS-$AppVersion.zip"
+
 foreach ($path in @($versionJsonSrc, $exeSrc, $macSrc)) {
     if (-not (Test-Path -LiteralPath $path)) {
-        throw "Отсутствует нужный файл: $path"
+        throw "Required file is missing: $path"
     }
 }
 
-Write-Host 'Копирую version.json и установщики в `_updates_repo_tmp`...'
-Copy-Item -LiteralPath $versionJsonSrc -Destination (Join-Path $updatesRoot 'version.json') -Force
-Copy-Item -LiteralPath $exeSrc -Destination (Join-Path $updatesRoot "ClipartGenerator-Setup-$AppVersion.exe") -Force
-Copy-Item -LiteralPath $macSrc -Destination (Join-Path $updatesRoot "ClipartGenerator-macOS-$AppVersion.zip") -Force
+Write-Host 'Copying files into _updates_repo_tmp...'
+Copy-Item -LiteralPath $versionJsonSrc -Destination (Join-Path -Path $updatesRoot -ChildPath 'version.json') -Force
+Copy-Item -LiteralPath $exeSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-Setup-$AppVersion.exe") -Force
+Copy-Item -LiteralPath $macSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-macOS-$AppVersion.zip") -Force
 
-Write-Host 'Готово. Что дальше:'
-Write-Host " 1. cd $updatesRoot"
-Write-Host ' 2. git status'
-Write-Host " 3. git add version.json ClipartGenerator-Setup-$AppVersion.exe ClipartGenerator-macOS-$AppVersion.zip"
-Write-Host ' 4. git commit / git push в _updates_repo_tmp, затем обновите релиз.'
+Write-Host ''
+Write-Host 'Done.'
+Write-Host 'Next steps:'
+Write-Host "1. cd \"$updatesRoot\""
+Write-Host '2. git status'
+Write-Host "3. git add version.json ClipartGenerator-Setup-$AppVersion.exe ClipartGenerator-macOS-$AppVersion.zip"
+Write-Host '4. git commit and git push in _updates_repo_tmp'
+Write-Host '5. Update the public GitHub Release in Clipart-Generator-Updates if needed'
