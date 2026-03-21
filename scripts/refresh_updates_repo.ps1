@@ -21,7 +21,7 @@ $projectRoot = (Get-Item '.').FullName
 
 function Resolve-PathFromRoot([string]$relativePath) {
     if ([string]::IsNullOrWhiteSpace($relativePath)) {
-        throw 'Не задан путь.'
+        throw "Не задан путь."
     }
 
     return if ([System.IO.Path]::IsPathRooted($relativePath)) {
