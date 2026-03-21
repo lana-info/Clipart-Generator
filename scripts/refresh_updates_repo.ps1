@@ -1,8 +1,5 @@
 <#
-Скрипт обновляет публичный репозиторий обновлений (_updates_repo_tmp) из приватного:
-1. очищает папку, оставляя только .git,
-2. копирует version.json и указанный установщик из release/,
-3. делает коммит и пуш в Clipart-Generator-Updates.
+Скрипт действует одного шага: копирует артефакты release/ → локальный клон `_updates_repo_tmp` и информирует пользователя.
 #>
 param(
     [Parameter(Mandatory)]
@@ -17,85 +14,59 @@ param(
     [string]
     $SetupName,
 
+    [Parameter(Mandatory)]
     [string]
-    $VersionFileName = 'version.json',
+    $MacZipName,
 
-    [switch]
-    $DryRun
+    [string]
+    $VersionFileName = 'version.json'
 )
 
 Set-StrictMode -Version Latest
 
 $projectRoot = (Get-Item '.').FullName
-$scriptRoot = (Get-Item $PSScriptRoot).FullName
 
-function Resolve-RepoPath([string]$relativePath) {
-    $fullPath = if ([System.IO.Path]::IsPathRooted($relativePath)) {
-        $relativePath
-    } else {
-        Join-Path -Path $projectRoot -ChildPath $relativePath
+function Resolve-PathFromRoot([string]$relativePath) {
+    if ([System.IO.Path]::IsPathRooted($relativePath)) {
+        return $relativePath
     }
 
-    return (Resolve-Path -LiteralPath $fullPath -ErrorAction Stop).ProviderPath
+    return Join-Path -Path $projectRoot -ChildPath $relativePath
 }
 
-$privateRoot = Resolve-RepoPath $PrivateRepoPath
-$updatesRoot = Resolve-RepoPath $UpdatesRepoPath
-
-$versionSource = Join-Path -Path $privateRoot -ChildPath $VersionFileName
-if (-not (Test-Path -LiteralPath $versionSource)) {
-    throw "Не удалось найти $VersionFileName в $privateRoot"
-}
+$privateRoot = Resolve-PathFromRoot $PrivateRepoPath
+$updatesRoot = Resolve-PathFromRoot $UpdatesRepoPath
 
 $releaseDir = Join-Path -Path $privateRoot -ChildPath 'release'
+$versionSource = Join-Path -Path $privateRoot -ChildPath $VersionFileName
 $setupSource = Join-Path -Path $releaseDir -ChildPath $SetupName
-if (-not (Test-Path -LiteralPath $setupSource)) {
-    throw "Не удалось найти установщик $SetupName в $releaseDir"
-}
+$macSource = Join-Path -Path $releaseDir -ChildPath $MacZipName
 
-$existingItems = Get-ChildItem -LiteralPath $updatesRoot -Force | Where-Object { $_.Name -ne '.git' }
-foreach ($item in $existingItems) {
-    if ($DryRun) {
-        Write-Host "Будет удалено: $($item.FullName)"
-        continue
+foreach ($artifact in @{
+    version = $versionSource;
+    windows = $setupSource;
+    macos = $macSource
+}) {
+    if (-not (Test-Path -LiteralPath $artifact.Value)) {
+        throw "Скачайте артефакт $($artifact.Value) и разместите в release/."
     }
-
-    Remove-Item -LiteralPath $item.FullName -Recurse -Force -ErrorAction Stop
 }
 
-$copyPlan = @(
-    @{ Source = $versionSource; Destination = Join-Path -Path $updatesRoot -ChildPath $VersionFileName },
-    @{ Source = $setupSource; Destination = Join-Path -Path $updatesRoot -ChildPath $SetupName }
+[array]$copyPlan = @(
+    @{ Source = $versionSource; Destination = Join-Path -Path $updatesRoot -ChildPath $VersionFileName; Label = 'описание версии' },
+    @{ Source = $setupSource; Destination = Join-Path -Path $updatesRoot -ChildPath $SetupName; Label = 'Windows-установщик' },
+    @{ Source = $macSource; Destination = Join-Path -Path $updatesRoot -ChildPath $MacZipName; Label = 'macOS-архив' }
 )
 
-foreach ($step in $copyPlan) {
-    if ($DryRun) {
-        Write-Host "Будет скопировано: $($step.Source) -> $($step.Destination)"
-        continue
-    }
+Write-Host 'Скрипт выполняет единственный шаг — копирует артефакты в `_updates_repo_tmp`.'
 
+foreach ($step in $copyPlan) {
+    Write-Host "Копирую $($step.Label) из $($step.Source) → $($step.Destination)..."
     Copy-Item -LiteralPath $step.Source -Destination $step.Destination -Force -ErrorAction Stop
 }
 
-if ($DryRun) {
-    Write-Host 'DryRun завершён, изменений нет.'
-    return
-}
-
-$gitArgs = @('-C', $updatesRoot)
-try {
-    & git @gitArgs add -A | Out-Null
-    $status = & git @gitArgs status -sb
-    if ($status -match 'working tree clean') {
-        Write-Host 'Изменений для коммита нет.'
-        return
-    }
-
-    $commitMessage = "chore(release): refresh updates repo for $SetupName"
-    & git @gitArgs commit -m $commitMessage
-    & git @gitArgs push
-    Write-Host 'Обновления отправлены в репозиторий обновлений.'
-} catch {
-    Write-Host "Git-команды завершились ошибкой: $($_.Exception.Message)"
-    throw
-}
+Write-Host 'Готово: файлы лежат в `_updates_repo_tmp`.'
+Write-Host 'Дальше вам нужно:'
+Write-Host " 1. Перейти в каталог $updatesRoot и проверить `git status`."
+Write-Host " 2. Добавить version.json, $SetupName и $MacZipName, затем сделать git commit и git push в Clipart-Generator-Updates."
+Write-Host ' 3. Создать или обновить релиз на GitHub и загрузить туда указанные артефакты.'
