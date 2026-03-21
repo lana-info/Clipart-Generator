@@ -26,7 +26,13 @@
      3. Скачивает артефакты `.exe` и `.zip` из GitHub Release.
      4. Копирует `version.json`, Windows setup и macOS zip в `_updates_repo_tmp`.
      5. Выдаёт рекомендации: `git status`, добавление файлов, коммит/пуш и обновление релиза в `Clipart-Generator-Updates`.
-3. Сделайте `git commit` и `git push` в `Clipart-Generator-Updates`.
+3. Дальше делайте всё очень просто, по одной команде, прямо в папке `_updates_repo_tmp`:
+   1. `git status`
+   2. `git add version.json ClipartGenerator-Setup-<версия>.exe ClipartGenerator-macOS-<версия>.zip`
+   3. `git commit -m "chore(release): publish <версия> artifacts"`
+   4. `git pull --rebase origin main`
+   5. `git push origin main`
+4. Если на шаге `git pull --rebase origin main` появится конфликт, остановитесь и посмотрите текст ошибки. Если конфликтов нет, сразу выполняйте `git push origin main`.
 
 ### Шаг 4. Финальный чек
 1. Убедитесь, что GitHub release содержит только нужные assets (удалите лишнее).
