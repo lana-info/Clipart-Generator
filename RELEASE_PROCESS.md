@@ -3,18 +3,23 @@
 В проекте используется двойная схема: **Clipart-Generator** хранит код и собирает артефакты, **Clipart-Generator-Updates** публикует только `version.json` и `ClipartGenerator-Setup-*.exe` для автообновления. Эти шаги можно выполнять вручную или запускать скрипты.
 
 ### Шаг 1. Собрать релиз в `Clipart-Generator`
-1. Убедитесь, что все изменения закоммичены в `main`. Скрипт `scripts/refresh_updates_repo.ps1` теперь вызывает `Release Multi Platform`, обновляет `version.json`, скачивает готовые `.exe` и `.zip` и копирует артефакты в `_updates_repo_tmp`.
-2. Запустите `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath .. -UpdatesRepoPath ..\Clipart-Generator-Updates` и передайте `-AppVersion` если нужен конкретный тег (по умолчанию берётся из `release/VERSION.txt`). Скрипт сам ждёт GitHub Action, скачивает артефакты и копирует их.
+1. Убедитесь, что все изменения закоммичены в `main`. Скрипт `scripts/refresh_updates_repo.ps1` находит проект по пути `D:\Projects\Clipart Generator`, вызывает `Release Multi Platform`, обновляет `version.json`, скачивает готовые `.exe` и `.zip` и копирует артефакты в `_updates_repo_tmp`.
+2. Запустите `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath .. -UpdatesRepoPath ..\Clipart-Generator-Updates` внутри `D:\Projects\Clipart Generator`, при необходимости добавьте `-AppVersion <версия>` (по умолчанию берётся из `release/VERSION.txt`). Скрипт сам ждёт GitHub Action, скачивает артефакты и копирует их.
 
 ### Шаг 2. Подготовка GitHub Release
 1. Создайте release на GitHub с тегом `v0.25`.
 2. Загрузите Windows setup и macOS zip как assets.
-3. Скопируйте `version.json` и все артефакты локально в `_updates_repo_tmp`.
 
 ### Шаг 3. Обновление репозитория `Clipart-Generator-Updates`
 1. Перейдите в папку `_updates_repo_tmp` (клонированный публичный репозиторий).
-2. Запустите скрипт `scripts/refresh_updates_repo.ps1` из приватного репозитория: `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath ".." -UpdatesRepoPath "..\Clipart-Generator-Updates" -SetupName "ClipartGenerator-Setup-0.25.exe"`.
-3. Скрипт очистит публичное репо, оставит только `version.json` и `.exe`, затем сделает `git commit` и `git push` туда.
+2. Запустите скрипт `scripts/refresh_updates_repo.ps1` из приватного репозитория: `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath ".." -UpdatesRepoPath "..\Clipart-Generator-Updates" [-AppVersion <версия>]`.
+   - Скрипт:
+     1. Обновляет `version.json` через `update_version.ps1`.
+     2. Запускает GitHub Action `Release Multi Platform` и ждёт завершения сборки macOS и Windows.
+     3. Скачивает артефакты `.exe` и `.zip` из GitHub Release.
+     4. Копирует `version.json`, Windows setup и macOS zip в `_updates_repo_tmp`.
+     5. Выдаёт рекомендации: `git status`, добавление файлов, коммит/пуш и обновление релиза в `Clipart-Generator-Updates`.
+3. Сделайте `git commit` и `git push` в `Clipart-Generator-Updates`.
 
 ### Шаг 4. Финальный чек
 1. Убедитесь, что GitHub release содержит только нужные assets (удалите лишнее).
