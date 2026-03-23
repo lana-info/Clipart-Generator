@@ -57,7 +57,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-APP_VERSION = "0.2.5"
+APP_VERSION = "0.2.6"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 REFERENCE_MODEL_SHORTLIST = {
     "flux-2/pro-image-to-image",
