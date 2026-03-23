@@ -1,0 +1,235 @@
+[
+  {
+    "model": "gpt4o-image",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "c89fba7cffff7330977e1f6ac0927275",
+    "payload": {
+      "prompt": "simple test image",
+      "size": "1:1"
+    }
+  },
+  {
+    "model": "gpt-image/1.5-text-to-image",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "f2f8a79244b3df2fb969005b9bdedf62",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1",
+      "quality": "medium"
+    }
+  },
+  {
+    "model": "z-image",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "35f71d64e26cf5f4921b0c7a0ea4a32f",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1"
+    }
+  },
+  {
+    "model": "google/imagen4",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "8d61e9187f7f884e0e14eac2f866cf44",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1"
+    }
+  },
+  {
+    "model": "google/imagen4-fast",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "7122ffd1f3b1c74ca73ce96194d7935b",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1"
+    }
+  },
+  {
+    "model": "google/imagen4-ultra",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "af8d7f3ff2a89c4f8426f7b5c32aff03",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1"
+    }
+  },
+  {
+    "model": "google/nano-banana",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "3625e3e763c2f079e53fe1bad9e730f2",
+    "payload": {
+      "prompt": "simple test image",
+      "image_size": "1:1"
+    }
+  },
+  {
+    "model": "flux-2/flex-text-to-image",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "75669a4b5887b37087bcd0e3e2ee224a",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1",
+      "resolution": "1K"
+    }
+  },
+  {
+    "model": "flux-2/pro-text-to-image",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "d964641cd0716636c5ea3a3c65d52b66",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1",
+      "resolution": "1K"
+    }
+  },
+  {
+    "model": "grok-imagine/text-to-image",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "8161ac248fce371f473af84c5764004d",
+    "payload": {
+      "prompt": "simple test image",
+      "aspect_ratio": "1:1"
+    }
+  },
+  {
+    "model": "qwen/text-to-image",
+    "type": "text_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "9aea60ff0a789edf29df22cd2932de2a",
+    "payload": {
+      "prompt": "simple test image",
+      "image_size": "square_hd"
+    }
+  },
+  {
+    "model": "nano-banana-pro",
+    "type": "image_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "210052004813ccfa5b208494bf67ced9",
+    "payload": {
+      "prompt": "simple test image",
+      "image_urls": [
+        "https://picsum.photos/768/768"
+      ],
+      "aspect_ratio": "1:1"
+    }
+  },
+  {
+    "model": "flux-2/pro-image-to-image",
+    "type": "image_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "693284e32cb04193c06a848f736b7574",
+    "payload": {
+      "prompt": "simple test image",
+      "input_urls": [
+        "https://picsum.photos/768/768"
+      ],
+      "aspect_ratio": "1:1",
+      "resolution": "1K"
+    }
+  },
+  {
+    "model": "flux-2/flex-image-to-image",
+    "type": "image_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "c881798ce27793a18ce084f395377d34",
+    "payload": {
+      "prompt": "simple test image",
+      "input_urls": [
+        "https://picsum.photos/768/768"
+      ],
+      "aspect_ratio": "1:1",
+      "resolution": "1K"
+    }
+  },
+  {
+    "model": "grok-imagine/image-to-image",
+    "type": "image_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "fccb2ebfed79fb5de9463b8b4004f7ac",
+    "payload": {
+      "prompt": "simple test image",
+      "image_urls": [
+        "https://picsum.photos/768/768"
+      ],
+      "aspect_ratio": "1:1"
+    }
+  },
+  {
+    "model": "gpt-image/1.5-image-to-image",
+    "type": "image_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "6814ad95b9775a704956b6e7074a0c3d",
+    "payload": {
+      "prompt": "simple test image",
+      "input_urls": [
+        "https://picsum.photos/768/768"
+      ],
+      "aspect_ratio": "1:1",
+      "quality": "medium"
+    }
+  },
+  {
+    "model": "qwen/image-to-image",
+    "type": "image_to_image",
+    "code": 200,
+    "msg": "success",
+    "taskId": "cd55ac2b9c94363ec9d8d077c46b324d",
+    "payload": {
+      "prompt": "simple test image",
+      "image_url": "https://picsum.photos/768/768"
+    }
+  },
+  {
+    "model": "google/nano-banana-edit",
+    "type": "edit",
+    "code": 200,
+    "msg": "success",
+    "taskId": "e234622f3c6805527a903b8cfda4514b",
+    "payload": {
+      "prompt": "simple test image",
+      "image_urls": [
+        "https://picsum.photos/768/768"
+      ],
+      "image_size": "1:1"
+    }
+  },
+  {
+    "model": "qwen/image-edit",
+    "type": "edit",
+    "code": 200,
+    "msg": "success",
+    "taskId": "22caf2b0bde23f9c554d5523318bcf0a",
+    "payload": {
+      "prompt": "simple test image",
+      "image_url": "https://picsum.photos/768/768"
+    }
+  }
+]

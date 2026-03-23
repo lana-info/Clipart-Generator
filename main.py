@@ -68,6 +68,39 @@ REFERENCE_MODEL_SHORTLIST = {
     "google/nano-banana-edit",
 }
 
+DOCUMENTED_MODEL_LIMITS = {
+    "gpt-image/1.5-text-to-image": {
+        "aspect_ratios": {"1:1", "2:3", "3:2"},
+        "qualities": {"medium", "high"},
+    },
+    "gpt-image/1.5-image-to-image": {
+        "aspect_ratios": {"1:1", "2:3", "3:2"},
+        "qualities": {"medium", "high"},
+    },
+}
+
+SUPPORTED_GENERATION_MODEL_IDS = {
+    "gpt4o-image",
+    "gpt-image/1.5-text-to-image",
+    "z-image",
+    "google/imagen4",
+    "google/imagen4-fast",
+    "google/imagen4-ultra",
+    "google/nano-banana",
+    "nano-banana-pro",
+    "flux-2/flex-text-to-image",
+    "flux-2/pro-text-to-image",
+    "grok-imagine/text-to-image",
+    "qwen/text-to-image",
+    "flux-2/pro-image-to-image",
+    "flux-2/flex-image-to-image",
+    "grok-imagine/image-to-image",
+    "gpt-image/1.5-image-to-image",
+    "qwen/image-to-image",
+    "google/nano-banana-edit",
+    "qwen/image-edit",
+}
+
 GENERATION_MODELS = [
     # Text -> Image
     {"id": "gpt4o-image", "label": "GPT‑4o Image", "type": "text_to_image"},
@@ -79,16 +112,11 @@ GENERATION_MODELS = [
     {"id": "google/nano-banana", "label": "Google Nano Banana", "type": "text_to_image"},
     {"id": "flux-2/flex-text-to-image", "label": "FLUX.2 Flex (Text→Image)", "type": "text_to_image"},
     {"id": "flux-2/pro-text-to-image", "label": "FLUX.2 Pro (Text→Image)", "type": "text_to_image"},
-    {"id": "black-forest-labs/flux-kontext-pro", "label": "FLUX Kontext Pro", "type": "text_to_image"},
-    {"id": "black-forest-labs/flux-kontext-max", "label": "FLUX Kontext Max", "type": "text_to_image"},
-    {"id": "seedream", "label": "Seedream", "type": "text_to_image"},
-    {"id": "seedream-v4-text-to-image", "label": "Seedream v4 (Text→Image)", "type": "text_to_image"},
-    {"id": "4.5-text-to-image", "label": "Seedream 4.5 (Text→Image)", "type": "text_to_image"},
     {"id": "grok-imagine/text-to-image", "label": "Grok Imagine (Text→Image)", "type": "text_to_image"},
     {"id": "qwen/text-to-image", "label": "Qwen (Text→Image)", "type": "text_to_image"},
 
     # Image -> Image
-    {"id": "google/pro-image-to-image", "label": "Google Pro (Image→Image)", "type": "image_to_image"},
+    {"id": "nano-banana-pro", "label": "Google Nano Banana Pro", "type": "image_to_image"},
     {"id": "flux-2/pro-image-to-image", "label": "FLUX.2 Pro (Image→Image)", "type": "image_to_image"},
     {"id": "flux-2/flex-image-to-image", "label": "FLUX.2 Flex (Image→Image)", "type": "image_to_image"},
     {"id": "grok-imagine/image-to-image", "label": "Grok Imagine (Image→Image)", "type": "image_to_image"},
@@ -97,12 +125,6 @@ GENERATION_MODELS = [
 
     # Edit
     {"id": "google/nano-banana-edit", "label": "Google Nano Banana Edit", "type": "edit"},
-    {"id": "seedream-v4-edit", "label": "Seedream v4 Edit", "type": "edit"},
-    {"id": "4.5-edit", "label": "Seedream 4.5 Edit", "type": "edit"},
-    {"id": "ideogram/v3-reframe", "label": "Ideogram v3 Reframe", "type": "edit"},
-    {"id": "ideogram/character-edit", "label": "Ideogram Character Edit", "type": "edit"},
-    {"id": "ideogram/character-remix", "label": "Ideogram Character Remix", "type": "edit"},
-    {"id": "ideogram/character", "label": "Ideogram Character", "type": "edit"},
     {"id": "qwen/image-edit", "label": "Qwen Image Edit", "type": "edit"},
 ]
 
@@ -526,8 +548,8 @@ class WorkerThread(QThread):
         parts.append(f"--{boundary}--\r\n".encode("utf-8"))
 
         upload_urls = [
-            "https://api.kie.ai/api/file-stream-upload",
             "https://kieai.redpandaai.co/api/file-stream-upload",
+            "https://api.kie.ai/api/file-stream-upload",
         ]
 
         last_error = None
@@ -541,7 +563,7 @@ class WorkerThread(QThread):
 
                 self.progress.emit(f"  Upload endpoint: {upload_url}")
                 req = request.Request(upload_url, data=body, headers=headers, method="POST")
-                payload = json.loads(self._request_with_retries(req, timeout=max(30, self.timeout)).decode("utf-8"))
+                payload = json.loads(self._request_with_retries(req, timeout=max(60, self.timeout)).decode("utf-8"))
 
                 # Поддержка разных форматов ответа API.
                 if payload.get("success") is False:
@@ -557,8 +579,9 @@ class WorkerThread(QThread):
                 last_error = e
                 self.progress.emit(f"  Upload ошибка: {e}")
 
-        # Fallback: URL Upload API из документации KIE.
-        # Используем data URL, чтобы не требовать внешний хостинг файла.
+        # Fallback: URL Upload API оставляем только как аварийный запасной вариант.
+        # Документация KIE ожидает публичный http/https URL, поэтому этот путь
+        # может не поддерживаться сервером для всех файлов.
         try:
             import base64
 
@@ -661,6 +684,80 @@ class WorkerThread(QThread):
             return self._kie_generate_4o_image(prompt)
         return self._kie_generate_generic_model(normalized_model, prompt, reference_urls=reference_urls)
 
+    def _normalize_model_ratio(self, model_name, ratio):
+        limits = DOCUMENTED_MODEL_LIMITS.get(model_name) or {}
+        allowed = limits.get("aspect_ratios") or set()
+        if ratio in allowed or not allowed:
+            return ratio
+        fallback_ratio = "1:1" if "1:1" in allowed else next(iter(sorted(allowed)))
+        self.progress.emit(
+            f"  Соотношение {ratio} не подтверждено для {model_name}. Используем {fallback_ratio}."
+        )
+        return fallback_ratio
+
+    def _normalize_model_quality(self, model_name, quality="medium"):
+        limits = DOCUMENTED_MODEL_LIMITS.get(model_name) or {}
+        allowed = limits.get("qualities") or set()
+        if quality in allowed or not allowed:
+            return quality
+        return "medium"
+
+    def _build_documented_model_input(self, model_name, prompt, reference_urls=None):
+        reference_urls = reference_urls or []
+        ratio = self._normalize_model_ratio(model_name, self._normalize_ratio(self.generation_size))
+        quality = self._normalize_model_quality(model_name)
+
+        if model_name == "gpt-image/1.5-text-to-image":
+            return {"prompt": prompt, "aspect_ratio": ratio, "quality": quality}
+
+        if model_name == "gpt-image/1.5-image-to-image":
+            return {
+                "prompt": prompt,
+                "input_urls": list(reference_urls),
+                "aspect_ratio": ratio,
+                "quality": quality,
+            }
+
+        if model_name in {"flux-2/pro-text-to-image", "flux-2/flex-text-to-image"}:
+            return {"prompt": prompt, "aspect_ratio": ratio, "resolution": "1K"}
+
+        if model_name in {"flux-2/pro-image-to-image", "flux-2/flex-image-to-image"}:
+            return {
+                "prompt": prompt,
+                "input_urls": list(reference_urls),
+                "aspect_ratio": ratio,
+                "resolution": "1K",
+            }
+
+        if model_name == "google/nano-banana":
+            return {"prompt": prompt, "image_size": ratio}
+
+        if model_name == "google/nano-banana-edit":
+            return {"prompt": prompt, "image_urls": list(reference_urls), "image_size": ratio}
+
+        if model_name == "qwen/text-to-image":
+            return {"prompt": prompt, "image_size": self._ratio_to_qwen_image_size(ratio)}
+
+        if model_name == "qwen/image-to-image":
+            return {"prompt": prompt, "image_url": reference_urls[0]}
+
+        if model_name == "qwen/image-edit":
+            return {"prompt": prompt, "image_url": reference_urls[0]}
+
+        if model_name == "nano-banana-pro":
+            return {"prompt": prompt, "image_urls": list(reference_urls), "aspect_ratio": ratio}
+
+        if model_name in {"grok-imagine/text-to-image", "google/imagen4", "google/imagen4-fast", "google/imagen4-ultra"}:
+            return {"prompt": prompt, "aspect_ratio": ratio}
+
+        if model_name == "grok-imagine/image-to-image":
+            return {"prompt": prompt, "image_urls": list(reference_urls), "aspect_ratio": ratio}
+
+        if model_name == "z-image":
+            return {"prompt": prompt, "aspect_ratio": ratio}
+
+        return {"prompt": prompt, "size": ratio}
+
     def _select_generation_model(self, reference_urls):
         has_references = bool(reference_urls)
         preferred_model = self.reference_generation_model if has_references else self.text_generation_model
@@ -686,9 +783,9 @@ class WorkerThread(QThread):
         if required_type == "image_to_image" and "qwen/image-to-image" in GENERATION_MODEL_META:
             return "qwen/image-to-image"
         for entry in GENERATION_MODELS:
-            if entry.get("type") == required_type:
+            if entry.get("type") == required_type and entry.get("id") in SUPPORTED_GENERATION_MODEL_IDS:
                 return entry.get("id")
-        return "gpt4o-image"
+        return "gpt-image/1.5-text-to-image"
 
     def _normalize_generation_model(self, model_name):
         model = (model_name or "").strip()
@@ -700,7 +797,7 @@ class WorkerThread(QThread):
             return "gpt4o-image"
 
         if model == "flux-kontext":
-            return "black-forest-labs/flux-kontext-pro"
+            return "flux-kontext"
 
         if model in {"z-image", "zai-org/z-image"}:
             return "z-image"
@@ -708,13 +805,12 @@ class WorkerThread(QThread):
         if model in {
             "google/nano-banana",
             "google/nano-banana-edit",
+            "nano-banana-pro",
             "google/imagen4",
             "google/imagen4-fast",
             "google/imagen4-ultra",
             "flux-2/flex-text-to-image",
             "flux-2/pro-text-to-image",
-            "black-forest-labs/flux-kontext-pro",
-            "black-forest-labs/flux-kontext-max",
         }:
             return model
 
@@ -726,37 +822,16 @@ class WorkerThread(QThread):
         headers = self._kie_headers()
         headers["Content-Type"] = "application/json"
         ratio = self._normalize_ratio(self.generation_size)
-        legacy_size = self._ratio_to_legacy_size(ratio)
-
-        # Для 4o API чаще всего нужен size в px, но оставляем fallback-варианты.
-        payload_variants = [
-            {"prompt": prompt, "size": legacy_size},
-            {"prompt": prompt, "size": ratio},
-            {"prompt": prompt, "aspectRatio": ratio},
-            {"prompt": prompt, "aspect_ratio": ratio},
-        ]
-
-        result = None
-        last_error = None
-        for payload in payload_variants:
-            try:
-                result = self._request_json(
-                    "https://api.kie.ai/api/v1/gpt4o-image/generate",
-                    method="POST",
-                    payload=payload,
-                    headers=headers,
-                    timeout=max(30, self.timeout),
-                )
-                if int(result.get("code", 0)) == 200:
-                    break
-                last_error = RuntimeError(result.get("msg") or "Ошибка создания задачи 4o Image")
-            except Exception as e:
-                last_error = e
-
-        if result is None or int(result.get("code", 0)) != 200:
-            if result is not None:
-                raise RuntimeError(result.get("msg") or "Ошибка создания задачи 4o Image")
-            raise RuntimeError(str(last_error) if last_error else "Ошибка создания задачи 4o Image")
+        payload = {"prompt": prompt, "size": ratio}
+        result = self._request_json(
+            "https://api.kie.ai/api/v1/gpt4o-image/generate",
+            method="POST",
+            payload=payload,
+            headers=headers,
+            timeout=max(30, self.timeout),
+        )
+        if int(result.get("code", 0)) != 200:
+            raise RuntimeError(result.get("msg") or "Ошибка создания задачи 4o Image")
 
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
@@ -766,183 +841,15 @@ class WorkerThread(QThread):
 
     def _kie_generate_generic_model(self, model_name, prompt, reference_urls=None):
         reference_urls = reference_urls or []
-        ratio = self._normalize_ratio(self.generation_size)
-        legacy_size = self._ratio_to_legacy_size(ratio)
-
-        if model_name == "z-image":
-            model_candidates = ["z-image", "zai-org/z-image"]
-        else:
-            model_candidates = [model_name]
-
-        if reference_urls:
-            input_variants = self._build_reference_input_variants(model_name, prompt, reference_urls, ratio, legacy_size)
-        else:
-            if model_name == "gpt-image/1.5-text-to-image":
-                input_variants = [
-                    {"prompt": prompt, "aspect_ratio": ratio, "quality": "medium"},
-                    {"prompt": prompt, "aspect_ratio": ratio, "quality": "high"},
-                    {"prompt": prompt, "aspectRatio": ratio, "quality": "medium"},
-                    {"prompt": prompt, "size": ratio, "quality": "medium"},
-                    {"prompt": prompt, "size": legacy_size, "quality": "medium"},
-                ]
-            elif model_name in {"flux-2/pro-text-to-image", "flux-2/flex-text-to-image"}:
-                input_variants = [
-                    {"prompt": prompt, "aspect_ratio": ratio, "resolution": "2K"},
-                    {"prompt": prompt, "aspect_ratio": ratio, "resolution": "1K"},
-                    {"prompt": prompt, "aspectRatio": ratio, "resolution": "2K"},
-                    {"prompt": prompt, "aspectRatio": ratio, "resolution": "1K"},
-                    {"prompt": prompt, "aspect_ratio": ratio},
-                    {"prompt": prompt, "size": ratio},
-                ]
-            elif model_name == "google/nano-banana":
-                input_variants = [
-                    {"prompt": prompt, "image_size": ratio},
-                    {"prompt": prompt, "image_size": "auto"},
-                    {"prompt": prompt, "output_format": "png", "image_size": ratio},
-                    {"prompt": prompt, "output_format": "jpeg", "image_size": ratio},
-                    {"prompt": prompt, "size": ratio},
-                ]
-            elif model_name == "qwen/text-to-image":
-                input_variants = [
-                    {"prompt": prompt, "image_size": "square_hd"},
-                    {"prompt": prompt, "image_size": self._ratio_to_qwen_image_size(ratio)},
-                    {"prompt": prompt, "output_format": "png", "image_size": self._ratio_to_qwen_image_size(ratio)},
-                    {"prompt": prompt, "output_format": "jpeg", "image_size": self._ratio_to_qwen_image_size(ratio)},
-                    {"prompt": prompt, "size": ratio},
-                ]
-            else:
-                input_variants = [
-                    {"prompt": prompt, "size": ratio},
-                    {"prompt": prompt, "aspectRatio": ratio},
-                    {"prompt": prompt, "aspect_ratio": ratio},
-                    {"prompt": prompt, "size": legacy_size},
-                    {"prompt": prompt, "image_size": legacy_size},
-                ]
-
-        prompt_variants = [prompt]
-        if model_name == "z-image":
-            compact_prompt = " ".join((prompt or "").split())
-            if compact_prompt and compact_prompt != prompt:
-                prompt_variants.append(compact_prompt)
-            for limit in (1200, 900, 700, 500):
-                if compact_prompt and len(compact_prompt) > limit:
-                    prompt_variants.append(compact_prompt[:limit])
-
-        last_error = None
-        for candidate in model_candidates:
-            for candidate_prompt in prompt_variants:
-                for input_payload in input_variants:
-                    payload = dict(input_payload)
-                    payload["prompt"] = candidate_prompt
-                    try:
-                        task_id = self._kie_create_task(candidate, payload)
-                        self.progress.emit(f"  Task ID: {task_id}")
-                        return self._kie_wait_result(task_id)
-                    except Exception as e:
-                        last_error = e
-                        self.progress.emit(f"  Модель {candidate} / input {list(payload.keys())} недоступна: {e}")
-
-        # Фолбэк для старых реализаций API.
-        fallback_input = {
-            "prompt": prompt,
-            "size": legacy_size,
-        }
-        if reference_urls:
-            fallback_input["image"] = reference_urls[0]
-            if len(reference_urls) > 1:
-                fallback_input["images"] = list(reference_urls)
-
-        fallback_task_id = self._kie_create_task(model_name, fallback_input)
-        self.progress.emit(f"  Task ID: {fallback_task_id}")
-        return self._kie_wait_result(fallback_task_id)
+        payload = self._build_documented_model_input(model_name, prompt, reference_urls)
+        task_id = self._kie_create_task(model_name, payload)
+        self.progress.emit(f"  Task ID: {task_id}")
+        return self._kie_wait_result(task_id)
 
     def _build_reference_input_variants(self, model_name, prompt, reference_urls, ratio, legacy_size):
-        primary_ref = reference_urls[0]
-        image_list = list(reference_urls)
-
-        common_variants = [
-            {"prompt": prompt, "image": primary_ref, "size": ratio},
-            {"prompt": prompt, "image_url": primary_ref, "size": ratio},
-            {"prompt": prompt, "imageUrl": primary_ref, "size": ratio},
-            {"prompt": prompt, "fileUrl": primary_ref, "size": ratio},
-            {"prompt": prompt, "inputImage": primary_ref, "size": ratio},
-            {"prompt": prompt, "images": image_list, "size": ratio},
-            {"prompt": prompt, "image_urls": image_list, "size": ratio},
-            {"prompt": prompt, "imageUrls": image_list, "size": ratio},
-            {"prompt": prompt, "input_urls": image_list, "size": ratio},
-            {"prompt": prompt, "inputUrls": image_list, "size": ratio},
-            {"prompt": prompt, "filesUrl": image_list, "size": ratio},
-            {"prompt": prompt, "image": primary_ref, "aspectRatio": ratio},
-            {"prompt": prompt, "image": primary_ref, "aspect_ratio": ratio},
-            {"prompt": prompt, "input_urls": image_list, "aspectRatio": ratio},
-            {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio},
-            {"prompt": prompt, "image": primary_ref, "size": legacy_size},
-            {"prompt": prompt, "input_urls": image_list, "size": legacy_size},
-            {"prompt": prompt, "filesUrl": image_list, "size": legacy_size},
-            {"prompt": prompt, "fileUrl": primary_ref, "size": legacy_size},
-        ]
-
-        prioritized_variants = {
-            "qwen/image-to-image": [
-                {"prompt": prompt, "image_url": primary_ref},
-                {"prompt": prompt, "image_url": primary_ref, "strength": 0.8},
-                {"prompt": prompt, "image_url": primary_ref, "output_format": "png"},
-                {"prompt": prompt, "image": primary_ref, "size": ratio},
-                {"prompt": prompt, "imageUrl": primary_ref, "size": ratio},
-            ],
-            "google/nano-banana-edit": [
-                {"prompt": prompt, "image_urls": image_list, "image_size": ratio},
-                {"prompt": prompt, "image_urls": image_list, "image_size": "auto"},
-                {"prompt": prompt, "image_urls": image_list, "output_format": "png", "image_size": ratio},
-                {"prompt": prompt, "images": image_list, "size": ratio},
-                {"prompt": prompt, "imageUrls": image_list, "size": ratio},
-            ],
-            "gpt-image/1.5-image-to-image": [
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio, "quality": "medium"},
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio, "quality": "high"},
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": "1:1", "quality": "medium"},
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio},
-                {"prompt": prompt, "inputUrls": image_list, "aspect_ratio": ratio, "quality": "medium"},
-                {"prompt": prompt, "input_urls": image_list, "aspectRatio": ratio, "quality": "medium"},
-            ],
-            "flux-2/pro-image-to-image": [
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio, "resolution": "2K"},
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio, "resolution": "1K"},
-                {"prompt": prompt, "inputUrls": image_list, "aspect_ratio": ratio, "resolution": "2K"},
-                {"prompt": prompt, "inputUrls": image_list, "aspect_ratio": ratio, "resolution": "1K"},
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio},
-                {"prompt": prompt, "input_urls": image_list, "size": ratio},
-                {"prompt": prompt, "inputUrls": image_list, "size": ratio},
-                {"prompt": prompt, "input_urls": image_list, "aspectRatio": ratio},
-                {"prompt": prompt, "input_urls": image_list, "size": legacy_size},
-            ],
-            "flux-2/flex-image-to-image": [
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio, "resolution": "2K"},
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio, "resolution": "1K"},
-                {"prompt": prompt, "inputUrls": image_list, "aspect_ratio": ratio, "resolution": "2K"},
-                {"prompt": prompt, "inputUrls": image_list, "aspect_ratio": ratio, "resolution": "1K"},
-                {"prompt": prompt, "input_urls": image_list, "aspect_ratio": ratio},
-                {"prompt": prompt, "input_urls": image_list, "size": ratio},
-                {"prompt": prompt, "inputUrls": image_list, "size": ratio},
-                {"prompt": prompt, "input_urls": image_list, "aspectRatio": ratio},
-                {"prompt": prompt, "input_urls": image_list, "size": legacy_size},
-            ],
-            "grok-imagine/image-to-image": [
-                {"prompt": prompt, "image_urls": image_list, "size": ratio},
-                {"prompt": prompt, "images": image_list, "size": ratio},
-                {"prompt": prompt, "imageUrls": image_list, "size": ratio},
-            ],
-        }
-
-        variants = []
-        seen = set()
-        for payload in prioritized_variants.get(model_name, []) + common_variants:
-            key = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-            if key in seen:
-                continue
-            seen.add(key)
-            variants.append(payload)
-        return variants
+        del ratio, legacy_size
+        payload = self._build_documented_model_input(model_name, prompt, reference_urls)
+        return [payload]
 
     def _build_reference_probe_variants(self, model_name, prompt, sample_image_url, ratio, legacy_size):
         reference_variants = self._build_reference_input_variants(
@@ -955,50 +862,8 @@ class WorkerThread(QThread):
         return [{"model": model_name, "input": payload} for payload in reference_variants]
 
     def _build_text_probe_variants(self, model_name, prompt, ratio, legacy_size):
-        if model_name == "gpt-image/1.5-text-to-image":
-            input_variants = [
-                {"prompt": prompt, "aspect_ratio": ratio, "quality": "medium"},
-                {"prompt": prompt, "aspect_ratio": ratio, "quality": "high"},
-                {"prompt": prompt, "aspectRatio": ratio, "quality": "medium"},
-                {"prompt": prompt, "size": ratio, "quality": "medium"},
-                {"prompt": prompt, "size": legacy_size, "quality": "medium"},
-            ]
-        elif model_name in {"flux-2/pro-text-to-image", "flux-2/flex-text-to-image"}:
-            input_variants = [
-                {"prompt": prompt, "aspect_ratio": ratio, "resolution": "2K"},
-                {"prompt": prompt, "aspect_ratio": ratio, "resolution": "1K"},
-                {"prompt": prompt, "aspectRatio": ratio, "resolution": "2K"},
-                {"prompt": prompt, "aspectRatio": ratio, "resolution": "1K"},
-                {"prompt": prompt, "aspect_ratio": ratio},
-                {"prompt": prompt, "size": ratio},
-            ]
-        elif model_name == "google/nano-banana":
-            input_variants = [
-                {"prompt": prompt, "image_size": ratio},
-                {"prompt": prompt, "image_size": "auto"},
-                {"prompt": prompt, "output_format": "png", "image_size": ratio},
-                {"prompt": prompt, "output_format": "jpeg", "image_size": ratio},
-                {"prompt": prompt, "size": ratio},
-            ]
-        elif model_name == "qwen/text-to-image":
-            qwen_size = self._ratio_to_qwen_image_size(ratio)
-            input_variants = [
-                {"prompt": prompt, "image_size": "square_hd"},
-                {"prompt": prompt, "image_size": qwen_size},
-                {"prompt": prompt, "output_format": "png", "image_size": qwen_size},
-                {"prompt": prompt, "output_format": "jpeg", "image_size": qwen_size},
-                {"prompt": prompt, "size": ratio},
-            ]
-        else:
-            input_variants = [
-                {"prompt": prompt, "size": ratio},
-                {"prompt": prompt, "aspectRatio": ratio},
-                {"prompt": prompt, "aspect_ratio": ratio},
-                {"prompt": prompt, "size": legacy_size},
-                {"prompt": prompt, "image_size": legacy_size},
-            ]
-
-        return [{"model": model_name, "input": payload} for payload in input_variants]
+        payload = self._build_documented_model_input(model_name, prompt, [])
+        return [{"model": model_name, "input": payload}]
 
     def _normalize_ratio(self, value):
         raw = (value or "").strip()
@@ -2048,6 +1913,7 @@ class MainWindow(QMainWindow):
         alias_map = {
             "gpt-image-1": "gpt4o-image",
             "gpt-image-1.5": "gpt4o-image",
+            "google/pro-image-to-image": "nano-banana-pro",
             "flux-kontext": "black-forest-labs/flux-kontext-pro",
             "zai-org/z-image": "z-image",
         }
@@ -2068,6 +1934,8 @@ class MainWindow(QMainWindow):
         for entry in GENERATION_MODELS:
             model_id = entry.get("id")
             model_type = entry.get("type")
+            if model_id not in SUPPORTED_GENERATION_MODEL_IDS and model_id not in extra_ids:
+                continue
             if model_type not in allowed_types and model_id not in extra_ids:
                 continue
             label = entry.get("label", model_id or "")
@@ -3150,8 +3018,7 @@ class MainWindow(QMainWindow):
                     legacy_size,
                 )
             else:
-                # Для image/edit моделей задаём приоритеты по конкретной модели,
-                # а затем уже используем общий fallback-набор схем.
+                # Для image/edit моделей используем один документированный payload.
                 payload_variants = self._build_reference_probe_variants(
                     test_model,
                     prompt,
@@ -3258,6 +3125,21 @@ class MainWindow(QMainWindow):
         self.config["last_updates_expired_notice_at"] = datetime.now(timezone.utc).isoformat()
         self.save_config()
 
+    def _parse_update_manifest(self, raw_bytes):
+        raw_text = raw_bytes.decode("utf-8-sig", errors="replace")
+        stripped = raw_text.lstrip()
+
+        if "<<<<<<<" in raw_text or "=======" in raw_text or ">>>>>>>" in raw_text:
+            raise RuntimeError("version.json содержит маркеры git-конфликта")
+
+        if stripped.startswith("<!DOCTYPE") or stripped.startswith("<html"):
+            raise RuntimeError("сервер обновлений вернул HTML вместо JSON")
+
+        try:
+            return json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Некорректный JSON в version.json: {e}") from e
+
     def check_for_updates(self, silent=False):
         manifest_url = UPDATE_MANIFEST_URL
         if not manifest_url:
@@ -3275,8 +3157,7 @@ class MainWindow(QMainWindow):
                 method="GET",
             )
             with request.urlopen(req, timeout=20, context=build_ssl_context()) as resp:
-                # Поддержка BOM в JSON (например, если version.json сохранён PowerShell с UTF-8 BOM).
-                manifest = json.loads(resp.read().decode("utf-8-sig"))
+                manifest = self._parse_update_manifest(resp.read())
 
             latest_version = str(manifest.get("latest_version", "")).strip()
             download_url = str(manifest.get("download_url", "")).strip()
