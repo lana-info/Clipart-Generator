@@ -57,7 +57,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-APP_VERSION = "0.2.6"
+APP_VERSION = "1.0.0"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 REFERENCE_MODEL_SHORTLIST = {
     "flux-2/pro-image-to-image",
@@ -208,6 +208,7 @@ class WorkerThread(QThread):
         self.trim_enabled = bool(settings.get("trim_enabled", False))
         self.trim_mode = str(settings.get("trim_mode", "alpha") or "alpha")
         self.trim_position = str(settings.get("trim_position", "post") or "post")
+        self.export_300_dpi = bool(settings.get("export_300_dpi", False))
         self.kie_upscale_model = settings.get("kie_upscale_model", "topaz/upscale")
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.upscale_factor = int(settings.get("upscale_factor", 4) or 4)
@@ -417,9 +418,19 @@ class WorkerThread(QThread):
 
     def _save_image_as_png(self, source_path, output_path):
         with Image.open(source_path) as img:
-            if img.mode not in {"RGB", "RGBA"}:
-                img = img.convert("RGBA")
-            img.save(output_path, format="PNG")
+            self._save_image_object_as_png(img, output_path)
+
+    def _save_image_object_as_png(self, image, output_path):
+        image_to_save = image
+        if image_to_save.mode not in {"RGB", "RGBA"}:
+            image_to_save = image_to_save.convert("RGBA")
+        save_kwargs = self._get_png_save_kwargs()
+        image_to_save.save(output_path, format="PNG", **save_kwargs)
+
+    def _get_png_save_kwargs(self):
+        if self.export_300_dpi:
+            return {"dpi": (300, 300)}
+        return {}
 
     def _trim_image_file(self, source_path, output_path, stage_label):
         with Image.open(source_path) as img:
@@ -435,9 +446,7 @@ class WorkerThread(QThread):
                 return output_path
 
             cropped = img.crop(bbox)
-            if cropped.mode not in {"RGB", "RGBA"}:
-                cropped = cropped.convert("RGBA")
-            cropped.save(output_path, format="PNG")
+            self._save_image_object_as_png(cropped, output_path)
             self.progress.emit(f"  Trim {stage_label}: {img.width}x{img.height} → {cropped.width}x{cropped.height}")
             return output_path
 
@@ -450,10 +459,31 @@ class WorkerThread(QThread):
     def _detect_alpha_trim_bbox(self, image):
         rgba = image.convert("RGBA")
         alpha = rgba.split()[-1]
-        return alpha.getbbox()
+        # У некоторых моделей по краям остаётся «грязная» полупрозрачность
+        # (alpha 1..10), из-за которой getbbox() возвращает весь кадр.
+        # Считаем полезной областью только пиксели с заметной непрозрачностью.
+        alpha_threshold = 12
+        solid_alpha = alpha.point(lambda v: 255 if v > alpha_threshold else 0)
+        bbox = solid_alpha.getbbox()
+        if not bbox:
+            return None
+
+        full_bbox = (0, 0, image.width, image.height)
+        if bbox != full_bbox:
+            return bbox
+
+        # Если картинка полностью непрозрачная, многие модели всё равно
+        # дорисовывают белые поля без прозрачности. В таком случае делаем
+        # запасной поиск по почти белому фону, чтобы Trim работал предсказуемо.
+        if self._is_fully_opaque(alpha):
+            fallback_bbox = self._detect_white_trim_bbox(image)
+            if fallback_bbox:
+                return fallback_bbox
+
+        return bbox
 
     def _detect_white_trim_bbox(self, image):
-        threshold = 255
+        threshold = 250
         rgb = image.convert("RGB")
         r, g, b = rgb.split()
         mask_r = r.point(lambda v: 255 if v < threshold else 0)
@@ -465,6 +495,12 @@ class WorkerThread(QThread):
         alpha_non_empty = rgba.split()[-1].point(lambda v: 255 if v > 0 else 0)
         mask = ImageChops.multiply(mask, alpha_non_empty)
         return mask.getbbox()
+
+    def _is_fully_opaque(self, alpha_channel):
+        extrema = alpha_channel.getextrema()
+        if not extrema:
+            return False
+        return extrema[0] == 255 and extrema[1] == 255
 
     def _resolve_upscale_factor(self):
         model_name = (self.kie_upscale_model or "").strip()
@@ -992,7 +1028,7 @@ class WorkerThread(QThread):
                 else:
                     with open(output_path, "wb") as f:
                         f.write(content)
-                if output_path.lower().endswith(".png") and "output" in output_path.lower():
+                if self.export_300_dpi and output_path.lower().endswith(".png") and "output" in output_path.lower():
                     self._set_png_dpi(output_path, dpi=300)
                 return
             except Exception as e:
@@ -1006,11 +1042,13 @@ class WorkerThread(QThread):
         if content.startswith(png_signature):
             with open(output_path, "wb") as f:
                 f.write(content)
+            if self.export_300_dpi:
+                self._set_png_dpi(output_path, dpi=300)
             return
 
         try:
             with Image.open(BytesIO(content)) as img:
-                img.save(output_path, format="PNG")
+                self._save_image_object_as_png(img, output_path)
             self.progress.emit("  Формат ответа не PNG: выполнена конвертация в PNG")
             return
         except Exception:
@@ -1476,6 +1514,7 @@ class MainWindow(QMainWindow):
             "trim_enabled": False,
             "trim_mode": "alpha",
             "trim_position": "post",
+            "export_300_dpi": False,
             "upscale_factor": 4,
             "kie_upscale_model": "topaz/upscale",
             "kie_remove_bg_model": "recraft/remove-background",
@@ -1714,6 +1753,8 @@ class MainWindow(QMainWindow):
         self.chk_remove_bg.setChecked(self.config.get("remove_bg", True))
         self.chk_trim = QCheckBox("Trim (обрезка пустых краёв)")
         self.chk_trim.setChecked(bool(self.config.get("trim_enabled", False)))
+        self.chk_export_300_dpi = QCheckBox("Экспорт для печати (300 DPI)")
+        self.chk_export_300_dpi.setChecked(bool(self.config.get("export_300_dpi", False)))
         self.trim_mode_combo = QComboBox()
         self.trim_mode_combo.addItem("Прозрачные края", "alpha")
         self.trim_mode_combo.addItem("Белые края", "white")
@@ -1732,8 +1773,9 @@ class MainWindow(QMainWindow):
         process_flags_layout.addWidget(self.chk_upscale, 0, 0)
         process_flags_layout.addWidget(self.chk_remove_bg, 0, 1)
         process_flags_layout.addWidget(self.chk_trim, 1, 0)
-        process_flags_layout.addWidget(self.trim_mode_combo, 1, 1)
-        process_flags_layout.addWidget(self.trim_position_combo, 1, 2)
+        process_flags_layout.addWidget(self.chk_export_300_dpi, 1, 1)
+        process_flags_layout.addWidget(self.trim_mode_combo, 2, 1)
+        process_flags_layout.addWidget(self.trim_position_combo, 2, 2)
         process_flags_layout.setAlignment(self.trim_position_combo, Qt.AlignmentFlag.AlignLeft)
         process_flags_layout.setColumnStretch(3, 1)
         process_flags_group.setLayout(process_flags_layout)
@@ -2045,6 +2087,7 @@ class MainWindow(QMainWindow):
         self.chk_upscale.toggled.connect(self.schedule_settings_save)
         self.chk_remove_bg.toggled.connect(self.schedule_settings_save)
         self.chk_trim.toggled.connect(self.schedule_settings_save)
+        self.chk_export_300_dpi.toggled.connect(self.schedule_settings_save)
         self.trim_mode_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.trim_position_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_upscale_model_combo.currentTextChanged.connect(self.schedule_settings_save)
@@ -3239,6 +3282,7 @@ class MainWindow(QMainWindow):
         self.config["remove_bg"] = self.chk_remove_bg.isChecked()
         self.config["upscale"] = self.chk_upscale.isChecked()
         self.config["trim_enabled"] = self.chk_trim.isChecked()
+        self.config["export_300_dpi"] = self.chk_export_300_dpi.isChecked()
         self.config["trim_mode"] = str(self.trim_mode_combo.currentData() or "alpha")
         self.config["trim_position"] = str(self.trim_position_combo.currentData() or "post")
         self.config["upscale_factor"] = int(self.upscale_factor_combo.currentText())

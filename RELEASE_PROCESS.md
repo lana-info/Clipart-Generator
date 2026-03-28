@@ -8,13 +8,13 @@
     - Пример пошагового запуска:
       1. Откройте PowerShell.
       2. Введите `cd "D:\Projects\Clipart Generator"` и нажмите Enter.
-      3. Выполните команду `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath . -UpdatesRepoPath .\_updates_repo_tmp` (при необходимости добавьте `-AppVersion 0.25`).
+      3. Выполните команду `powershell -ExecutionPolicy Bypass -File .\scripts\refresh_updates_repo.ps1 -PrivateRepoPath . -UpdatesRepoPath .\_updates_repo_tmp` (при необходимости добавьте `-AppVersion 1.0.0`).
       4. Дождитесь, пока скрипт напишет "Готово" и подскажет, какие действия сделать дальше.
         - Если вам нужно только скачать уже созданные артефакты, добавьте `-Mode copy` и укажите `-AppVersion`, чтобы команда загрузила `.exe` и `.zip` без повторной сборки.
         - Если сборка уже выполнена локально и файлы лежат в `release/`, используйте `-Mode post-build` (в этом режиме скрипт пропускает workflow/загрузку и просто копирует файлы).
 
 ### Шаг 2. Подготовка GitHub Release
-1. Создайте release на GitHub с тегом `v0.25`.
+1. Создайте release на GitHub с тегом `v1.0.0`.
 2. Загрузите Windows setup и macOS zip как assets.
 
 ### Шаг 3. Обновление репозитория `Clipart-Generator-Updates`
@@ -36,7 +36,7 @@
 
 ### Шаг 4. Финальный чек
 1. Убедитесь, что GitHub release содержит только нужные assets (удалите лишнее).
-2. Проверьте, что `Clipart-Generator-Updates` (в GitHub) показывает `version.json` и `.exe` и что ссылка соответствует новой версии (0.25).
+2. Проверьте, что `Clipart-Generator-Updates` (в GitHub) показывает `version.json` и `.exe` и что ссылка соответствует новой версии (1.0.0).
 3. Протестируйте автообновление в приложении: запустите и убедитесь, что `version.json` скачивается без ошибок.
 
 Если нужен автоматический скрипт (PowerShell или .cmd), можно взять вышеописанный `scripts/refresh_updates_repo.ps1` как основу, добавить флаг `-DryRun`, логирование и запуск сборки до копирования.
