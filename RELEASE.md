@@ -85,7 +85,14 @@ python -m PyInstaller --noconfirm --clean --windowed --name "Clipart Generator" 
 
 ```bash
 cd dist
-zip -r "Clipart-Generator-mac-x.y.z.zip" "Clipart Generator.app"
+zip -r "ClipartGenerator-macOS-apple-silicon-x.y.z.zip" "Clipart Generator.app"
+```
+
+- [ ] Для Intel-сборки собрать отдельный архив:
+
+```bash
+cd dist
+zip -r "ClipartGenerator-macOS-intel-x.y.z.zip" "Clipart Generator.app"
 ```
 
 - [ ] (Опционально) сделать `.dmg` через отдельный инструмент (`create-dmg` и т.п.).
@@ -96,8 +103,8 @@ zip -r "Clipart-Generator-mac-x.y.z.zip" "Clipart Generator.app"
 - [ ] Проверить запуск на «чистом» Mac без ручного обхода безопасности.
 
 ### 6) Публикация
-- [ ] Загрузить mac-артефакт в GitHub Release (обычно отдельный asset рядом с Windows setup).
-- [ ] В описании релиза указать, что файл для macOS: `Clipart-Generator-mac-x.y.z.zip`.
+- [ ] Загрузить оба mac-артефакта в GitHub Release.
+- [ ] В описании релиза указать, какой файл для Apple Silicon, а какой для Intel.
 
 ### 7) Важно про автообновление
 - [ ] Текущая логика автообновления в приложении ориентирована на Windows installer (`.exe`).

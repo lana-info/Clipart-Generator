@@ -28,7 +28,7 @@
      5. Выдаёт рекомендации: `git status`, добавление файлов, коммит/пуш и обновление релиза в `Clipart-Generator-Updates`.
 3. Дальше делайте всё очень просто, по одной команде, прямо в папке `_updates_repo_tmp`:
    1. `git status`
-   2. `git add version.json ClipartGenerator-Setup-<версия>.exe ClipartGenerator-macOS-<версия>.zip`
+   2. `git add version.json ClipartGenerator-Setup-<версия>.exe ClipartGenerator-macOS-apple-silicon-<версия>.zip ClipartGenerator-macOS-intel-<версия>.zip`
    3. `git commit -m "chore(release): publish <версия> artifacts"`
    4. `git pull --rebase origin main`
    5. `git push origin main`
