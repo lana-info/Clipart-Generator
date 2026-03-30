@@ -135,11 +135,24 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install LLVM for Intel macOS build
+        if: ${{ matrix.arch == 'intel' }}
+        run: |
+          brew install llvm
+
+      - name: Configure LLVM environment for Intel macOS build
+        if: ${{ matrix.arch == 'intel' }}
+        run: |
+          LLVM_PREFIX="$(brew --prefix llvm)"
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "LLVM_DIR=$LLVM_PREFIX/lib/cmake/llvm" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install "setuptools<70"
           python -m pip install wheel
+          python -m pip install numpy
           python -m pip install --no-build-isolation -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
