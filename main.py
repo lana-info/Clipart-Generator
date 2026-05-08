@@ -60,12 +60,34 @@ from PyQt6.QtWidgets import (
 APP_VERSION = "1.0.0"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 REFERENCE_MODEL_SHORTLIST = {
+    "gpt-image/1.5-image-to-image",
+    "gpt-image-2",
+    "nano-banana-2",
+    "nano-banana-pro",
+    "qwen-image-2",
     "flux-2/pro-image-to-image",
     "flux-2/flex-image-to-image",
+}
+
+# Показываем только выбранные модели; остальные остаются в коде, чтобы быстро вернуть их обратно.
+VISIBLE_GENERATION_MODEL_IDS = {
+    "gpt-image/1.5-text-to-image",
+    "gpt-image-2",
+    "nano-banana-2",
+    "nano-banana-pro",
+    "qwen-image-2",
+    "flux-2/pro-text-to-image",
+    "flux-2/flex-text-to-image",
     "gpt-image/1.5-image-to-image",
-    "qwen/image-to-image",
-    "grok-imagine/image-to-image",
-    "google/nano-banana-edit",
+    "flux-2/pro-image-to-image",
+    "flux-2/flex-image-to-image",
+}
+
+REFERENCE_COMPATIBLE_TEXT_MODELS = {
+    "gpt-image-2",
+    "nano-banana-2",
+    "nano-banana-pro",
+    "qwen-image-2",
 }
 
 DOCUMENTED_MODEL_LIMITS = {
@@ -77,11 +99,53 @@ DOCUMENTED_MODEL_LIMITS = {
         "aspect_ratios": {"1:1", "2:3", "3:2"},
         "qualities": {"medium", "high"},
     },
+    "gpt-image-2": {
+        "aspect_ratios": {"auto", "1:1", "9:16", "16:9", "4:3", "3:4"},
+        "resolutions": {"1K", "2K", "4K"},
+    },
+    "nano-banana-2": {
+        "aspect_ratios": {"auto", "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"},
+        "resolutions": {"1K", "2K", "4K"},
+    },
+    "nano-banana-pro": {
+        "aspect_ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"},
+        "resolutions": {"1K", "2K", "4K"},
+    },
+    "qwen-image-2": {
+        "aspect_ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"},
+    },
+}
+
+RATIO_OPTIONS_ORDER = [
+    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+]
+RESOLUTION_OPTIONS_ORDER = ["1K", "2K", "4K", "8K"]
+
+GENERATION_PRICING = {
+    "gpt-image/1.5-text-to-image": "4 / 22 credits ($0.02 / $0.11)",
+    "gpt-image/1.5-image-to-image": "4 / 22 credits ($0.02 / $0.11)",
+    "gpt-image-2": {"1K": "6 credits / $0.03", "2K": "10 credits / $0.05", "4K": "16 credits / $0.08"},
+    "nano-banana-2": {"1K": "8 credits / $0.04", "2K": "12 credits / $0.06", "4K": "18 credits / $0.09"},
+    "nano-banana-pro": {"1K": "18 credits / $0.09", "2K": "18 credits / $0.09", "4K": "24 credits / $0.12"},
+    "qwen-image-2": "6 credits / $0.03",
+    "flux-2/flex-text-to-image": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
+    "flux-2/pro-text-to-image": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
+    "flux-2/flex-image-to-image": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
+    "flux-2/pro-image-to-image": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
+}
+
+PROCESSING_PRICING = {
+    "topaz/upscale": "40 credits / $0.20",
+    "recraft/crisp-upscale": "0.5 credits / $0.0025",
+    "recraft/remove-background": "1 credit / $0.005",
 }
 
 SUPPORTED_GENERATION_MODEL_IDS = {
     "gpt4o-image",
     "gpt-image/1.5-text-to-image",
+    "gpt-image-2",
+    "nano-banana-2",
+    "qwen-image-2",
     "z-image",
     "google/imagen4",
     "google/imagen4-fast",
@@ -105,11 +169,14 @@ GENERATION_MODELS = [
     # Text -> Image
     {"id": "gpt4o-image", "label": "GPT‑4o Image", "type": "text_to_image"},
     {"id": "gpt-image/1.5-text-to-image", "label": "GPT Image 1.5 (Text→Image)", "type": "text_to_image"},
+    {"id": "gpt-image-2", "label": "GPT Image 2", "type": "text_to_image"},
+    {"id": "nano-banana-2", "label": "Nano Banana 2", "type": "text_to_image"},
     {"id": "z-image", "label": "Z-Image", "type": "text_to_image"},
     {"id": "google/imagen4", "label": "Google Imagen 4", "type": "text_to_image"},
     {"id": "google/imagen4-fast", "label": "Google Imagen 4 Fast", "type": "text_to_image"},
     {"id": "google/imagen4-ultra", "label": "Google Imagen 4 Ultra", "type": "text_to_image"},
     {"id": "google/nano-banana", "label": "Google Nano Banana", "type": "text_to_image"},
+    {"id": "qwen-image-2", "label": "Qwen Image 2.0", "type": "text_to_image"},
     {"id": "flux-2/flex-text-to-image", "label": "FLUX.2 Flex (Text→Image)", "type": "text_to_image"},
     {"id": "flux-2/pro-text-to-image", "label": "FLUX.2 Pro (Text→Image)", "type": "text_to_image"},
     {"id": "grok-imagine/text-to-image", "label": "Grok Imagine (Text→Image)", "type": "text_to_image"},
@@ -117,8 +184,11 @@ GENERATION_MODELS = [
 
     # Image -> Image
     {"id": "nano-banana-pro", "label": "Google Nano Banana Pro", "type": "image_to_image"},
+    {"id": "gpt-image-2", "label": "GPT Image 2", "type": "image_to_image"},
+    {"id": "nano-banana-2", "label": "Nano Banana 2", "type": "image_to_image"},
     {"id": "flux-2/pro-image-to-image", "label": "FLUX.2 Pro (Image→Image)", "type": "image_to_image"},
     {"id": "flux-2/flex-image-to-image", "label": "FLUX.2 Flex (Image→Image)", "type": "image_to_image"},
+    {"id": "qwen-image-2", "label": "Qwen Image 2.0", "type": "edit"},
     {"id": "grok-imagine/image-to-image", "label": "Grok Imagine (Image→Image)", "type": "image_to_image"},
     {"id": "gpt-image/1.5-image-to-image", "label": "GPT Image 1.5 (Image→Image)", "type": "image_to_image"},
     {"id": "qwen/image-to-image", "label": "Qwen (Image→Image)", "type": "image_to_image"},
@@ -191,13 +261,17 @@ class WorkerThread(QThread):
         self.kie_upload_path = settings.get("kie_upload_path", "clipart-generator")
         self.text_generation_model = settings.get(
             "text_generation_model",
-            settings.get("generation_model", "gpt4o-image"),
+            settings.get("generation_model", "gpt-image/1.5-text-to-image"),
         )
         self.reference_generation_model = settings.get(
             "reference_generation_model",
-            "qwen/image-to-image",
+            "gpt-image/1.5-image-to-image",
         )
-        self.generation_size = settings.get("generation_size", "1:1")
+        legacy_ratio = settings.get("generation_size", "1:1")
+        self.text_generation_ratio = settings.get("text_generation_ratio", legacy_ratio)
+        self.reference_generation_ratio = settings.get("reference_generation_ratio", legacy_ratio)
+        self.text_generation_resolution = settings.get("text_generation_resolution", "1K")
+        self.reference_generation_resolution = settings.get("reference_generation_resolution", "1K")
         self.timeout = max(10, int(settings.get("timeout", 60)))
         self.retries = max(0, int(settings.get("retries", 3)))
         self.generation_wait_timeout = max(120, int(settings.get("generation_wait_timeout", 300)))
@@ -507,8 +581,19 @@ class WorkerThread(QThread):
         if model_name == "recraft/crisp-upscale":
             return 4
         if model_name == "topaz/upscale":
-            return self.upscale_factor if self.upscale_factor in {2, 4, 8} else 4
-        return self.upscale_factor if self.upscale_factor in {2, 3, 4} else 4
+            return 8
+        return 4
+
+    def _get_generation_profile(self, has_references):
+        if has_references:
+            return (
+                self._normalize_ratio(self.reference_generation_ratio),
+                str(self.reference_generation_resolution or "1K").strip() or "1K",
+            )
+        return (
+            self._normalize_ratio(self.text_generation_ratio),
+            str(self.text_generation_resolution or "1K").strip() or "1K",
+        )
 
     def _kie_headers(self):
         return {
@@ -740,8 +825,12 @@ class WorkerThread(QThread):
 
     def _build_documented_model_input(self, model_name, prompt, reference_urls=None):
         reference_urls = reference_urls or []
-        ratio = self._normalize_model_ratio(model_name, self._normalize_ratio(self.generation_size))
+        ratio_setting, resolution_setting = self._get_generation_profile(bool(reference_urls))
+        ratio = self._normalize_model_ratio(model_name, ratio_setting)
         quality = self._normalize_model_quality(model_name)
+        capabilities = self._get_model_capabilities(model_name)
+        allowed_resolutions = capabilities["resolutions"]
+        resolution = resolution_setting if resolution_setting in allowed_resolutions else ("1K" if "1K" in allowed_resolutions else (next(iter(sorted(allowed_resolutions))) if allowed_resolutions else "1K"))
 
         if model_name == "gpt-image/1.5-text-to-image":
             return {"prompt": prompt, "aspect_ratio": ratio, "quality": quality}
@@ -754,15 +843,47 @@ class WorkerThread(QThread):
                 "quality": quality,
             }
 
+        if model_name == "gpt-image-2":
+            payload = {
+                "prompt": prompt,
+                "aspect_ratio": ratio,
+                "resolution": resolution,
+            }
+            if reference_urls:
+                payload["input_urls"] = list(reference_urls)
+            return payload
+
+        if model_name == "nano-banana-2":
+            payload = {
+                "prompt": prompt,
+                "aspect_ratio": ratio,
+                "resolution": resolution,
+                "output_format": "png",
+            }
+            if reference_urls:
+                payload["image_input"] = list(reference_urls)
+            return payload
+
+        if model_name == "nano-banana-pro":
+            payload = {
+                "prompt": prompt,
+                "aspect_ratio": ratio,
+                "resolution": resolution,
+                "output_format": "png",
+            }
+            if reference_urls:
+                payload["image_input"] = list(reference_urls)
+            return payload
+
         if model_name in {"flux-2/pro-text-to-image", "flux-2/flex-text-to-image"}:
-            return {"prompt": prompt, "aspect_ratio": ratio, "resolution": "1K"}
+            return {"prompt": prompt, "aspect_ratio": ratio, "resolution": resolution}
 
         if model_name in {"flux-2/pro-image-to-image", "flux-2/flex-image-to-image"}:
             return {
                 "prompt": prompt,
                 "input_urls": list(reference_urls),
                 "aspect_ratio": ratio,
-                "resolution": "1K",
+                "resolution": resolution,
             }
 
         if model_name == "google/nano-banana":
@@ -772,16 +893,24 @@ class WorkerThread(QThread):
             return {"prompt": prompt, "image_urls": list(reference_urls), "image_size": ratio}
 
         if model_name == "qwen/text-to-image":
-            return {"prompt": prompt, "image_size": self._ratio_to_qwen_image_size(ratio)}
+            return {"prompt": prompt, "image_size": self._ratio_to_qwen_image_size(ratio), "output_format": "png", "nsfw_checker": True}
 
         if model_name == "qwen/image-to-image":
             return {"prompt": prompt, "image_url": reference_urls[0]}
 
+        if model_name == "qwen-image-2":
+            payload = {
+                "prompt": prompt,
+                "image_size": self._ratio_to_qwen_image_size(ratio),
+                "output_format": "png",
+                "nsfw_checker": True,
+            }
+            if reference_urls:
+                payload["image_url"] = list(reference_urls)
+            return payload
+
         if model_name == "qwen/image-edit":
             return {"prompt": prompt, "image_url": reference_urls[0]}
-
-        if model_name == "nano-banana-pro":
-            return {"prompt": prompt, "image_urls": list(reference_urls), "aspect_ratio": ratio}
 
         if model_name in {"grok-imagine/text-to-image", "google/imagen4", "google/imagen4-fast", "google/imagen4-ultra"}:
             return {"prompt": prompt, "aspect_ratio": ratio}
@@ -801,7 +930,7 @@ class WorkerThread(QThread):
         model_meta = GENERATION_MODEL_META.get(normalized, {})
         model_type = model_meta.get("type")
 
-        if has_references and model_type in {"image_to_image", "edit"}:
+        if has_references and (model_type in {"image_to_image", "edit"} or normalized in REFERENCE_COMPATIBLE_TEXT_MODELS):
             return normalized
         if not has_references and model_type == "text_to_image":
             return normalized
@@ -816,21 +945,22 @@ class WorkerThread(QThread):
         return fallback
 
     def _default_generation_model(self, required_type):
-        if required_type == "image_to_image" and "qwen/image-to-image" in GENERATION_MODEL_META:
-            return "qwen/image-to-image"
         for entry in GENERATION_MODELS:
-            if entry.get("type") == required_type and entry.get("id") in SUPPORTED_GENERATION_MODEL_IDS:
-                return entry.get("id")
+            model_id = entry.get("id")
+            if model_id not in VISIBLE_GENERATION_MODEL_IDS:
+                continue
+            if entry.get("type") == required_type and model_id in SUPPORTED_GENERATION_MODEL_IDS:
+                return model_id
         return "gpt-image/1.5-text-to-image"
 
     def _normalize_generation_model(self, model_name):
         model = (model_name or "").strip()
         if not model:
-            self.progress.emit("  Модель не указана. Используем gpt4o-image.")
-            return "gpt4o-image"
+            self.progress.emit("  Модель не указана. Используем gpt-image/1.5-text-to-image.")
+            return "gpt-image/1.5-text-to-image"
 
         if model in {"gpt4o-image", "gpt-image-1", "gpt-image-1.5"}:
-            return "gpt4o-image"
+            return "gpt-image/1.5-text-to-image"
 
         if model == "flux-kontext":
             return "flux-kontext"
@@ -841,7 +971,10 @@ class WorkerThread(QThread):
         if model in {
             "google/nano-banana",
             "google/nano-banana-edit",
+            "gpt-image-2",
+            "nano-banana-2",
             "nano-banana-pro",
+            "qwen-image-2",
             "google/imagen4",
             "google/imagen4-fast",
             "google/imagen4-ultra",
@@ -857,7 +990,7 @@ class WorkerThread(QThread):
     def _kie_generate_4o_image(self, prompt):
         headers = self._kie_headers()
         headers["Content-Type"] = "application/json"
-        ratio = self._normalize_ratio(self.generation_size)
+        ratio, _ = self._get_generation_profile(False)
         payload = {"prompt": prompt, "size": ratio}
         result = self._request_json(
             "https://api.kie.ai/api/v1/gpt4o-image/generate",
@@ -903,7 +1036,7 @@ class WorkerThread(QThread):
 
     def _normalize_ratio(self, value):
         raw = (value or "").strip()
-        allowed = {"1:1", "4:3", "3:4", "16:9", "9:16"}
+        allowed = {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"}
         legacy_map = {
             "1024x1024": "1:1",
             "1024x1536": "3:4",
@@ -926,12 +1059,15 @@ class WorkerThread(QThread):
 
     def _ratio_to_qwen_image_size(self, ratio):
         return {
-            "1:1": "square_hd",
-            "4:3": "landscape_4_3",
-            "3:4": "portrait_4_3",
-            "16:9": "landscape_16_9",
-            "9:16": "portrait_16_9",
-        }.get(ratio, "square_hd")
+            "1:1": "1:1",
+            "2:3": "2:3",
+            "3:2": "3:2",
+            "3:4": "3:4",
+            "4:3": "4:3",
+            "9:16": "9:16",
+            "16:9": "16:9",
+            "21:9": "21:9",
+        }.get(ratio, "1:1")
 
     def _kie_wait_4o_result(self, task_id):
         timeout_sec = self.generation_wait_timeout
@@ -1505,10 +1641,14 @@ class MainWindow(QMainWindow):
             "update_manifest_url": UPDATE_MANIFEST_URL,
             "kie_api_key": "",
             "kie_upload_path": "clipart-generator",
-            "text_generation_model": "gpt4o-image",
-            "reference_generation_model": "qwen/image-to-image",
-            "generation_model": "gpt4o-image",
+            "text_generation_model": "gpt-image/1.5-text-to-image",
+            "reference_generation_model": "gpt-image/1.5-image-to-image",
+            "generation_model": "gpt-image/1.5-text-to-image",
             "generation_size": "1:1",
+            "text_generation_ratio": "1:1",
+            "reference_generation_ratio": "1:1",
+            "text_generation_resolution": "1K",
+            "reference_generation_resolution": "1K",
             "remove_bg": True,
             "upscale": True,
             "trim_enabled": False,
@@ -1538,26 +1678,36 @@ class MainWindow(QMainWindow):
         # URL обновлений всегда фиксированный и не редактируется в UI.
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL
 
-        legacy_generation_model = self._normalize_generation_model_id(self.config.get("generation_model", "gpt4o-image"))
+        legacy_generation_model = self._normalize_generation_model_id(self.config.get("generation_model", "gpt-image/1.5-text-to-image"))
         legacy_meta = GENERATION_MODEL_META.get(legacy_generation_model, {})
         legacy_type = legacy_meta.get("type", "text_to_image")
 
         text_model = self._normalize_generation_model_id(self.config.get("text_generation_model", ""))
         text_meta = GENERATION_MODEL_META.get(text_model, {})
-        if text_meta.get("type") != "text_to_image":
+        if text_model not in VISIBLE_GENERATION_MODEL_IDS:
+            text_model = "gpt-image/1.5-text-to-image"
+        elif text_meta.get("type") != "text_to_image":
             if legacy_type == "text_to_image":
                 text_model = legacy_generation_model
             else:
-                text_model = "gpt4o-image"
+                text_model = "gpt-image/1.5-text-to-image"
         self.config["text_generation_model"] = text_model
 
         reference_model = self._normalize_generation_model_id(self.config.get("reference_generation_model", ""))
-        if reference_model not in REFERENCE_MODEL_SHORTLIST:
+        if reference_model not in VISIBLE_GENERATION_MODEL_IDS:
+            reference_model = "gpt-image/1.5-image-to-image"
+        elif reference_model not in REFERENCE_MODEL_SHORTLIST:
             if legacy_generation_model in REFERENCE_MODEL_SHORTLIST:
                 reference_model = legacy_generation_model
             else:
-                reference_model = "qwen/image-to-image"
+                reference_model = "gpt-image/1.5-image-to-image"
         self.config["reference_generation_model"] = reference_model
+
+        legacy_ratio = str(self.config.get("generation_size", "1:1") or "1:1")
+        self.config["text_generation_ratio"] = str(self.config.get("text_generation_ratio", legacy_ratio) or "1:1")
+        self.config["reference_generation_ratio"] = str(self.config.get("reference_generation_ratio", legacy_ratio) or "1:1")
+        self.config["text_generation_resolution"] = str(self.config.get("text_generation_resolution", "1K") or "1K")
+        self.config["reference_generation_resolution"] = str(self.config.get("reference_generation_resolution", "1K") or "1K")
 
         # Оставляем legacy-ключ для обратной совместимости.
         self.config["generation_model"] = self.config["text_generation_model"]
@@ -1802,10 +1952,12 @@ class MainWindow(QMainWindow):
         self.populate_generation_models(self.text_generation_model_combo, {"text_to_image"})
         self.set_generation_model_selection(
             self.text_generation_model_combo,
-            self.config.get("text_generation_model", "gpt4o-image"),
+            self.config.get("text_generation_model", "gpt-image/1.5-text-to-image"),
             {"text_to_image"},
-            "gpt4o-image",
+            "gpt-image/1.5-text-to-image",
         )
+        self.text_model_price_label = QLabel("")
+        self.text_model_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
 
         self.reference_generation_model_combo = QComboBox()
         self.populate_generation_models(
@@ -1815,19 +1967,18 @@ class MainWindow(QMainWindow):
         )
         self.set_generation_model_selection(
             self.reference_generation_model_combo,
-            self.config.get("reference_generation_model", "qwen/image-to-image"),
+            self.config.get("reference_generation_model", "gpt-image/1.5-image-to-image"),
             set(),
-            "qwen/image-to-image",
+            "gpt-image/1.5-image-to-image",
             include_model_ids=REFERENCE_MODEL_SHORTLIST,
         )
+        self.reference_model_price_label = QLabel("")
+        self.reference_model_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
 
-        self.generation_size_combo = QComboBox()
-        self.generation_size_combo.addItems(["1:1", "4:3", "3:4", "16:9", "9:16"])
-        size_value = str(self.config.get("generation_size", "1:1"))
-        legacy_map = {"1024x1024": "1:1", "1024x1536": "3:4", "1536x1024": "4:3"}
-        if size_value in legacy_map:
-            size_value = legacy_map[size_value]
-        self.generation_size_combo.setCurrentText(size_value if size_value else "1:1")
+        self.text_ratio_combo = QComboBox()
+        self.text_resolution_combo = QComboBox()
+        self.reference_ratio_combo = QComboBox()
+        self.reference_resolution_combo = QComboBox()
         self.btn_check_balance = QPushButton("Проверить баланс")
         self.btn_check_balance.setFixedSize(130, 32)
         self.btn_check_balance.setStyleSheet(self.compact_button_style)
@@ -1844,7 +1995,10 @@ class MainWindow(QMainWindow):
         self.kie_api_key_input.setFixedSize(settings_field_width, 32)
         self.text_generation_model_combo.setFixedSize(settings_field_width, 32)
         self.reference_generation_model_combo.setFixedSize(settings_field_width, 32)
-        self.generation_size_combo.setFixedSize(settings_field_width, 32)
+        self.text_ratio_combo.setFixedSize(110, 32)
+        self.text_resolution_combo.setFixedSize(110, 32)
+        self.reference_ratio_combo.setFixedSize(110, 32)
+        self.reference_resolution_combo.setFixedSize(110, 32)
 
         lbl_api_key = QLabel("KIE API Key:")
         lbl_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -1852,18 +2006,40 @@ class MainWindow(QMainWindow):
         lbl_text_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_reference_model = QLabel("Для промптов с референсами:")
         lbl_reference_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_gen_size = QLabel("Соотношение:")
-        lbl_gen_size.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_text_options = QLabel("Параметры текста:")
+        lbl_text_options.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_reference_options = QLabel("Параметры референса:")
+        lbl_reference_options.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        text_options_widget = QWidget()
+        text_options_layout = QHBoxLayout(text_options_widget)
+        text_options_layout.setContentsMargins(0, 0, 0, 0)
+        text_options_layout.setSpacing(8)
+        text_options_layout.addWidget(self.text_ratio_combo)
+        text_options_layout.addWidget(self.text_resolution_combo)
+        text_options_layout.addStretch()
+
+        reference_options_widget = QWidget()
+        reference_options_layout = QHBoxLayout(reference_options_widget)
+        reference_options_layout.setContentsMargins(0, 0, 0, 0)
+        reference_options_layout.setSpacing(8)
+        reference_options_layout.addWidget(self.reference_ratio_combo)
+        reference_options_layout.addWidget(self.reference_resolution_combo)
+        reference_options_layout.addStretch()
 
         kie_layout.addWidget(lbl_api_key, 0, 0)
         kie_layout.addWidget(self.kie_api_key_input, 0, 1)
         kie_layout.addWidget(self.api_key_buttons_widget, 0, 2)
         kie_layout.addWidget(lbl_text_model, 1, 0)
         kie_layout.addWidget(self.text_generation_model_combo, 1, 1)
-        kie_layout.addWidget(lbl_reference_model, 2, 0)
-        kie_layout.addWidget(self.reference_generation_model_combo, 2, 1)
-        kie_layout.addWidget(lbl_gen_size, 3, 0)
-        kie_layout.addWidget(self.generation_size_combo, 3, 1)
+        kie_layout.addWidget(self.text_model_price_label, 1, 2)
+        kie_layout.addWidget(lbl_text_options, 2, 0)
+        kie_layout.addWidget(text_options_widget, 2, 1)
+        kie_layout.addWidget(lbl_reference_model, 3, 0)
+        kie_layout.addWidget(self.reference_generation_model_combo, 3, 1)
+        kie_layout.addWidget(self.reference_model_price_label, 3, 2)
+        kie_layout.addWidget(lbl_reference_options, 4, 0)
+        kie_layout.addWidget(reference_options_widget, 4, 1)
         kie_group.setLayout(kie_layout)
         settings_tab_layout.addWidget(kie_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -1884,28 +2060,25 @@ class MainWindow(QMainWindow):
         rim = self.config.get("kie_remove_bg_model", "recraft/remove-background")
         ri_index = self.kie_remove_bg_model_combo.findText(rim)
         self.kie_remove_bg_model_combo.setCurrentIndex(ri_index if ri_index >= 0 else 0)
-
-        self.upscale_factor_combo = QComboBox()
-        self.upscale_factor_combo.addItems(["2", "4", "8"])
-        self.upscale_factor_combo.setCurrentText(str(self.config.get("upscale_factor", 4)))
+        self.kie_upscale_price_label = QLabel("")
+        self.kie_upscale_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
+        self.kie_remove_bg_price_label = QLabel("")
+        self.kie_remove_bg_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
 
         self.kie_upscale_model_combo.setFixedSize(settings_field_width, 32)
-        self.upscale_factor_combo.setFixedSize(settings_field_width, 32)
         self.kie_remove_bg_model_combo.setFixedSize(settings_field_width, 32)
 
         lbl_upscale_model = QLabel("Апскейл модель:")
         lbl_upscale_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_upscale_factor = QLabel("Кратность:")
-        lbl_upscale_factor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_remove_bg = QLabel("Удаление фона:")
         lbl_remove_bg.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         process_settings_layout.addWidget(lbl_upscale_model, 0, 0)
         process_settings_layout.addWidget(self.kie_upscale_model_combo, 0, 1)
-        process_settings_layout.addWidget(lbl_upscale_factor, 1, 0)
-        process_settings_layout.addWidget(self.upscale_factor_combo, 1, 1)
-        process_settings_layout.addWidget(lbl_remove_bg, 2, 0)
-        process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 2, 1)
+        process_settings_layout.addWidget(self.kie_upscale_price_label, 0, 2)
+        process_settings_layout.addWidget(lbl_remove_bg, 1, 0)
+        process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 1, 1)
+        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 1, 2)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -1944,7 +2117,8 @@ class MainWindow(QMainWindow):
         main_layout.setStretch(3, 0)
         main_layout.addWidget(log_group)
 
-        self.refresh_upscale_factor_options()
+        self.refresh_generation_controls()
+        self.refresh_processing_price_labels()
         self.update_trim_controls_state()
         self.chk_trim.toggled.connect(self.update_trim_controls_state)
         self.trim_mode_combo.currentIndexChanged.connect(self.update_trim_controls_state)
@@ -1953,14 +2127,14 @@ class MainWindow(QMainWindow):
     def _normalize_generation_model_id(self, model_id):
         model = (model_id or "").strip()
         alias_map = {
-            "gpt-image-1": "gpt4o-image",
-            "gpt-image-1.5": "gpt4o-image",
+            "gpt-image-1": "gpt-image/1.5-text-to-image",
+            "gpt-image-1.5": "gpt-image/1.5-text-to-image",
             "google/pro-image-to-image": "nano-banana-pro",
             "flux-kontext": "black-forest-labs/flux-kontext-pro",
             "zai-org/z-image": "z-image",
         }
         if not model:
-            return "gpt4o-image"
+            return "gpt-image/1.5-text-to-image"
         return alias_map.get(model, model)
 
     def _model_type_title(self, model_type):
@@ -1973,21 +2147,27 @@ class MainWindow(QMainWindow):
     def populate_generation_models(self, combo_box, allowed_types, include_model_ids=None):
         combo_box.clear()
         extra_ids = set(include_model_ids or set())
+        seen_model_ids = set()
         for entry in GENERATION_MODELS:
             model_id = entry.get("id")
             model_type = entry.get("type")
-            if model_id not in SUPPORTED_GENERATION_MODEL_IDS and model_id not in extra_ids:
+            if model_id in seen_model_ids:
+                continue
+            if model_id not in VISIBLE_GENERATION_MODEL_IDS and model_id not in extra_ids:
                 continue
             if model_type not in allowed_types and model_id not in extra_ids:
                 continue
             label = entry.get("label", model_id or "")
             combo_box.addItem(label, model_id)
+            seen_model_ids.add(model_id)
 
     def set_generation_model_selection(self, combo_box, model_id, allowed_types, fallback_id, include_model_ids=None):
         normalized = self._normalize_generation_model_id(model_id)
         model_meta = GENERATION_MODEL_META.get(normalized, {})
         extra_ids = set(include_model_ids or set())
-        if model_meta.get("type") not in allowed_types and normalized not in extra_ids:
+        if normalized not in VISIBLE_GENERATION_MODEL_IDS and normalized not in extra_ids:
+            normalized = fallback_id
+        elif model_meta.get("type") not in allowed_types and normalized not in extra_ids:
             normalized = fallback_id
 
         idx = combo_box.findData(normalized)
@@ -2008,6 +2188,103 @@ class MainWindow(QMainWindow):
         if not model_id:
             model_id = combo_box.currentText()
         return self._normalize_generation_model_id(model_id)
+
+    def _get_model_capabilities(self, model_id):
+        limits = DOCUMENTED_MODEL_LIMITS.get(model_id) or {}
+        return {
+            "ratios": set(limits.get("aspect_ratios") or set()),
+            "resolutions": set(limits.get("resolutions") or set()),
+            "pricing": GENERATION_PRICING.get(model_id),
+        }
+
+    def _get_ordered_ratios_for_model(self, model_id):
+        allowed = self._get_model_capabilities(model_id)["ratios"]
+        if not allowed:
+            return ["1:1"]
+        ordered = [value for value in RATIO_OPTIONS_ORDER if value in allowed]
+        return ordered or sorted(allowed)
+
+    def _get_ordered_resolutions_for_model(self, model_id):
+        allowed = self._get_model_capabilities(model_id)["resolutions"]
+        if not allowed:
+            return []
+        ordered = [value for value in RESOLUTION_OPTIONS_ORDER if value in allowed]
+        return ordered or sorted(allowed)
+
+    def _set_combo_values(self, combo, values, preferred_value):
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItems(values)
+        if not values:
+            combo.blockSignals(False)
+            return
+        if preferred_value in values:
+            combo.setCurrentText(preferred_value)
+        else:
+            combo.setCurrentIndex(0)
+        combo.blockSignals(False)
+
+    def _format_model_price(self, model_id, selected_resolution):
+        price_data = self._get_model_capabilities(model_id)["pricing"]
+        if isinstance(price_data, dict):
+            if selected_resolution in price_data:
+                return price_data[selected_resolution]
+            for fallback in RESOLUTION_OPTIONS_ORDER:
+                if fallback in price_data:
+                    return price_data[fallback]
+            return next(iter(price_data.values())) if price_data else "-"
+        return str(price_data or "-")
+
+    def refresh_generation_controls(self, *_):
+        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
+        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
+        preferred_text_ratio = self.text_ratio_combo.currentText().strip() or str(self.config.get("text_generation_ratio", "1:1") or "1:1")
+        preferred_reference_ratio = self.reference_ratio_combo.currentText().strip() or str(self.config.get("reference_generation_ratio", "1:1") or "1:1")
+        preferred_text_resolution = self.text_resolution_combo.currentText().strip() or str(self.config.get("text_generation_resolution", "1K") or "1K")
+        preferred_reference_resolution = self.reference_resolution_combo.currentText().strip() or str(self.config.get("reference_generation_resolution", "1K") or "1K")
+
+        self._set_combo_values(
+            self.text_ratio_combo,
+            self._get_ordered_ratios_for_model(text_model),
+            preferred_text_ratio,
+        )
+        self._set_combo_values(
+            self.reference_ratio_combo,
+            self._get_ordered_ratios_for_model(reference_model),
+            preferred_reference_ratio,
+        )
+
+        text_resolutions = self._get_ordered_resolutions_for_model(text_model)
+        ref_resolutions = self._get_ordered_resolutions_for_model(reference_model)
+        self._set_combo_values(
+            self.text_resolution_combo,
+            text_resolutions or ["—"],
+            preferred_text_resolution,
+        )
+        self._set_combo_values(
+            self.reference_resolution_combo,
+            ref_resolutions or ["—"],
+            preferred_reference_resolution,
+        )
+        self.text_resolution_combo.setEnabled(bool(text_resolutions))
+        self.reference_resolution_combo.setEnabled(bool(ref_resolutions))
+
+        self.refresh_generation_price_labels()
+        self.schedule_settings_save()
+
+    def refresh_generation_price_labels(self, *_):
+        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
+        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
+        text_resolution = self.text_resolution_combo.currentText().strip()
+        reference_resolution = self.reference_resolution_combo.currentText().strip()
+        self.text_model_price_label.setText(self._format_model_price(text_model, text_resolution))
+        self.reference_model_price_label.setText(self._format_model_price(reference_model, reference_resolution))
+
+    def refresh_processing_price_labels(self, *_):
+        upscale_model = self.kie_upscale_model_combo.currentText().strip()
+        remove_bg_model = self.kie_remove_bg_model_combo.currentText().strip()
+        self.kie_upscale_price_label.setText(PROCESSING_PRICING.get(upscale_model, "-"))
+        self.kie_remove_bg_price_label.setText(PROCESSING_PRICING.get(remove_bg_model, "-"))
 
     def create_template_values_table(self, placeholder_prefix):
         table = QTableWidget(0, 2)
@@ -2083,7 +2360,16 @@ class MainWindow(QMainWindow):
             self.license_backup_server_url_input.textChanged.connect(self.schedule_settings_save)
         self.text_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.reference_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
-        self.generation_size_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.text_generation_model_combo.currentTextChanged.connect(self.refresh_generation_controls)
+        self.reference_generation_model_combo.currentTextChanged.connect(self.refresh_generation_controls)
+        self.text_ratio_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.text_resolution_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.text_ratio_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
+        self.text_resolution_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
+        self.reference_ratio_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.reference_resolution_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.reference_ratio_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
+        self.reference_resolution_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
         self.chk_upscale.toggled.connect(self.schedule_settings_save)
         self.chk_remove_bg.toggled.connect(self.schedule_settings_save)
         self.chk_trim.toggled.connect(self.schedule_settings_save)
@@ -2091,9 +2377,9 @@ class MainWindow(QMainWindow):
         self.trim_mode_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.trim_position_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_upscale_model_combo.currentTextChanged.connect(self.schedule_settings_save)
-        self.kie_upscale_model_combo.currentTextChanged.connect(self.on_upscale_model_changed)
+        self.kie_upscale_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
         self.kie_remove_bg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
-        self.upscale_factor_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.kie_remove_bg_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
         self.radio_run_generate.toggled.connect(self.schedule_settings_save)
         self.radio_run_process.toggled.connect(self.schedule_settings_save)
         self.radio_run_both.toggled.connect(self.schedule_settings_save)
@@ -2101,36 +2387,10 @@ class MainWindow(QMainWindow):
     def schedule_settings_save(self, *_):
         self.settings_save_timer.start()
 
-    def on_upscale_model_changed(self, *_):
-        self.refresh_upscale_factor_options()
-
     def update_trim_controls_state(self, *_):
         trim_enabled = self.chk_trim.isChecked()
         self.trim_mode_combo.setEnabled(trim_enabled)
         self.trim_position_combo.setEnabled(trim_enabled)
-
-    def refresh_upscale_factor_options(self):
-        model_name = self.kie_upscale_model_combo.currentText().strip()
-        if model_name == "recraft/crisp-upscale":
-            factors = ["4"]
-        elif model_name == "topaz/upscale":
-            factors = ["2", "4", "8"]
-        else:
-            factors = ["2", "3", "4"]
-
-        current_factor = self.upscale_factor_combo.currentText().strip()
-        self.upscale_factor_combo.blockSignals(True)
-        self.upscale_factor_combo.clear()
-        self.upscale_factor_combo.addItems(factors)
-        if current_factor in factors:
-            self.upscale_factor_combo.setCurrentText(current_factor)
-        elif "4" in factors:
-            self.upscale_factor_combo.setCurrentText("4")
-        else:
-            self.upscale_factor_combo.setCurrentIndex(0)
-        self.upscale_factor_combo.setEnabled(model_name != "recraft/crisp-upscale")
-        self.upscale_factor_combo.blockSignals(False)
-        self.schedule_settings_save()
 
     def on_mode_changed(self, checked):
         is_process = self.radio_run_process.isChecked()
@@ -2608,6 +2868,11 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Выберите рабочую папку")
             return
 
+        validation_error = self.validate_generation_selection()
+        if validation_error:
+            QMessageBox.warning(self, "Ошибка", validation_error)
+            return
+
         self.persist_ui_settings()
         current_api_key = self.config.get("kie_api_key", "").strip()
 
@@ -2662,6 +2927,27 @@ class MainWindow(QMainWindow):
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.worker.start()
+
+    def validate_generation_selection(self):
+        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
+        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
+        text_ratio = self.text_ratio_combo.currentText().strip()
+        reference_ratio = self.reference_ratio_combo.currentText().strip()
+        text_resolution = self.text_resolution_combo.currentText().strip()
+        reference_resolution = self.reference_resolution_combo.currentText().strip()
+
+        text_caps = self._get_model_capabilities(text_model)
+        reference_caps = self._get_model_capabilities(reference_model)
+
+        if text_caps["ratios"] and text_ratio not in text_caps["ratios"]:
+            return f"Соотношение {text_ratio} недоступно для модели {text_model}"
+        if reference_caps["ratios"] and reference_ratio not in reference_caps["ratios"]:
+            return f"Соотношение {reference_ratio} недоступно для модели {reference_model}"
+        if text_caps["resolutions"] and text_resolution not in text_caps["resolutions"]:
+            return f"Размер {text_resolution} недоступен для модели {text_model}"
+        if reference_caps["resolutions"] and reference_resolution not in reference_caps["resolutions"]:
+            return f"Размер {reference_resolution} недоступен для модели {reference_model}"
+        return ""
 
     def stop_work(self):
         if self.worker:
@@ -2763,7 +3049,8 @@ class MainWindow(QMainWindow):
         text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
         reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
         timeout = max(10, int(self.config.get("timeout", 60)))
-        ratio = self.generation_size_combo.currentText().strip() or "1:1"
+        text_ratio = self.text_ratio_combo.currentText().strip() or "1:1"
+        reference_ratio = self.reference_ratio_combo.currentText().strip() or "1:1"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -2777,14 +3064,20 @@ class MainWindow(QMainWindow):
                 raise RuntimeError(f"Недоступна модель для текстовых промптов: {text_model}. {text_msg}")
 
             # Если уже проверили 1:1 и выбран тоже 1:1, повторный сетевой запрос не нужен.
-            if ratio != "1:1":
-                ratio_ok, ratio_msg, _ = self._probe_model_with_ratio(text_model, ratio, headers, timeout)
+            if text_ratio != "1:1":
+                ratio_ok, ratio_msg, _ = self._probe_model_with_ratio(text_model, text_ratio, headers, timeout)
                 if not ratio_ok:
                     raise RuntimeError(
-                        f"Недоступно соотношение {ratio} для модели {text_model}. {ratio_msg}"
+                        f"Недоступно соотношение {text_ratio} для модели {text_model}. {ratio_msg}"
                     )
 
-            ref_ok, ref_msg, ref_task_id = self._probe_model_with_ratio(reference_model, "1:1", headers, timeout)
+            ref_ok, ref_msg, ref_task_id = self._probe_model_with_ratio(
+                reference_model,
+                "1:1",
+                headers,
+                timeout,
+                reference_urls=[sample_image_url],
+            )
             if (
                 not ref_ok
                 and reference_model == "gpt-image/1.5-image-to-image"
@@ -2798,7 +3091,7 @@ class MainWindow(QMainWindow):
                 ref_task_id = "schema-check-skipped"
             elif (
                 not ref_ok
-                and reference_model_type in {"image_to_image", "edit"}
+                and (reference_model_type in {"image_to_image", "edit"} or reference_model in REFERENCE_COMPATIBLE_TEXT_MODELS)
                 and self._is_schema_required_error(ref_msg)
             ):
                 self.log(
@@ -2810,8 +3103,14 @@ class MainWindow(QMainWindow):
             if not ref_ok:
                 raise RuntimeError(f"Недоступна модель для промптов с референсами: {reference_model}. {ref_msg}")
 
-            if ratio != "1:1":
-                ref_ratio_ok, ref_ratio_msg, _ = self._probe_model_with_ratio(reference_model, ratio, headers, timeout)
+            if reference_ratio != "1:1":
+                ref_ratio_ok, ref_ratio_msg, _ = self._probe_model_with_ratio(
+                    reference_model,
+                    reference_ratio,
+                    headers,
+                    timeout,
+                    reference_urls=[sample_image_url],
+                )
                 if (
                     not ref_ratio_ok
                     and reference_model == "gpt-image/1.5-image-to-image"
@@ -2824,7 +3123,7 @@ class MainWindow(QMainWindow):
                     ref_ratio_ok = True
                 elif (
                     not ref_ratio_ok
-                    and reference_model_type in {"image_to_image", "edit"}
+                    and (reference_model_type in {"image_to_image", "edit"} or reference_model in REFERENCE_COMPATIBLE_TEXT_MODELS)
                     and self._is_schema_required_error(ref_ratio_msg)
                 ):
                     self.log(
@@ -2834,7 +3133,7 @@ class MainWindow(QMainWindow):
                     ref_ratio_ok = True
                 if not ref_ratio_ok:
                     raise RuntimeError(
-                        f"Недоступно соотношение {ratio} для модели {reference_model}. {ref_ratio_msg}"
+                        f"Недоступно соотношение {reference_ratio} для модели {reference_model}. {ref_ratio_msg}"
                     )
 
             self.log(
@@ -3027,11 +3326,12 @@ class MainWindow(QMainWindow):
             self.log(f"Проверка лицензии не пройдена: {e}")
             QMessageBox.warning(self, "Лицензия", f"Ошибка проверки: {e}")
 
-    def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout):
+    def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout, reference_urls=None):
         prompt = "simple test image"
         legacy_size = self._ratio_to_legacy_size_ui(ratio)
         sample_image_url = "https://picsum.photos/768/768"
         probe_timeout = min(max(8, timeout), 20)
+        probe_reference_urls = list(reference_urls or [])
 
         model = self._normalize_generation_model_id(raw_model)
         if model in {"gpt4o-image", "gpt-image-1", "gpt-image-1.5"}:
@@ -3053,7 +3353,15 @@ class MainWindow(QMainWindow):
         else:
             url = "https://api.kie.ai/api/v1/jobs/createTask"
             test_model = model
-            if model_type == "text_to_image":
+            if probe_reference_urls and (model_type in {"image_to_image", "edit"} or model in REFERENCE_COMPATIBLE_TEXT_MODELS):
+                payload_variants = self._build_reference_probe_variants(
+                    test_model,
+                    prompt,
+                    probe_reference_urls[0] or sample_image_url,
+                    ratio,
+                    legacy_size,
+                )
+            elif model_type == "text_to_image":
                 payload_variants = self._build_text_probe_variants(
                     test_model,
                     prompt,
@@ -3278,14 +3586,17 @@ class MainWindow(QMainWindow):
             self.reference_generation_model_combo
         )
         self.config["generation_model"] = self.config["text_generation_model"]
-        self.config["generation_size"] = self.generation_size_combo.currentText()
+        self.config["text_generation_ratio"] = self.text_ratio_combo.currentText()
+        self.config["reference_generation_ratio"] = self.reference_ratio_combo.currentText()
+        self.config["text_generation_resolution"] = self.text_resolution_combo.currentText()
+        self.config["reference_generation_resolution"] = self.reference_resolution_combo.currentText()
+        self.config["generation_size"] = self.config["text_generation_ratio"]
         self.config["remove_bg"] = self.chk_remove_bg.isChecked()
         self.config["upscale"] = self.chk_upscale.isChecked()
         self.config["trim_enabled"] = self.chk_trim.isChecked()
         self.config["export_300_dpi"] = self.chk_export_300_dpi.isChecked()
         self.config["trim_mode"] = str(self.trim_mode_combo.currentData() or "alpha")
         self.config["trim_position"] = str(self.trim_position_combo.currentData() or "post")
-        self.config["upscale_factor"] = int(self.upscale_factor_combo.currentText())
         self.config["kie_upscale_model"] = self.kie_upscale_model_combo.currentText()
         self.config["kie_remove_bg_model"] = self.kie_remove_bg_model_combo.currentText()
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL
@@ -3316,7 +3627,3 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
-
-
-
-
