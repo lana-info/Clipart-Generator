@@ -153,6 +153,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -AppVersion 1.0.0
 Для проверки релиза важны:
 
 - `version.json` и GitHub Release должны совпадать по `download_url` и `sha256`;
+- `download_url` для Windows-апдейта должен вести на публичный asset в `Clipart-Generator-Updates`, а не на приватный `Clipart-Generator`, иначе приложение получит `404` при скачивании без авторизации;
 - в public update repo не должно быть лишних файлов;
 - автообновление должно видеть новый `version.json`.
 

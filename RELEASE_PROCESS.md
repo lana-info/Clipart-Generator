@@ -1,6 +1,6 @@
 ## Процесс выпуска версии
 
-В проекте используется двойная схема: **Clipart-Generator** хранит код и собирает артефакты, **Clipart-Generator-Updates** публикует только `version.json` и `ClipartGenerator-Setup-*.exe` для автообновления. Эти шаги можно выполнять вручную или запускать скрипты.
+В проекте используется двойная схема: **Clipart-Generator** хранит код и собирает артефакты, **Clipart-Generator-Updates** публикует `version.json`, `ClipartGenerator-Setup-*.exe` и один macOS zip для ручной установки. Эти шаги можно выполнять вручную или запускать скрипты.
 
 ### Шаг 1. Собрать релиз в `Clipart-Generator`
 1. Убедитесь, что все изменения закоммичены в `main`. Скрипт `scripts/refresh_updates_repo.ps1` находит проект по пути `D:\Projects\Clipart Generator`, вызывает `Release Multi Platform`, обновляет `version.json`, скачивает готовые `.exe` и `.zip` и копирует артефакты в `_updates_repo_tmp`.
@@ -28,7 +28,7 @@
      5. Выдаёт рекомендации: `git status`, добавление файлов, коммит/пуш и обновление релиза в `Clipart-Generator-Updates`.
 3. Дальше делайте всё очень просто, по одной команде, прямо в папке `_updates_repo_tmp`:
    1. `git status`
-   2. `git add version.json ClipartGenerator-Setup-<версия>.exe ClipartGenerator-macOS-apple-silicon-<версия>.zip ClipartGenerator-macOS-intel-<версия>.zip`
+   2. `git add version.json ClipartGenerator-Setup-<версия>.exe ClipartGenerator-macOS-<версия>.zip`
    3. `git commit -m "chore(release): publish <версия> artifacts"`
    4. `git pull --rebase origin main`
    5. `git push origin main`
@@ -36,7 +36,8 @@
 
 ### Шаг 4. Финальный чек
 1. Убедитесь, что GitHub release содержит только нужные assets (удалите лишнее).
-2. Проверьте, что `Clipart-Generator-Updates` (в GitHub) показывает `version.json` и `.exe` и что ссылка соответствует новой версии (1.0.0).
+2. Проверьте, что `Clipart-Generator-Updates` (в GitHub) показывает `version.json`, `.exe` и `ClipartGenerator-macOS-<версия>.zip`.
 3. Протестируйте автообновление в приложении: запустите и убедитесь, что `version.json` скачивается без ошибок.
+4. Проверьте, что `download_url` в `version.json` указывает на публичный asset в `Clipart-Generator-Updates`, а не на приватный `Clipart-Generator`; иначе Windows-обновление получит `404` без авторизации.
 
 Если нужен автоматический скрипт (PowerShell или .cmd), можно взять вышеописанный `scripts/refresh_updates_repo.ps1` как основу, добавить флаг `-DryRun`, логирование и запуск сборки до копирования.
