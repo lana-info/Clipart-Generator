@@ -83,36 +83,65 @@ VISIBLE_GENERATION_MODEL_IDS = {
     "flux-2/flex-image-to-image",
 }
 
-REFERENCE_COMPATIBLE_TEXT_MODELS = {
-    "gpt-image-2",
-    "nano-banana-2",
-    "nano-banana-pro",
-    "qwen-image-2",
-}
-
-DOCUMENTED_MODEL_LIMITS = {
+MODEL_CAPABILITIES = {
     "gpt-image/1.5-text-to-image": {
-        "aspect_ratios": {"1:1", "2:3", "3:2"},
+        "ratios": {"1:1", "2:3", "3:2"},
         "qualities": {"medium", "high"},
+        "pricing": "4 / 22 credits ($0.02 / $0.11)",
+        "reference_compatible_text": False,
     },
     "gpt-image/1.5-image-to-image": {
-        "aspect_ratios": {"1:1", "2:3", "3:2"},
+        "ratios": {"1:1", "2:3", "3:2"},
         "qualities": {"medium", "high"},
+        "pricing": "4 / 22 credits ($0.02 / $0.11)",
+        "reference_compatible_text": False,
     },
     "gpt-image-2": {
-        "aspect_ratios": {"auto", "1:1", "9:16", "16:9", "4:3", "3:4"},
+        "ratios": {"auto", "1:1", "9:16", "16:9", "4:3", "3:4"},
         "resolutions": {"1K", "2K", "4K"},
+        "pricing": {"1K": "6 credits / $0.03", "2K": "10 credits / $0.05", "4K": "16 credits / $0.08"},
+        "reference_compatible_text": True,
     },
     "nano-banana-2": {
-        "aspect_ratios": {"auto", "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"},
+        "ratios": {"auto", "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"},
         "resolutions": {"1K", "2K", "4K"},
+        "pricing": {"1K": "8 credits / $0.04", "2K": "12 credits / $0.06", "4K": "18 credits / $0.09"},
+        "reference_compatible_text": True,
     },
     "nano-banana-pro": {
-        "aspect_ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"},
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"},
         "resolutions": {"1K", "2K", "4K"},
+        "pricing": {"1K": "18 credits / $0.09", "2K": "18 credits / $0.09", "4K": "24 credits / $0.12"},
+        "reference_compatible_text": True,
     },
     "qwen-image-2": {
-        "aspect_ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"},
+        "ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"},
+        "pricing": "6 credits / $0.03",
+        "reference_compatible_text": True,
+    },
+    "flux-2/flex-text-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
+        "reference_compatible_text": False,
+    },
+    "flux-2/pro-text-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
+        "reference_compatible_text": False,
+    },
+    "flux-2/flex-image-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
+        "reference_compatible_text": False,
+    },
+    "flux-2/pro-image-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
+        "reference_compatible_text": False,
     },
 }
 
@@ -121,24 +150,22 @@ RATIO_OPTIONS_ORDER = [
 ]
 RESOLUTION_OPTIONS_ORDER = ["1K", "2K", "4K", "8K"]
 
-GENERATION_PRICING = {
-    "gpt-image/1.5-text-to-image": "4 / 22 credits ($0.02 / $0.11)",
-    "gpt-image/1.5-image-to-image": "4 / 22 credits ($0.02 / $0.11)",
-    "gpt-image-2": {"1K": "6 credits / $0.03", "2K": "10 credits / $0.05", "4K": "16 credits / $0.08"},
-    "nano-banana-2": {"1K": "8 credits / $0.04", "2K": "12 credits / $0.06", "4K": "18 credits / $0.09"},
-    "nano-banana-pro": {"1K": "18 credits / $0.09", "2K": "18 credits / $0.09", "4K": "24 credits / $0.12"},
-    "qwen-image-2": "6 credits / $0.03",
-    "flux-2/flex-text-to-image": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
-    "flux-2/pro-text-to-image": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
-    "flux-2/flex-image-to-image": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
-    "flux-2/pro-image-to-image": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
-}
-
 PROCESSING_PRICING = {
     "topaz/upscale": "40 credits / $0.20",
     "recraft/crisp-upscale": "0.5 credits / $0.0025",
     "recraft/remove-background": "1 credit / $0.005",
 }
+
+
+def get_model_capabilities(model_id):
+    limits = MODEL_CAPABILITIES.get(model_id) or {}
+    return {
+        "ratios": set(limits.get("ratios") or set()),
+        "resolutions": set(limits.get("resolutions") or set()),
+        "qualities": set(limits.get("qualities") or set()),
+        "pricing": limits.get("pricing"),
+        "reference_compatible_text": bool(limits.get("reference_compatible_text", False)),
+    }
 
 SUPPORTED_GENERATION_MODEL_IDS = {
     "gpt4o-image",
@@ -595,6 +622,9 @@ class WorkerThread(QThread):
             str(self.text_generation_resolution or "1K").strip() or "1K",
         )
 
+    def _get_model_capabilities(self, model_id):
+        return get_model_capabilities(model_id)
+
     def _kie_headers(self):
         return {
             "Authorization": f"Bearer {self.kie_api_key}",
@@ -806,8 +836,7 @@ class WorkerThread(QThread):
         return self._kie_generate_generic_model(normalized_model, prompt, reference_urls=reference_urls)
 
     def _normalize_model_ratio(self, model_name, ratio):
-        limits = DOCUMENTED_MODEL_LIMITS.get(model_name) or {}
-        allowed = limits.get("aspect_ratios") or set()
+        allowed = self._get_model_capabilities(model_name)["ratios"]
         if ratio in allowed or not allowed:
             return ratio
         fallback_ratio = "1:1" if "1:1" in allowed else next(iter(sorted(allowed)))
@@ -817,8 +846,7 @@ class WorkerThread(QThread):
         return fallback_ratio
 
     def _normalize_model_quality(self, model_name, quality="medium"):
-        limits = DOCUMENTED_MODEL_LIMITS.get(model_name) or {}
-        allowed = limits.get("qualities") or set()
+        allowed = self._get_model_capabilities(model_name)["qualities"]
         if quality in allowed or not allowed:
             return quality
         return "medium"
@@ -930,7 +958,8 @@ class WorkerThread(QThread):
         model_meta = GENERATION_MODEL_META.get(normalized, {})
         model_type = model_meta.get("type")
 
-        if has_references and (model_type in {"image_to_image", "edit"} or normalized in REFERENCE_COMPATIBLE_TEXT_MODELS):
+        reference_compatible = self._get_model_capabilities(normalized)["reference_compatible_text"]
+        if has_references and (model_type in {"image_to_image", "edit"} or reference_compatible):
             return normalized
         if not has_references and model_type == "text_to_image":
             return normalized
@@ -2190,12 +2219,7 @@ class MainWindow(QMainWindow):
         return self._normalize_generation_model_id(model_id)
 
     def _get_model_capabilities(self, model_id):
-        limits = DOCUMENTED_MODEL_LIMITS.get(model_id) or {}
-        return {
-            "ratios": set(limits.get("aspect_ratios") or set()),
-            "resolutions": set(limits.get("resolutions") or set()),
-            "pricing": GENERATION_PRICING.get(model_id),
-        }
+        return get_model_capabilities(model_id)
 
     def _get_ordered_ratios_for_model(self, model_id):
         allowed = self._get_model_capabilities(model_id)["ratios"]
@@ -3091,7 +3115,7 @@ class MainWindow(QMainWindow):
                 ref_task_id = "schema-check-skipped"
             elif (
                 not ref_ok
-                and (reference_model_type in {"image_to_image", "edit"} or reference_model in REFERENCE_COMPATIBLE_TEXT_MODELS)
+                and (reference_model_type in {"image_to_image", "edit"} or self._get_model_capabilities(reference_model)["reference_compatible_text"])
                 and self._is_schema_required_error(ref_msg)
             ):
                 self.log(
@@ -3123,7 +3147,7 @@ class MainWindow(QMainWindow):
                     ref_ratio_ok = True
                 elif (
                     not ref_ratio_ok
-                    and (reference_model_type in {"image_to_image", "edit"} or reference_model in REFERENCE_COMPATIBLE_TEXT_MODELS)
+                    and (reference_model_type in {"image_to_image", "edit"} or self._get_model_capabilities(reference_model)["reference_compatible_text"])
                     and self._is_schema_required_error(ref_ratio_msg)
                 ):
                     self.log(
@@ -3353,7 +3377,7 @@ class MainWindow(QMainWindow):
         else:
             url = "https://api.kie.ai/api/v1/jobs/createTask"
             test_model = model
-            if probe_reference_urls and (model_type in {"image_to_image", "edit"} or model in REFERENCE_COMPATIBLE_TEXT_MODELS):
+            if probe_reference_urls and (model_type in {"image_to_image", "edit"} or self._get_model_capabilities(model)["reference_compatible_text"]):
                 payload_variants = self._build_reference_probe_variants(
                     test_model,
                     prompt,
