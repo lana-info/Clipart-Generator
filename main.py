@@ -10,6 +10,7 @@ import hashlib
 import mimetypes
 import re
 import ssl
+import math
 from io import BytesIO, StringIO
 from urllib.parse import urlparse
 from urllib import error as urlerror
@@ -57,7 +58,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 REFERENCE_MODEL_SHORTLIST = {
     "gpt-image/1.5-image-to-image",
@@ -225,8 +226,15 @@ GENERATION_MODELS = [
     {"id": "qwen/image-edit", "label": "Qwen Image Edit", "type": "edit"},
 ]
 
-GENERATION_MODEL_META = {entry["id"]: entry for entry in GENERATION_MODELS}
+# Для моделей, которые встречаются несколько раз (text/image/edit),
+# в базовой карте фиксируем первое объявление (обычно text_to_image).
+GENERATION_MODEL_META = {}
+for _entry in GENERATION_MODELS:
+    _model_id = _entry.get("id")
+    if _model_id and _model_id not in GENERATION_MODEL_META:
+        GENERATION_MODEL_META[_model_id] = _entry
 MAX_REFERENCES_PER_PROMPT = 5
+PROMPT_RATIO_PATTERN = re.compile(r"(?<!\d)(\d{1,2})\s*(?:[:xх])\s*(\d{1,2})(?!\d)", re.IGNORECASE)
 
 
 def split_references(raw_value):
@@ -487,24 +495,46 @@ class WorkerThread(QThread):
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
+        trim_mode = self._normalize_trim_mode(self.trim_mode)
+        trim_position = self._normalize_trim_position(self.trim_position)
+        split_upscale = self.upscale and trim_position == "between"
 
         if self.upscale:
-            self.progress.emit(f"  Апскейл через {self.kie_upscale_model}...")
-            upscale_factor = self._resolve_upscale_factor()
-            if self.kie_upscale_model == "topaz/upscale":
-                upscale_input = {
-                    "image_url": pipeline_url,
-                    "upscale_factor": str(upscale_factor),
-                }
-            elif self.kie_upscale_model == "recraft/crisp-upscale":
-                upscale_input = None
-            else:
-                upscale_input = {"scale": upscale_factor}
-            self.progress.emit(f"  Кратность апскейла: {upscale_factor}x")
-            pipeline_url = self._kie_run_model_task(self.kie_upscale_model, pipeline_url, extra_input=upscale_input)
-            upscaled_path = os.path.join(raw_dir, f"{prefix}_upscaled_{idx:03d}_{self.run_stamp}.png")
-            self._download_file(pipeline_url, upscaled_path)
-            self.progress.emit(f"  Промежуточный апскейл: {upscaled_path}")
+            first_factor = self._resolve_upscale_factor()
+            second_factor = first_factor
+            if split_upscale:
+                first_factor, second_factor = self._split_upscale_factors(first_factor)
+
+            pipeline_url = self._upscale_pipeline_step(
+                pipeline_url,
+                raw_dir,
+                idx,
+                prefix,
+                "upscaled",
+                first_factor,
+            )
+
+            if split_upscale:
+                between_source_path = os.path.join(raw_dir, f"{prefix}_between_source_{idx:03d}_{self.run_stamp}.png")
+                between_trimmed_path = os.path.join(raw_dir, f"{prefix}_betweentrim_{idx:03d}_{self.run_stamp}.png")
+                self._download_file(pipeline_url, between_source_path)
+                self._trim_image_file(
+                    between_source_path,
+                    between_trimmed_path,
+                    "между апскейлами",
+                    trim_mode=trim_mode,
+                )
+                self.progress.emit("  Между апскейлами: повторная загрузка после trim")
+                pipeline_url = self._kie_upload_file(between_trimmed_path)
+                self.progress.emit("  Загружено в KIE")
+                pipeline_url = self._upscale_pipeline_step(
+                    pipeline_url,
+                    raw_dir,
+                    idx,
+                    prefix,
+                    "upscaled_2",
+                    second_factor,
+                )
 
         if self.remove_bg:
             self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
@@ -515,11 +545,30 @@ class WorkerThread(QThread):
 
         return pipeline_url
 
+    def _upscale_pipeline_step(self, image_url, raw_dir, idx, prefix, step_name, upscale_factor):
+        self.progress.emit(f"  Апскейл через {self.kie_upscale_model}...")
+        if self.kie_upscale_model == "topaz/upscale":
+            upscale_input = {
+                "image_url": image_url,
+                "upscale_factor": str(upscale_factor),
+            }
+        elif self.kie_upscale_model == "recraft/crisp-upscale":
+            upscale_input = None
+        else:
+            upscale_input = {"scale": upscale_factor}
+        self.progress.emit(f"  Кратность апскейла: {upscale_factor}x")
+        pipeline_url = self._kie_run_model_task(self.kie_upscale_model, image_url, extra_input=upscale_input)
+        upscaled_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
+        self._download_file(pipeline_url, upscaled_path)
+        self.progress.emit(f"  Промежуточный апскейл: {upscaled_path}")
+        return pipeline_url
+
     def _save_pipeline_result(self, result_url, output_path, raw_dir, idx, prefix):
-        if self.trim_enabled and self.trim_position == "post":
+        trim_position = self._normalize_trim_position(self.trim_position)
+        if self.trim_enabled and (trim_position == "post" or (trim_position == "between" and not self.upscale)):
             pretrim_path = os.path.join(raw_dir, f"{prefix}_pretrim_{idx:03d}_{self.run_stamp}.png")
             self._download_file(result_url, pretrim_path)
-            self._trim_image_file(pretrim_path, output_path, "в конце")
+            self._trim_image_file(pretrim_path, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
             return
         self._download_file(result_url, output_path)
 
@@ -539,9 +588,9 @@ class WorkerThread(QThread):
             return {"dpi": (300, 300)}
         return {}
 
-    def _trim_image_file(self, source_path, output_path, stage_label):
+    def _trim_image_file(self, source_path, output_path, stage_label, trim_mode=None):
         with Image.open(source_path) as img:
-            bbox = self._detect_trim_bbox(img)
+            bbox = self._detect_trim_bbox(img, trim_mode=trim_mode)
             if not bbox:
                 self.progress.emit(f"  Trim {stage_label}: пустые края не найдены")
                 self._save_image_as_png(source_path, output_path)
@@ -557,10 +606,12 @@ class WorkerThread(QThread):
             self.progress.emit(f"  Trim {stage_label}: {img.width}x{img.height} → {cropped.width}x{cropped.height}")
             return output_path
 
-    def _detect_trim_bbox(self, image):
-        mode = (self.trim_mode or "alpha").lower()
+    def _detect_trim_bbox(self, image, trim_mode=None):
+        mode = self._normalize_trim_mode(trim_mode or self.trim_mode)
         if mode == "white":
             return self._detect_white_trim_bbox(image)
+        if mode == "black":
+            return self._detect_black_trim_bbox(image)
         return self._detect_alpha_trim_bbox(image)
 
     def _detect_alpha_trim_bbox(self, image):
@@ -603,6 +654,20 @@ class WorkerThread(QThread):
         mask = ImageChops.multiply(mask, alpha_non_empty)
         return mask.getbbox()
 
+    def _detect_black_trim_bbox(self, image):
+        threshold = 5
+        rgb = image.convert("RGB")
+        r, g, b = rgb.split()
+        mask_r = r.point(lambda v: 255 if v > threshold else 0)
+        mask_g = g.point(lambda v: 255 if v > threshold else 0)
+        mask_b = b.point(lambda v: 255 if v > threshold else 0)
+        mask = ImageChops.lighter(mask_r, ImageChops.lighter(mask_g, mask_b))
+
+        rgba = image.convert("RGBA")
+        alpha_non_empty = rgba.split()[-1].point(lambda v: 255 if v > 0 else 0)
+        mask = ImageChops.multiply(mask, alpha_non_empty)
+        return mask.getbbox()
+
     def _is_fully_opaque(self, alpha_channel):
         extrema = alpha_channel.getextrema()
         if not extrema:
@@ -616,6 +681,35 @@ class WorkerThread(QThread):
         if model_name == "topaz/upscale":
             return 8
         return 4
+
+    def _split_upscale_factors(self, total_factor):
+        total = max(1, int(total_factor or 1))
+        if total <= 1:
+            return 1, 1
+        first = 2 if total >= 4 else 1
+        second = max(1, total // first)
+        return first, second
+
+    def _normalize_trim_mode(self, value):
+        mode = str(value or "alpha").strip().lower()
+        if mode in {"alpha", "white", "black"}:
+            return mode
+        legacy_map = {
+            "transparent": "alpha",
+            "opaque": "white",
+        }
+        return legacy_map.get(mode, "alpha")
+
+    def _normalize_trim_position(self, value):
+        position = str(value or "post").strip().lower()
+        if position in {"post", "pre", "between"}:
+            return position
+        legacy_map = {
+            "after": "post",
+            "before": "pre",
+            "middle": "between",
+        }
+        return legacy_map.get(position, "post")
 
     def _get_generation_profile(self, has_references):
         if has_references:
@@ -985,17 +1079,13 @@ class WorkerThread(QThread):
         b = int(right)
         if a <= 0 or b <= 0:
             return ""
-        x, y = a, b
-        while y:
-            x, y = y, x % y
-        g = x if x > 0 else 1
+        g = math.gcd(a, b) or 1
         return f"{a // g}:{b // g}"
 
     def _extract_ratio_from_prompt(self, prompt):
         text = str(prompt or "")
-        # Supports: 2:3, 2 x 3, 2х3, 2 к 3, 2/3.
-        ratio_pattern = re.compile(r"(?<!\d)(\d{1,2})\s*(?:[:xх/]|к)\s*(\d{1,2})(?!\d)", re.IGNORECASE)
-        match = ratio_pattern.search(text)
+        # Supports only: 2:3, 2 x 3, 2х3.
+        match = PROMPT_RATIO_PATTERN.search(text)
         if not match:
             return ""
         return self._reduce_ratio(match.group(1), match.group(2))
@@ -1013,7 +1103,7 @@ class WorkerThread(QThread):
             prompt_ratio = self._extract_ratio_from_prompt(prompt)
             if prompt_ratio:
                 ratio_setting = prompt_ratio
-                self.progress.emit(f"  ÐÐ°Ð¹Ð´ÐµÐ½Ð° Ð¿Ñ€Ð¾Ð¿Ð¾Ñ€Ñ†Ð¸Ñ Ð² Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ðµ: {prompt_ratio} (UI=auto)")
+                self.progress.emit(f"  Пропорция из промпта: {prompt_ratio} (UI=auto)")
         ratio = self._normalize_model_ratio(model_name, ratio_setting)
         quality = self._normalize_model_quality(model_name)
         capabilities = self._get_model_capabilities(model_name)
@@ -1222,6 +1312,72 @@ class WorkerThread(QThread):
     def _build_text_probe_variants(self, model_name, prompt, ratio, legacy_size):
         payload = self._build_documented_model_input(model_name, prompt, [])
         return [{"model": model_name, "input": payload}]
+
+    def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout, reference_urls=None):
+        prompt = "simple test image"
+        legacy_size = self._ratio_to_legacy_size(ratio)
+        sample_image_url = "https://picsum.photos/768/768"
+        probe_timeout = min(max(8, timeout), 20)
+        probe_reference_urls = list(reference_urls or [])
+
+        model = self._normalize_generation_model(raw_model)
+        if model in {"gpt4o-image", "gpt-image-1", "gpt-image-1.5"}:
+            model = "gpt4o-image"
+
+        if not model:
+            model = "gpt4o-image"
+
+        model_type = (GENERATION_MODEL_META.get(model) or {}).get("type", "text_to_image")
+
+        if model == "gpt4o-image":
+            url = "https://api.kie.ai/api/v1/gpt4o-image/generate"
+            payload_variants = [
+                {"prompt": prompt, "size": legacy_size},
+                {"prompt": prompt, "size": ratio},
+                {"prompt": prompt, "aspectRatio": ratio},
+                {"prompt": prompt, "aspect_ratio": ratio},
+            ]
+        else:
+            url = "https://api.kie.ai/api/v1/jobs/createTask"
+            test_model = model
+            if probe_reference_urls and (model_type in {"image_to_image", "edit"} or self._get_model_capabilities(model)["reference_compatible_text"]):
+                payload_variants = self._build_reference_probe_variants(
+                    test_model,
+                    prompt,
+                    probe_reference_urls[0] or sample_image_url,
+                    ratio,
+                    legacy_size,
+                )
+            elif model_type == "text_to_image":
+                payload_variants = self._build_text_probe_variants(
+                    test_model,
+                    prompt,
+                    ratio,
+                    legacy_size,
+                )
+            else:
+                payload_variants = self._build_reference_probe_variants(
+                    test_model,
+                    prompt,
+                    sample_image_url,
+                    ratio,
+                    legacy_size,
+                )
+
+        last_error = "Не удалось выполнить проверку"
+        for payload in payload_variants:
+            try:
+                req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+                with request.urlopen(req, timeout=probe_timeout, context=build_ssl_context()) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                if int(data.get("code", 0)) == 200:
+                    task_id = (data.get("data") or {}).get("taskId", "-")
+                    return True, "OK", task_id
+                last_error = data.get("msg") or "Проверка не пройдена"
+            except Exception as e:
+                last_error = str(e)
+
+        return False, last_error, "-"
 
     def _normalize_ratio(self, value):
         raw = (value or "").strip()
@@ -2097,25 +2253,49 @@ class MainWindow(QMainWindow):
         self.trim_mode_combo = QComboBox()
         self.trim_mode_combo.addItem("Прозрачные края", "alpha")
         self.trim_mode_combo.addItem("Белые края", "white")
+        self.trim_mode_combo.addItem("Черные края", "black")
         trim_mode = str(self.config.get("trim_mode", "alpha") or "alpha")
         trim_mode_index = self.trim_mode_combo.findData(trim_mode)
         self.trim_mode_combo.setCurrentIndex(trim_mode_index if trim_mode_index >= 0 else 0)
         self.trim_position_combo = QComboBox()
         self.trim_position_combo.addItem("В конце", "post")
         self.trim_position_combo.addItem("До апскейла", "pre")
+        self.trim_position_combo.addItem("Между двумя апскейлами", "between")
         self.trim_position_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.trim_position_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         trim_position = str(self.config.get("trim_position", "post") or "post")
         trim_position_index = self.trim_position_combo.findData(trim_position)
         self.trim_position_combo.setCurrentIndex(trim_position_index if trim_position_index >= 0 else 0)
 
+        trim_controls_widget = QWidget()
+        trim_controls_layout = QVBoxLayout(trim_controls_widget)
+        trim_controls_layout.setContentsMargins(0, 0, 0, 0)
+        trim_controls_layout.setSpacing(6)
+
+        trim_mode_row = QWidget()
+        trim_mode_row_layout = QHBoxLayout(trim_mode_row)
+        trim_mode_row_layout.setContentsMargins(0, 0, 0, 0)
+        trim_mode_row_layout.setSpacing(8)
+        trim_mode_row_layout.addWidget(QLabel("Удаляемый цвет:"))
+        trim_mode_row_layout.addWidget(self.trim_mode_combo)
+        trim_mode_row_layout.addStretch()
+
+        trim_position_row = QWidget()
+        trim_position_row_layout = QHBoxLayout(trim_position_row)
+        trim_position_row_layout.setContentsMargins(0, 0, 0, 0)
+        trim_position_row_layout.setSpacing(8)
+        trim_position_row_layout.addWidget(QLabel("Когда делать:"))
+        trim_position_row_layout.addWidget(self.trim_position_combo)
+        trim_position_row_layout.addStretch()
+
+        trim_controls_layout.addWidget(trim_mode_row)
+        trim_controls_layout.addWidget(trim_position_row)
+
         process_flags_layout.addWidget(self.chk_upscale, 0, 0)
         process_flags_layout.addWidget(self.chk_remove_bg, 0, 1)
         process_flags_layout.addWidget(self.chk_trim, 1, 0)
         process_flags_layout.addWidget(self.chk_export_300_dpi, 1, 1)
-        process_flags_layout.addWidget(self.trim_mode_combo, 2, 1)
-        process_flags_layout.addWidget(self.trim_position_combo, 2, 2)
-        process_flags_layout.setAlignment(self.trim_position_combo, Qt.AlignmentFlag.AlignLeft)
+        process_flags_layout.addWidget(trim_controls_widget, 2, 0, 1, 4)
         process_flags_layout.setColumnStretch(3, 1)
         process_flags_group.setLayout(process_flags_layout)
         process_tab_layout.addWidget(process_flags_group)
@@ -3047,6 +3227,226 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Экспорт CSV", f"Не удалось сохранить CSV: {e}")
 
+    def _get_model_label(self, model_id):
+        normalized = self._normalize_generation_model_id(model_id)
+        for entry in GENERATION_MODELS:
+            if entry.get("id") == normalized:
+                return str(entry.get("label") or normalized)
+        return normalized
+
+    def _is_model_unavailable_error(self, message):
+        text = str(message or "").lower()
+        markers = [
+            "model not supported",
+            "not supported",
+            "model unavailable",
+            "unsupported model",
+            "не поддерж",
+            "недоступ",
+        ]
+        return any(marker in text for marker in markers)
+
+    def _select_combo_model_id(self, combo_box, model_id):
+        idx = combo_box.findData(model_id)
+        if idx >= 0:
+            combo_box.setCurrentIndex(idx)
+            return True
+        return False
+
+    def _is_model_compatible_for_references(self, model_id):
+        normalized = self._normalize_generation_model_id(model_id)
+        model_meta = GENERATION_MODEL_META.get(normalized, {})
+        model_type = model_meta.get("type")
+        if model_type in {"image_to_image", "edit"}:
+            return True
+        return bool(self._get_model_capabilities(normalized)["reference_compatible_text"])
+
+    def _ensure_mode_compatible_model_with_prompt(
+        self,
+        combo_box,
+        selected_model_id,
+        fallback_model_id,
+        needs_references,
+        reason_text,
+    ):
+        selected_model = self._normalize_generation_model_id(selected_model_id)
+        fallback_model = self._normalize_generation_model_id(fallback_model_id)
+
+        compatible = self._is_model_compatible_for_references(selected_model) if needs_references else (
+            (GENERATION_MODEL_META.get(selected_model) or {}).get("type") == "text_to_image"
+        )
+        if compatible:
+            return True
+
+        selected_label = self._get_model_label(selected_model)
+        fallback_label = self._get_model_label(fallback_model)
+        answer = QMessageBox.question(
+            self,
+            "Модель не подходит для режима",
+            (
+                f'Модель "{selected_label}" не подходит для текущего режима.\n'
+                f"Причина: {reason_text}\n\n"
+                f'Заменить на модель по умолчанию "{fallback_label}"?'
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self.log("Запуск остановлен: пользователь отказался от замены несовместимой модели")
+            return False
+
+        if selected_model == fallback_model:
+            QMessageBox.warning(
+                self,
+                "Модель не подходит для режима",
+                f'Модель по умолчанию "{fallback_label}" тоже не подходит. Запуск остановлен.',
+            )
+            self.log(f"Запуск остановлен: модель по умолчанию '{fallback_label}' не подходит для режима")
+            return False
+
+        self.log(
+            f"Модель '{selected_label}' не подходит для режима ({reason_text}). "
+            f"Переключаемся на '{fallback_label}'."
+        )
+        self._select_combo_model_id(combo_box, fallback_model)
+        return True
+
+    def _probe_model_with_fallback_prompt(
+        self,
+        combo_box,
+        preferred_model_id,
+        fallback_model_id,
+        ratio,
+        headers,
+        timeout,
+        probe_reference_urls=None,
+        runtime_settings=None,
+    ):
+        selected_model = self._normalize_generation_model_id(preferred_model_id)
+        fallback_model = self._normalize_generation_model_id(fallback_model_id)
+        probe_settings = dict(runtime_settings or self.config)
+        probe_settings["kie_api_key"] = probe_settings.get("kie_api_key", "").strip()
+        probe_worker = WorkerThread(
+            "mode1_generate_only",
+            self.work_dir or os.getcwd(),
+            probe_settings,
+            selected_files=[],
+            generated_prompts=[],
+        )
+
+        while True:
+            ok, error_message, _ = probe_worker._probe_model_with_ratio(
+                selected_model,
+                ratio,
+                headers,
+                timeout,
+                reference_urls=probe_reference_urls,
+            )
+            if ok:
+                self._select_combo_model_id(combo_box, selected_model)
+                return True
+
+            if not self._is_model_unavailable_error(error_message):
+                return True
+
+            unavailable_label = self._get_model_label(selected_model)
+            fallback_label = self._get_model_label(fallback_model)
+            answer = QMessageBox.question(
+                self,
+                "Модель недоступна",
+                (
+                    f'Модель "{unavailable_label}" недоступна.\n'
+                    f'Заменить на модель по умолчанию "{fallback_label}"?'
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.log("Запуск остановлен: пользователь отказался от замены недоступной модели")
+                return False
+
+            if selected_model == fallback_model:
+                QMessageBox.warning(
+                    self,
+                    "Модель недоступна",
+                    f'Модель по умолчанию "{fallback_label}" тоже недоступна. Запуск остановлен.',
+                )
+                self.log(f"Запуск остановлен: модель по умолчанию '{fallback_label}' недоступна")
+                return False
+
+            self.log(f"Модель '{unavailable_label}' недоступна. Переключаемся на '{fallback_label}'.")
+            selected_model = fallback_model
+
+    def _ensure_models_available_before_run(self, run_mode, prompts, runtime_settings=None):
+        if run_mode == "process_only":
+            return True
+
+        references_needed = False
+        for entry in prompts or []:
+            if isinstance(entry, dict) and split_references(entry.get("references", [])):
+                references_needed = True
+                break
+
+        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
+        if not self._ensure_mode_compatible_model_with_prompt(
+            combo_box=self.text_generation_model_combo,
+            selected_model_id=text_model,
+            fallback_model_id="gpt-image/1.5-text-to-image",
+            needs_references=False,
+            reason_text="эта модель работает только с референсным изображением (image-to-image/edit)",
+        ):
+            return False
+
+        if references_needed:
+            reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
+            if not self._ensure_mode_compatible_model_with_prompt(
+                combo_box=self.reference_generation_model_combo,
+                selected_model_id=reference_model,
+                fallback_model_id="gpt-image/1.5-image-to-image",
+                needs_references=True,
+                reason_text="для записей с референсами нужна image-to-image/edit модель",
+            ):
+                return False
+
+        api_key = self.kie_api_key_input.text().strip()
+        if not api_key:
+            return True
+
+        timeout = max(10, int(self.config.get("timeout", 60)))
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
+        if not self._probe_model_with_fallback_prompt(
+            combo_box=self.text_generation_model_combo,
+            preferred_model_id=text_model,
+            fallback_model_id="gpt-image/1.5-text-to-image",
+            ratio=self.text_ratio_combo.currentText().strip() or "1:1",
+            headers=headers,
+            timeout=timeout,
+            probe_reference_urls=None,
+            runtime_settings=runtime_settings,
+        ):
+            return False
+
+        if not references_needed:
+            return True
+
+        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
+        return self._probe_model_with_fallback_prompt(
+            combo_box=self.reference_generation_model_combo,
+            preferred_model_id=reference_model,
+            fallback_model_id="gpt-image/1.5-image-to-image",
+            ratio=self.reference_ratio_combo.currentText().strip() or "1:1",
+            headers=headers,
+            timeout=timeout,
+            probe_reference_urls=["https://picsum.photos/768/768"],
+            runtime_settings=runtime_settings,
+        )
+
     def start_work(self):
         if not self.work_dir:
             QMessageBox.warning(self, "Ошибка", "Выберите рабочую папку")
@@ -3097,7 +3497,14 @@ class MainWindow(QMainWindow):
             self.refresh_prompts_table()
             mode = "mode1_generate_only"
 
-        if not self._ensure_models_available_before_run(run_mode, self.generated_prompts):
+        launch_mode_label = {
+            "generate_only": "Только генерация изображений",
+            "process_only": "Только обработка файлов",
+            "both": "Все вместе",
+        }.get(run_mode, run_mode)
+        self.log(f"Сценарий запуска: {launch_mode_label}")
+
+        if not self._ensure_models_available_before_run(run_mode, self.generated_prompts, runtime_settings):
             return
         self.persist_ui_settings()
         runtime_settings = dict(self.config)
@@ -3168,7 +3575,7 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.question(
             self,
             "Готово",
-            "Обработка завершена. Открыть папку с результатами?",
+            f"{message}\n\nОткрыть папку с результатами?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
