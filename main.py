@@ -980,6 +980,26 @@ class WorkerThread(QThread):
         )
         return fallback_ratio
 
+    def _reduce_ratio(self, left, right):
+        a = int(left)
+        b = int(right)
+        if a <= 0 or b <= 0:
+            return ""
+        x, y = a, b
+        while y:
+            x, y = y, x % y
+        g = x if x > 0 else 1
+        return f"{a // g}:{b // g}"
+
+    def _extract_ratio_from_prompt(self, prompt):
+        text = str(prompt or "")
+        # Supports: 2:3, 2 x 3, 2х3, 2 к 3, 2/3.
+        ratio_pattern = re.compile(r"(?<!\d)(\d{1,2})\s*(?:[:xх/]|к)\s*(\d{1,2})(?!\d)", re.IGNORECASE)
+        match = ratio_pattern.search(text)
+        if not match:
+            return ""
+        return self._reduce_ratio(match.group(1), match.group(2))
+
     def _normalize_model_quality(self, model_name, quality="medium"):
         allowed = self._get_model_capabilities(model_name)["qualities"]
         if quality in allowed or not allowed:
@@ -989,6 +1009,11 @@ class WorkerThread(QThread):
     def _build_documented_model_input(self, model_name, prompt, reference_urls=None):
         reference_urls = reference_urls or []
         ratio_setting, resolution_setting = self._get_generation_profile(bool(reference_urls))
+        if ratio_setting == "auto":
+            prompt_ratio = self._extract_ratio_from_prompt(prompt)
+            if prompt_ratio:
+                ratio_setting = prompt_ratio
+                self.progress.emit(f"  ÐÐ°Ð¹Ð´ÐµÐ½Ð° Ð¿Ñ€Ð¾Ð¿Ð¾Ñ€Ñ†Ð¸Ñ Ð² Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ðµ: {prompt_ratio} (UI=auto)")
         ratio = self._normalize_model_ratio(model_name, ratio_setting)
         quality = self._normalize_model_quality(model_name)
         capabilities = self._get_model_capabilities(model_name)
