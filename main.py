@@ -397,7 +397,10 @@ class WorkerThread(QThread):
 
         self.progress_value.emit(100)
         if emit_final:
-            self.finished.emit(f"Mode 1: Готово ({done}/{total})")
+            if done == 0:
+                self.finished.emit(f"Mode 1: Готово (0/{total}). Изображения не созданы.")
+            else:
+                self.finished.emit(f"Mode 1: Готово ({done}/{total})")
 
     def _normalize_prompt_entries(self, raw_entries):
         entries = []
@@ -477,7 +480,10 @@ class WorkerThread(QThread):
 
         self.progress_value.emit(100)
         if emit_final:
-            self.finished.emit(f"Mode 2: Готово ({done}/{total})")
+            if done == 0:
+                self.finished.emit(f"Mode 2: Готово (0/{total}). Изображения не созданы.")
+            else:
+                self.finished.emit(f"Mode 2: Готово ({done}/{total})")
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
@@ -624,6 +630,135 @@ class WorkerThread(QThread):
 
     def _get_model_capabilities(self, model_id):
         return get_model_capabilities(model_id)
+
+    def _get_model_label(self, model_id):
+        normalized = self._normalize_generation_model_id(model_id)
+        for entry in GENERATION_MODELS:
+            if entry.get("id") == normalized:
+                return str(entry.get("label") or normalized)
+        return normalized
+
+    def _is_model_unavailable_error(self, message):
+        text = str(message or "").lower()
+        markers = [
+            "model not supported",
+            "not supported",
+            "model unavailable",
+            "unsupported model",
+            "не поддерж",
+            "недоступ",
+        ]
+        return any(marker in text for marker in markers)
+
+    def _select_combo_model_id(self, combo_box, model_id):
+        idx = combo_box.findData(model_id)
+        if idx >= 0:
+            combo_box.setCurrentIndex(idx)
+            return True
+        return False
+
+    def _probe_model_with_fallback_prompt(
+        self,
+        combo_box,
+        preferred_model_id,
+        fallback_model_id,
+        ratio,
+        headers,
+        timeout,
+        probe_reference_urls=None,
+    ):
+        selected_model = self._normalize_generation_model_id(preferred_model_id)
+        fallback_model = self._normalize_generation_model_id(fallback_model_id)
+
+        while True:
+            ok, error_message, _ = self._probe_model_with_ratio(
+                selected_model,
+                ratio,
+                headers,
+                timeout,
+                reference_urls=probe_reference_urls,
+            )
+            if ok:
+                self._select_combo_model_id(combo_box, selected_model)
+                return True
+
+            if not self._is_model_unavailable_error(error_message):
+                return True
+
+            unavailable_label = self._get_model_label(selected_model)
+            fallback_label = self._get_model_label(fallback_model)
+            answer = QMessageBox.question(
+                self,
+                "Модель недоступна",
+                (
+                    f'Модель "{unavailable_label}" недоступна.\n'
+                    f'Заменить на модель по умолчанию "{fallback_label}"?'
+                ),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.log("Запуск остановлен: пользователь отказался от замены недоступной модели")
+                return False
+
+            if selected_model == fallback_model:
+                QMessageBox.warning(
+                    self,
+                    "Модель недоступна",
+                    f'Модель по умолчанию "{fallback_label}" тоже недоступна. Запуск остановлен.',
+                )
+                self.log(f"Запуск остановлен: модель по умолчанию '{fallback_label}' недоступна")
+                return False
+
+            self.log(f"Модель '{unavailable_label}' недоступна. Переключаемся на '{fallback_label}'.")
+            selected_model = fallback_model
+
+    def _ensure_models_available_before_run(self, run_mode, prompts):
+        if run_mode == "process_only":
+            return True
+
+        api_key = self.kie_api_key_input.text().strip()
+        if not api_key:
+            return True
+
+        timeout = max(10, int(self.config.get("timeout", 60)))
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
+        if not self._probe_model_with_fallback_prompt(
+            combo_box=self.text_generation_model_combo,
+            preferred_model_id=text_model,
+            fallback_model_id="gpt-image/1.5-text-to-image",
+            ratio=self.text_ratio_combo.currentText().strip() or "1:1",
+            headers=headers,
+            timeout=timeout,
+            probe_reference_urls=None,
+        ):
+            return False
+
+        references_needed = False
+        for entry in prompts or []:
+            if isinstance(entry, dict) and split_references(entry.get("references", [])):
+                references_needed = True
+                break
+
+        if not references_needed:
+            return True
+
+        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
+        return self._probe_model_with_fallback_prompt(
+            combo_box=self.reference_generation_model_combo,
+            preferred_model_id=reference_model,
+            fallback_model_id="gpt-image/1.5-image-to-image",
+            ratio=self.reference_ratio_combo.currentText().strip() or "1:1",
+            headers=headers,
+            timeout=timeout,
+            probe_reference_urls=["https://picsum.photos/768/768"],
+        )
 
     def _kie_headers(self):
         return {
@@ -2908,6 +3043,7 @@ class MainWindow(QMainWindow):
         runtime_settings = dict(self.config)
         runtime_settings["kie_api_key"] = current_api_key
         self.has_generated_output_in_run = False
+        active_prompts = []
 
         run_mode = self.config.get("run_mode", "generate_only")
         if run_mode == "process_only":
@@ -2935,6 +3071,12 @@ class MainWindow(QMainWindow):
             self.generated_prompts = active_prompts
             self.refresh_prompts_table()
             mode = "mode1_generate_only"
+
+        if not self._ensure_models_available_before_run(run_mode, self.generated_prompts):
+            return
+        self.persist_ui_settings()
+        runtime_settings = dict(self.config)
+        runtime_settings["kie_api_key"] = current_api_key
 
         self.worker = WorkerThread(
             mode=mode,
