@@ -11,6 +11,7 @@
 
 2) **Clipart-Generator-Updates** (репозиторий обновлений)
 - Здесь только `version.json` для автообновления Windows.
+- Здесь также лежит один macOS zip для ручной установки.
 - Этот репозиторий не про код и не обязателен для mac-сборки.
 - Локально у вас это папка: `_updates_repo_tmp`.
 
@@ -18,10 +19,9 @@
 
 У вас уже рабочий Windows-релиз. Значит дальше для Mac:
 - работаем только с **Clipart-Generator**,
-- собираем два архива:
-  - `ClipartGenerator-macOS-apple-silicon-x.y.z.zip`
-  - `ClipartGenerator-macOS-intel-x.y.z.zip`
-- добавляем оба zip как дополнительные файлы в релиз.
+- собираем один архив:
+  - `ClipartGenerator-macOS-x.y.z.zip`
+- добавляем его как дополнительный файл в релиз.
 
 `Clipart-Generator-Updates` для этого шага не трогаем.
 
@@ -36,8 +36,7 @@
 3. Указать `app_version` (например `0.1.1`).
 4. После завершения скачать artifacts:
    - `windows-x.y.z` → `ClipartGenerator-Setup-x.y.z.exe`
-   - `macos-apple-silicon-x.y.z` → `ClipartGenerator-macOS-apple-silicon-x.y.z.zip`
-   - `macos-intel-x.y.z` → `ClipartGenerator-macOS-intel-x.y.z.zip`
+   - `macos-x.y.z` → `ClipartGenerator-macOS-x.y.z.zip`
 
 Важно:
 - автообновление в приложении сейчас ориентировано на Windows setup (`.exe`);
@@ -92,7 +91,7 @@
 ```
 
 Если Apple Developer аккаунта нет:
-- workflow всё равно соберёт оба macOS zip без этих секретов;
+- workflow всё равно соберёт macOS zip без этих секретов;
 - приложение запустится на Mac через обход предупреждения Gatekeeper ("Открыть" через контекстное меню).
 
 ## 1) Подготовка (один раз)

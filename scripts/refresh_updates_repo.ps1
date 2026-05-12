@@ -91,8 +91,19 @@ function Download-Artifacts {
 
     Write-Host "Downloading release artifacts for v$Version into release/..."
     & gh release download "v$Version" --pattern "ClipartGenerator-Setup-$Version.exe" -D "$projectRoot\release"
-    & gh release download "v$Version" --pattern "ClipartGenerator-macOS-apple-silicon-$Version.zip" -D "$projectRoot\release"
-    & gh release download "v$Version" --pattern "ClipartGenerator-macOS-intel-$Version.zip" -D "$projectRoot\release"
+    $macPatterns = @(
+        "ClipartGenerator-macOS-$Version.zip",
+        "ClipartGenerator-macOS-apple-silicon-$Version.zip",
+        "ClipartGenerator-macOS-intel-$Version.zip"
+    )
+    foreach ($pattern in $macPatterns) {
+        try {
+            & gh release download "v$Version" --pattern $pattern -D "$projectRoot\release" --clobber
+            break
+        } catch {
+            continue
+        }
+    }
 }
 
 Ensure-Command -Name 'gh' -InstallHint 'Install GitHub CLI from https://cli.github.com/'
@@ -137,6 +148,7 @@ switch ($Mode) {
 
 $versionJsonSrc = Join-Path -Path $projectRoot -ChildPath 'version.json'
 $exeSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-Setup-$AppVersion.exe"
+$macUnifiedSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-macOS-$AppVersion.zip"
 $macArmSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-macOS-apple-silicon-$AppVersion.zip"
 $macIntelSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-macOS-intel-$AppVersion.zip"
 
@@ -150,12 +162,14 @@ Write-Host 'Copying files into _updates_repo_tmp...'
 Copy-Item -LiteralPath $versionJsonSrc -Destination (Join-Path -Path $updatesRoot -ChildPath 'version.json') -Force
 Copy-Item -LiteralPath $exeSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-Setup-$AppVersion.exe") -Force
 
-if (Test-Path -LiteralPath $macArmSrc) {
-    Copy-Item -LiteralPath $macArmSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-macOS-apple-silicon-$AppVersion.zip") -Force
-}
-
-if (Test-Path -LiteralPath $macIntelSrc) {
-    Copy-Item -LiteralPath $macIntelSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-macOS-intel-$AppVersion.zip") -Force
+if (Test-Path -LiteralPath $macUnifiedSrc) {
+    Copy-Item -LiteralPath $macUnifiedSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-macOS-$AppVersion.zip") -Force
+} elseif (Test-Path -LiteralPath $macArmSrc) {
+    Copy-Item -LiteralPath $macArmSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-macOS-$AppVersion.zip") -Force
+} elseif (Test-Path -LiteralPath $macIntelSrc) {
+    Copy-Item -LiteralPath $macIntelSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-macOS-$AppVersion.zip") -Force
+} else {
+    throw "No macOS release zip found for $AppVersion"
 }
 
 Write-Host ''
@@ -163,6 +177,6 @@ Write-Host 'Done.'
 Write-Host 'Next steps:'
 Write-Host "1. cd \"$updatesRoot\""
 Write-Host '2. git status'
-Write-Host "3. git add version.json ClipartGenerator-Setup-$AppVersion.exe ClipartGenerator-macOS-apple-silicon-$AppVersion.zip ClipartGenerator-macOS-intel-$AppVersion.zip"
+Write-Host "3. git add version.json ClipartGenerator-Setup-$AppVersion.exe ClipartGenerator-macOS-$AppVersion.zip"
 Write-Host '4. git commit and git push in _updates_repo_tmp'
 Write-Host '5. Update the public GitHub Release in Clipart-Generator-Updates if needed'
