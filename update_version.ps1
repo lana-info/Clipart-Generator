@@ -3,7 +3,7 @@ param(
     [string]$AppVersion,
 
     [string]$RepoOwner = "lana-info",
-    [string]$RepoName = "Clipart-Generator",
+    [string]$RepoName = "Clipart-Generator-Updates",
     [string]$ReleaseTag = "",
     [string]$SetupFileName = "",
     [string]$SetupPath = ""
