@@ -232,6 +232,13 @@ def normalize_edge_shrink_pixels(pixels):
     return max(1, min(3, pixel_value))
 
 
+def normalize_local_rembg_edge_quality(quality):
+    quality_value = str(quality or "normal").strip().lower()
+    if quality_value not in {"soft", "normal", "sharp"}:
+        quality_value = "normal"
+    return quality_value
+
+
 def get_model_capabilities(model_id):
     limits = MODEL_CAPABILITIES.get(model_id) or {}
     return {
@@ -402,6 +409,9 @@ class WorkerThread(QThread):
         self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
         self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
         self.local_rembg_model = settings.get("local_rembg_model", "birefnet-general")
+        self.local_rembg_edge_quality = normalize_local_rembg_edge_quality(
+            settings.get("local_rembg_edge_quality", "normal")
+        )
         self.local_rembg_session = None
         self.local_rembg_remove = None
         self.edge_shrink_enabled = bool(settings.get("edge_shrink_enabled", False))
@@ -798,8 +808,23 @@ class WorkerThread(QThread):
         with open(input_path, "rb") as src:
             result_data = remove(src.read(), session=session)
         with Image.open(BytesIO(result_data)) as img:
-            self._save_image_object_as_png(img.convert("RGBA"), output_path)
+            result = self._apply_local_rembg_edge_quality(img.convert("RGBA"))
+            self._save_image_object_as_png(result, output_path)
         return output_path
+
+    def _apply_local_rembg_edge_quality(self, image):
+        rgba = image.convert("RGBA")
+        quality = normalize_local_rembg_edge_quality(self.local_rembg_edge_quality)
+        if quality == "normal":
+            return rgba
+
+        red, green, blue, alpha = rgba.split()
+        if quality == "soft":
+            alpha = alpha.filter(ImageFilter.GaussianBlur(radius=0.45))
+        elif quality == "sharp":
+            alpha = alpha.point(lambda value: 0 if value <= 24 else (255 if value >= 232 else value))
+            alpha = alpha.filter(ImageFilter.MedianFilter(size=3))
+        return Image.merge("RGBA", (red, green, blue, alpha))
 
     def _edge_shrink_pipeline_step(self, input_path, raw_dir, idx, prefix):
         edge_path = os.path.join(raw_dir, f"{prefix}_edgeshrink_{idx:03d}_{self.run_stamp}.png")
@@ -2293,6 +2318,7 @@ class MainWindow(QMainWindow):
             "remove_bg_provider": "kie",
             "local_rembg_profile": "clipart",
             "local_rembg_model": "birefnet-general",
+            "local_rembg_edge_quality": "normal",
             "edge_shrink_enabled": False,
             "edge_shrink_pixels": 1,
             "kie_upscale_model": "topaz/upscale",
@@ -2781,6 +2807,18 @@ class MainWindow(QMainWindow):
         local_rembg_model_index = self.local_rembg_model_combo.findData(local_rembg_model)
         self.local_rembg_model_combo.setCurrentIndex(local_rembg_model_index if local_rembg_model_index >= 0 else 0)
 
+        self.local_rembg_edge_quality_combo = QComboBox()
+        self.local_rembg_edge_quality_combo.addItem("Мягкий", "soft")
+        self.local_rembg_edge_quality_combo.addItem("Обычный", "normal")
+        self.local_rembg_edge_quality_combo.addItem("Четкий", "sharp")
+        local_rembg_edge_quality = normalize_local_rembg_edge_quality(
+            self.config.get("local_rembg_edge_quality", "normal")
+        )
+        local_rembg_edge_quality_index = self.local_rembg_edge_quality_combo.findData(local_rembg_edge_quality)
+        self.local_rembg_edge_quality_combo.setCurrentIndex(
+            local_rembg_edge_quality_index if local_rembg_edge_quality_index >= 0 else 1
+        )
+
         self.kie_remove_bg_model_combo = QComboBox()
         self.kie_remove_bg_model_combo.addItems(["recraft/remove-background"])
         rim = self.config.get("kie_remove_bg_model", "recraft/remove-background")
@@ -2799,6 +2837,7 @@ class MainWindow(QMainWindow):
         self.remove_bg_provider_combo.setFixedSize(settings_field_width, 32)
         self.local_rembg_profile_combo.setFixedSize(settings_field_width, 32)
         self.local_rembg_model_combo.setFixedSize(settings_field_width, 32)
+        self.local_rembg_edge_quality_combo.setFixedSize(settings_field_width, 32)
         self.kie_remove_bg_model_combo.setFixedSize(settings_field_width, 32)
 
         lbl_upscale_provider = QLabel("Апскейл провайдер:")
@@ -2817,6 +2856,8 @@ class MainWindow(QMainWindow):
         lbl_local_rembg_profile.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_local_rembg_model = QLabel("rembg модель:")
         lbl_local_rembg_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_rembg_edge_quality = QLabel("rembg край:")
+        lbl_local_rembg_edge_quality.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_remove_bg = QLabel("Удаление фона:")
         lbl_remove_bg.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
@@ -2837,9 +2878,11 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(self.local_rembg_profile_combo, 5, 1)
         process_settings_layout.addWidget(lbl_local_rembg_model, 5, 2)
         process_settings_layout.addWidget(self.local_rembg_model_combo, 5, 3)
-        process_settings_layout.addWidget(lbl_remove_bg, 6, 0)
-        process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 6, 1)
-        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 6, 2)
+        process_settings_layout.addWidget(lbl_local_rembg_edge_quality, 6, 0)
+        process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 6, 1)
+        process_settings_layout.addWidget(lbl_remove_bg, 7, 0)
+        process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 7, 1)
+        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 7, 2)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -3149,6 +3192,7 @@ class MainWindow(QMainWindow):
         self.remove_bg_provider_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_rembg_profile_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_rembg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_rembg_edge_quality_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_remove_bg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_remove_bg_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
         self.radio_run_generate.toggled.connect(self.schedule_settings_save)
@@ -3176,6 +3220,7 @@ class MainWindow(QMainWindow):
         is_local_rembg = self.remove_bg_provider_combo.currentData() == "local_rembg"
         self.local_rembg_profile_combo.setEnabled(is_local_rembg)
         self.local_rembg_model_combo.setEnabled(is_local_rembg)
+        self.local_rembg_edge_quality_combo.setEnabled(is_local_rembg)
 
     def on_mode_changed(self, checked):
         is_process = self.radio_run_process.isChecked()
@@ -4650,6 +4695,9 @@ class MainWindow(QMainWindow):
         self.config["remove_bg_provider"] = str(self.remove_bg_provider_combo.currentData() or "kie")
         self.config["local_rembg_profile"] = str(self.local_rembg_profile_combo.currentData() or "clipart")
         self.config["local_rembg_model"] = str(self.local_rembg_model_combo.currentData() or "birefnet-general")
+        self.config["local_rembg_edge_quality"] = normalize_local_rembg_edge_quality(
+            self.local_rembg_edge_quality_combo.currentData()
+        )
         self.config["kie_upscale_model"] = self.kie_upscale_model_combo.currentText()
         self.config["kie_remove_bg_model"] = self.kie_remove_bg_model_combo.currentText()
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL

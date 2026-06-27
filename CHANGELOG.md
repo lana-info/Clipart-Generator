@@ -29,6 +29,7 @@
 - Added local-only and mixed local/KIE processing pipeline routing.
 - Added `LOCAL_PROCESSING_PROJECT_PAGE.md` with links to the processing spec and author setup instructions.
 - Added an early `onnxruntime` preload to avoid a Windows DLL import-order conflict between PyQt6 and rembg.
+- Added a local rembg edge quality setting with `Soft`, `Normal`, and `Sharp` presets.
 
 ### Changed
 
@@ -60,3 +61,5 @@
 - Verified a mixed local Real-ESRGAN -> KIE remove-background pipeline with a network-free smoke test.
 - Verified the local-only output composites on a dark background and keeps an alpha channel.
 - Verified Real-ESRGAN binaries/models are ignored and not tracked by git.
+- Verified local rembg edge quality normalization and alpha-channel post-processing with a targeted smoke test.
+- Verified the local rembg edge quality UI setting saves into config in an offscreen smoke test.

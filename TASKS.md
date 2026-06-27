@@ -61,3 +61,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Test one image through mixed pipeline.
 - [x] Inspect output on a dark background.
 - [x] Verify Real-ESRGAN binaries/models are not tracked by git.
+
+## Phase 9 - Local rembg Settings
+
+- [x] Add a local rembg edge quality setting with `Soft`, `Normal`, and `Sharp` presets.
+- [x] Save and load the local rembg edge quality setting with the rest of the UI config.
+- [x] Apply local rembg edge quality only after local rembg output, without changing KIE behavior.
+- [x] Verify the new setting with a targeted smoke test.
