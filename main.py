@@ -11,18 +11,24 @@ import mimetypes
 import re
 import ssl
 import math
+import subprocess
 from io import BytesIO, StringIO
 from urllib.parse import urlparse
 from urllib import error as urlerror
 from urllib import request, parse
 from datetime import datetime, timedelta, timezone
-from PIL import Image, ImageChops
+from PIL import Image, ImageChops, ImageFilter
 from license_client import LicenseClient
 
 try:
     import certifi
 except Exception:
     certifi = None
+
+try:
+    import onnxruntime  # noqa: F401
+except Exception:
+    pass
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize
 from PyQt6.QtGui import QKeySequence, QIcon, QPixmap
@@ -156,6 +162,74 @@ PROCESSING_PRICING = {
     "recraft/crisp-upscale": "0.5 credits / $0.0025",
     "recraft/remove-background": "1 credit / $0.005",
 }
+
+REALESRGAN_EXE_NAME = "realesrgan-ncnn-vulkan.exe"
+REALESRGAN_PROFILE_MODELS = {
+    "photo": "realesrgan-x4plus",
+    "clipart": "realesrgan-x4plus-anime",
+}
+
+
+def resolve_local_realesrgan_exe_path(local_realesrgan_dir):
+    raw_path = str(local_realesrgan_dir or "").strip().strip('"')
+    if not raw_path:
+        return ""
+
+    resolved_path = os.path.abspath(os.path.expanduser(os.path.expandvars(raw_path)))
+    if os.path.basename(resolved_path).lower() == REALESRGAN_EXE_NAME.lower():
+        return resolved_path
+    return os.path.join(resolved_path, REALESRGAN_EXE_NAME)
+
+
+def validate_local_realesrgan_exe(local_realesrgan_dir):
+    raw_path = str(local_realesrgan_dir or "").strip().strip('"')
+    if not raw_path:
+        return "", "Укажите папку Local Real-ESRGAN в настройках обработки"
+
+    resolved_path = os.path.abspath(os.path.expanduser(os.path.expandvars(raw_path)))
+    base_dir = os.path.dirname(resolved_path) if os.path.basename(resolved_path).lower() == REALESRGAN_EXE_NAME.lower() else resolved_path
+    exe_path = resolve_local_realesrgan_exe_path(resolved_path)
+
+    if not os.path.isdir(base_dir):
+        return "", f"Папка Real-ESRGAN не найдена: {base_dir}"
+    if not os.path.isfile(exe_path):
+        return "", f"Не найден {REALESRGAN_EXE_NAME}: {exe_path}"
+    models_dir = os.path.join(base_dir, "models")
+    if not os.path.isdir(models_dir):
+        return "", f"Папка models Real-ESRGAN не найдена: {models_dir}"
+    return exe_path, ""
+
+
+def get_local_realesrgan_model_name(profile):
+    return REALESRGAN_PROFILE_MODELS.get(str(profile or "").strip().lower(), REALESRGAN_PROFILE_MODELS["clipart"])
+
+
+def normalize_local_realesrgan_scale(scale):
+    try:
+        scale_value = int(scale)
+    except (TypeError, ValueError):
+        scale_value = 4
+    if scale_value not in {2, 3, 4}:
+        scale_value = 4
+    return scale_value
+
+
+def import_rembg_tools():
+    try:
+        from rembg import new_session, remove
+    except KeyboardInterrupt:
+        raise
+    except BaseException as exc:
+        raise RuntimeError(f"Local rembg is not available: {exc}") from exc
+    return new_session, remove
+
+
+def normalize_edge_shrink_pixels(pixels):
+    try:
+        pixel_value = int(pixels)
+    except (TypeError, ValueError):
+        pixel_value = 1
+    return max(1, min(3, pixel_value))
 
 
 def get_model_capabilities(model_id):
@@ -321,6 +395,17 @@ class WorkerThread(QThread):
         self.kie_upscale_model = settings.get("kie_upscale_model", "topaz/upscale")
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.upscale_factor = int(settings.get("upscale_factor", 4) or 4)
+        self.upscale_provider = settings.get("upscale_provider", "kie")
+        self.local_realesrgan_dir = settings.get("local_realesrgan_dir", "")
+        self.local_realesrgan_profile = settings.get("local_realesrgan_profile", "clipart")
+        self.local_realesrgan_scale = normalize_local_realesrgan_scale(settings.get("local_realesrgan_scale", 4))
+        self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
+        self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
+        self.local_rembg_model = settings.get("local_rembg_model", "birefnet-general")
+        self.local_rembg_session = None
+        self.local_rembg_remove = None
+        self.edge_shrink_enabled = bool(settings.get("edge_shrink_enabled", False))
+        self.edge_shrink_pixels = normalize_edge_shrink_pixels(settings.get("edge_shrink_pixels", 1))
 
     def run(self):
         try:
@@ -382,9 +467,9 @@ class WorkerThread(QThread):
                 final_url = image_url
                 if process_generated:
                     if self.upscale or self.remove_bg:
-                        uploaded_url = self._kie_upload_file(source_path)
-                        self.progress.emit("  Загружено в KIE")
-                        final_url = self._run_kie_processing_pipeline(uploaded_url, raw_dir, idx, "gen", source_path)
+                        final_url = self._run_processing_pipeline(source_path, image_url, raw_dir, idx, "gen")
+                    elif self.edge_shrink_enabled:
+                        final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "gen")
                     else:
                         final_url = None
 
@@ -428,10 +513,10 @@ class WorkerThread(QThread):
         self.progress.emit("Mode 2: Обработка существующих файлов через KIE")
         self.progress.emit(f"Рабочая папка: {self.work_dir}")
 
-        if not (self.upscale or self.remove_bg or self.trim_enabled):
+        if not (self.upscale or self.remove_bg or self.trim_enabled or self.edge_shrink_enabled):
             raise ValueError("Включите хотя бы один этап: апскейл, удаление фона или trim")
 
-        if (self.upscale or self.remove_bg) and not self.kie_api_key:
+        if (self._uses_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
 
         if not self.selected_files:
@@ -464,9 +549,9 @@ class WorkerThread(QThread):
                     source_path = self._trim_image_file(source_path, pretrim_path, "до апскейла")
 
                 if self.upscale or self.remove_bg:
-                    uploaded_url = self._kie_upload_file(source_path)
-                    self.progress.emit("  Загружено в KIE")
-                    final_url = self._run_kie_processing_pipeline(uploaded_url, raw_dir, idx, "file", source_path)
+                    final_url = self._run_processing_pipeline(source_path, None, raw_dir, idx, "file")
+                elif self.edge_shrink_enabled:
+                    final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "file")
                 else:
                     final_url = None
 
@@ -492,6 +577,96 @@ class WorkerThread(QThread):
                 self.finished.emit(f"Mode 2: Готово (0/{total}). Изображения не созданы.")
             else:
                 self.finished.emit(f"Mode 2: Готово ({done}/{total})")
+
+    def _uses_local_upscale(self):
+        return self.upscale and self.upscale_provider == "local_realesrgan"
+
+    def _uses_kie_upscale(self):
+        return self.upscale and not self._uses_local_upscale()
+
+    def _uses_local_remove_bg(self):
+        return self.remove_bg and self.remove_bg_provider == "local_rembg"
+
+    def _uses_kie_remove_bg(self):
+        return self.remove_bg and not self._uses_local_remove_bg()
+
+    def _can_use_legacy_kie_processing_pipeline(self):
+        return self._uses_kie_upscale() and not self._uses_local_remove_bg() and not self.edge_shrink_enabled
+
+    def _ensure_kie_url(self, current_url, current_path):
+        if current_url:
+            return current_url
+        uploaded_url = self._kie_upload_file(current_path)
+        self.progress.emit("  Загружено в KIE")
+        return uploaded_url
+
+    def _ensure_local_path(self, current_path, current_url, raw_dir, idx, prefix, step_name):
+        if current_path and os.path.isfile(current_path):
+            return current_path
+        local_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
+        self._download_file(current_url, local_path)
+        self.progress.emit(f"  Промежуточный локальный источник: {local_path}")
+        return local_path
+
+    def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
+        if self._can_use_legacy_kie_processing_pipeline():
+            uploaded_url = source_url or self._kie_upload_file(source_path)
+            if not source_url:
+                self.progress.emit("  Загружено в KIE")
+            return self._run_kie_processing_pipeline(uploaded_url, raw_dir, idx, prefix, source_path)
+
+        current_path = source_path
+        current_url = source_url
+        local_result = False
+
+        if self.upscale:
+            if self._uses_local_upscale():
+                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+                current_path = self._local_realesrgan_pipeline_step(current_path, raw_dir, idx, prefix, "upscaled")
+                current_url = None
+                local_result = True
+            else:
+                current_url = self._ensure_kie_url(current_url, current_path)
+                current_url = self._upscale_pipeline_step(
+                    current_url,
+                    raw_dir,
+                    idx,
+                    prefix,
+                    "upscaled",
+                    self._resolve_upscale_factor(),
+                )
+                current_path = os.path.join(raw_dir, f"{prefix}_upscaled_{idx:03d}_{self.run_stamp}.png")
+                local_result = False
+
+        if self.remove_bg:
+            if self._uses_local_remove_bg():
+                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+                nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
+                self._run_local_rembg(current_path, nobg_path)
+                self.progress.emit(f"  Промежуточный локальный без фона: {nobg_path}")
+                current_path = nobg_path
+                current_url = None
+                local_result = True
+            else:
+                current_url = self._ensure_kie_url(current_url, current_path)
+                self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
+                current_url = self._kie_run_model_task(self.kie_remove_bg_model, current_url)
+                nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
+                self._download_file(current_url, nobg_path)
+                self.progress.emit(f"  Промежуточный без фона: {nobg_path}")
+                current_path = nobg_path
+                local_result = False
+
+        if self.edge_shrink_enabled:
+            current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+            if self.remove_bg or self._has_alpha_channel(current_path):
+                current_path = self._edge_shrink_pipeline_step(current_path, raw_dir, idx, prefix)
+                current_url = None
+                local_result = True
+            else:
+                self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
+
+        return current_path if local_result else current_url
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
@@ -542,6 +717,8 @@ class WorkerThread(QThread):
             nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
             self._download_file(pipeline_url, nobg_path)
             self.progress.emit(f"  Промежуточный без фона: {nobg_path}")
+            if self.edge_shrink_enabled:
+                return self._edge_shrink_pipeline_step(nobg_path, raw_dir, idx, prefix)
 
         return pipeline_url
 
@@ -563,8 +740,113 @@ class WorkerThread(QThread):
         self.progress.emit(f"  Промежуточный апскейл: {upscaled_path}")
         return pipeline_url
 
+    def _local_realesrgan_pipeline_step(self, input_path, raw_dir, idx, prefix, step_name):
+        upscaled_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
+        model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile)
+        scale = normalize_local_realesrgan_scale(self.local_realesrgan_scale)
+        self.progress.emit(f"  Локальный апскейл Real-ESRGAN: {model_name}, {scale}x...")
+        self._run_local_realesrgan(input_path, upscaled_path)
+        self.progress.emit(f"  Промежуточный локальный апскейл: {upscaled_path}")
+        return upscaled_path
+
+    def _run_local_realesrgan(self, input_path, output_path):
+        exe_path, error_message = validate_local_realesrgan_exe(self.local_realesrgan_dir)
+        if error_message:
+            raise ValueError(error_message)
+
+        model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile)
+        scale = normalize_local_realesrgan_scale(self.local_realesrgan_scale)
+        command = [
+            exe_path,
+            "-i",
+            input_path,
+            "-o",
+            output_path,
+            "-n",
+            model_name,
+            "-s",
+            str(scale),
+        ]
+        completed = subprocess.run(
+            command,
+            cwd=os.path.dirname(exe_path),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            stderr = (completed.stderr or "").strip()
+            stdout = (completed.stdout or "").strip()
+            details = stderr or stdout or f"exit code {completed.returncode}"
+            raise RuntimeError(f"Local Real-ESRGAN failed: {details}")
+        if not os.path.isfile(output_path):
+            raise RuntimeError(f"Local Real-ESRGAN did not create output file: {output_path}")
+        return output_path
+
+    def _get_local_rembg_session(self):
+        if self.local_rembg_session is None or self.local_rembg_remove is None:
+            new_session, remove = import_rembg_tools()
+            self.progress.emit(
+                f"  Local rembg: загрузка модели {self.local_rembg_model}. Первый запуск может быть долгим..."
+            )
+            self.local_rembg_session = new_session(self.local_rembg_model)
+            self.local_rembg_remove = remove
+        return self.local_rembg_session, self.local_rembg_remove
+
+    def _run_local_rembg(self, input_path, output_path):
+        session, remove = self._get_local_rembg_session()
+        with open(input_path, "rb") as src:
+            result_data = remove(src.read(), session=session)
+        with Image.open(BytesIO(result_data)) as img:
+            self._save_image_object_as_png(img.convert("RGBA"), output_path)
+        return output_path
+
+    def _edge_shrink_pipeline_step(self, input_path, raw_dir, idx, prefix):
+        edge_path = os.path.join(raw_dir, f"{prefix}_edgeshrink_{idx:03d}_{self.run_stamp}.png")
+        self.progress.emit(f"  Удаление контура: {self.edge_shrink_pixels} px...")
+        self._shrink_alpha_edges(input_path, edge_path, self.edge_shrink_pixels)
+        self.progress.emit(f"  Промежуточный без контура: {edge_path}")
+        return edge_path
+
+    def _edge_shrink_alpha_source_if_available(self, input_path, raw_dir, idx, prefix):
+        if not self._has_alpha_channel(input_path):
+            self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
+            return None
+        return self._edge_shrink_pipeline_step(input_path, raw_dir, idx, prefix)
+
+    def _shrink_alpha_edges(self, input_path, output_path, pixels):
+        try:
+            shrink_pixels = int(pixels)
+        except (TypeError, ValueError):
+            shrink_pixels = 0
+
+        with Image.open(input_path) as img:
+            rgba = img.convert("RGBA")
+            if shrink_pixels <= 0:
+                self._save_image_object_as_png(rgba, output_path)
+                return output_path
+
+            red, green, blue, alpha = rgba.split()
+            cleaned_alpha = alpha.point(lambda value: 0 if value <= 12 else value)
+            for _ in range(shrink_pixels):
+                cleaned_alpha = cleaned_alpha.filter(ImageFilter.MinFilter(size=3))
+
+            result = Image.merge("RGBA", (red, green, blue, cleaned_alpha))
+            self._save_image_object_as_png(result, output_path)
+        return output_path
+
+    def _has_alpha_channel(self, image_path):
+        with Image.open(image_path) as img:
+            return "A" in img.getbands()
+
     def _save_pipeline_result(self, result_url, output_path, raw_dir, idx, prefix):
         trim_position = self._normalize_trim_position(self.trim_position)
+        if os.path.isfile(str(result_url)):
+            if self.trim_enabled and (trim_position == "post" or (trim_position == "between" and not self.upscale)):
+                self._trim_image_file(result_url, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
+            else:
+                self._save_image_as_png(result_url, output_path)
+            return
         if self.trim_enabled and (trim_position == "post" or (trim_position == "between" and not self.upscale)):
             pretrim_path = os.path.join(raw_dir, f"{prefix}_pretrim_{idx:03d}_{self.run_stamp}.png")
             self._download_file(result_url, pretrim_path)
@@ -2001,6 +2283,18 @@ class MainWindow(QMainWindow):
             "trim_position": "post",
             "export_300_dpi": False,
             "upscale_factor": 4,
+            "upscale_provider": "kie",
+            "local_realesrgan_dir": os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "realesrgan-ncnn-vulkan-20211212-windows",
+            ),
+            "local_realesrgan_profile": "clipart",
+            "local_realesrgan_scale": 4,
+            "remove_bg_provider": "kie",
+            "local_rembg_profile": "clipart",
+            "local_rembg_model": "birefnet-general",
+            "edge_shrink_enabled": False,
+            "edge_shrink_pixels": 1,
             "kie_upscale_model": "topaz/upscale",
             "kie_remove_bg_model": "recraft/remove-background",
             "run_mode": "generate_only",
@@ -2250,6 +2544,14 @@ class MainWindow(QMainWindow):
         self.chk_trim.setChecked(bool(self.config.get("trim_enabled", False)))
         self.chk_export_300_dpi = QCheckBox("Экспорт для печати (300 DPI)")
         self.chk_export_300_dpi.setChecked(bool(self.config.get("export_300_dpi", False)))
+        self.chk_edge_shrink = QCheckBox("Удалять контур")
+        self.chk_edge_shrink.setChecked(bool(self.config.get("edge_shrink_enabled", False)))
+        self.edge_shrink_pixels_combo = QComboBox()
+        for pixel_value in (1, 2, 3):
+            self.edge_shrink_pixels_combo.addItem(f"{pixel_value} px", pixel_value)
+        edge_shrink_pixels = int(self.config.get("edge_shrink_pixels", 1) or 1)
+        edge_shrink_pixels_index = self.edge_shrink_pixels_combo.findData(edge_shrink_pixels)
+        self.edge_shrink_pixels_combo.setCurrentIndex(edge_shrink_pixels_index if edge_shrink_pixels_index >= 0 else 0)
         self.trim_mode_combo = QComboBox()
         self.trim_mode_combo.addItem("Прозрачные края", "alpha")
         self.trim_mode_combo.addItem("Белые края", "white")
@@ -2295,7 +2597,9 @@ class MainWindow(QMainWindow):
         process_flags_layout.addWidget(self.chk_remove_bg, 0, 1)
         process_flags_layout.addWidget(self.chk_trim, 1, 0)
         process_flags_layout.addWidget(self.chk_export_300_dpi, 1, 1)
-        process_flags_layout.addWidget(trim_controls_widget, 2, 0, 1, 4)
+        process_flags_layout.addWidget(self.chk_edge_shrink, 2, 0)
+        process_flags_layout.addWidget(self.edge_shrink_pixels_combo, 2, 1)
+        process_flags_layout.addWidget(trim_controls_widget, 3, 0, 1, 4)
         process_flags_layout.setColumnStretch(3, 1)
         process_flags_group.setLayout(process_flags_layout)
         process_tab_layout.addWidget(process_flags_group)
@@ -2418,11 +2722,64 @@ class MainWindow(QMainWindow):
         process_settings_layout.setHorizontalSpacing(6)
         process_settings_layout.setVerticalSpacing(6)
 
+        self.upscale_provider_combo = QComboBox()
+        self.upscale_provider_combo.addItem("KIE", "kie")
+        self.upscale_provider_combo.addItem("Local Real-ESRGAN", "local_realesrgan")
+        upscale_provider = str(self.config.get("upscale_provider", "kie") or "kie")
+        upscale_provider_index = self.upscale_provider_combo.findData(upscale_provider)
+        self.upscale_provider_combo.setCurrentIndex(upscale_provider_index if upscale_provider_index >= 0 else 0)
+
+        self.local_realesrgan_dir_input = QLineEdit()
+        self.local_realesrgan_dir_input.setText(str(self.config.get("local_realesrgan_dir", "") or ""))
+
+        self.local_realesrgan_profile_combo = QComboBox()
+        self.local_realesrgan_profile_combo.addItem("Photo", "photo")
+        self.local_realesrgan_profile_combo.addItem("Clipart", "clipart")
+        local_realesrgan_profile = str(self.config.get("local_realesrgan_profile", "clipart") or "clipart")
+        local_realesrgan_profile_index = self.local_realesrgan_profile_combo.findData(local_realesrgan_profile)
+        self.local_realesrgan_profile_combo.setCurrentIndex(
+            local_realesrgan_profile_index if local_realesrgan_profile_index >= 0 else 1
+        )
+
+        self.local_realesrgan_scale_combo = QComboBox()
+        for scale_value in (2, 3, 4):
+            self.local_realesrgan_scale_combo.addItem(f"{scale_value}x", scale_value)
+        local_realesrgan_scale = int(self.config.get("local_realesrgan_scale", 4) or 4)
+        local_realesrgan_scale_index = self.local_realesrgan_scale_combo.findData(local_realesrgan_scale)
+        self.local_realesrgan_scale_combo.setCurrentIndex(
+            local_realesrgan_scale_index if local_realesrgan_scale_index >= 0 else 2
+        )
+
         self.kie_upscale_model_combo = QComboBox()
         self.kie_upscale_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
         uim = self.config.get("kie_upscale_model", "topaz/upscale")
         ui_index = self.kie_upscale_model_combo.findText(uim)
         self.kie_upscale_model_combo.setCurrentIndex(ui_index if ui_index >= 0 else 0)
+
+        self.remove_bg_provider_combo = QComboBox()
+        self.remove_bg_provider_combo.addItem("KIE", "kie")
+        self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
+        remove_bg_provider = str(self.config.get("remove_bg_provider", "kie") or "kie")
+        remove_bg_provider_index = self.remove_bg_provider_combo.findData(remove_bg_provider)
+        self.remove_bg_provider_combo.setCurrentIndex(remove_bg_provider_index if remove_bg_provider_index >= 0 else 0)
+
+        self.local_rembg_profile_combo = QComboBox()
+        self.local_rembg_profile_combo.addItem("Clipart", "clipart")
+        self.local_rembg_profile_combo.addItem("People", "people")
+        self.local_rembg_profile_combo.addItem("Anime", "anime")
+        self.local_rembg_profile_combo.addItem("Fallback", "fallback")
+        local_rembg_profile = str(self.config.get("local_rembg_profile", "clipart") or "clipart")
+        local_rembg_profile_index = self.local_rembg_profile_combo.findData(local_rembg_profile)
+        self.local_rembg_profile_combo.setCurrentIndex(local_rembg_profile_index if local_rembg_profile_index >= 0 else 0)
+
+        self.local_rembg_model_combo = QComboBox()
+        self.local_rembg_model_combo.addItem("birefnet-general", "birefnet-general")
+        self.local_rembg_model_combo.addItem("birefnet-portrait", "birefnet-portrait")
+        self.local_rembg_model_combo.addItem("isnet-anime", "isnet-anime")
+        self.local_rembg_model_combo.addItem("isnet-general-use", "isnet-general-use")
+        local_rembg_model = str(self.config.get("local_rembg_model", "birefnet-general") or "birefnet-general")
+        local_rembg_model_index = self.local_rembg_model_combo.findData(local_rembg_model)
+        self.local_rembg_model_combo.setCurrentIndex(local_rembg_model_index if local_rembg_model_index >= 0 else 0)
 
         self.kie_remove_bg_model_combo = QComboBox()
         self.kie_remove_bg_model_combo.addItems(["recraft/remove-background"])
@@ -2434,20 +2791,55 @@ class MainWindow(QMainWindow):
         self.kie_remove_bg_price_label = QLabel("")
         self.kie_remove_bg_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
 
+        self.upscale_provider_combo.setFixedSize(settings_field_width, 32)
+        self.local_realesrgan_dir_input.setFixedSize(settings_field_width * 2, 32)
+        self.local_realesrgan_profile_combo.setFixedSize(settings_field_width, 32)
+        self.local_realesrgan_scale_combo.setFixedSize(110, 32)
         self.kie_upscale_model_combo.setFixedSize(settings_field_width, 32)
+        self.remove_bg_provider_combo.setFixedSize(settings_field_width, 32)
+        self.local_rembg_profile_combo.setFixedSize(settings_field_width, 32)
+        self.local_rembg_model_combo.setFixedSize(settings_field_width, 32)
         self.kie_remove_bg_model_combo.setFixedSize(settings_field_width, 32)
 
+        lbl_upscale_provider = QLabel("Апскейл провайдер:")
+        lbl_upscale_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_realesrgan_dir = QLabel("Real-ESRGAN папка:")
+        lbl_local_realesrgan_dir.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_realesrgan_profile = QLabel("Real-ESRGAN профиль:")
+        lbl_local_realesrgan_profile.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_realesrgan_scale = QLabel("Scale:")
+        lbl_local_realesrgan_scale.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_upscale_model = QLabel("Апскейл модель:")
         lbl_upscale_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_remove_bg_provider = QLabel("Фон провайдер:")
+        lbl_remove_bg_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_rembg_profile = QLabel("rembg профиль:")
+        lbl_local_rembg_profile.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_rembg_model = QLabel("rembg модель:")
+        lbl_local_rembg_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_remove_bg = QLabel("Удаление фона:")
         lbl_remove_bg.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-        process_settings_layout.addWidget(lbl_upscale_model, 0, 0)
-        process_settings_layout.addWidget(self.kie_upscale_model_combo, 0, 1)
-        process_settings_layout.addWidget(self.kie_upscale_price_label, 0, 2)
-        process_settings_layout.addWidget(lbl_remove_bg, 1, 0)
-        process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 1, 1)
-        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 1, 2)
+        process_settings_layout.addWidget(lbl_upscale_provider, 0, 0)
+        process_settings_layout.addWidget(self.upscale_provider_combo, 0, 1)
+        process_settings_layout.addWidget(lbl_local_realesrgan_dir, 1, 0)
+        process_settings_layout.addWidget(self.local_realesrgan_dir_input, 1, 1, 1, 2)
+        process_settings_layout.addWidget(lbl_local_realesrgan_profile, 2, 0)
+        process_settings_layout.addWidget(self.local_realesrgan_profile_combo, 2, 1)
+        process_settings_layout.addWidget(lbl_local_realesrgan_scale, 2, 2)
+        process_settings_layout.addWidget(self.local_realesrgan_scale_combo, 2, 3)
+        process_settings_layout.addWidget(lbl_upscale_model, 3, 0)
+        process_settings_layout.addWidget(self.kie_upscale_model_combo, 3, 1)
+        process_settings_layout.addWidget(self.kie_upscale_price_label, 3, 2)
+        process_settings_layout.addWidget(lbl_remove_bg_provider, 4, 0)
+        process_settings_layout.addWidget(self.remove_bg_provider_combo, 4, 1)
+        process_settings_layout.addWidget(lbl_local_rembg_profile, 5, 0)
+        process_settings_layout.addWidget(self.local_rembg_profile_combo, 5, 1)
+        process_settings_layout.addWidget(lbl_local_rembg_model, 5, 2)
+        process_settings_layout.addWidget(self.local_rembg_model_combo, 5, 3)
+        process_settings_layout.addWidget(lbl_remove_bg, 6, 0)
+        process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 6, 1)
+        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 6, 2)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -2489,8 +2881,14 @@ class MainWindow(QMainWindow):
         self.refresh_generation_controls()
         self.refresh_processing_price_labels()
         self.update_trim_controls_state()
+        self.update_edge_shrink_controls_state()
+        self.update_upscale_provider_controls_state()
+        self.update_remove_bg_provider_controls_state()
         self.chk_trim.toggled.connect(self.update_trim_controls_state)
+        self.chk_edge_shrink.toggled.connect(self.update_edge_shrink_controls_state)
         self.trim_mode_combo.currentIndexChanged.connect(self.update_trim_controls_state)
+        self.upscale_provider_combo.currentIndexChanged.connect(self.update_upscale_provider_controls_state)
+        self.remove_bg_provider_combo.currentIndexChanged.connect(self.update_remove_bg_provider_controls_state)
         self.on_mode_changed(True)
 
     def _normalize_generation_model_id(self, model_id):
@@ -2738,10 +3136,19 @@ class MainWindow(QMainWindow):
         self.chk_remove_bg.toggled.connect(self.schedule_settings_save)
         self.chk_trim.toggled.connect(self.schedule_settings_save)
         self.chk_export_300_dpi.toggled.connect(self.schedule_settings_save)
+        self.chk_edge_shrink.toggled.connect(self.schedule_settings_save)
+        self.edge_shrink_pixels_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.trim_mode_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.trim_position_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.upscale_provider_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_realesrgan_dir_input.textChanged.connect(self.schedule_settings_save)
+        self.local_realesrgan_profile_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_realesrgan_scale_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_upscale_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_upscale_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
+        self.remove_bg_provider_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_rembg_profile_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_rembg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_remove_bg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_remove_bg_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
         self.radio_run_generate.toggled.connect(self.schedule_settings_save)
@@ -2755,6 +3162,20 @@ class MainWindow(QMainWindow):
         trim_enabled = self.chk_trim.isChecked()
         self.trim_mode_combo.setEnabled(trim_enabled)
         self.trim_position_combo.setEnabled(trim_enabled)
+
+    def update_edge_shrink_controls_state(self, *_):
+        self.edge_shrink_pixels_combo.setEnabled(self.chk_edge_shrink.isChecked())
+
+    def update_upscale_provider_controls_state(self, *_):
+        is_local_realesrgan = self.upscale_provider_combo.currentData() == "local_realesrgan"
+        self.local_realesrgan_dir_input.setEnabled(is_local_realesrgan)
+        self.local_realesrgan_profile_combo.setEnabled(is_local_realesrgan)
+        self.local_realesrgan_scale_combo.setEnabled(is_local_realesrgan)
+
+    def update_remove_bg_provider_controls_state(self, *_):
+        is_local_rembg = self.remove_bg_provider_combo.currentData() == "local_rembg"
+        self.local_rembg_profile_combo.setEnabled(is_local_rembg)
+        self.local_rembg_model_combo.setEnabled(is_local_rembg)
 
     def on_mode_changed(self, checked):
         is_process = self.radio_run_process.isChecked()
@@ -3447,6 +3868,17 @@ class MainWindow(QMainWindow):
             runtime_settings=runtime_settings,
         )
 
+    def _uses_local_realesrgan_for_run(self, run_mode):
+        if run_mode not in {"process_only", "both"}:
+            return False
+        return self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() == "local_realesrgan"
+
+    def validate_local_realesrgan_selection(self, run_mode):
+        if not self._uses_local_realesrgan_for_run(run_mode):
+            return ""
+        _, error_message = validate_local_realesrgan_exe(self.local_realesrgan_dir_input.text())
+        return error_message
+
     def start_work(self):
         if not self.work_dir:
             QMessageBox.warning(self, "Ошибка", "Выберите рабочую папку")
@@ -3460,7 +3892,11 @@ class MainWindow(QMainWindow):
         self.persist_ui_settings()
         current_api_key = self.config.get("kie_api_key", "").strip()
 
-        needs_kie_api = not self.radio_run_process.isChecked() or self.chk_upscale.isChecked() or self.chk_remove_bg.isChecked()
+        needs_kie_api = (
+            not self.radio_run_process.isChecked()
+            or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() != "local_realesrgan")
+            or (self.chk_remove_bg.isChecked() and self.remove_bg_provider_combo.currentData() != "local_rembg")
+        )
         if needs_kie_api and not current_api_key:
             QMessageBox.warning(self, "Ошибка", "Укажите KIE API Key на вкладке «Настройки»")
             return
@@ -3476,7 +3912,12 @@ class MainWindow(QMainWindow):
             if not self.selected_files:
                 QMessageBox.warning(self, "Ошибка", "Для режима обработки выберите файлы")
                 return
-            if not (self.chk_upscale.isChecked() or self.chk_remove_bg.isChecked() or self.chk_trim.isChecked()):
+            if not (
+                self.chk_upscale.isChecked()
+                or self.chk_remove_bg.isChecked()
+                or self.chk_trim.isChecked()
+                or self.chk_edge_shrink.isChecked()
+            ):
                 QMessageBox.warning(self, "Ошибка", "Включите хотя бы один этап: апскейл, удаление фона или trim")
                 return
         elif run_mode == "both":
@@ -3496,6 +3937,11 @@ class MainWindow(QMainWindow):
             self.generated_prompts = active_prompts
             self.refresh_prompts_table()
             mode = "mode1_generate_only"
+
+        local_realesrgan_error = self.validate_local_realesrgan_selection(run_mode)
+        if local_realesrgan_error:
+            QMessageBox.warning(self, "Ошибка", local_realesrgan_error)
+            return
 
         launch_mode_label = {
             "generate_only": "Только генерация изображений",
@@ -4193,8 +4639,17 @@ class MainWindow(QMainWindow):
         self.config["upscale"] = self.chk_upscale.isChecked()
         self.config["trim_enabled"] = self.chk_trim.isChecked()
         self.config["export_300_dpi"] = self.chk_export_300_dpi.isChecked()
+        self.config["edge_shrink_enabled"] = self.chk_edge_shrink.isChecked()
+        self.config["edge_shrink_pixels"] = normalize_edge_shrink_pixels(self.edge_shrink_pixels_combo.currentData() or 1)
         self.config["trim_mode"] = str(self.trim_mode_combo.currentData() or "alpha")
         self.config["trim_position"] = str(self.trim_position_combo.currentData() or "post")
+        self.config["upscale_provider"] = str(self.upscale_provider_combo.currentData() or "kie")
+        self.config["local_realesrgan_dir"] = self.local_realesrgan_dir_input.text().strip()
+        self.config["local_realesrgan_profile"] = str(self.local_realesrgan_profile_combo.currentData() or "clipart")
+        self.config["local_realesrgan_scale"] = int(self.local_realesrgan_scale_combo.currentData() or 4)
+        self.config["remove_bg_provider"] = str(self.remove_bg_provider_combo.currentData() or "kie")
+        self.config["local_rembg_profile"] = str(self.local_rembg_profile_combo.currentData() or "clipart")
+        self.config["local_rembg_model"] = str(self.local_rembg_model_combo.currentData() or "birefnet-general")
         self.config["kie_upscale_model"] = self.kie_upscale_model_combo.currentText()
         self.config["kie_remove_bg_model"] = self.kie_remove_bg_model_combo.currentText()
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL

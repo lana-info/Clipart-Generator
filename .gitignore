@@ -41,5 +41,7 @@ release/*.msi
 # Локальный клон репозитория обновлений
 _updates_repo_tmp/
 
+# Local Real-ESRGAN binaries and models
+realesrgan-ncnn-vulkan-20211212-windows/
 
 
