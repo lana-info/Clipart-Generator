@@ -490,3 +490,23 @@ Photoroom можно вернуться протестировать позже,
 6. Проверка на 2-3 картинках.
 
 Это даст максимум пользы без полной переработки приложения.
+
+## 13. Addendum: Fixed Order and Unsharp Mask
+
+The processing order is fixed:
+
+1. upscale;
+2. optional Unsharp Mask;
+3. remove background;
+4. edge contour removal;
+5. final trim.
+
+The trim timing selector is removed from the UI. Trim always runs at the end.
+
+Unsharp Mask runs after upscale and before background removal. Manual settings are available:
+
+- `Amount`;
+- `Radius`;
+- `Threshold`.
+
+Starting preset for watercolor clipart: `Amount 30`, `Radius 100`, `Threshold 0`.

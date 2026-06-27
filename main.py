@@ -239,6 +239,30 @@ def normalize_local_rembg_edge_quality(quality):
     return quality_value
 
 
+def normalize_unsharp_amount(amount):
+    try:
+        amount_value = int(amount)
+    except (TypeError, ValueError):
+        amount_value = 30
+    return max(0, min(500, amount_value))
+
+
+def normalize_unsharp_radius(radius):
+    try:
+        radius_value = float(radius)
+    except (TypeError, ValueError):
+        radius_value = 100.0
+    return max(0.1, min(200.0, radius_value))
+
+
+def normalize_unsharp_threshold(threshold):
+    try:
+        threshold_value = int(threshold)
+    except (TypeError, ValueError):
+        threshold_value = 0
+    return max(0, min(255, threshold_value))
+
+
 def get_model_capabilities(model_id):
     limits = MODEL_CAPABILITIES.get(model_id) or {}
     return {
@@ -397,12 +421,15 @@ class WorkerThread(QThread):
         self.remove_bg = settings.get("remove_bg", True)
         self.trim_enabled = bool(settings.get("trim_enabled", False))
         self.trim_mode = str(settings.get("trim_mode", "alpha") or "alpha")
-        self.trim_position = str(settings.get("trim_position", "post") or "post")
         self.export_300_dpi = bool(settings.get("export_300_dpi", False))
         self.kie_upscale_model = settings.get("kie_upscale_model", "topaz/upscale")
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.upscale_factor = int(settings.get("upscale_factor", 4) or 4)
         self.upscale_provider = settings.get("upscale_provider", "kie")
+        self.unsharp_enabled = bool(settings.get("unsharp_enabled", False))
+        self.unsharp_amount = normalize_unsharp_amount(settings.get("unsharp_amount", 30))
+        self.unsharp_radius = normalize_unsharp_radius(settings.get("unsharp_radius", 100))
+        self.unsharp_threshold = normalize_unsharp_threshold(settings.get("unsharp_threshold", 0))
         self.local_realesrgan_dir = settings.get("local_realesrgan_dir", "")
         self.local_realesrgan_profile = settings.get("local_realesrgan_profile", "clipart")
         self.local_realesrgan_scale = normalize_local_realesrgan_scale(settings.get("local_realesrgan_scale", 4))
@@ -470,9 +497,6 @@ class WorkerThread(QThread):
                 self.progress.emit(f"  Сгенерировано: {gen_path}")
 
                 source_path = gen_path
-                if process_generated and self.trim_enabled and self.trim_position == "pre":
-                    pretrim_path = os.path.join(raw_dir, f"gen_pretrim_{idx:03d}_{self.run_stamp}.png")
-                    source_path = self._trim_image_file(source_path, pretrim_path, "до апскейла")
 
                 final_url = image_url
                 if process_generated:
@@ -487,7 +511,7 @@ class WorkerThread(QThread):
                 if final_url:
                     self._save_pipeline_result(final_url, out_path, raw_dir, idx, "gen")
                 elif process_generated:
-                    if self.trim_enabled and self.trim_position == "post":
+                    if self.trim_enabled:
                         self._trim_image_file(source_path, out_path, "в конце")
                     else:
                         self._save_image_as_png(source_path, out_path)
@@ -554,9 +578,6 @@ class WorkerThread(QThread):
                     continue
 
                 source_path = file_path
-                if self.trim_enabled and self.trim_position == "pre":
-                    pretrim_path = os.path.join(raw_dir, f"file_pretrim_{idx:03d}_{self.run_stamp}.png")
-                    source_path = self._trim_image_file(source_path, pretrim_path, "до апскейла")
 
                 if self.upscale or self.remove_bg:
                     final_url = self._run_processing_pipeline(source_path, None, raw_dir, idx, "file")
@@ -571,7 +592,7 @@ class WorkerThread(QThread):
                 if final_url:
                     self._save_pipeline_result(final_url, out_path, raw_dir, idx, "file")
                 else:
-                    if self.trim_enabled and self.trim_position == "post":
+                    if self.trim_enabled:
                         self._trim_image_file(source_path, out_path, "в конце")
                     else:
                         self._save_image_as_png(source_path, out_path)
@@ -601,7 +622,12 @@ class WorkerThread(QThread):
         return self.remove_bg and not self._uses_local_remove_bg()
 
     def _can_use_legacy_kie_processing_pipeline(self):
-        return self._uses_kie_upscale() and not self._uses_local_remove_bg() and not self.edge_shrink_enabled
+        return (
+            self._uses_kie_upscale()
+            and not self._uses_local_remove_bg()
+            and not self.edge_shrink_enabled
+            and not self.unsharp_enabled
+        )
 
     def _ensure_kie_url(self, current_url, current_path):
         if current_url:
@@ -647,6 +673,11 @@ class WorkerThread(QThread):
                 )
                 current_path = os.path.join(raw_dir, f"{prefix}_upscaled_{idx:03d}_{self.run_stamp}.png")
                 local_result = False
+            if self.unsharp_enabled:
+                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "upscaled_source")
+                current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
+                current_url = None
+                local_result = True
 
         if self.remove_bg:
             if self._uses_local_remove_bg():
@@ -680,46 +711,16 @@ class WorkerThread(QThread):
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
-        trim_mode = self._normalize_trim_mode(self.trim_mode)
-        trim_position = self._normalize_trim_position(self.trim_position)
-        split_upscale = self.upscale and trim_position == "between"
 
         if self.upscale:
-            first_factor = self._resolve_upscale_factor()
-            second_factor = first_factor
-            if split_upscale:
-                first_factor, second_factor = self._split_upscale_factors(first_factor)
-
             pipeline_url = self._upscale_pipeline_step(
                 pipeline_url,
                 raw_dir,
                 idx,
                 prefix,
                 "upscaled",
-                first_factor,
+                self._resolve_upscale_factor(),
             )
-
-            if split_upscale:
-                between_source_path = os.path.join(raw_dir, f"{prefix}_between_source_{idx:03d}_{self.run_stamp}.png")
-                between_trimmed_path = os.path.join(raw_dir, f"{prefix}_betweentrim_{idx:03d}_{self.run_stamp}.png")
-                self._download_file(pipeline_url, between_source_path)
-                self._trim_image_file(
-                    between_source_path,
-                    between_trimmed_path,
-                    "между апскейлами",
-                    trim_mode=trim_mode,
-                )
-                self.progress.emit("  Между апскейлами: повторная загрузка после trim")
-                pipeline_url = self._kie_upload_file(between_trimmed_path)
-                self.progress.emit("  Загружено в KIE")
-                pipeline_url = self._upscale_pipeline_step(
-                    pipeline_url,
-                    raw_dir,
-                    idx,
-                    prefix,
-                    "upscaled_2",
-                    second_factor,
-                )
 
         if self.remove_bg:
             self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
@@ -759,6 +760,16 @@ class WorkerThread(QThread):
         self.progress.emit(f"  Промежуточный локальный апскейл: {upscaled_path}")
         return upscaled_path
 
+    def _unsharp_mask_pipeline_step(self, input_path, raw_dir, idx, prefix):
+        output_path = os.path.join(raw_dir, f"{prefix}_unsharp_{idx:03d}_{self.run_stamp}.png")
+        self.progress.emit(
+            f"  Unsharp Mask: amount {self.unsharp_amount}, radius {self.unsharp_radius:g}, "
+            f"threshold {self.unsharp_threshold}..."
+        )
+        self._apply_unsharp_mask_file(input_path, output_path)
+        self.progress.emit(f"  Промежуточная резкость: {output_path}")
+        return output_path
+
     def _run_local_realesrgan(self, input_path, output_path):
         exe_path, error_message = validate_local_realesrgan_exe(self.local_realesrgan_dir)
         if error_message:
@@ -791,6 +802,19 @@ class WorkerThread(QThread):
             raise RuntimeError(f"Local Real-ESRGAN failed: {details}")
         if not os.path.isfile(output_path):
             raise RuntimeError(f"Local Real-ESRGAN did not create output file: {output_path}")
+        return output_path
+
+    def _apply_unsharp_mask_file(self, input_path, output_path):
+        with Image.open(input_path) as img:
+            image = img.convert("RGBA") if "A" in img.getbands() else img.convert("RGB")
+            sharpened = image.filter(
+                ImageFilter.UnsharpMask(
+                    radius=self.unsharp_radius,
+                    percent=self.unsharp_amount,
+                    threshold=self.unsharp_threshold,
+                )
+            )
+            self._save_image_object_as_png(sharpened, output_path)
         return output_path
 
     def _get_local_rembg_session(self):
@@ -865,14 +889,13 @@ class WorkerThread(QThread):
             return "A" in img.getbands()
 
     def _save_pipeline_result(self, result_url, output_path, raw_dir, idx, prefix):
-        trim_position = self._normalize_trim_position(self.trim_position)
         if os.path.isfile(str(result_url)):
-            if self.trim_enabled and (trim_position == "post" or (trim_position == "between" and not self.upscale)):
+            if self.trim_enabled:
                 self._trim_image_file(result_url, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
             else:
                 self._save_image_as_png(result_url, output_path)
             return
-        if self.trim_enabled and (trim_position == "post" or (trim_position == "between" and not self.upscale)):
+        if self.trim_enabled:
             pretrim_path = os.path.join(raw_dir, f"{prefix}_pretrim_{idx:03d}_{self.run_stamp}.png")
             self._download_file(result_url, pretrim_path)
             self._trim_image_file(pretrim_path, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
@@ -989,14 +1012,6 @@ class WorkerThread(QThread):
             return 8
         return 4
 
-    def _split_upscale_factors(self, total_factor):
-        total = max(1, int(total_factor or 1))
-        if total <= 1:
-            return 1, 1
-        first = 2 if total >= 4 else 1
-        second = max(1, total // first)
-        return first, second
-
     def _normalize_trim_mode(self, value):
         mode = str(value or "alpha").strip().lower()
         if mode in {"alpha", "white", "black"}:
@@ -1006,17 +1021,6 @@ class WorkerThread(QThread):
             "opaque": "white",
         }
         return legacy_map.get(mode, "alpha")
-
-    def _normalize_trim_position(self, value):
-        position = str(value or "post").strip().lower()
-        if position in {"post", "pre", "between"}:
-            return position
-        legacy_map = {
-            "after": "post",
-            "before": "pre",
-            "middle": "between",
-        }
-        return legacy_map.get(position, "post")
 
     def _get_generation_profile(self, has_references):
         if has_references:
@@ -2305,10 +2309,13 @@ class MainWindow(QMainWindow):
             "upscale": True,
             "trim_enabled": False,
             "trim_mode": "alpha",
-            "trim_position": "post",
             "export_300_dpi": False,
             "upscale_factor": 4,
             "upscale_provider": "kie",
+            "unsharp_enabled": False,
+            "unsharp_amount": 30,
+            "unsharp_radius": 100,
+            "unsharp_threshold": 0,
             "local_realesrgan_dir": os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "realesrgan-ncnn-vulkan-20211212-windows",
@@ -2568,6 +2575,8 @@ class MainWindow(QMainWindow):
         self.chk_remove_bg.setChecked(self.config.get("remove_bg", True))
         self.chk_trim = QCheckBox("Trim (обрезка пустых краёв)")
         self.chk_trim.setChecked(bool(self.config.get("trim_enabled", False)))
+        self.chk_unsharp = QCheckBox("Unsharp Mask после апскейла")
+        self.chk_unsharp.setChecked(bool(self.config.get("unsharp_enabled", False)))
         self.chk_export_300_dpi = QCheckBox("Экспорт для печати (300 DPI)")
         self.chk_export_300_dpi.setChecked(bool(self.config.get("export_300_dpi", False)))
         self.chk_edge_shrink = QCheckBox("Удалять контур")
@@ -2585,15 +2594,15 @@ class MainWindow(QMainWindow):
         trim_mode = str(self.config.get("trim_mode", "alpha") or "alpha")
         trim_mode_index = self.trim_mode_combo.findData(trim_mode)
         self.trim_mode_combo.setCurrentIndex(trim_mode_index if trim_mode_index >= 0 else 0)
-        self.trim_position_combo = QComboBox()
-        self.trim_position_combo.addItem("В конце", "post")
-        self.trim_position_combo.addItem("До апскейла", "pre")
-        self.trim_position_combo.addItem("Между двумя апскейлами", "between")
-        self.trim_position_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.trim_position_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        trim_position = str(self.config.get("trim_position", "post") or "post")
-        trim_position_index = self.trim_position_combo.findData(trim_position)
-        self.trim_position_combo.setCurrentIndex(trim_position_index if trim_position_index >= 0 else 0)
+        self.unsharp_amount_spin = QSpinBox()
+        self.unsharp_amount_spin.setRange(0, 500)
+        self.unsharp_amount_spin.setValue(normalize_unsharp_amount(self.config.get("unsharp_amount", 30)))
+        self.unsharp_radius_spin = QSpinBox()
+        self.unsharp_radius_spin.setRange(1, 200)
+        self.unsharp_radius_spin.setValue(int(round(normalize_unsharp_radius(self.config.get("unsharp_radius", 100)))))
+        self.unsharp_threshold_spin = QSpinBox()
+        self.unsharp_threshold_spin.setRange(0, 255)
+        self.unsharp_threshold_spin.setValue(normalize_unsharp_threshold(self.config.get("unsharp_threshold", 0)))
 
         trim_controls_widget = QWidget()
         trim_controls_layout = QVBoxLayout(trim_controls_widget)
@@ -2608,24 +2617,29 @@ class MainWindow(QMainWindow):
         trim_mode_row_layout.addWidget(self.trim_mode_combo)
         trim_mode_row_layout.addStretch()
 
-        trim_position_row = QWidget()
-        trim_position_row_layout = QHBoxLayout(trim_position_row)
-        trim_position_row_layout.setContentsMargins(0, 0, 0, 0)
-        trim_position_row_layout.setSpacing(8)
-        trim_position_row_layout.addWidget(QLabel("Когда делать:"))
-        trim_position_row_layout.addWidget(self.trim_position_combo)
-        trim_position_row_layout.addStretch()
+        unsharp_row = QWidget()
+        unsharp_row_layout = QHBoxLayout(unsharp_row)
+        unsharp_row_layout.setContentsMargins(0, 0, 0, 0)
+        unsharp_row_layout.setSpacing(8)
+        unsharp_row_layout.addWidget(QLabel("Amount:"))
+        unsharp_row_layout.addWidget(self.unsharp_amount_spin)
+        unsharp_row_layout.addWidget(QLabel("Radius:"))
+        unsharp_row_layout.addWidget(self.unsharp_radius_spin)
+        unsharp_row_layout.addWidget(QLabel("Threshold:"))
+        unsharp_row_layout.addWidget(self.unsharp_threshold_spin)
+        unsharp_row_layout.addStretch()
 
         trim_controls_layout.addWidget(trim_mode_row)
-        trim_controls_layout.addWidget(trim_position_row)
+        trim_controls_layout.addWidget(unsharp_row)
 
         process_flags_layout.addWidget(self.chk_upscale, 0, 0)
         process_flags_layout.addWidget(self.chk_remove_bg, 0, 1)
         process_flags_layout.addWidget(self.chk_trim, 1, 0)
-        process_flags_layout.addWidget(self.chk_export_300_dpi, 1, 1)
+        process_flags_layout.addWidget(self.chk_unsharp, 1, 1)
         process_flags_layout.addWidget(self.chk_edge_shrink, 2, 0)
         process_flags_layout.addWidget(self.edge_shrink_pixels_combo, 2, 1)
-        process_flags_layout.addWidget(trim_controls_widget, 3, 0, 1, 4)
+        process_flags_layout.addWidget(self.chk_export_300_dpi, 3, 0)
+        process_flags_layout.addWidget(trim_controls_widget, 4, 0, 1, 4)
         process_flags_layout.setColumnStretch(3, 1)
         process_flags_group.setLayout(process_flags_layout)
         process_tab_layout.addWidget(process_flags_group)
@@ -2925,10 +2939,13 @@ class MainWindow(QMainWindow):
         self.refresh_processing_price_labels()
         self.update_trim_controls_state()
         self.update_edge_shrink_controls_state()
+        self.update_unsharp_controls_state()
         self.update_upscale_provider_controls_state()
         self.update_remove_bg_provider_controls_state()
         self.chk_trim.toggled.connect(self.update_trim_controls_state)
         self.chk_edge_shrink.toggled.connect(self.update_edge_shrink_controls_state)
+        self.chk_upscale.toggled.connect(self.update_unsharp_controls_state)
+        self.chk_unsharp.toggled.connect(self.update_unsharp_controls_state)
         self.trim_mode_combo.currentIndexChanged.connect(self.update_trim_controls_state)
         self.upscale_provider_combo.currentIndexChanged.connect(self.update_upscale_provider_controls_state)
         self.remove_bg_provider_combo.currentIndexChanged.connect(self.update_remove_bg_provider_controls_state)
@@ -3178,11 +3195,14 @@ class MainWindow(QMainWindow):
         self.chk_upscale.toggled.connect(self.schedule_settings_save)
         self.chk_remove_bg.toggled.connect(self.schedule_settings_save)
         self.chk_trim.toggled.connect(self.schedule_settings_save)
+        self.chk_unsharp.toggled.connect(self.schedule_settings_save)
         self.chk_export_300_dpi.toggled.connect(self.schedule_settings_save)
         self.chk_edge_shrink.toggled.connect(self.schedule_settings_save)
         self.edge_shrink_pixels_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.trim_mode_combo.currentTextChanged.connect(self.schedule_settings_save)
-        self.trim_position_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.unsharp_amount_spin.valueChanged.connect(self.schedule_settings_save)
+        self.unsharp_radius_spin.valueChanged.connect(self.schedule_settings_save)
+        self.unsharp_threshold_spin.valueChanged.connect(self.schedule_settings_save)
         self.upscale_provider_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_realesrgan_dir_input.textChanged.connect(self.schedule_settings_save)
         self.local_realesrgan_profile_combo.currentTextChanged.connect(self.schedule_settings_save)
@@ -3205,10 +3225,15 @@ class MainWindow(QMainWindow):
     def update_trim_controls_state(self, *_):
         trim_enabled = self.chk_trim.isChecked()
         self.trim_mode_combo.setEnabled(trim_enabled)
-        self.trim_position_combo.setEnabled(trim_enabled)
 
     def update_edge_shrink_controls_state(self, *_):
         self.edge_shrink_pixels_combo.setEnabled(self.chk_edge_shrink.isChecked())
+
+    def update_unsharp_controls_state(self, *_):
+        unsharp_enabled = self.chk_upscale.isChecked() and self.chk_unsharp.isChecked()
+        self.unsharp_amount_spin.setEnabled(unsharp_enabled)
+        self.unsharp_radius_spin.setEnabled(unsharp_enabled)
+        self.unsharp_threshold_spin.setEnabled(unsharp_enabled)
 
     def update_upscale_provider_controls_state(self, *_):
         is_local_realesrgan = self.upscale_provider_combo.currentData() == "local_realesrgan"
@@ -4683,11 +4708,14 @@ class MainWindow(QMainWindow):
         self.config["remove_bg"] = self.chk_remove_bg.isChecked()
         self.config["upscale"] = self.chk_upscale.isChecked()
         self.config["trim_enabled"] = self.chk_trim.isChecked()
+        self.config["unsharp_enabled"] = self.chk_unsharp.isChecked()
+        self.config["unsharp_amount"] = normalize_unsharp_amount(self.unsharp_amount_spin.value())
+        self.config["unsharp_radius"] = normalize_unsharp_radius(self.unsharp_radius_spin.value())
+        self.config["unsharp_threshold"] = normalize_unsharp_threshold(self.unsharp_threshold_spin.value())
         self.config["export_300_dpi"] = self.chk_export_300_dpi.isChecked()
         self.config["edge_shrink_enabled"] = self.chk_edge_shrink.isChecked()
         self.config["edge_shrink_pixels"] = normalize_edge_shrink_pixels(self.edge_shrink_pixels_combo.currentData() or 1)
         self.config["trim_mode"] = str(self.trim_mode_combo.currentData() or "alpha")
-        self.config["trim_position"] = str(self.trim_position_combo.currentData() or "post")
         self.config["upscale_provider"] = str(self.upscale_provider_combo.currentData() or "kie")
         self.config["local_realesrgan_dir"] = self.local_realesrgan_dir_input.text().strip()
         self.config["local_realesrgan_profile"] = str(self.local_realesrgan_profile_combo.currentData() or "clipart")

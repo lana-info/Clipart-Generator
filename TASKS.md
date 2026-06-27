@@ -68,3 +68,11 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Save and load the local rembg edge quality setting with the rest of the UI config.
 - [x] Apply local rembg edge quality only after local rembg output, without changing KIE behavior.
 - [x] Verify the new setting with a targeted smoke test.
+
+## Phase 10 - Fixed Processing Order and Unsharp Mask
+
+- [x] Add optional Unsharp Mask settings after upscale.
+- [x] Allow custom Unsharp Mask amount, radius, and threshold values.
+- [x] Fix processing order to `upscale -> unsharp -> remove background -> edge shrink -> trim`.
+- [x] Remove the trim timing selector from the UI and config writes.
+- [x] Verify compile, Unsharp Mask output, and a mixed pipeline smoke test.

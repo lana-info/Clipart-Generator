@@ -30,12 +30,15 @@
 - Added `LOCAL_PROCESSING_PROJECT_PAGE.md` with links to the processing spec and author setup instructions.
 - Added an early `onnxruntime` preload to avoid a Windows DLL import-order conflict between PyQt6 and rembg.
 - Added a local rembg edge quality setting with `Soft`, `Normal`, and `Sharp` presets.
+- Added optional Unsharp Mask after upscale with custom amount, radius, and threshold settings.
 
 ### Changed
 
 - Ignored local `realesrgan-ncnn-vulkan-20211212-windows/` binaries and models so they do not get committed.
 - KIE API key validation now depends on the selected processing providers instead of any enabled processing step.
 - Changed the rembg requirement to `rembg[cpu]` so fresh installs include the CPU backend.
+- Fixed the processing order to `upscale -> Unsharp Mask -> remove background -> edge shrink -> trim`.
+- Removed the trim timing selector from the UI; trim now always runs at the end.
 
 ### Verified
 
@@ -63,3 +66,6 @@
 - Verified Real-ESRGAN binaries/models are ignored and not tracked by git.
 - Verified local rembg edge quality normalization and alpha-channel post-processing with a targeted smoke test.
 - Verified the local rembg edge quality UI setting saves into config in an offscreen smoke test.
+- Verified Unsharp Mask normalization and output with a targeted smoke test.
+- Verified the Unsharp Mask UI settings save into config and the trim timing selector is absent.
+- Verified mixed KIE/local order with Unsharp Mask before background removal.
