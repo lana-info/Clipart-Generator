@@ -500,7 +500,7 @@ class WorkerThread(QThread):
 
                 final_url = image_url
                 if process_generated:
-                    if self.upscale or self.remove_bg:
+                    if self.upscale or self.unsharp_enabled or self.remove_bg:
                         final_url = self._run_processing_pipeline(source_path, image_url, raw_dir, idx, "gen")
                     elif self.edge_shrink_enabled:
                         final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "gen")
@@ -547,7 +547,7 @@ class WorkerThread(QThread):
         self.progress.emit("Mode 2: Обработка существующих файлов через KIE")
         self.progress.emit(f"Рабочая папка: {self.work_dir}")
 
-        if not (self.upscale or self.remove_bg or self.trim_enabled or self.edge_shrink_enabled):
+        if not (self.upscale or self.unsharp_enabled or self.remove_bg or self.trim_enabled or self.edge_shrink_enabled):
             raise ValueError("Включите хотя бы один этап: апскейл, удаление фона или trim")
 
         if (self._uses_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
@@ -579,7 +579,7 @@ class WorkerThread(QThread):
 
                 source_path = file_path
 
-                if self.upscale or self.remove_bg:
+                if self.upscale or self.unsharp_enabled or self.remove_bg:
                     final_url = self._run_processing_pipeline(source_path, None, raw_dir, idx, "file")
                 elif self.edge_shrink_enabled:
                     final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "file")
@@ -673,11 +673,12 @@ class WorkerThread(QThread):
                 )
                 current_path = os.path.join(raw_dir, f"{prefix}_upscaled_{idx:03d}_{self.run_stamp}.png")
                 local_result = False
-            if self.unsharp_enabled:
-                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "upscaled_source")
-                current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
-                current_url = None
-                local_result = True
+
+        if self.unsharp_enabled:
+            current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
+            current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
+            current_url = None
+            local_result = True
 
         if self.remove_bg:
             if self._uses_local_remove_bg():
@@ -2575,7 +2576,7 @@ class MainWindow(QMainWindow):
         self.chk_remove_bg.setChecked(self.config.get("remove_bg", True))
         self.chk_trim = QCheckBox("Trim (обрезка пустых краёв)")
         self.chk_trim.setChecked(bool(self.config.get("trim_enabled", False)))
-        self.chk_unsharp = QCheckBox("Unsharp Mask после апскейла")
+        self.chk_unsharp = QCheckBox("Unsharp Mask")
         self.chk_unsharp.setChecked(bool(self.config.get("unsharp_enabled", False)))
         self.chk_export_300_dpi = QCheckBox("Экспорт для печати (300 DPI)")
         self.chk_export_300_dpi.setChecked(bool(self.config.get("export_300_dpi", False)))
@@ -2587,6 +2588,9 @@ class MainWindow(QMainWindow):
         edge_shrink_pixels = int(self.config.get("edge_shrink_pixels", 1) or 1)
         edge_shrink_pixels_index = self.edge_shrink_pixels_combo.findData(edge_shrink_pixels)
         self.edge_shrink_pixels_combo.setCurrentIndex(edge_shrink_pixels_index if edge_shrink_pixels_index >= 0 else 0)
+        self.edge_shrink_pixels_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.edge_shrink_pixels_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.edge_shrink_pixels_combo.setFixedSize(72, 32)
         self.trim_mode_combo = QComboBox()
         self.trim_mode_combo.addItem("Прозрачные края", "alpha")
         self.trim_mode_combo.addItem("Белые края", "white")
@@ -2750,9 +2754,9 @@ class MainWindow(QMainWindow):
         settings_tab_layout.addWidget(kie_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         process_settings_group = QGroupBox("Обработка через KIE")
-        process_settings_group.setMaximumWidth(720)
+        process_settings_group.setMaximumWidth(900)
         process_settings_layout = QGridLayout()
-        process_settings_layout.setHorizontalSpacing(6)
+        process_settings_layout.setHorizontalSpacing(10)
         process_settings_layout.setVerticalSpacing(6)
 
         self.upscale_provider_combo = QComboBox()
@@ -2833,19 +2837,22 @@ class MainWindow(QMainWindow):
         self.kie_remove_bg_model_combo.setCurrentIndex(ri_index if ri_index >= 0 else 0)
         self.kie_upscale_price_label = QLabel("")
         self.kie_upscale_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
+        self.kie_upscale_price_label.setMinimumWidth(135)
         self.kie_remove_bg_price_label = QLabel("")
         self.kie_remove_bg_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
+        self.kie_remove_bg_price_label.setMinimumWidth(135)
 
-        self.upscale_provider_combo.setFixedSize(settings_field_width, 32)
-        self.local_realesrgan_dir_input.setFixedSize(settings_field_width * 2, 32)
-        self.local_realesrgan_profile_combo.setFixedSize(settings_field_width, 32)
+        process_settings_field_width = 190
+        self.upscale_provider_combo.setFixedSize(process_settings_field_width, 32)
+        self.local_realesrgan_dir_input.setFixedSize(process_settings_field_width * 2 + 10, 32)
+        self.local_realesrgan_profile_combo.setFixedSize(process_settings_field_width, 32)
         self.local_realesrgan_scale_combo.setFixedSize(110, 32)
-        self.kie_upscale_model_combo.setFixedSize(settings_field_width, 32)
-        self.remove_bg_provider_combo.setFixedSize(settings_field_width, 32)
-        self.local_rembg_profile_combo.setFixedSize(settings_field_width, 32)
-        self.local_rembg_model_combo.setFixedSize(settings_field_width, 32)
-        self.local_rembg_edge_quality_combo.setFixedSize(settings_field_width, 32)
-        self.kie_remove_bg_model_combo.setFixedSize(settings_field_width, 32)
+        self.kie_upscale_model_combo.setFixedSize(process_settings_field_width, 32)
+        self.remove_bg_provider_combo.setFixedSize(process_settings_field_width, 32)
+        self.local_rembg_profile_combo.setFixedSize(process_settings_field_width, 32)
+        self.local_rembg_model_combo.setFixedSize(process_settings_field_width, 32)
+        self.local_rembg_edge_quality_combo.setFixedSize(process_settings_field_width, 32)
+        self.kie_remove_bg_model_combo.setFixedSize(process_settings_field_width, 32)
 
         lbl_upscale_provider = QLabel("Апскейл провайдер:")
         lbl_upscale_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -2878,7 +2885,7 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(self.local_realesrgan_scale_combo, 2, 3)
         process_settings_layout.addWidget(lbl_upscale_model, 3, 0)
         process_settings_layout.addWidget(self.kie_upscale_model_combo, 3, 1)
-        process_settings_layout.addWidget(self.kie_upscale_price_label, 3, 2)
+        process_settings_layout.addWidget(self.kie_upscale_price_label, 3, 3)
         process_settings_layout.addWidget(lbl_remove_bg_provider, 4, 0)
         process_settings_layout.addWidget(self.remove_bg_provider_combo, 4, 1)
         process_settings_layout.addWidget(lbl_local_rembg_profile, 5, 0)
@@ -2889,7 +2896,7 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 6, 1)
         process_settings_layout.addWidget(lbl_remove_bg, 7, 0)
         process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 7, 1)
-        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 7, 2)
+        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 7, 3)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -2937,7 +2944,6 @@ class MainWindow(QMainWindow):
         self.update_remove_bg_provider_controls_state()
         self.chk_trim.toggled.connect(self.update_trim_controls_state)
         self.chk_edge_shrink.toggled.connect(self.update_edge_shrink_controls_state)
-        self.chk_upscale.toggled.connect(self.update_unsharp_controls_state)
         self.chk_unsharp.toggled.connect(self.update_unsharp_controls_state)
         self.trim_mode_combo.currentIndexChanged.connect(self.update_trim_controls_state)
         self.upscale_provider_combo.currentIndexChanged.connect(self.update_upscale_provider_controls_state)
@@ -3223,7 +3229,7 @@ class MainWindow(QMainWindow):
         self.edge_shrink_pixels_combo.setEnabled(self.chk_edge_shrink.isChecked())
 
     def update_unsharp_controls_state(self, *_):
-        unsharp_enabled = self.chk_upscale.isChecked() and self.chk_unsharp.isChecked()
+        unsharp_enabled = self.chk_unsharp.isChecked()
         self.unsharp_amount_spin.setEnabled(unsharp_enabled)
         self.unsharp_radius_spin.setEnabled(unsharp_enabled)
         self.unsharp_threshold_spin.setEnabled(unsharp_enabled)
@@ -3977,6 +3983,7 @@ class MainWindow(QMainWindow):
                 return
             if not (
                 self.chk_upscale.isChecked()
+                or self.chk_unsharp.isChecked()
                 or self.chk_remove_bg.isChecked()
                 or self.chk_trim.isChecked()
                 or self.chk_edge_shrink.isChecked()

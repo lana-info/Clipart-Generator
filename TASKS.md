@@ -82,3 +82,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Reorder the processing controls vertically to match the actual processing order.
 - [x] Move each action's parameters to the right of that action.
 - [x] Verify UI construction and settings save/load.
+
+## Phase 12 - Processing UI Polish
+
+- [x] Make Unsharp Mask independent from the upscale checkbox.
+- [x] Keep the edge contour pixel selector compact.
+- [x] Fix processing provider settings layout so price labels and rembg model fields do not overlap.
+- [x] Verify UI construction, settings save/load, and Unsharp Mask without upscale.

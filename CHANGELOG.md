@@ -40,6 +40,8 @@
 - Fixed the processing order to `upscale -> Unsharp Mask -> remove background -> edge shrink -> trim`.
 - Removed the trim timing selector from the UI; trim now always runs at the end.
 - Reordered the processing controls vertically to match the actual processing order, with each step's parameters on the right.
+- Made Unsharp Mask an independent processing step that can run without upscale.
+- Compacted the edge contour pixel selector and adjusted processing provider settings to prevent price/model field overlap.
 
 ### Verified
 
@@ -71,3 +73,5 @@
 - Verified the Unsharp Mask UI settings save into config and the trim timing selector is absent.
 - Verified mixed KIE/local order with Unsharp Mask before background removal.
 - Verified the reordered processing controls construct and save settings in an offscreen UI smoke test.
+- Verified Unsharp Mask can run as the only processing step without upscale.
+- Verified compact edge contour and provider settings UI construction in an offscreen smoke test.
