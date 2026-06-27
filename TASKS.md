@@ -76,3 +76,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Fix processing order to `upscale -> unsharp -> remove background -> edge shrink -> trim`.
 - [x] Remove the trim timing selector from the UI and config writes.
 - [x] Verify compile, Unsharp Mask output, and a mixed pipeline smoke test.
+
+## Phase 11 - Processing UI Order
+
+- [x] Reorder the processing controls vertically to match the actual processing order.
+- [x] Move each action's parameters to the right of that action.
+- [x] Verify UI construction and settings save/load.

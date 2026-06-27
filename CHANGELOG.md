@@ -39,6 +39,7 @@
 - Changed the rembg requirement to `rembg[cpu]` so fresh installs include the CPU backend.
 - Fixed the processing order to `upscale -> Unsharp Mask -> remove background -> edge shrink -> trim`.
 - Removed the trim timing selector from the UI; trim now always runs at the end.
+- Reordered the processing controls vertically to match the actual processing order, with each step's parameters on the right.
 
 ### Verified
 
@@ -69,3 +70,4 @@
 - Verified Unsharp Mask normalization and output with a targeted smoke test.
 - Verified the Unsharp Mask UI settings save into config and the trim timing selector is absent.
 - Verified mixed KIE/local order with Unsharp Mask before background removal.
+- Verified the reordered processing controls construct and save settings in an offscreen UI smoke test.
