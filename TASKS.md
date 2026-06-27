@@ -89,3 +89,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Keep the edge contour pixel selector compact.
 - [x] Fix processing provider settings layout so price labels and rembg model fields do not overlap.
 - [x] Verify UI construction, settings save/load, and Unsharp Mask without upscale.
+
+## Phase 13 - Provider Settings UI Cost Labels
+
+- [x] Move KIE processing cost labels next to their model selectors.
+- [x] Keep the provider settings grid compact without overlapping rembg fields.
+- [x] Verify UI construction and settings save/load.

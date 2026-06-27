@@ -42,6 +42,7 @@
 - Reordered the processing controls vertically to match the actual processing order, with each step's parameters on the right.
 - Made Unsharp Mask an independent processing step that can run without upscale.
 - Compacted the edge contour pixel selector and adjusted processing provider settings to prevent price/model field overlap.
+- Moved KIE processing cost labels back next to their model selectors while keeping the provider settings grid compact.
 
 ### Verified
 
@@ -75,3 +76,4 @@
 - Verified the reordered processing controls construct and save settings in an offscreen UI smoke test.
 - Verified Unsharp Mask can run as the only processing step without upscale.
 - Verified compact edge contour and provider settings UI construction in an offscreen smoke test.
+- Verified provider cost labels construct next to model selectors in an offscreen UI smoke test.

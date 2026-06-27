@@ -2837,10 +2837,10 @@ class MainWindow(QMainWindow):
         self.kie_remove_bg_model_combo.setCurrentIndex(ri_index if ri_index >= 0 else 0)
         self.kie_upscale_price_label = QLabel("")
         self.kie_upscale_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
-        self.kie_upscale_price_label.setMinimumWidth(135)
+        self.kie_upscale_price_label.setMinimumWidth(120)
         self.kie_remove_bg_price_label = QLabel("")
         self.kie_remove_bg_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
-        self.kie_remove_bg_price_label.setMinimumWidth(135)
+        self.kie_remove_bg_price_label.setMinimumWidth(120)
 
         process_settings_field_width = 190
         self.upscale_provider_combo.setFixedSize(process_settings_field_width, 32)
@@ -2885,7 +2885,7 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(self.local_realesrgan_scale_combo, 2, 3)
         process_settings_layout.addWidget(lbl_upscale_model, 3, 0)
         process_settings_layout.addWidget(self.kie_upscale_model_combo, 3, 1)
-        process_settings_layout.addWidget(self.kie_upscale_price_label, 3, 3)
+        process_settings_layout.addWidget(self.kie_upscale_price_label, 3, 2)
         process_settings_layout.addWidget(lbl_remove_bg_provider, 4, 0)
         process_settings_layout.addWidget(self.remove_bg_provider_combo, 4, 1)
         process_settings_layout.addWidget(lbl_local_rembg_profile, 5, 0)
@@ -2896,7 +2896,7 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 6, 1)
         process_settings_layout.addWidget(lbl_remove_bg, 7, 0)
         process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 7, 1)
-        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 7, 3)
+        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 7, 2)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
