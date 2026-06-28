@@ -32,6 +32,7 @@
 - Added a local rembg edge quality setting with `Soft`, `Normal`, and `Sharp` presets.
 - Added optional Unsharp Mask after upscale with custom amount, radius, and threshold settings.
 - Added a standalone BEN2 evaluation script for testing background removal quality outside the app runtime.
+- Added Local BEN2 as an experimental background removal provider with hard alpha, softness, and corner radius controls.
 
 ### Changed
 
@@ -45,6 +46,7 @@
 - Compacted the edge contour pixel selector and adjusted processing provider settings to prevent price/model field overlap.
 - Moved KIE processing cost labels back next to their model selectors while keeping the provider settings grid compact.
 - Placed KIE processing cost labels in the same inline row as their model selectors.
+- Local BEN2 background removal now defaults to hard alpha output so it does not introduce semi-transparent edges unless softness is enabled.
 
 ### Verified
 
@@ -82,3 +84,4 @@
 - Verified inline processing cost labels share the same row widget as their model selectors.
 - Verified the BEN2 evaluation script compiles and exposes CLI help without requiring BEN2 dependencies.
 - Verified BEN2 can run on the watercolor bird sample and save PNG plus dark preview output for visual comparison.
+- Verified Local BEN2 UI settings save/load and hard-alpha post-processing with targeted smoke tests.

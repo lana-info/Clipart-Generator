@@ -106,3 +106,12 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Add a standalone BEN2 background removal test script.
 - [x] Document the exact command to install and run BEN2 testing.
 - [x] Verify the script compiles and exposes help without requiring BEN2 to be installed.
+
+## Phase 16 - Local BEN2 Provider
+
+- [x] Add Local BEN2 as an experimental background removal provider.
+- [x] Add BEN2 hard alpha threshold, edge softness, and corner radius settings.
+- [x] Keep BEN2 default output hard-edged with no semi-transparent alpha.
+- [x] Save and load BEN2 settings with the rest of the processing config.
+- [x] Let local BEN2 processing run without requiring a KIE API key.
+- [x] Verify compile, UI settings save/load, and hard-alpha post-processing.

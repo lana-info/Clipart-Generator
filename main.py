@@ -263,6 +263,30 @@ def normalize_unsharp_threshold(threshold):
     return max(0, min(255, threshold_value))
 
 
+def normalize_ben2_alpha_threshold(threshold):
+    try:
+        threshold_value = int(threshold)
+    except (TypeError, ValueError):
+        threshold_value = 24
+    return max(0, min(255, threshold_value))
+
+
+def normalize_ben2_edge_softness(pixels):
+    try:
+        pixel_value = int(pixels)
+    except (TypeError, ValueError):
+        pixel_value = 0
+    return max(0, min(3, pixel_value))
+
+
+def normalize_ben2_corner_radius(pixels):
+    try:
+        pixel_value = int(pixels)
+    except (TypeError, ValueError):
+        pixel_value = 0
+    return max(0, min(3, pixel_value))
+
+
 def get_model_capabilities(model_id):
     limits = MODEL_CAPABILITIES.get(model_id) or {}
     return {
@@ -441,6 +465,17 @@ class WorkerThread(QThread):
         )
         self.local_rembg_session = None
         self.local_rembg_remove = None
+        self.local_ben2_refine_foreground = bool(settings.get("local_ben2_refine_foreground", False))
+        self.local_ben2_alpha_threshold = normalize_ben2_alpha_threshold(
+            settings.get("local_ben2_alpha_threshold", 24)
+        )
+        self.local_ben2_edge_softness = normalize_ben2_edge_softness(
+            settings.get("local_ben2_edge_softness", 0)
+        )
+        self.local_ben2_corner_radius = normalize_ben2_corner_radius(
+            settings.get("local_ben2_corner_radius", 0)
+        )
+        self.local_ben2_model = None
         self.edge_shrink_enabled = bool(settings.get("edge_shrink_enabled", False))
         self.edge_shrink_pixels = normalize_edge_shrink_pixels(settings.get("edge_shrink_pixels", 1))
 
@@ -615,8 +650,14 @@ class WorkerThread(QThread):
     def _uses_kie_upscale(self):
         return self.upscale and not self._uses_local_upscale()
 
-    def _uses_local_remove_bg(self):
+    def _uses_local_rembg_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_rembg"
+
+    def _uses_local_ben2_remove_bg(self):
+        return self.remove_bg and self.remove_bg_provider == "local_ben2"
+
+    def _uses_local_remove_bg(self):
+        return self._uses_local_rembg_remove_bg() or self._uses_local_ben2_remove_bg()
 
     def _uses_kie_remove_bg(self):
         return self.remove_bg and not self._uses_local_remove_bg()
@@ -681,11 +722,19 @@ class WorkerThread(QThread):
             local_result = True
 
         if self.remove_bg:
-            if self._uses_local_remove_bg():
+            if self._uses_local_rembg_remove_bg():
                 current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
                 nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
                 self._run_local_rembg(current_path, nobg_path)
                 self.progress.emit(f"  Промежуточный локальный без фона: {nobg_path}")
+                current_path = nobg_path
+                current_url = None
+                local_result = True
+            elif self._uses_local_ben2_remove_bg():
+                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+                nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
+                self._run_local_ben2(current_path, nobg_path)
+                self.progress.emit(f"  Промежуточный BEN2 без фона: {nobg_path}")
                 current_path = nobg_path
                 current_url = None
                 local_result = True
@@ -849,6 +898,56 @@ class WorkerThread(QThread):
         elif quality == "sharp":
             alpha = alpha.point(lambda value: 0 if value <= 24 else (255 if value >= 232 else value))
             alpha = alpha.filter(ImageFilter.MedianFilter(size=3))
+        return Image.merge("RGBA", (red, green, blue, alpha))
+
+    def _get_local_ben2_model(self):
+        if self.local_ben2_model is None:
+            try:
+                from ben2 import AutoModel
+                import torch
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Local BEN2 is not available. Install test dependencies first: "
+                    "python -m pip install torch torchvision transformers pillow "
+                    "git+https://github.com/PramaLLC/BEN2.git"
+                ) from exc
+
+            self.progress.emit("  Local BEN2: загрузка модели. Первый запуск может быть долгим...")
+            model = AutoModel.from_pretrained("PramaLLC/BEN2")
+            model.to(torch.device("cpu"))
+            model.eval()
+            self.local_ben2_model = model
+        return self.local_ben2_model
+
+    def _run_local_ben2(self, input_path, output_path):
+        model = self._get_local_ben2_model()
+        with Image.open(input_path) as img:
+            source = img.convert("RGB")
+            try:
+                result = model.inference(source, refine_foreground=self.local_ben2_refine_foreground)
+            except TypeError:
+                result = model.inference(source)
+        if not isinstance(result, Image.Image):
+            raise RuntimeError(f"Local BEN2 returned unsupported result type: {type(result)!r}")
+        result = self._apply_ben2_alpha_settings(result.convert("RGBA"))
+        self._save_image_object_as_png(result, output_path)
+        return output_path
+
+    def _apply_ben2_alpha_threshold(self, image):
+        return self._apply_ben2_alpha_settings(image)
+
+    def _apply_ben2_alpha_settings(self, image):
+        rgba = image.convert("RGBA")
+        threshold = normalize_ben2_alpha_threshold(self.local_ben2_alpha_threshold)
+        red, green, blue, alpha = rgba.split()
+        alpha = alpha.point(lambda value: 0 if value <= threshold else 255)
+        corner_radius = normalize_ben2_corner_radius(self.local_ben2_corner_radius)
+        for _ in range(corner_radius):
+            alpha = alpha.filter(ImageFilter.MedianFilter(size=3))
+            alpha = alpha.point(lambda value: 255 if value >= 128 else 0)
+        softness = normalize_ben2_edge_softness(self.local_ben2_edge_softness)
+        if softness > 0:
+            alpha = alpha.filter(ImageFilter.GaussianBlur(radius=softness))
         return Image.merge("RGBA", (red, green, blue, alpha))
 
     def _edge_shrink_pipeline_step(self, input_path, raw_dir, idx, prefix):
@@ -2327,6 +2426,10 @@ class MainWindow(QMainWindow):
             "local_rembg_profile": "clipart",
             "local_rembg_model": "birefnet-general",
             "local_rembg_edge_quality": "normal",
+            "local_ben2_refine_foreground": False,
+            "local_ben2_alpha_threshold": 24,
+            "local_ben2_edge_softness": 0,
+            "local_ben2_corner_radius": 0,
             "edge_shrink_enabled": False,
             "edge_shrink_pixels": 1,
             "kie_upscale_model": "topaz/upscale",
@@ -2796,6 +2899,7 @@ class MainWindow(QMainWindow):
         self.remove_bg_provider_combo = QComboBox()
         self.remove_bg_provider_combo.addItem("KIE", "kie")
         self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
+        self.remove_bg_provider_combo.addItem("Local BEN2 (experimental)", "local_ben2")
         remove_bg_provider = str(self.config.get("remove_bg_provider", "kie") or "kie")
         remove_bg_provider_index = self.remove_bg_provider_combo.findData(remove_bg_provider)
         self.remove_bg_provider_combo.setCurrentIndex(remove_bg_provider_index if remove_bg_provider_index >= 0 else 0)
@@ -2828,6 +2932,30 @@ class MainWindow(QMainWindow):
         local_rembg_edge_quality_index = self.local_rembg_edge_quality_combo.findData(local_rembg_edge_quality)
         self.local_rembg_edge_quality_combo.setCurrentIndex(
             local_rembg_edge_quality_index if local_rembg_edge_quality_index >= 0 else 1
+        )
+
+        self.local_ben2_refine_checkbox = QCheckBox("refine foreground")
+        self.local_ben2_refine_checkbox.setChecked(bool(self.config.get("local_ben2_refine_foreground", False)))
+        self.local_ben2_alpha_threshold_spin = QSpinBox()
+        self.local_ben2_alpha_threshold_spin.setRange(0, 255)
+        self.local_ben2_alpha_threshold_spin.setValue(
+            normalize_ben2_alpha_threshold(self.config.get("local_ben2_alpha_threshold", 24))
+        )
+        self.local_ben2_edge_softness_combo = QComboBox()
+        for pixel_value in (0, 1, 2, 3):
+            self.local_ben2_edge_softness_combo.addItem(f"{pixel_value} px", pixel_value)
+        local_ben2_edge_softness = normalize_ben2_edge_softness(self.config.get("local_ben2_edge_softness", 0))
+        local_ben2_edge_softness_index = self.local_ben2_edge_softness_combo.findData(local_ben2_edge_softness)
+        self.local_ben2_edge_softness_combo.setCurrentIndex(
+            local_ben2_edge_softness_index if local_ben2_edge_softness_index >= 0 else 0
+        )
+        self.local_ben2_corner_radius_combo = QComboBox()
+        for pixel_value in (0, 1, 2, 3):
+            self.local_ben2_corner_radius_combo.addItem(f"{pixel_value} px", pixel_value)
+        local_ben2_corner_radius = normalize_ben2_corner_radius(self.config.get("local_ben2_corner_radius", 0))
+        local_ben2_corner_radius_index = self.local_ben2_corner_radius_combo.findData(local_ben2_corner_radius)
+        self.local_ben2_corner_radius_combo.setCurrentIndex(
+            local_ben2_corner_radius_index if local_ben2_corner_radius_index >= 0 else 0
         )
 
         self.kie_remove_bg_model_combo = QComboBox()
@@ -2868,6 +2996,9 @@ class MainWindow(QMainWindow):
         self.local_rembg_profile_combo.setFixedSize(process_settings_field_width, 32)
         self.local_rembg_model_combo.setFixedSize(process_settings_field_width, 32)
         self.local_rembg_edge_quality_combo.setFixedSize(process_settings_field_width, 32)
+        self.local_ben2_alpha_threshold_spin.setFixedSize(90, 32)
+        self.local_ben2_edge_softness_combo.setFixedSize(72, 32)
+        self.local_ben2_corner_radius_combo.setFixedSize(72, 32)
         self.kie_remove_bg_model_combo.setFixedSize(process_settings_field_width, 32)
 
         lbl_upscale_provider = QLabel("Апскейл провайдер:")
@@ -2888,8 +3019,23 @@ class MainWindow(QMainWindow):
         lbl_local_rembg_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_local_rembg_edge_quality = QLabel("rembg край:")
         lbl_local_rembg_edge_quality.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_ben2 = QLabel("BEN2:")
+        lbl_local_ben2.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_remove_bg = QLabel("Удаление фона:")
         lbl_remove_bg.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        local_ben2_widget = QWidget()
+        local_ben2_layout = QHBoxLayout(local_ben2_widget)
+        local_ben2_layout.setContentsMargins(0, 0, 0, 0)
+        local_ben2_layout.setSpacing(8)
+        local_ben2_layout.addWidget(self.local_ben2_refine_checkbox)
+        local_ben2_layout.addWidget(QLabel("alpha threshold:"))
+        local_ben2_layout.addWidget(self.local_ben2_alpha_threshold_spin)
+        local_ben2_layout.addWidget(QLabel("softness:"))
+        local_ben2_layout.addWidget(self.local_ben2_edge_softness_combo)
+        local_ben2_layout.addWidget(QLabel("radius:"))
+        local_ben2_layout.addWidget(self.local_ben2_corner_radius_combo)
+        local_ben2_layout.addStretch()
 
         process_settings_layout.addWidget(lbl_upscale_provider, 0, 0)
         process_settings_layout.addWidget(self.upscale_provider_combo, 0, 1)
@@ -2909,8 +3055,10 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(self.local_rembg_model_combo, 5, 3)
         process_settings_layout.addWidget(lbl_local_rembg_edge_quality, 6, 0)
         process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 6, 1)
-        process_settings_layout.addWidget(lbl_remove_bg, 7, 0)
-        process_settings_layout.addWidget(kie_remove_bg_model_widget, 7, 1, 1, 3)
+        process_settings_layout.addWidget(lbl_local_ben2, 7, 0)
+        process_settings_layout.addWidget(local_ben2_widget, 7, 1, 1, 3)
+        process_settings_layout.addWidget(lbl_remove_bg, 8, 0)
+        process_settings_layout.addWidget(kie_remove_bg_model_widget, 8, 1, 1, 3)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -3226,6 +3374,10 @@ class MainWindow(QMainWindow):
         self.local_rembg_profile_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_rembg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_rembg_edge_quality_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_ben2_refine_checkbox.toggled.connect(self.schedule_settings_save)
+        self.local_ben2_alpha_threshold_spin.valueChanged.connect(self.schedule_settings_save)
+        self.local_ben2_edge_softness_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_ben2_corner_radius_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_remove_bg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_remove_bg_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
         self.radio_run_generate.toggled.connect(self.schedule_settings_save)
@@ -3256,9 +3408,14 @@ class MainWindow(QMainWindow):
 
     def update_remove_bg_provider_controls_state(self, *_):
         is_local_rembg = self.remove_bg_provider_combo.currentData() == "local_rembg"
+        is_local_ben2 = self.remove_bg_provider_combo.currentData() == "local_ben2"
         self.local_rembg_profile_combo.setEnabled(is_local_rembg)
         self.local_rembg_model_combo.setEnabled(is_local_rembg)
         self.local_rembg_edge_quality_combo.setEnabled(is_local_rembg)
+        self.local_ben2_refine_checkbox.setEnabled(is_local_ben2)
+        self.local_ben2_alpha_threshold_spin.setEnabled(is_local_ben2)
+        self.local_ben2_edge_softness_combo.setEnabled(is_local_ben2)
+        self.local_ben2_corner_radius_combo.setEnabled(is_local_ben2)
 
     def on_mode_changed(self, checked):
         is_process = self.radio_run_process.isChecked()
@@ -3978,7 +4135,10 @@ class MainWindow(QMainWindow):
         needs_kie_api = (
             not self.radio_run_process.isChecked()
             or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() != "local_realesrgan")
-            or (self.chk_remove_bg.isChecked() and self.remove_bg_provider_combo.currentData() != "local_rembg")
+            or (
+                self.chk_remove_bg.isChecked()
+                and self.remove_bg_provider_combo.currentData() not in {"local_rembg", "local_ben2"}
+            )
         )
         if needs_kie_api and not current_api_key:
             QMessageBox.warning(self, "Ошибка", "Укажите KIE API Key на вкладке «Настройки»")
@@ -4739,6 +4899,16 @@ class MainWindow(QMainWindow):
         self.config["local_rembg_model"] = str(self.local_rembg_model_combo.currentData() or "birefnet-general")
         self.config["local_rembg_edge_quality"] = normalize_local_rembg_edge_quality(
             self.local_rembg_edge_quality_combo.currentData()
+        )
+        self.config["local_ben2_refine_foreground"] = self.local_ben2_refine_checkbox.isChecked()
+        self.config["local_ben2_alpha_threshold"] = normalize_ben2_alpha_threshold(
+            self.local_ben2_alpha_threshold_spin.value()
+        )
+        self.config["local_ben2_edge_softness"] = normalize_ben2_edge_softness(
+            self.local_ben2_edge_softness_combo.currentData()
+        )
+        self.config["local_ben2_corner_radius"] = normalize_ben2_corner_radius(
+            self.local_ben2_corner_radius_combo.currentData()
         )
         self.config["kie_upscale_model"] = self.kie_upscale_model_combo.currentText()
         self.config["kie_remove_bg_model"] = self.kie_remove_bg_model_combo.currentText()
