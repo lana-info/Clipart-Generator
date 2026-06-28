@@ -100,3 +100,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 - [x] Put each KIE processing cost label in the same row widget as its model selector.
 - [x] Verify UI construction and settings save/load.
+
+## Phase 15 - BEN2 Evaluation Script
+
+- [x] Add a standalone BEN2 background removal test script.
+- [x] Document the exact command to install and run BEN2 testing.
+- [x] Verify the script compiles and exposes help without requiring BEN2 to be installed.

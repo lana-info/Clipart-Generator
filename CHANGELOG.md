@@ -31,6 +31,7 @@
 - Added an early `onnxruntime` preload to avoid a Windows DLL import-order conflict between PyQt6 and rembg.
 - Added a local rembg edge quality setting with `Soft`, `Normal`, and `Sharp` presets.
 - Added optional Unsharp Mask after upscale with custom amount, radius, and threshold settings.
+- Added a standalone BEN2 evaluation script for testing background removal quality outside the app runtime.
 
 ### Changed
 
@@ -79,3 +80,5 @@
 - Verified compact edge contour and provider settings UI construction in an offscreen smoke test.
 - Verified provider cost labels construct next to model selectors in an offscreen UI smoke test.
 - Verified inline processing cost labels share the same row widget as their model selectors.
+- Verified the BEN2 evaluation script compiles and exposes CLI help without requiring BEN2 dependencies.
+- Verified BEN2 can run on the watercolor bird sample and save PNG plus dark preview output for visual comparison.

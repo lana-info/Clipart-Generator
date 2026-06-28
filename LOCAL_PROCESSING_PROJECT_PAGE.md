@@ -37,3 +37,22 @@ The processing order is fixed:
 3. Remove background.
 4. Edge contour removal.
 5. Final trim.
+
+## BEN2 Test
+
+BEN2 is evaluated with a standalone script before adding it to the app.
+
+Install test dependencies:
+
+```powershell
+python -m pip install torch torchvision transformers pillow
+python -m pip install git+https://github.com/PramaLLC/BEN2.git
+```
+
+Run on one or more images:
+
+```powershell
+python .\scripts\test_ben2_background.py "C:\path\image.png" --output-dir "C:\path\ben2-test"
+```
+
+Compare the generated `_ben2.png` and `_dark_preview.png` files against Photoroom and Local rembg.
