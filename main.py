@@ -839,24 +839,40 @@ class WorkerThread(QThread):
 
         scale = normalize_local_realesrgan_scale(self.local_realesrgan_scale)
         model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
-        command = [
-            exe_path,
-            "-i",
-            input_path,
-            "-o",
-            output_path,
-            "-n",
-            model_name,
-            "-s",
-            str(scale),
-        ]
-        completed = subprocess.run(
-            command,
-            cwd=os.path.dirname(exe_path),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        actual_input_path = input_path
+        alpha_channel = None
+        temp_dir = None
+        with Image.open(input_path) as source_img:
+            if "A" in source_img.getbands():
+                source_rgba = source_img.convert("RGBA")
+                alpha_channel = source_rgba.getchannel("A")
+                temp_dir = tempfile.TemporaryDirectory()
+                actual_input_path = os.path.join(temp_dir.name, "realesrgan_rgb_input.png")
+                background = Image.new("RGB", source_rgba.size, (255, 255, 255))
+                background.paste(source_rgba.convert("RGB"), mask=alpha_channel)
+                background.save(actual_input_path, format="PNG")
+        try:
+            command = [
+                exe_path,
+                "-i",
+                actual_input_path,
+                "-o",
+                output_path,
+                "-n",
+                model_name,
+                "-s",
+                str(scale),
+            ]
+            completed = subprocess.run(
+                command,
+                cwd=os.path.dirname(exe_path),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        finally:
+            if temp_dir is not None:
+                temp_dir.cleanup()
         if completed.returncode != 0:
             stderr = (completed.stderr or "").strip()
             stdout = (completed.stdout or "").strip()
@@ -864,7 +880,19 @@ class WorkerThread(QThread):
             raise RuntimeError(f"Local Real-ESRGAN failed: {details}")
         if not os.path.isfile(output_path):
             raise RuntimeError(f"Local Real-ESRGAN did not create output file: {output_path}")
+        if alpha_channel is not None:
+            self._restore_upscaled_alpha(output_path, alpha_channel)
         return output_path
+
+    def _restore_upscaled_alpha(self, output_path, alpha_channel):
+        with Image.open(output_path) as result_img:
+            result = result_img.convert("RGBA")
+            alpha_histogram = alpha_channel.histogram()
+            has_soft_alpha = any(alpha_histogram[1:255])
+            resample = Image.Resampling.LANCZOS if has_soft_alpha else Image.Resampling.NEAREST
+            upscaled_alpha = alpha_channel.resize(result.size, resample)
+            result.putalpha(upscaled_alpha)
+            self._save_image_object_as_png(result, output_path)
 
     def _apply_unsharp_mask_file(self, input_path, output_path):
         with Image.open(input_path) as img:

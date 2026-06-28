@@ -123,3 +123,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Keep Local Real-ESRGAN `2x` and `4x` available in the UI.
 - [x] Remove unsupported local `3x` from the scale selector.
 - [x] Verify compile and local command/model selection smoke tests.
+
+## Phase 18 - Local Real-ESRGAN Alpha Preservation
+
+- [x] Diagnose fully transparent output when upscaling an already-trimmed RGBA PNG.
+- [x] Run Local Real-ESRGAN on a temporary RGB composite when the input has alpha.
+- [x] Restore the upscaled alpha channel after Local Real-ESRGAN finishes.
+- [x] Verify compile and a real Local Real-ESRGAN run on the affected bird PNG.
