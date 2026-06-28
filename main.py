@@ -2842,6 +2842,22 @@ class MainWindow(QMainWindow):
         self.kie_remove_bg_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
         self.kie_remove_bg_price_label.setMinimumWidth(120)
 
+        kie_upscale_model_widget = QWidget()
+        kie_upscale_model_layout = QHBoxLayout(kie_upscale_model_widget)
+        kie_upscale_model_layout.setContentsMargins(0, 0, 0, 0)
+        kie_upscale_model_layout.setSpacing(8)
+        kie_upscale_model_layout.addWidget(self.kie_upscale_model_combo)
+        kie_upscale_model_layout.addWidget(self.kie_upscale_price_label)
+        kie_upscale_model_layout.addStretch()
+
+        kie_remove_bg_model_widget = QWidget()
+        kie_remove_bg_model_layout = QHBoxLayout(kie_remove_bg_model_widget)
+        kie_remove_bg_model_layout.setContentsMargins(0, 0, 0, 0)
+        kie_remove_bg_model_layout.setSpacing(8)
+        kie_remove_bg_model_layout.addWidget(self.kie_remove_bg_model_combo)
+        kie_remove_bg_model_layout.addWidget(self.kie_remove_bg_price_label)
+        kie_remove_bg_model_layout.addStretch()
+
         process_settings_field_width = 190
         self.upscale_provider_combo.setFixedSize(process_settings_field_width, 32)
         self.local_realesrgan_dir_input.setFixedSize(process_settings_field_width * 2 + 10, 32)
@@ -2884,8 +2900,7 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(lbl_local_realesrgan_scale, 2, 2)
         process_settings_layout.addWidget(self.local_realesrgan_scale_combo, 2, 3)
         process_settings_layout.addWidget(lbl_upscale_model, 3, 0)
-        process_settings_layout.addWidget(self.kie_upscale_model_combo, 3, 1)
-        process_settings_layout.addWidget(self.kie_upscale_price_label, 3, 2)
+        process_settings_layout.addWidget(kie_upscale_model_widget, 3, 1, 1, 3)
         process_settings_layout.addWidget(lbl_remove_bg_provider, 4, 0)
         process_settings_layout.addWidget(self.remove_bg_provider_combo, 4, 1)
         process_settings_layout.addWidget(lbl_local_rembg_profile, 5, 0)
@@ -2895,8 +2910,7 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(lbl_local_rembg_edge_quality, 6, 0)
         process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 6, 1)
         process_settings_layout.addWidget(lbl_remove_bg, 7, 0)
-        process_settings_layout.addWidget(self.kie_remove_bg_model_combo, 7, 1)
-        process_settings_layout.addWidget(self.kie_remove_bg_price_label, 7, 2)
+        process_settings_layout.addWidget(kie_remove_bg_model_widget, 7, 1, 1, 3)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 

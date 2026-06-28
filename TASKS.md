@@ -95,3 +95,8 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Move KIE processing cost labels next to their model selectors.
 - [x] Keep the provider settings grid compact without overlapping rembg fields.
 - [x] Verify UI construction and settings save/load.
+
+## Phase 14 - Inline Processing Cost Labels
+
+- [x] Put each KIE processing cost label in the same row widget as its model selector.
+- [x] Verify UI construction and settings save/load.
