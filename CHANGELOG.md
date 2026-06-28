@@ -47,6 +47,8 @@
 - Moved KIE processing cost labels back next to their model selectors while keeping the provider settings grid compact.
 - Placed KIE processing cost labels in the same inline row as their model selectors.
 - Local BEN2 background removal now defaults to hard alpha output so it does not introduce semi-transparent edges unless softness is enabled.
+- Local Real-ESRGAN `Clipart 2x` now uses the matching `RealESRGANv2-animevideo-xsx2` model instead of forcing the x4 anime model to 2x.
+- Removed unsupported Local Real-ESRGAN `3x` from the scale selector; local scale choices are now `2x` and `4x`.
 
 ### Verified
 
@@ -85,3 +87,4 @@
 - Verified the BEN2 evaluation script compiles and exposes CLI help without requiring BEN2 dependencies.
 - Verified BEN2 can run on the watercolor bird sample and save PNG plus dark preview output for visual comparison.
 - Verified Local BEN2 UI settings save/load and hard-alpha post-processing with targeted smoke tests.
+- Verified Local Real-ESRGAN model selection maps `Clipart 2x` to the x2 model and `Clipart 4x` to the x4 model.

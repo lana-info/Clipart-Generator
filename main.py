@@ -168,6 +168,10 @@ REALESRGAN_PROFILE_MODELS = {
     "photo": "realesrgan-x4plus",
     "clipart": "realesrgan-x4plus-anime",
 }
+REALESRGAN_PROFILE_SCALE_MODELS = {
+    ("clipart", 2): "RealESRGANv2-animevideo-xsx2",
+    ("clipart", 4): "realesrgan-x4plus-anime",
+}
 
 
 def resolve_local_realesrgan_exe_path(local_realesrgan_dir):
@@ -200,8 +204,16 @@ def validate_local_realesrgan_exe(local_realesrgan_dir):
     return exe_path, ""
 
 
-def get_local_realesrgan_model_name(profile):
-    return REALESRGAN_PROFILE_MODELS.get(str(profile or "").strip().lower(), REALESRGAN_PROFILE_MODELS["clipart"])
+def get_local_realesrgan_model_name(profile, scale=None):
+    profile_value = str(profile or "").strip().lower()
+    try:
+        scale_value = int(scale)
+    except (TypeError, ValueError):
+        scale_value = None
+    scale_model = REALESRGAN_PROFILE_SCALE_MODELS.get((profile_value, scale_value))
+    if scale_model:
+        return scale_model
+    return REALESRGAN_PROFILE_MODELS.get(profile_value, REALESRGAN_PROFILE_MODELS["clipart"])
 
 
 def normalize_local_realesrgan_scale(scale):
@@ -209,7 +221,7 @@ def normalize_local_realesrgan_scale(scale):
         scale_value = int(scale)
     except (TypeError, ValueError):
         scale_value = 4
-    if scale_value not in {2, 3, 4}:
+    if scale_value not in {2, 4}:
         scale_value = 4
     return scale_value
 
@@ -803,8 +815,8 @@ class WorkerThread(QThread):
 
     def _local_realesrgan_pipeline_step(self, input_path, raw_dir, idx, prefix, step_name):
         upscaled_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
-        model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile)
         scale = normalize_local_realesrgan_scale(self.local_realesrgan_scale)
+        model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
         self.progress.emit(f"  Локальный апскейл Real-ESRGAN: {model_name}, {scale}x...")
         self._run_local_realesrgan(input_path, upscaled_path)
         self.progress.emit(f"  Промежуточный локальный апскейл: {upscaled_path}")
@@ -825,8 +837,8 @@ class WorkerThread(QThread):
         if error_message:
             raise ValueError(error_message)
 
-        model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile)
         scale = normalize_local_realesrgan_scale(self.local_realesrgan_scale)
+        model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
         command = [
             exe_path,
             "-i",
@@ -2882,7 +2894,7 @@ class MainWindow(QMainWindow):
         )
 
         self.local_realesrgan_scale_combo = QComboBox()
-        for scale_value in (2, 3, 4):
+        for scale_value in (2, 4):
             self.local_realesrgan_scale_combo.addItem(f"{scale_value}x", scale_value)
         local_realesrgan_scale = int(self.config.get("local_realesrgan_scale", 4) or 4)
         local_realesrgan_scale_index = self.local_realesrgan_scale_combo.findData(local_realesrgan_scale)

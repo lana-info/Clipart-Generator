@@ -22,7 +22,7 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 
 1. Put `realesrgan-ncnn-vulkan-20211212-windows/` in the project folder.
 2. In processing settings, choose `Local Real-ESRGAN`.
-3. For clipart, choose `Clipart` and start with `2x`; use `4x` when quality matters more than speed.
+3. For clipart, choose `Clipart` and start with `2x`; use `4x` when quality matters more than speed. Local Real-ESRGAN supports `2x` and `4x` here.
 4. If the upscaled watercolor looks too soft, enable `Unsharp Mask` after upscale. Start with `Amount 30`, `Radius 100`, `Threshold 0`.
 5. For background removal, start with `Local BEN2 (experimental)` when clipart needs a cleaner cut than rembg.
 6. For BEN2, start with `refine foreground` off, `alpha threshold 24`, `softness 0 px`, `radius 0 px`.

@@ -115,3 +115,11 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Save and load BEN2 settings with the rest of the processing config.
 - [x] Let local BEN2 processing run without requiring a KIE API key.
 - [x] Verify compile, UI settings save/load, and hard-alpha post-processing.
+
+## Phase 17 - Local Real-ESRGAN Scale Fix
+
+- [x] Diagnose square/tile artifacts in Local Real-ESRGAN `2x` output.
+- [x] Use a scale-compatible Real-ESRGAN model for `Clipart 2x`.
+- [x] Keep Local Real-ESRGAN `2x` and `4x` available in the UI.
+- [x] Remove unsupported local `3x` from the scale selector.
+- [x] Verify compile and local command/model selection smoke tests.
