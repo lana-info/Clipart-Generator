@@ -92,17 +92,7 @@ jobs:
             release/VERSION.txt
 
   build-macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: apple-silicon
-            pyinstaller_arch: arm64
-          - runner: macos-15-intel
-            arch: intel
-            pyinstaller_arch: x86_64
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-15
     env:
       APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
       APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD }}
@@ -111,8 +101,6 @@ jobs:
       APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
       APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
       APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
-      MAC_ARCH: ${{ matrix.arch }}
-      PYINSTALLER_TARGET_ARCH: ${{ matrix.pyinstaller_arch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -135,18 +123,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install LLVM for Intel macOS build
-        if: ${{ matrix.arch == 'intel' }}
-        run: |
-          brew install llvm@22
-
-      - name: Configure LLVM environment for Intel macOS build
-        if: ${{ matrix.arch == 'intel' }}
-        run: |
-          LLVM_PREFIX="$(brew --prefix llvm@22)"
-          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
-          echo "LLVM_DIR=$LLVM_PREFIX/lib/cmake/llvm" >> "$GITHUB_ENV"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -166,7 +142,6 @@ jobs:
             --clean \
             --windowed \
             --name "Clipart Generator" \
-            --target-arch "$PYINSTALLER_TARGET_ARCH" \
             --add-data ".env.example:." \
             main.py
 
@@ -195,7 +170,7 @@ jobs:
       - name: Pack macOS app to zip
         run: |
           mkdir -p release
-          ditto -c -k --sequesterRsrc --keepParent "dist/Clipart Generator.app" "release/ClipartGenerator-macOS-${MAC_ARCH}-${{ steps.version.outputs.app_version }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "dist/Clipart Generator.app" "release/ClipartGenerator-macOS-${{ steps.version.outputs.app_version }}.zip"
 
       - name: Notarize macOS app zip and staple app
         if: ${{ env.APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64 != '' && env.APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD != '' && env.APPLE_KEYCHAIN_PASSWORD != '' && env.APPLE_CODESIGN_IDENTITY != '' && env.APPLE_NOTARY_APPLE_ID != '' && env.APPLE_NOTARY_TEAM_ID != '' && env.APPLE_NOTARY_APP_PASSWORD != '' }}
@@ -204,22 +179,22 @@ jobs:
           NOTARY_TEAM_ID: ${{ env.APPLE_NOTARY_TEAM_ID }}
           NOTARY_APP_PASSWORD: ${{ env.APPLE_NOTARY_APP_PASSWORD }}
         run: |
-          xcrun notarytool submit "release/ClipartGenerator-macOS-${MAC_ARCH}-${{ steps.version.outputs.app_version }}.zip" \
+          xcrun notarytool submit "release/ClipartGenerator-macOS-${{ steps.version.outputs.app_version }}.zip" \
             --apple-id "$NOTARY_APPLE_ID" \
             --team-id "$NOTARY_TEAM_ID" \
             --password "$NOTARY_APP_PASSWORD" \
             --wait
 
           xcrun stapler staple "dist/Clipart Generator.app"
-          ditto -c -k --sequesterRsrc --keepParent "dist/Clipart Generator.app" "release/ClipartGenerator-macOS-${MAC_ARCH}-${{ steps.version.outputs.app_version }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "dist/Clipart Generator.app" "release/ClipartGenerator-macOS-${{ steps.version.outputs.app_version }}.zip"
 
       - name: Upload macOS artifacts
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}-${{ steps.version.outputs.app_version }}
+          name: macos-${{ steps.version.outputs.app_version }}
           path: |
-            release/ClipartGenerator-macOS-${{ matrix.arch }}-${{ steps.version.outputs.app_version }}.zip
+            release/ClipartGenerator-macOS-${{ steps.version.outputs.app_version }}.zip
 
       - name: Upload macOS zip to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -228,4 +203,4 @@ jobs:
           name: Clipart Generator v${{ steps.version.outputs.app_version }}
           overwrite_files: true
           files: |
-            release/ClipartGenerator-macOS-${{ matrix.arch }}-${{ steps.version.outputs.app_version }}.zip
+            release/ClipartGenerator-macOS-${{ steps.version.outputs.app_version }}.zip
