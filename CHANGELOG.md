@@ -50,7 +50,6 @@
 - Local Real-ESRGAN `Clipart 2x` now uses the matching `RealESRGANv2-animevideo-xsx2` model instead of forcing the x4 anime model to 2x.
 - Removed unsupported Local Real-ESRGAN `3x` from the scale selector; local scale choices are now `2x` and `4x`.
 - Local Real-ESRGAN now preserves the alpha channel when upscaling already-trimmed transparent PNG files.
-- GPT Image 2 KIE requests now use the documented text-to-image or image-to-image task model depending on whether reference images are attached.
 
 ### Verified
 
