@@ -138,12 +138,12 @@ jobs:
       - name: Install LLVM for Intel macOS build
         if: ${{ matrix.arch == 'intel' }}
         run: |
-          brew install llvm@20
+          brew install llvm@22
 
       - name: Configure LLVM environment for Intel macOS build
         if: ${{ matrix.arch == 'intel' }}
         run: |
-          LLVM_PREFIX="$(brew --prefix llvm@20)"
+          LLVM_PREFIX="$(brew --prefix llvm@22)"
           echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
           echo "LLVM_DIR=$LLVM_PREFIX/lib/cmake/llvm" >> "$GITHUB_ENV"
 
