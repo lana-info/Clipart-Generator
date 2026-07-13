@@ -55,6 +55,8 @@
 
 ### Verified
 
+- Verified the current `main.py` compiles and constructs `MainWindow` in Qt offscreen mode without errors.
+- Verified an isolated legacy config preserves existing values and receives safe defaults for missing processing settings without accessing the user's real config.
 - Verified legacy config files load successfully and receive the new local processing defaults without changing existing values.
 - Verified new processing UI settings save to config and load back correctly in an isolated headless smoke test.
 - Verified Local Real-ESRGAN path validation for missing paths, missing exe, valid folders, direct exe paths, and KIE/generate-only bypass cases.

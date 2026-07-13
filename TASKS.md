@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 19 - Automated MVP baseline**.
+Current next task: **Task 20 - Local Processing Acceptance**.
 
 ## Phase 1 - Preparation
 
@@ -139,7 +139,7 @@ Current next task: **Task 19 - Automated MVP baseline**.
 
 ## Task 19 - Automated MVP Baseline
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Prove that the current application starts and accepts old settings before adding another processing feature.
@@ -151,13 +151,14 @@ Steps:
 - Fix only blocking regressions discovered by these checks, then rerun the same checks.
 
 Acceptance:
-- [ ] The module compiles and imports without errors.
-- [ ] The main window constructs without changing the current UI layout.
-- [ ] Existing config files remain compatible and missing keys receive defaults.
+- [x] The module compiles and imports without errors.
+- [x] The main window constructs without changing the current UI layout.
+- [x] Existing config files remain compatible and missing keys receive defaults.
 
 Verification:
-- [ ] `python -m py_compile .\main.py`
-- [ ] `$env:QT_QPA_PLATFORM='offscreen'; python -c "import main; app=main.QApplication([]); w=main.MainWindow(); print('SMOKE_OK')"`
+- [x] `python -m py_compile .\main.py`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -c "import main; app=main.QApplication([]); w=main.MainWindow(); print('SMOKE_OK')"`
+- [x] Isolated legacy-config smoke returned `LEGACY_CONFIG_OK` without reading or changing the user's real config.
 
 Notes:
 - Do not use the user's real config or print stored keys.
@@ -165,7 +166,7 @@ Notes:
 
 ## Task 20 - Local Processing Acceptance
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Verify the main process-only workflow without KIE and prevent recurrence of the alpha and tiled-upscale regressions.
