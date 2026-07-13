@@ -88,17 +88,17 @@ Clipart Generator должен помогать автору быстро ген
 - [x] Приложение запускается без ошибок в текущем окружении.
 - [x] Старые config-файлы открываются, а отсутствующие новые ключи получают безопасные defaults.
 - [ ] Generate-only сценарий сохраняет изображения в `output/`.
-- [ ] Process-only сценарий работает на локальных PNG/JPG без генерации.
-- [ ] Local-only processing не требует KIE API key.
+- [x] Process-only сценарий работает на локальных PNG/JPG без генерации.
+- [x] Local-only processing не требует KIE API key.
 - [ ] Mixed local/KIE processing требует KIE API key только для KIE-шагов.
-- [ ] Local Real-ESRGAN `2x` и `4x` создают изображение ожидаемого размера.
-- [ ] Local Real-ESRGAN сохраняет alpha у прозрачных PNG.
+- [x] Local Real-ESRGAN `2x` и `4x` создают изображение ожидаемого размера.
+- [x] Local Real-ESRGAN сохраняет alpha у прозрачных PNG.
 - [ ] Удаление фона сохраняет PNG с alpha.
-- [ ] Edge shrink меняет только alpha-край и не портит RGB.
-- [ ] BEN2 hard-alpha режим не создаёт полупрозрачный край при `softness 0`.
-- [ ] Trim удаляет пустые края в конце pipeline.
+- [x] Edge shrink меняет только alpha-край и не портит RGB.
+- [x] BEN2 hard-alpha режим не создаёт полупрозрачный край при `softness 0`.
+- [x] Trim удаляет пустые края в конце pipeline.
 - [ ] UI сохраняет и восстанавливает настройки обработки.
-- [ ] В `raw/` сохраняются промежуточные файлы для диагностики.
+- [x] В `raw/` сохраняются промежуточные файлы для диагностики.
 - [ ] Перед релизом пройдены проверки из `TEST_CHECKLIST.md`.
 
 ## Related Documents

@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 20 - Local Processing Acceptance**.
+Current next task: **Task 21 - KIE And Mixed Workflow Acceptance**.
 
 ## Phase 1 - Preparation
 
@@ -166,7 +166,7 @@ Notes:
 
 ## Task 20 - Local Processing Acceptance
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Verify the main process-only workflow without KIE and prevent recurrence of the alpha and tiled-upscale regressions.
@@ -178,21 +178,21 @@ Steps:
 - Inspect one transparent result on a dark background.
 
 Acceptance:
-- [ ] Process-only local mode works without a KIE key.
-- [ ] `2x` and `4x` outputs have correct dimensions without tile artifacts.
-- [ ] Transparent PNG output is non-empty and keeps a valid alpha channel.
-- [ ] The final order remains `upscale -> unsharp -> remove background -> edge shrink -> trim -> save`.
+- [x] Process-only local mode works without a KIE key.
+- [x] `2x` and `4x` outputs have correct dimensions without tile artifacts.
+- [x] Transparent PNG output is non-empty and keeps a valid alpha channel.
+- [x] The final order remains `upscale -> unsharp -> remove background -> edge shrink -> trim -> save`.
 
 Verification:
-- [ ] `python -m unittest tests.test_local_processing_acceptance -v`
-- [ ] Manual dark-background comparison is recorded in `CHANGELOG.md`.
+- [x] `python -m unittest tests.test_local_processing_acceptance -v`
+- [x] Manual dark-background comparison is recorded in `CHANGELOG.md`.
 
 Notes:
 - Use the existing local Real-ESRGAN folder; do not add its binaries or models to git.
 
 ## Task 21 - KIE And Mixed Workflow Acceptance
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Confirm API-key routing and the generation/mixed workflows without changing provider behavior.

@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added focused local-processing acceptance tests covering Real-ESRGAN, PNG/JPG process-only flows, alpha controls, Unsharp Mask, edge shrink, trim, and pipeline order.
 - Added a post-MVP export cleanup plan for selective metadata cleanup, visible generator marks, and supported hidden provenance data.
 - Added `PROCESSING_PIPELINE_TZ.md` with the final processing pipeline specification.
 - Added `TASKS.md` with the ordered implementation checklist for local Real-ESRGAN, local rembg, edge shrink, and verification.
@@ -55,6 +56,12 @@
 
 ### Verified
 
+- Verified 7 local-processing acceptance tests pass without KIE or network calls.
+- Verified real Local Real-ESRGAN `2x` and `4x` runs produce exact dimensions, preserve binary alpha, and retain the expected quadrant layout without tile artifacts.
+- Verified local process-only accepts RGBA PNG and RGB JPEG inputs, writes diagnostic intermediates to `raw/`, and saves final PNG output.
+- Verified the local order is `upscale -> unsharp -> remove background -> edge shrink -> trim -> save`.
+- Verified BEN2 hard alpha, optional softness, rembg edge softness, RGB-preserving edge shrink, and transparent-border trim with deterministic image fixtures.
+- Inspected the real `4x` transparent result on a dark background; the alpha boundary was clean and no tiled layout defect was visible.
 - Verified the current `main.py` compiles and constructs `MainWindow` in Qt offscreen mode without errors.
 - Verified an isolated legacy config preserves existing values and receives safe defaults for missing processing settings without accessing the user's real config.
 - Verified legacy config files load successfully and receive the new local processing defaults without changing existing values.
