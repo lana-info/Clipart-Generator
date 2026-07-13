@@ -37,6 +37,7 @@
 
 ### Changed
 
+- Reworked the open task plan into ordered MVP verification, metadata cleanup, hidden provenance, and conditional visible-mark stages; build and release work remain excluded unless requested separately.
 - Ignored local `realesrgan-ncnn-vulkan-20211212-windows/` binaries and models so they do not get committed.
 - KIE API key validation now depends on the selected processing providers instead of any enabled processing step.
 - Changed the rembg requirement to `rembg[cpu]` so fresh installs include the CPU backend.
