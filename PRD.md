@@ -90,7 +90,7 @@ Clipart Generator должен помогать автору быстро ген
 - [ ] Generate-only сценарий сохраняет изображения в `output/`.
 - [x] Process-only сценарий работает на локальных PNG/JPG без генерации.
 - [x] Local-only processing не требует KIE API key.
-- [ ] Mixed local/KIE processing требует KIE API key только для KIE-шагов.
+- [x] Mixed local/KIE processing требует KIE API key только для KIE-шагов.
 - [x] Local Real-ESRGAN `2x` и `4x` создают изображение ожидаемого размера.
 - [x] Local Real-ESRGAN сохраняет alpha у прозрачных PNG.
 - [ ] Удаление фона сохраняет PNG с alpha.

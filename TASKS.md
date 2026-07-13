@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 21 - KIE And Mixed Workflow Acceptance**.
+Current next task: **Task 22 - MVP Acceptance Closeout**.
 
 ## Phase 1 - Preparation
 
@@ -192,7 +192,7 @@ Notes:
 
 ## Task 21 - KIE And Mixed Workflow Acceptance
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Confirm API-key routing and the generation/mixed workflows without changing provider behavior.
@@ -203,21 +203,21 @@ Steps:
 - Verify progress messages, `raw/`, `output/`, and error handling without logging secrets.
 
 Acceptance:
-- [ ] Local-only mode never asks for a KIE key.
-- [ ] KIE-only and mixed modes request the key only when a selected step uses KIE.
-- [ ] Generate-only and mixed workflows save the expected files.
-- [ ] No API key or secret appears in logs.
+- [x] Local-only mode never asks for a KIE key.
+- [x] KIE-only and mixed modes request the key only when a selected step uses KIE.
+- [x] Generate-only and mixed workflows save the expected files.
+- [x] No API key or secret appears in logs.
 
 Verification:
-- [ ] `python -m unittest tests.test_kie_routing -v`
-- [ ] One controlled live KIE smoke check is recorded, or its absence is explicitly documented.
+- [x] `python -m unittest tests.test_kie_routing -v`
+- [x] Live KIE smoke was not run to avoid consuming credits; network-free generate-only and mixed-flow tests were used instead.
 
 Notes:
 - A live check can consume credits; keep it to the smallest useful sample.
 
 ## Task 22 - MVP Acceptance Closeout
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Close the current MVP against the product documents before starting post-MVP cleanup features.

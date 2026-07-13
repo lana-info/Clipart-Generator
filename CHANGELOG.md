@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added network-free KIE routing tests for worker and UI key validation, generate-only output, mixed local/KIE processing, error reporting, and secret-safe logs.
 - Added focused local-processing acceptance tests covering Real-ESRGAN, PNG/JPG process-only flows, alpha controls, Unsharp Mask, edge shrink, trim, and pipeline order.
 - Added a post-MVP export cleanup plan for selective metadata cleanup, visible generator marks, and supported hidden provenance data.
 - Added `PROCESSING_PIPELINE_TZ.md` with the final processing pipeline specification.
@@ -56,6 +57,11 @@
 
 ### Verified
 
+- Verified 5 focused KIE routing tests and the full 12-test suite pass without network calls.
+- Verified UI and worker routing across local-only, KIE-only, local-to-KIE, and KIE-to-local provider combinations.
+- Verified simulated generate-only and mixed local/KIE workflows save `raw/` intermediates and final `output/` PNG files.
+- Verified provider failures remain visible while the API key stays absent from progress and completion logs.
+- Did not run a live KIE smoke request to avoid consuming credits; external provider availability remains intentionally unverified in this task.
 - Verified 7 local-processing acceptance tests pass without KIE or network calls.
 - Verified real Local Real-ESRGAN `2x` and `4x` runs produce exact dimensions, preserve binary alpha, and retain the expected quadrant layout without tile artifacts.
 - Verified local process-only accepts RGBA PNG and RGB JPEG inputs, writes diagnostic intermediates to `raw/`, and saves final PNG output.
