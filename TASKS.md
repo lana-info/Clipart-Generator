@@ -1,6 +1,6 @@
 # TASKS
 
-Source spec: `PROCESSING_PIPELINE_TZ.md`.
+Source specs: `PRD.md` and `PROCESSING_PIPELINE_TZ.md`.
 
 Rule: take the next open task in order. Keep code changes narrow and do not refactor working code unless it directly makes the current task safer.
 
@@ -130,3 +130,18 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 - [x] Run Local Real-ESRGAN on a temporary RGB composite when the input has alpha.
 - [x] Restore the upscaled alpha channel after Local Real-ESRGAN finishes.
 - [x] Verify compile and a real Local Real-ESRGAN run on the affected bird PNG.
+
+## Phase 19 - Post-MVP Export Cleanup
+
+- [ ] Document which Nano Banana visible marks, metadata fields, provenance manifests, and hidden pixel-level markers can be detected reliably.
+- [ ] Define ownership/licensing limits and supported formats before implementing mark removal.
+- [ ] Add independent cleanup checkboxes for metadata, visible generator marks, and supported hidden provenance data.
+- [ ] Add separate preservation choices for ICC color profile and export DPI.
+- [ ] Implement metadata inspection that reports EXIF, XMP, IPTC, comments, thumbnails, and supported provenance data without changing the file.
+- [ ] Implement selective metadata cleanup and verify that unchecked categories remain unchanged.
+- [ ] Prototype visible generator-mark removal on owned test images and reject results that damage clipart details.
+- [ ] Prototype removal of supported hidden metadata/manifests; clearly report pixel-level markers that cannot be removed reliably.
+- [ ] Place visible-mark cleanup before final upscale/trim when testing shows this gives the cleanest result, and run metadata cleanup only during final save.
+- [ ] Save and restore all cleanup choices without changing defaults for existing users.
+- [ ] Add before/after diagnostics and tests for metadata, transparency, DPI, color profile, and visual quality.
+- [ ] Update author documentation only after the supported cleanup guarantees are confirmed by tests.

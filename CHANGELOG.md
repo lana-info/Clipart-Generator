@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added a post-MVP export cleanup plan for selective metadata cleanup, visible generator marks, and supported hidden provenance data.
 - Added `PROCESSING_PIPELINE_TZ.md` with the final processing pipeline specification.
 - Added `TASKS.md` with the ordered implementation checklist for local Real-ESRGAN, local rembg, edge shrink, and verification.
 - Added default config keys for future local Real-ESRGAN, local rembg, and edge shrink settings.
