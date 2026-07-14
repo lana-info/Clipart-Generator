@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added explicit C2PA export cleanup for bounded PNG `caBX`, JPEG APP11/JUMBF, valid embedded XMP pointers, and supported external manifest references in a new PNG.
+- Added 11 C2PA cleanup tests covering PNG/JPEG containers, remote and `self#jumbf` references, post-`IDAT` XMP, packet/comment/PI preservation, unknown and mixed provenance, duplicate XMP, sidecars, value-safe results, and atomic rollback.
 - Added a selective metadata cleanup core for new PNG exports with independent EXIF, XMP, IPTC, comments/text, embedded-thumbnail, known-generator, ICC, and DPI options.
 - Added a shared exact-match generator metadata policy plus bounded PNG/JPEG preflight, UTF-8/UTF-16 XMP handling, EXIF overlap protection, stripe-based pixel/alpha verification, value-safe metadata digests, and atomic publication.
 - Added 15 cleanup tests covering category independence, ICC/DPI, palette/RGB transparency, localized iTXt, C2PA rejection, malformed/overlapping EXIF, UTF-16 XMP declarations, duplicate text, multiple JPEG comments, input limits, and failure rollback.
@@ -55,6 +57,9 @@
 
 ### Changed
 
+- Advanced the metadata-inspector schema to v3 with separate embedded-container, embedded-XMP-reference, supported-external-reference, and unclassified-provenance states.
+- PNG text inspection now uses a bounded raw chunk scan so metadata after `IDAT` is included without decoding image pixels.
+- Selective XMP cleanup now preserves packet wrappers, comments, processing instructions, and unrelated fields; ambiguous provenance aborts unless full XMP removal is explicitly selected.
 - Known generator fields now use one shared exact allowlist; substring matches and ordinary EXIF camera `Model` fields are no longer classified as generator metadata.
 - Metadata-only cleanup rejects C2PA-bearing or indeterminate inputs until explicit C2PA export cleanup is implemented in Task 27.
 - Advanced the metadata-inspector schema to v2 with a separate C2PA presence, scan-status, and always-`not_validated` result.
@@ -84,6 +89,8 @@
 
 ### Verified
 
+- Verified 11 focused C2PA cleanup tests and all 63 project tests pass; three review passes closed URI prefix collisions, mixed valid/unknown provenance, post-`IDAT` metadata, XMP structure preservation, and duplicate-key concerns.
+- Verified the cleanup result states that remote manifests, sidecars, signature validity, and pixel soft bindings were not deleted, accessed, removed, or validated.
 - Verified 15 focused metadata-cleanup tests and all 52 project tests pass; the third review pass returned `PASS` after C2PA, alpha, EXIF-overlap, XMP, allowlist, preservation, JPEG-comment, and memory-bound findings were fixed.
 - Verified cleanup preserves source files and prior outputs on failure, preserves selected ICC/300 DPI and unchecked supported metadata values, and publishes only after decoded pixels, dimensions, alpha, and metadata match expectations.
 - Verified 8 focused C2PA tests and all 37 project tests pass after enforcing PNG/JPEG bounds, nested/extended JPEG JUMBF lengths, contiguous APP11 sequence, and required description toggles.

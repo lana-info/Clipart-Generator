@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+import zlib
 from os import PathLike, fstat
 from typing import Any
 
@@ -11,13 +12,14 @@ from PIL import ExifTags, Image, IptcImagePlugin, UnidentifiedImageError
 from metadata_policy import (
     GENERATOR_EXIF_TAGS,
     XmpPolicyError,
+    classify_c2pa_xmp_references,
     classify_generator_field_names,
     classify_generator_xmp,
     parse_xmp_root,
 )
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SUPPORTED_FORMATS = frozenset({"PNG", "JPEG"})
 CATEGORY_NAMES = (
     "exif",
@@ -40,6 +42,9 @@ _MAX_C2PA_SEGMENTS = 1_024
 _MAX_C2PA_DECLARED_BYTES = 64 * 1024 * 1024
 _MAX_JPEG_PREFIX_BYTES = 96
 _MAX_PNG_CHUNK_LENGTH = 0x7FFFFFFF
+_MAX_PNG_TEXT_CHUNK_BYTES = 1 * 1024 * 1024
+_MAX_PNG_TEXT_TOTAL_BYTES = 64 * 1024 * 1024
+_MAX_PNG_TEXT_COMPRESSED_BYTES = 16 * 1024 * 1024
 
 
 def _c2pa_summary(
@@ -54,10 +59,18 @@ def _c2pa_summary(
 ) -> dict[str, Any]:
     return {
         "presence": presence,
+        "embedded_presence": presence,
+        "embedded_reference_presence": "unknown",
+        "external_reference_presence": "unknown",
+        "unclassified_reference_presence": "unknown",
         "validation": "not_validated",
         "scan_status": scan_status,
+        "reference_scan_status": "not_scanned",
         "reason": reason,
         "item_count": max(0, int(item_count)),
+        "embedded_reference_count": 0,
+        "external_reference_count": 0,
+        "unclassified_reference_count": 0,
         "segment_count": max(0, int(segment_count)),
         "size_bytes": max(0, int(size_bytes)),
         "containers": list(containers),
@@ -530,6 +543,64 @@ def _known_generator_fields(names: list[str], payloads: list[bytes] | None = Non
     return tuple(sorted(matches))
 
 
+def _c2pa_xmp_reference_summary(payloads: list[bytes]) -> dict[str, Any]:
+    embedded_count = 0
+    external_count = 0
+    unknown_count = 0
+    malformed = False
+    for payload in payloads:
+        try:
+            counts = classify_c2pa_xmp_references(parse_xmp_root(payload))
+            embedded_count += counts["embedded"]
+            external_count += counts["external"]
+            unknown_count += counts["unknown"]
+        except XmpPolicyError:
+            malformed = True
+    return {
+        "embedded_presence": "present" if embedded_count else ("unknown" if malformed else "not_present"),
+        "external_presence": "present" if external_count else ("unknown" if malformed else "not_present"),
+        "unclassified_presence": "present" if unknown_count else ("unknown" if malformed else "not_present"),
+        "scan_status": "malformed" if malformed else ("unclassified" if unknown_count else "ok"),
+        "embedded_count": embedded_count,
+        "external_count": external_count,
+        "unclassified_count": unknown_count,
+    }
+
+
+def _combine_c2pa_summary(embedded: dict[str, Any], references: dict[str, Any]) -> dict[str, Any]:
+    result = dict(embedded)
+    embedded_presence = str(embedded.get("presence", "unknown"))
+    embedded_reference_presence = str(references["embedded_presence"])
+    external_reference_presence = str(references["external_presence"])
+    unclassified_reference_presence = str(references["unclassified_presence"])
+    presence_states = {
+        embedded_presence,
+        embedded_reference_presence,
+        external_reference_presence,
+        unclassified_reference_presence,
+    }
+    if "present" in presence_states:
+        overall_presence = "present"
+    elif presence_states == {"not_present"}:
+        overall_presence = "not_present"
+    else:
+        overall_presence = "unknown"
+    result.update(
+        {
+            "presence": overall_presence,
+            "embedded_presence": embedded_presence,
+            "embedded_reference_presence": embedded_reference_presence,
+            "external_reference_presence": external_reference_presence,
+            "unclassified_reference_presence": unclassified_reference_presence,
+            "reference_scan_status": references["scan_status"],
+            "embedded_reference_count": max(0, int(references["embedded_count"])),
+            "external_reference_count": max(0, int(references["external_count"])),
+            "unclassified_reference_count": max(0, int(references["unclassified_count"])),
+        }
+    )
+    return result
+
+
 def _read_tiff_integer(data: bytes, offset: int, byte_order: str, value_type: int, count: int) -> int | None:
     if count != 1:
         return None
@@ -607,11 +678,91 @@ def _base_result(status: str, reason: str | None = None) -> dict[str, Any]:
     }
 
 
-def _png_text_entries(image: Image.Image) -> dict[str, str]:
-    text = getattr(image, "text", None)
-    if not isinstance(text, dict):
-        return {}
-    return {str(key): str(value) for key, value in text.items()}
+def _bounded_png_text_decompress(payload: bytes) -> bytes:
+    try:
+        decompressor = zlib.decompressobj()
+        decoded = decompressor.decompress(payload, _MAX_PNG_TEXT_CHUNK_BYTES + 1)
+        if len(decoded) > _MAX_PNG_TEXT_CHUNK_BYTES or decompressor.unconsumed_tail:
+            raise ValueError("PNG text chunk exceeds the inspection limit")
+        decoded += decompressor.flush(_MAX_PNG_TEXT_CHUNK_BYTES + 1 - len(decoded))
+        if (
+            len(decoded) > _MAX_PNG_TEXT_CHUNK_BYTES
+            or not decompressor.eof
+            or decompressor.unused_data
+        ):
+            raise ValueError("PNG compressed text is malformed or oversized")
+        return decoded
+    except zlib.error as error:
+        raise ValueError("PNG compressed text is malformed") from error
+
+
+def _png_text_value(chunk_type: bytes, payload: bytes) -> tuple[str, str]:
+    keyword, separator, remainder = payload.partition(b"\x00")
+    if not separator or not keyword:
+        raise ValueError("PNG text keyword is malformed")
+    key = keyword.decode("latin-1", errors="strict")
+    if chunk_type == b"tEXt":
+        return key, remainder.decode("latin-1", errors="strict")
+    if chunk_type == b"zTXt":
+        if not remainder or remainder[0] != 0:
+            raise ValueError("PNG compressed text method is unsupported")
+        value = _bounded_png_text_decompress(remainder[1:])
+        return key, value.decode("latin-1", errors="strict")
+
+    if len(remainder) < 2:
+        raise ValueError("PNG international text header is truncated")
+    compressed, compression_method = remainder[0], remainder[1]
+    if compressed not in {0, 1} or compression_method != 0:
+        raise ValueError("PNG international text compression is unsupported")
+    language, separator, remainder = remainder[2:].partition(b"\x00")
+    if not separator:
+        raise ValueError("PNG international text language is malformed")
+    language.decode("ascii", errors="strict")
+    translated_key, separator, text = remainder.partition(b"\x00")
+    if not separator:
+        raise ValueError("PNG international text translated key is malformed")
+    translated_key.decode("utf-8", errors="strict")
+    if compressed:
+        text = _bounded_png_text_decompress(text)
+    return key, text.decode("utf-8", errors="strict")
+
+
+def _scan_png_text_entries(path: str | PathLike[str]) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    total_text_bytes = 0
+    with open(path, "rb") as stream:
+        file_size = fstat(stream.fileno()).st_size
+        if stream.read(len(_PNG_SIGNATURE)) != _PNG_SIGNATURE:
+            return entries
+        position = len(_PNG_SIGNATURE)
+        for _ in range(_MAX_CONTAINER_ENTRIES):
+            if position + 12 > file_size:
+                raise ValueError("PNG chunk stream is truncated")
+            header = stream.read(8)
+            if len(header) != 8:
+                raise ValueError("PNG chunk header is truncated")
+            length, chunk_type = struct.unpack(">I4s", header)
+            position += 8
+            if length > _MAX_PNG_CHUNK_LENGTH or position + length + 4 > file_size:
+                raise ValueError("PNG chunk exceeds the source file")
+            if chunk_type in {b"tEXt", b"zTXt", b"iTXt"}:
+                if length > _MAX_PNG_TEXT_COMPRESSED_BYTES:
+                    raise ValueError("PNG text chunk exceeds the inspection limit")
+                payload = stream.read(length)
+                entry = _png_text_value(chunk_type, payload)
+                entry_size = len(entry[0].encode("utf-8")) + len(entry[1].encode("utf-8"))
+                total_text_bytes += entry_size
+                if total_text_bytes > _MAX_PNG_TEXT_TOTAL_BYTES:
+                    raise ValueError("PNG text metadata exceeds the inspection limit")
+                entries.append(entry)
+            else:
+                stream.seek(length, 1)
+            if len(stream.read(4)) != 4:
+                raise ValueError("PNG chunk checksum is truncated")
+            position += length + 4
+            if chunk_type == b"IEND":
+                return entries
+    raise ValueError("PNG contains too many chunks")
 
 
 def _xmp_payloads(image: Image.Image, png_text: dict[str, str]) -> list[bytes]:
@@ -627,9 +778,17 @@ def _xmp_payloads(image: Image.Image, png_text: dict[str, str]) -> list[bytes]:
     return payloads
 
 
-def _inspect_supported_image(image: Image.Image) -> dict[str, dict[str, Any]]:
+def _inspect_supported_image(
+    image: Image.Image,
+    png_text_entries: list[tuple[str, str]] | None = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     categories = _empty_categories()
-    png_text = _png_text_entries(image) if image.format == "PNG" else {}
+    if image.format == "PNG":
+        text_entries = png_text_entries or []
+        png_text = dict(text_entries)
+    else:
+        text_entries = []
+        png_text = {}
 
     raw_exif = image.info.get("exif")
     if not isinstance(raw_exif, bytes):
@@ -647,8 +806,16 @@ def _inspect_supported_image(image: Image.Image) -> dict[str, dict[str, Any]]:
     thumbnail_size = _exif_thumbnail_size(raw_exif) if raw_exif else 0
     categories["embedded_thumbnail"] = _category(1 if thumbnail_size else 0, thumbnail_size)
 
-    xmp_payloads = _xmp_payloads(image, png_text)
+    if image.format == "PNG":
+        xmp_payloads = [
+            value.encode("utf-8")
+            for key, value in text_entries
+            if key.casefold() in _XMP_KEYS
+        ]
+    else:
+        xmp_payloads = _xmp_payloads(image, png_text)
     categories["xmp"] = _category(len(xmp_payloads), sum(map(len, xmp_payloads)))
+    c2pa_references = _c2pa_xmp_reference_summary(xmp_payloads)
 
     try:
         iptc = IptcImagePlugin.getiptcinfo(image) or {}
@@ -656,8 +823,8 @@ def _inspect_supported_image(image: Image.Image) -> dict[str, dict[str, Any]]:
         iptc = {}
     categories["iptc"] = _category(len(iptc), sum(_value_size(value) for value in iptc.values()))
 
-    ordinary_text = [(key, value) for key, value in png_text.items() if key.lower() not in _XMP_KEYS]
-    raw_comment = image.info.get("comment")
+    ordinary_text = [(key, value) for key, value in text_entries if key.casefold() not in _XMP_KEYS]
+    raw_comment = image.info.get("comment") if image.format == "JPEG" else None
     comment_count = 1 if isinstance(raw_comment, (bytes, str)) and raw_comment else 0
     text_size = sum(_value_size(key) + _value_size(value) for key, value in ordinary_text)
     categories["comments_text"] = _category(
@@ -680,7 +847,7 @@ def _inspect_supported_image(image: Image.Image) -> dict[str, dict[str, Any]]:
         0,
         fields=list(generator_fields),
     )
-    return categories
+    return categories, c2pa_references
 
 
 def inspect_image_metadata(path: str | PathLike[str]) -> dict[str, Any]:
@@ -710,8 +877,10 @@ def inspect_image_metadata(path: str | PathLike[str]) -> dict[str, Any]:
             if result["is_animated"] or int(getattr(image, "n_frames", 1)) != 1:
                 result.update({"status": "unsupported", "supported": False, "reason": "animated_not_supported"})
                 return result
-            result["categories"] = _inspect_supported_image(image)
-            result["c2pa"] = inspect_c2pa_presence(path)
+            png_text_entries = _scan_png_text_entries(path) if image_format == "PNG" else None
+            categories, c2pa_references = _inspect_supported_image(image, png_text_entries)
+            result["categories"] = categories
+            result["c2pa"] = _combine_c2pa_summary(inspect_c2pa_presence(path), c2pa_references)
             return result
     except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError, ValueError):
         return _base_result("invalid", "unreadable_or_invalid_image")

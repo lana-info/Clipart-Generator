@@ -440,7 +440,7 @@ Notes:
 
 ## Task 27 - C2PA Export Cleanup
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Remove supported embedded C2PA data or references from the new PNG export when explicitly selected.
@@ -452,19 +452,24 @@ Steps:
 - Abort publication if post-save validation does not match the selected action.
 
 Acceptance:
-- [ ] Embedded structures selected for cleanup are absent from the new PNG.
-- [ ] The source file remains unchanged.
-- [ ] Logs never claim that remote manifests or pixel soft bindings were deleted.
+- [x] Embedded structures selected for cleanup are absent from the new PNG.
+- [x] The source file remains unchanged.
+- [x] Logs never claim that remote manifests or pixel soft bindings were deleted.
 
 Verification:
-- [ ] `python -m unittest tests.test_c2pa_cleanup -v`
+- [x] `python -m unittest tests.test_c2pa_cleanup -v`
 
 Notes:
 - This task validates the limited `REMOVE` claim in `CLEANUP_CAPABILITY_MATRIX.md`.
+- Added explicit `remove_embedded_c2pa` cleanup for bounded PNG `caBX`, JPEG APP11/JUMBF, valid XMP `self#jumbf=c2pa/...`, and supported HTTP(S) `.c2pa`/JUMBF references in the new PNG only.
+- Inspector schema v3 separates embedded containers, embedded XMP pointers, supported external references, and unclassified provenance values; no remote fetch or signature validation is performed.
+- Unknown or mixed provenance values abort selective cleanup unless the whole XMP category is explicitly removed. Duplicate PNG XMP keys abort before any `dict` conversion.
+- Selective XMP filtering preserves packet wrappers, comments, processing instructions, and unrelated XMP fields; a bounded raw PNG text scan includes metadata placed after `IDAT`.
+- Sidecar files, remote manifests, and pixel soft bindings are never touched. Eleven focused C2PA cleanup tests and all 63 project tests pass after three review passes.
 
 ## Task 28 - Metadata Cleanup UI And Settings
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Expose independent metadata/C2PA cleanup choices without changing current defaults.

@@ -11,12 +11,14 @@ from dataclasses import dataclass, fields
 from os import PathLike
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree
+from xml.dom import minidom
+from xml.parsers.expat import ExpatError
 
 from PIL import Image, IptcImagePlugin, PngImagePlugin, UnidentifiedImageError
 
 from metadata_inspector import inspect_image_metadata
 from metadata_policy import (
+    C2PA_XMP_REFERENCE_PROPERTIES,
     GENERATOR_EXIF_TAGS,
     GENERATOR_XMP_PROPERTIES,
     XmpPolicyError,
@@ -79,6 +81,7 @@ class MetadataCleanupOptions:
     remove_generator_fields: bool = False
     preserve_icc: bool = True
     preserve_dpi: bool = True
+    remove_embedded_c2pa: bool = False
 
 
 def _validate_options(options: MetadataCleanupOptions) -> None:
@@ -184,25 +187,55 @@ def _safe_xmp_text(payload: bytes) -> str:
         raise MetadataCleanupError(str(error)) from error
 
 
+def _dom_property_name(node: Any) -> str:
+    namespace = getattr(node, "namespaceURI", None)
+    local_name = getattr(node, "localName", None)
+    if namespace and local_name:
+        return f"{{{namespace}}}{local_name}"
+    return str(getattr(node, "nodeName", ""))
+
+
+def _filter_xmp_properties(payload: bytes, properties: frozenset[str]) -> tuple[bytes, int]:
+    text = xmp_text_for_png(payload)
+    try:
+        document = minidom.parseString(text.encode("utf-8"))
+    except (ExpatError, TypeError, ValueError) as error:
+        raise XmpPolicyError("XMP payload is malformed") from error
+    removed = 0
+    try:
+        elements = list(document.getElementsByTagName("*"))
+        for element in elements:
+            attributes = [element.attributes.item(index) for index in range(element.attributes.length)]
+            for attribute in attributes:
+                if attribute is not None and _dom_property_name(attribute) in properties:
+                    element.removeAttributeNode(attribute)
+                    removed += 1
+        for element in elements:
+            if _dom_property_name(element) not in properties:
+                continue
+            if element.parentNode is document:
+                raise XmpPolicyError("XMP root property cannot be removed safely")
+            element.parentNode.removeChild(element)
+            removed += 1
+        if not removed:
+            return payload, 0
+        return document.toxml(encoding="utf-8"), removed
+    finally:
+        document.unlink()
+
+
 def _filter_xmp_generator_fields(payload: bytes) -> tuple[bytes, int]:
     try:
-        root = parse_xmp_root(payload)
+        return _filter_xmp_properties(payload, frozenset(GENERATOR_XMP_PROPERTIES))
     except XmpPolicyError as error:
         raise MetadataCleanupError(str(error)) from error
 
-    removed = 0
-    for element in root.iter():
-        for attribute in tuple(element.attrib):
-            if attribute in GENERATOR_XMP_PROPERTIES:
-                del element.attrib[attribute]
-                removed += 1
-        for child in tuple(element):
-            if child.tag in GENERATOR_XMP_PROPERTIES:
-                element.remove(child)
-                removed += 1
-    if not removed:
-        return payload, 0
-    return ElementTree.tostring(root, encoding="utf-8"), removed
+
+def _filter_xmp_c2pa_references(payload: bytes) -> tuple[bytes, int]:
+    try:
+        return _filter_xmp_properties(payload, C2PA_XMP_REFERENCE_PROPERTIES)
+    except XmpPolicyError as error:
+        raise MetadataCleanupError(str(error)) from error
 
 
 def _xmp_generator_field_count(payload: bytes) -> int:
@@ -671,6 +704,14 @@ def _validate_cleanup_output(
     after = inspect_image_metadata(path)
     if after["status"] != "ok" or after["format"] != "PNG":
         raise MetadataCleanupError("cleanup output failed metadata inspection")
+    after_c2pa = after["c2pa"]
+    if (
+        after_c2pa["embedded_presence"] != "not_present"
+        or after_c2pa["embedded_reference_presence"] != "not_present"
+        or after_c2pa["external_reference_presence"] != "not_present"
+        or after_c2pa["unclassified_reference_presence"] != "not_present"
+    ):
+        raise MetadataCleanupError("cleanup output retained a C2PA file structure or reference")
     after_categories = after["categories"]
     for category, expected in expected_categories.items():
         if bool(after_categories[category]["present"]) != expected:
@@ -705,8 +746,21 @@ def cleanup_image_metadata(
     before = inspect_image_metadata(source_resolved)
     if before["status"] != "ok":
         raise MetadataCleanupError("source must be a supported single-frame PNG or JPEG")
-    if before["c2pa"]["presence"] != "not_present":
-        raise MetadataCleanupError("C2PA input requires the explicit C2PA cleanup task")
+    before_c2pa = before["c2pa"]
+    if not cleanup_options.remove_embedded_c2pa and before_c2pa["presence"] != "not_present":
+        raise MetadataCleanupError("C2PA input requires explicit C2PA cleanup")
+    if cleanup_options.remove_embedded_c2pa:
+        if before_c2pa["scan_status"] != "ok" or before_c2pa["embedded_presence"] == "unknown":
+            raise MetadataCleanupError("embedded C2PA structure cannot be classified safely")
+        if (
+            "unknown"
+            in {
+                before_c2pa["embedded_reference_presence"],
+                before_c2pa["external_reference_presence"],
+            }
+            or before_c2pa["unclassified_reference_presence"] != "not_present"
+        ) and not cleanup_options.remove_xmp:
+            raise MetadataCleanupError("C2PA XMP references cannot be classified safely")
 
     try:
         with Image.open(source_resolved) as source_image:
@@ -777,6 +831,8 @@ def cleanup_image_metadata(
         for key, payload, language, translated_key in xmp_payloads:
             if cleanup_options.remove_generator_fields:
                 payload, _ = _filter_xmp_generator_fields(payload)
+            if cleanup_options.remove_embedded_c2pa:
+                payload, _ = _filter_xmp_c2pa_references(payload)
             output_xmp_payloads.append((key, payload, language, translated_key))
 
     output_xmp_text: list[_TextEntry] = [
@@ -897,6 +953,42 @@ def cleanup_image_metadata(
             if not iptc
             else ("removed" if cleanup_options.remove_iptc else "not_preserved_output_unsupported")
         ),
+        "embedded_c2pa": (
+            "removed"
+            if before_c2pa["embedded_presence"] == "present" and cleanup_options.remove_embedded_c2pa
+            else "absent"
+        ),
+        "c2pa_external_reference": (
+            "removed_from_output"
+            if before_c2pa["external_reference_presence"] == "present"
+            and cleanup_options.remove_embedded_c2pa
+            else (
+                "unclassified_xmp_removed"
+                if before_c2pa["external_reference_presence"] == "unknown"
+                and cleanup_options.remove_embedded_c2pa
+                and cleanup_options.remove_xmp
+                else "absent"
+            )
+        ),
+        "c2pa_embedded_reference": (
+            "removed_from_output"
+            if before_c2pa["embedded_reference_presence"] == "present"
+            and cleanup_options.remove_embedded_c2pa
+            else (
+                "unclassified_xmp_removed"
+                if before_c2pa["embedded_reference_presence"] == "unknown"
+                and cleanup_options.remove_embedded_c2pa
+                and cleanup_options.remove_xmp
+                else "absent"
+            )
+        ),
+        "c2pa_unclassified_reference": (
+            "removed_with_xmp_category"
+            if before_c2pa["unclassified_reference_presence"] != "not_present"
+            and cleanup_options.remove_embedded_c2pa
+            and cleanup_options.remove_xmp
+            else "absent"
+        ),
     }
     return {
         "status": "ok",
@@ -905,8 +997,14 @@ def cleanup_image_metadata(
         "width": source_size[0],
         "height": source_size[1],
         "actions": actions,
-        "before": {"categories": before_categories},
-        "after": {"categories": after_categories},
+        "c2pa_scope": {
+            "remote_manifest": "not_deleted_or_accessed",
+            "sidecar_manifest": "not_deleted_or_accessed",
+            "pixel_soft_bindings": "not_removed_or_validated",
+            "signature_validation": "not_performed",
+        },
+        "before": {"categories": before_categories, "c2pa": before_c2pa},
+        "after": {"categories": after_categories, "c2pa": after["c2pa"]},
     }
 
 
