@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 22 - MVP Acceptance Closeout**.
+Current next task: **Task 23 - Cleanup Capability And Safety Matrix**.
 
 ## Phase 1 - Preparation
 
@@ -217,7 +217,7 @@ Notes:
 
 ## Task 22 - MVP Acceptance Closeout
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Close the current MVP against the product documents before starting post-MVP cleanup features.
@@ -229,21 +229,21 @@ Steps:
 - Update PRD acceptance checkboxes only where evidence exists.
 
 Acceptance:
-- [ ] Every MVP acceptance criterion is either verified or has a named blocking task.
-- [ ] Documentation matches the actual UI and processing order.
-- [ ] No build, release, tag, or update-repository action is performed.
+- [x] Every MVP acceptance criterion is either verified or explicitly reserved for the release checklist.
+- [x] Documentation matches the actual UI and processing order.
+- [x] No build, release, tag, or update-repository action is performed.
 
 Verification:
-- [ ] `python -m py_compile .\main.py`
-- [ ] `python -m unittest discover -s tests -v`
-- [ ] Manual main-flow results are recorded in `CHANGELOG.md`.
+- [x] `python -m py_compile .\main.py`
+- [x] `python -m unittest discover -s tests -v`
+- [x] Manual and automated main-flow evidence is recorded in `CHANGELOG.md`.
 
 Notes:
-- This is the gate before post-MVP work.
+- Closed with 14 passing tests. Live KIE and release-only visual/build checks remain intentionally open until an explicit release request.
 
 ## Task 23 - Cleanup Capability And Safety Matrix
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Define exactly what can be inspected or removed reliably before adding cleanup controls.

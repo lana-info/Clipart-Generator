@@ -127,6 +127,7 @@ class KieRoutingTests(unittest.TestCase):
                         patch.object(main, "PROMPTS_STORAGE_FILE", str(case_dir / "prompts.json")),
                         patch.object(main, "LICENSE_CACHE_FILE", str(case_dir / "license_cache.json")),
                         patch.object(main.MainWindow, "_migrate_legacy_local_files", return_value=None),
+                        patch.object(main.QTimer, "singleShot"),
                         patch.object(main.QMessageBox, "warning") as warning_mock,
                         patch.object(main.WorkerThread, "start", autospec=True) as start_mock,
                     ):
@@ -156,7 +157,10 @@ class KieRoutingTests(unittest.TestCase):
                         else:
                             warning_mock.assert_not_called()
                             start_mock.assert_called_once()
+                        window.settings_save_timer.stop()
+                        window.api_key_mask_timer.stop()
                         window.deleteLater()
+                        self.app.processEvents()
 
     def test_generate_only_saves_raw_and_output_without_network(self):
         with tempfile.TemporaryDirectory(prefix="clipart-kie-generate-") as temp_dir:

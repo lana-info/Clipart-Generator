@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added isolated offscreen UI acceptance tests for the window title, work-folder setup, API-key lock, processing-setting persistence, validation, and completion/Stop dialog rules.
 - Added network-free KIE routing tests for worker and UI key validation, generate-only output, mixed local/KIE processing, error reporting, and secret-safe logs.
 - Added focused local-processing acceptance tests covering Real-ESRGAN, PNG/JPG process-only flows, alpha controls, Unsharp Mask, edge shrink, trim, and pipeline order.
 - Added a post-MVP export cleanup plan for selective metadata cleanup, visible generator marks, and supported hidden provenance data.
@@ -39,6 +40,8 @@
 
 ### Changed
 
+- Closed the non-release MVP acceptance gate and moved the ordered task plan to the post-MVP cleanup capability research task.
+- Isolated startup update timers and pending windows in UI tests so the full suite cannot trigger background update checks or write outside temporary test folders.
 - Reworked the open task plan into ordered MVP verification, metadata cleanup, hidden provenance, and conditional visible-mark stages; build and release work remain excluded unless requested separately.
 - Ignored local `realesrgan-ncnn-vulkan-20211212-windows/` binaries and models so they do not get committed.
 - KIE API key validation now depends on the selected processing providers instead of any enabled processing step.
@@ -57,7 +60,12 @@
 
 ### Verified
 
-- Verified 5 focused KIE routing tests and the full 12-test suite pass without network calls.
+- Verified all 14 tests pass in one process, including the real local Real-ESRGAN checks and the isolated main-window acceptance checks.
+- Verified sections 1-9 of `TEST_CHECKLIST.md` through automated UI/worker tests plus the previously recorded real local pipeline and dark-background inspection.
+- Verified generate-only writes `raw/` and `output/`, background removal produces PNG alpha, and processing settings restore from an isolated saved config.
+- Reviewed `README_AUTHOR_SHORT.md`, `PRD.md`, `TASKS.md`, `CHANGELOG.md`, and `TEST_CHECKLIST.md`; their MVP flow and fixed processing order agree with the current application.
+- Live KIE generation, manual visual UI inspection, build, tag, release, and update-repository actions were not performed.
+- Verified 5 focused KIE routing tests pass without network calls.
 - Verified UI and worker routing across local-only, KIE-only, local-to-KIE, and KIE-to-local provider combinations.
 - Verified simulated generate-only and mixed local/KIE workflows save `raw/` intermediates and final `output/` PNG files.
 - Verified provider failures remain visible while the API key stays absent from progress and completion logs.
