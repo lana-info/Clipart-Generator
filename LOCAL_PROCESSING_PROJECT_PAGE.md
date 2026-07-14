@@ -13,6 +13,7 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 - Local rembg background removal.
 - Local rembg edge quality presets: `Soft`, `Normal`, `Sharp`.
 - Experimental Local BEN2 background removal with hard alpha controls.
+- PhotoRoom Standard background removal as an optional paid quality fallback.
 - Edge contour removal with `1/2/3 px`.
 - KIE fallback.
 - Local-only processing without a KIE API key.
@@ -29,7 +30,8 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 7. If BEN2 leaves jagged corners, try `radius 1 px`; use `2-3 px` only if the silhouette still looks too rough.
 8. Keep `softness 0 px` when the output must have a hard edge with no semi-transparent aura.
 9. Enable `Удалять контур` and start with `1 px`; use `2-3 px` only when a visible white edge remains.
-10. A fully local processing run does not require a KIE API key. Mixed local/KIE runs still need the key for the selected KIE step.
+10. When local removal quality is insufficient, enter the PhotoRoom API key in Settings and select `PhotoRoom Standard`.
+11. A fully local or PhotoRoom-only processing run does not require a KIE API key. Mixed local/KIE runs still need the key for the selected KIE step.
 
 ## Fixed Processing Order
 

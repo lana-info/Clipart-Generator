@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 23 - Cleanup Capability And Safety Matrix**.
+Current next task: **Task 22C - Upscale Before And After Background Removal**.
 
 ## Phase 1 - Preparation
 
@@ -268,9 +268,63 @@ Verification:
 Notes:
 - Live KIE generation is excluded from this task to avoid consuming credits; the same routing was previously verified live in the isolated 1.0.3 hotfix.
 
+## Task 22B - PhotoRoom Standard Background Removal
+
+Status: Done
+
+Goal:
+Add PhotoRoom Standard as an independent background-removal provider without changing existing provider behavior.
+
+Steps:
+- Add a separate masked PhotoRoom API key field and lock in Settings.
+- Add `PhotoRoom Standard` to the background provider selector.
+- Send local image files to the documented `/v1/segment` endpoint as PNG/RGBA/full-size output.
+- Validate the returned image before saving it into `raw/`.
+- Require only the key for the provider actually selected and keep secrets out of logs.
+
+Acceptance:
+- [x] PhotoRoom Standard can be selected independently from KIE, rembg, and BEN2.
+- [x] Process-only PhotoRoom does not require a KIE API key.
+- [x] A missing PhotoRoom key or invalid response produces an actionable error.
+- [x] The PhotoRoom key and provider selection save and restore safely.
+- [x] Existing providers and processing order remain unchanged.
+
+Verification:
+- [x] `python -m py_compile .\main.py`
+- [x] `python -m unittest tests.test_photoroom_provider -v`
+- [x] `python -m unittest discover -s tests -v`
+
+Notes:
+- Standard mode uses `https://sdk.photoroom.com/v1/segment`; no paid live request is required for automated verification.
+- Verification passed with 4 focused PhotoRoom tests and 20 tests in the full suite; no live PhotoRoom credits were spent.
+
+## Task 22C - Upscale Before And After Background Removal
+
+Status: Todo
+
+Goal:
+Allow upscale before background removal, after background removal, or at both positions.
+
+Steps:
+- Replace the single upscale step with independent before/after controls.
+- Give each enabled pass its own provider and `2x/4x` scale settings.
+- Preserve current behavior for old configs: before enabled, after disabled.
+- Show the combined multiplier when both passes are enabled.
+- Keep edge cleanup and trim after the final upscale pass.
+
+Acceptance:
+- [ ] Before-only, after-only, and both-pass pipelines run in the selected order.
+- [ ] `2x + 2x` produces `4x`; `4x + 4x` clearly reports `16x` before processing.
+- [ ] Transparent PNG alpha remains valid after a post-removal upscale.
+- [ ] Existing configs retain their current before-upscale behavior.
+
+Verification:
+- [ ] `python -m unittest tests.test_upscale_positions -v`
+- [ ] `python -m unittest discover -s tests -v`
+
 ## Task 23 - Cleanup Capability And Safety Matrix
 
-Status: Todo - next safe task
+Status: Todo
 
 Goal:
 Define exactly what can be inspected or removed reliably before adding cleanup controls.

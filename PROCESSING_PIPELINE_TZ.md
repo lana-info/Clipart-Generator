@@ -69,6 +69,7 @@ Default для клипартов:
 Провайдеры:
 
 - `KIE`: текущий `recraft/remove-background`;
+- `PhotoRoom Standard`: `POST https://sdk.photoroom.com/v1/segment`, PNG/RGBA, `size=full`;
 - `Local rembg`: локальная обработка через Python-библиотеку `rembg`.
 
 Local rembg профили:
@@ -142,6 +143,7 @@ KIE остается fallback, если локальная модель дает
   "local_realesrgan_profile": "clipart",
   "local_realesrgan_scale": 4,
   "remove_bg_provider": "kie",
+  "photoroom_api_key": "",
   "local_rembg_profile": "clipart",
   "local_rembg_model": "birefnet-general",
   "edge_shrink_enabled": false,
@@ -192,11 +194,18 @@ KIE остается fallback, если локальная модель дает
 Добавить выбор провайдера:
 
 - `KIE`;
+- `PhotoRoom Standard`;
 - `Local rembg`.
 
 Если выбран KIE:
 
 - показывать текущий `recraft/remove-background`.
+
+Если выбран PhotoRoom Standard:
+
+- использовать отдельный скрытый `PhotoRoom API Key` из настроек;
+- запрашивать `format=png`, `channels=rgba`, `size=full`, без crop и despill;
+- не требовать KIE API Key для process-only.
 
 Если выбран Local rembg:
 
@@ -467,16 +476,13 @@ save PNG
 
 ## 11. Решение по Photoroom
 
-Photoroom не включать в первую версию.
+Добавить `PhotoRoom Standard` как отдельный платный fallback для изображений, где локальные модели дают неприемлемый край.
 
-Причины:
-
-- платный API;
-- для массовых клипартов дороже локального rembg;
-- для апскейла есть ограничения и неочевидная польза именно для клипартов;
-- текущий KIE fallback уже закрывает облачную обработку.
-
-Photoroom можно вернуться протестировать позже, если local rembg + KIE дадут плохое качество на части изображений.
+- API: `POST https://sdk.photoroom.com/v1/segment`.
+- Режим: Standard, PNG/RGBA, полный размер.
+- Ключ: отдельное скрытое поле с замком в настройках.
+- Цена по документации на момент решения: `$0.02` за успешную обработку изображения.
+- PhotoRoom не заменяет локальные варианты и используется только при явном выборе пользователя.
 
 ## 12. Рекомендуемый MVP
 

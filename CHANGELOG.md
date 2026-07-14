@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added PhotoRoom Standard background removal with a separate masked API key, provider selection, PNG/RGBA validation, and process-only routing without KIE.
+- Added network-free PhotoRoom tests for multipart requests, alpha output, failures, provider routing, key locking, validation, and settings persistence.
 - Added isolated offscreen UI acceptance tests for the window title, work-folder setup, API-key lock, processing-setting persistence, validation, and completion/Stop dialog rules.
 - Added network-free KIE routing tests for worker and UI key validation, generate-only output, mixed local/KIE processing, error reporting, and secret-safe logs.
 - Added focused local-processing acceptance tests covering Real-ESRGAN, PNG/JPG process-only flows, alpha controls, Unsharp Mask, edge shrink, trim, and pipeline order.
@@ -64,7 +66,9 @@
 
 ### Verified
 
-- Verified all 16 tests pass in one process, including GPT Image 2 routing, real local Real-ESRGAN checks, and isolated main-window acceptance checks.
+- Verified all 20 tests pass in one process, including PhotoRoom Standard, GPT Image 2 routing, real local Real-ESRGAN checks, and isolated main-window acceptance checks.
+- Verified PhotoRoom process-only does not require or call KIE, validates PNG alpha before saving, and never writes its API key to progress logs.
+- PhotoRoom verification used mocked network responses only; no paid live request or credits were used.
 - Verified GPT Image 2 generation and availability probes use the same documented task-model routing without making a live KIE request.
 - Verified non-GPT generation model ids remain unchanged by the new resolver.
 - Verified sections 1-9 of `TEST_CHECKLIST.md` through automated UI/worker tests plus the previously recorded real local pipeline and dark-background inspection.

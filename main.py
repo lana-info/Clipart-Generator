@@ -66,6 +66,7 @@ from PyQt6.QtWidgets import (
 
 APP_VERSION = "1.0.2"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
+PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 REFERENCE_MODEL_SHORTLIST = {
     "gpt-image/1.5-image-to-image",
     "gpt-image-2",
@@ -443,6 +444,7 @@ class WorkerThread(QThread):
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
         self.kie_api_key = settings.get("kie_api_key", "").strip()
+        self.photoroom_api_key = settings.get("photoroom_api_key", "").strip()
         self.kie_upload_path = settings.get("kie_upload_path", "clipart-generator")
         self.text_generation_model = settings.get(
             "text_generation_model",
@@ -521,6 +523,8 @@ class WorkerThread(QThread):
         self.progress.emit(f"Рабочая папка: {self.work_dir}")
         if not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
+        if process_generated and self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
+            raise ValueError("Не указан PhotoRoom API Key")
 
         raw_dir = os.path.join(self.work_dir, "raw")
         output_dir = os.path.join(self.work_dir, "output")
@@ -600,7 +604,7 @@ class WorkerThread(QThread):
         return entries
 
     def _mode2_process_files(self, emit_final=True):
-        self.progress.emit("Mode 2: Обработка существующих файлов через KIE")
+        self.progress.emit("Mode 2: Обработка существующих файлов")
         self.progress.emit(f"Рабочая папка: {self.work_dir}")
 
         if not (self.upscale or self.unsharp_enabled or self.remove_bg or self.trim_enabled or self.edge_shrink_enabled):
@@ -608,6 +612,8 @@ class WorkerThread(QThread):
 
         if (self._uses_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
+        if self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
+            raise ValueError("Не указан PhotoRoom API Key")
 
         if not self.selected_files:
             if emit_final:
@@ -677,16 +683,20 @@ class WorkerThread(QThread):
     def _uses_local_ben2_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_ben2"
 
+    def _uses_photoroom_remove_bg(self):
+        return self.remove_bg and self.remove_bg_provider == "photoroom"
+
     def _uses_local_remove_bg(self):
         return self._uses_local_rembg_remove_bg() or self._uses_local_ben2_remove_bg()
 
     def _uses_kie_remove_bg(self):
-        return self.remove_bg and not self._uses_local_remove_bg()
+        return self.remove_bg and not self._uses_local_remove_bg() and not self._uses_photoroom_remove_bg()
 
     def _can_use_legacy_kie_processing_pipeline(self):
         return (
             self._uses_kie_upscale()
             and not self._uses_local_remove_bg()
+            and not self._uses_photoroom_remove_bg()
             and not self.edge_shrink_enabled
             and not self.unsharp_enabled
         )
@@ -756,6 +766,21 @@ class WorkerThread(QThread):
                 nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
                 self._run_local_ben2(current_path, nobg_path)
                 self.progress.emit(f"  Промежуточный BEN2 без фона: {nobg_path}")
+                current_path = nobg_path
+                current_url = None
+                local_result = True
+            elif self._uses_photoroom_remove_bg():
+                current_path = self._ensure_local_path(
+                    current_path,
+                    current_url,
+                    raw_dir,
+                    idx,
+                    prefix,
+                    "photoroom_source",
+                )
+                nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
+                self._run_photoroom_remove_bg(current_path, nobg_path)
+                self.progress.emit(f"  Промежуточный PhotoRoom без фона: {nobg_path}")
                 current_path = nobg_path
                 current_url = None
                 local_result = True
@@ -1343,7 +1368,7 @@ class WorkerThread(QThread):
                 last_error = RuntimeError(error_message)
 
                 # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
-                if e.code in {400, 401, 403, 404}:
+                if e.code in {400, 401, 402, 403, 404}:
                     break
 
                 if attempt >= self.retries:
@@ -1366,6 +1391,72 @@ class WorkerThread(QThread):
         req = request.Request(url, data=data_bytes, headers=req_headers, method=method)
         raw = self._request_with_retries(req, timeout=timeout)
         return json.loads(raw.decode("utf-8"))
+
+    def _run_photoroom_remove_bg(self, input_path, output_path):
+        if not self.photoroom_api_key:
+            raise ValueError("Не указан PhotoRoom API Key")
+        if not os.path.isfile(input_path):
+            raise FileNotFoundError(f"Файл для PhotoRoom не найден: {input_path}")
+
+        boundary = "----ClipartPhotoRoomBoundary" + uuid.uuid4().hex
+        filename = re.sub(r'[\r\n"]', "_", os.path.basename(input_path)) or "image.png"
+        content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        with open(input_path, "rb") as source_file:
+            image_bytes = source_file.read()
+
+        parts = []
+        for field_name, field_value in (
+            ("format", "png"),
+            ("channels", "rgba"),
+            ("size", "full"),
+            ("crop", "false"),
+            ("despill", "false"),
+        ):
+            parts.extend(
+                [
+                    f"--{boundary}\r\n".encode("ascii"),
+                    f'Content-Disposition: form-data; name="{field_name}"\r\n\r\n'.encode("ascii"),
+                    field_value.encode("ascii"),
+                    b"\r\n",
+                ]
+            )
+        parts.extend(
+            [
+                f"--{boundary}\r\n".encode("ascii"),
+                f'Content-Disposition: form-data; name="image_file"; filename="{filename}"\r\n'.encode(
+                    "utf-8"
+                ),
+                f"Content-Type: {content_type}\r\n\r\n".encode("ascii"),
+                image_bytes,
+                b"\r\n",
+                f"--{boundary}--\r\n".encode("ascii"),
+            ]
+        )
+        req = request.Request(
+            PHOTOROOM_SEGMENT_URL,
+            data=b"".join(parts),
+            headers={
+                "x-api-key": self.photoroom_api_key,
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "Accept": "image/png",
+            },
+            method="POST",
+        )
+
+        self.progress.emit("  Удаление фона через PhotoRoom Standard...")
+        response_bytes = self._request_with_retries(req, timeout=max(60, self.timeout))
+        try:
+            with Image.open(BytesIO(response_bytes)) as response_image:
+                response_image.load()
+                if response_image.format != "PNG" or "A" not in response_image.getbands():
+                    raise ValueError("ответ не является PNG с alpha-каналом")
+                result_image = response_image.convert("RGBA").copy()
+        except Exception as exc:
+            raise RuntimeError(f"PhotoRoom вернул некорректное изображение: {exc}") from exc
+
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        result_image.save(output_path, format="PNG")
+        return output_path
 
     def _kie_upload_file(self, file_path):
         boundary = "----ClipartBoundary" + uuid.uuid4().hex
@@ -2363,6 +2454,7 @@ class MainWindow(QMainWindow):
         self.selected_files = []
         self.has_generated_output_in_run = False
         self.api_key_locked = True
+        self.photoroom_api_key_locked = True
         self.is_updating_prompts_table = False
         self.settings_save_timer = QTimer(self)
         self.settings_save_timer.setSingleShot(True)
@@ -2452,6 +2544,7 @@ class MainWindow(QMainWindow):
             "app_version": APP_VERSION,
             "update_manifest_url": UPDATE_MANIFEST_URL,
             "kie_api_key": "",
+            "photoroom_api_key": "",
             "kie_upload_path": "clipart-generator",
             "text_generation_model": "gpt-image/1.5-text-to-image",
             "reference_generation_model": "gpt-image/1.5-image-to-image",
@@ -2802,7 +2895,7 @@ class MainWindow(QMainWindow):
 
         process_tab_layout.addStretch()
 
-        kie_group = QGroupBox("KIE: подключение и генерация")
+        kie_group = QGroupBox("Подключения и генерация")
         kie_group.setMaximumWidth(720)
         kie_layout = QGridLayout()
         kie_layout.setHorizontalSpacing(6)
@@ -2912,7 +3005,25 @@ class MainWindow(QMainWindow):
         kie_group.setLayout(kie_layout)
         settings_tab_layout.addWidget(kie_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        process_settings_group = QGroupBox("Обработка через KIE")
+        self.photoroom_api_key_input = QLineEdit()
+        self.photoroom_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.photoroom_api_key_input.setText(self.config.get("photoroom_api_key", ""))
+        self.photoroom_api_key_input.setReadOnly(True)
+        self.photoroom_api_key_input.setFixedSize(settings_field_width, 32)
+        self.btn_photoroom_api_key_lock = QPushButton("🔒")
+        self.btn_photoroom_api_key_lock.setFixedSize(40, 32)
+        self.btn_photoroom_api_key_lock.setToolTip("Ключ заблокирован")
+        self.btn_photoroom_api_key_lock.clicked.connect(self.toggle_photoroom_api_key_lock)
+        photoroom_price_label = QLabel("Standard · $0.02 / изображение")
+        photoroom_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
+        lbl_photoroom_api_key = QLabel("PhotoRoom API Key:")
+        lbl_photoroom_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        kie_layout.addWidget(lbl_photoroom_api_key, 5, 0)
+        kie_layout.addWidget(self.photoroom_api_key_input, 5, 1)
+        kie_layout.addWidget(self.btn_photoroom_api_key_lock, 5, 2)
+        kie_layout.addWidget(photoroom_price_label, 5, 3)
+
+        process_settings_group = QGroupBox("Провайдеры обработки")
         process_settings_group.setMaximumWidth(900)
         process_settings_layout = QGridLayout()
         process_settings_layout.setHorizontalSpacing(10)
@@ -2954,6 +3065,7 @@ class MainWindow(QMainWindow):
 
         self.remove_bg_provider_combo = QComboBox()
         self.remove_bg_provider_combo.addItem("KIE", "kie")
+        self.remove_bg_provider_combo.addItem("PhotoRoom Standard", "photoroom")
         self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
         self.remove_bg_provider_combo.addItem("Local BEN2 (experimental)", "local_ben2")
         remove_bg_provider = str(self.config.get("remove_bg_provider", "kie") or "kie")
@@ -3393,6 +3505,7 @@ class MainWindow(QMainWindow):
     def setup_settings_autosave_connections(self):
         self.kie_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.kie_api_key_input.textChanged.connect(self.on_api_key_changed)
+        self.photoroom_api_key_input.textChanged.connect(self.schedule_settings_save)
         if hasattr(self, "license_key_input"):
             self.license_key_input.textChanged.connect(self.schedule_settings_save)
         if hasattr(self, "license_server_url_input"):
@@ -3465,8 +3578,11 @@ class MainWindow(QMainWindow):
         self.local_realesrgan_scale_combo.setEnabled(is_local_realesrgan)
 
     def update_remove_bg_provider_controls_state(self, *_):
+        is_kie = self.remove_bg_provider_combo.currentData() == "kie"
         is_local_rembg = self.remove_bg_provider_combo.currentData() == "local_rembg"
         is_local_ben2 = self.remove_bg_provider_combo.currentData() == "local_ben2"
+        self.kie_remove_bg_model_combo.setEnabled(is_kie)
+        self.kie_remove_bg_price_label.setEnabled(is_kie)
         self.local_rembg_profile_combo.setEnabled(is_local_rembg)
         self.local_rembg_model_combo.setEnabled(is_local_rembg)
         self.local_rembg_edge_quality_combo.setEnabled(is_local_rembg)
@@ -4189,17 +4305,28 @@ class MainWindow(QMainWindow):
 
         self.persist_ui_settings()
         current_api_key = self.config.get("kie_api_key", "").strip()
+        current_photoroom_api_key = self.config.get("photoroom_api_key", "").strip()
 
         needs_kie_api = (
             not self.radio_run_process.isChecked()
             or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() != "local_realesrgan")
             or (
                 self.chk_remove_bg.isChecked()
-                and self.remove_bg_provider_combo.currentData() not in {"local_rembg", "local_ben2"}
+                and self.remove_bg_provider_combo.currentData() == "kie"
             )
         )
         if needs_kie_api and not current_api_key:
             QMessageBox.warning(self, "Ошибка", "Укажите KIE API Key на вкладке «Настройки»")
+            return
+
+        will_process = self.radio_run_process.isChecked() or self.radio_run_both.isChecked()
+        needs_photoroom_api = (
+            will_process
+            and self.chk_remove_bg.isChecked()
+            and self.remove_bg_provider_combo.currentData() == "photoroom"
+        )
+        if needs_photoroom_api and not current_photoroom_api_key:
+            QMessageBox.warning(self, "Ошибка", "Укажите PhotoRoom API Key на вкладке «Настройки»")
             return
 
         runtime_settings = dict(self.config)
@@ -4385,6 +4512,22 @@ class MainWindow(QMainWindow):
         self.btn_api_key_lock.setText("🔓")
         self.btn_api_key_lock.setToolTip("Ключ разблокирован")
         self.log("KIE API Key разблокирован: можно смотреть и редактировать")
+
+    def toggle_photoroom_api_key_lock(self):
+        self.photoroom_api_key_locked = not self.photoroom_api_key_locked
+        if self.photoroom_api_key_locked:
+            self.photoroom_api_key_input.setReadOnly(True)
+            self.photoroom_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+            self.btn_photoroom_api_key_lock.setText("🔒")
+            self.btn_photoroom_api_key_lock.setToolTip("Ключ заблокирован")
+            self.log("PhotoRoom API Key заблокирован")
+            return
+
+        self.photoroom_api_key_input.setReadOnly(False)
+        self.photoroom_api_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
+        self.btn_photoroom_api_key_lock.setText("🔓")
+        self.btn_photoroom_api_key_lock.setToolTip("Ключ разблокирован")
+        self.log("PhotoRoom API Key разблокирован: можно смотреть и редактировать")
 
     def check_generation_model(self):
         api_key = self.kie_api_key_input.text().strip()
@@ -4921,6 +5064,7 @@ class MainWindow(QMainWindow):
 
     def persist_ui_settings(self):
         self.config["kie_api_key"] = self.kie_api_key_input.text().strip()
+        self.config["photoroom_api_key"] = self.photoroom_api_key_input.text().strip()
         if hasattr(self, "license_key_input"):
             self.config["license_key"] = self.license_key_input.text().strip()
         if hasattr(self, "license_server_url_input"):
