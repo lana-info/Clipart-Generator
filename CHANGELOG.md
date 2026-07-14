@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added a standalone read-only PNG/JPEG metadata inspector with structured summaries for EXIF, XMP, IPTC, comments/text, embedded thumbnails, ICC, DPI, and known generator fields.
+- Added synthetic metadata fixtures covering transparent PNG, JPEG, content-based format detection, animation rejection, invalid inputs, and value-safe JSON serialization.
 - Added PhotoRoom Standard background removal with a separate masked API key, provider selection, PNG/RGBA validation, and process-only routing without KIE.
 - Added network-free PhotoRoom tests for multipart requests, alpha output, failures, provider routing, key locking, validation, and settings persistence.
 - Added independent upscale passes before and after background removal, each with its own provider and scale/model settings plus a combined multiplier indicator.
@@ -74,7 +76,9 @@
 
 ### Verified
 
-- Verified Tasks 24-50 are contiguous, include Goal/Steps/Acceptance/Verification/Notes, and keep Task 24 as the next safe implementation task.
+- Verified metadata inspection preserves source hashes, sizes, and modification timestamps; no fixture metadata values appear in serialized results.
+- Verified 5 focused metadata-inspector tests and all 29 project tests pass after bounded decompression-bomb error handling.
+- Verified Tasks 24-50 are contiguous and include Goal/Steps/Acceptance/Verification/Notes; Task 25 is now the next safe implementation task.
 - Verified the planning-only change leaves `main.py` compiling and all 24 existing tests passing.
 - Verified all 24 tests pass in one process, including PhotoRoom Standard, both upscale positions, GPT Image 2 routing, real local Real-ESRGAN checks, and isolated main-window acceptance checks.
 - Verified `2x + 2x` produces `4x`, `4x + 4x` reports `16x`, and post-removal upscale preserves a valid alpha channel.

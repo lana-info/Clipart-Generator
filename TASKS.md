@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 24 - Read-Only Metadata Inspector**.
+Current next task: **Task 25 - Bounded C2PA Presence Inspector**.
 
 ## Phase 1 - Preparation
 
@@ -356,7 +356,7 @@ Notes:
 
 ## Task 24 - Read-Only Metadata Inspector Foundation
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Inspect ordinary PNG/JPEG metadata without modifying the source file.
@@ -369,19 +369,21 @@ Steps:
 - Add synthetic PNG, transparent PNG, JPEG, and unsupported-format fixtures.
 
 Acceptance:
-- [ ] The source hash, size, and modification timestamp remain unchanged after inspection.
-- [ ] Present, absent, and unsupported categories are reported deterministically.
-- [ ] Results are serializable and usable by tests, logs, and future UI.
+- [x] The source hash, size, and modification timestamp remain unchanged after inspection.
+- [x] Present, absent, and unsupported categories are reported deterministically.
+- [x] Results are serializable and usable by tests, logs, and future UI.
 
 Verification:
-- [ ] `python -m unittest tests.test_metadata_inspector -v`
+- [x] `python -m unittest tests.test_metadata_inspector -v`
 
 Notes:
 - Prefer Pillow and standard-library parsing already available in the project.
+- Implemented in `metadata_inspector.py` without changing `main.py`; 5 focused tests and all 29 tests pass.
+- Review hardened decompression-bomb handling and confirmed that returned/loggable data contains only category counts, sizes, and allowlisted field names.
 
 ## Task 25 - Bounded C2PA Presence Inspector
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Detect embedded C2PA structures locally without validating signatures or using the network.
