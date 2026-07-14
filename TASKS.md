@@ -383,7 +383,7 @@ Notes:
 
 ## Task 25 - Bounded C2PA Presence Inspector
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Detect embedded C2PA structures locally without validating signatures or using the network.
@@ -395,19 +395,22 @@ Steps:
 - Integrate the result into the Task 24 inspector schema.
 
 Acceptance:
-- [ ] Detection never claims a manifest is valid.
-- [ ] Corrupt inputs fail safely without unbounded reads or memory allocation.
-- [ ] No remote manifest is fetched automatically.
+- [x] Detection never claims a manifest is valid.
+- [x] Corrupt inputs fail safely without unbounded reads or memory allocation.
+- [x] No remote manifest is fetched automatically.
 
 Verification:
-- [ ] `python -m unittest tests.test_c2pa_inspector -v`
+- [x] `python -m unittest tests.test_c2pa_inspector -v`
 
 Notes:
 - Do not add `c2pa-python` until its packaging and build impact are explicitly justified.
+- Implemented as a standard-library bounded scan in `metadata_inspector.py`; schema v2 keeps C2PA presence and `not_validated` separate from ordinary metadata categories.
+- Review added exact JPEG JUMBF/description `LBox`, extended-`LBox`, contiguous APP11 `En/Z`, description-toggle, overrun, and sequence-gap checks instead of treating marker presence as a complete container.
+- Eight focused tests and all 37 project tests pass; 54 embedded fixtures from the official `contentauth/c2pa-rs` checkout were detected with no non-OK present result.
 
 ## Task 26 - Selective Metadata Cleanup Core
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Remove selected ordinary and AI/service metadata while preserving selected export data and image pixels.

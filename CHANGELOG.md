@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added bounded read-only C2PA presence inspection for PNG `caBX` and JPEG APP11/JUMBF containers without signature validation or remote-manifest access.
+- Added adversarial C2PA fixtures for truncated/oversized chunks, nested and extended lengths, malformed toggles, APP11 sequence gaps, extra continuations, and scan limits.
 - Added a standalone read-only PNG/JPEG metadata inspector with structured summaries for EXIF, XMP, IPTC, comments/text, embedded thumbnails, ICC, DPI, and known generator fields.
 - Added synthetic metadata fixtures covering transparent PNG, JPEG, content-based format detection, animation rejection, invalid inputs, and value-safe JSON serialization.
 - Added PhotoRoom Standard background removal with a separate masked API key, provider selection, PNG/RGBA validation, and process-only routing without KIE.
@@ -50,6 +52,7 @@
 
 ### Changed
 
+- Advanced the metadata-inspector schema to v2 with a separate C2PA presence, scan-status, and always-`not_validated` result.
 - Closed the non-release MVP acceptance gate and moved the ordered task plan to the post-MVP cleanup capability research task.
 - Isolated startup update timers and pending windows in UI tests so the full suite cannot trigger background update checks or write outside temporary test folders.
 - Reworked the open task plan into ordered MVP verification, metadata cleanup, hidden provenance, and conditional visible-mark stages; build and release work remain excluded unless requested separately.
@@ -76,6 +79,9 @@
 
 ### Verified
 
+- Verified 8 focused C2PA tests and all 37 project tests pass after enforcing PNG/JPEG bounds, nested/extended JPEG JUMBF lengths, contiguous APP11 sequence, and required description toggles.
+- Verified the detector against 54 embedded C2PA PNG/JPEG fixtures from the official `contentauth/c2pa-rs` checkout, including a 30-segment JPEG; all detected fixtures returned an OK bounded scan.
+- Review reproduced and fixed incomplete-JUMBF and invalid-toggle false positives before Task 25 was closed.
 - Verified metadata inspection preserves source hashes, sizes, and modification timestamps; no fixture metadata values appear in serialized results.
 - Verified 5 focused metadata-inspector tests and all 29 project tests pass after bounded decompression-bomb error handling.
 - Verified Tasks 24-50 are contiguous and include Goal/Steps/Acceptance/Verification/Notes; Task 25 is now the next safe implementation task.

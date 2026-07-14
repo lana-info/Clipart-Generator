@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import re
 import struct
-from os import PathLike
+from os import PathLike, fstat
 from typing import Any
 
 from PIL import ExifTags, Image, IptcImagePlugin, UnidentifiedImageError
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SUPPORTED_FORMATS = frozenset({"PNG", "JPEG"})
 CATEGORY_NAMES = (
     "exif",
@@ -24,6 +24,15 @@ CATEGORY_NAMES = (
 )
 
 _XMP_KEYS = frozenset({"xml:com.adobe.xmp", "xmp"})
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_JPEG_SIGNATURE = b"\xff\xd8"
+_C2PA_UUID = bytes.fromhex("6332706100110010800000aa00389b71")
+_MAX_CONTAINER_ENTRIES = 100_000
+_MAX_JPEG_FILL_BYTES = 1_024
+_MAX_C2PA_SEGMENTS = 1_024
+_MAX_C2PA_DECLARED_BYTES = 64 * 1024 * 1024
+_MAX_JPEG_PREFIX_BYTES = 96
+_MAX_PNG_CHUNK_LENGTH = 0x7FFFFFFF
 _GENERATOR_FIELD_PATTERNS = {
     "software": ("software", "creatortool"),
     "prompt": ("prompt", "parameters", "workflow"),
@@ -31,6 +40,456 @@ _GENERATOR_FIELD_PATTERNS = {
     "digital_source_type": ("digitalsourcetype",),
     "generator": ("generator", "aigc", "hfjobid", "signature"),
 }
+
+
+def _c2pa_summary(
+    presence: str = "unknown",
+    *,
+    scan_status: str = "not_scanned",
+    reason: str | None = None,
+    item_count: int = 0,
+    segment_count: int = 0,
+    size_bytes: int = 0,
+    containers: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    return {
+        "presence": presence,
+        "validation": "not_validated",
+        "scan_status": scan_status,
+        "reason": reason,
+        "item_count": max(0, int(item_count)),
+        "segment_count": max(0, int(segment_count)),
+        "size_bytes": max(0, int(size_bytes)),
+        "containers": list(containers),
+    }
+
+
+def _c2pa_scan_result(
+    found_count: int,
+    segment_count: int,
+    size_bytes: int,
+    container: str,
+    *,
+    scan_status: str = "ok",
+    reason: str | None = None,
+) -> dict[str, Any]:
+    presence = "present" if found_count else ("not_present" if scan_status == "ok" else "unknown")
+    return _c2pa_summary(
+        presence,
+        scan_status=scan_status,
+        reason=reason,
+        item_count=found_count,
+        segment_count=segment_count,
+        size_bytes=size_bytes,
+        containers=(container,) if found_count else (),
+    )
+
+
+def _scan_png_c2pa(stream: Any, file_size: int) -> dict[str, Any]:
+    found_count = 0
+    found_size = 0
+    position = len(_PNG_SIGNATURE)
+    entry_count = 0
+    first_chunk = True
+
+    while position < file_size:
+        entry_count += 1
+        if entry_count > _MAX_CONTAINER_ENTRIES:
+            return _c2pa_scan_result(
+                found_count,
+                found_count,
+                found_size,
+                "png_cabx",
+                scan_status="limit_exceeded",
+                reason="too_many_png_chunks",
+            )
+
+        stream.seek(position)
+        header = stream.read(8)
+        if len(header) != 8:
+            return _c2pa_scan_result(
+                found_count,
+                found_count,
+                found_size,
+                "png_cabx",
+                scan_status="malformed",
+                reason="truncated_png_chunk_header",
+            )
+        chunk_length, chunk_type = struct.unpack(">I4s", header)
+        if chunk_length > _MAX_PNG_CHUNK_LENGTH:
+            return _c2pa_scan_result(
+                found_count,
+                found_count,
+                found_size,
+                "png_cabx",
+                scan_status="limit_exceeded",
+                reason="png_chunk_length_exceeds_spec",
+            )
+
+        chunk_end = position + 12 + chunk_length
+        if chunk_end > file_size:
+            return _c2pa_scan_result(
+                found_count,
+                found_count,
+                found_size,
+                "png_cabx",
+                scan_status="malformed",
+                reason="truncated_png_chunk",
+            )
+        if first_chunk and (chunk_type != b"IHDR" or chunk_length != 13):
+            return _c2pa_scan_result(
+                found_count,
+                found_count,
+                found_size,
+                "png_cabx",
+                scan_status="malformed",
+                reason="invalid_png_ihdr",
+            )
+        first_chunk = False
+
+        if chunk_type == b"caBX":
+            found_count += 1
+            found_size += chunk_length
+        if chunk_type == b"IEND":
+            if chunk_length != 0:
+                return _c2pa_scan_result(
+                    found_count,
+                    found_count,
+                    found_size,
+                    "png_cabx",
+                    scan_status="malformed",
+                    reason="invalid_png_iend",
+                )
+            return _c2pa_scan_result(found_count, found_count, found_size, "png_cabx")
+        position = chunk_end
+
+    return _c2pa_scan_result(
+        found_count,
+        found_count,
+        found_size,
+        "png_cabx",
+        scan_status="malformed",
+        reason="missing_png_iend",
+    )
+
+
+def _box_header(data: bytes, offset: int) -> tuple[int | None, bytes, int] | None:
+    if offset < 0 or offset + 8 > len(data):
+        return None
+    size_32, box_type = struct.unpack_from(">I4s", data, offset)
+    if size_32 == 1:
+        if offset + 16 > len(data):
+            return None
+        size_64 = struct.unpack_from(">Q", data, offset + 8)[0]
+        if size_64 < 16:
+            return None
+        return size_64, box_type, 16
+    if size_32 == 0:
+        return None, box_type, 8
+    if size_32 < 8:
+        return None
+    return size_32, box_type, 8
+
+
+def _jpeg_c2pa_start(
+    data: bytes,
+    payload_length: int,
+) -> tuple[tuple[bytes, bytes, int, int] | None, str | None, bool]:
+    if len(data) < 8 or data[:2] != b"JP" or struct.unpack_from(">I", data, 4)[0] != 1:
+        return None, None, False
+
+    outer = _box_header(data, 8)
+    if outer is None:
+        return None, None, False
+    outer_size, outer_type, outer_header_size = outer
+    if outer_type != b"jumb":
+        return None, None, False
+
+    description_offset = 8 + outer_header_size
+    description = _box_header(data, description_offset)
+    if description is None:
+        return None, None, False
+    description_size, description_type, description_header_size = description
+    if description_type != b"jumd":
+        return None, None, False
+
+    uuid_offset = description_offset + description_header_size
+    uuid_end = uuid_offset + len(_C2PA_UUID)
+    if uuid_end > len(data) or data[uuid_offset:uuid_end] != _C2PA_UUID:
+        return None, None, False
+
+    label_end = uuid_end + 1 + len(b"c2pa\x00")
+    if label_end > len(data):
+        return None, "truncated_jumbf_description", True
+    toggles = data[uuid_end]
+    if toggles & 0x03 != 0x03:
+        return None, "invalid_jumbf_toggles", True
+    if data[uuid_end + 1 : label_end] != b"c2pa\x00":
+        return None, "invalid_c2pa_jumbf_label", True
+
+    required_outer_size = label_end - 8
+    required_description_size = label_end - description_offset
+    if outer_size is None:
+        return None, "unbounded_c2pa_jumbf_box", True
+    if outer_size < required_outer_size:
+        return None, "invalid_c2pa_jumbf_length", True
+    if description_size is None:
+        return None, "unbounded_c2pa_description_box", True
+    if description_size < required_description_size:
+        return None, "invalid_c2pa_description_length", True
+    if description_offset + description_size > 8 + outer_size:
+        return None, "c2pa_description_exceeds_outer_box", True
+
+    received_size = max(0, payload_length - 8)
+    return (data[2:4], data[8:16], outer_size, received_size), None, True
+
+
+def _jpeg_c2pa_continuation(data: bytes, instance: bytes, expected_sequence: int, box_header: bytes) -> bool:
+    return (
+        len(data) >= 16
+        and data[:2] == b"JP"
+        and data[2:4] == instance
+        and struct.unpack_from(">I", data, 4)[0] == expected_sequence
+        and data[8:16] == box_header
+    )
+
+
+def _jpeg_xt_identity(data: bytes) -> tuple[bytes, int] | None:
+    if len(data) < 8 or data[:2] != b"JP":
+        return None
+    return data[2:4], struct.unpack_from(">I", data, 4)[0]
+
+
+def _scan_jpeg_c2pa(stream: Any, file_size: int) -> dict[str, Any]:
+    found_count = 0
+    segment_count = 0
+    found_size = 0
+    marker_count = 0
+    active_instance: bytes | None = None
+    active_box_header = b""
+    active_declared_size = 0
+    active_received_size = 0
+    expected_sequence = 0
+    completed_instance: bytes | None = None
+
+    def malformed(reason: str) -> dict[str, Any]:
+        return _c2pa_scan_result(
+            found_count,
+            segment_count,
+            found_size,
+            "jpeg_app11_jumbf",
+            scan_status="malformed",
+            reason=reason,
+        )
+
+    stream.seek(len(_JPEG_SIGNATURE))
+    while stream.tell() < file_size:
+        marker_count += 1
+        if marker_count > _MAX_CONTAINER_ENTRIES:
+            return _c2pa_scan_result(
+                found_count,
+                segment_count,
+                found_size,
+                "jpeg_app11_jumbf",
+                scan_status="limit_exceeded",
+                reason="too_many_jpeg_markers",
+            )
+
+        marker_prefix = stream.read(1)
+        if marker_prefix != b"\xff":
+            return _c2pa_scan_result(
+                found_count,
+                segment_count,
+                found_size,
+                "jpeg_app11_jumbf",
+                scan_status="malformed",
+                reason="invalid_jpeg_marker_prefix",
+            )
+        fill_count = 0
+        marker_value = stream.read(1)
+        while marker_value == b"\xff":
+            fill_count += 1
+            if fill_count > _MAX_JPEG_FILL_BYTES:
+                return _c2pa_scan_result(
+                    found_count,
+                    segment_count,
+                    found_size,
+                    "jpeg_app11_jumbf",
+                    scan_status="limit_exceeded",
+                    reason="too_many_jpeg_fill_bytes",
+                )
+            marker_value = stream.read(1)
+        if len(marker_value) != 1 or marker_value == b"\x00":
+            return _c2pa_scan_result(
+                found_count,
+                segment_count,
+                found_size,
+                "jpeg_app11_jumbf",
+                scan_status="malformed",
+                reason="truncated_or_invalid_jpeg_marker",
+            )
+
+        marker = marker_value[0]
+        if marker == 0xD9:
+            if active_instance is not None:
+                return malformed("truncated_c2pa_jumbf")
+            return _c2pa_scan_result(found_count, segment_count, found_size, "jpeg_app11_jumbf")
+        if marker == 0xD8 or marker == 0x01 or 0xD0 <= marker <= 0xD7:
+            if active_instance is not None:
+                return malformed("noncontiguous_c2pa_jumbf")
+            completed_instance = None
+            continue
+
+        length_bytes = stream.read(2)
+        if len(length_bytes) != 2:
+            return _c2pa_scan_result(
+                found_count,
+                segment_count,
+                found_size,
+                "jpeg_app11_jumbf",
+                scan_status="malformed",
+                reason="truncated_jpeg_segment_length",
+            )
+        segment_length = struct.unpack(">H", length_bytes)[0]
+        if segment_length < 2:
+            return _c2pa_scan_result(
+                found_count,
+                segment_count,
+                found_size,
+                "jpeg_app11_jumbf",
+                scan_status="malformed",
+                reason="invalid_jpeg_segment_length",
+            )
+        payload_length = segment_length - 2
+        payload_start = stream.tell()
+        segment_end = payload_start + payload_length
+        if segment_end > file_size:
+            return _c2pa_scan_result(
+                found_count,
+                segment_count,
+                found_size,
+                "jpeg_app11_jumbf",
+                scan_status="malformed",
+                reason="truncated_jpeg_segment",
+            )
+
+        if marker == 0xEB:
+            prefix = stream.read(min(payload_length, _MAX_JPEG_PREFIX_BYTES))
+            if active_instance is not None:
+                if not _jpeg_c2pa_continuation(
+                    prefix,
+                    active_instance,
+                    expected_sequence,
+                    active_box_header,
+                ):
+                    identity = _jpeg_xt_identity(prefix)
+                    reason = (
+                        "invalid_c2pa_jumbf_sequence"
+                        if identity is not None and identity[0] == active_instance
+                        else "noncontiguous_c2pa_jumbf"
+                    )
+                    return malformed(reason)
+
+                continuation_size = payload_length - 16
+                if continuation_size <= 0:
+                    return malformed("empty_c2pa_jumbf_continuation")
+                segment_count += 1
+                found_size += continuation_size
+                active_received_size += continuation_size
+                if active_received_size > active_declared_size:
+                    return malformed("c2pa_jumbf_length_overrun")
+                if active_received_size == active_declared_size:
+                    completed_instance = active_instance
+                    active_instance = None
+                    active_box_header = b""
+                    active_declared_size = 0
+                    active_received_size = 0
+                    expected_sequence = 0
+                else:
+                    expected_sequence += 1
+            else:
+                identity = _jpeg_xt_identity(prefix)
+                if (
+                    completed_instance is not None
+                    and identity is not None
+                    and identity[0] == completed_instance
+                    and identity[1] > 1
+                ):
+                    return malformed("unexpected_c2pa_jumbf_continuation")
+
+                start, start_error, is_c2pa_candidate = _jpeg_c2pa_start(prefix, payload_length)
+                completed_instance = None
+                if is_c2pa_candidate:
+                    found_count += 1
+                    segment_count += 1
+                if start_error is not None:
+                    return malformed(start_error)
+                if start is not None:
+                    instance, box_header, declared_size, received_size = start
+                    found_size += received_size
+                    if declared_size > _MAX_C2PA_DECLARED_BYTES:
+                        return _c2pa_scan_result(
+                            found_count,
+                            segment_count,
+                            found_size,
+                            "jpeg_app11_jumbf",
+                            scan_status="limit_exceeded",
+                            reason="c2pa_jpeg_data_exceeds_scan_limit",
+                        )
+                    if received_size > declared_size:
+                        return malformed("c2pa_jumbf_length_overrun")
+                    if received_size == declared_size:
+                        completed_instance = instance
+                    else:
+                        active_instance = instance
+                        active_box_header = box_header
+                        active_declared_size = declared_size
+                        active_received_size = received_size
+                        expected_sequence = 2
+            if segment_count > _MAX_C2PA_SEGMENTS or found_size > _MAX_C2PA_DECLARED_BYTES:
+                return _c2pa_scan_result(
+                    found_count,
+                    segment_count,
+                    found_size,
+                    "jpeg_app11_jumbf",
+                    scan_status="limit_exceeded",
+                    reason="c2pa_jpeg_data_exceeds_scan_limit",
+                )
+        else:
+            if active_instance is not None:
+                return malformed("noncontiguous_c2pa_jumbf")
+            completed_instance = None
+
+        stream.seek(segment_end)
+        if marker == 0xDA:
+            return _c2pa_scan_result(found_count, segment_count, found_size, "jpeg_app11_jumbf")
+
+    if active_instance is not None:
+        return malformed("truncated_c2pa_jumbf")
+    return _c2pa_scan_result(
+        found_count,
+        segment_count,
+        found_size,
+        "jpeg_app11_jumbf",
+        scan_status="malformed",
+        reason="missing_jpeg_scan_or_eoi",
+    )
+
+
+def inspect_c2pa_presence(path: str | PathLike[str]) -> dict[str, Any]:
+    """Detect bounded embedded C2PA containers without validating or fetching them."""
+
+    try:
+        with open(path, "rb") as stream:
+            file_size = fstat(stream.fileno()).st_size
+            signature = stream.read(len(_PNG_SIGNATURE))
+            if signature == _PNG_SIGNATURE:
+                return _scan_png_c2pa(stream, file_size)
+            if signature.startswith(_JPEG_SIGNATURE):
+                return _scan_jpeg_c2pa(stream, file_size)
+            return _c2pa_summary(scan_status="unsupported", reason="unsupported_container")
+    except (OSError, OverflowError, ValueError):
+        return _c2pa_summary(scan_status="unreadable", reason="unreadable_file")
 
 
 def _empty_category() -> dict[str, Any]:
@@ -154,6 +613,7 @@ def _base_result(status: str, reason: str | None = None) -> dict[str, Any]:
         "height": None,
         "is_animated": False,
         "categories": _empty_categories(),
+        "c2pa": _c2pa_summary(),
     }
 
 
@@ -261,9 +721,10 @@ def inspect_image_metadata(path: str | PathLike[str]) -> dict[str, Any]:
                 result.update({"status": "unsupported", "supported": False, "reason": "animated_not_supported"})
                 return result
             result["categories"] = _inspect_supported_image(image)
+            result["c2pa"] = inspect_c2pa_presence(path)
             return result
     except (Image.DecompressionBombError, UnidentifiedImageError, OSError, SyntaxError, ValueError):
         return _base_result("invalid", "unreadable_or_invalid_image")
 
 
-__all__ = ["SCHEMA_VERSION", "SUPPORTED_FORMATS", "inspect_image_metadata"]
+__all__ = ["SCHEMA_VERSION", "SUPPORTED_FORMATS", "inspect_c2pa_presence", "inspect_image_metadata"]
