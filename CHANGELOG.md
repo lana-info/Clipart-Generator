@@ -6,6 +6,7 @@
 
 - Added the isolated Task 31 visible-mark detector evaluation harness and documented the pinned `remove-ai-watermarks` revision, Apache-2.0 attribution requirement, reproducible command, confidence/location/timing results, and temporary binary-mask output.
 - Added a separate visible-mark inpainting benchmark harness for automatic versus user-confirmed rectangular masks; it reports runtime, changed pixels inside/outside the mask, alpha presence, and optional-backend failures without overwriting sources.
+- Added the Task 33 KIE mask-edit benchmark preparation note with the documented API contract, mask semantics, supported aspect ratios, and a minimal no-key paid-test protocol.
 
 - Added metadata-cleanup acceptance coverage for every independent removal choice and one combined local pipeline with before/after pixel and alpha invariants.
 - Documented the implemented Tasks 24-30 contract, exact PNG/JPEG limits, ICC/DPI behavior, atomic final-save order, and unsupported C2PA/pixel-watermark claims.

@@ -600,7 +600,7 @@ Notes:
 
 ## Task 33 - KIE Mask-Edit Benchmark
 
-Status: Todo
+Status: In progress - API contract researched; live paid comparison pending
 
 Goal:
 Determine whether KIE 4o mask editing is a better fallback for visible marks than local inpainting.
@@ -621,6 +621,7 @@ Verification:
 
 Notes:
 - This task spends credits and must remain a minimal benchmark.
+- API ratio constraints and the safe paid-test protocol are recorded in `TASK33_KIE_MASK_BENCHMARK.md`.
 
 ## Task 34 - Visible-Mark Provider Decision Gate
 
