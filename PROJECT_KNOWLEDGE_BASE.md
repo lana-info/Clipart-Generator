@@ -1,6 +1,6 @@
 # База знаний проекта Clipart Generator
 
-_Последнее обновление: 2026-05-07_
+_Последнее обновление: 2026-07-13_
 
 ## Кратко
 
@@ -30,6 +30,7 @@ Clipart Generator — это настольное приложение для г
 - [`PROGRESS.md`](./PROGRESS.md) - история выполненных изменений.
 - [`RELEASE_PROCESS.md`](./RELEASE_PROCESS.md) - процесс выпуска.
 - [`TEST_CHECKLIST.md`](./TEST_CHECKLIST.md) - ручной чеклист перед релизом.
+- [`CLEANUP_CAPABILITY_MATRIX.md`](./CLEANUP_CAPABILITY_MATRIX.md) - подтверждённые возможности и ограничения очистки metadata/C2PA, видимых меток и экспериментальной перегенерации пиксельных watermark.
 
 ## Архитектура приложения
 

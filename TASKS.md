@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 23 - Cleanup Capability And Safety Matrix**.
+Current next task: **Task 24 - Read-Only Metadata Inspector**.
 
 ## Phase 1 - Preparation
 
@@ -327,7 +327,7 @@ Notes:
 
 ## Task 23 - Cleanup Capability And Safety Matrix
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Define exactly what can be inspected or removed reliably before adding cleanup controls.
@@ -339,26 +339,31 @@ Steps:
 - Decide which actions can be labelled `remove`, which are only `detect/report`, and which are unsupported.
 
 Acceptance:
-- [ ] A durable capability matrix lists supported, detectable-only, and unsupported items.
-- [ ] Every factual claim has an official or primary source.
-- [ ] The plan does not promise reliable removal of unknown pixel-level markers.
+- [x] A durable capability matrix lists supported, detectable-only, and unsupported items.
+- [x] Every factual claim has an official or primary source.
+- [x] The plan does not promise reliable removal of unknown pixel-level markers.
 
 Verification:
-- [ ] The capability matrix is linked from `PRD.md` and `PROJECT_KNOWLEDGE_BASE.md`.
+- [x] The capability matrix is linked from `PRD.md` and `PROJECT_KNOWLEDGE_BASE.md`.
 
 Notes:
 - This research task must finish before implementation choices are locked.
+- Decision: file metadata can be inspected and selectively removed; embedded C2PA removal is narrowly scoped to the new export and requires fixture validation; pixel-level markers may use a separate experimental whole-image regeneration mode but are not metadata-removal features.
+- Candidate review: `lana-info/remove-ai-watermarks` is Apache-2.0 and suitable for a local prototype; KIE and OpenRouter expose generic image editing but no documented hidden-image-watermark remover.
+- Sources were checked on 2026-07-13 against Google Gemini/SynthID, C2PA 2.4, W3C PNG, IPTC 2025.1, Pillow, Adobe Content Credentials, c2patool, `remove-ai-watermarks`, KIE, and OpenRouter documentation.
 
 ## Task 24 - Read-Only Metadata Inspector
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Inspect cleanup-relevant data without modifying the source image.
 
 Steps:
 - Add a small metadata inspection component outside the UI code.
-- Report EXIF, XMP, IPTC, comments, embedded thumbnails, ICC profile, DPI, and supported provenance fields.
+- Support ordinary single-frame PNG/JPEG inputs first.
+- Report EXIF, XMP, IPTC, comments, embedded thumbnails, ICC profile, DPI, known generator fields, and C2PA presence.
+- Report C2PA as `present/not present/not validated` without network access.
 - Return structured results suitable for tests, logs, and later UI controls.
 - Add fixtures for PNG, JPEG, and transparent PNG.
 
@@ -366,6 +371,7 @@ Acceptance:
 - [ ] Inspection never modifies the source file.
 - [ ] Present and absent categories are reported accurately.
 - [ ] The inspector does not expose unrelated sensitive file contents in logs.
+- [ ] Unsupported formats receive a clear result without partial cleanup claims.
 
 Verification:
 - [ ] `python -m unittest tests.test_metadata_inspector -v`
@@ -457,7 +463,7 @@ Handle only hidden provenance data confirmed as detectable or removable by Task 
 Steps:
 - Implement detection for supported metadata-based or manifest-based provenance markers.
 - Remove them only when the matching checkbox is enabled and the capability matrix marks removal as reliable.
-- Report pixel-level markers as detected, unknown, or unsupported instead of claiming success.
+- Report pixel-level markers as detected, unknown, or unsupported instead of claiming metadata-cleanup success.
 
 Acceptance:
 - [ ] Supported provenance data follows the selected checkbox.
@@ -468,19 +474,20 @@ Verification:
 - [ ] `python -m unittest tests.test_provenance_cleanup -v`
 
 Notes:
-- Do not add destructive image transformations merely to defeat an unknown hidden signal.
+- This task is metadata/manifest handling only. Whole-image regeneration belongs to Tasks 31-32.
 
 ## Task 29 - Visible Generator-Mark Prototype
 
 Status: Todo
 
 Goal:
-Determine whether visible Nano Banana/Gemini service marks can be removed locally without damaging clipart.
+Determine whether visible generator service marks can be removed reliably on owned or licensed images.
 
 Steps:
 - Use only owned or licensed test images with known visible marks.
-- Compare automatic detection, a user-confirmed mask, and a manual fallback.
-- Test the candidate step before upscale and compare edges, texture, transparency, and false positives.
+- Compare `lana-info/remove-ai-watermarks` automatic detection, a user-confirmed mask, and a manual fallback.
+- Compare local inpainting with KIE 4o mask editing as an optional cloud fallback.
+- Test the candidate step before upscale and compare edges, texture, transparency, and false positives on clipart, photos, and illustrations.
 - Reject automatic integration if quality is inconsistent.
 
 Acceptance:
@@ -515,12 +522,68 @@ Acceptance:
 
 Verification:
 - [ ] `python -m unittest tests.test_visible_mark_cleanup -v`
-- [ ] Manual visual checks cover marked and unmarked clipart.
+- [ ] Manual visual checks cover marked and unmarked clipart, photos, and illustrations.
 
 Notes:
 - If Task 29 is no-go, mark this task `Skipped` and implement only the documented fallback.
 
-## Task 31 - Post-MVP Cleanup Acceptance
+## Task 31 - Experimental Pixel-Watermark Regeneration Prototype
+
+Status: Todo
+
+Goal:
+Determine whether whole-image regeneration is useful for disrupting SynthID or other hidden pixel markers on general owned images.
+
+Steps:
+- Run `lana-info/remove-ai-watermarks` outside the application first and compare its ControlNet, SDXL, and optional Qwen pipelines where hardware permits.
+- Compare local results with KIE GPT Image 2/FLUX image-to-image and current OpenRouter image-to-image candidates.
+- Test photos, illustrations, text-heavy images, faces, and clipart; changing the image is allowed, but corruption and unusable output are not.
+- Record runtime, model downloads, VRAM/RAM use, API cost, visible quality, dimensions, alpha behavior, and metadata added by the selected provider.
+- Verify the result with the official detector when available; otherwise report `not verified` rather than `removed`.
+
+Acceptance:
+- [ ] At least one local and one cloud path are compared on the same owned fixtures.
+- [ ] The report distinguishes successful processing from independently verified watermark absence.
+- [ ] A go/no-go decision identifies the default provider, fallback, and supported image classes.
+- [ ] Model-weight licenses and required Apache-2.0 attribution are recorded before integration.
+
+Verification:
+- [ ] Before/after comparisons and benchmark results are recorded in the project page.
+- [ ] No heavy dependency is added to the main application during the prototype.
+
+Notes:
+- KIE/OpenRouter generic image editors may add their own provenance or pixel watermark; inspect every output again.
+- Google/Nano Banana must not be used to remove SynthID because Google documents that its generated images receive SynthID.
+
+## Task 32 - Experimental Pixel-Watermark Controls And Integration
+
+Status: Todo - conditional on Task 31 go decision
+
+Goal:
+Expose the approved whole-image regeneration path as a separate optional action for any owned image.
+
+Steps:
+- Add an independent `Экспериментальная перегенерация` checkbox, provider selector, and only the parameters approved by Task 31.
+- Show that the entire image will be regenerated and may change before processing starts.
+- Keep the feature disabled by default and isolated from metadata cleanup and background removal.
+- Run the local implementation in an isolated subprocess/environment so heavy optional dependencies do not affect normal startup.
+- Store any new API key in Settings using the existing masked and locked pattern.
+- Re-inspect metadata/provenance after regeneration and report `verified`, `detected`, or `not verified`.
+
+Acceptance:
+- [ ] Existing processing is unchanged while the option is disabled.
+- [ ] The action works independently for clipart, photos, and illustrations.
+- [ ] Cancellation, failed model downloads, insufficient memory, API failures, and invalid outputs are actionable and do not overwrite earlier files.
+- [ ] Logs never claim hidden-watermark removal without detector evidence.
+
+Verification:
+- [ ] `python -m unittest tests.test_pixel_watermark_regeneration -v`
+- [ ] `python -m unittest discover -s tests -v`
+
+Notes:
+- If Task 31 is no-go, mark this task `Skipped` and keep only detection/reporting.
+
+## Task 33 - Post-MVP Cleanup Acceptance
 
 Status: Todo
 
@@ -536,7 +599,7 @@ Steps:
 Acceptance:
 - [ ] Cleanup choices are independent, persistent, and disabled by default for old users.
 - [ ] Metadata cleanup preserves selected ICC/DPI and never changes pixels or alpha.
-- [ ] Hidden and visible mark claims match tested capabilities.
+- [ ] Hidden and visible mark claims match tested capabilities, including any experimental regeneration mode.
 - [ ] The application remains usable for generation and processing with cleanup disabled.
 
 Verification:
