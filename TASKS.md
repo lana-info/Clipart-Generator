@@ -494,7 +494,7 @@ Notes:
 
 ## Task 29 - Shared Final-Save Cleanup Integration
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Run selected metadata cleanup once through the shared final-save path.
@@ -506,20 +506,22 @@ Steps:
 - Log found, removed, preserved, unsupported, and failed categories without metadata values or secrets.
 
 Acceptance:
-- [ ] Disabled cleanup is behaviorally equivalent to the current application.
-- [ ] Every final workflow uses the same cleanup decision and validation path.
-- [ ] A cleanup failure does not publish a corrupt or partial output.
+- [x] Disabled cleanup is behaviorally equivalent to the current application.
+- [x] Every final workflow uses the same cleanup decision and validation path.
+- [x] A cleanup failure does not publish a corrupt or partial output.
 
 Verification:
-- [ ] `python -m unittest tests.test_final_save_cleanup -v`
-- [ ] `python -m unittest discover -s tests -v`
+- [x] `python -m unittest tests.test_final_save_cleanup -v`
+- [x] `python -m unittest discover -s tests -v`
 
 Notes:
 - This is the first user-complete cleanup slice.
+- All final workflows now publish through one same-directory staging path. Cleanup-only process runs need no KIE key, trim precedes cleanup, raw intermediates stay unchanged, C2PA cannot be hidden by trim/DPI conversion, and cleanup failures leave prior outputs untouched.
+- Ten focused final-save tests and all 75 project tests pass after three review passes.
 
 ## Task 30 - Metadata Cleanup Acceptance And Documentation
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Close the metadata/C2PA slice before starting pixel-changing watermark work.

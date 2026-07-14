@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added one atomic final-save path for optional metadata/C2PA cleanup across generate-only, generate-and-process, process-only, local, and mixed workflows.
+- Added value-safe cleanup progress summaries for found, removed, preserved, unsupported, and failed categories without logging metadata values.
+- Added 10 final-save integration tests covering disabled compatibility, cleanup-only runs, local/mixed routes, trim order, ICC/DPI preservation, 300 DPI precedence, palette alpha, C2PA preflight, safe logs, and rollback.
 - Added a compact final-file cleanup section with independent EXIF, XMP, IPTC, comments/text, embedded-thumbnail, known-generator, and embedded-C2PA choices plus ICC/DPI preservation settings.
 - Added offscreen UI coverage for independent cleanup choices, legacy-safe defaults, persistence, restoration, and non-overlapping layout.
 - Added explicit C2PA export cleanup for bounded PNG `caBX`, JPEG APP11/JUMBF, valid embedded XMP pointers, and supported external manifest references in a new PNG.
@@ -59,6 +62,8 @@
 
 ### Changed
 
+- Process-only runs can now perform metadata cleanup without another image-processing step or a KIE API key.
+- Selected cleanup carries supported metadata through trim and print-export staging; the existing 300 DPI export setting remains the final DPI authority.
 - Advanced the metadata-inspector schema to v3 with separate embedded-container, embedded-XMP-reference, supported-external-reference, and unclassified-provenance states.
 - PNG text inspection now uses a bounded raw chunk scan so metadata after `IDAT` is included without decoding image pixels.
 - Selective XMP cleanup now preserves packet wrappers, comments, processing instructions, and unrelated fields; ambiguous provenance aborts unless full XMP removal is explicitly selected.
@@ -91,6 +96,7 @@
 
 ### Verified
 
+- Verified 10 focused final-save cleanup tests and all 75 project tests pass after review of byte-equivalent disabled behavior, atomic rollback, trim ordering, metadata preservation, palette alpha, and C2PA conversion safety.
 - Verified the cleanup UI keeps all removals disabled for legacy configs, preserves ICC/DPI by default, restores every choice independently, and passes 2 focused plus all 65 project tests.
 - Verified 11 focused C2PA cleanup tests and all 63 project tests pass; three review passes closed URI prefix collisions, mixed valid/unknown provenance, post-`IDAT` metadata, XMP structure preservation, and duplicate-key concerns.
 - Verified the cleanup result states that remote manifests, sidecars, signature validity, and pixel soft bindings were not deleted, accessed, removed, or validated.

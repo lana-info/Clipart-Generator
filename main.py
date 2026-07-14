@@ -12,13 +12,16 @@ import re
 import ssl
 import math
 import subprocess
+import shutil
 from io import BytesIO, StringIO
 from urllib.parse import urlparse
 from urllib import error as urlerror
 from urllib import request, parse
 from datetime import datetime, timedelta, timezone
-from PIL import Image, ImageChops, ImageFilter
+from PIL import Image, ImageChops, ImageFilter, PngImagePlugin
 from license_client import LicenseClient
+from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
+from metadata_inspector import inspect_image_metadata
 
 try:
     import certifi
@@ -508,6 +511,17 @@ class WorkerThread(QThread):
         self.local_ben2_model = None
         self.edge_shrink_enabled = bool(settings.get("edge_shrink_enabled", False))
         self.edge_shrink_pixels = normalize_edge_shrink_pixels(settings.get("edge_shrink_pixels", 1))
+        self.metadata_cleanup_options = MetadataCleanupOptions(
+            remove_exif=bool(settings.get("cleanup_remove_exif", False)),
+            remove_xmp=bool(settings.get("cleanup_remove_xmp", False)),
+            remove_iptc=bool(settings.get("cleanup_remove_iptc", False)),
+            remove_comments_text=bool(settings.get("cleanup_remove_comments_text", False)),
+            remove_embedded_thumbnail=bool(settings.get("cleanup_remove_embedded_thumbnail", False)),
+            remove_generator_fields=bool(settings.get("cleanup_remove_generator_fields", False)),
+            preserve_icc=bool(settings.get("cleanup_preserve_icc", True)),
+            preserve_dpi=bool(settings.get("cleanup_preserve_dpi", True)) or self.export_300_dpi,
+            remove_embedded_c2pa=bool(settings.get("cleanup_remove_embedded_c2pa", False)),
+        )
 
     def run(self):
         try:
@@ -577,15 +591,14 @@ class WorkerThread(QThread):
                         final_url = None
 
                 out_path = os.path.join(output_dir, f"result_{idx:03d}_{self.run_stamp}.png")
-                if final_url:
-                    self._save_pipeline_result(final_url, out_path, raw_dir, idx, "gen")
-                elif process_generated:
-                    if self.trim_enabled:
-                        self._trim_image_file(source_path, out_path, "в конце")
-                    else:
-                        self._save_image_as_png(source_path, out_path)
-                else:
-                    self._save_image_as_png(gen_path, out_path)
+                self._save_final_output(
+                    final_url,
+                    source_path,
+                    out_path,
+                    raw_dir,
+                    idx,
+                    "gen",
+                )
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
             except Exception as e:
@@ -624,8 +637,9 @@ class WorkerThread(QThread):
             or self.remove_bg
             or self.trim_enabled
             or self.edge_shrink_enabled
+            or self._metadata_cleanup_requested()
         ):
-            raise ValueError("Включите хотя бы один этап: апскейл, удаление фона или trim")
+            raise ValueError("Включите хотя бы один этап: апскейл, удаление фона, trim или очистку файла")
 
         if (self._uses_any_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
@@ -668,13 +682,14 @@ class WorkerThread(QThread):
                 base = os.path.splitext(os.path.basename(file_path))[0]
                 out_path = os.path.join(output_dir, f"{base}_processed_{self.run_stamp}.png")
 
-                if final_url:
-                    self._save_pipeline_result(final_url, out_path, raw_dir, idx, "file")
-                else:
-                    if self.trim_enabled:
-                        self._trim_image_file(source_path, out_path, "в конце")
-                    else:
-                        self._save_image_as_png(source_path, out_path)
+                self._save_final_output(
+                    final_url,
+                    source_path,
+                    out_path,
+                    raw_dir,
+                    idx,
+                    "file",
+                )
 
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
@@ -1184,19 +1199,259 @@ class WorkerThread(QThread):
         with Image.open(image_path) as img:
             return "A" in img.getbands()
 
+    def _metadata_cleanup_requested(self):
+        options = self.metadata_cleanup_options
+        return any(
+            (
+                options.remove_exif,
+                options.remove_xmp,
+                options.remove_iptc,
+                options.remove_comments_text,
+                options.remove_embedded_thumbnail,
+                options.remove_generator_fields,
+                options.remove_embedded_c2pa,
+                not options.preserve_icc,
+                not options.preserve_dpi,
+            )
+        )
+
+    def _save_final_output(self, result_url, source_path, output_path, raw_dir, idx, prefix):
+        output_dir = os.path.dirname(os.path.abspath(output_path))
+        os.makedirs(output_dir, exist_ok=True)
+        stage_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                prefix=".clipart-final-",
+                suffix=".stage.png",
+                dir=output_dir,
+                delete=False,
+            ) as stage_file:
+                stage_path = stage_file.name
+
+            local_cleanup_source = None
+            if self._metadata_cleanup_requested() and not self.trim_enabled and not self.export_300_dpi:
+                if result_url and os.path.isfile(str(result_url)):
+                    local_cleanup_source = str(result_url)
+                elif not result_url and source_path and os.path.isfile(str(source_path)):
+                    local_cleanup_source = str(source_path)
+
+            source_inspection = None
+            if local_cleanup_source:
+                source_inspection = self._inspect_precleanup_source(local_cleanup_source)
+                shutil.copyfile(local_cleanup_source, stage_path)
+            elif result_url:
+                source_inspection = self._save_pipeline_result(
+                    result_url,
+                    stage_path,
+                    raw_dir,
+                    idx,
+                    prefix,
+                )
+            elif self.trim_enabled:
+                source_inspection = self._inspect_precleanup_source(source_path)
+                self._trim_image_file(
+                    source_path,
+                    stage_path,
+                    "в конце",
+                    trim_mode=self._normalize_trim_mode(self.trim_mode),
+                )
+            else:
+                source_inspection = self._inspect_precleanup_source(source_path)
+                self._save_image_as_png(source_path, stage_path)
+
+            self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
+        finally:
+            if stage_path and os.path.exists(stage_path):
+                try:
+                    os.remove(stage_path)
+                except OSError:
+                    pass
+
+    def _inspect_precleanup_source(self, source_path):
+        if not self._metadata_cleanup_requested():
+            return None
+
+        inspection = inspect_image_metadata(source_path)
+        if inspection.get("status") != "ok":
+            return inspection
+        c2pa = inspection.get("c2pa", {})
+        try:
+            if c2pa.get("presence") != "not_present":
+                if not self.metadata_cleanup_options.remove_embedded_c2pa:
+                    raise MetadataCleanupError("C2PA input requires explicit C2PA cleanup")
+                if c2pa.get("scan_status") != "ok" or c2pa.get("embedded_presence") == "unknown":
+                    raise MetadataCleanupError("embedded C2PA structure cannot be classified safely")
+                if (
+                    "unknown"
+                    in {
+                        c2pa.get("embedded_reference_presence"),
+                        c2pa.get("external_reference_presence"),
+                    }
+                    or c2pa.get("unclassified_reference_presence") != "not_present"
+                ) and not self.metadata_cleanup_options.remove_xmp:
+                    raise MetadataCleanupError("C2PA XMP references cannot be classified safely")
+        except MetadataCleanupError as error:
+            self._log_metadata_cleanup_inspection(inspection)
+            message = str(error).strip() or "неизвестная ошибка проверки"
+            self.progress.emit(f"  Очистка файла: ошибка — {message}; итог не опубликован")
+            raise RuntimeError(f"Очистка файла не выполнена: {message}") from error
+        return inspection
+
+    def _publish_final_output(self, stage_path, output_path, source_inspection=None):
+        if not self._metadata_cleanup_requested():
+            os.replace(stage_path, output_path)
+            return None
+
+        try:
+            inspection = source_inspection or inspect_image_metadata(stage_path)
+            self._log_metadata_cleanup_inspection(inspection)
+            result = cleanup_image_metadata(
+                stage_path,
+                output_path,
+                self.metadata_cleanup_options,
+            )
+        except MetadataCleanupError as error:
+            message = str(error).strip() or "неизвестная ошибка проверки"
+            self.progress.emit(f"  Очистка файла: ошибка — {message}; итог не опубликован")
+            raise RuntimeError(f"Очистка файла не выполнена: {message}") from error
+        except Exception as error:
+            self.progress.emit("  Очистка файла: непредвиденная ошибка; итог не опубликован")
+            raise RuntimeError("Очистка файла не выполнена; итог не опубликован") from error
+
+        self._apply_precleanup_action_overrides(result, inspection)
+        self._log_metadata_cleanup_result(result)
+        return result
+
+    def _apply_precleanup_action_overrides(self, result, inspection):
+        if not inspection or inspection.get("status") != "ok":
+            return
+        actions = result.get("actions", {})
+        categories = inspection.get("categories", {})
+        if categories.get("iptc", {}).get("present") and actions.get("iptc") == "absent":
+            actions["iptc"] = (
+                "removed"
+                if self.metadata_cleanup_options.remove_iptc
+                else "not_preserved_output_unsupported"
+            )
+
+        c2pa = inspection.get("c2pa", {})
+        if not self.metadata_cleanup_options.remove_embedded_c2pa:
+            return
+        if c2pa.get("embedded_presence") == "present":
+            actions["embedded_c2pa"] = "removed"
+        if c2pa.get("external_reference_presence") == "present":
+            actions["c2pa_external_reference"] = "removed_from_output"
+        if c2pa.get("embedded_reference_presence") == "present":
+            actions["c2pa_embedded_reference"] = "removed_from_output"
+        if (
+            c2pa.get("unclassified_reference_presence") != "not_present"
+            and self.metadata_cleanup_options.remove_xmp
+        ):
+            actions["c2pa_unclassified_reference"] = "removed_with_xmp_category"
+
+    def _log_metadata_cleanup_inspection(self, inspection):
+        labels = {
+            "exif": "EXIF",
+            "xmp": "XMP",
+            "iptc": "IPTC",
+            "comments_text": "комментарии/текст",
+            "embedded_thumbnail": "встроенная миниатюра",
+            "icc_profile": "ICC-профиль",
+            "dpi": "DPI",
+            "generator_fields": "данные генератора",
+        }
+        if inspection.get("status") != "ok":
+            self.progress.emit("  Очистка файла: найдено — проверка итогового формата не поддерживается")
+            return
+
+        categories = inspection.get("categories", {})
+        found = [label for key, label in labels.items() if categories.get(key, {}).get("present")]
+        c2pa = inspection.get("c2pa", {})
+        if c2pa.get("embedded_presence") == "present":
+            found.append("встроенный C2PA")
+        if c2pa.get("embedded_reference_presence") == "present":
+            found.append("встроенная ссылка C2PA")
+        if c2pa.get("external_reference_presence") == "present":
+            found.append("внешняя ссылка C2PA")
+        if c2pa.get("unclassified_reference_presence") not in {None, "not_present"}:
+            found.append("неопределённая ссылка provenance")
+        self.progress.emit(f"  Очистка файла: найдено — {', '.join(found) if found else 'нет'}")
+
+    def _log_metadata_cleanup_result(self, result):
+        labels = {
+            "exif": "EXIF",
+            "xmp": "XMP",
+            "iptc": "IPTC",
+            "comments_text": "комментарии/текст",
+            "embedded_thumbnail": "встроенная миниатюра",
+            "generator_fields": "данные генератора",
+            "icc_profile": "ICC-профиль",
+            "dpi": "DPI",
+            "embedded_c2pa": "встроенный C2PA",
+            "c2pa_external_reference": "внешняя ссылка C2PA",
+            "c2pa_embedded_reference": "встроенная ссылка C2PA",
+            "c2pa_unclassified_reference": "неопределённая ссылка provenance",
+        }
+        removed_statuses = {
+            "removed",
+            "removed_from_output",
+            "removed_with_selected_category",
+            "removed_with_xmp_category",
+            "unclassified_xmp_removed",
+        }
+        unsupported_statuses = {"not_preserved", "not_preserved_output_unsupported"}
+        groups = {"removed": [], "preserved": [], "unsupported": [], "failed": []}
+        for key, status in result.get("actions", {}).items():
+            label = labels.get(key, key)
+            if status in removed_statuses:
+                groups["removed"].append(label)
+            elif status == "preserved":
+                groups["preserved"].append(label)
+            elif status in unsupported_statuses:
+                groups["unsupported"].append(label)
+            elif status != "absent":
+                groups["failed"].append(label)
+
+        messages = (
+            ("удалено", groups["removed"]),
+            ("сохранено", groups["preserved"]),
+            ("не поддерживается", groups["unsupported"]),
+            ("не выполнено", groups["failed"]),
+        )
+        for title, values in messages:
+            self.progress.emit(f"  Очистка файла: {title} — {', '.join(values) if values else 'нет'}")
+
     def _save_pipeline_result(self, result_url, output_path, raw_dir, idx, prefix):
         if os.path.isfile(str(result_url)):
+            inspection = self._inspect_precleanup_source(result_url)
             if self.trim_enabled:
                 self._trim_image_file(result_url, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
             else:
                 self._save_image_as_png(result_url, output_path)
-            return
+            return inspection
         if self.trim_enabled:
             pretrim_path = os.path.join(raw_dir, f"{prefix}_pretrim_{idx:03d}_{self.run_stamp}.png")
-            self._download_file(result_url, pretrim_path)
+            self._download_precleanup_result(result_url, pretrim_path)
+            inspection = self._inspect_precleanup_source(pretrim_path)
             self._trim_image_file(pretrim_path, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
+            return inspection
+        self._download_precleanup_result(result_url, output_path)
+        inspection = self._inspect_precleanup_source(output_path)
+        if self.export_300_dpi and self._metadata_cleanup_requested():
+            self._set_png_dpi(output_path, dpi=300)
+        return inspection
+
+    def _download_precleanup_result(self, result_url, output_path):
+        if not self._metadata_cleanup_requested():
+            self._download_file(result_url, output_path)
             return
-        self._download_file(result_url, output_path)
+        export_300_dpi = self.export_300_dpi
+        self.export_300_dpi = False
+        try:
+            self._download_file(result_url, output_path)
+        finally:
+            self.export_300_dpi = export_300_dpi
 
     def _save_image_as_png(self, source_path, output_path):
         with Image.open(source_path) as img:
@@ -1206,13 +1461,59 @@ class WorkerThread(QThread):
         image_to_save = image
         if image_to_save.mode not in {"RGB", "RGBA"}:
             image_to_save = image_to_save.convert("RGBA")
-        save_kwargs = self._get_png_save_kwargs()
+        save_kwargs = self._get_png_save_kwargs(image)
         image_to_save.save(output_path, format="PNG", **save_kwargs)
 
-    def _get_png_save_kwargs(self):
-        if self.export_300_dpi:
-            return {"dpi": (300, 300)}
-        return {}
+    def _get_png_save_kwargs(self, source_image=None, dpi_override=None):
+        save_kwargs = {}
+        if source_image is not None and self._metadata_cleanup_requested():
+            source_info = dict(getattr(source_image, "info", {}) or {})
+            raw_icc = source_info.get("icc_profile")
+            if isinstance(raw_icc, bytes) and raw_icc:
+                save_kwargs["icc_profile"] = raw_icc
+
+            raw_exif = source_info.get("exif")
+            if not isinstance(raw_exif, bytes):
+                try:
+                    exif = source_image.getexif()
+                    raw_exif = exif.tobytes() if exif else b""
+                except (OSError, SyntaxError, ValueError):
+                    raw_exif = b""
+            if raw_exif:
+                save_kwargs["exif"] = raw_exif
+
+            text_entries = dict(getattr(source_image, "text", {}) or {})
+            for key, value in source_info.items():
+                if isinstance(value, str):
+                    text_entries.setdefault(str(key), value)
+                elif str(key).casefold() in {"comment", "xmp", "xml:com.adobe.xmp"} and isinstance(
+                    value, bytes
+                ):
+                    text_entries.setdefault(str(key), value.decode("utf-8", errors="replace"))
+            if text_entries:
+                pnginfo = PngImagePlugin.PngInfo()
+                for key, value in text_entries.items():
+                    pnginfo.add_itxt(str(key), str(value))
+                save_kwargs["pnginfo"] = pnginfo
+
+            transparency = source_info.get("transparency")
+            if transparency is not None and source_image.mode == "RGB":
+                save_kwargs["transparency"] = transparency
+
+            source_dpi = source_info.get("dpi")
+            if (
+                dpi_override is None
+                and not self.export_300_dpi
+                and isinstance(source_dpi, (tuple, list))
+                and len(source_dpi) >= 2
+            ):
+                save_kwargs["dpi"] = (source_dpi[0], source_dpi[1])
+
+        if dpi_override is not None:
+            save_kwargs["dpi"] = (dpi_override, dpi_override)
+        elif self.export_300_dpi:
+            save_kwargs["dpi"] = (300, 300)
+        return save_kwargs
 
     def _trim_image_file(self, source_path, output_path, stage_label, trim_mode=None):
         with Image.open(source_path) as img:
@@ -2227,7 +2528,11 @@ class WorkerThread(QThread):
             with Image.open(file_path) as img:
                 if img.format != "PNG":
                     return
-                img.save(file_path, format="PNG", dpi=(dpi, dpi))
+                img.save(
+                    file_path,
+                    format="PNG",
+                    **self._get_png_save_kwargs(img, dpi_override=dpi),
+                )
             self.progress.emit(f"  Установлен DPI {dpi} для {os.path.basename(file_path)}")
         except Exception as e:
             self.progress.emit(f"  Не удалось установить DPI для {os.path.basename(file_path)}: {e}")
@@ -4601,6 +4906,22 @@ class MainWindow(QMainWindow):
         _, error_message = validate_local_realesrgan_exe(self.local_realesrgan_dir_input.text())
         return error_message
 
+    def _cleanup_requested_from_ui(self):
+        return any(
+            (
+                self.chk_cleanup_remove_exif.isChecked(),
+                self.chk_cleanup_remove_xmp.isChecked(),
+                self.chk_cleanup_remove_iptc.isChecked(),
+                self.chk_cleanup_remove_comments_text.isChecked(),
+                self.chk_cleanup_remove_thumbnail.isChecked(),
+                self.chk_cleanup_remove_generator.isChecked(),
+                self.chk_cleanup_remove_c2pa.isChecked(),
+                not self.chk_cleanup_preserve_icc.isChecked(),
+                not self.chk_cleanup_preserve_dpi.isChecked()
+                and not self.chk_export_300_dpi.isChecked(),
+            )
+        )
+
     def start_work(self):
         if not self.work_dir:
             QMessageBox.warning(self, "Ошибка", "Выберите рабочую папку")
@@ -4659,8 +4980,13 @@ class MainWindow(QMainWindow):
                 or self.chk_remove_bg.isChecked()
                 or self.chk_trim.isChecked()
                 or self.chk_edge_shrink.isChecked()
+                or self._cleanup_requested_from_ui()
             ):
-                QMessageBox.warning(self, "Ошибка", "Включите хотя бы один этап: апскейл, удаление фона или trim")
+                QMessageBox.warning(
+                    self,
+                    "Ошибка",
+                    "Включите хотя бы один этап: апскейл, удаление фона, trim или очистку файла",
+                )
                 return
         elif run_mode == "both":
             active_prompts = self.get_list_mode_prompts()
