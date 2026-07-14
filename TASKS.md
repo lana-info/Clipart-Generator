@@ -521,7 +521,7 @@ Notes:
 
 ## Task 30 - Metadata Cleanup Acceptance And Documentation
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Close the metadata/C2PA slice before starting pixel-changing watermark work.
@@ -533,22 +533,24 @@ Steps:
 - Fix only blocking issues discovered by this review.
 
 Acceptance:
-- [ ] Documentation matches tested behavior.
-- [ ] Metadata cleanup never changes visible pixels or alpha.
-- [ ] Existing processing remains usable with cleanup disabled.
+- [x] Documentation matches tested behavior.
+- [x] Metadata cleanup never changes visible pixels or alpha.
+- [x] Existing processing remains usable with cleanup disabled.
 
 Verification:
-- [ ] `python -m py_compile .\main.py`
-- [ ] `python -m unittest discover -s tests -v`
+- [x] `python -m py_compile .\main.py`
+- [x] `python -m unittest discover -s tests -v`
 
 Notes:
 - Do not start visible-mark work until this gate passes.
+- Every removal choice passes an independent PNG/JPEG fixture, and one combined local pipeline verifies one cleanup call plus identical decoded pixels/alpha before and after metadata cleanup.
+- `CLEANUP_CAPABILITY_MATRIX.md` now records implemented formats, bounds, preservation behavior, C2PA scope, unsupported claims, and the 300 DPI precedence rule. Two focused acceptance tests and all 77 project tests pass.
 
 ## Phase 20 - Visible Generator Marks
 
 ## Task 31 - Local Visible-Mark Detector Prototype
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Measure whether `lana-info/remove-ai-watermarks` reliably localizes supported visible generator marks.

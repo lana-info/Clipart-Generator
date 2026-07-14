@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added metadata-cleanup acceptance coverage for every independent removal choice and one combined local pipeline with before/after pixel and alpha invariants.
+- Documented the implemented Tasks 24-30 contract, exact PNG/JPEG limits, ICC/DPI behavior, atomic final-save order, and unsupported C2PA/pixel-watermark claims.
 - Added one atomic final-save path for optional metadata/C2PA cleanup across generate-only, generate-and-process, process-only, local, and mixed workflows.
 - Added value-safe cleanup progress summaries for found, removed, preserved, unsupported, and failed categories without logging metadata values.
 - Added 10 final-save integration tests covering disabled compatibility, cleanup-only runs, local/mixed routes, trim order, ICC/DPI preservation, 300 DPI precedence, palette alpha, C2PA preflight, safe logs, and rollback.
@@ -62,6 +64,7 @@
 
 ### Changed
 
+- Closed the metadata/C2PA acceptance gate and moved visible generator-mark work behind its separate prototype and go/no-go tasks.
 - Process-only runs can now perform metadata cleanup without another image-processing step or a KIE API key.
 - Selected cleanup carries supported metadata through trim and print-export staging; the existing 300 DPI export setting remains the final DPI authority.
 - Advanced the metadata-inspector schema to v3 with separate embedded-container, embedded-XMP-reference, supported-external-reference, and unclassified-provenance states.
@@ -96,6 +99,7 @@
 
 ### Verified
 
+- Verified every cleanup checkbox independently and all choices together in a local pipeline; 2 focused acceptance tests and all 77 project tests pass with identical final-stage pixels/alpha.
 - Verified 10 focused final-save cleanup tests and all 75 project tests pass after review of byte-equivalent disabled behavior, atomic rollback, trim ordering, metadata preservation, palette alpha, and C2PA conversion safety.
 - Verified the cleanup UI keeps all removals disabled for legacy configs, preserves ICC/DPI by default, restores every choice independently, and passes 2 focused plus all 65 project tests.
 - Verified 11 focused C2PA cleanup tests and all 63 project tests pass; three review passes closed URI prefix collisions, mixed valid/unknown provenance, post-`IDAT` metadata, XMP structure preservation, and duplicate-key concerns.

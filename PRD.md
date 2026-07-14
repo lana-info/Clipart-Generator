@@ -113,6 +113,10 @@ Source of truth for supported claims: [`CLEANUP_CAPABILITY_MATRIX.md`](./CLEANUP
 - [x] Trim удаляет пустые края в конце pipeline.
 - [x] UI сохраняет и восстанавливает настройки обработки.
 - [x] В `raw/` сохраняются промежуточные файлы для диагностики.
+- [x] Metadata cleanup поддерживает независимые EXIF/XMP/IPTC/comments/thumbnail/generator/C2PA настройки и legacy-safe defaults.
+- [x] Cleanup-only process запускается без KIE API key и публикует новый PNG атомарно.
+- [x] Metadata-only стадия не меняет размеры, декодированные пиксели или alpha; ICC/DPI сохраняются согласно выбранным настройкам.
+- [x] C2PA cleanup ограничен локальным manifest/ссылкой в новом PNG и не заявляет удаление remote/sidecar/pixel signals.
 - [ ] Перед релизом пройдены проверки из `TEST_CHECKLIST.md`.
 
 ## Related Documents
