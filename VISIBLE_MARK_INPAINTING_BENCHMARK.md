@@ -27,6 +27,23 @@ resolution attempted to obtain model resources and exceeded the bounded benchmar
 window. They remain unselected until their weights are explicitly installed and
 licensed for evaluation.
 
-The required visual comparison on user-owned marked fixtures remains open. The
-upstream demo/sample images used here are reproducible evaluation assets, not user
-production files.
+## User-Owned Fixture Gate
+
+The gate was completed with:
+
+- `C:\Users\belou\Downloads\Gemini_Generated_Image_fmj7lefmj7lefmj7.png`, a
+  912x1147 RGBA image with the visible Gemini sparkle;
+- `C:\Users\belou\Downloads\New folder\ready\tiny-water-droplet-1.png`, an
+  unmarked clipart fixture.
+
+The detector found the owned Gemini mark at confidence `0.694789` and did not fire
+on the unmarked clipart. Automatic-mask and rectangle-mask `cv2` runs both changed
+zero pixels outside their supplied masks. The automatic mask changed 3,237 pixels
+inside the mark region; its bbox was `(832, 1067, 48, 48)`. The source and output
+were both RGBA with fully opaque alpha. A direct pixel diff confirmed that all
+3,237 changed pixels lie within the automatic mask bbox; the source file was not
+modified.
+
+The external CLI preview was not used as acceptance evidence because its renderer
+displayed the opaque output incorrectly in the preview. The decoded pixel and alpha
+checks above are authoritative for this benchmark.

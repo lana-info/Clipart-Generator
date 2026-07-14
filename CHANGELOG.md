@@ -104,6 +104,7 @@
 
 - Verified the isolated detector against one Gemini marked fixture, one Doubao marked fixture, and five unmarked upstream fixtures: 2/2 marked detections and 0/5 false positives. Jimeng, Samsung, and user-owned marked fixtures remain unverified.
 - Verified bounded `cv2` inpainting on Gemini and Doubao masks: four runs changed zero pixels outside the supplied mask. MI-GAN/LaMa evaluation and visual inspection on user-owned marked fixtures remain open.
+- Completed the Task 32 owned-fixture gate with a Gemini-marked image and an unmarked clipart: detector confidence `0.694789`, no unmarked detection, zero changed pixels outside both automatic and rectangular masks, and opaque RGBA preserved.
 
 - Verified every cleanup checkbox independently and all choices together in a local pipeline; 2 focused acceptance tests and all 77 project tests pass with identical final-stage pixels/alpha.
 - Verified 10 focused final-save cleanup tests and all 75 project tests pass after review of byte-equivalent disabled behavior, atomic rollback, trim ordering, metadata preservation, palette alpha, and C2PA conversion safety.

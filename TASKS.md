@@ -575,7 +575,7 @@ Notes:
 
 ## Task 32 - Local Visible-Mark Inpainting Benchmark
 
-Status: In progress - bounded cv2 benchmark complete; owned-fixture visual gate remains
+Status: Done - cv2 selected as the local default/fallback
 
 Goal:
 Choose a local fill method for confirmed masks without unacceptable damage outside the marked region.
@@ -592,11 +592,11 @@ Acceptance:
 - [x] Benchmark never overwrites originals; backend failures are reported without publishing output.
 
 Verification:
-- [ ] Before/after/mask comparisons are inspected on owned fixtures.
+- [x] Before/after/mask comparisons are inspected on owned fixtures; decoded pixels and alpha were verified.
 
 Notes:
 - Keep benchmark assets outside git unless small and redistributable.
-- MI-GAN/LaMa remain unselected because their optional weights were not installed; see `VISIBLE_MARK_INPAINTING_BENCHMARK.md`.
+- MI-GAN/LaMa remain unselected because their optional weights were not installed; see `VISIBLE_MARK_INPAINTING_BENCHMARK.md`. They can be evaluated later as a separate optional backend without changing the selected safe fallback.
 
 ## Task 33 - KIE Mask-Edit Benchmark
 
