@@ -11,6 +11,7 @@
 - Added `CLEANUP_CAPABILITY_MATRIX.md` with source-backed decisions for EXIF/XMP/IPTC, generator metadata, C2PA manifests, SynthID, unknown pixel-level markers, and visible marks.
 - Evaluated `lana-info/remove-ai-watermarks` as an Apache-2.0 prototype candidate and separated its metadata, visible-inpainting, and whole-image diffusion modes.
 - Added ordered prototype and conditional integration tasks for pixel-watermark regeneration across general images, with local, KIE, and OpenRouter comparisons.
+- Expanded the remaining cleanup roadmap into focused Tasks 24-50 with separate gates for metadata/C2PA, visible marks, KIE-first hidden-marker regeneration, optional OpenRouter evaluation, and conditional GPU serverless/VPS gateway work.
 - Added isolated offscreen UI acceptance tests for the window title, work-folder setup, API-key lock, processing-setting persistence, validation, and completion/Stop dialog rules.
 - Added network-free KIE routing tests for worker and UI key validation, generate-only output, mixed local/KIE processing, error reporting, and secret-safe logs.
 - Added focused local-processing acceptance tests covering Real-ESRGAN, PNG/JPG process-only flows, alpha controls, Unsharp Mask, edge shrink, trim, and pipeline order.
@@ -55,6 +56,7 @@
 - Changed the rembg requirement to `rembg[cpu]` so fresh installs include the CPU backend.
 - Extended the processing order to `optional upscale before -> Unsharp Mask -> remove background -> optional upscale after -> edge shrink -> trim`.
 - Limited the planned first cleanup implementation to single-frame PNG/JPEG inspection and new-PNG export; experimental whole-image regeneration is kept separate from metadata cleanup and cannot claim success without detector evidence.
+- Prioritized KIE before new infrastructure; RunPod/Modal and the ordinary VPS gateway are now conditional fallbacks instead of mandatory application dependencies.
 - Removed the trim timing selector from the UI; trim now always runs at the end.
 - Reordered the processing controls vertically to match the actual processing order, with each step's parameters on the right.
 - Made Unsharp Mask an independent processing step that can run without upscale.
@@ -72,6 +74,8 @@
 
 ### Verified
 
+- Verified Tasks 24-50 are contiguous, include Goal/Steps/Acceptance/Verification/Notes, and keep Task 24 as the next safe implementation task.
+- Verified the planning-only change leaves `main.py` compiling and all 24 existing tests passing.
 - Verified all 24 tests pass in one process, including PhotoRoom Standard, both upscale positions, GPT Image 2 routing, real local Real-ESRGAN checks, and isolated main-window acceptance checks.
 - Verified `2x + 2x` produces `4x`, `4x + 4x` reports `16x`, and post-removal upscale preserves a valid alpha channel.
 - Verified the cleanup matrix links every factual capability claim to official Google, C2PA, W3C, IPTC, Pillow, Adobe, or c2patool documentation.
