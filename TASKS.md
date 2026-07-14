@@ -550,7 +550,7 @@ Notes:
 
 ## Task 31 - Local Visible-Mark Detector Prototype
 
-Status: Todo - next safe task
+Status: Done - limited prototype gate; user-owned marked fixtures still required before integration
 
 Goal:
 Measure whether `lana-info/remove-ai-watermarks` reliably localizes supported visible generator marks.
@@ -562,19 +562,20 @@ Steps:
 - Measure false positives across clipart, photos, illustrations, and textured corners.
 
 Acceptance:
-- [ ] Supported marks have documented detection rates.
-- [ ] False positives are measured on unmarked images.
-- [ ] No heavy dependency is added to the main application.
+- [x] Gemini and Doubao detection rates are documented for the available reproducible marked fixtures.
+- [x] False positives are measured on five unmarked image fixtures.
+- [x] No heavy dependency is added to the main application.
 
 Verification:
-- [ ] Prototype command and results are recorded in the project documentation.
+- [x] Prototype command and results are recorded in `VISIBLE_MARK_DETECTOR_EVAL.md`.
 
 Notes:
 - Detection approval does not approve an inpainting backend.
+- Jimeng/Samsung and user-owned marked fixtures remain an explicit evidence gap; do not treat this task as production integration approval.
 
 ## Task 32 - Local Visible-Mark Inpainting Benchmark
 
-Status: Todo
+Status: In progress - bounded cv2 benchmark complete; owned-fixture visual gate remains
 
 Goal:
 Choose a local fill method for confirmed masks without unacceptable damage outside the marked region.
@@ -586,15 +587,16 @@ Steps:
 - Record runtime, RAM, model downloads, and supported image classes.
 
 Acceptance:
-- [ ] A local default and fallback are selected or local inpainting is rejected.
-- [ ] No accepted result changes pixels outside the documented safety margin unexpectedly.
-- [ ] Failures leave the original image unchanged.
+- [x] Provisional local default/fallback selected: cv2 with automatic or user-confirmed mask.
+- [x] The bounded benchmark changed zero pixels outside the supplied mask.
+- [x] Benchmark never overwrites originals; backend failures are reported without publishing output.
 
 Verification:
 - [ ] Before/after/mask comparisons are inspected on owned fixtures.
 
 Notes:
 - Keep benchmark assets outside git unless small and redistributable.
+- MI-GAN/LaMa remain unselected because their optional weights were not installed; see `VISIBLE_MARK_INPAINTING_BENCHMARK.md`.
 
 ## Task 33 - KIE Mask-Edit Benchmark
 

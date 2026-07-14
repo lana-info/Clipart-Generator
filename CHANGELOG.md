@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added the isolated Task 31 visible-mark detector evaluation harness and documented the pinned `remove-ai-watermarks` revision, Apache-2.0 attribution requirement, reproducible command, confidence/location/timing results, and temporary binary-mask output.
+- Added a separate visible-mark inpainting benchmark harness for automatic versus user-confirmed rectangular masks; it reports runtime, changed pixels inside/outside the mask, alpha presence, and optional-backend failures without overwriting sources.
+
 - Added metadata-cleanup acceptance coverage for every independent removal choice and one combined local pipeline with before/after pixel and alpha invariants.
 - Documented the implemented Tasks 24-30 contract, exact PNG/JPEG limits, ICC/DPI behavior, atomic final-save order, and unsupported C2PA/pixel-watermark claims.
 - Added one atomic final-save path for optional metadata/C2PA cleanup across generate-only, generate-and-process, process-only, local, and mixed workflows.
@@ -98,6 +101,9 @@
 - Fixed GPT Image 2 generation by routing text prompts to `gpt-image-2-text-to-image` and reference prompts to `gpt-image-2-image-to-image`, while preserving the existing `gpt-image-2` UI/config id.
 
 ### Verified
+
+- Verified the isolated detector against one Gemini marked fixture, one Doubao marked fixture, and five unmarked upstream fixtures: 2/2 marked detections and 0/5 false positives. Jimeng, Samsung, and user-owned marked fixtures remain unverified.
+- Verified bounded `cv2` inpainting on Gemini and Doubao masks: four runs changed zero pixels outside the supplied mask. MI-GAN/LaMa evaluation and visual inspection on user-owned marked fixtures remain open.
 
 - Verified every cleanup checkbox independently and all choices together in a local pipeline; 2 focused acceptance tests and all 77 project tests pass with identical final-stage pixels/alpha.
 - Verified 10 focused final-save cleanup tests and all 75 project tests pass after review of byte-equivalent disabled behavior, atomic rollback, trim ordering, metadata preservation, palette alpha, and C2PA conversion safety.

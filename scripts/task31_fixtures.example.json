@@ -1,0 +1,12 @@
+{
+  "fixtures": [
+    {
+      "path": "C:/path/to/owned-gemini-image.png",
+      "expected": ["gemini"]
+    },
+    {
+      "path": "C:/path/to/owned-clean-image.png",
+      "expected": []
+    }
+  ]
+}
