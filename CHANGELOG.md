@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added a selective metadata cleanup core for new PNG exports with independent EXIF, XMP, IPTC, comments/text, embedded-thumbnail, known-generator, ICC, and DPI options.
+- Added a shared exact-match generator metadata policy plus bounded PNG/JPEG preflight, UTF-8/UTF-16 XMP handling, EXIF overlap protection, stripe-based pixel/alpha verification, value-safe metadata digests, and atomic publication.
+- Added 15 cleanup tests covering category independence, ICC/DPI, palette/RGB transparency, localized iTXt, C2PA rejection, malformed/overlapping EXIF, UTF-16 XMP declarations, duplicate text, multiple JPEG comments, input limits, and failure rollback.
 - Added bounded read-only C2PA presence inspection for PNG `caBX` and JPEG APP11/JUMBF containers without signature validation or remote-manifest access.
 - Added adversarial C2PA fixtures for truncated/oversized chunks, nested and extended lengths, malformed toggles, APP11 sequence gaps, extra continuations, and scan limits.
 - Added a standalone read-only PNG/JPEG metadata inspector with structured summaries for EXIF, XMP, IPTC, comments/text, embedded thumbnails, ICC, DPI, and known generator fields.
@@ -52,6 +55,8 @@
 
 ### Changed
 
+- Known generator fields now use one shared exact allowlist; substring matches and ordinary EXIF camera `Model` fields are no longer classified as generator metadata.
+- Metadata-only cleanup rejects C2PA-bearing or indeterminate inputs until explicit C2PA export cleanup is implemented in Task 27.
 - Advanced the metadata-inspector schema to v2 with a separate C2PA presence, scan-status, and always-`not_validated` result.
 - Closed the non-release MVP acceptance gate and moved the ordered task plan to the post-MVP cleanup capability research task.
 - Isolated startup update timers and pending windows in UI tests so the full suite cannot trigger background update checks or write outside temporary test folders.
@@ -79,6 +84,8 @@
 
 ### Verified
 
+- Verified 15 focused metadata-cleanup tests and all 52 project tests pass; the third review pass returned `PASS` after C2PA, alpha, EXIF-overlap, XMP, allowlist, preservation, JPEG-comment, and memory-bound findings were fixed.
+- Verified cleanup preserves source files and prior outputs on failure, preserves selected ICC/300 DPI and unchecked supported metadata values, and publishes only after decoded pixels, dimensions, alpha, and metadata match expectations.
 - Verified 8 focused C2PA tests and all 37 project tests pass after enforcing PNG/JPEG bounds, nested/extended JPEG JUMBF lengths, contiguous APP11 sequence, and required description toggles.
 - Verified the detector against 54 embedded C2PA PNG/JPEG fixtures from the official `contentauth/c2pa-rs` checkout, including a 30-segment JPEG; all detected fixtures returned an OK bounded scan.
 - Review reproduced and fixed incomplete-JUMBF and invalid-toggle false positives before Task 25 was closed.

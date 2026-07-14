@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
-import re
 import struct
 from os import PathLike, fstat
 from typing import Any
 
 from PIL import ExifTags, Image, IptcImagePlugin, UnidentifiedImageError
+
+from metadata_policy import (
+    GENERATOR_EXIF_TAGS,
+    XmpPolicyError,
+    classify_generator_field_names,
+    classify_generator_xmp,
+    parse_xmp_root,
+)
 
 
 SCHEMA_VERSION = 2
@@ -33,13 +40,6 @@ _MAX_C2PA_SEGMENTS = 1_024
 _MAX_C2PA_DECLARED_BYTES = 64 * 1024 * 1024
 _MAX_JPEG_PREFIX_BYTES = 96
 _MAX_PNG_CHUNK_LENGTH = 0x7FFFFFFF
-_GENERATOR_FIELD_PATTERNS = {
-    "software": ("software", "creatortool"),
-    "prompt": ("prompt", "parameters", "workflow"),
-    "model": ("model", "aisystemused"),
-    "digital_source_type": ("digitalsourcetype",),
-    "generator": ("generator", "aigc", "hfjobid", "signature"),
-}
 
 
 def _c2pa_summary(
@@ -520,23 +520,13 @@ def _value_size(value: Any) -> int:
     return 0
 
 
-def _normalized_field_name(value: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", value.lower())
-
-
 def _known_generator_fields(names: list[str], payloads: list[bytes] | None = None) -> tuple[str, ...]:
-    normalized_names = [_normalized_field_name(name) for name in names]
-    searchable_payload = b"\n".join(payloads or ()).lower()
-    matches: set[str] = set()
-    for canonical_name, patterns in _GENERATOR_FIELD_PATTERNS.items():
-        for pattern in patterns:
-            normalized_pattern = _normalized_field_name(pattern)
-            if any(normalized_pattern in name for name in normalized_names):
-                matches.add(canonical_name)
-                break
-            if normalized_pattern.encode("ascii") in searchable_payload:
-                matches.add(canonical_name)
-                break
+    matches = set(classify_generator_field_names(names))
+    for payload in payloads or ():
+        try:
+            matches.update(classify_generator_xmp(parse_xmp_root(payload)))
+        except XmpPolicyError:
+            continue
     return tuple(sorted(matches))
 
 
@@ -682,7 +672,7 @@ def _inspect_supported_image(image: Image.Image) -> dict[str, dict[str, Any]]:
     dpi_present = isinstance(raw_dpi, (tuple, list)) and len(raw_dpi) >= 2
     categories["dpi"] = _category(1 if dpi_present else 0, 0)
 
-    exif_names = [str(ExifTags.TAGS.get(tag, tag)) for tag in exif]
+    exif_names = [str(ExifTags.TAGS.get(tag, tag)) for tag in exif if tag in GENERATOR_EXIF_TAGS]
     metadata_names = exif_names + [key for key, _ in ordinary_text]
     generator_fields = _known_generator_fields(metadata_names, xmp_payloads)
     categories["generator_fields"] = _category(

@@ -410,7 +410,7 @@ Notes:
 
 ## Task 26 - Selective Metadata Cleanup Core
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Remove selected ordinary and AI/service metadata while preserving selected export data and image pixels.
@@ -423,20 +423,24 @@ Steps:
 - Compare decoded pixels, dimensions, and alpha before and after metadata-only cleanup.
 
 Acceptance:
-- [ ] Checked categories are removed and unchecked categories remain where the output format supports them.
-- [ ] ICC and 300 DPI are preserved when selected.
-- [ ] Pixel values, dimensions, and alpha are unchanged.
-- [ ] A failure leaves the source and previous output intact.
+- [x] Checked categories are removed and unchecked categories remain where the output format supports them.
+- [x] ICC and 300 DPI are preserved when selected.
+- [x] Pixel values, dimensions, and alpha are unchanged.
+- [x] A failure leaves the source and previous output intact.
 
 Verification:
-- [ ] `python -m unittest tests.test_metadata_cleanup -v`
+- [x] `python -m unittest tests.test_metadata_cleanup -v`
 
 Notes:
 - This task contains no C2PA or visible/pixel watermark handling.
+- Implemented a shared exact-match allowlist in `metadata_policy.py`: EXIF `Software`; normalized exact PNG/JPEG text names for software, prompt, model, digital-source, and generator identifiers; and exact XMP `CreatorTool`/`DigitalSourceType` properties. Unknown fields and EXIF camera `Model` are not guessed.
+- C2PA-bearing or indeterminate inputs are rejected until Task 27 can make removal explicit; multiple JPEG comments and duplicate PNG text keys are rejected unless their selected category is removed.
+- Added bounded file/pixel/dimension/metadata preflight, stripe-based pixel/alpha hashing, EXIF overlap validation, value-safe metadata digests, and atomic same-directory publication.
+- Fifteen focused cleanup tests and all 52 project tests pass; three review passes closed C2PA, transparency, EXIF overlap, UTF-16 XMP, allowlist consistency, metadata preservation, JPEG comment, and memory-bound findings.
 
 ## Task 27 - C2PA Export Cleanup
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Remove supported embedded C2PA data or references from the new PNG export when explicitly selected.
