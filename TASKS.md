@@ -469,7 +469,7 @@ Notes:
 
 ## Task 28 - Metadata Cleanup UI And Settings
 
-Status: Todo - next safe task
+Status: Done
 
 Goal:
 Expose independent metadata/C2PA cleanup choices without changing current defaults.
@@ -481,19 +481,20 @@ Steps:
 - Save and restore settings; cleanup remains disabled for legacy configs while preservation options default to enabled.
 
 Acceptance:
-- [ ] Every supported category can be enabled independently.
-- [ ] Old config files preserve current processing behavior.
-- [ ] Controls do not overlap at the supported offscreen viewport.
+- [x] Every supported category can be enabled independently.
+- [x] Old config files preserve current processing behavior.
+- [x] Controls do not overlap at the supported offscreen viewport.
 
 Verification:
-- [ ] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_cleanup_ui -v`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_cleanup_ui -v`
 
 Notes:
 - Do not rearrange unrelated controls.
+- Added seven independent removal choices plus ICC/DPI preservation choices. Cleanup remains disabled for legacy configs, ICC/DPI preservation defaults to enabled, and all 65 project tests pass.
 
 ## Task 29 - Shared Final-Save Cleanup Integration
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Run selected metadata cleanup once through the shared final-save path.

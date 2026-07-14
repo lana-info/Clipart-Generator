@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added a compact final-file cleanup section with independent EXIF, XMP, IPTC, comments/text, embedded-thumbnail, known-generator, and embedded-C2PA choices plus ICC/DPI preservation settings.
+- Added offscreen UI coverage for independent cleanup choices, legacy-safe defaults, persistence, restoration, and non-overlapping layout.
 - Added explicit C2PA export cleanup for bounded PNG `caBX`, JPEG APP11/JUMBF, valid embedded XMP pointers, and supported external manifest references in a new PNG.
 - Added 11 C2PA cleanup tests covering PNG/JPEG containers, remote and `self#jumbf` references, post-`IDAT` XMP, packet/comment/PI preservation, unknown and mixed provenance, duplicate XMP, sidecars, value-safe results, and atomic rollback.
 - Added a selective metadata cleanup core for new PNG exports with independent EXIF, XMP, IPTC, comments/text, embedded-thumbnail, known-generator, ICC, and DPI options.
@@ -89,6 +91,7 @@
 
 ### Verified
 
+- Verified the cleanup UI keeps all removals disabled for legacy configs, preserves ICC/DPI by default, restores every choice independently, and passes 2 focused plus all 65 project tests.
 - Verified 11 focused C2PA cleanup tests and all 63 project tests pass; three review passes closed URI prefix collisions, mixed valid/unknown provenance, post-`IDAT` metadata, XMP structure preservation, and duplicate-key concerns.
 - Verified the cleanup result states that remote manifests, sidecars, signature validity, and pixel soft bindings were not deleted, accessed, removed, or validated.
 - Verified 15 focused metadata-cleanup tests and all 52 project tests pass; the third review pass returned `PASS` after C2PA, alpha, EXIF-overlap, XMP, allowlist, preservation, JPEG-comment, and memory-bound findings were fixed.

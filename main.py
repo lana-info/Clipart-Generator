@@ -2706,6 +2706,15 @@ class MainWindow(QMainWindow):
             "local_ben2_corner_radius": 0,
             "edge_shrink_enabled": False,
             "edge_shrink_pixels": 1,
+            "cleanup_remove_exif": False,
+            "cleanup_remove_xmp": False,
+            "cleanup_remove_iptc": False,
+            "cleanup_remove_comments_text": False,
+            "cleanup_remove_embedded_thumbnail": False,
+            "cleanup_remove_generator_fields": False,
+            "cleanup_remove_embedded_c2pa": False,
+            "cleanup_preserve_icc": True,
+            "cleanup_preserve_dpi": True,
             "kie_upscale_model": "topaz/upscale",
             "kie_upscale_after_model": "topaz/upscale",
             "kie_remove_bg_model": "recraft/remove-background",
@@ -3024,6 +3033,56 @@ class MainWindow(QMainWindow):
         process_flags_layout.setColumnStretch(1, 1)
         process_flags_group.setLayout(process_flags_layout)
         process_tab_layout.addWidget(process_flags_group)
+
+        self.cleanup_group = QGroupBox("Очистка файла")
+        cleanup_layout = QGridLayout()
+        cleanup_layout.setHorizontalSpacing(20)
+        cleanup_layout.setVerticalSpacing(6)
+
+        self.chk_cleanup_remove_exif = QCheckBox("Удалить EXIF")
+        self.chk_cleanup_remove_xmp = QCheckBox("Удалить XMP")
+        self.chk_cleanup_remove_iptc = QCheckBox("Удалить IPTC")
+        self.chk_cleanup_remove_comments_text = QCheckBox("Удалить комментарии/текст")
+        self.chk_cleanup_remove_thumbnail = QCheckBox("Удалить встроенную миниатюру")
+        self.chk_cleanup_remove_generator = QCheckBox("Удалить данные генератора")
+        self.chk_cleanup_remove_c2pa = QCheckBox("Удалить встроенный C2PA")
+        self.chk_cleanup_preserve_icc = QCheckBox("Сохранить ICC-профиль")
+        self.chk_cleanup_preserve_dpi = QCheckBox("Сохранить DPI")
+
+        self.chk_cleanup_remove_exif.setChecked(bool(self.config.get("cleanup_remove_exif", False)))
+        self.chk_cleanup_remove_xmp.setChecked(bool(self.config.get("cleanup_remove_xmp", False)))
+        self.chk_cleanup_remove_iptc.setChecked(bool(self.config.get("cleanup_remove_iptc", False)))
+        self.chk_cleanup_remove_comments_text.setChecked(
+            bool(self.config.get("cleanup_remove_comments_text", False))
+        )
+        self.chk_cleanup_remove_thumbnail.setChecked(
+            bool(self.config.get("cleanup_remove_embedded_thumbnail", False))
+        )
+        self.chk_cleanup_remove_generator.setChecked(
+            bool(self.config.get("cleanup_remove_generator_fields", False))
+        )
+        self.chk_cleanup_remove_c2pa.setChecked(
+            bool(self.config.get("cleanup_remove_embedded_c2pa", False))
+        )
+        self.chk_cleanup_preserve_icc.setChecked(bool(self.config.get("cleanup_preserve_icc", True)))
+        self.chk_cleanup_preserve_dpi.setChecked(bool(self.config.get("cleanup_preserve_dpi", True)))
+        self.chk_cleanup_remove_c2pa.setToolTip(
+            "Удаляет только встроенный манифест и поддерживаемые ссылки из нового PNG"
+        )
+
+        cleanup_layout.addWidget(self.chk_cleanup_remove_exif, 0, 0)
+        cleanup_layout.addWidget(self.chk_cleanup_remove_thumbnail, 0, 1)
+        cleanup_layout.addWidget(self.chk_cleanup_preserve_icc, 0, 2)
+        cleanup_layout.addWidget(self.chk_cleanup_remove_xmp, 1, 0)
+        cleanup_layout.addWidget(self.chk_cleanup_remove_generator, 1, 1)
+        cleanup_layout.addWidget(self.chk_cleanup_preserve_dpi, 1, 2)
+        cleanup_layout.addWidget(self.chk_cleanup_remove_iptc, 2, 0)
+        cleanup_layout.addWidget(self.chk_cleanup_remove_c2pa, 2, 1)
+        cleanup_layout.addWidget(self.chk_cleanup_remove_comments_text, 3, 0)
+        cleanup_layout.setColumnStretch(0, 1)
+        cleanup_layout.setColumnStretch(1, 1)
+        self.cleanup_group.setLayout(cleanup_layout)
+        process_tab_layout.addWidget(self.cleanup_group)
 
         process_tab_layout.addStretch()
 
@@ -3729,6 +3788,15 @@ class MainWindow(QMainWindow):
         self.chk_unsharp.toggled.connect(self.schedule_settings_save)
         self.chk_export_300_dpi.toggled.connect(self.schedule_settings_save)
         self.chk_edge_shrink.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_remove_exif.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_remove_xmp.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_remove_iptc.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_remove_comments_text.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_remove_thumbnail.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_remove_generator.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_remove_c2pa.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_preserve_icc.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_preserve_dpi.toggled.connect(self.schedule_settings_save)
         self.edge_shrink_pixels_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.trim_mode_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.unsharp_amount_spin.valueChanged.connect(self.schedule_settings_save)
@@ -5337,6 +5405,15 @@ class MainWindow(QMainWindow):
         self.config["export_300_dpi"] = self.chk_export_300_dpi.isChecked()
         self.config["edge_shrink_enabled"] = self.chk_edge_shrink.isChecked()
         self.config["edge_shrink_pixels"] = normalize_edge_shrink_pixels(self.edge_shrink_pixels_combo.currentData() or 1)
+        self.config["cleanup_remove_exif"] = self.chk_cleanup_remove_exif.isChecked()
+        self.config["cleanup_remove_xmp"] = self.chk_cleanup_remove_xmp.isChecked()
+        self.config["cleanup_remove_iptc"] = self.chk_cleanup_remove_iptc.isChecked()
+        self.config["cleanup_remove_comments_text"] = self.chk_cleanup_remove_comments_text.isChecked()
+        self.config["cleanup_remove_embedded_thumbnail"] = self.chk_cleanup_remove_thumbnail.isChecked()
+        self.config["cleanup_remove_generator_fields"] = self.chk_cleanup_remove_generator.isChecked()
+        self.config["cleanup_remove_embedded_c2pa"] = self.chk_cleanup_remove_c2pa.isChecked()
+        self.config["cleanup_preserve_icc"] = self.chk_cleanup_preserve_icc.isChecked()
+        self.config["cleanup_preserve_dpi"] = self.chk_cleanup_preserve_dpi.isChecked()
         self.config["trim_mode"] = str(self.trim_mode_combo.currentData() or "alpha")
         self.config["upscale_provider"] = str(self.upscale_provider_combo.currentData() or "kie")
         self.config["upscale_after_provider"] = str(
