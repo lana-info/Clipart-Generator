@@ -6,6 +6,8 @@
 
 - Added PhotoRoom Standard background removal with a separate masked API key, provider selection, PNG/RGBA validation, and process-only routing without KIE.
 - Added network-free PhotoRoom tests for multipart requests, alpha output, failures, provider routing, key locking, validation, and settings persistence.
+- Added independent upscale passes before and after background removal, each with its own provider and scale/model settings plus a combined multiplier indicator.
+- Added focused tests for before-only, after-only, and two-pass upscale order, dimensions, alpha preservation, and legacy config behavior.
 - Added isolated offscreen UI acceptance tests for the window title, work-folder setup, API-key lock, processing-setting persistence, validation, and completion/Stop dialog rules.
 - Added network-free KIE routing tests for worker and UI key validation, generate-only output, mixed local/KIE processing, error reporting, and secret-safe logs.
 - Added focused local-processing acceptance tests covering Real-ESRGAN, PNG/JPG process-only flows, alpha controls, Unsharp Mask, edge shrink, trim, and pipeline order.
@@ -48,7 +50,7 @@
 - Ignored local `realesrgan-ncnn-vulkan-20211212-windows/` binaries and models so they do not get committed.
 - KIE API key validation now depends on the selected processing providers instead of any enabled processing step.
 - Changed the rembg requirement to `rembg[cpu]` so fresh installs include the CPU backend.
-- Fixed the processing order to `upscale -> Unsharp Mask -> remove background -> edge shrink -> trim`.
+- Extended the processing order to `optional upscale before -> Unsharp Mask -> remove background -> optional upscale after -> edge shrink -> trim`.
 - Removed the trim timing selector from the UI; trim now always runs at the end.
 - Reordered the processing controls vertically to match the actual processing order, with each step's parameters on the right.
 - Made Unsharp Mask an independent processing step that can run without upscale.
@@ -66,7 +68,8 @@
 
 ### Verified
 
-- Verified all 20 tests pass in one process, including PhotoRoom Standard, GPT Image 2 routing, real local Real-ESRGAN checks, and isolated main-window acceptance checks.
+- Verified all 24 tests pass in one process, including PhotoRoom Standard, both upscale positions, GPT Image 2 routing, real local Real-ESRGAN checks, and isolated main-window acceptance checks.
+- Verified `2x + 2x` produces `4x`, `4x + 4x` reports `16x`, and post-removal upscale preserves a valid alpha channel.
 - Verified PhotoRoom process-only does not require or call KIE, validates PNG alpha before saving, and never writes its API key to progress logs.
 - PhotoRoom verification used mocked network responses only; no paid live request or credits were used.
 - Verified GPT Image 2 generation and availability probes use the same documented task-model routing without making a live KIE request.

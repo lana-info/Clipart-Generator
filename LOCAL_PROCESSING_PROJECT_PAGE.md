@@ -8,7 +8,7 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## What This Adds
 
-- Local Real-ESRGAN upscale.
+- Independent Local Real-ESRGAN/KIE upscale passes before and after background removal.
 - Optional Unsharp Mask after upscale.
 - Local rembg background removal.
 - Local rembg edge quality presets: `Soft`, `Normal`, `Sharp`.
@@ -37,11 +37,14 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 
 The processing order is fixed:
 
-1. Upscale.
+1. Optional upscale before background removal.
 2. Optional Unsharp Mask.
 3. Remove background.
-4. Edge contour removal.
-5. Final trim.
+4. Optional upscale after background removal.
+5. Edge contour removal.
+6. Final trim.
+
+Each upscale pass has its own provider and scale/model. The UI shows the combined multiplier, for example `2x + 2x = 4x` or `4x + 4x = 16x`.
 
 ## BEN2 Test
 

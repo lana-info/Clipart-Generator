@@ -16,7 +16,7 @@ Clipart Generator должен помогать автору быстро ген
 
 - Генерация изображений через поддерживаемые KIE-модели в режимах text-to-image и image-to-image.
 - Пакетная обработка локальных файлов без обязательной генерации.
-- Апскейл через KIE или Local Real-ESRGAN.
+- Независимый апскейл до и/или после удаления фона через KIE или Local Real-ESRGAN.
 - Удаление фона через KIE, PhotoRoom Standard, Local rembg или экспериментальный Local BEN2.
 - Опциональный Unsharp Mask после апскейла.
 - Опциональное удаление края/контура объекта на `1/2/3 px`.
@@ -29,7 +29,7 @@ Clipart Generator должен помогать автору быстро ген
 
 1. Автор выбирает рабочую папку, вводит промпты, выбирает модель генерации, пропорции и качество, запускает генерацию и получает результаты в `output/`.
 2. Автор выбирает существующие изображения, включает нужные шаги обработки, запускает process-only режим и получает обработанные PNG в `output/`.
-3. Автор выбирает локальный pipeline: Local Real-ESRGAN -> Unsharp Mask -> Local BEN2/rembg -> edge shrink -> trim, чтобы уменьшить стоимость облачной обработки.
+3. Автор выбирает локальный pipeline: optional Real-ESRGAN до фона -> Unsharp Mask -> Local BEN2/rembg -> optional Real-ESRGAN после фона -> edge shrink -> trim.
 4. Автор выбирает смешанный pipeline, когда часть шагов выполняется локально, а часть через KIE.
 5. Автор проверяет промежуточные файлы в `raw/`, если результат выглядит неправильно.
 6. Поддержка выпускает новую версию через существующие build/release документы и не смешивает основной repo с repo обновлений.
@@ -38,12 +38,13 @@ Clipart Generator должен помогать автору быстро ген
 
 Фиксированный порядок обработки:
 
-1. Upscale.
+1. Optional upscale before background removal.
 2. Optional Unsharp Mask.
 3. Remove background.
-4. Edge contour removal.
-5. Final trim.
-6. Save PNG.
+4. Optional upscale after background removal.
+5. Edge contour removal.
+6. Final trim.
+7. Save PNG.
 
 Этот порядок должен оставаться предсказуемым: UI показывает шаги в том же порядке, в котором они выполняются.
 
@@ -94,6 +95,7 @@ Clipart Generator должен помогать автору быстро ген
 - [x] Mixed local/KIE processing требует KIE API key только для KIE-шагов.
 - [x] Local Real-ESRGAN `2x` и `4x` создают изображение ожидаемого размера.
 - [x] Local Real-ESRGAN сохраняет alpha у прозрачных PNG.
+- [x] Апскейл можно независимо включать до фона, после фона или в обеих позициях; общий множитель показывается до запуска.
 - [x] Удаление фона сохраняет PNG с alpha.
 - [x] PhotoRoom Standard работает в process-only без KIE API key и сохраняет PNG/RGBA.
 - [x] Edge shrink меняет только alpha-край и не портит RGB.

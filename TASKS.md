@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
 
-Current next task: **Task 22C - Upscale Before And After Background Removal**.
+Current next task: **Task 23 - Cleanup Capability And Safety Matrix**.
 
 ## Phase 1 - Preparation
 
@@ -300,7 +300,7 @@ Notes:
 
 ## Task 22C - Upscale Before And After Background Removal
 
-Status: Todo
+Status: Done
 
 Goal:
 Allow upscale before background removal, after background removal, or at both positions.
@@ -313,18 +313,21 @@ Steps:
 - Keep edge cleanup and trim after the final upscale pass.
 
 Acceptance:
-- [ ] Before-only, after-only, and both-pass pipelines run in the selected order.
-- [ ] `2x + 2x` produces `4x`; `4x + 4x` clearly reports `16x` before processing.
-- [ ] Transparent PNG alpha remains valid after a post-removal upscale.
-- [ ] Existing configs retain their current before-upscale behavior.
+- [x] Before-only, after-only, and both-pass pipelines run in the selected order.
+- [x] `2x + 2x` produces `4x`; `4x + 4x` clearly reports `16x` before processing.
+- [x] Transparent PNG alpha remains valid after a post-removal upscale.
+- [x] Existing configs retain their current before-upscale behavior.
 
 Verification:
-- [ ] `python -m unittest tests.test_upscale_positions -v`
-- [ ] `python -m unittest discover -s tests -v`
+- [x] `python -m unittest tests.test_upscale_positions -v`
+- [x] `python -m unittest discover -s tests -v`
+
+Notes:
+- Verification passed with 4 focused tests and 24 tests in the full suite. The Settings layout was also rendered offscreen at `1100x900` without control overlap.
 
 ## Task 23 - Cleanup Capability And Safety Matrix
 
-Status: Todo
+Status: Todo - next safe task
 
 Goal:
 Define exactly what can be inspected or removed reliably before adding cleanup controls.

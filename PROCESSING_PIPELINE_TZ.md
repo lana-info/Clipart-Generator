@@ -4,11 +4,12 @@
 
 Добавить в Clipart Generator гибкий пайплайн массовой постобработки клипартов:
 
-1. апскейл изображения;
+1. опциональный апскейл до удаления фона;
 2. удаление фона;
-3. удаление белого/грязного контура по краю объекта;
-4. trim пустых краев;
-5. сохранение готового PNG.
+3. опциональный апскейл после удаления фона;
+4. удаление белого/грязного контура по краю объекта;
+5. trim пустых краев;
+6. сохранение готового PNG.
 
 Главная цель - получить качественные PNG-клипарты для Etsy/маркетплейсов дешевле, стабильнее и с большим контролем, чем при полностью облачной обработке.
 
@@ -24,7 +25,7 @@
   - прозрачные края;
   - белые края;
   - черные края;
-  - позиция trim: до апскейла, между апскейлами, в конце.
+  - trim всегда выполняется в конце.
 - В `requirements.txt` уже есть:
   - `Pillow`;
   - `rembg`;
@@ -34,7 +35,7 @@
 - Добавлен локальный Real-ESRGAN:
   - `realesrgan-ncnn-vulkan-20211212-windows/realesrgan-ncnn-vulkan.exe`;
   - модели в `realesrgan-ncnn-vulkan-20211212-windows/models`;
-  - текущий `upscale.bat` поддерживает photo/clipart и scale 2/3/4.
+  - приложение поддерживает проверенные scale `2x` и `4x`.
 
 ## 3. Основное решение
 
@@ -55,7 +56,6 @@ Real-ESRGAN профили:
 Scale:
 
 - `2x`;
-- `3x`;
 - `4x`.
 
 Default для клипартов:
@@ -116,11 +116,13 @@ KIE остается fallback, если локальная модель дает
 Для большинства клипартов:
 
 1. Исходник.
-2. Апскейл.
-3. Удаление фона.
-4. Удаление контура 1-3 px.
-5. Trim пустых краев.
-6. Сохранение PNG.
+2. Опциональный апскейл до удаления фона.
+3. Опциональный Unsharp Mask.
+4. Удаление фона.
+5. Опциональный апскейл после удаления фона.
+6. Удаление контура 1-3 px.
+7. Trim пустых краев.
+8. Сохранение PNG.
 
 Почему апскейл до удаления фона:
 
@@ -139,9 +141,13 @@ KIE остается fallback, если локальная модель дает
 ```json
 {
   "upscale_provider": "kie",
+  "upscale_after": false,
+  "upscale_after_provider": "local_realesrgan",
   "local_realesrgan_dir": "D:\\WorkOS\\Clipart Generator\\realesrgan-ncnn-vulkan-20211212-windows",
   "local_realesrgan_profile": "clipart",
   "local_realesrgan_scale": 4,
+  "local_realesrgan_after_scale": 4,
+  "kie_upscale_after_model": "topaz/upscale",
   "remove_bg_provider": "kie",
   "photoroom_api_key": "",
   "local_rembg_profile": "clipart",
@@ -162,7 +168,8 @@ KIE остается fallback, если локальная модель дает
 
 Оставить текущие чекбоксы:
 
-- Апскейл;
+- Апскейл до удаления фона;
+- Апскейл после удаления фона;
 - Удаление фона;
 - Trim;
 - Экспорт 300 DPI.
@@ -501,15 +508,16 @@ save PNG
 
 The processing order is fixed:
 
-1. upscale;
+1. optional upscale before background removal;
 2. optional Unsharp Mask;
 3. remove background;
-4. edge contour removal;
-5. final trim.
+4. optional upscale after background removal;
+5. edge contour removal;
+6. final trim.
 
 The trim timing selector is removed from the UI. Trim always runs at the end.
 
-Unsharp Mask runs after upscale and before background removal. Manual settings are available:
+Unsharp Mask runs after the optional first upscale and before background removal. Manual settings are available:
 
 - `Amount`;
 - `Radius`;

@@ -464,15 +464,19 @@ class WorkerThread(QThread):
         self.generation_wait_timeout = max(120, int(settings.get("generation_wait_timeout", 300)))
         self.status_poll_interval = max(5.0, min(60.0, float(settings.get("status_poll_interval", 20))))
 
-        self.upscale = settings.get("upscale", True)
+        # Legacy `upscale` remains the before-background pass for old configs.
+        self.upscale = bool(settings.get("upscale", True))
+        self.upscale_after = bool(settings.get("upscale_after", False))
         self.remove_bg = settings.get("remove_bg", True)
         self.trim_enabled = bool(settings.get("trim_enabled", False))
         self.trim_mode = str(settings.get("trim_mode", "alpha") or "alpha")
         self.export_300_dpi = bool(settings.get("export_300_dpi", False))
         self.kie_upscale_model = settings.get("kie_upscale_model", "topaz/upscale")
+        self.kie_upscale_after_model = settings.get("kie_upscale_after_model", self.kie_upscale_model)
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.upscale_factor = int(settings.get("upscale_factor", 4) or 4)
         self.upscale_provider = settings.get("upscale_provider", "kie")
+        self.upscale_after_provider = settings.get("upscale_after_provider", "local_realesrgan")
         self.unsharp_enabled = bool(settings.get("unsharp_enabled", False))
         self.unsharp_amount = normalize_unsharp_amount(settings.get("unsharp_amount", 30))
         self.unsharp_radius = normalize_unsharp_radius(settings.get("unsharp_radius", 100))
@@ -480,6 +484,9 @@ class WorkerThread(QThread):
         self.local_realesrgan_dir = settings.get("local_realesrgan_dir", "")
         self.local_realesrgan_profile = settings.get("local_realesrgan_profile", "clipart")
         self.local_realesrgan_scale = normalize_local_realesrgan_scale(settings.get("local_realesrgan_scale", 4))
+        self.local_realesrgan_after_scale = normalize_local_realesrgan_scale(
+            settings.get("local_realesrgan_after_scale", self.local_realesrgan_scale)
+        )
         self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
         self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
         self.local_rembg_model = settings.get("local_rembg_model", "birefnet-general")
@@ -525,6 +532,8 @@ class WorkerThread(QThread):
             raise ValueError("Не указан KIE API Key")
         if process_generated and self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
             raise ValueError("Не указан PhotoRoom API Key")
+        if process_generated:
+            self._log_upscale_plan()
 
         raw_dir = os.path.join(self.work_dir, "raw")
         output_dir = os.path.join(self.work_dir, "output")
@@ -560,7 +569,7 @@ class WorkerThread(QThread):
 
                 final_url = image_url
                 if process_generated:
-                    if self.upscale or self.unsharp_enabled or self.remove_bg:
+                    if self.upscale or self.upscale_after or self.unsharp_enabled or self.remove_bg:
                         final_url = self._run_processing_pipeline(source_path, image_url, raw_dir, idx, "gen")
                     elif self.edge_shrink_enabled:
                         final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "gen")
@@ -606,11 +615,19 @@ class WorkerThread(QThread):
     def _mode2_process_files(self, emit_final=True):
         self.progress.emit("Mode 2: Обработка существующих файлов")
         self.progress.emit(f"Рабочая папка: {self.work_dir}")
+        self._log_upscale_plan()
 
-        if not (self.upscale or self.unsharp_enabled or self.remove_bg or self.trim_enabled or self.edge_shrink_enabled):
+        if not (
+            self.upscale
+            or self.upscale_after
+            or self.unsharp_enabled
+            or self.remove_bg
+            or self.trim_enabled
+            or self.edge_shrink_enabled
+        ):
             raise ValueError("Включите хотя бы один этап: апскейл, удаление фона или trim")
 
-        if (self._uses_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
+        if (self._uses_any_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
         if self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
             raise ValueError("Не указан PhotoRoom API Key")
@@ -641,7 +658,7 @@ class WorkerThread(QThread):
 
                 source_path = file_path
 
-                if self.upscale or self.unsharp_enabled or self.remove_bg:
+                if self.upscale or self.upscale_after or self.unsharp_enabled or self.remove_bg:
                     final_url = self._run_processing_pipeline(source_path, None, raw_dir, idx, "file")
                 elif self.edge_shrink_enabled:
                     final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "file")
@@ -677,6 +694,40 @@ class WorkerThread(QThread):
     def _uses_kie_upscale(self):
         return self.upscale and not self._uses_local_upscale()
 
+    def _uses_local_upscale_after(self):
+        return self.upscale_after and self.upscale_after_provider == "local_realesrgan"
+
+    def _uses_kie_upscale_after(self):
+        return self.upscale_after and not self._uses_local_upscale_after()
+
+    def _uses_any_kie_upscale(self):
+        return self._uses_kie_upscale() or self._uses_kie_upscale_after()
+
+    def _upscale_pass_factor(self, provider, local_scale, kie_model):
+        if provider == "local_realesrgan":
+            return normalize_local_realesrgan_scale(local_scale)
+        return self._resolve_upscale_factor(kie_model)
+
+    def _combined_upscale_factor(self):
+        factor = 1
+        if self.upscale:
+            factor *= self._upscale_pass_factor(
+                self.upscale_provider,
+                self.local_realesrgan_scale,
+                self.kie_upscale_model,
+            )
+        if self.upscale_after:
+            factor *= self._upscale_pass_factor(
+                self.upscale_after_provider,
+                self.local_realesrgan_after_scale,
+                self.kie_upscale_after_model,
+            )
+        return factor
+
+    def _log_upscale_plan(self):
+        if self.upscale or self.upscale_after:
+            self.progress.emit(f"Итоговая кратность апскейла: {self._combined_upscale_factor()}x")
+
     def _uses_local_rembg_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_rembg"
 
@@ -695,6 +746,7 @@ class WorkerThread(QThread):
     def _can_use_legacy_kie_processing_pipeline(self):
         return (
             self._uses_kie_upscale()
+            and not self.upscale_after
             and not self._uses_local_remove_bg()
             and not self._uses_photoroom_remove_bg()
             and not self.edge_shrink_enabled
@@ -728,23 +780,17 @@ class WorkerThread(QThread):
         local_result = False
 
         if self.upscale:
-            if self._uses_local_upscale():
-                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-                current_path = self._local_realesrgan_pipeline_step(current_path, raw_dir, idx, prefix, "upscaled")
-                current_url = None
-                local_result = True
-            else:
-                current_url = self._ensure_kie_url(current_url, current_path)
-                current_url = self._upscale_pipeline_step(
-                    current_url,
-                    raw_dir,
-                    idx,
-                    prefix,
-                    "upscaled",
-                    self._resolve_upscale_factor(),
-                )
-                current_path = os.path.join(raw_dir, f"{prefix}_upscaled_{idx:03d}_{self.run_stamp}.png")
-                local_result = False
+            current_path, current_url, local_result = self._run_upscale_pass(
+                current_path=current_path,
+                current_url=current_url,
+                raw_dir=raw_dir,
+                idx=idx,
+                prefix=prefix,
+                step_name="upscaled_before",
+                provider=self.upscale_provider,
+                local_scale=self.local_realesrgan_scale,
+                kie_model=self.kie_upscale_model,
+            )
 
         if self.unsharp_enabled:
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
@@ -794,6 +840,19 @@ class WorkerThread(QThread):
                 current_path = nobg_path
                 local_result = False
 
+        if self.upscale_after:
+            current_path, current_url, local_result = self._run_upscale_pass(
+                current_path=current_path,
+                current_url=current_url,
+                raw_dir=raw_dir,
+                idx=idx,
+                prefix=prefix,
+                step_name="upscaled_after",
+                provider=self.upscale_after_provider,
+                local_scale=self.local_realesrgan_after_scale,
+                kie_model=self.kie_upscale_after_model,
+            )
+
         if self.edge_shrink_enabled:
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
             if self.remove_bg or self._has_alpha_channel(current_path):
@@ -804,6 +863,57 @@ class WorkerThread(QThread):
                 self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
 
         return current_path if local_result else current_url
+
+    def _run_upscale_pass(
+        self,
+        current_path,
+        current_url,
+        raw_dir,
+        idx,
+        prefix,
+        step_name,
+        provider,
+        local_scale,
+        kie_model,
+    ):
+        if provider == "local_realesrgan":
+            current_path = self._ensure_local_path(
+                current_path,
+                current_url,
+                raw_dir,
+                idx,
+                prefix,
+                f"{step_name}_source",
+            )
+            previous_scale = getattr(self, "_active_local_realesrgan_scale", None)
+            self._active_local_realesrgan_scale = normalize_local_realesrgan_scale(local_scale)
+            try:
+                current_path = self._local_realesrgan_pipeline_step(
+                    current_path,
+                    raw_dir,
+                    idx,
+                    prefix,
+                    step_name,
+                )
+            finally:
+                if previous_scale is None:
+                    del self._active_local_realesrgan_scale
+                else:
+                    self._active_local_realesrgan_scale = previous_scale
+            return current_path, None, True
+
+        current_url = self._ensure_kie_url(current_url, current_path)
+        current_url = self._upscale_pipeline_step(
+            current_url,
+            raw_dir,
+            idx,
+            prefix,
+            step_name,
+            self._resolve_upscale_factor(kie_model),
+            model_name=kie_model,
+        )
+        current_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
+        return current_path, current_url, False
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
@@ -829,19 +939,29 @@ class WorkerThread(QThread):
 
         return pipeline_url
 
-    def _upscale_pipeline_step(self, image_url, raw_dir, idx, prefix, step_name, upscale_factor):
-        self.progress.emit(f"  Апскейл через {self.kie_upscale_model}...")
-        if self.kie_upscale_model == "topaz/upscale":
+    def _upscale_pipeline_step(
+        self,
+        image_url,
+        raw_dir,
+        idx,
+        prefix,
+        step_name,
+        upscale_factor,
+        model_name=None,
+    ):
+        model_name = (model_name or self.kie_upscale_model).strip()
+        self.progress.emit(f"  Апскейл через {model_name}...")
+        if model_name == "topaz/upscale":
             upscale_input = {
                 "image_url": image_url,
                 "upscale_factor": str(upscale_factor),
             }
-        elif self.kie_upscale_model == "recraft/crisp-upscale":
+        elif model_name == "recraft/crisp-upscale":
             upscale_input = None
         else:
             upscale_input = {"scale": upscale_factor}
         self.progress.emit(f"  Кратность апскейла: {upscale_factor}x")
-        pipeline_url = self._kie_run_model_task(self.kie_upscale_model, image_url, extra_input=upscale_input)
+        pipeline_url = self._kie_run_model_task(model_name, image_url, extra_input=upscale_input)
         upscaled_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
         self._download_file(pipeline_url, upscaled_path)
         self.progress.emit(f"  Промежуточный апскейл: {upscaled_path}")
@@ -849,10 +969,12 @@ class WorkerThread(QThread):
 
     def _local_realesrgan_pipeline_step(self, input_path, raw_dir, idx, prefix, step_name):
         upscaled_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
-        scale = normalize_local_realesrgan_scale(self.local_realesrgan_scale)
+        scale = normalize_local_realesrgan_scale(
+            getattr(self, "_active_local_realesrgan_scale", self.local_realesrgan_scale)
+        )
         model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
         self.progress.emit(f"  Локальный апскейл Real-ESRGAN: {model_name}, {scale}x...")
-        self._run_local_realesrgan(input_path, upscaled_path)
+        self._run_local_realesrgan(input_path, upscaled_path, scale=scale)
         self.progress.emit(f"  Промежуточный локальный апскейл: {upscaled_path}")
         return upscaled_path
 
@@ -866,12 +988,12 @@ class WorkerThread(QThread):
         self.progress.emit(f"  Промежуточная резкость: {output_path}")
         return output_path
 
-    def _run_local_realesrgan(self, input_path, output_path):
+    def _run_local_realesrgan(self, input_path, output_path, scale=None):
         exe_path, error_message = validate_local_realesrgan_exe(self.local_realesrgan_dir)
         if error_message:
             raise ValueError(error_message)
 
-        scale = normalize_local_realesrgan_scale(self.local_realesrgan_scale)
+        scale = normalize_local_realesrgan_scale(scale or self.local_realesrgan_scale)
         model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
         actual_input_path = input_path
         alpha_channel = None
@@ -1178,8 +1300,8 @@ class WorkerThread(QThread):
             return False
         return extrema[0] == 255 and extrema[1] == 255
 
-    def _resolve_upscale_factor(self):
-        model_name = (self.kie_upscale_model or "").strip()
+    def _resolve_upscale_factor(self, model_name=None):
+        model_name = (model_name or self.kie_upscale_model or "").strip()
         if model_name == "recraft/crisp-upscale":
             return 4
         if model_name == "topaz/upscale":
@@ -2556,11 +2678,13 @@ class MainWindow(QMainWindow):
             "reference_generation_resolution": "1K",
             "remove_bg": True,
             "upscale": True,
+            "upscale_after": False,
             "trim_enabled": False,
             "trim_mode": "alpha",
             "export_300_dpi": False,
             "upscale_factor": 4,
             "upscale_provider": "kie",
+            "upscale_after_provider": "local_realesrgan",
             "unsharp_enabled": False,
             "unsharp_amount": 30,
             "unsharp_radius": 100,
@@ -2571,6 +2695,7 @@ class MainWindow(QMainWindow):
             ),
             "local_realesrgan_profile": "clipart",
             "local_realesrgan_scale": 4,
+            "local_realesrgan_after_scale": 4,
             "remove_bg_provider": "kie",
             "local_rembg_profile": "clipart",
             "local_rembg_model": "birefnet-general",
@@ -2582,6 +2707,7 @@ class MainWindow(QMainWindow):
             "edge_shrink_enabled": False,
             "edge_shrink_pixels": 1,
             "kie_upscale_model": "topaz/upscale",
+            "kie_upscale_after_model": "topaz/upscale",
             "kie_remove_bg_model": "recraft/remove-background",
             "run_mode": "generate_only",
             "prompt_input_mode": "list",
@@ -2822,8 +2948,12 @@ class MainWindow(QMainWindow):
         process_flags_layout = QGridLayout()
         process_flags_layout.setHorizontalSpacing(12)
         process_flags_layout.setVerticalSpacing(8)
-        self.chk_upscale = QCheckBox("Апскейл")
+        self.chk_upscale = QCheckBox("Апскейл до удаления фона")
         self.chk_upscale.setChecked(self.config.get("upscale", True))
+        self.chk_upscale_after = QCheckBox("Апскейл после удаления фона")
+        self.chk_upscale_after.setChecked(bool(self.config.get("upscale_after", False)))
+        self.upscale_total_label = QLabel("")
+        self.upscale_total_label.setStyleSheet("color:#14b8a6; font-weight:700;")
         self.chk_remove_bg = QCheckBox("Удаление фона")
         self.chk_remove_bg.setChecked(self.config.get("remove_bg", True))
         self.chk_trim = QCheckBox("Trim (обрезка пустых краёв)")
@@ -2884,11 +3014,13 @@ class MainWindow(QMainWindow):
         process_flags_layout.addWidget(self.chk_unsharp, 1, 0)
         process_flags_layout.addWidget(unsharp_params_widget, 1, 1)
         process_flags_layout.addWidget(self.chk_remove_bg, 2, 0)
-        process_flags_layout.addWidget(self.chk_edge_shrink, 3, 0)
-        process_flags_layout.addWidget(self.edge_shrink_pixels_combo, 3, 1)
-        process_flags_layout.addWidget(self.chk_trim, 4, 0)
-        process_flags_layout.addWidget(trim_params_widget, 4, 1)
-        process_flags_layout.addWidget(self.chk_export_300_dpi, 5, 0)
+        process_flags_layout.addWidget(self.chk_upscale_after, 3, 0)
+        process_flags_layout.addWidget(self.upscale_total_label, 3, 1)
+        process_flags_layout.addWidget(self.chk_edge_shrink, 4, 0)
+        process_flags_layout.addWidget(self.edge_shrink_pixels_combo, 4, 1)
+        process_flags_layout.addWidget(self.chk_trim, 5, 0)
+        process_flags_layout.addWidget(trim_params_widget, 5, 1)
+        process_flags_layout.addWidget(self.chk_export_300_dpi, 6, 0)
         process_flags_layout.setColumnStretch(1, 1)
         process_flags_group.setLayout(process_flags_layout)
         process_tab_layout.addWidget(process_flags_group)
@@ -3036,6 +3168,17 @@ class MainWindow(QMainWindow):
         upscale_provider_index = self.upscale_provider_combo.findData(upscale_provider)
         self.upscale_provider_combo.setCurrentIndex(upscale_provider_index if upscale_provider_index >= 0 else 0)
 
+        self.upscale_after_provider_combo = QComboBox()
+        self.upscale_after_provider_combo.addItem("KIE", "kie")
+        self.upscale_after_provider_combo.addItem("Local Real-ESRGAN", "local_realesrgan")
+        upscale_after_provider = str(
+            self.config.get("upscale_after_provider", "local_realesrgan") or "local_realesrgan"
+        )
+        upscale_after_provider_index = self.upscale_after_provider_combo.findData(upscale_after_provider)
+        self.upscale_after_provider_combo.setCurrentIndex(
+            upscale_after_provider_index if upscale_after_provider_index >= 0 else 1
+        )
+
         self.local_realesrgan_dir_input = QLineEdit()
         self.local_realesrgan_dir_input.setText(str(self.config.get("local_realesrgan_dir", "") or ""))
 
@@ -3057,11 +3200,30 @@ class MainWindow(QMainWindow):
             local_realesrgan_scale_index if local_realesrgan_scale_index >= 0 else 2
         )
 
+        self.local_realesrgan_after_scale_combo = QComboBox()
+        for scale_value in (2, 4):
+            self.local_realesrgan_after_scale_combo.addItem(f"{scale_value}x", scale_value)
+        local_realesrgan_after_scale = int(self.config.get("local_realesrgan_after_scale", 4) or 4)
+        local_realesrgan_after_scale_index = self.local_realesrgan_after_scale_combo.findData(
+            local_realesrgan_after_scale
+        )
+        self.local_realesrgan_after_scale_combo.setCurrentIndex(
+            local_realesrgan_after_scale_index if local_realesrgan_after_scale_index >= 0 else 1
+        )
+
         self.kie_upscale_model_combo = QComboBox()
         self.kie_upscale_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
         uim = self.config.get("kie_upscale_model", "topaz/upscale")
         ui_index = self.kie_upscale_model_combo.findText(uim)
         self.kie_upscale_model_combo.setCurrentIndex(ui_index if ui_index >= 0 else 0)
+
+        self.kie_upscale_after_model_combo = QComboBox()
+        self.kie_upscale_after_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
+        upscale_after_model = self.config.get("kie_upscale_after_model", uim)
+        upscale_after_model_index = self.kie_upscale_after_model_combo.findText(upscale_after_model)
+        self.kie_upscale_after_model_combo.setCurrentIndex(
+            upscale_after_model_index if upscale_after_model_index >= 0 else 0
+        )
 
         self.remove_bg_provider_combo = QComboBox()
         self.remove_bg_provider_combo.addItem("KIE", "kie")
@@ -3134,6 +3296,9 @@ class MainWindow(QMainWindow):
         self.kie_upscale_price_label = QLabel("")
         self.kie_upscale_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
         self.kie_upscale_price_label.setMinimumWidth(120)
+        self.kie_upscale_after_price_label = QLabel("")
+        self.kie_upscale_after_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
+        self.kie_upscale_after_price_label.setMinimumWidth(120)
         self.kie_remove_bg_price_label = QLabel("")
         self.kie_remove_bg_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
         self.kie_remove_bg_price_label.setMinimumWidth(120)
@@ -3146,6 +3311,14 @@ class MainWindow(QMainWindow):
         kie_upscale_model_layout.addWidget(self.kie_upscale_price_label)
         kie_upscale_model_layout.addStretch()
 
+        kie_upscale_after_model_widget = QWidget()
+        kie_upscale_after_model_layout = QHBoxLayout(kie_upscale_after_model_widget)
+        kie_upscale_after_model_layout.setContentsMargins(0, 0, 0, 0)
+        kie_upscale_after_model_layout.setSpacing(8)
+        kie_upscale_after_model_layout.addWidget(self.kie_upscale_after_model_combo)
+        kie_upscale_after_model_layout.addWidget(self.kie_upscale_after_price_label)
+        kie_upscale_after_model_layout.addStretch()
+
         kie_remove_bg_model_widget = QWidget()
         kie_remove_bg_model_layout = QHBoxLayout(kie_remove_bg_model_widget)
         kie_remove_bg_model_layout.setContentsMargins(0, 0, 0, 0)
@@ -3156,10 +3329,13 @@ class MainWindow(QMainWindow):
 
         process_settings_field_width = 190
         self.upscale_provider_combo.setFixedSize(process_settings_field_width, 32)
+        self.upscale_after_provider_combo.setFixedSize(process_settings_field_width, 32)
         self.local_realesrgan_dir_input.setFixedSize(process_settings_field_width * 2 + 10, 32)
         self.local_realesrgan_profile_combo.setFixedSize(process_settings_field_width, 32)
         self.local_realesrgan_scale_combo.setFixedSize(110, 32)
+        self.local_realesrgan_after_scale_combo.setFixedSize(110, 32)
         self.kie_upscale_model_combo.setFixedSize(process_settings_field_width, 32)
+        self.kie_upscale_after_model_combo.setFixedSize(process_settings_field_width, 32)
         self.remove_bg_provider_combo.setFixedSize(process_settings_field_width, 32)
         self.local_rembg_profile_combo.setFixedSize(process_settings_field_width, 32)
         self.local_rembg_model_combo.setFixedSize(process_settings_field_width, 32)
@@ -3169,16 +3345,22 @@ class MainWindow(QMainWindow):
         self.local_ben2_corner_radius_combo.setFixedSize(72, 32)
         self.kie_remove_bg_model_combo.setFixedSize(process_settings_field_width, 32)
 
-        lbl_upscale_provider = QLabel("Апскейл провайдер:")
+        lbl_upscale_provider = QLabel("До фона провайдер:")
         lbl_upscale_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_local_realesrgan_dir = QLabel("Real-ESRGAN папка:")
         lbl_local_realesrgan_dir.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_local_realesrgan_profile = QLabel("Real-ESRGAN профиль:")
         lbl_local_realesrgan_profile.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_realesrgan_scale = QLabel("Scale:")
+        lbl_local_realesrgan_scale = QLabel("До фона scale:")
         lbl_local_realesrgan_scale.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_upscale_model = QLabel("Апскейл модель:")
+        lbl_upscale_model = QLabel("До фона модель:")
         lbl_upscale_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_upscale_after_provider = QLabel("После фона провайдер:")
+        lbl_upscale_after_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_local_realesrgan_after_scale = QLabel("После фона scale:")
+        lbl_local_realesrgan_after_scale.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_upscale_after_model = QLabel("После фона модель:")
+        lbl_upscale_after_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_remove_bg_provider = QLabel("Фон провайдер:")
         lbl_remove_bg_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_local_rembg_profile = QLabel("rembg профиль:")
@@ -3215,18 +3397,24 @@ class MainWindow(QMainWindow):
         process_settings_layout.addWidget(self.local_realesrgan_scale_combo, 2, 3)
         process_settings_layout.addWidget(lbl_upscale_model, 3, 0)
         process_settings_layout.addWidget(kie_upscale_model_widget, 3, 1, 1, 3)
-        process_settings_layout.addWidget(lbl_remove_bg_provider, 4, 0)
-        process_settings_layout.addWidget(self.remove_bg_provider_combo, 4, 1)
-        process_settings_layout.addWidget(lbl_local_rembg_profile, 5, 0)
-        process_settings_layout.addWidget(self.local_rembg_profile_combo, 5, 1)
-        process_settings_layout.addWidget(lbl_local_rembg_model, 5, 2)
-        process_settings_layout.addWidget(self.local_rembg_model_combo, 5, 3)
-        process_settings_layout.addWidget(lbl_local_rembg_edge_quality, 6, 0)
-        process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 6, 1)
-        process_settings_layout.addWidget(lbl_local_ben2, 7, 0)
-        process_settings_layout.addWidget(local_ben2_widget, 7, 1, 1, 3)
-        process_settings_layout.addWidget(lbl_remove_bg, 8, 0)
-        process_settings_layout.addWidget(kie_remove_bg_model_widget, 8, 1, 1, 3)
+        process_settings_layout.addWidget(lbl_upscale_after_provider, 4, 0)
+        process_settings_layout.addWidget(self.upscale_after_provider_combo, 4, 1)
+        process_settings_layout.addWidget(lbl_local_realesrgan_after_scale, 4, 2)
+        process_settings_layout.addWidget(self.local_realesrgan_after_scale_combo, 4, 3)
+        process_settings_layout.addWidget(lbl_upscale_after_model, 5, 0)
+        process_settings_layout.addWidget(kie_upscale_after_model_widget, 5, 1, 1, 3)
+        process_settings_layout.addWidget(lbl_remove_bg_provider, 6, 0)
+        process_settings_layout.addWidget(self.remove_bg_provider_combo, 6, 1)
+        process_settings_layout.addWidget(lbl_local_rembg_profile, 7, 0)
+        process_settings_layout.addWidget(self.local_rembg_profile_combo, 7, 1)
+        process_settings_layout.addWidget(lbl_local_rembg_model, 7, 2)
+        process_settings_layout.addWidget(self.local_rembg_model_combo, 7, 3)
+        process_settings_layout.addWidget(lbl_local_rembg_edge_quality, 8, 0)
+        process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 8, 1)
+        process_settings_layout.addWidget(lbl_local_ben2, 9, 0)
+        process_settings_layout.addWidget(local_ben2_widget, 9, 1, 1, 3)
+        process_settings_layout.addWidget(lbl_remove_bg, 10, 0)
+        process_settings_layout.addWidget(kie_remove_bg_model_widget, 10, 1, 1, 3)
         process_settings_group.setLayout(process_settings_layout)
         settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -3271,12 +3459,20 @@ class MainWindow(QMainWindow):
         self.update_edge_shrink_controls_state()
         self.update_unsharp_controls_state()
         self.update_upscale_provider_controls_state()
+        self.update_upscale_total_label()
         self.update_remove_bg_provider_controls_state()
         self.chk_trim.toggled.connect(self.update_trim_controls_state)
         self.chk_edge_shrink.toggled.connect(self.update_edge_shrink_controls_state)
         self.chk_unsharp.toggled.connect(self.update_unsharp_controls_state)
         self.trim_mode_combo.currentIndexChanged.connect(self.update_trim_controls_state)
         self.upscale_provider_combo.currentIndexChanged.connect(self.update_upscale_provider_controls_state)
+        self.upscale_after_provider_combo.currentIndexChanged.connect(self.update_upscale_provider_controls_state)
+        self.chk_upscale.toggled.connect(self.update_upscale_total_label)
+        self.chk_upscale_after.toggled.connect(self.update_upscale_total_label)
+        self.local_realesrgan_scale_combo.currentIndexChanged.connect(self.update_upscale_total_label)
+        self.local_realesrgan_after_scale_combo.currentIndexChanged.connect(self.update_upscale_total_label)
+        self.kie_upscale_model_combo.currentIndexChanged.connect(self.update_upscale_total_label)
+        self.kie_upscale_after_model_combo.currentIndexChanged.connect(self.update_upscale_total_label)
         self.remove_bg_provider_combo.currentIndexChanged.connect(self.update_remove_bg_provider_controls_state)
         self.on_mode_changed(True)
 
@@ -3435,8 +3631,10 @@ class MainWindow(QMainWindow):
 
     def refresh_processing_price_labels(self, *_):
         upscale_model = self.kie_upscale_model_combo.currentText().strip()
+        upscale_after_model = self.kie_upscale_after_model_combo.currentText().strip()
         remove_bg_model = self.kie_remove_bg_model_combo.currentText().strip()
         self.kie_upscale_price_label.setText(PROCESSING_PRICING.get(upscale_model, "-"))
+        self.kie_upscale_after_price_label.setText(PROCESSING_PRICING.get(upscale_after_model, "-"))
         self.kie_remove_bg_price_label.setText(PROCESSING_PRICING.get(remove_bg_model, "-"))
 
     def create_template_values_table(self, placeholder_prefix):
@@ -3525,6 +3723,7 @@ class MainWindow(QMainWindow):
         self.reference_ratio_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
         self.reference_resolution_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
         self.chk_upscale.toggled.connect(self.schedule_settings_save)
+        self.chk_upscale_after.toggled.connect(self.schedule_settings_save)
         self.chk_remove_bg.toggled.connect(self.schedule_settings_save)
         self.chk_trim.toggled.connect(self.schedule_settings_save)
         self.chk_unsharp.toggled.connect(self.schedule_settings_save)
@@ -3536,11 +3735,15 @@ class MainWindow(QMainWindow):
         self.unsharp_radius_spin.valueChanged.connect(self.schedule_settings_save)
         self.unsharp_threshold_spin.valueChanged.connect(self.schedule_settings_save)
         self.upscale_provider_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.upscale_after_provider_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_realesrgan_dir_input.textChanged.connect(self.schedule_settings_save)
         self.local_realesrgan_profile_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_realesrgan_scale_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.local_realesrgan_after_scale_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_upscale_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.kie_upscale_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
+        self.kie_upscale_after_model_combo.currentTextChanged.connect(self.schedule_settings_save)
+        self.kie_upscale_after_model_combo.currentTextChanged.connect(self.refresh_processing_price_labels)
         self.remove_bg_provider_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_rembg_profile_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.local_rembg_model_combo.currentTextChanged.connect(self.schedule_settings_save)
@@ -3572,10 +3775,41 @@ class MainWindow(QMainWindow):
         self.unsharp_threshold_spin.setEnabled(unsharp_enabled)
 
     def update_upscale_provider_controls_state(self, *_):
-        is_local_realesrgan = self.upscale_provider_combo.currentData() == "local_realesrgan"
-        self.local_realesrgan_dir_input.setEnabled(is_local_realesrgan)
-        self.local_realesrgan_profile_combo.setEnabled(is_local_realesrgan)
-        self.local_realesrgan_scale_combo.setEnabled(is_local_realesrgan)
+        before_is_local = self.upscale_provider_combo.currentData() == "local_realesrgan"
+        after_is_local = self.upscale_after_provider_combo.currentData() == "local_realesrgan"
+        self.local_realesrgan_dir_input.setEnabled(before_is_local or after_is_local)
+        self.local_realesrgan_profile_combo.setEnabled(before_is_local or after_is_local)
+        self.local_realesrgan_scale_combo.setEnabled(before_is_local)
+        self.local_realesrgan_after_scale_combo.setEnabled(after_is_local)
+        self.kie_upscale_model_combo.setEnabled(not before_is_local)
+        self.kie_upscale_price_label.setEnabled(not before_is_local)
+        self.kie_upscale_after_model_combo.setEnabled(not after_is_local)
+        self.kie_upscale_after_price_label.setEnabled(not after_is_local)
+        self.update_upscale_total_label()
+
+    def _ui_upscale_pass_factor(self, provider_combo, local_scale_combo, kie_model_combo):
+        if provider_combo.currentData() == "local_realesrgan":
+            return normalize_local_realesrgan_scale(local_scale_combo.currentData() or 4)
+        model_name = kie_model_combo.currentText().strip()
+        if model_name == "topaz/upscale":
+            return 8
+        return 4
+
+    def update_upscale_total_label(self, *_):
+        factor = 1
+        if self.chk_upscale.isChecked():
+            factor *= self._ui_upscale_pass_factor(
+                self.upscale_provider_combo,
+                self.local_realesrgan_scale_combo,
+                self.kie_upscale_model_combo,
+            )
+        if self.chk_upscale_after.isChecked():
+            factor *= self._ui_upscale_pass_factor(
+                self.upscale_after_provider_combo,
+                self.local_realesrgan_after_scale_combo,
+                self.kie_upscale_after_model_combo,
+            )
+        self.upscale_total_label.setText(f"Итоговый масштаб: {factor}x")
 
     def update_remove_bg_provider_controls_state(self, *_):
         is_kie = self.remove_bg_provider_combo.currentData() == "kie"
@@ -4285,7 +4519,13 @@ class MainWindow(QMainWindow):
     def _uses_local_realesrgan_for_run(self, run_mode):
         if run_mode not in {"process_only", "both"}:
             return False
-        return self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() == "local_realesrgan"
+        return (
+            self.chk_upscale.isChecked()
+            and self.upscale_provider_combo.currentData() == "local_realesrgan"
+        ) or (
+            self.chk_upscale_after.isChecked()
+            and self.upscale_after_provider_combo.currentData() == "local_realesrgan"
+        )
 
     def validate_local_realesrgan_selection(self, run_mode):
         if not self._uses_local_realesrgan_for_run(run_mode):
@@ -4310,6 +4550,10 @@ class MainWindow(QMainWindow):
         needs_kie_api = (
             not self.radio_run_process.isChecked()
             or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() != "local_realesrgan")
+            or (
+                self.chk_upscale_after.isChecked()
+                and self.upscale_after_provider_combo.currentData() != "local_realesrgan"
+            )
             or (
                 self.chk_remove_bg.isChecked()
                 and self.remove_bg_provider_combo.currentData() == "kie"
@@ -4342,6 +4586,7 @@ class MainWindow(QMainWindow):
                 return
             if not (
                 self.chk_upscale.isChecked()
+                or self.chk_upscale_after.isChecked()
                 or self.chk_unsharp.isChecked()
                 or self.chk_remove_bg.isChecked()
                 or self.chk_trim.isChecked()
@@ -5083,6 +5328,7 @@ class MainWindow(QMainWindow):
         self.config["generation_size"] = self.config["text_generation_ratio"]
         self.config["remove_bg"] = self.chk_remove_bg.isChecked()
         self.config["upscale"] = self.chk_upscale.isChecked()
+        self.config["upscale_after"] = self.chk_upscale_after.isChecked()
         self.config["trim_enabled"] = self.chk_trim.isChecked()
         self.config["unsharp_enabled"] = self.chk_unsharp.isChecked()
         self.config["unsharp_amount"] = normalize_unsharp_amount(self.unsharp_amount_spin.value())
@@ -5093,9 +5339,15 @@ class MainWindow(QMainWindow):
         self.config["edge_shrink_pixels"] = normalize_edge_shrink_pixels(self.edge_shrink_pixels_combo.currentData() or 1)
         self.config["trim_mode"] = str(self.trim_mode_combo.currentData() or "alpha")
         self.config["upscale_provider"] = str(self.upscale_provider_combo.currentData() or "kie")
+        self.config["upscale_after_provider"] = str(
+            self.upscale_after_provider_combo.currentData() or "local_realesrgan"
+        )
         self.config["local_realesrgan_dir"] = self.local_realesrgan_dir_input.text().strip()
         self.config["local_realesrgan_profile"] = str(self.local_realesrgan_profile_combo.currentData() or "clipart")
         self.config["local_realesrgan_scale"] = int(self.local_realesrgan_scale_combo.currentData() or 4)
+        self.config["local_realesrgan_after_scale"] = int(
+            self.local_realesrgan_after_scale_combo.currentData() or 4
+        )
         self.config["remove_bg_provider"] = str(self.remove_bg_provider_combo.currentData() or "kie")
         self.config["local_rembg_profile"] = str(self.local_rembg_profile_combo.currentData() or "clipart")
         self.config["local_rembg_model"] = str(self.local_rembg_model_combo.currentData() or "birefnet-general")
@@ -5113,6 +5365,7 @@ class MainWindow(QMainWindow):
             self.local_ben2_corner_radius_combo.currentData()
         )
         self.config["kie_upscale_model"] = self.kie_upscale_model_combo.currentText()
+        self.config["kie_upscale_after_model"] = self.kie_upscale_after_model_combo.currentText()
         self.config["kie_remove_bg_model"] = self.kie_remove_bg_model_combo.currentText()
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL
         self.config["prompt_input_mode"] = "list"
