@@ -59,6 +59,71 @@ class KieRoutingTests(unittest.TestCase):
         messages = "\n".join([*progress, *finished])
         self.assertNotIn(DUMMY_KIE_KEY, messages)
 
+    def test_gpt_image_2_routes_documented_task_models(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        task_models = []
+
+        def fake_create_task(worker_self, model, input_payload):
+            task_models.append(model)
+            self.assertIsInstance(input_payload, dict)
+            return f"task-{len(task_models)}"
+
+        def fake_wait_result(worker_self, task_id):
+            return f"mock://{task_id}"
+
+        worker._kie_create_task = types.MethodType(fake_create_task, worker)
+        worker._kie_wait_result = types.MethodType(fake_wait_result, worker)
+
+        worker._kie_generate_generic_model("gpt-image-2", "text prompt")
+        worker._kie_generate_generic_model(
+            "gpt-image-2",
+            "reference prompt",
+            ["mock://reference.png"],
+        )
+
+        self.assertEqual(
+            task_models,
+            ["gpt-image-2-text-to-image", "gpt-image-2-image-to-image"],
+        )
+        self.assertEqual(
+            main.resolve_kie_generation_model("nano-banana-2", False),
+            "nano-banana-2",
+        )
+
+    def test_gpt_image_2_probe_and_saved_ids_use_the_same_routing(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+
+        text_variant = worker._build_text_probe_variants(
+            "gpt-image-2", "test", "1:1", "1024x1024"
+        )[0]
+        reference_variant = worker._build_reference_probe_variants(
+            "gpt-image-2",
+            "test",
+            "mock://reference.png",
+            "1:1",
+            "1024x1024",
+        )[0]
+
+        self.assertEqual(text_variant["model"], "gpt-image-2-text-to-image")
+        self.assertEqual(reference_variant["model"], "gpt-image-2-image-to-image")
+        for endpoint_id in (
+            "gpt-image-2-text-to-image",
+            "gpt-image-2-image-to-image",
+        ):
+            self.assertEqual(worker._normalize_generation_model(endpoint_id), "gpt-image-2")
+            self.assertEqual(
+                main.MainWindow._normalize_generation_model_id(None, endpoint_id),
+                "gpt-image-2",
+            )
+
     def test_provider_combinations_require_key_only_for_kie_steps(self):
         cases = [
             (

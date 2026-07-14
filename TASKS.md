@@ -241,6 +241,33 @@ Verification:
 Notes:
 - Closed with 14 passing tests. Live KIE and release-only visual/build checks remain intentionally open until an explicit release request.
 
+## Task 22A - GPT Image 2 KIE Model Routing Hotfix
+
+Status: Done
+
+Goal:
+Restore GPT Image 2 generation in the current application without importing release-only changes from the 1.0.3 hotfix branch.
+
+Steps:
+- Keep the UI/config model id as `gpt-image-2`.
+- Route KIE requests without references to `gpt-image-2-text-to-image`.
+- Route KIE requests with references to `gpt-image-2-image-to-image`.
+- Apply the same routing to model availability probes and normalize saved endpoint ids back to the UI id.
+- Add network-free regression tests for both routes.
+
+Acceptance:
+- [x] Text-to-image and image-to-image requests use the documented KIE model ids.
+- [x] The visible model name and saved config remain compatible with `gpt-image-2`.
+- [x] Other generation models are unchanged.
+
+Verification:
+- [x] `python -m py_compile .\main.py`
+- [x] `python -m unittest tests.test_kie_routing -v`
+- [x] `python -m unittest discover -s tests -v`
+
+Notes:
+- Live KIE generation is excluded from this task to avoid consuming credits; the same routing was previously verified live in the isolated 1.0.3 hotfix.
+
 ## Task 23 - Cleanup Capability And Safety Matrix
 
 Status: Todo - next safe task

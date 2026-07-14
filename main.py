@@ -309,6 +309,15 @@ def get_model_capabilities(model_id):
         "reference_compatible_text": bool(limits.get("reference_compatible_text", False)),
     }
 
+
+def resolve_kie_generation_model(model_id, has_references=False):
+    if model_id == "gpt-image-2":
+        if has_references:
+            return "gpt-image-2-image-to-image"
+        return "gpt-image-2-text-to-image"
+    return model_id
+
+
 SUPPORTED_GENERATION_MODEL_IDS = {
     "gpt4o-image",
     "gpt-image/1.5-text-to-image",
@@ -1702,6 +1711,8 @@ class WorkerThread(QThread):
             "google/nano-banana",
             "google/nano-banana-edit",
             "gpt-image-2",
+            "gpt-image-2-text-to-image",
+            "gpt-image-2-image-to-image",
             "nano-banana-2",
             "nano-banana-pro",
             "qwen-image-2",
@@ -1711,6 +1722,8 @@ class WorkerThread(QThread):
             "flux-2/flex-text-to-image",
             "flux-2/pro-text-to-image",
         }:
+            if model in {"gpt-image-2-text-to-image", "gpt-image-2-image-to-image"}:
+                return "gpt-image-2"
             return model
 
         # Возвращаем исходное имя, чтобы поддерживать новые модели без обновления кода.
@@ -1741,7 +1754,8 @@ class WorkerThread(QThread):
     def _kie_generate_generic_model(self, model_name, prompt, reference_urls=None):
         reference_urls = reference_urls or []
         payload = self._build_documented_model_input(model_name, prompt, reference_urls)
-        task_id = self._kie_create_task(model_name, payload)
+        task_model = resolve_kie_generation_model(model_name, bool(reference_urls))
+        task_id = self._kie_create_task(task_model, payload)
         self.progress.emit(f"  Task ID: {task_id}")
         return self._kie_wait_result(task_id)
 
@@ -1758,11 +1772,13 @@ class WorkerThread(QThread):
             ratio,
             legacy_size,
         )
-        return [{"model": model_name, "input": payload} for payload in reference_variants]
+        task_model = resolve_kie_generation_model(model_name, True)
+        return [{"model": task_model, "input": payload} for payload in reference_variants]
 
     def _build_text_probe_variants(self, model_name, prompt, ratio, legacy_size):
         payload = self._build_documented_model_input(model_name, prompt, [])
-        return [{"model": model_name, "input": payload}]
+        task_model = resolve_kie_generation_model(model_name, False)
+        return [{"model": task_model, "input": payload}]
 
     def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout, reference_urls=None):
         prompt = "simple test image"
@@ -3157,6 +3173,8 @@ class MainWindow(QMainWindow):
         alias_map = {
             "gpt-image-1": "gpt-image/1.5-text-to-image",
             "gpt-image-1.5": "gpt-image/1.5-text-to-image",
+            "gpt-image-2-text-to-image": "gpt-image-2",
+            "gpt-image-2-image-to-image": "gpt-image-2",
             "google/pro-image-to-image": "nano-banana-pro",
             "flux-kontext": "black-forest-labs/flux-kontext-pro",
             "zai-org/z-image": "z-image",

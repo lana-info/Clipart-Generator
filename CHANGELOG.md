@@ -58,9 +58,15 @@
 - Removed unsupported Local Real-ESRGAN `3x` from the scale selector; local scale choices are now `2x` and `4x`.
 - Local Real-ESRGAN now preserves the alpha channel when upscaling already-trimmed transparent PNG files.
 
+### Fixed
+
+- Fixed GPT Image 2 generation by routing text prompts to `gpt-image-2-text-to-image` and reference prompts to `gpt-image-2-image-to-image`, while preserving the existing `gpt-image-2` UI/config id.
+
 ### Verified
 
-- Verified all 14 tests pass in one process, including the real local Real-ESRGAN checks and the isolated main-window acceptance checks.
+- Verified all 16 tests pass in one process, including GPT Image 2 routing, real local Real-ESRGAN checks, and isolated main-window acceptance checks.
+- Verified GPT Image 2 generation and availability probes use the same documented task-model routing without making a live KIE request.
+- Verified non-GPT generation model ids remain unchanged by the new resolver.
 - Verified sections 1-9 of `TEST_CHECKLIST.md` through automated UI/worker tests plus the previously recorded real local pipeline and dark-background inspection.
 - Verified generate-only writes `raw/` and `output/`, background removal produces PNG alpha, and processing settings restore from an isolated saved config.
 - Reviewed `README_AUTHOR_SHORT.md`, `PRD.md`, `TASKS.md`, `CHANGELOG.md`, and `TEST_CHECKLIST.md`; their MVP flow and fixed processing order agree with the current application.
