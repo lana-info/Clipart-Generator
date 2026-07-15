@@ -659,7 +659,7 @@ Notes:
 
 ## Task 35 - Visible-Mark UI And Settings
 
-Status: Todo - activated by Task 34 local-only go decision
+Status: Done - local-only controls added with legacy-safe defaults
 
 Goal:
 Expose only the approved visible-mark controls.
@@ -672,15 +672,19 @@ Steps:
 - Show when user confirmation is required.
 
 Acceptance:
-- [ ] Controls match the Task 34 decision exactly.
-- [ ] Existing UI remains unchanged while the feature is disabled.
-- [ ] Unsupported automatic modes are not selectable.
+- [x] Controls match the Task 34 decision exactly.
+- [x] Existing UI remains unchanged while the feature is disabled.
+- [x] Unsupported automatic modes are not selectable.
 
 Verification:
-- [ ] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_visible_mark_ui -v`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_visible_mark_ui -v`
 
 Notes:
 - Automatic modes for Doubao, Jimeng, Samsung, and unknown marks are intentionally unavailable.
+- Added one disabled-by-default row before upscale with only `Gemini automatically`
+  and `User-confirmed area`. The confirmation status appears only for the second
+  mode; no KIE/provider control was added.
+- Task 35 changes config/UI only. Worker processing remains unchanged until Task 36.
 
 ## Task 36 - Visible-Mark Pipeline Integration
 

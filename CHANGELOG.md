@@ -4,6 +4,7 @@
 
 ### Added
 
+- Added disabled-by-default visible-mark settings at the top of the processing order with only `Gemini automatically` and `User-confirmed area` modes, compact right-side parameters, and no KIE/provider selector.
 - Added the isolated Task 31 visible-mark detector evaluation harness and documented the pinned `remove-ai-watermarks` revision, Apache-2.0 attribution requirement, reproducible command, confidence/location/timing results, and temporary binary-mask output.
 - Added a separate visible-mark inpainting benchmark harness for automatic versus user-confirmed rectangular masks; it reports runtime, changed pixels inside/outside the mask, alpha presence, and optional-backend failures without overwriting sources.
 - Added the Task 33 KIE mask-edit benchmark preparation note with the documented API contract, mask semantics, supported aspect ratios, and a minimal no-key paid-test protocol.
@@ -106,6 +107,7 @@
 
 ### Verified
 
+- Verified the Task 35 controls use safe defaults for legacy configs, enable parameters only with the action, show confirmation only for the manual-area mode, persist independently, stay inside the existing processing layout, and expose no unsupported automatic/KIE option; 2 focused offscreen tests pass.
 - Verified the isolated detector against one Gemini marked fixture, one Doubao marked fixture, and five unmarked upstream fixtures: 2/2 marked detections and 0/5 false positives. Jimeng, Samsung, and user-owned marked fixtures remain unverified.
 - Verified bounded `cv2` inpainting on Gemini and Doubao masks: four runs changed zero pixels outside the supplied mask. MI-GAN/LaMa evaluation and visual inspection on user-owned marked fixtures remain open.
 - Completed the Task 32 owned-fixture gate with a Gemini-marked image and an unmarked clipart: detector confidence `0.694789`, no unmarked detection, zero changed pixels outside both automatic and rectangular masks, and opaque RGBA preserved.

@@ -248,6 +248,13 @@ def normalize_edge_shrink_pixels(pixels):
     return max(1, min(3, pixel_value))
 
 
+def normalize_visible_mark_cleanup_mode(mode):
+    mode_value = str(mode or "gemini_auto").strip().lower()
+    if mode_value not in {"gemini_auto", "confirmed_area"}:
+        mode_value = "gemini_auto"
+    return mode_value
+
+
 def normalize_local_rembg_edge_quality(quality):
     quality_value = str(quality or "normal").strip().lower()
     if quality_value not in {"soft", "normal", "sharp"}:
@@ -3011,6 +3018,8 @@ class MainWindow(QMainWindow):
             "local_ben2_corner_radius": 0,
             "edge_shrink_enabled": False,
             "edge_shrink_pixels": 1,
+            "visible_mark_cleanup_enabled": False,
+            "visible_mark_cleanup_mode": "gemini_auto",
             "cleanup_remove_exif": False,
             "cleanup_remove_xmp": False,
             "cleanup_remove_iptc": False,
@@ -3258,10 +3267,32 @@ class MainWindow(QMainWindow):
         files_group.setLayout(files_layout)
         process_tab_layout.addWidget(files_group)
 
-        process_flags_group = QGroupBox("Параметры обработки")
+        self.process_flags_group = QGroupBox("Параметры обработки")
         process_flags_layout = QGridLayout()
         process_flags_layout.setHorizontalSpacing(12)
         process_flags_layout.setVerticalSpacing(8)
+        self.chk_visible_mark_cleanup = QCheckBox("Удалить видимую метку")
+        self.chk_visible_mark_cleanup.setChecked(
+            bool(self.config.get("visible_mark_cleanup_enabled", False))
+        )
+        self.chk_visible_mark_cleanup.setToolTip(
+            "Только для собственных или лицензированных изображений"
+        )
+        self.visible_mark_mode_combo = QComboBox()
+        self.visible_mark_mode_combo.addItem("Gemini автоматически", "gemini_auto")
+        self.visible_mark_mode_combo.addItem("Область с подтверждением", "confirmed_area")
+        visible_mark_mode = normalize_visible_mark_cleanup_mode(
+            self.config.get("visible_mark_cleanup_mode", "gemini_auto")
+        )
+        visible_mark_mode_index = self.visible_mark_mode_combo.findData(visible_mark_mode)
+        self.visible_mark_mode_combo.setCurrentIndex(
+            visible_mark_mode_index if visible_mark_mode_index >= 0 else 0
+        )
+        self.visible_mark_mode_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.visible_mark_mode_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+        self.visible_mark_mode_combo.setFixedHeight(32)
+        self.visible_mark_confirmation_label = QLabel("Нужно подтверждение")
+        self.visible_mark_confirmation_label.setStyleSheet("color:#14b8a6; font-weight:600;")
         self.chk_upscale = QCheckBox("Апскейл до удаления фона")
         self.chk_upscale.setChecked(self.config.get("upscale", True))
         self.chk_upscale_after = QCheckBox("Апскейл после удаления фона")
@@ -3324,20 +3355,30 @@ class MainWindow(QMainWindow):
         trim_params_layout.addWidget(self.trim_mode_combo)
         trim_params_layout.addStretch()
 
-        process_flags_layout.addWidget(self.chk_upscale, 0, 0)
-        process_flags_layout.addWidget(self.chk_unsharp, 1, 0)
-        process_flags_layout.addWidget(unsharp_params_widget, 1, 1)
-        process_flags_layout.addWidget(self.chk_remove_bg, 2, 0)
-        process_flags_layout.addWidget(self.chk_upscale_after, 3, 0)
-        process_flags_layout.addWidget(self.upscale_total_label, 3, 1)
-        process_flags_layout.addWidget(self.chk_edge_shrink, 4, 0)
-        process_flags_layout.addWidget(self.edge_shrink_pixels_combo, 4, 1)
-        process_flags_layout.addWidget(self.chk_trim, 5, 0)
-        process_flags_layout.addWidget(trim_params_widget, 5, 1)
-        process_flags_layout.addWidget(self.chk_export_300_dpi, 6, 0)
+        visible_mark_params_widget = QWidget()
+        visible_mark_params_layout = QHBoxLayout(visible_mark_params_widget)
+        visible_mark_params_layout.setContentsMargins(0, 0, 0, 0)
+        visible_mark_params_layout.setSpacing(8)
+        visible_mark_params_layout.addWidget(self.visible_mark_mode_combo)
+        visible_mark_params_layout.addWidget(self.visible_mark_confirmation_label)
+        visible_mark_params_layout.addStretch()
+
+        process_flags_layout.addWidget(self.chk_visible_mark_cleanup, 0, 0)
+        process_flags_layout.addWidget(visible_mark_params_widget, 0, 1)
+        process_flags_layout.addWidget(self.chk_upscale, 1, 0)
+        process_flags_layout.addWidget(self.chk_unsharp, 2, 0)
+        process_flags_layout.addWidget(unsharp_params_widget, 2, 1)
+        process_flags_layout.addWidget(self.chk_remove_bg, 3, 0)
+        process_flags_layout.addWidget(self.chk_upscale_after, 4, 0)
+        process_flags_layout.addWidget(self.upscale_total_label, 4, 1)
+        process_flags_layout.addWidget(self.chk_edge_shrink, 5, 0)
+        process_flags_layout.addWidget(self.edge_shrink_pixels_combo, 5, 1)
+        process_flags_layout.addWidget(self.chk_trim, 6, 0)
+        process_flags_layout.addWidget(trim_params_widget, 6, 1)
+        process_flags_layout.addWidget(self.chk_export_300_dpi, 7, 0)
         process_flags_layout.setColumnStretch(1, 1)
-        process_flags_group.setLayout(process_flags_layout)
-        process_tab_layout.addWidget(process_flags_group)
+        self.process_flags_group.setLayout(process_flags_layout)
+        process_tab_layout.addWidget(self.process_flags_group)
 
         self.cleanup_group = QGroupBox("Очистка файла")
         cleanup_layout = QGridLayout()
@@ -3819,12 +3860,15 @@ class MainWindow(QMainWindow):
 
         self.refresh_generation_controls()
         self.refresh_processing_price_labels()
+        self.update_visible_mark_controls_state()
         self.update_trim_controls_state()
         self.update_edge_shrink_controls_state()
         self.update_unsharp_controls_state()
         self.update_upscale_provider_controls_state()
         self.update_upscale_total_label()
         self.update_remove_bg_provider_controls_state()
+        self.chk_visible_mark_cleanup.toggled.connect(self.update_visible_mark_controls_state)
+        self.visible_mark_mode_combo.currentIndexChanged.connect(self.update_visible_mark_controls_state)
         self.chk_trim.toggled.connect(self.update_trim_controls_state)
         self.chk_edge_shrink.toggled.connect(self.update_edge_shrink_controls_state)
         self.chk_unsharp.toggled.connect(self.update_unsharp_controls_state)
@@ -4086,6 +4130,8 @@ class MainWindow(QMainWindow):
         self.reference_resolution_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.reference_ratio_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
         self.reference_resolution_combo.currentTextChanged.connect(self.refresh_generation_price_labels)
+        self.chk_visible_mark_cleanup.toggled.connect(self.schedule_settings_save)
+        self.visible_mark_mode_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.chk_upscale.toggled.connect(self.schedule_settings_save)
         self.chk_upscale_after.toggled.connect(self.schedule_settings_save)
         self.chk_remove_bg.toggled.connect(self.schedule_settings_save)
@@ -4133,6 +4179,14 @@ class MainWindow(QMainWindow):
 
     def schedule_settings_save(self, *_):
         self.settings_save_timer.start()
+
+    def update_visible_mark_controls_state(self, *_):
+        enabled = self.chk_visible_mark_cleanup.isChecked()
+        self.visible_mark_mode_combo.setEnabled(enabled)
+        confirmation_required = (
+            enabled and self.visible_mark_mode_combo.currentData() == "confirmed_area"
+        )
+        self.visible_mark_confirmation_label.setVisible(confirmation_required)
 
     def update_trim_controls_state(self, *_):
         trim_enabled = self.chk_trim.isChecked()
@@ -5720,6 +5774,10 @@ class MainWindow(QMainWindow):
         self.config["text_generation_resolution"] = self.text_resolution_combo.currentText()
         self.config["reference_generation_resolution"] = self.reference_resolution_combo.currentText()
         self.config["generation_size"] = self.config["text_generation_ratio"]
+        self.config["visible_mark_cleanup_enabled"] = self.chk_visible_mark_cleanup.isChecked()
+        self.config["visible_mark_cleanup_mode"] = normalize_visible_mark_cleanup_mode(
+            self.visible_mark_mode_combo.currentData()
+        )
         self.config["remove_bg"] = self.chk_remove_bg.isChecked()
         self.config["upscale"] = self.chk_upscale.isChecked()
         self.config["upscale_after"] = self.chk_upscale_after.isChecked()
