@@ -22,6 +22,13 @@ from PIL import Image, ImageChops, ImageFilter, PngImagePlugin
 from license_client import LicenseClient
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from metadata_inspector import inspect_image_metadata
+from visible_mark_cleanup import (
+    VisibleMarkCleanupCancelled,
+    VisibleMarkCleanupError,
+    cleanup_visible_mark,
+    normalize_confirmed_region,
+    visible_mark_region_key,
+)
 
 try:
     import certifi
@@ -33,8 +40,8 @@ try:
 except Exception:
     pass
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize
-from PyQt6.QtGui import QKeySequence, QIcon, QPixmap
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize, QPoint, QRect
+from PyQt6.QtGui import QKeySequence, QIcon, QPixmap, QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -475,6 +482,21 @@ class WorkerThread(QThread):
         self.status_poll_interval = max(5.0, min(60.0, float(settings.get("status_poll_interval", 20))))
 
         # Legacy `upscale` remains the before-background pass for old configs.
+        self.visible_mark_cleanup_enabled = bool(settings.get("visible_mark_cleanup_enabled", False))
+        self.visible_mark_cleanup_mode = normalize_visible_mark_cleanup_mode(
+            settings.get("visible_mark_cleanup_mode", "gemini_auto")
+        )
+        self.visible_mark_confirmed_regions = {}
+        raw_visible_mark_regions = settings.get("visible_mark_confirmed_regions", {})
+        if isinstance(raw_visible_mark_regions, dict):
+            for path_key, region in raw_visible_mark_regions.items():
+                if isinstance(region, (tuple, list)) and len(region) == 4:
+                    try:
+                        self.visible_mark_confirmed_regions[visible_mark_region_key(path_key)] = tuple(
+                            int(value) for value in region
+                        )
+                    except (TypeError, ValueError):
+                        continue
         self.upscale = bool(settings.get("upscale", True))
         self.upscale_after = bool(settings.get("upscale_after", False))
         self.remove_bg = settings.get("remove_bg", True)
@@ -590,7 +612,13 @@ class WorkerThread(QThread):
 
                 final_url = image_url
                 if process_generated:
-                    if self.upscale or self.upscale_after or self.unsharp_enabled or self.remove_bg:
+                    if (
+                        self.visible_mark_cleanup_enabled
+                        or self.upscale
+                        or self.upscale_after
+                        or self.unsharp_enabled
+                        or self.remove_bg
+                    ):
                         final_url = self._run_processing_pipeline(source_path, image_url, raw_dir, idx, "gen")
                     elif self.edge_shrink_enabled:
                         final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "gen")
@@ -608,6 +636,9 @@ class WorkerThread(QThread):
                 )
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
+            except VisibleMarkCleanupCancelled:
+                self.progress.emit("Остановлено пользователем")
+                return
             except Exception as e:
                 self.progress.emit(f"  Ошибка: {e}")
 
@@ -638,7 +669,8 @@ class WorkerThread(QThread):
         self._log_upscale_plan()
 
         if not (
-            self.upscale
+            self.visible_mark_cleanup_enabled
+            or self.upscale
             or self.upscale_after
             or self.unsharp_enabled
             or self.remove_bg
@@ -646,7 +678,10 @@ class WorkerThread(QThread):
             or self.edge_shrink_enabled
             or self._metadata_cleanup_requested()
         ):
-            raise ValueError("Включите хотя бы один этап: апскейл, удаление фона, trim или очистку файла")
+            raise ValueError(
+                "Включите хотя бы один этап: удаление видимой метки, апскейл, "
+                "удаление фона, trim или очистку файла"
+            )
 
         if (self._uses_any_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
@@ -679,7 +714,13 @@ class WorkerThread(QThread):
 
                 source_path = file_path
 
-                if self.upscale or self.upscale_after or self.unsharp_enabled or self.remove_bg:
+                if (
+                    self.visible_mark_cleanup_enabled
+                    or self.upscale
+                    or self.upscale_after
+                    or self.unsharp_enabled
+                    or self.remove_bg
+                ):
                     final_url = self._run_processing_pipeline(source_path, None, raw_dir, idx, "file")
                 elif self.edge_shrink_enabled:
                     final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "file")
@@ -700,6 +741,9 @@ class WorkerThread(QThread):
 
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
+            except VisibleMarkCleanupCancelled:
+                self.progress.emit("Остановлено пользователем")
+                return
             except Exception as e:
                 self.progress.emit(f"  Ошибка: {e}")
 
@@ -768,6 +812,7 @@ class WorkerThread(QThread):
     def _can_use_legacy_kie_processing_pipeline(self):
         return (
             self._uses_kie_upscale()
+            and not self.visible_mark_cleanup_enabled
             and not self.upscale_after
             and not self._uses_local_remove_bg()
             and not self._uses_photoroom_remove_bg()
@@ -800,6 +845,26 @@ class WorkerThread(QThread):
         current_path = source_path
         current_url = source_url
         local_result = False
+
+        if self.visible_mark_cleanup_enabled:
+            current_path = self._ensure_local_path(
+                current_path,
+                current_url,
+                raw_dir,
+                idx,
+                prefix,
+                "visible_mark_source",
+            )
+            visible_mark_path = self._visible_mark_cleanup_pipeline_step(
+                current_path,
+                raw_dir,
+                idx,
+                prefix,
+            )
+            if visible_mark_path:
+                current_path = visible_mark_path
+                current_url = None
+                local_result = True
 
         if self.upscale:
             current_path, current_url, local_result = self._run_upscale_pass(
@@ -885,6 +950,49 @@ class WorkerThread(QThread):
                 self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
 
         return current_path if local_result else current_url
+
+    def _visible_mark_cleanup_pipeline_step(self, input_path, raw_dir, idx, prefix):
+        confirmed_region = None
+        if self.visible_mark_cleanup_mode == "confirmed_area":
+            confirmed_region = self.visible_mark_confirmed_regions.get(
+                visible_mark_region_key(input_path)
+            )
+            if confirmed_region is None:
+                self.progress.emit("  Видимая метка: файл пропущен, область не подтверждена")
+                return None
+
+        output_path = os.path.join(
+            raw_dir,
+            f"{prefix}_visible_mark_{idx:03d}_{self.run_stamp}.png",
+        )
+        mode_label = (
+            "Gemini автоматически"
+            if self.visible_mark_cleanup_mode == "gemini_auto"
+            else "подтвержденная область"
+        )
+        self.progress.emit(f"  Видимая метка: локальная обработка ({mode_label})...")
+        result = cleanup_visible_mark(
+            input_path,
+            output_path,
+            self.visible_mark_cleanup_mode,
+            confirmed_region=confirmed_region,
+            cancelled=lambda: not self.is_running,
+        )
+
+        if not result.changed:
+            if self.visible_mark_cleanup_mode == "gemini_auto":
+                self.progress.emit(
+                    f"  Видимая метка Gemini не найдена уверенно ({result.confidence:.3f}); файл не изменен"
+                )
+            else:
+                self.progress.emit("  Видимая метка: подтвержденная область не потребовала изменений")
+            return None
+
+        self.progress.emit(
+            f"  Видимая метка удалена локально: {output_path} "
+            f"(вне области изменено {result.changed_pixels_outside_mask} px)"
+        )
+        return output_path
 
     def _run_upscale_pass(
         self,
@@ -2876,6 +2984,179 @@ class PromptReferencesDialog(QDialog):
         return prompt, refs[:MAX_REFERENCES_PER_PROMPT]
 
 
+class ImageRegionSelector(QLabel):
+    selection_changed = pyqtSignal(bool)
+
+    def __init__(self, image_path, parent=None):
+        super().__init__(parent)
+        source_pixmap = QPixmap(image_path)
+        if source_pixmap.isNull():
+            raise ValueError(f"Не удалось открыть изображение: {image_path}")
+
+        self.source_size = source_pixmap.size()
+        self.display_pixmap = source_pixmap.scaled(
+            QSize(820, 560),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.setPixmap(self.display_pixmap)
+        self.setFixedSize(self.display_pixmap.size())
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self._drag_start = None
+        self._selection = QRect()
+
+    def _bounded_point(self, point):
+        return QPoint(
+            max(0, min(self.width() - 1, point.x())),
+            max(0, min(self.height() - 1, point.y())),
+        )
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton:
+            return super().mousePressEvent(event)
+        self._drag_start = self._bounded_point(event.position().toPoint())
+        self._selection = QRect(self._drag_start, self._drag_start)
+        self.update()
+        self.selection_changed.emit(False)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_start is None:
+            return super().mouseMoveEvent(event)
+        current = self._bounded_point(event.position().toPoint())
+        self._selection = QRect(self._drag_start, current).normalized().intersected(self.rect())
+        self.update()
+        self.selection_changed.emit(self.has_selection())
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != Qt.MouseButton.LeftButton or self._drag_start is None:
+            return super().mouseReleaseEvent(event)
+        current = self._bounded_point(event.position().toPoint())
+        self._selection = QRect(self._drag_start, current).normalized().intersected(self.rect())
+        self._drag_start = None
+        self.update()
+        self.selection_changed.emit(self.has_selection())
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.has_selection():
+            return
+        painter = QPainter(self)
+        painter.fillRect(self._selection, QColor(20, 184, 166, 55))
+        painter.setPen(QPen(QColor(20, 184, 166), 2))
+        painter.drawRect(self._selection)
+
+    def has_selection(self):
+        return self._selection.width() >= 2 and self._selection.height() >= 2
+
+    def set_selection(self, rectangle):
+        self._selection = QRect(rectangle).normalized().intersected(self.rect())
+        self.update()
+        self.selection_changed.emit(self.has_selection())
+
+    def selected_source_region(self):
+        if not self.has_selection():
+            return None
+        source_width = self.source_size.width()
+        source_height = self.source_size.height()
+        display_width = self.display_pixmap.width()
+        display_height = self.display_pixmap.height()
+        x1 = math.floor(self._selection.x() * source_width / display_width)
+        y1 = math.floor(self._selection.y() * source_height / display_height)
+        x2 = math.ceil(
+            (self._selection.x() + self._selection.width()) * source_width / display_width
+        )
+        y2 = math.ceil(
+            (self._selection.y() + self._selection.height()) * source_height / display_height
+        )
+        return (
+            max(0, x1),
+            max(0, y1),
+            min(source_width, x2) - max(0, x1),
+            min(source_height, y2) - max(0, y1),
+        )
+
+
+class VisibleMarkRegionDialog(QDialog):
+    def __init__(self, image_path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Область видимой метки")
+        self._selected_region = None
+        self._skipped = False
+
+        layout = QVBoxLayout(self)
+        file_label = QLabel(os.path.basename(image_path))
+        file_label.setWordWrap(True)
+        layout.addWidget(file_label)
+
+        self.selector = ImageRegionSelector(image_path, self)
+        layout.addWidget(self.selector, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        self.selection_status = QLabel("Область не выбрана")
+        layout.addWidget(self.selection_status)
+
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.skip_button = self.button_box.addButton(
+            "Пропустить файл",
+            QDialogButtonBox.ButtonRole.ActionRole,
+        )
+        self.ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        self.ok_button.setEnabled(False)
+        layout.addWidget(self.button_box)
+
+        self.selector.selection_changed.connect(self._update_selection_state)
+        self.button_box.accepted.connect(self._accept_selection)
+        self.button_box.rejected.connect(self.reject)
+        self.skip_button.clicked.connect(self._skip_file)
+
+    def _update_selection_state(self, _has_selection):
+        region = self.selector.selected_source_region()
+        if region is None:
+            self.ok_button.setEnabled(False)
+            self.selection_status.setStyleSheet("")
+            self.selection_status.setText("Область не выбрана")
+            return
+        try:
+            region = normalize_confirmed_region(
+                region,
+                (self.selector.source_size.width(), self.selector.source_size.height()),
+            )
+        except VisibleMarkCleanupError as error:
+            self.ok_button.setEnabled(False)
+            self.selection_status.setText(str(error))
+            self.selection_status.setStyleSheet("color:#ef4444;")
+            return
+        self.ok_button.setEnabled(True)
+        self.selection_status.setStyleSheet("")
+        self.selection_status.setText(f"Область: {region[2]} x {region[3]} px")
+
+    def _accept_selection(self):
+        region = self.selector.selected_source_region()
+        if region is None:
+            return
+        try:
+            self._selected_region = normalize_confirmed_region(
+                region,
+                (self.selector.source_size.width(), self.selector.source_size.height()),
+            )
+        except VisibleMarkCleanupError as error:
+            self.selection_status.setText(str(error))
+            return
+        self.accept()
+
+    def _skip_file(self):
+        self._skipped = True
+        self._selected_region = None
+        self.accept()
+
+    def selected_region(self):
+        return self._selected_region
+
+    def was_skipped(self):
+        return self._skipped
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -4289,6 +4570,26 @@ class MainWindow(QMainWindow):
             self.lbl_files_count.setText(f"Выбрано файлов: {len(files)}")
             self.log(f"Выбрано файлов: {len(files)}")
 
+    def collect_visible_mark_regions(self):
+        confirmed_regions = {}
+        for file_path in self.selected_files:
+            try:
+                dialog = VisibleMarkRegionDialog(file_path, self)
+            except Exception as error:
+                QMessageBox.warning(
+                    self,
+                    "Область видимой метки",
+                    f"Не удалось открыть {os.path.basename(file_path)}: {error}",
+                )
+                return None
+
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return None
+            region = dialog.selected_region()
+            if region is not None:
+                confirmed_regions[visible_mark_region_key(file_path)] = region
+        return confirmed_regions
+
     def add_prompt_row(self):
         self.generated_prompts.append({"prompt": "", "references": []})
         self.refresh_prompts_table()
@@ -5020,6 +5321,7 @@ class MainWindow(QMainWindow):
         runtime_settings["kie_api_key"] = current_api_key
         self.has_generated_output_in_run = False
         active_prompts = []
+        visible_mark_confirmed_regions = {}
 
         run_mode = self.config.get("run_mode", "generate_only")
         if run_mode == "process_only":
@@ -5028,7 +5330,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Ошибка", "Для режима обработки выберите файлы")
                 return
             if not (
-                self.chk_upscale.isChecked()
+                self.chk_visible_mark_cleanup.isChecked()
+                or self.chk_upscale.isChecked()
                 or self.chk_upscale_after.isChecked()
                 or self.chk_unsharp.isChecked()
                 or self.chk_remove_bg.isChecked()
@@ -5039,10 +5342,29 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "Ошибка",
-                    "Включите хотя бы один этап: апскейл, удаление фона, trim или очистку файла",
+                    "Включите хотя бы один этап: удаление видимой метки, апскейл, "
+                    "удаление фона, trim или очистку файла",
                 )
                 return
+            if (
+                self.chk_visible_mark_cleanup.isChecked()
+                and self.visible_mark_mode_combo.currentData() == "confirmed_area"
+            ):
+                visible_mark_confirmed_regions = self.collect_visible_mark_regions()
+                if visible_mark_confirmed_regions is None:
+                    return
         elif run_mode == "both":
+            if (
+                self.chk_visible_mark_cleanup.isChecked()
+                and self.visible_mark_mode_combo.currentData() == "confirmed_area"
+            ):
+                QMessageBox.warning(
+                    self,
+                    "Область видимой метки",
+                    "Ручное подтверждение области доступно только для уже выбранных файлов. "
+                    "Для создаваемых изображений выберите автоматический режим Gemini.",
+                )
+                return
             active_prompts = self.get_list_mode_prompts()
             if not active_prompts:
                 QMessageBox.warning(self, "Ошибка", "Добавьте хотя бы одну запись")
@@ -5077,6 +5399,7 @@ class MainWindow(QMainWindow):
         self.persist_ui_settings()
         runtime_settings = dict(self.config)
         runtime_settings["kie_api_key"] = current_api_key
+        runtime_settings["visible_mark_confirmed_regions"] = visible_mark_confirmed_regions
 
         self.worker = WorkerThread(
             mode=mode,

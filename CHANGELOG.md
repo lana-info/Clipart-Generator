@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added local visible-mark processing before the first upscale: automatic Gemini detection at confidence `>= 0.5` and a per-file user-confirmed rectangle for other small service marks.
+- Added atomic `raw/*_visible_mark_*.png` output validation, alpha preservation, cancellation/rollback handling, and runtime-only confirmed coordinates; this step never requires or calls KIE.
+- Vendored the pinned Apache-2.0 Gemini detector and its two required templates from `remove-ai-watermarks` commit `190dc89d234fd7e3a61ff755f01251c9c0b87ef0`, including attribution and packaging data.
+- Added the detector templates, license, and notice to the tracked Windows/macOS PyInstaller commands without running a build or release.
 - Added disabled-by-default visible-mark settings at the top of the processing order with only `Gemini automatically` and `User-confirmed area` modes, compact right-side parameters, and no KIE/provider selector.
 - Added the isolated Task 31 visible-mark detector evaluation harness and documented the pinned `remove-ai-watermarks` revision, Apache-2.0 attribution requirement, reproducible command, confidence/location/timing results, and temporary binary-mask output.
 - Added a separate visible-mark inpainting benchmark harness for automatic versus user-confirmed rectangular masks; it reports runtime, changed pixels inside/outside the mask, alpha presence, and optional-backend failures without overwriting sources.
@@ -70,6 +74,7 @@
 
 ### Changed
 
+- The fixed processing order now starts with optional local visible-mark cleanup; all existing upscale, Unsharp Mask, background, edge, trim, metadata, and final-save ordering remains unchanged after it.
 - Task 34 approved a disabled-by-default local visible-mark path: automatic detection only for Gemini, a user-confirmed bounded mask for other small service marks, local `cv2` as the only precise provider, and no KIE key or KIE selector.
 - Rejected KIE GPT Image 1.5 as the precise visible-mark fallback: local `cv2` remains the bounded candidate, while whole-image managed regeneration stays separate for future hidden-marker evaluation.
 - Closed the metadata/C2PA acceptance gate and moved visible generator-mark work behind its separate prototype and go/no-go tasks.
@@ -107,6 +112,9 @@
 
 ### Verified
 
+- Verified Task 36 with 6 focused tests and all 85 project tests: visible cleanup runs only when enabled and before upscale, process-only works without KIE, confirmed coordinates are not persisted, alpha is preserved, zero pixels change outside the approved mask, and failure/cancellation preserve source and prior output.
+- Verified the real owned Gemini fixture at confidence `0.694789`: the source hash remained unchanged, `3,237` pixels changed inside the removal mask, and `0` outside. An unmarked UI screenshot scored `0.184643`, stayed unchanged, and created no raw output. No API request or credit was used.
+- Verified the Windows build script parses, the GitHub workflow YAML parses, and every declared detector data path exists; packaging itself was intentionally not run.
 - Verified the Task 35 controls use safe defaults for legacy configs, enable parameters only with the action, show confirmation only for the manual-area mode, persist independently, stay inside the existing processing layout, and expose no unsupported automatic/KIE option; 2 focused offscreen tests pass.
 - Verified the isolated detector against one Gemini marked fixture, one Doubao marked fixture, and five unmarked upstream fixtures: 2/2 marked detections and 0/5 false positives. Jimeng, Samsung, and user-owned marked fixtures remain unverified.
 - Verified bounded `cv2` inpainting on Gemini and Doubao masks: four runs changed zero pixels outside the supplied mask. MI-GAN/LaMa evaluation and visual inspection on user-owned marked fixtures remain open.

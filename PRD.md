@@ -16,6 +16,7 @@ Clipart Generator должен помогать автору быстро ген
 
 - Генерация изображений через поддерживаемые KIE-модели в режимах text-to-image и image-to-image.
 - Пакетная обработка локальных файлов без обязательной генерации.
+- Опциональное локальное удаление небольшой видимой метки до первого апскейла: Gemini автоматически или другая метка в подтвержденной пользователем области.
 - Независимый апскейл до и/или после удаления фона через KIE или Local Real-ESRGAN.
 - Удаление фона через KIE, PhotoRoom Standard, Local rembg или экспериментальный Local BEN2.
 - Опциональный Unsharp Mask после апскейла.
@@ -29,7 +30,7 @@ Clipart Generator должен помогать автору быстро ген
 
 1. Автор выбирает рабочую папку, вводит промпты, выбирает модель генерации, пропорции и качество, запускает генерацию и получает результаты в `output/`.
 2. Автор выбирает существующие изображения, включает нужные шаги обработки, запускает process-only режим и получает обработанные PNG в `output/`.
-3. Автор выбирает локальный pipeline: optional Real-ESRGAN до фона -> Unsharp Mask -> Local BEN2/rembg -> optional Real-ESRGAN после фона -> edge shrink -> trim.
+3. Автор выбирает локальный pipeline: optional visible-mark cleanup -> optional Real-ESRGAN до фона -> Unsharp Mask -> Local BEN2/rembg -> optional Real-ESRGAN после фона -> edge shrink -> trim.
 4. Автор выбирает смешанный pipeline, когда часть шагов выполняется локально, а часть через KIE.
 5. Автор проверяет промежуточные файлы в `raw/`, если результат выглядит неправильно.
 6. Поддержка выпускает новую версию через существующие build/release документы и не смешивает основной repo с repo обновлений.
@@ -38,13 +39,14 @@ Clipart Generator должен помогать автору быстро ген
 
 Фиксированный порядок обработки:
 
-1. Optional upscale before background removal.
-2. Optional Unsharp Mask.
-3. Remove background.
-4. Optional upscale after background removal.
-5. Edge contour removal.
-6. Final trim.
-7. Save PNG.
+1. Optional local visible-mark cleanup.
+2. Optional upscale before background removal.
+3. Optional Unsharp Mask.
+4. Remove background.
+5. Optional upscale after background removal.
+6. Edge contour removal.
+7. Final trim.
+8. Save PNG.
 
 Этот порядок должен оставаться предсказуемым: UI показывает шаги в том же порядке, в котором они выполняются.
 
@@ -119,8 +121,8 @@ Source of truth for supported claims: [`CLEANUP_CAPABILITY_MATRIX.md`](./CLEANUP
 - [x] Cleanup-only process запускается без KIE API key и публикует новый PNG атомарно.
 - [x] Metadata-only стадия не меняет размеры, декодированные пиксели или alpha; ICC/DPI сохраняются согласно выбранным настройкам.
 - [x] C2PA cleanup ограничен локальным manifest/ссылкой в новом PNG и не заявляет удаление remote/sidecar/pixel signals.
-- [ ] Видимая метка Gemini может быть удалена локально до первого апскейла; остальные небольшие метки требуют подтвержденную область, а KIE key не нужен.
-- [ ] Выключенная очистка видимой метки сохраняет прежний UI, pipeline и результат без изменений.
+- [x] Видимая метка Gemini может быть удалена локально до первого апскейла; остальные небольшие метки требуют подтвержденную область, а KIE key не нужен.
+- [x] Выключенная очистка видимой метки сохраняет прежний UI, pipeline и результат без изменений.
 - [ ] Перед релизом пройдены проверки из `TEST_CHECKLIST.md`.
 
 ## Related Documents

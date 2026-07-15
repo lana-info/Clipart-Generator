@@ -8,6 +8,7 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## What This Adds
 
+- Optional local removal of a small visible mark before upscale: Gemini automatically or a user-confirmed area for an existing file.
 - Independent Local Real-ESRGAN/KIE upscale passes before and after background removal.
 - Optional Unsharp Mask after upscale.
 - Local rembg background removal.
@@ -18,6 +19,11 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 - KIE fallback.
 - Local-only processing without a KIE API key.
 - Mixed local/KIE processing flows.
+
+For visible marks, use `Gemini automatically` only for the small Gemini corner
+sparkle. Use `User-confirmed area` for another small service mark on an existing
+process-only file; the selected rectangle is not saved after the run. This local
+step is disabled by default and does not use KIE.
 
 ## Author Quick Setup
 
@@ -37,12 +43,13 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 
 The processing order is fixed:
 
-1. Optional upscale before background removal.
-2. Optional Unsharp Mask.
-3. Remove background.
-4. Optional upscale after background removal.
-5. Edge contour removal.
-6. Final trim.
+1. Optional local visible-mark cleanup.
+2. Optional upscale before background removal.
+3. Optional Unsharp Mask.
+4. Remove background.
+5. Optional upscale after background removal.
+6. Edge contour removal.
+7. Final trim.
 
 Each upscale pass has its own provider and scale/model. The UI shows the combined multiplier, for example `2x + 2x = 4x` or `4x + 4x = 16x`.
 

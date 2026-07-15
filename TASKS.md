@@ -684,11 +684,11 @@ Notes:
 - Added one disabled-by-default row before upscale with only `Gemini automatically`
   and `User-confirmed area`. The confirmation status appears only for the second
   mode; no KIE/provider control was added.
-- Task 35 changes config/UI only. Worker processing remains unchanged until Task 36.
+- Task 35 introduced config/UI only; Worker integration was completed separately in Task 36.
 
 ## Task 36 - Visible-Mark Pipeline Integration
 
-Status: Todo - activated by Task 34 local-only go decision
+Status: Done - local-only step integrated before the first upscale
 
 Goal:
 Run approved visible-mark cleanup before upscale without changing unrelated processing.
@@ -700,17 +700,32 @@ Steps:
 - Handle cancellation, provider failure, and user-confirmation requirements safely.
 
 Acceptance:
-- [ ] The step runs only when enabled.
-- [ ] Existing processing order after the step remains unchanged.
-- [ ] Failed cleanup does not overwrite the source or previous final output.
+- [x] The step runs only when enabled.
+- [x] Existing processing order after the step remains unchanged.
+- [x] Failed cleanup does not overwrite the source or previous final output.
 
 Verification:
-- [ ] `python -m unittest tests.test_visible_mark_pipeline -v`
-- [ ] `python -m unittest discover -s tests -v`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_visible_mark_pipeline -v`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest discover -s tests -v`
 
 Notes:
 - Metadata cleanup still runs only at final save.
 - Visible-mark cleanup is local-only and must never require or call KIE.
+- Vendored only the pinned Apache-2.0 Gemini detector and two required templates
+  from `remove-ai-watermarks` commit `190dc89d234fd7e3a61ff755f01251c9c0b87ef0`;
+  no upstream model weights or removal engines were added.
+- Automatic Gemini removal requires confidence `>= 0.5`; a lower score leaves the
+  source unchanged and creates no visible-mark `raw/` file.
+- User-confirmed mode opens a local rectangle selector for each process-only file,
+  limits the area to 15% of the image, and keeps coordinates only in current-run memory.
+- Successful output is validated and atomically saved as
+  `raw/*_visible_mark_*.png`; source pixels and prior outputs remain intact on failure
+  or cancellation.
+- Tracked Windows/macOS PyInstaller commands include the two templates, Apache
+  license, and attribution notice; no application build or release was run.
+- Six focused tests and all 85 project tests pass. A real owned Gemini fixture scored
+  `0.694789`, changed `0` pixels outside the mask, and preserved the source hash; an
+  unmarked screenshot scored `0.184643` and produced no raw output. No API request was made.
 
 ## Task 37 - Visible-Mark Acceptance
 

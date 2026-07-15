@@ -22,6 +22,9 @@ python -m PyInstaller `
     --windowed `
     --name "Clipart Generator" `
     --add-data ".env.example;." `
+    --add-data "third_party/remove_ai_watermarks_gemini/assets;third_party/remove_ai_watermarks_gemini/assets" `
+    --add-data "third_party/remove_ai_watermarks_gemini/LICENSE;third_party/remove_ai_watermarks_gemini" `
+    --add-data "third_party/remove_ai_watermarks_gemini/NOTICE.md;third_party/remove_ai_watermarks_gemini" `
     main.py
 
 Write-Host "==> Prepare release directory"

@@ -168,6 +168,9 @@ jobs:
             --name "Clipart Generator" \
             --target-arch "$PYINSTALLER_TARGET_ARCH" \
             --add-data ".env.example:." \
+            --add-data "third_party/remove_ai_watermarks_gemini/assets:third_party/remove_ai_watermarks_gemini/assets" \
+            --add-data "third_party/remove_ai_watermarks_gemini/LICENSE:third_party/remove_ai_watermarks_gemini" \
+            --add-data "third_party/remove_ai_watermarks_gemini/NOTICE.md:third_party/remove_ai_watermarks_gemini" \
             main.py
 
       - name: Import Apple certificate and sign app
