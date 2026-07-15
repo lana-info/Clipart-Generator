@@ -1,6 +1,6 @@
 # База знаний проекта Clipart Generator
 
-_Последнее обновление: 2026-07-13_
+_Последнее обновление: 2026-07-14_
 
 ## Кратко
 
@@ -31,6 +31,7 @@ Clipart Generator — это настольное приложение для г
 - [`RELEASE_PROCESS.md`](./RELEASE_PROCESS.md) - процесс выпуска.
 - [`TEST_CHECKLIST.md`](./TEST_CHECKLIST.md) - ручной чеклист перед релизом.
 - [`CLEANUP_CAPABILITY_MATRIX.md`](./CLEANUP_CAPABILITY_MATRIX.md) - подтверждённые возможности и ограничения очистки metadata/C2PA, видимых меток и экспериментальной перегенерации пиксельных watermark.
+- [`VISIBLE_MARK_DETECTOR_EVAL.md`](./VISIBLE_MARK_DETECTOR_EVAL.md), [`VISIBLE_MARK_INPAINTING_BENCHMARK.md`](./VISIBLE_MARK_INPAINTING_BENCHMARK.md), [`TASK33_KIE_MASK_BENCHMARK.md`](./TASK33_KIE_MASK_BENCHMARK.md) - evidence и Task 34 decision для будущей local-only очистки небольших видимых меток.
 
 ## Архитектура приложения
 

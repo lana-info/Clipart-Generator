@@ -19,8 +19,10 @@ rectangular masks. It changed zero pixels outside the supplied mask in all four
 runs. Automatic masks changed fewer pixels than the rectangular fallback on both
 fixtures. Runtime was approximately 0.6-1.9 seconds per run on this machine.
 
-The fallback policy is therefore provisionally `cv2` plus a user-confirmed mask;
-this is a safety property, not a claim that `cv2` gives the best texture fill.
+Task 34 selected `cv2` as the only precise local provider: automatic masks are
+allowed only for Gemini, while other small service marks require a user-confirmed
+bounded mask. This is a safety property, not a claim that `cv2` gives the best
+texture fill.
 
 MI-GAN and LaMa were not run automatically: invoking the package's optional backend
 resolution attempted to obtain model resources and exceeded the bounded benchmark

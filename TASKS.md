@@ -550,7 +550,7 @@ Notes:
 
 ## Task 31 - Local Visible-Mark Detector Prototype
 
-Status: Done - limited prototype gate; user-owned marked fixtures still required before integration
+Status: Done - prototype evidence completed; production scope decided in Task 34
 
 Goal:
 Measure whether `lana-info/remove-ai-watermarks` reliably localizes supported visible generator marks.
@@ -571,7 +571,9 @@ Verification:
 
 Notes:
 - Detection approval does not approve an inpainting backend.
-- Jimeng/Samsung and user-owned marked fixtures remain an explicit evidence gap; do not treat this task as production integration approval.
+- Jimeng/Samsung remain an explicit evidence gap. The user-owned Gemini marked and
+  unmarked fixture gate was completed in Task 32; Task 34 limits automatic
+  integration to Gemini.
 
 ## Task 32 - Local Visible-Mark Inpainting Benchmark
 
@@ -629,7 +631,7 @@ Notes:
 
 ## Task 34 - Visible-Mark Provider Decision Gate
 
-Status: Todo
+Status: Done - local-only go decision with Gemini-only automation
 
 Goal:
 Choose local, KIE, user-confirmed-only, or no automatic visible-mark removal.
@@ -640,25 +642,31 @@ Steps:
 - Update the capability matrix and mark Tasks 35-37 active or skipped.
 
 Acceptance:
-- [ ] The decision is based on saved evidence rather than a single image.
-- [ ] Automatic processing is rejected for any class with unsafe false positives.
-- [ ] User-confirmed mask fallback remains available when automatic detection is not approved.
+- [x] The decision is based on saved evidence rather than a single image.
+- [x] Automatic processing is rejected for any class with unsafe false positives.
+- [x] User-confirmed mask fallback remains available when automatic detection is not approved.
 
 Verification:
-- [ ] Decision and rationale are recorded in PRD/project documentation and changelog.
+- [x] Decision and rationale are recorded in PRD/project documentation and changelog.
 
 Notes:
 - No production integration belongs to this gate.
+- Automatic local detection/removal is approved only for the small Gemini corner
+  mark on owned/licensed PNG/JPEG. Doubao and unmeasured/unknown small service marks
+  require a user-confirmed bounded mask; unsupported images remain unchanged.
+- Local `cv2` is the only approved precise provider. KIE, MI-GAN, and LaMa are not
+  selectable in the visible-mark UI. The feature remains disabled by default.
 
 ## Task 35 - Visible-Mark UI And Settings
 
-Status: Todo - conditional on Task 34 go decision
+Status: Todo - activated by Task 34 local-only go decision
 
 Goal:
 Expose only the approved visible-mark controls.
 
 Steps:
-- Add an independent visible-mark checkbox and approved provider/mask controls.
+- Add an independent visible-mark checkbox with `Gemini automatically` and
+  `User-confirmed area` modes; do not add a KIE/provider selector.
 - Place parameters to the right of the action and keep the step disabled by default.
 - Save/load settings without affecting legacy configs.
 - Show when user confirmation is required.
@@ -672,11 +680,11 @@ Verification:
 - [ ] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_visible_mark_ui -v`
 
 Notes:
-- If Task 34 is no-go, mark this task `Skipped`.
+- Automatic modes for Doubao, Jimeng, Samsung, and unknown marks are intentionally unavailable.
 
 ## Task 36 - Visible-Mark Pipeline Integration
 
-Status: Todo - conditional on Task 34 go decision
+Status: Todo - activated by Task 34 local-only go decision
 
 Goal:
 Run approved visible-mark cleanup before upscale without changing unrelated processing.
@@ -698,17 +706,18 @@ Verification:
 
 Notes:
 - Metadata cleanup still runs only at final save.
+- Visible-mark cleanup is local-only and must never require or call KIE.
 
 ## Task 37 - Visible-Mark Acceptance
 
-Status: Todo - conditional on Task 34 go decision
+Status: Todo - activated by Task 34 local-only go decision
 
 Goal:
 Verify the complete visible-mark slice on marked and unmarked general images.
 
 Steps:
-- Test automatic and user-confirmed flows on approved image classes.
-- Verify local-only and KIE-required key routing.
+- Test automatic Gemini and user-confirmed flows on approved general-image fixtures.
+- Verify local-only routing and that visible-mark cleanup never requires a KIE key.
 - Compare results at normal view and 200% zoom.
 - Update supported/unsupported documentation.
 
@@ -722,7 +731,7 @@ Verification:
 - [ ] Manual comparison is recorded in `CHANGELOG.md`.
 
 Notes:
-- Skip if Task 34 rejected production integration.
+- Acceptance must include the saved upstream fixtures plus the user-owned marked and unmarked gate; no new paid request is required.
 
 ## Phase 21 - Hidden Pixel Markers: Managed API First
 

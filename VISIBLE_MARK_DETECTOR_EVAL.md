@@ -26,9 +26,8 @@ python scripts\probe_visible_marks.py `
 
 The manifest used upstream's reproducible demo/sample fixtures: one Gemini marked
 image, one Doubao marked image, and five unmarked images covering generated-photo,
-illustration, and textured/varied corners. The marked fixtures are upstream test
-assets rather than user-owned production images; user-owned marked fixtures are
-still needed before an integration decision.
+illustration, and textured/varied corners. Task 32 later added one user-owned Gemini
+marked image and one user-owned unmarked clipart fixture.
 
 ## Results
 
@@ -50,6 +49,6 @@ detector to production.
 ## Decision
 
 The localizer is technically lightweight and showed no false positives on the five
-available unmarked fixtures. Keep it as an isolated prototype. Do not add it to the
-application until Task 32/33 compare fill quality and user-owned marked fixtures
-confirm recall across the intended images.
+upstream fixtures or the later user-owned unmarked fixture. Task 34 approves
+automatic integration only for Gemini, which has both upstream and user-owned
+marked evidence. Doubao and unmeasured marks require a user-confirmed bounded mask.
