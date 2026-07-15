@@ -600,7 +600,7 @@ Notes:
 
 ## Task 33 - KIE Mask-Edit Benchmark
 
-Status: In progress - API contract researched; live paid comparison pending
+Status: Done - KIE rejected for precise visible-mark cleanup
 
 Goal:
 Determine whether KIE 4o mask editing is a better fallback for visible marks than local inpainting.
@@ -612,16 +612,20 @@ Steps:
 - Record provider errors and invalid-output handling.
 
 Acceptance:
-- [ ] KIE is compared against the selected local method on identical fixtures.
-- [ ] Cost and visible changes outside the mask are recorded.
-- [ ] No KIE key appears in logs or saved artifacts.
+- [x] KIE is compared against the selected local method on identical fixtures.
+- [x] Cost and visible changes outside the mask are recorded.
+- [x] No KIE key appears in logs or saved artifacts.
 
 Verification:
-- [ ] Manual comparison and request-cost evidence are recorded.
+- [x] Manual comparison and request-cost evidence are recorded.
 
 Notes:
 - This task spends credits and must remain a minimal benchmark.
 - API ratio constraints and the safe paid-test protocol are recorded in `TASK33_KIE_MASK_BENCHMARK.md`.
+- Two native 4o mask payloads were rejected before generation; one GPT Image 1.5
+  mask-reference task succeeded at a listed `$0.02` and took `102.485` seconds.
+- The KIE output changed `78.3491%` of content pixels outside the mask versus `0%`
+  for local `cv2`, so no additional request from the authorized five was justified.
 
 ## Task 34 - Visible-Mark Provider Decision Gate
 

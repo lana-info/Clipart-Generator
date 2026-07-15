@@ -7,6 +7,7 @@
 - Added the isolated Task 31 visible-mark detector evaluation harness and documented the pinned `remove-ai-watermarks` revision, Apache-2.0 attribution requirement, reproducible command, confidence/location/timing results, and temporary binary-mask output.
 - Added a separate visible-mark inpainting benchmark harness for automatic versus user-confirmed rectangular masks; it reports runtime, changed pixels inside/outside the mask, alpha presence, and optional-backend failures without overwriting sources.
 - Added the Task 33 KIE mask-edit benchmark preparation note with the documented API contract, mask semantics, supported aspect ratios, and a minimal no-key paid-test protocol.
+- Added an isolated KIE benchmark harness with a five-request hard cap, secret-safe progress capture, output metadata inspection, resize-normalization baseline, and request-free reanalysis of an existing result.
 
 - Added metadata-cleanup acceptance coverage for every independent removal choice and one combined local pipeline with before/after pixel and alpha invariants.
 - Documented the implemented Tasks 24-30 contract, exact PNG/JPEG limits, ICC/DPI behavior, atomic final-save order, and unsupported C2PA/pixel-watermark claims.
@@ -68,6 +69,7 @@
 
 ### Changed
 
+- Rejected KIE GPT Image 1.5 as the precise visible-mark fallback: local `cv2` remains the bounded candidate, while whole-image managed regeneration stays separate for future hidden-marker evaluation.
 - Closed the metadata/C2PA acceptance gate and moved visible generator-mark work behind its separate prototype and go/no-go tasks.
 - Process-only runs can now perform metadata cleanup without another image-processing step or a KIE API key.
 - Selected cleanup carries supported metadata through trim and print-export staging; the existing 300 DPI export setting remains the final DPI authority.
@@ -106,6 +108,7 @@
 - Verified the isolated detector against one Gemini marked fixture, one Doubao marked fixture, and five unmarked upstream fixtures: 2/2 marked detections and 0/5 false positives. Jimeng, Samsung, and user-owned marked fixtures remain unverified.
 - Verified bounded `cv2` inpainting on Gemini and Doubao masks: four runs changed zero pixels outside the supplied mask. MI-GAN/LaMa evaluation and visual inspection on user-owned marked fixtures remain open.
 - Completed the Task 32 owned-fixture gate with a Gemini-marked image and an unmarked clipart: detector confidence `0.694789`, no unmarked detection, zero changed pixels outside both automatic and rectangular masks, and opaque RGBA preserved.
+- Completed one successful KIE GPT Image 1.5 mask-reference generation at a listed `$0.02` in `102.485` seconds after two native 4o payloads were rejected before generation. The output removed the mark but changed `817,034` pixels (`78.3491%`) outside the mask versus a `2.5936%` resize-normalization baseline and `0%` for local `cv2`; no API key appeared in the saved report or progress capture.
 
 - Verified every cleanup checkbox independently and all choices together in a local pipeline; 2 focused acceptance tests and all 77 project tests pass with identical final-stage pixels/alpha.
 - Verified 10 focused final-save cleanup tests and all 75 project tests pass after review of byte-equivalent disabled behavior, atomic rollback, trim ordering, metadata preservation, palette alpha, and C2PA conversion safety.
