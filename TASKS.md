@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Task 40 - OpenRouter Managed-API Fallback Prototype**.
+Current next task: **Task 41 - Managed-API Decision Gate**.
 
 ## Phase 1 - Preparation
 
@@ -846,7 +846,7 @@ Notes:
 
 ## Task 40 - OpenRouter Managed-API Fallback Prototype
 
-Status: In progress - no-network prototype prepared; one live comparison is blocked on separate authorization and an OpenRouter key
+Status: Done
 
 Goal:
 Test one current OpenRouter image-to-image candidate only if KIE is insufficient.
@@ -858,13 +858,13 @@ Steps:
 - Keep the prototype outside the main application.
 
 Acceptance:
-- [ ] OpenRouter is compared directly with the failed or partial KIE cases.
-- [ ] No OpenRouter key appears in logs or fixtures.
-- [ ] The result does not receive production approval without detector and quality evidence.
+- [x] OpenRouter is compared directly with the failed or partial KIE cases.
+- [x] No OpenRouter key appears in logs or fixtures.
+- [x] The result does not receive production approval without detector and quality evidence.
 
 Verification:
 - [x] Preparation command and pending comparison table are recorded.
-- [ ] One live result and the completed comparison table are recorded.
+- [x] One live result and the completed comparison table are recorded.
 
 Notes:
 - `recraft/recraft-v4.1-utility` was selected from the current dedicated Image
@@ -876,13 +876,23 @@ Notes:
 - `scripts/run_openrouter_regeneration_benchmark.py` reuses the Task 39 fixture,
   prompt, metrics, metadata/C2PA inspection, and Task 38 status contract. It is
   outside the application and does not change `main.py` or the UI.
-- Live generation is globally closed at zero authorized attempts. The prepared
-  harness requires a separate user authorization and `OPENROUTER_API_KEY`; no
-  provider request or charge was made.
-- Six focused tests cover the real-alpha fixture, closed network gate, global
+- One separately authorized request completed in `12.588 s`; the API response
+  reported `$0.035`. Recraft returned `1024x1024` RGB WebP, lost alpha, changed
+  `99.9579%` of RGB pixels beyond tolerance, and scored global SSIM `0.177527`.
+- Manual review failed: photo subject, face identity, clipart, exact text, and
+  fine-grid content were changed. The raw WebP also contains a signed `CRFT`
+  provenance chunk. SynthID remains `not_verified`; removal is not claimed.
+- Live generation is globally closed again at zero authorized attempts, while
+  the local state records the authorized attempt as `1/1` used. The key does not
+  appear in the report, fixtures, diff, or git history.
+- Ten focused tests cover the real-alpha fixture, closed network gate, global
   one-shot reservation, missing-key behavior, validated response allowlisting,
-  and safe `not_verified` analysis; all 104 project tests pass.
-- Mark `Skipped` if KIE passes Task 41 without a fallback need.
+  signed WebP evidence without provider values, and safe `not_verified`
+  analysis, including malformed WebP padding, pre-read size rejection, and RIFF
+  boundary enforcement; all 108 project tests pass.
+- Three review passes found and fixed bounded-read, test-count, and RIFF-boundary
+  issues. No blocking or important finding remains open.
+- Decision: OpenRouter/Recraft is not approved for production. Task 41 is active.
 
 ## Task 41 - Managed-API Decision Gate
 

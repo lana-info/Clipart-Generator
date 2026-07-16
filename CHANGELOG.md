@@ -9,8 +9,11 @@
   rubric while keeping the production application unchanged.
 - Added a globally closed paid-request gate, process-independent one-shot
   reservation, base64 reference transport, strict provider-image validation,
-  allowlisted cost/media parsing, and secret-safe failure reports. No
-  OpenRouter request was made.
+  allowlisted cost/media parsing, and secret-safe failure reports. The benchmark
+  remains outside the production application.
+- Added bounded WebP container inspection for the OpenRouter benchmark. It
+  records the presence of Recraft's signed `CRFT` provenance block without
+  serializing its signature, identifier, or other provider values.
 - Added the isolated Task 39 KIE whole-image regeneration harness, a globally closed live-request gate after the five authorized attempts, one multi-class RGBA fixture, provider-byte preservation, per-tile quality/alpha/dimension metrics, metadata/C2PA inspection, and Task 38 `not_verified` status output.
 - Added the Task 39 comparison report for GPT Image 2 and FLUX 2 Pro at `1K`; generated artifacts remain outside git and no production UI or pipeline behavior changed.
 - Added the provider-neutral hidden pixel-watermark status contract with separate processing/evidence/file-hint/handoff branches, explicit input/output evidence stage, controlled `detected`/`not_detected`/`not_verified`/`unsupported` evidence, official Gemini SynthID handoff, safe logs, and no false `removed` state.
@@ -87,6 +90,9 @@
 
 ### Changed
 
+- Completed the separately authorized Task 40 OpenRouter comparison and closed
+  its live-request gate again. Recraft V4.1 Utility is rejected for production;
+  Task 41 is now the next decision gate.
 - Changed the multi-platform release workflow to manual-only `workflow_dispatch`; ordinary pushes to `main` no longer start builds or releases.
 - Replaced visible-mark `cv2.inpaint` after its 200% quality check exposed rectangular patches: the Gemini mode now reconstructs the known alpha overlay, while confirmed small service labels use bounded local MI-GAN with an internally feathered edge.
 - The fixed processing order now starts with optional local visible-mark cleanup; all existing upscale, Unsharp Mask, background, edge, trim, metadata, and final-save ordering remains unchanged after it.
@@ -127,6 +133,19 @@
 
 ### Verified
 
+- Completed one OpenRouter Recraft V4.1 Utility generation: the API response
+  reported `$0.035` and `12.588 s`. It returned `1024x1024` RGB WebP, lost alpha,
+  changed the photo/face/clipart/text content, scored global SSIM `0.177527`, and
+  added a signed `CRFT` provenance block. Pixel-marker status remains
+  `not_verified`, so removal is not claimed.
+- Verified the completed Task 40 state with 10 focused tests and all 108 project
+  tests. The code-level live gate is back at zero, the persistent state records
+  the single attempt as used, oversized WebP files are rejected before reading,
+  bytes outside the declared RIFF boundary are rejected, and provider
+  signature/identifier values are not serialized.
+- Completed three Task 40 review passes and fixed every reported important
+  issue: bounded reads, consistent verification counts, and strict RIFF
+  boundaries. No blocking or important finding remains open.
 - Verified the Task 40 preparation command without network access and 6 focused
   tests: the live gate remains closed at zero, no state/output is created by a
   denied call, one future authorization cannot be reused from another process,

@@ -31,7 +31,8 @@ PROVIDER_ID = "recraft"
 LISTED_COST_USD = 0.035
 TASK40_AUTHORIZED_GENERATION_ATTEMPTS = 0
 MAX_PROVIDER_IMAGE_BYTES = 50 * 1024 * 1024
-SNAPSHOT_DATE = "2026-07-15"
+MAX_WEBP_CHUNKS = 128
+SNAPSHOT_DATE = "2026-07-16"
 CANDIDATE_SNAPSHOT = {
     "model": MODEL_ID,
     "provider": PROVIDER_ID,
@@ -186,6 +187,83 @@ def parse_provider_response(payload: object) -> dict[str, Any]:
     }
 
 
+def inspect_provider_container(path: Path) -> dict[str, Any]:
+    """Record bounded WebP chunk evidence without serializing provider values."""
+    if path.stat().st_size > MAX_PROVIDER_IMAGE_BYTES:
+        raise OpenRouterBenchmarkError("Provider image exceeds the size limit")
+    data = path.read_bytes()
+    if len(data) > MAX_PROVIDER_IMAGE_BYTES:
+        raise OpenRouterBenchmarkError("Provider image exceeds the size limit")
+    if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        return {"format": "other", "status": "not_webp"}
+    declared_size = int.from_bytes(data[4:8], "little") + 8
+    if declared_size != len(data):
+        raise OpenRouterBenchmarkError("Provider WebP RIFF size does not match the file")
+
+    known_chunk_types = {
+        b"VP8 ": "VP8",
+        b"VP8L": "VP8L",
+        b"VP8X": "VP8X",
+        b"ALPH": "ALPH",
+        b"ANIM": "ANIM",
+        b"ANMF": "ANMF",
+        b"ICCP": "ICCP",
+        b"EXIF": "EXIF",
+        b"XMP ": "XMP",
+        b"CRFT": "CRFT",
+    }
+    chunks: list[dict[str, Any]] = []
+    recraft_signature: dict[str, Any] | None = None
+    position = 12
+    while position + 8 <= len(data):
+        if len(chunks) >= MAX_WEBP_CHUNKS:
+            raise OpenRouterBenchmarkError("Provider WebP contains too many chunks")
+        chunk_type = data[position : position + 4]
+        chunk_size = int.from_bytes(data[position + 4 : position + 8], "little")
+        payload_start = position + 8
+        payload_end = payload_start + chunk_size
+        if payload_end > len(data):
+            raise OpenRouterBenchmarkError("Provider WebP contains a truncated chunk")
+        safe_type = known_chunk_types.get(chunk_type, "other")
+        chunks.append({"type": safe_type, "size_bytes": chunk_size})
+        if chunk_type == b"CRFT":
+            try:
+                value = json.loads(data[payload_start:payload_end])
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                value = None
+            if isinstance(value, dict):
+                algorithm = value.get("signing_algo")
+                recraft_signature = {
+                    "signed_by_matches_expected_provider": value.get("signed_by") == PROVIDER_ID,
+                    "signature_present": isinstance(value.get("signature_b64"), str)
+                    and bool(value["signature_b64"]),
+                    "signing_algorithm": "Ed25519" if algorithm == "Ed25519" else "other",
+                    "identifier_present": isinstance(value.get("identifier"), str)
+                    and bool(value["identifier"]),
+                    "generation_timestamp_present": isinstance(
+                        value.get("generation_timestamp"), (int, float)
+                    )
+                    and not isinstance(value.get("generation_timestamp"), bool),
+                }
+            else:
+                recraft_signature = {"present": True, "parsed": False}
+        next_position = payload_end + (chunk_size & 1)
+        if next_position > len(data):
+            raise OpenRouterBenchmarkError("Provider WebP contains truncated padding")
+        position = next_position
+
+    return {
+        "format": "WEBP",
+        "status": "inspected",
+        "file_size_bytes": len(data),
+        "declared_size_matches": True,
+        "trailing_bytes": len(data) - position,
+        "chunks": chunks,
+        "recraft_signature": recraft_signature,
+        "c2pa_validation": "not_performed",
+    }
+
+
 def _request_image(source_path: Path, api_key: str) -> tuple[dict[str, Any], float]:
     body = json.dumps(build_request_payload(source_path), separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(
@@ -332,6 +410,7 @@ def main() -> int:
         "response_media_type": media_type,
         "fixture": fixture,
         "metrics": metrics,
+        "provider_container": inspect_provider_container(output_path),
         "output": str(output_path),
         "api_key_logged": False,
     }

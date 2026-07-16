@@ -72,7 +72,7 @@ metadata/C2PA hints и detector evidence хранятся отдельно; `rem
 | [`lana-info/remove-ai-watermarks`](https://github.com/lana-info/remove-ai-watermarks) | Apache-2.0 код для metadata/C2PA, локализации известных видимых меток и inpainting; отдельный тяжёлый режим полной diffusion-перегенерации через SDXL/ControlNet/Qwen | Использовать только проверенный detector и templates для Gemini; не переносить upstream removal engines или diffusion backends. Сохранить Apache-2.0 attribution. |
 | [`Picsart-AI-Research/MI-GAN`](https://github.com/Picsart-AI-Research/MI-GAN) | MIT-licensed локальный inpainting; официальный проект ссылается на конвертированный ONNX model | Использовать закрепленный ONNX только внутри ограниченной подтвержденной области. Проверять SHA-256 при первом запуске и не менять пиксели вне маски. |
 | KIE | В документации есть масочное редактирование через 4o Image и image-to-image через GPT Image 2/FLUX.2; отдельного документированного удалителя скрытых image-watermark не найдено. | Отклонён и для точечного удаления видимой метки, и как универсальная полная перегенерация. В Task 39 GPT Image 2 потерял alpha и вернул `1254x1254` вместо `1024x1024`; FLUX 2 Pro потерял alpha и распространил контрольную сетку на всё изображение. Оба результата содержали C2PA и остались `not_verified`. |
-| OpenRouter | Унифицированный Image API поддерживает image-to-image/reference editing для доступных image models; отдельной подтверждённой операции удаления скрытого watermark нет. | Для Task 40 подготовлен изолированный тест `recraft/recraft-v4.1-utility` по снимку `$0.035`/image. Live-запрос закрыт до отдельного разрешения и ключа; production-решение не принято. Не использовать Google/Nano Banana как remover SynthID: новый Google output сам получает SynthID. |
+| OpenRouter | Унифицированный Image API поддерживает image-to-image/reference editing для доступных image models; отдельной подтверждённой операции удаления скрытого watermark нет. | Отклонён. Task 40 `recraft/recraft-v4.1-utility` стоил `$0.035`, сохранил `1024x1024`, но потерял alpha, заменил сюжет/лицо, испортил текст и добавил подписанный `CRFT` provenance-блок. Detector evidence отсутствует. Не использовать Google/Nano Banana как remover SynthID: новый Google output сам получает SynthID. |
 
 Источники: [лицензия remove-ai-watermarks](https://github.com/lana-info/remove-ai-watermarks/blob/main/LICENSE), [KIE 4o Image mask editing](https://docs.kie.ai/4o-image-api/quickstart), [KIE GPT Image 2 image-to-image](https://docs.kie.ai/market/gpt/gpt-image-2-image-to-image), [KIE FLUX 2 Pro image-to-image](https://docs.kie.ai/market/flux2/pro-image-to-image), [KIE Sora 2 video remover](https://docs.kie.ai/cn/market/sora2/sora-watermark-remover), [OpenRouter Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation), [OpenRouter image models](https://openrouter.ai/collections/image-models).
 
@@ -108,7 +108,7 @@ Task 37 сохранил local-only решение и тот же UI, но от�
 8. Видимые метки не входят в metadata cleanup и выполняются отдельным opt-in шагом до первого апскейла.
 9. Автоматическое удаление разрешено только для подтвержденной Gemini-метки; все остальные небольшие служебные метки требуют пользовательского подтверждения области.
 10. Точечное удаление видимых меток выполняется локально: reverse-alpha для Gemini и встроенный MI-GAN для подтвержденной bounded mask. KIE не является selectable provider для этого шага.
-11. KIE не добавляется как универсальный provider перегенерации: Task 39 не прошёл общий quality gate по alpha, размерам/компоновке и detector evidence. Следующий ограниченный шаг - один OpenRouter-кандидат; подготовка Recraft V4.1 Utility не является production approval и не разрешает платный запрос.
+11. KIE и OpenRouter не добавляются как универсальные providers перегенерации: Tasks 39-40 не прошли общий quality gate по alpha, сюжету/идентичности, точному тексту и detector evidence. Task 41 должен решить, активировать ли условный local/GPU путь.
 
 ## Ограничения владения и безопасности
 
@@ -123,6 +123,6 @@ Task 37 сохранил local-only решение и тот же UI, но от�
 - Tasks 24-30 выполнены: локально инспектируют и выборочно очищают поддерживаемые PNG/JPEG metadata/C2PA только в final save, с проверкой pixels/alpha/ICC/DPI и без сетевого запроса.
 - Tasks 31-34 выполнены: выбран local-only путь с автоматикой только для Gemini и user-confirmed bounded mask для остальных небольших служебных меток.
 - Tasks 35-37 выполнены: добавлены opt-in UI, локальный шаг до первого upscale и приемка без KIE key.
-- Tasks 38-39 выполнены: status contract зафиксирован, KIE не прошёл универсальный quality gate. Task 40 OpenRouter подготовлен без сети и ожидает отдельное разрешение на один запрос перед Task 41.
+- Tasks 38-40 выполнены: status contract зафиксирован, KIE и OpenRouter не прошли универсальный quality gate. Task 41 активирован перед условными Tasks 42-47.
 - Tasks 42-47: запускать local/GPU serverless/VPS gateway только если managed API не проходит quality gate.
 - Tasks 48-49: добавить только одобренный режим перегенерации и выполнять повторную инспекцию результата.

@@ -119,6 +119,78 @@ class OpenRouterRegenerationBenchmarkTests(unittest.TestCase):
             self.assertNotIn(secret, serialized)
             self.assertNotIn("provider_debug", parsed)
 
+    def test_webp_container_inspection_records_recraft_signature_without_values(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-task40-webp-") as temp_dir:
+            output = Path(temp_dir) / "output.provider"
+            Image.new("RGB", (16, 16), (120, 80, 40)).save(output, format="WEBP")
+            data = bytearray(output.read_bytes())
+            private_value = "provider-value-must-not-be-serialized"
+            metadata = json.dumps(
+                {
+                    "signed_by": "recraft",
+                    "signature_b64": private_value,
+                    "signing_algo": "Ed25519",
+                    "generation_timestamp": 1784241078,
+                    "identifier": private_value,
+                }
+            ).encode("utf-8")
+            chunk = b"CRFT" + len(metadata).to_bytes(4, "little") + metadata
+            if len(metadata) & 1:
+                chunk += b"\0"
+            data.extend(chunk)
+            data[4:8] = (len(data) - 8).to_bytes(4, "little")
+            output.write_bytes(data)
+
+            result = benchmark.inspect_provider_container(output)
+            serialized = json.dumps(result)
+
+            self.assertEqual(result["status"], "inspected")
+            self.assertTrue(result["declared_size_matches"])
+            self.assertEqual(result["trailing_bytes"], 0)
+            self.assertIn("CRFT", [chunk["type"] for chunk in result["chunks"]])
+            self.assertTrue(
+                result["recraft_signature"]["signed_by_matches_expected_provider"]
+            )
+            self.assertTrue(result["recraft_signature"]["signature_present"])
+            self.assertNotIn(private_value, serialized)
+
+    def test_webp_container_inspection_rejects_missing_chunk_padding(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-task40-webp-pad-") as temp_dir:
+            output = Path(temp_dir) / "output.provider"
+            Image.new("RGB", (16, 16), (120, 80, 40)).save(output, format="WEBP")
+            data = bytearray(output.read_bytes())
+            data.extend(b"CRFT\x01\x00\x00\x00{")
+            data[4:8] = (len(data) - 8).to_bytes(4, "little")
+            output.write_bytes(data)
+
+            with self.assertRaisesRegex(
+                benchmark.OpenRouterBenchmarkError, "truncated padding"
+            ):
+                benchmark.inspect_provider_container(output)
+
+    def test_webp_container_inspection_rejects_oversize_before_reading(self):
+        oversized = mock.Mock()
+        oversized.stat.return_value.st_size = benchmark.MAX_PROVIDER_IMAGE_BYTES + 1
+
+        with self.assertRaisesRegex(
+            benchmark.OpenRouterBenchmarkError, "exceeds the size limit"
+        ):
+            benchmark.inspect_provider_container(oversized)
+
+        oversized.read_bytes.assert_not_called()
+
+    def test_webp_container_inspection_rejects_bytes_outside_riff_boundary(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-task40-webp-riff-") as temp_dir:
+            output = Path(temp_dir) / "output.provider"
+            Image.new("RGB", (16, 16), (120, 80, 40)).save(output, format="WEBP")
+            with output.open("ab") as handle:
+                handle.write(b"CRFT\x02\x00\x00\x00{}")
+
+            with self.assertRaisesRegex(
+                benchmark.OpenRouterBenchmarkError, "RIFF size does not match"
+            ):
+                benchmark.inspect_provider_container(output)
+
     def test_existing_result_analysis_cannot_claim_watermark_removal(self):
         with tempfile.TemporaryDirectory(prefix="clipart-task40-analysis-") as temp_dir:
             root = Path(temp_dir)
