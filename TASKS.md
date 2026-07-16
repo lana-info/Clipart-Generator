@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Task 39 - KIE Whole-Image Regeneration Prototype**.
+Current next task: **Task 40 - OpenRouter Managed-API Fallback Prototype**.
 
 ## Phase 1 - Preparation
 
@@ -805,7 +805,7 @@ Notes:
 
 ## Task 39 - KIE Whole-Image Regeneration Prototype
 
-Status: Todo
+Status: Done
 
 Goal:
 Test whether the existing KIE integration is sufficient for whole-image regeneration before adding infrastructure.
@@ -818,19 +818,35 @@ Steps:
 - Re-check a known SynthID sample through the available official verification flow.
 
 Acceptance:
-- [ ] KIE results are evaluated on all required image classes.
-- [ ] Cost and quality are recorded per model/resolution.
-- [ ] Results report `not verified` unless detector evidence exists.
+- [x] KIE results are evaluated on all required image classes.
+- [x] Cost and quality are recorded per model/resolution.
+- [x] Results report `not verified` unless detector evidence exists.
 
 Verification:
-- [ ] Minimal paid benchmark results are recorded outside production code.
+- [x] Minimal paid benchmark results are recorded outside production code.
 
 Notes:
-- KIE is the preferred path only if it passes Task 41.
+- `TASK39_KIE_REGENERATION_BENCHMARK.md` records one GPT Image 2 and one FLUX 2
+  Pro `1K` generation. GPT returned `1254x1254` RGB and FLUX returned
+  `1024x1024` RGB; both lost alpha and added embedded C2PA. GPT preserved the
+  fixture better, while FLUX spread the fine grid across the board and changed
+  layout/text.
+- The known Gemini-origin fixture and both outputs remain `not_verified` because
+  no authenticated official Gemini detector session was available. Processing
+  success is not reported as watermark removal.
+- The five-attempt authorization is exhausted: Task 33 used three attempts and
+  Task 39 used two. The reusable harness now blocks live generation globally,
+  independent of output directory; the recorded model snapshots total
+  `11 credits / $0.055` without claiming actual billing.
+- KIE does not pass the universal quality gate, so Task 40 is activated. No
+  production UI or pipeline behavior was changed.
+- Five focused benchmark tests and all 98 project tests pass. They cover the
+  closed global budget, credit snapshots, real alpha, safe status claims, and the
+  enabled FLUX safety checker.
 
 ## Task 40 - OpenRouter Managed-API Fallback Prototype
 
-Status: Todo - conditional on Task 39 no-go or partial result
+Status: Todo - activated by Task 39 no-go
 
 Goal:
 Test one current OpenRouter image-to-image candidate only if KIE is insufficient.

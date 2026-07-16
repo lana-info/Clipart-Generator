@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added the isolated Task 39 KIE whole-image regeneration harness, a globally closed live-request gate after the five authorized attempts, one multi-class RGBA fixture, provider-byte preservation, per-tile quality/alpha/dimension metrics, metadata/C2PA inspection, and Task 38 `not_verified` status output.
+- Added the Task 39 comparison report for GPT Image 2 and FLUX 2 Pro at `1K`; generated artifacts remain outside git and no production UI or pipeline behavior changed.
 - Added the provider-neutral hidden pixel-watermark status contract with separate processing/evidence/file-hint/handoff branches, explicit input/output evidence stage, controlled `detected`/`not_detected`/`not_verified`/`unsupported` evidence, official Gemini SynthID handoff, safe logs, and no false `removed` state.
 - Added 6 focused status-contract tests covering scoped negative evidence, successful-but-unverified processing, metadata/C2PA separation, unknown markers, invalid detector claims, JSON serialization, and secret-safe formatting.
 - Added the pinned MIT-licensed MI-GAN ONNX model for bounded user-confirmed visible-mark filling, with a local integrity check, attribution, and Windows/macOS PyInstaller data entries; no build or release was run.
@@ -118,6 +120,8 @@
 
 ### Verified
 
+- Completed the two remaining user-authorized provider attempts: GPT Image 2 task polling took `99.497` seconds at a listed `6 credits / $0.030` and returned `1254x1254` RGB; FLUX 2 Pro task polling took `67.568` seconds at a listed `5 credits / $0.025` and returned `1024x1024` RGB. Upload time is excluded. Both flattened alpha and added embedded C2PA; FLUX also contaminated the board with the control grid. Neither output has detector evidence, so both remain `not_verified` and KIE is rejected as the universal regeneration path.
+- Verified Task 39 with 5 focused tests and all 98 project tests; the fixture has real alpha, the exhausted budget blocks live generation independently of output directory, credit snapshots are recorded, the FLUX fallback keeps its safety checker enabled, and report analysis cannot claim pixel-marker removal without detector evidence.
 - Verified Task 38 with 6 focused tests and all 93 project tests: processing success remains separate from detector evidence, negative evidence is scoped, metadata/C2PA hints cannot imply pixel results, unknown markers cannot report `removed`, and safe logs ignore arbitrary provider values.
 - Verified Task 37 with 8 focused tests and all 87 project tests on two marked Gemini images, one user-confirmed Doubao label, five clean upstream images, and one clean user-owned clipart. The final local path changed `0` pixels outside approved masks, preserved sources/dimensions/modes/alpha, left all clean fixtures unchanged, passed normal/200% visual inspection, and made `0` KIE/API requests.
 - Verified Task 36 with 6 focused tests and all 85 project tests: visible cleanup runs only when enabled and before upscale, process-only works without KIE, confirmed coordinates are not persisted, alpha is preserved, zero pixels change outside the approved mask, and failure/cancellation preserve source and prior output.
