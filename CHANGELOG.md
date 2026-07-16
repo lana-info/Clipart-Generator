@@ -4,6 +4,13 @@
 
 ### Added
 
+- Added the isolated Task 40 OpenRouter benchmark preparation for
+  `recraft/recraft-v4.1-utility`, reusing the Task 39 RGBA fixture and quality
+  rubric while keeping the production application unchanged.
+- Added a globally closed paid-request gate, process-independent one-shot
+  reservation, base64 reference transport, strict provider-image validation,
+  allowlisted cost/media parsing, and secret-safe failure reports. No
+  OpenRouter request was made.
 - Added the isolated Task 39 KIE whole-image regeneration harness, a globally closed live-request gate after the five authorized attempts, one multi-class RGBA fixture, provider-byte preservation, per-tile quality/alpha/dimension metrics, metadata/C2PA inspection, and Task 38 `not_verified` status output.
 - Added the Task 39 comparison report for GPT Image 2 and FLUX 2 Pro at `1K`; generated artifacts remain outside git and no production UI or pipeline behavior changed.
 - Added the provider-neutral hidden pixel-watermark status contract with separate processing/evidence/file-hint/handoff branches, explicit input/output evidence stage, controlled `detected`/`not_detected`/`not_verified`/`unsupported` evidence, official Gemini SynthID handoff, safe logs, and no false `removed` state.
@@ -120,6 +127,11 @@
 
 ### Verified
 
+- Verified the Task 40 preparation command without network access and 6 focused
+  tests: the live gate remains closed at zero, no state/output is created by a
+  denied call, one future authorization cannot be reused from another process,
+  a missing key does not consume an attempt, and analysis cannot claim pixel
+  watermark removal without detector evidence. All 104 project tests pass.
 - Completed the two remaining user-authorized provider attempts: GPT Image 2 task polling took `99.497` seconds at a listed `6 credits / $0.030` and returned `1254x1254` RGB; FLUX 2 Pro task polling took `67.568` seconds at a listed `5 credits / $0.025` and returned `1024x1024` RGB. Upload time is excluded. Both flattened alpha and added embedded C2PA; FLUX also contaminated the board with the control grid. Neither output has detector evidence, so both remain `not_verified` and KIE is rejected as the universal regeneration path.
 - Verified Task 39 with 5 focused tests and all 98 project tests; the fixture has real alpha, the exhausted budget blocks live generation independently of output directory, credit snapshots are recorded, the FLUX fallback keeps its safety checker enabled, and report analysis cannot claim pixel-marker removal without detector evidence.
 - Verified Task 38 with 6 focused tests and all 93 project tests: processing success remains separate from detector evidence, negative evidence is scoped, metadata/C2PA hints cannot imply pixel results, unknown markers cannot report `removed`, and safe logs ignore arbitrary provider values.

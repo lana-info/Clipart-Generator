@@ -846,7 +846,7 @@ Notes:
 
 ## Task 40 - OpenRouter Managed-API Fallback Prototype
 
-Status: Todo - activated by Task 39 no-go
+Status: In progress - no-network prototype prepared; one live comparison is blocked on separate authorization and an OpenRouter key
 
 Goal:
 Test one current OpenRouter image-to-image candidate only if KIE is insufficient.
@@ -863,9 +863,25 @@ Acceptance:
 - [ ] The result does not receive production approval without detector and quality evidence.
 
 Verification:
-- [ ] Prototype command and comparison table are recorded.
+- [x] Preparation command and pending comparison table are recorded.
+- [ ] One live result and the completed comparison table are recorded.
 
 Notes:
+- `recraft/recraft-v4.1-utility` was selected from the current dedicated Image
+  API records as the single non-Google candidate. Its endpoint snapshot is
+  `$0.035` per output image and accepts one reference image.
+- The provider has no documented hidden pixel-watermark removal guarantee or
+  checked pixel-watermark policy. The result must remain `not_verified` without
+  detector evidence.
+- `scripts/run_openrouter_regeneration_benchmark.py` reuses the Task 39 fixture,
+  prompt, metrics, metadata/C2PA inspection, and Task 38 status contract. It is
+  outside the application and does not change `main.py` or the UI.
+- Live generation is globally closed at zero authorized attempts. The prepared
+  harness requires a separate user authorization and `OPENROUTER_API_KEY`; no
+  provider request or charge was made.
+- Six focused tests cover the real-alpha fixture, closed network gate, global
+  one-shot reservation, missing-key behavior, validated response allowlisting,
+  and safe `not_verified` analysis; all 104 project tests pass.
 - Mark `Skipped` if KIE passes Task 41 without a fallback need.
 
 ## Task 41 - Managed-API Decision Gate
