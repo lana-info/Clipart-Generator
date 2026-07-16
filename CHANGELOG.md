@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added the provider-neutral hidden pixel-watermark status contract with separate processing/evidence/file-hint/handoff branches, explicit input/output evidence stage, controlled `detected`/`not_detected`/`not_verified`/`unsupported` evidence, official Gemini SynthID handoff, safe logs, and no false `removed` state.
+- Added 6 focused status-contract tests covering scoped negative evidence, successful-but-unverified processing, metadata/C2PA separation, unknown markers, invalid detector claims, JSON serialization, and secret-safe formatting.
 - Added the pinned MIT-licensed MI-GAN ONNX model for bounded user-confirmed visible-mark filling, with a local integrity check, attribution, and Windows/macOS PyInstaller data entries; no build or release was run.
 - Added Task 37 acceptance evidence for 3 marked and 6 unmarked general-image fixtures: source hashes, dimensions, modes, and alpha were preserved, no pixels changed outside approved masks, clean files produced no output, normal/200% comparisons passed, and no KIE/API request was made.
 - Added local visible-mark processing before the first upscale: automatic Gemini detection at confidence `>= 0.5` and a per-file user-confirmed rectangle for other small service marks.
@@ -116,6 +118,7 @@
 
 ### Verified
 
+- Verified Task 38 with 6 focused tests and all 93 project tests: processing success remains separate from detector evidence, negative evidence is scoped, metadata/C2PA hints cannot imply pixel results, unknown markers cannot report `removed`, and safe logs ignore arbitrary provider values.
 - Verified Task 37 with 8 focused tests and all 87 project tests on two marked Gemini images, one user-confirmed Doubao label, five clean upstream images, and one clean user-owned clipart. The final local path changed `0` pixels outside approved masks, preserved sources/dimensions/modes/alpha, left all clean fixtures unchanged, passed normal/200% visual inspection, and made `0` KIE/API requests.
 - Verified Task 36 with 6 focused tests and all 85 project tests: visible cleanup runs only when enabled and before upscale, process-only works without KIE, confirmed coordinates are not persisted, alpha is preserved, zero pixels change outside the approved mask, and failure/cancellation preserve source and prior output.
 - Verified the real owned Gemini fixture at confidence `0.694789`: the source hash remained unchanged, `3,237` pixels changed inside the removal mask, and `0` outside. An unmarked UI screenshot scored `0.184643`, stayed unchanged, and created no raw output. No API request or credit was used.

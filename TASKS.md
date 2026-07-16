@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Task 38 - Pixel-Watermark Status Contract**.
+Current next task: **Task 39 - KIE Whole-Image Regeneration Prototype**.
 
 ## Phase 1 - Preparation
 
@@ -772,7 +772,7 @@ Notes:
 
 ## Task 38 - Pixel-Watermark Status Contract
 
-Status: Todo
+Status: Done - provider-neutral claim-safe contract added
 
 Goal:
 Represent hidden-marker evidence without turning metadata proxies into false removal claims.
@@ -784,15 +784,24 @@ Steps:
 - Add safe log formatting and tests.
 
 Acceptance:
-- [ ] `not detected` never means proven human-made.
-- [ ] Processing success is separate from detector result.
-- [ ] Unknown markers never receive a false `removed` result.
+- [x] `not detected` never means proven human-made.
+- [x] Processing success is separate from detector result.
+- [x] Unknown markers never receive a false `removed` result.
 
 Verification:
-- [ ] `python -m unittest tests.test_watermark_status -v`
+- [x] `python -m unittest tests.test_watermark_status -v`
 
 Notes:
 - This contract is shared by KIE, OpenRouter, and any GPU worker.
+- `watermark_status.py` returns separate `processing`, `pixel_evidence`,
+  `file_hints`, and `verification_handoff` branches. Metadata/C2PA hints cannot
+  change pixel evidence, detector evidence identifies the checked input/output
+  stage, and the schema has no `removed` status.
+- Unverified SynthID uses the official Gemini handoff; unknown markers use manual
+  or external verification. The formatter emits only allowlisted labels and never
+  echoes provider/user values.
+- Six focused tests and all 93 project tests pass. Task 38 adds no UI, API call,
+  or pipeline behavior.
 
 ## Task 39 - KIE Whole-Image Regeneration Prototype
 
