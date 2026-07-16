@@ -25,6 +25,9 @@ python -m PyInstaller `
     --add-data "third_party/remove_ai_watermarks_gemini/assets;third_party/remove_ai_watermarks_gemini/assets" `
     --add-data "third_party/remove_ai_watermarks_gemini/LICENSE;third_party/remove_ai_watermarks_gemini" `
     --add-data "third_party/remove_ai_watermarks_gemini/NOTICE.md;third_party/remove_ai_watermarks_gemini" `
+    --add-data "third_party/migan/migan.onnx;third_party/migan" `
+    --add-data "third_party/migan/LICENSE;third_party/migan" `
+    --add-data "third_party/migan/NOTICE.md;third_party/migan" `
     main.py
 
 Write-Host "==> Prepare release directory"

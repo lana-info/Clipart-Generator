@@ -13,7 +13,11 @@ from third_party.remove_ai_watermarks_gemini import GeminiEngine
 
 GEMINI_MIN_CONFIDENCE = 0.5
 MAX_CONFIRMED_REGION_FRACTION = 0.15
-INPAINT_RADIUS = 6
+GEMINI_ALPHA_MIN = 0.005
+CONFIRMED_GLYPH_MIN_PIXELS = 20
+CONFIRMED_GLYPH_MAX_SATURATION = 55
+CONFIRMED_GLYPH_MIN_LUMA = 150
+CONFIRMED_GLYPH_TOPHAT_DELTA = 12
 
 
 class VisibleMarkCleanupError(RuntimeError):
@@ -61,6 +65,99 @@ def normalize_confirmed_region(region, image_size):
             f"Область метки слишком большая; выберите не более {percentage}% изображения"
         )
     return normalized
+
+
+def _gemini_reverse_alpha(bgr, engine, region):
+    x, y, width, height = region
+    alpha = np.asarray(engine.get_interpolated_alpha(width), dtype=np.float32)
+    if alpha.shape != (height, width):
+        alpha = cv2.resize(alpha, (width, height), interpolation=cv2.INTER_LINEAR)
+    alpha = np.clip(alpha, 0.0, 0.95)
+    active = alpha > GEMINI_ALPHA_MIN
+    if not np.any(active):
+        raise VisibleMarkCleanupError("Маска восстановления Gemini пуста")
+
+    source_roi = bgr[y : y + height, x : x + width].astype(np.float32)
+    alpha_3d = alpha[..., None]
+    recovered = np.clip(
+        (source_roi - alpha_3d * float(engine.logo_value)) / (1.0 - alpha_3d),
+        0,
+        255,
+    ).astype(np.uint8)
+    result = bgr.copy()
+    result_roi = result[y : y + height, x : x + width]
+    result_roi[active] = recovered[active]
+    result[y : y + height, x : x + width] = result_roi
+
+    mask = np.zeros(bgr.shape[:2], dtype=np.uint8)
+    mask_roi = mask[y : y + height, x : x + width]
+    mask_roi[active] = 255
+    mask[y : y + height, x : x + width] = mask_roi
+    return result, mask
+
+
+def _confirmed_region_mask(bgr, region):
+    x, y, width, height = region
+    fallback = np.zeros(bgr.shape[:2], dtype=np.uint8)
+    fallback[y : y + height, x : x + width] = 255
+    if width < 16 or height < 16:
+        return fallback
+
+    roi = bgr[y : y + height, x : x + width].astype(np.float32)
+    luma = roi.mean(axis=2)
+    saturation = roi.max(axis=2) - roi.min(axis=2)
+    sigma = max(4.0, height * 0.4)
+    local_background = cv2.GaussianBlur(luma, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    glyph = (
+        (saturation < CONFIRMED_GLYPH_MAX_SATURATION)
+        & ((luma - local_background) > CONFIRMED_GLYPH_TOPHAT_DELTA)
+        & (luma > CONFIRMED_GLYPH_MIN_LUMA)
+    ).astype(np.uint8) * 255
+    kernel = np.ones((5, 5), dtype=np.uint8)
+    glyph = cv2.morphologyEx(glyph, cv2.MORPH_CLOSE, kernel)
+    glyph = cv2.morphologyEx(glyph, cv2.MORPH_OPEN, kernel)
+    glyph_y, glyph_x = np.where(glyph > 0)
+    if glyph_x.size < CONFIRMED_GLYPH_MIN_PIXELS:
+        return fallback
+
+    padding = max(4, int(0.10 * height))
+    left = max(x, x + int(glyph_x.min()) - padding)
+    top = max(y, y + int(glyph_y.min()) - padding)
+    right = min(x + width, x + int(glyph_x.max()) + 1 + padding)
+    bottom = min(y + height, y + int(glyph_y.max()) + 1 + padding)
+    mask = np.zeros(bgr.shape[:2], dtype=np.uint8)
+    mask[top:bottom, left:right] = 255
+    dilation = max(3, int(0.02 * width))
+    ellipse = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE,
+        (dilation * 2 + 1, dilation * 2 + 1),
+    )
+    mask = cv2.dilate(mask, ellipse)
+    confirmed_bounds = fallback > 0
+    mask[~confirmed_bounds] = 0
+    return mask
+
+
+def _feather_inside_mask(source, generated, mask):
+    mask_pixels = mask > 0
+    if not np.any(mask_pixels):
+        return source.copy()
+    mask_y, mask_x = np.where(mask_pixels)
+    shortest_side = min(
+        int(mask_x.max() - mask_x.min() + 1),
+        int(mask_y.max() - mask_y.min() + 1),
+    )
+    feather = max(2, min(12, int(round(shortest_side * 0.09))))
+    distance = cv2.distanceTransform(mask, cv2.DIST_L2, 5)
+    weight = np.clip(distance / float(feather), 0.0, 1.0)[..., None]
+    result = np.clip(
+        source.astype(np.float32) * (1.0 - weight)
+        + generated.astype(np.float32) * weight,
+        0,
+        255,
+    ).astype(np.uint8)
+    result[~mask_pixels] = source[~mask_pixels]
+    return result
 
 
 def cleanup_visible_mark(
@@ -116,7 +213,7 @@ def cleanup_visible_mark(
             if not bool(getattr(detection, "detected", False)) or confidence < GEMINI_MIN_CONFIDENCE:
                 return VisibleMarkCleanupResult(changed=False, confidence=confidence)
             region = normalize_confirmed_region(getattr(detection, "region", None), source_size)
-            mask = detector.footprint_mask(bgr, region=getattr(detection, "region", None))
+            cleaned_bgr, mask = _gemini_reverse_alpha(bgr, detector, region)
         except VisibleMarkCleanupError:
             raise
         except Exception as error:
@@ -126,17 +223,19 @@ def cleanup_visible_mark(
         mask = np.where(mask > 0, 255, 0).astype(np.uint8)
     elif mode_value == "confirmed_area":
         region = normalize_confirmed_region(confirmed_region, source_size)
-        x, y, region_width, region_height = region
-        mask = np.zeros(bgr.shape[:2], dtype=np.uint8)
-        mask[y : y + region_height, x : x + region_width] = 255
+        mask = _confirmed_region_mask(bgr, region)
     else:
         raise VisibleMarkCleanupError(f"Неподдерживаемый режим удаления видимой метки: {mode_value}")
 
     check_cancelled()
-    try:
-        cleaned_bgr = cv2.inpaint(bgr, mask, INPAINT_RADIUS, cv2.INPAINT_TELEA)
-    except Exception as error:
-        raise VisibleMarkCleanupError(f"Не удалось заполнить область видимой метки: {error}") from error
+    if mode_value == "confirmed_area":
+        try:
+            from third_party.migan import inpaint_bgr
+
+            generated_bgr = inpaint_bgr(bgr, mask)
+            cleaned_bgr = _feather_inside_mask(bgr, generated_bgr, mask)
+        except Exception as error:
+            raise VisibleMarkCleanupError(f"Не удалось заполнить область видимой метки: {error}") from error
 
     changed_mask = np.any(cleaned_bgr != bgr, axis=2)
     inside = mask > 0

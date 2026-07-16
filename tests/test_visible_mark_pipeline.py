@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -19,6 +20,7 @@ import main
 from visible_mark_cleanup import (
     VisibleMarkCleanupCancelled,
     VisibleMarkCleanupError,
+    _confirmed_region_mask,
     cleanup_visible_mark,
     visible_mark_region_key,
 )
@@ -119,6 +121,80 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                 allowed = np.zeros(changed.shape, dtype=bool)
                 allowed[y : y + height, x : x + width] = True
                 self.assertFalse(np.any(changed & ~allowed))
+
+    def test_gemini_alpha_recovery_preserves_texture_without_a_patch(self):
+        class AlphaEngine:
+            logo_value = 255.0
+
+            def __init__(self, alpha, region):
+                self.alpha = alpha
+                self.region = region
+
+            def detect_watermark(self, _image):
+                return SimpleNamespace(detected=True, confidence=0.8, region=self.region)
+
+            def get_interpolated_alpha(self, _size):
+                return self.alpha
+
+        with tempfile.TemporaryDirectory(prefix="clipart-visible-gemini-alpha-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source = temp_path / "source.png"
+            output = temp_path / "cleaned.png"
+            width, height = 72, 64
+            region = (48, 40, 16, 16)
+            base = np.zeros((height, width, 3), dtype=np.uint8)
+            for y in range(height):
+                for x in range(width):
+                    base[y, x] = (30 + x * 2, 40 + y * 2, 70 + (x + y) % 80)
+            yy, xx = np.mgrid[-1:1:16j, -1:1:16j]
+            alpha = np.clip(0.52 * (1.0 - np.maximum(np.abs(xx), np.abs(yy))), 0.0, 0.52).astype(np.float32)
+            marked = base.astype(np.float32)
+            x, y, region_width, region_height = region
+            roi = marked[y : y + region_height, x : x + region_width]
+            roi[:] = roi * (1.0 - alpha[..., None]) + 255.0 * alpha[..., None]
+            marked = np.rint(marked).astype(np.uint8)
+            Image.fromarray(marked, mode="RGB").save(source)
+            source_digest = file_hash(source)
+
+            result = cleanup_visible_mark(
+                source,
+                output,
+                "gemini_auto",
+                engine=AlphaEngine(alpha, region),
+            )
+
+            self.assertTrue(result.changed)
+            self.assertEqual(result.changed_pixels_outside_mask, 0)
+            self.assertEqual(file_hash(source), source_digest)
+            with Image.open(output) as cleaned:
+                cleaned_rgb = np.asarray(cleaned.convert("RGB"))
+            difference = np.abs(cleaned_rgb.astype(np.int16) - base.astype(np.int16))
+            self.assertLessEqual(int(difference.max()), 2)
+
+    def test_confirmed_area_refines_a_light_service_label_inside_selection(self):
+        image = np.full((120, 180, 3), (45, 70, 85), dtype=np.uint8)
+        region = (70, 65, 95, 40)
+        cv2.putText(
+            image,
+            "AI",
+            (95, 96),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (235, 235, 235),
+            3,
+            cv2.LINE_AA,
+        )
+
+        mask = _confirmed_region_mask(image, region)
+        ys, xs = np.where(mask > 0)
+
+        self.assertGreater(xs.size, 0)
+        self.assertGreaterEqual(int(xs.min()), region[0])
+        self.assertGreaterEqual(int(ys.min()), region[1])
+        self.assertLess(int(xs.max()), region[0] + region[2])
+        self.assertLess(int(ys.max()), region[1] + region[3])
+        self.assertLess(int(xs.max() - xs.min() + 1), region[2])
+        self.assertLess(int(ys.max() - ys.min() + 1), region[3])
 
     def test_automatic_no_detection_leaves_source_unchanged_and_creates_no_raw_file(self):
         class NoDetectionEngine:

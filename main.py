@@ -968,7 +968,7 @@ class WorkerThread(QThread):
         mode_label = (
             "Gemini автоматически"
             if self.visible_mark_cleanup_mode == "gemini_auto"
-            else "подтвержденная область"
+            else "подтвержденная область, MI-GAN"
         )
         self.progress.emit(f"  Видимая метка: локальная обработка ({mode_label})...")
         result = cleanup_visible_mark(

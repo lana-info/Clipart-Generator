@@ -21,9 +21,17 @@ Change history: [`CHANGELOG.md`](./CHANGELOG.md).
 - Mixed local/KIE processing flows.
 
 For visible marks, use `Gemini automatically` only for the small Gemini corner
-sparkle. Use `User-confirmed area` for another small service mark on an existing
-process-only file; the selected rectangle is not saved after the run. This local
-step is disabled by default and does not use KIE.
+sparkle; the app restores it from the known alpha overlay. Use `User-confirmed
+area` for another small service mark on an existing process-only file; the app
+refines light service text inside the selection and fills it with the bundled
+local MI-GAN model. Select the mark with a small surrounding margin. The selected
+rectangle is not saved after the run. This step is disabled by default and does
+not use KIE or any network service.
+
+The confirmed-area mode is intended for small corner service labels on natural or
+softly textured backgrounds. Large, central, repeated, dark, or ownership-related
+watermarks are outside the approved quality claim and can require whole-image
+regeneration instead.
 
 ## Author Quick Setup
 

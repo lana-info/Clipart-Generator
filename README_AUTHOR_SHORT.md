@@ -30,6 +30,8 @@
 Теперь можно собирать сразу два артефакта через workflow:
 - `.github/workflows/release-multi-platform.yml`
 
+Workflow запускается только вручную после решения, что приложение готово. Обычные commit/push не запускают сборку или релиз.
+
 Как запускать:
 1. GitHub → **Actions** → **Release Multi Platform**.
 2. Нажать **Run workflow**.

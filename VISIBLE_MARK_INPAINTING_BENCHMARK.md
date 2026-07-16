@@ -1,7 +1,7 @@
 # Visible Mark Inpainting Benchmark
 
-Task 32 currently has a bounded CPU result only. The benchmark uses the same
-confirmed masks from Task 31 and never writes over source images.
+Task 32 established a bounded CPU baseline. Task 37 later completed the production
+quality gate. Both stages use confirmed masks and never write over source images.
 
 Command:
 
@@ -19,15 +19,31 @@ rectangular masks. It changed zero pixels outside the supplied mask in all four
 runs. Automatic masks changed fewer pixels than the rectangular fallback on both
 fixtures. Runtime was approximately 0.6-1.9 seconds per run on this machine.
 
-Task 34 selected `cv2` as the only precise local provider: automatic masks are
-allowed only for Gemini, while other small service marks require a user-confirmed
-bounded mask. This is a safety property, not a claim that `cv2` gives the best
-texture fill.
+Task 34 provisionally selected `cv2` as the bounded local provider: automatic
+masks are allowed only for Gemini, while other small service marks require a
+user-confirmed bounded mask. Task 37 visual inspection at normal size and 200%
+found visible rectangular patches in that production path, so the final
+implementation no longer uses `cv2.inpaint` for removal.
 
-MI-GAN and LaMa were not run automatically: invoking the package's optional backend
-resolution attempted to obtain model resources and exceeded the bounded benchmark
-window. They remain unselected until their weights are explicitly installed and
-licensed for evaluation.
+MI-GAN and LaMa were not available during the Task 32 baseline. Task 37 later
+evaluated the official MIT-licensed MI-GAN ONNX model linked by the
+[`Picsart-AI-Research/MI-GAN`](https://github.com/Picsart-AI-Research/MI-GAN)
+project. The pinned model is now bundled and runs locally through ONNX Runtime;
+LaMa remains unselected.
+
+## Task 37 Production Acceptance
+
+The final production path uses reverse-alpha reconstruction for the known Gemini
+overlay and bounded local MI-GAN for a user-confirmed service label. Nine fixtures
+were checked: two marked Gemini images, one confirmed Doubao label, five clean
+upstream images, and one clean user-owned clipart. All three marked fixtures were
+changed only inside their masks; all six clean fixtures remained unchanged and
+created no output. Source hashes, dimensions, image modes, and alpha were
+preserved. Normal-size and 200% comparison sheets passed visual inspection, with
+zero KIE/API requests.
+
+Acceptance evidence is stored outside git in
+`C:\Users\belou\Downloads\output\task37-visible-mark-acceptance-fixed`.
 
 ## User-Owned Fixture Gate
 

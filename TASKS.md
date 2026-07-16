@@ -4,9 +4,9 @@ Source specs: `PRD.md` and `PROCESSING_PIPELINE_TZ.md`.
 
 Rule: take the next open task in order. Keep code changes narrow and do not refactor working code unless it directly makes the current task safer.
 
-For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Do not build, tag, publish, or create a release unless the user requests it separately.
+For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Task 25 - Bounded C2PA Presence Inspector**.
+Current next task: **Task 38 - Pixel-Watermark Status Contract**.
 
 ## Phase 1 - Preparation
 
@@ -577,7 +577,7 @@ Notes:
 
 ## Task 32 - Local Visible-Mark Inpainting Benchmark
 
-Status: Done - cv2 selected as the local default/fallback
+Status: Done - cv2 established as the bounded baseline; superseded by Task 37 quality acceptance
 
 Goal:
 Choose a local fill method for confirmed masks without unacceptable damage outside the marked region.
@@ -598,7 +598,7 @@ Verification:
 
 Notes:
 - Keep benchmark assets outside git unless small and redistributable.
-- MI-GAN/LaMa remain unselected because their optional weights were not installed; see `VISIBLE_MARK_INPAINTING_BENCHMARK.md`. They can be evaluated later as a separate optional backend without changing the selected safe fallback.
+- MI-GAN/LaMa were unavailable during this bounded baseline. Task 37 later evaluated and bundled the official MIT MI-GAN ONNX model after the `cv2` production result failed the 200% visual quality gate; LaMa remains unselected.
 
 ## Task 33 - KIE Mask-Edit Benchmark
 
@@ -654,8 +654,10 @@ Notes:
 - Automatic local detection/removal is approved only for the small Gemini corner
   mark on owned/licensed PNG/JPEG. Doubao and unmeasured/unknown small service marks
   require a user-confirmed bounded mask; unsupported images remain unchanged.
-- Local `cv2` is the only approved precise provider. KIE, MI-GAN, and LaMa are not
-  selectable in the visible-mark UI. The feature remains disabled by default.
+- At this gate, local `cv2` was the only evaluated precise provider. Task 37 later
+  retained the same local-only UI and bounded-mask rules but replaced `cv2` after
+  production visual acceptance with reverse-alpha Gemini recovery and bundled MI-GAN.
+  KIE and LaMa are not selectable. The feature remains disabled by default.
 
 ## Task 35 - Visible-Mark UI And Settings
 
@@ -726,10 +728,13 @@ Notes:
 - Six focused tests and all 85 project tests pass. A real owned Gemini fixture scored
   `0.694789`, changed `0` pixels outside the mask, and preserved the source hash; an
   unmarked screenshot scored `0.184643` and produced no raw output. No API request was made.
+- Task 37 subsequently replaced the initial `cv2.inpaint` fill after its 200% visual
+  acceptance exposed rectangular patches; the step order, UI modes, and local-only
+  routing remain unchanged.
 
 ## Task 37 - Visible-Mark Acceptance
 
-Status: Todo - activated by Task 34 local-only go decision
+Status: Done - local-only quality acceptance passed
 
 Goal:
 Verify the complete visible-mark slice on marked and unmarked general images.
@@ -741,16 +746,27 @@ Steps:
 - Update supported/unsupported documentation.
 
 Acceptance:
-- [ ] Approved fixtures meet the recorded quality rubric.
-- [ ] Unmarked fixtures remain unchanged.
-- [ ] Logs and UI describe detection and removal accurately.
+- [x] Approved fixtures meet the recorded quality rubric.
+- [x] Unmarked fixtures remain unchanged.
+- [x] Logs and UI describe detection and removal accurately.
 
 Verification:
-- [ ] `python -m unittest tests.test_visible_mark_pipeline -v`
-- [ ] Manual comparison is recorded in `CHANGELOG.md`.
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_visible_mark_pipeline -v`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest discover -s tests -v`
+- [x] Manual comparison is recorded in `CHANGELOG.md`.
 
 Notes:
-- Acceptance must include the saved upstream fixtures plus the user-owned marked and unmarked gate; no new paid request is required.
+- Acceptance included two marked Gemini fixtures, one user-confirmed Doubao fixture,
+  five clean upstream fixtures, and one clean user-owned clipart fixture.
+- Reverse-alpha Gemini recovery and bounded local MI-GAN passed normal-size and 200%
+  visual inspection. All three marked files changed `0` pixels outside the mask;
+  all six unmarked files remained unchanged and produced no visible-mark output.
+- Source hashes, dimensions, modes, and alpha were preserved. The run made `0`
+  KIE/API requests. Evidence is stored outside git in
+  `C:\Users\belou\Downloads\output\task37-visible-mark-acceptance-fixed`.
+- The pinned MI-GAN model, MIT license, notice, and Windows/macOS packaging entries
+  are tracked. No application build, release, tag, or workflow run was performed.
+- Eight focused visible-mark tests and all 87 project tests pass.
 
 ## Phase 21 - Hidden Pixel Markers: Managed API First
 

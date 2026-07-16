@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added the pinned MIT-licensed MI-GAN ONNX model for bounded user-confirmed visible-mark filling, with a local integrity check, attribution, and Windows/macOS PyInstaller data entries; no build or release was run.
+- Added Task 37 acceptance evidence for 3 marked and 6 unmarked general-image fixtures: source hashes, dimensions, modes, and alpha were preserved, no pixels changed outside approved masks, clean files produced no output, normal/200% comparisons passed, and no KIE/API request was made.
 - Added local visible-mark processing before the first upscale: automatic Gemini detection at confidence `>= 0.5` and a per-file user-confirmed rectangle for other small service marks.
 - Added atomic `raw/*_visible_mark_*.png` output validation, alpha preservation, cancellation/rollback handling, and runtime-only confirmed coordinates; this step never requires or calls KIE.
 - Vendored the pinned Apache-2.0 Gemini detector and its two required templates from `remove-ai-watermarks` commit `190dc89d234fd7e3a61ff755f01251c9c0b87ef0`, including attribution and packaging data.
@@ -74,9 +76,11 @@
 
 ### Changed
 
+- Changed the multi-platform release workflow to manual-only `workflow_dispatch`; ordinary pushes to `main` no longer start builds or releases.
+- Replaced visible-mark `cv2.inpaint` after its 200% quality check exposed rectangular patches: the Gemini mode now reconstructs the known alpha overlay, while confirmed small service labels use bounded local MI-GAN with an internally feathered edge.
 - The fixed processing order now starts with optional local visible-mark cleanup; all existing upscale, Unsharp Mask, background, edge, trim, metadata, and final-save ordering remains unchanged after it.
-- Task 34 approved a disabled-by-default local visible-mark path: automatic detection only for Gemini, a user-confirmed bounded mask for other small service marks, local `cv2` as the only precise provider, and no KIE key or KIE selector.
-- Rejected KIE GPT Image 1.5 as the precise visible-mark fallback: local `cv2` remains the bounded candidate, while whole-image managed regeneration stays separate for future hidden-marker evaluation.
+- Task 34 approved a disabled-by-default local visible-mark path: automatic detection only for Gemini, a user-confirmed bounded mask for other small service marks, and no KIE key or KIE selector. Task 37 retained those product limits while improving the local fill method.
+- Rejected KIE GPT Image 1.5 as the precise visible-mark fallback; bounded local processing remains selected, while whole-image managed regeneration stays separate for future hidden-marker evaluation.
 - Closed the metadata/C2PA acceptance gate and moved visible generator-mark work behind its separate prototype and go/no-go tasks.
 - Process-only runs can now perform metadata cleanup without another image-processing step or a KIE API key.
 - Selected cleanup carries supported metadata through trim and print-export staging; the existing 300 DPI export setting remains the final DPI authority.
@@ -112,12 +116,13 @@
 
 ### Verified
 
+- Verified Task 37 with 8 focused tests and all 87 project tests on two marked Gemini images, one user-confirmed Doubao label, five clean upstream images, and one clean user-owned clipart. The final local path changed `0` pixels outside approved masks, preserved sources/dimensions/modes/alpha, left all clean fixtures unchanged, passed normal/200% visual inspection, and made `0` KIE/API requests.
 - Verified Task 36 with 6 focused tests and all 85 project tests: visible cleanup runs only when enabled and before upscale, process-only works without KIE, confirmed coordinates are not persisted, alpha is preserved, zero pixels change outside the approved mask, and failure/cancellation preserve source and prior output.
 - Verified the real owned Gemini fixture at confidence `0.694789`: the source hash remained unchanged, `3,237` pixels changed inside the removal mask, and `0` outside. An unmarked UI screenshot scored `0.184643`, stayed unchanged, and created no raw output. No API request or credit was used.
 - Verified the Windows build script parses, the GitHub workflow YAML parses, and every declared detector data path exists; packaging itself was intentionally not run.
 - Verified the Task 35 controls use safe defaults for legacy configs, enable parameters only with the action, show confirmation only for the manual-area mode, persist independently, stay inside the existing processing layout, and expose no unsupported automatic/KIE option; 2 focused offscreen tests pass.
 - Verified the isolated detector against one Gemini marked fixture, one Doubao marked fixture, and five unmarked upstream fixtures: 2/2 marked detections and 0/5 false positives. Jimeng, Samsung, and user-owned marked fixtures remain unverified.
-- Verified bounded `cv2` inpainting on Gemini and Doubao masks: four runs changed zero pixels outside the supplied mask. MI-GAN/LaMa evaluation and visual inspection on user-owned marked fixtures remain open.
+- Verified bounded `cv2` inpainting as the Task 32 safety baseline; Task 37 later rejected its visible production quality and replaced it with reverse-alpha Gemini recovery plus bounded local MI-GAN. LaMa remains unselected.
 - Completed the Task 32 owned-fixture gate with a Gemini-marked image and an unmarked clipart: detector confidence `0.694789`, no unmarked detection, zero changed pixels outside both automatic and rectangular masks, and opaque RGBA preserved.
 - Completed one successful KIE GPT Image 1.5 mask-reference generation at a listed `$0.02` in `102.485` seconds after two native 4o payloads were rejected before generation. The output removed the mark but changed `817,034` pixels (`78.3491%`) outside the mask versus a `2.5936%` resize-normalization baseline and `0%` for local `cv2`; no API key appeared in the saved report or progress capture.
 - Closed the Task 34 provider gate from two reproducible marked fixtures, five reproducible unmarked fixtures, and the user-owned Gemini marked/unmarked pair. Gemini is the only approved automatic mark; Doubao and unmeasured marks remain user-confirmed-only.

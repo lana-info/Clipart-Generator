@@ -54,8 +54,8 @@
 | Provenance | Remote/sidecar C2PA manifest reference | `INSPECT` + ограниченный `REMOVE` | Та же галочка `Удалить встроенный C2PA` удаляет только поддерживаемую ссылку из нового PNG | Remote manifest, sidecar и копии у третьих сторон не удаляются и не запрашиваются по сети. | [c2patool external/remote manifests](https://opensource.contentauthenticity.org/docs/c2patool/docs/usage/#generating-a-remote-manifest), [Adobe: deletion limits](https://helpx.adobe.com/creative-cloud/apps/adobe-content-authenticity/content-credentials/manage-content-credentials.html) |
 | Pixel-level watermark | Google SynthID в Nano Banana/Gemini images | `DETECT/REPORT` + `EXPERIMENTAL REGENERATE` | `Проверить SynthID через Gemini`; отдельно `Перегенерировать изображение (экспериментально)` | Все изображения Nano Banana API содержат SynthID. Официальная проверка доступна через Gemini, но отсутствие результата не доказывает отсутствие AI. Экспериментальная перегенерация меняет все пиксели и требует повторной внешней проверки. | [Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation), [Google SynthID](https://deepmind.google/models/synthid/), [Gemini verification](https://support.google.com/gemini/answer/16722517) |
 | Pixel-level watermark | Неизвестные невидимые watermark/fingerprint/steganography | `UNSUPPORTED` для гарантированного удаления; `EXPERIMENTAL REGENERATE` без гарантии | Только общий экспериментальный режим перегенерации | Нет универсального надежного детектора или метода удаления. C2PA soft bindings могут переживать удаление manifest и обычные преобразования. | [C2PA soft bindings](https://spec.c2pa.org/specifications/specifications/2.4/specs/C2PA_Specification.html#_soft_bindings), [C2PA FAQ](https://c2pa.org/faqs/) |
-| Видимая метка | Небольшой угловой значок Gemini | `APPROVED FOR LOCAL INTEGRATION` | Отдельный opt-in режим `Gemini автоматически` | Task 34 разрешает только проверенный локальный detector + `cv2`; не путать с SynthID. Исходник не перезаписывается, неуверенная/отсутствующая детекция оставляет файл без изменений. | [Google: visible watermark experiment and invisible SynthID](https://blog.google/products-and-platforms/products/gemini/image-editing/) |
-| Видимая метка | Doubao, Jimeng, Samsung и неизвестная небольшая служебная метка | `USER-CONFIRMED LOCAL REMOVE` | Пользователь подтверждает ограниченную область; автоматический режим недоступен | Doubao имеет только один воспроизводимый marked fixture, Jimeng/Samsung не измерены. Большие, центральные, повторяющиеся и чужие коммерческие watermark не входят в поддержку. | [Google: visible watermark experiment and invisible SynthID](https://blog.google/products-and-platforms/products/gemini/image-editing/) |
+| Видимая метка | Небольшой угловой значок Gemini | `APPROVED FOR LOCAL INTEGRATION` | Отдельный opt-in режим `Gemini автоматически` | Локальный detector находит известный overlay, после чего исходные пиксели восстанавливаются обратным alpha-compositing; не путать с SynthID. Неуверенная/отсутствующая детекция оставляет файл без изменений. | [Google: visible watermark experiment and invisible SynthID](https://blog.google/products-and-platforms/products/gemini/image-editing/) |
+| Видимая метка | Doubao и неизвестная небольшая светлая служебная метка | `USER-CONFIRMED LOCAL REMOVE` | Пользователь подтверждает ограниченную область; автоматический режим недоступен | Светлая метка уточняется внутри выделения и локально заполняется MI-GAN. Doubao имеет один воспроизводимый marked fixture; Jimeng/Samsung не измерены. Большие, центральные, повторяющиеся, темные и чужие коммерческие watermark не входят в поддержку. | [MI-GAN official repository](https://github.com/Picsart-AI-Research/MI-GAN) |
 
 `REMOVE` для C2PA подтверждён bounded PNG/JPEG fixtures Tasks 25, 27 и 30 только для локальных `caBX`/APP11 JUMBF structures и поддерживаемых XMP references в новом PNG. Это не означает удаление remote manifest, sidecar, подписи у третьей стороны или pixel-level soft binding.
 
@@ -63,15 +63,18 @@
 
 | Кандидат | Что реально даёт | Решение |
 |---|---|---|
-| [`lana-info/remove-ai-watermarks`](https://github.com/lana-info/remove-ai-watermarks) | Apache-2.0 код для metadata/C2PA, локализации известных видимых меток и inpainting; отдельный тяжёлый режим полной diffusion-перегенерации через SDXL/ControlNet/Qwen | Использовать только проверенный detector как референс для Gemini и локальный `cv2` для bounded mask; не переносить весь проект или optional model backends. Сохранить Apache-2.0 attribution и отдельно проверить лицензии любых будущих weights. |
+| [`lana-info/remove-ai-watermarks`](https://github.com/lana-info/remove-ai-watermarks) | Apache-2.0 код для metadata/C2PA, локализации известных видимых меток и inpainting; отдельный тяжёлый режим полной diffusion-перегенерации через SDXL/ControlNet/Qwen | Использовать только проверенный detector и templates для Gemini; не переносить upstream removal engines или diffusion backends. Сохранить Apache-2.0 attribution. |
+| [`Picsart-AI-Research/MI-GAN`](https://github.com/Picsart-AI-Research/MI-GAN) | MIT-licensed локальный inpainting; официальный проект ссылается на конвертированный ONNX model | Использовать закрепленный ONNX только внутри ограниченной подтвержденной области. Проверять SHA-256 при первом запуске и не менять пиксели вне маски. |
 | KIE | В документации есть масочное редактирование через 4o Image и image-to-image через GPT Image 2, FLUX Kontext/FLUX.2; отдельного документированного удалителя скрытых image-watermark не найдено. KIE предлагает специализированный remover только для Sora 2 video. | Отклонён для точечного удаления видимой метки: native 4o payloads были отвергнуты, а GPT Image 1.5 изменил `78.3491%` пикселей вне маски. Остаётся кандидатом только для отдельной полной перегенерации скрытых pixel markers. |
 | OpenRouter | Унифицированный Image API поддерживает image-to-image/reference editing для доступных image models; отдельной подтверждённой операции удаления скрытого watermark нет. | Проверить только в сравнительном прототипе. Не использовать Google/Nano Banana как remover SynthID: новый Google output сам получает SynthID. |
 
 Источники: [лицензия remove-ai-watermarks](https://github.com/lana-info/remove-ai-watermarks/blob/main/LICENSE), [KIE 4o Image mask editing](https://docs.kie.ai/4o-image-api/quickstart), [KIE GPT Image 2 image-to-image](https://docs.kie.ai/market/gpt/gpt-image-2-image-to-image), [KIE FLUX Kontext editing](https://docs.kie.ai/flux-kontext-api/generate-or-edit-image/), [KIE Sora 2 video remover](https://docs.kie.ai/cn/market/sora2/sora-watermark-remover), [OpenRouter Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation), [OpenRouter image models](https://openrouter.ai/collections/image-models).
 
-## Task 34: quality gate видимых меток
+## Tasks 34 and 37: quality gate видимых меток
 
-| Критерий | Local detector + `cv2` | KIE mask-reference |
+Task 34 established the provider gate; this table records its initial benchmark.
+
+| Критерий | Local detector + `cv2` baseline | KIE mask-reference |
 |---|---|---|
 | Проверенные marked fixtures | Gemini upstream + user-owned; Doubao upstream | тот же user-owned Gemini fixture |
 | Проверенные unmarked fixtures | 5 upstream + 1 user-owned; ложных срабатываний `0/6` | не применимо: маска передана явно |
@@ -80,11 +83,12 @@
 | Время/стоимость | примерно `0.6-1.9` с, без API credits | `102.485` с, одна успешная генерация около `$0.02` |
 | Размеры/alpha | исходные размеры; RGBA сохранён на owned fixture | `1023x1537` RGB вместо padded `912x1368`, alpha отсутствует |
 
-Решение: активировать Tasks 35-37 с local-only реализацией. Автоматически
-разрешена только Gemini-метка, подтвержденная двумя marked fixtures. Doubao и все
-неизмеренные/неизвестные небольшие служебные метки допускаются только через
-подтвержденную пользователем bounded mask. KIE и optional MI-GAN/LaMa в UI видимых
-меток не добавляются. Функция выключена по умолчанию.
+Task 37 сохранил local-only решение и тот же UI, но отклонил `cv2.inpaint` после
+визуальной проверки production path при 200%: были видны прямоугольные заплатки.
+Финальный путь использует reverse-alpha для Gemini и встроенный MI-GAN для
+подтвержденной bounded mask. На 3 marked fixtures изменено `0` пикселей вне маски;
+6 unmarked fixtures остались без изменений. KIE/LaMa и выбор backend в UI не
+добавляются. Функция выключена по умолчанию.
 
 ## Принятые продуктовые решения
 
@@ -97,7 +101,7 @@
 7. Неизвестные пиксельные маркеры нельзя объявлять гарантированно удалёнными. Экспериментальная перегенерация сообщает только факт выполнения и результат доступной проверки.
 8. Видимые метки не входят в metadata cleanup и выполняются отдельным opt-in шагом до первого апскейла.
 9. Автоматическое удаление разрешено только для подтвержденной Gemini-метки; все остальные небольшие служебные метки требуют пользовательского подтверждения области.
-10. Точечное удаление видимых меток выполняется локально через `cv2`; KIE не является selectable provider для этого шага.
+10. Точечное удаление видимых меток выполняется локально: reverse-alpha для Gemini и встроенный MI-GAN для подтвержденной bounded mask. KIE не является selectable provider для этого шага.
 
 ## Ограничения владения и безопасности
 
