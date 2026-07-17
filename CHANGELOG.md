@@ -4,6 +4,30 @@
 
 ### Added
 
+- Completed Task 50 cleanup acceptance across independent metadata choices,
+  combined local processing, mixed KIE, and PhotoRoom Standard routes.
+- Added offline light/dark comparison evidence for photo, face, illustration,
+  transparent clipart, and text-heavy content; decoded RGBA, alpha, dimensions,
+  ICC, and DPI were preserved through metadata-only cleanup.
+- Added regression coverage for PhotoRoom plus shared cleanup, mixed KIE plus
+  cleanup, exact KIE credential hosts and redirects, fully decodable provider
+  PNGs, non-blocking Stop, cancellation-before-publication, secret-safe provider
+  errors, bounded provider uploads/responses, and non-retried POST requests.
+- Fixed Stop so it remains responsive while an in-flight request finishes and
+  never publishes the current item after cancellation.
+- Restricted KIE credentials to exact `kie.ai`/`redpandaai.co` domains and their
+  subdomains; sensitive headers are not inherited by redirects.
+- Stopped logging provider response bodies, validated PNG payloads by decoding,
+  and retry only idempotent GET/HEAD/OPTIONS requests automatically.
+- Hardened KIE, PhotoRoom, update, and license transports against HTTPS downgrade
+  redirects; remote license URLs require HTTPS, authenticated redirects cannot
+  inherit secrets, and provider response/upload sizes are bounded.
+- Kept model preflight fail-closed for transport failures while allowing only a
+  bounded, classified reference-schema error without exposing provider bodies.
+- Changed user-confirmed visible-mark wording to report bounded area processing
+  that requires visual verification instead of claiming proven removal.
+- Verified Task 50 with 176 offline tests and no paid request, build, tag,
+  workflow, or release.
 - Completed Task 42 with a pinned, isolated, no-download production-hardware
   feasibility preflight for `remove-ai-watermarks` SDXL, ControlNet, and Qwen
   pipelines.

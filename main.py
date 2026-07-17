@@ -13,6 +13,7 @@ import ssl
 import math
 import subprocess
 import shutil
+import threading
 from io import BytesIO, StringIO
 from urllib.parse import urlparse
 from urllib import error as urlerror
@@ -77,6 +78,35 @@ from PyQt6.QtWidgets import (
 APP_VERSION = "1.0.2"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
+MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
+MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
+MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_API_UPLOAD_BYTES = 128 * 1024 * 1024
+MAX_PROVIDER_IMAGE_DIMENSION = 32_768
+MAX_PROVIDER_IMAGE_PIXELS = 70_000_000
+
+
+class ProcessingCancelled(RuntimeError):
+    pass
+
+
+class ResponseLimitError(RuntimeError):
+    pass
+
+
+class HttpsOnlyRedirectHandler(request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        source = urlparse(req.full_url)
+        target = urlparse(newurl)
+        if source.scheme.lower() == "https" and (
+            target.scheme.lower() != "https" or not target.hostname
+        ):
+            return None
+        if target.username or target.password:
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 REFERENCE_MODEL_SHORTLIST = {
     "gpt-image/1.5-image-to-image",
     "gpt-image-2",
@@ -444,6 +474,59 @@ def build_ssl_context():
     return ssl.create_default_context()
 
 
+def open_url_secure(req, timeout, context=None):
+    ssl_context = context or build_ssl_context()
+    opener = request.build_opener(
+        request.HTTPSHandler(context=ssl_context),
+        HttpsOnlyRedirectHandler(),
+    )
+    return opener.open(req, timeout=timeout)
+
+
+def protect_secret_headers_from_redirects(req):
+    for header_name in ("Authorization", "X-api-key"):
+        value = req.get_header(header_name)
+        if value is None:
+            continue
+        req.remove_header(header_name)
+        req.add_unredirected_header(header_name, value)
+
+
+def read_response_limited(response, max_bytes):
+    headers = getattr(response, "headers", None)
+    content_length = headers.get("Content-Length") if headers is not None else None
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                raise ResponseLimitError("API response exceeds size limit")
+        except (TypeError, ValueError):
+            pass
+    payload = response.read(max_bytes + 1)
+    if len(payload) > max_bytes:
+        raise ResponseLimitError("API response exceeds size limit")
+    return payload
+
+
+def safe_error_text(error, secrets=(), limit=500):
+    message = str(error).strip() or error.__class__.__name__
+    for secret in secrets:
+        if secret:
+            message = message.replace(str(secret), "[hidden]")
+    message = re.sub(r"(?i)(bearer\s+)[^\s,;]+", r"\1[hidden]", message)
+    return message[:limit]
+
+
+def is_schema_required_error_message(message):
+    text = str(message or "").lower()
+    return (
+        text == "schema_required"
+        or "is required" in text
+        or "field is required" in text
+        or "required field" in text
+        or "missing required" in text
+    )
+
+
 class WorkerThread(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(str)
@@ -458,7 +541,19 @@ class WorkerThread(QThread):
         self.selected_files = selected_files or []
         self.generated_prompts = generated_prompts or []
         self.is_running = True
+        self._publish_lock = threading.Lock()
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+        sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
+        self._secret_values = tuple(
+            {
+                value.strip()
+                for key, value in settings.items()
+                if isinstance(value, str)
+                and value.strip()
+                and any(marker in str(key).lower() for marker in sensitive_markers)
+            }
+        )
 
         self.kie_api_key = settings.get("kie_api_key", "").strip()
         self.photoroom_api_key = settings.get("photoroom_api_key", "").strip()
@@ -562,11 +657,24 @@ class WorkerThread(QThread):
                 self._mode1_generate(process_generated=True)
             else:
                 self._mode2_process_files()
-        except Exception as e:
-            self.error.emit(str(e))
+        except ProcessingCancelled as error:
+            self.progress.emit(self._safe_error_text(error))
+        except Exception as error:
+            self.error.emit(self._safe_error_text(error))
 
     def stop(self):
-        self.is_running = False
+        with self._publish_lock:
+            self.is_running = False
+
+    def _ensure_running(self):
+        if not self.is_running:
+            raise ProcessingCancelled("Остановлено пользователем")
+
+    def _safe_error_text(self, error, limit=500):
+        return safe_error_text(error, self._secret_values, limit=limit)
+
+    def _protect_secret_headers_from_redirects(self, req):
+        protect_secret_headers_from_redirects(req)
 
     def _mode1_generate(self, process_generated, emit_final=True):
         self.progress.emit("Mode 1: Генерация из промптов")
@@ -604,8 +712,10 @@ class WorkerThread(QThread):
                 prompt_text = entry.get("prompt", "")
                 references = entry.get("references", [])
                 image_url = self._kie_generate_image(prompt_text, references)
+                self._ensure_running()
                 gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
                 self._download_file(image_url, gen_path)
+                self._ensure_running()
                 self.progress.emit(f"  Сгенерировано: {gen_path}")
 
                 source_path = gen_path
@@ -625,6 +735,7 @@ class WorkerThread(QThread):
                     else:
                         final_url = None
 
+                self._ensure_running()
                 out_path = os.path.join(output_dir, f"result_{idx:03d}_{self.run_stamp}.png")
                 self._save_final_output(
                     final_url,
@@ -636,11 +747,11 @@ class WorkerThread(QThread):
                 )
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
-            except VisibleMarkCleanupCancelled:
+            except (ProcessingCancelled, VisibleMarkCleanupCancelled):
                 self.progress.emit("Остановлено пользователем")
                 return
             except Exception as e:
-                self.progress.emit(f"  Ошибка: {e}")
+                self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
         self.progress_value.emit(100)
         if emit_final:
@@ -727,6 +838,7 @@ class WorkerThread(QThread):
                 else:
                     final_url = None
 
+                self._ensure_running()
                 base = os.path.splitext(os.path.basename(file_path))[0]
                 out_path = os.path.join(output_dir, f"{base}_processed_{self.run_stamp}.png")
 
@@ -741,11 +853,11 @@ class WorkerThread(QThread):
 
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
-            except VisibleMarkCleanupCancelled:
+            except (ProcessingCancelled, VisibleMarkCleanupCancelled):
                 self.progress.emit("Остановлено пользователем")
                 return
             except Exception as e:
-                self.progress.emit(f"  Ошибка: {e}")
+                self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
         self.progress_value.emit(100)
         if emit_final:
@@ -836,11 +948,21 @@ class WorkerThread(QThread):
         return local_path
 
     def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
+        self._ensure_running()
         if self._can_use_legacy_kie_processing_pipeline():
             uploaded_url = source_url or self._kie_upload_file(source_path)
+            self._ensure_running()
             if not source_url:
                 self.progress.emit("  Загружено в KIE")
-            return self._run_kie_processing_pipeline(uploaded_url, raw_dir, idx, prefix, source_path)
+            result = self._run_kie_processing_pipeline(
+                uploaded_url,
+                raw_dir,
+                idx,
+                prefix,
+                source_path,
+            )
+            self._ensure_running()
+            return result
 
         current_path = source_path
         current_url = source_url
@@ -865,6 +987,7 @@ class WorkerThread(QThread):
                 current_path = visible_mark_path
                 current_url = None
                 local_result = True
+            self._ensure_running()
 
         if self.upscale:
             current_path, current_url, local_result = self._run_upscale_pass(
@@ -878,12 +1001,14 @@ class WorkerThread(QThread):
                 local_scale=self.local_realesrgan_scale,
                 kie_model=self.kie_upscale_model,
             )
+            self._ensure_running()
 
         if self.unsharp_enabled:
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
             current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
             current_url = None
             local_result = True
+            self._ensure_running()
 
         if self.remove_bg:
             if self._uses_local_rembg_remove_bg():
@@ -926,6 +1051,7 @@ class WorkerThread(QThread):
                 self.progress.emit(f"  Промежуточный без фона: {nobg_path}")
                 current_path = nobg_path
                 local_result = False
+            self._ensure_running()
 
         if self.upscale_after:
             current_path, current_url, local_result = self._run_upscale_pass(
@@ -939,6 +1065,7 @@ class WorkerThread(QThread):
                 local_scale=self.local_realesrgan_after_scale,
                 kie_model=self.kie_upscale_after_model,
             )
+            self._ensure_running()
 
         if self.edge_shrink_enabled:
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
@@ -948,6 +1075,7 @@ class WorkerThread(QThread):
                 local_result = True
             else:
                 self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
+            self._ensure_running()
 
         return current_path if local_result else current_url
 
@@ -988,10 +1116,17 @@ class WorkerThread(QThread):
                 self.progress.emit("  Видимая метка: подтвержденная область не потребовала изменений")
             return None
 
-        self.progress.emit(
-            f"  Видимая метка удалена локально: {output_path} "
-            f"(вне области изменено {result.changed_pixels_outside_mask} px)"
-        )
+        if self.visible_mark_cleanup_mode == "gemini_auto":
+            self.progress.emit(
+                f"  Видимая метка Gemini удалена локально: {output_path} "
+                f"(вне области изменено {result.changed_pixels_outside_mask} px)"
+            )
+        else:
+            self.progress.emit(
+                f"  Подтвержденная область обработана локально: {output_path} "
+                f"(вне области изменено {result.changed_pixels_outside_mask} px); "
+                "результат требует визуальной проверки"
+            )
         return output_path
 
     def _run_upscale_pass(
@@ -1331,6 +1466,7 @@ class WorkerThread(QThread):
         )
 
     def _save_final_output(self, result_url, source_path, output_path, raw_dir, idx, prefix):
+        self._ensure_running()
         output_dir = os.path.dirname(os.path.abspath(output_path))
         os.makedirs(output_dir, exist_ok=True)
         stage_path = None
@@ -1375,6 +1511,7 @@ class WorkerThread(QThread):
                 source_inspection = self._inspect_precleanup_source(source_path)
                 self._save_image_as_png(source_path, stage_path)
 
+            self._ensure_running()
             self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
         finally:
             if stage_path and os.path.exists(stage_path):
@@ -1413,19 +1550,41 @@ class WorkerThread(QThread):
             raise RuntimeError(f"Очистка файла не выполнена: {message}") from error
         return inspection
 
-    def _publish_final_output(self, stage_path, output_path, source_inspection=None):
-        if not self._metadata_cleanup_requested():
+    def _replace_output_if_running(self, stage_path, output_path):
+        with self._publish_lock:
+            if not self.is_running:
+                raise ProcessingCancelled("Остановлено пользователем")
             os.replace(stage_path, output_path)
+
+    def _publish_final_output(self, stage_path, output_path, source_inspection=None):
+        self._ensure_running()
+        if not self._metadata_cleanup_requested():
+            self._replace_output_if_running(stage_path, output_path)
             return None
 
+        publish_path = None
         try:
+            output_dir = os.path.dirname(os.path.abspath(output_path))
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                prefix=".clipart-publish-",
+                suffix=".png",
+                dir=output_dir,
+                delete=False,
+            ) as publish_file:
+                publish_path = publish_file.name
+            os.remove(publish_path)
+
             inspection = source_inspection or inspect_image_metadata(stage_path)
             self._log_metadata_cleanup_inspection(inspection)
             result = cleanup_image_metadata(
                 stage_path,
-                output_path,
+                publish_path,
                 self.metadata_cleanup_options,
             )
+            self._replace_output_if_running(publish_path, output_path)
+        except ProcessingCancelled:
+            raise
         except MetadataCleanupError as error:
             message = str(error).strip() or "неизвестная ошибка проверки"
             self.progress.emit(f"  Очистка файла: ошибка — {message}; итог не опубликован")
@@ -1433,6 +1592,12 @@ class WorkerThread(QThread):
         except Exception as error:
             self.progress.emit("  Очистка файла: непредвиденная ошибка; итог не опубликован")
             raise RuntimeError("Очистка файла не выполнена; итог не опубликован") from error
+        finally:
+            if publish_path and os.path.exists(publish_path):
+                try:
+                    os.remove(publish_path)
+                except OSError:
+                    pass
 
         self._apply_precleanup_action_overrides(result, inspection)
         self._log_metadata_cleanup_result(result)
@@ -1799,8 +1964,21 @@ class WorkerThread(QThread):
                 self._select_combo_model_id(combo_box, selected_model)
                 return True
 
-            if not self._is_model_unavailable_error(error_message):
+            if probe_reference_urls and is_schema_required_error_message(error_message):
+                self.log(
+                    "Reference-model preflight skipped: the API requires fields that are only available during the real run."
+                )
                 return True
+
+            if not self._is_model_unavailable_error(error_message):
+                safe_message = safe_error_text(
+                    error_message,
+                    (self.kie_api_key,),
+                )
+                self.progress.emit(
+                    f"Запуск остановлен: проверка модели не завершена ({safe_message})"
+                )
+                return False
 
             unavailable_label = self._get_model_label(selected_model)
             fallback_label = self._get_model_label(fallback_model)
@@ -1888,38 +2066,39 @@ class WorkerThread(QThread):
         req_timeout = timeout or self.timeout
         last_error = None
         ssl_context = build_ssl_context()
-        for attempt in range(self.retries + 1):
+        self._protect_secret_headers_from_redirects(req)
+        method = req.get_method().upper()
+        retry_limit = self.retries if method in {"GET", "HEAD", "OPTIONS"} else 0
+        for attempt in range(retry_limit + 1):
+            self._ensure_running()
             try:
-                with request.urlopen(req, timeout=req_timeout, context=ssl_context) as resp:
-                    return resp.read()
+                with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
+                    response = read_response_limited(resp, MAX_API_RESPONSE_BYTES)
+                self._ensure_running()
+                return response
             except urlerror.HTTPError as e:
-                response_body = ""
-                try:
-                    response_body = e.read().decode("utf-8", errors="ignore")
-                except Exception:
-                    response_body = ""
-
-                error_message = f"HTTP {e.code} {e.reason}"
-                if response_body:
-                    error_message = f"{error_message}: {response_body[:300]}"
-
-                last_error = RuntimeError(error_message)
+                last_error = RuntimeError(f"HTTP {e.code}")
 
                 # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
                 if e.code in {400, 401, 402, 403, 404}:
                     break
 
-                if attempt >= self.retries:
+                if attempt >= retry_limit:
                     break
-                self.progress.emit(f"  Повтор запроса {attempt + 1}/{self.retries}")
+                self.progress.emit(f"  Повтор запроса {attempt + 1}/{retry_limit}")
                 time.sleep(min(2 * (attempt + 1), 6))
+            except ProcessingCancelled:
+                raise
+            except ResponseLimitError as error:
+                last_error = error
+                break
             except Exception as e:
                 last_error = e
-                if attempt >= self.retries:
+                if attempt >= retry_limit:
                     break
-                self.progress.emit(f"  Повтор запроса {attempt + 1}/{self.retries}")
+                self.progress.emit(f"  Повтор запроса {attempt + 1}/{retry_limit}")
                 time.sleep(min(2 * (attempt + 1), 6))
-        raise RuntimeError(f"Ошибка HTTP-запроса: {last_error}")
+        raise RuntimeError(f"Ошибка HTTP-запроса: {self._safe_error_text(last_error)}")
 
     def _request_json(self, url, method="GET", payload=None, headers=None, timeout=None):
         req_headers = headers or {}
@@ -1930,6 +2109,15 @@ class WorkerThread(QThread):
         raw = self._request_with_retries(req, timeout=timeout)
         return json.loads(raw.decode("utf-8"))
 
+    def _read_upload_file(self, file_path):
+        if os.path.getsize(file_path) > MAX_API_UPLOAD_BYTES:
+            raise ResponseLimitError("Upload file exceeds size limit")
+        with open(file_path, "rb") as source_file:
+            payload = source_file.read(MAX_API_UPLOAD_BYTES + 1)
+        if len(payload) > MAX_API_UPLOAD_BYTES:
+            raise ResponseLimitError("Upload file exceeds size limit")
+        return payload
+
     def _run_photoroom_remove_bg(self, input_path, output_path):
         if not self.photoroom_api_key:
             raise ValueError("Не указан PhotoRoom API Key")
@@ -1939,8 +2127,7 @@ class WorkerThread(QThread):
         boundary = "----ClipartPhotoRoomBoundary" + uuid.uuid4().hex
         filename = re.sub(r'[\r\n"]', "_", os.path.basename(input_path)) or "image.png"
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        with open(input_path, "rb") as source_file:
-            image_bytes = source_file.read()
+        image_bytes = self._read_upload_file(input_path)
 
         parts = []
         for field_name, field_value in (
@@ -1985,15 +2172,25 @@ class WorkerThread(QThread):
         response_bytes = self._request_with_retries(req, timeout=max(60, self.timeout))
         try:
             with Image.open(BytesIO(response_bytes)) as response_image:
-                response_image.load()
                 if response_image.format != "PNG" or "A" not in response_image.getbands():
                     raise ValueError("ответ не является PNG с alpha-каналом")
+                if getattr(response_image, "n_frames", 1) != 1:
+                    raise ValueError("ответ должен содержать один кадр")
+                if max(response_image.size) > MAX_PROVIDER_IMAGE_DIMENSION:
+                    raise ValueError("ответ превышает лимит стороны изображения")
+                if response_image.width * response_image.height > MAX_PROVIDER_IMAGE_PIXELS:
+                    raise ValueError("ответ превышает лимит пикселей")
+                response_image.load()
+                self._ensure_running()
                 result_image = response_image.convert("RGBA").copy()
+                save_kwargs = self._get_png_save_kwargs(response_image)
+        except ProcessingCancelled:
+            raise
         except Exception as exc:
-            raise RuntimeError(f"PhotoRoom вернул некорректное изображение: {exc}") from exc
+            raise RuntimeError("PhotoRoom вернул некорректное изображение") from exc
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        result_image.save(output_path, format="PNG")
+        result_image.save(output_path, format="PNG", **save_kwargs)
         return output_path
 
     def _kie_upload_file(self, file_path):
@@ -2001,8 +2198,7 @@ class WorkerThread(QThread):
         filename = os.path.basename(file_path)
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        with open(file_path, "rb") as f:
-            file_bytes = f.read()
+        file_bytes = self._read_upload_file(file_path)
 
         parts = []
         parts.append(f"--{boundary}\r\n".encode("utf-8"))
@@ -2015,80 +2211,30 @@ class WorkerThread(QThread):
         parts.append(file_bytes)
         parts.append(b"\r\n")
         parts.append(f"--{boundary}--\r\n".encode("utf-8"))
-
-        upload_urls = [
-            "https://kieai.redpandaai.co/api/file-stream-upload",
-            "https://api.kie.ai/api/file-stream-upload",
-        ]
-
-        last_error = None
+        upload_url = "https://kieai.redpandaai.co/api/file-stream-upload"
         body = b"".join(parts)
-
-        for upload_url in upload_urls:
-            try:
-                headers = self._kie_headers()
-                headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
-                headers["x-api-key"] = self.kie_api_key
-
-                self.progress.emit(f"  Upload endpoint: {upload_url}")
-                req = request.Request(upload_url, data=body, headers=headers, method="POST")
-                payload = json.loads(self._request_with_retries(req, timeout=max(60, self.timeout)).decode("utf-8"))
-
-                # Поддержка разных форматов ответа API.
-                if payload.get("success") is False:
-                    raise RuntimeError(payload.get("msg") or "Ошибка загрузки файла в KIE")
-
-                data = payload.get("data") or {}
-                download_url = data.get("downloadUrl") or data.get("url") or payload.get("url")
-                if download_url:
-                    return download_url
-
-                raise RuntimeError("KIE upload не вернул downloadUrl/url")
-            except Exception as e:
-                last_error = e
-                self.progress.emit(f"  Upload ошибка: {e}")
-
-        # Fallback: URL Upload API оставляем только как аварийный запасной вариант.
-        # Документация KIE ожидает публичный http/https URL, поэтому этот путь
-        # может не поддерживаться сервером для всех файлов.
         try:
-            import base64
-
-            with open(file_path, "rb") as f:
-                file_bytes = f.read()
-            b64 = base64.b64encode(file_bytes).decode("ascii")
-            data_url = f"data:{content_type};base64,{b64}"
-
             headers = self._kie_headers()
-            headers["Content-Type"] = "application/json"
-            payload = {
-                "fileUrl": data_url,
-                "uploadPath": self.kie_upload_path,
-                "fileName": filename,
-            }
-            self.progress.emit("  Upload endpoint: https://kieai.redpandaai.co/api/file-url-upload (fallback)")
-            result = self._request_json(
-                "https://kieai.redpandaai.co/api/file-url-upload",
-                method="POST",
-                payload=payload,
-                headers=headers,
-                timeout=max(30, self.timeout),
+            headers["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+            headers["x-api-key"] = self.kie_api_key
+            self.progress.emit(f"  Upload endpoint: {upload_url}")
+            req = request.Request(upload_url, data=body, headers=headers, method="POST")
+            payload = json.loads(
+                self._request_with_retries(req, timeout=max(60, self.timeout)).decode("utf-8")
             )
-
-            if result.get("success") is False:
-                raise RuntimeError(result.get("msg") or "Ошибка URL Upload в KIE")
-            data = result.get("data") or {}
-            download_url = data.get("downloadUrl") or data.get("url") or result.get("url")
+            if payload.get("success") is False:
+                raise RuntimeError("KIE upload rejected the file")
+            data = payload.get("data") or {}
+            download_url = data.get("downloadUrl") or data.get("url") or payload.get("url")
             if download_url:
                 return download_url
-            raise RuntimeError("KIE URL upload не вернул downloadUrl/url")
-        except Exception as e:
-            self.progress.emit(f"  URL Upload fallback ошибка: {e}")
-
-        raise RuntimeError(
-            "Не удалось загрузить файл в KIE. Проверьте API key, upload path и права доступа. "
-            f"Последняя ошибка: {last_error}"
-        )
+            raise RuntimeError("KIE upload did not return a download URL")
+        except ProcessingCancelled:
+            raise
+        except Exception as error:
+            raise RuntimeError(
+                f"Не удалось загрузить файл в KIE: {self._safe_error_text(error)}"
+            ) from error
 
     def _kie_create_task(self, model, input_payload):
         headers = self._kie_headers()
@@ -2101,7 +2247,7 @@ class WorkerThread(QThread):
             timeout=max(30, self.timeout),
         )
         if int(result.get("code", 0)) != 200:
-            raise RuntimeError(result.get("msg") or "Не удалось создать задачу KIE")
+            raise RuntimeError(f"KIE createTask rejected the request (code {result.get('code', '-')})")
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
             raise RuntimeError("KIE createTask не вернул taskId")
@@ -2372,7 +2518,7 @@ class WorkerThread(QThread):
             timeout=max(30, self.timeout),
         )
         if int(result.get("code", 0)) != 200:
-            raise RuntimeError(result.get("msg") or "Ошибка создания задачи 4o Image")
+            raise RuntimeError(f"KIE 4o Image rejected the request (code {result.get('code', '-')})")
 
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
@@ -2412,7 +2558,7 @@ class WorkerThread(QThread):
     def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout, reference_urls=None):
         prompt = "simple test image"
         legacy_size = self._ratio_to_legacy_size(ratio)
-        sample_image_url = "https://picsum.photos/768/768"
+        sample_image_url = MODEL_PROBE_SAMPLE_IMAGE_URL
         probe_timeout = min(max(8, timeout), 20)
         probe_reference_urls = list(reference_urls or [])
 
@@ -2460,20 +2606,39 @@ class WorkerThread(QThread):
                     legacy_size,
                 )
 
-        last_error = "Не удалось выполнить проверку"
-        for payload in payload_variants:
-            try:
-                req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-                with request.urlopen(req, timeout=probe_timeout, context=build_ssl_context()) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                if int(data.get("code", 0)) == 200:
-                    task_id = (data.get("data") or {}).get("taskId", "-")
-                    return True, "OK", task_id
-                last_error = data.get("msg") or "Проверка не пройдена"
-            except Exception as e:
-                last_error = str(e)
-
-        return False, last_error, "-"
+        payload = payload_variants[0]
+        try:
+            req = request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            self._protect_secret_headers_from_redirects(req)
+            with open_url_secure(req, timeout=probe_timeout, context=build_ssl_context()) as resp:
+                raw = read_response_limited(resp, MAX_API_JSON_RESPONSE_BYTES)
+            data = json.loads(raw.decode("utf-8"))
+            response_code = int(data.get("code", 0))
+            if response_code == 200:
+                task_id = (data.get("data") or {}).get("taskId", "-")
+                return True, "OK", task_id
+            provider_message = data.get("msg") or data.get("message") or ""
+            if response_code in {400, 422} and is_schema_required_error_message(provider_message):
+                return False, "schema_required", "-"
+            return False, f"KIE probe rejected the request (code {data.get('code', '-')})", "-"
+        except urlerror.HTTPError as error:
+            if error.code in {400, 422}:
+                try:
+                    raw = read_response_limited(error, MAX_API_JSON_RESPONSE_BYTES)
+                    data = json.loads(raw.decode("utf-8"))
+                    provider_message = data.get("msg") or data.get("message") or ""
+                    if is_schema_required_error_message(provider_message):
+                        return False, "schema_required", "-"
+                except Exception:
+                    pass
+            return False, f"HTTP {error.code}", "-"
+        except Exception as error:
+            return False, self._safe_error_text(error), "-"
 
     def _normalize_ratio(self, value):
         raw = (value or "").strip()
@@ -2515,13 +2680,12 @@ class WorkerThread(QThread):
         deadline = time.time() + timeout_sec
         headers = self._kie_headers()
         while time.time() < deadline:
-            if not self.is_running:
-                raise RuntimeError("Остановлено пользователем")
+            self._ensure_running()
 
             url = f"https://api.kie.ai/api/v1/gpt4o-image/record-info?{parse.urlencode({'taskId': task_id})}"
             result = self._request_json(url, method="GET", headers=headers, timeout=30)
             if int(result.get("code", 0)) != 200:
-                raise RuntimeError(result.get("msg") or "Ошибка статуса 4o Image")
+                raise RuntimeError(f"KIE 4o status failed (code {result.get('code', '-')})")
 
             data = result.get("data") or {}
             status = str(data.get("status", "")).upper()
@@ -2541,13 +2705,12 @@ class WorkerThread(QThread):
         deadline = time.time() + timeout_sec
         headers = self._kie_headers()
         while time.time() < deadline:
-            if not self.is_running:
-                raise RuntimeError("Остановлено пользователем")
+            self._ensure_running()
 
             url = f"https://api.kie.ai/api/v1/jobs/recordInfo?{parse.urlencode({'taskId': task_id})}"
             result = self._request_json(url, method="GET", headers=headers, timeout=30)
             if int(result.get("code", 0)) != 200:
-                raise RuntimeError(result.get("msg") or "Ошибка получения статуса KIE")
+                raise RuntimeError(f"KIE status failed (code {result.get('code', '-')})")
 
             data = result.get("data") or {}
             state = str(data.get("state", "")).lower()
@@ -2587,9 +2750,18 @@ class WorkerThread(QThread):
             "Accept-Language": "en-US,en;q=0.9,ru;q=0.8",
         }
 
-        host = (urlparse(url).netloc or "").lower()
+        parsed_url = urlparse(url)
+        host = (parsed_url.hostname or "").lower().rstrip(".")
+        if parsed_url.scheme.lower() != "https" or not host:
+            raise RuntimeError("Provider download URL must use HTTPS")
+        if parsed_url.username or parsed_url.password:
+            raise RuntimeError("Provider download URL must not contain credentials")
         # Некоторые CDN KIE/Redpanda отдают 403 (Cloudflare 1010) без auth-заголовков.
-        if "redpandaai.co" in host or "kie.ai" in host:
+        trusted_kie_host = parsed_url.scheme.lower() == "https" and (
+            host in {"kie.ai", "redpandaai.co"}
+            or host.endswith((".kie.ai", ".redpandaai.co"))
+        )
+        if trusted_kie_host:
             headers["Authorization"] = f"Bearer {self.kie_api_key}"
             headers["x-api-key"] = self.kie_api_key
             headers["Referer"] = "https://docs.kie.ai/"
@@ -2598,8 +2770,10 @@ class WorkerThread(QThread):
         attempts = [headers, {"User-Agent": headers["User-Agent"], "Accept": "*/*"}, {}]
         for idx, h in enumerate(attempts, start=1):
             try:
+                self._ensure_running()
                 req = request.Request(url, headers=h, method="GET")
                 content = self._request_with_retries(req, timeout=60)
+                self._ensure_running()
                 if output_path.lower().endswith(".png"):
                     self._save_png_from_any_image_bytes(content, output_path)
                 else:
@@ -2608,35 +2782,46 @@ class WorkerThread(QThread):
                 if self.export_300_dpi and output_path.lower().endswith(".png") and "output" in output_path.lower():
                     self._set_png_dpi(output_path, dpi=300)
                 return
+            except ProcessingCancelled:
+                raise
             except Exception as e:
                 last_error = e
-                self.progress.emit(f"  Download попытка {idx} не удалась: {e}")
+                self.progress.emit(
+                    f"  Download попытка {idx} не удалась: {self._safe_error_text(e)}"
+                )
 
-        raise RuntimeError(f"Не удалось скачать файл по URL ({host}): {last_error}")
+        raise RuntimeError(
+            f"Не удалось скачать файл по URL ({host}): {self._safe_error_text(last_error)}"
+        )
 
     def _save_png_from_any_image_bytes(self, content, output_path):
-        png_signature = b"\x89PNG\r\n\x1a\n"
-        if content.startswith(png_signature):
-            with open(output_path, "wb") as f:
-                f.write(content)
-            if self.export_300_dpi:
-                self._set_png_dpi(output_path, dpi=300)
-            return
-
+        if len(content) > MAX_API_RESPONSE_BYTES:
+            raise RuntimeError("Provider image exceeds size limit")
         try:
             with Image.open(BytesIO(content)) as img:
+                if getattr(img, "n_frames", 1) != 1:
+                    raise RuntimeError("Provider image must be single-frame")
+                if max(img.size) > MAX_PROVIDER_IMAGE_DIMENSION:
+                    raise RuntimeError("Provider image exceeds dimension limit")
+                if img.width * img.height > MAX_PROVIDER_IMAGE_PIXELS:
+                    raise RuntimeError("Provider image exceeds pixel limit")
+                img.load()
+                self._ensure_running()
+                if img.format == "PNG":
+                    with open(output_path, "wb") as output_file:
+                        output_file.write(content)
+                    if self.export_300_dpi:
+                        self._set_png_dpi(output_path, dpi=300)
+                    return
                 self._save_image_object_as_png(img, output_path)
             self.progress.emit("  Формат ответа не PNG: выполнена конвертация в PNG")
             return
-        except Exception:
-            pass
-
-        head_hex = content[:16].hex().upper()
-        head_text = content[:120].decode("utf-8", errors="ignore").strip().replace("\n", " ")
-        raise RuntimeError(
-            "Сервер вернул невалидный контент вместо изображения. "
-            f"Сигнатура: {head_hex}. Начало ответа: {head_text[:100]}"
-        )
+        except ProcessingCancelled:
+            raise
+        except RuntimeError:
+            raise
+        except Exception as error:
+            raise RuntimeError("Сервер вернул невалидный контент вместо изображения") from error
 
     def _set_png_dpi(self, file_path, dpi=300):
         try:
@@ -3168,6 +3353,7 @@ class MainWindow(QMainWindow):
         self.generated_prompts = []
         self.selected_files = []
         self.has_generated_output_in_run = False
+        self.stop_pending = False
         self.api_key_locked = True
         self.photoroom_api_key_locked = True
         self.is_updating_prompts_table = False
@@ -5143,8 +5329,24 @@ class MainWindow(QMainWindow):
                 self._select_combo_model_id(combo_box, selected_model)
                 return True
 
-            if not self._is_model_unavailable_error(error_message):
+            if probe_reference_urls and self._is_schema_required_error(error_message):
+                self.log(
+                    "Reference-model preflight skipped: the API requires fields that are only available during the real run."
+                )
                 return True
+
+            if not self._is_model_unavailable_error(error_message):
+                safe_message = safe_error_text(
+                    error_message,
+                    (probe_settings.get("kie_api_key", ""),),
+                )
+                self.log(f"Запуск остановлен: проверка модели не завершена ({safe_message})")
+                QMessageBox.warning(
+                    self,
+                    "Проверка модели",
+                    "Не удалось безопасно проверить модель. Запуск остановлен, чтобы не дублировать платный запрос.",
+                )
+                return False
 
             unavailable_label = self._get_model_label(selected_model)
             fallback_label = self._get_model_label(fallback_model)
@@ -5401,6 +5603,7 @@ class MainWindow(QMainWindow):
         runtime_settings["kie_api_key"] = current_api_key
         runtime_settings["visible_mark_confirmed_regions"] = visible_mark_confirmed_regions
 
+        self.stop_pending = False
         self.worker = WorkerThread(
             mode=mode,
             work_dir=self.work_dir,
@@ -5439,16 +5642,34 @@ class MainWindow(QMainWindow):
         return ""
 
     def stop_work(self):
-        if self.worker:
+        if not self.worker:
+            self.btn_start.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+            return
+
+        if not self.stop_pending:
+            self.stop_pending = True
             self.worker.stop()
-            self.worker.wait()
-            self.worker = None
+            self.log("Остановка запрошена...")
+        self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(False)
+        self._finish_stop_when_worker_exits()
+
+    def _finish_stop_when_worker_exits(self):
+        if self.worker and self.worker.isRunning():
+            QTimer.singleShot(100, self._finish_stop_when_worker_exits)
+            return
+
+        self.worker = None
+        self.stop_pending = False
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self.log("Остановлено")
         self.offer_open_output_folder_after_stop()
 
     def on_finished(self, message):
+        if self.stop_pending:
+            return
         self.log(message)
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
@@ -5496,6 +5717,8 @@ class MainWindow(QMainWindow):
                 self.log(f"Не удалось открыть папку output: {e}")
 
     def on_error(self, err):
+        if self.stop_pending:
+            return
         self.log(f"Ошибка: {err}")
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
@@ -5562,6 +5785,7 @@ class MainWindow(QMainWindow):
             "Accept": "application/json",
         }
         reference_model_type = (GENERATION_MODEL_META.get(reference_model) or {}).get("type", "text_to_image")
+        sample_image_url = MODEL_PROBE_SAMPLE_IMAGE_URL
 
         try:
             text_ok, text_msg, text_task_id = self._probe_model_with_ratio(text_model, "1:1", headers, timeout)
@@ -5650,28 +5874,16 @@ class MainWindow(QMainWindow):
             )
             QMessageBox.information(self, "Проверка моделей", "Обе модели доступны")
         except urlerror.HTTPError as e:
-            body = ""
-            try:
-                body = e.read().decode("utf-8", errors="ignore")
-            except Exception:
-                body = ""
-            msg = f"HTTP {e.code} {e.reason}"
-            if body:
-                msg = f"{msg}: {body[:400]}"
+            msg = f"HTTP {e.code}"
             self.log(f"Проверка моделей не пройдена: {msg}")
             QMessageBox.warning(self, "Проверка моделей", f"Проверка не пройдена\n{msg}")
         except Exception as e:
-            self.log(f"Проверка моделей не пройдена: {e}")
-            QMessageBox.warning(self, "Проверка моделей", f"Ошибка проверки: {e}")
+            msg = safe_error_text(e, (self.kie_api_key_input.text().strip(),))
+            self.log(f"Проверка моделей не пройдена: {msg}")
+            QMessageBox.warning(self, "Проверка моделей", f"Ошибка проверки: {msg}")
 
     def _is_schema_required_error(self, message):
-        text = str(message or "").lower()
-        return (
-            "is required" in text
-            or "field is required" in text
-            or "required field" in text
-            or "missing required" in text
-        )
+        return is_schema_required_error_message(message)
 
     def _extract_credit_value(self, payload):
         priority_keys = [
@@ -5743,21 +5955,23 @@ class MainWindow(QMainWindow):
         self.btn_check_balance.setText("Проверка...")
         try:
             req = request.Request("https://api.kie.ai/api/v1/chat/credit", headers=headers, method="GET")
-            with request.urlopen(req, timeout=timeout, context=build_ssl_context()) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
+            protect_secret_headers_from_redirects(req)
+            with open_url_secure(req, timeout=timeout, context=build_ssl_context()) as resp:
+                raw = read_response_limited(resp, MAX_API_JSON_RESPONSE_BYTES)
+            result = json.loads(raw.decode("utf-8"))
 
             if int(result.get("code", 200)) not in {0, 200}:
-                raise RuntimeError(result.get("msg") or "KIE вернул ошибку при получении баланса")
+                raise RuntimeError(
+                    f"KIE balance request failed (code {result.get('code', '-')})"
+                )
 
             extracted = self._extract_credit_value(result)
             if extracted is None:
-                preview = json.dumps(result, ensure_ascii=False)[:1200]
-                self.log(f"Баланс KIE: поле с кредитами не найдено. Полный ответ: {preview}")
+                self.log("Баланс KIE: поле с кредитами не найдено")
                 QMessageBox.information(
                     self,
                     "Баланс KIE",
-                    "Запрос выполнен, но поле баланса не распознано.\n"
-                    "Ответ сервера сохранён в логе (нижняя панель).",
+                    "Запрос выполнен, но поле баланса не распознано.",
                 )
                 return
 
@@ -5765,19 +5979,13 @@ class MainWindow(QMainWindow):
             self.log(f"Баланс KIE: {value} кредитов")
             QMessageBox.information(self, "Баланс KIE", f"{value} кредитов")
         except urlerror.HTTPError as e:
-            body = ""
-            try:
-                body = e.read().decode("utf-8", errors="ignore")
-            except Exception:
-                body = ""
-            msg = f"HTTP {e.code} {e.reason}"
-            if body:
-                msg = f"{msg}: {body[:400]}"
+            msg = f"HTTP {e.code}"
             self.log(f"Проверка баланса не пройдена: {msg}")
             QMessageBox.warning(self, "Баланс KIE", f"Проверка не пройдена\n{msg}")
         except Exception as e:
-            self.log(f"Проверка баланса не пройдена: {e}")
-            QMessageBox.warning(self, "Баланс KIE", f"Ошибка проверки: {e}")
+            msg = safe_error_text(e, (api_key,))
+            self.log(f"Проверка баланса не пройдена: {msg}")
+            QMessageBox.warning(self, "Баланс KIE", f"Ошибка проверки: {msg}")
         finally:
             self.btn_check_balance.setEnabled(True)
             self.btn_check_balance.setText("Проверить баланс")
@@ -5807,7 +6015,10 @@ class MainWindow(QMainWindow):
                     activated_now = True
 
             if not result.get("ok"):
-                message = str(result.get("message") or "Ключ не прошёл проверку")
+                message = safe_error_text(
+                    result.get("message") or "Ключ не прошёл проверку",
+                    (license_key,),
+                )
                 self.log(f"Лицензия не прошла проверку: {message}")
                 QMessageBox.warning(self, "Лицензия", message)
                 return
@@ -5828,75 +6039,27 @@ class MainWindow(QMainWindow):
             self.log(f"Проверка лицензии успешна: {state_text}")
             QMessageBox.information(self, "Лицензия", message)
         except Exception as e:
-            self.log(f"Проверка лицензии не пройдена: {e}")
-            QMessageBox.warning(self, "Лицензия", f"Ошибка проверки: {e}")
+            message = safe_error_text(e, (license_key,))
+            self.log(f"Проверка лицензии не пройдена: {message}")
+            QMessageBox.warning(self, "Лицензия", f"Ошибка проверки: {message}")
 
     def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout, reference_urls=None):
-        prompt = "simple test image"
-        legacy_size = self._ratio_to_legacy_size_ui(ratio)
-        sample_image_url = "https://picsum.photos/768/768"
-        probe_timeout = min(max(8, timeout), 20)
-        probe_reference_urls = list(reference_urls or [])
-
-        model = self._normalize_generation_model_id(raw_model)
-        if model in {"gpt4o-image", "gpt-image-1", "gpt-image-1.5"}:
-            model = "gpt4o-image"
-
-        if not model:
-            model = "gpt4o-image"
-
-        model_type = (GENERATION_MODEL_META.get(model) or {}).get("type", "text_to_image")
-
-        if model == "gpt4o-image":
-            url = "https://api.kie.ai/api/v1/gpt4o-image/generate"
-            payload_variants = [
-                {"prompt": prompt, "size": legacy_size},
-                {"prompt": prompt, "size": ratio},
-                {"prompt": prompt, "aspectRatio": ratio},
-                {"prompt": prompt, "aspect_ratio": ratio},
-            ]
-        else:
-            url = "https://api.kie.ai/api/v1/jobs/createTask"
-            test_model = model
-            if probe_reference_urls and (model_type in {"image_to_image", "edit"} or self._get_model_capabilities(model)["reference_compatible_text"]):
-                payload_variants = self._build_reference_probe_variants(
-                    test_model,
-                    prompt,
-                    probe_reference_urls[0] or sample_image_url,
-                    ratio,
-                    legacy_size,
-                )
-            elif model_type == "text_to_image":
-                payload_variants = self._build_text_probe_variants(
-                    test_model,
-                    prompt,
-                    ratio,
-                    legacy_size,
-                )
-            else:
-                # Для image/edit моделей используем один документированный payload.
-                payload_variants = self._build_reference_probe_variants(
-                    test_model,
-                    prompt,
-                    sample_image_url,
-                    ratio,
-                    legacy_size,
-                )
-
-        last_error = "Не удалось выполнить проверку"
-        for payload in payload_variants:
-            try:
-                req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-                with request.urlopen(req, timeout=probe_timeout, context=build_ssl_context()) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                if int(data.get("code", 0)) == 200:
-                    task_id = (data.get("data") or {}).get("taskId", "-")
-                    return True, "OK", task_id
-                last_error = data.get("msg") or "Проверка не пройдена"
-            except Exception as e:
-                last_error = str(e)
-
-        return False, last_error, "-"
+        probe_settings = dict(self.config)
+        probe_settings["kie_api_key"] = self.kie_api_key_input.text().strip()
+        probe_worker = WorkerThread(
+            "mode1_generate_only",
+            self.work_dir or os.getcwd(),
+            probe_settings,
+            selected_files=[],
+            generated_prompts=[],
+        )
+        return probe_worker._probe_model_with_ratio(
+            raw_model,
+            ratio,
+            headers,
+            timeout,
+            reference_urls=reference_urls,
+        )
 
     def _parse_version_tuple(self, version_text):
         parts = str(version_text or "0.0.0").strip().split(".")
@@ -5929,7 +6092,7 @@ class MainWindow(QMainWindow):
             },
             method="GET",
         )
-        with request.urlopen(req, timeout=120, context=build_ssl_context()) as resp:
+        with open_url_secure(req, timeout=120, context=build_ssl_context()) as resp:
             content = resp.read()
 
         temp_dir = tempfile.gettempdir()
@@ -6012,7 +6175,7 @@ class MainWindow(QMainWindow):
                 },
                 method="GET",
             )
-            with request.urlopen(req, timeout=20, context=build_ssl_context()) as resp:
+            with open_url_secure(req, timeout=20, context=build_ssl_context()) as resp:
                 manifest = self._parse_update_manifest(resp.read())
 
             latest_version = str(manifest.get("latest_version", "")).strip()

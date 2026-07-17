@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Task 42 - Local remove-ai-watermarks Feasibility**.
+Current next task: **None. All ordered implementation tasks are complete; release-only checks wait for an explicit user command.**
 
 ## Phase 1 - Preparation
 
@@ -1162,7 +1162,7 @@ Notes:
 
 ## Task 50 - Complete Cleanup Acceptance
 
-Status: Todo
+Status: Done
 
 Goal:
 Verify the complete post-MVP cleanup goal without building or publishing a release.
@@ -1174,15 +1174,19 @@ Steps:
 - Fix only blocking issues and record later improvements separately.
 
 Acceptance:
-- [ ] Metadata cleanup preserves pixels/alpha and selected ICC/DPI.
-- [ ] Visible and hidden mark claims match saved evidence.
-- [ ] Existing generation and processing remain usable with all cleanup features disabled.
-- [ ] Conditional GPU tasks are either verified or explicitly marked `Skipped` with rationale.
+- [x] Metadata cleanup preserves pixels/alpha and selected ICC/DPI.
+- [x] Visible and hidden mark claims match saved evidence.
+- [x] Existing generation and processing remain usable with all cleanup features disabled.
+- [x] Conditional GPU tasks are either verified or explicitly marked `Skipped` with rationale.
 
 Verification:
-- [ ] `python -m py_compile .\main.py`
-- [ ] `python -m unittest discover -s tests -v`
-- [ ] Manual comparisons on light/dark backgrounds and multiple image classes are recorded.
+- [x] `python -m py_compile .\main.py .\license_client.py .\tests\test_license_client_security.py .\tests\test_kie_routing.py .\tests\test_main_ui_acceptance.py .\tests\test_photoroom_provider.py .\tests\test_visible_mark_pipeline.py`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest discover -s tests -v` (`176/176` passed)
+- [x] Manual comparisons on light/dark backgrounds and multiple image classes are recorded.
 
 Notes:
 - Finish with documentation, commit, and push only. Do not build, tag, publish, or create a release.
+- The first acceptance pass was reopened after independent review reproduced redirect/header leaks, provider-body logging, final-publication cancellation races, ambiguous upload POST fallback, and insufficient provider-image limits.
+- The fixes were covered by regressions and a fresh independent review returned `PASS`, including HTTPS redirect handling and real HTTP 400/422 reference-schema classification.
+- Final evidence is recorded in [`TASK50_CLEANUP_ACCEPTANCE.md`](./TASK50_CLEANUP_ACCEPTANCE.md).
+- No paid request, model download, build, tag, workflow, or release was run.

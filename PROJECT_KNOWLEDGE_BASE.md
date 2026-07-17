@@ -32,7 +32,8 @@ Clipart Generator — это настольное приложение для г
 - [`TEST_CHECKLIST.md`](./TEST_CHECKLIST.md) - ручной чеклист перед релизом.
 - [`CLEANUP_CAPABILITY_MATRIX.md`](./CLEANUP_CAPABILITY_MATRIX.md) - подтверждённые возможности и ограничения очистки metadata/C2PA, видимых меток и экспериментальной перегенерации пиксельных watermark.
 - [`TASK42_LOCAL_WATERMARK_FEASIBILITY.md`](./TASK42_LOCAL_WATERMARK_FEASIBILITY.md) - проверенные SHA/лицензии/размеры моделей и доказанный local production hardware no-go для SDXL/ControlNet/Qwen без загрузки весов.
-- [`VISIBLE_MARK_DETECTOR_EVAL.md`](./VISIBLE_MARK_DETECTOR_EVAL.md), [`VISIBLE_MARK_INPAINTING_BENCHMARK.md`](./VISIBLE_MARK_INPAINTING_BENCHMARK.md), [`TASK33_KIE_MASK_BENCHMARK.md`](./TASK33_KIE_MASK_BENCHMARK.md) - evidence и Task 34 decision для будущей local-only очистки небольших видимых меток.
+- [`VISIBLE_MARK_DETECTOR_EVAL.md`](./VISIBLE_MARK_DETECTOR_EVAL.md), [`VISIBLE_MARK_INPAINTING_BENCHMARK.md`](./VISIBLE_MARK_INPAINTING_BENCHMARK.md), [`TASK33_KIE_MASK_BENCHMARK.md`](./TASK33_KIE_MASK_BENCHMARK.md) - evidence и Task 34 decision для реализованной local-only очистки небольших видимых меток.
+- [`TASK50_CLEANUP_ACCEPTANCE.md`](./TASK50_CLEANUP_ACCEPTANCE.md) - итоговая no-release приёмка cleanup, mixed KIE/PhotoRoom маршрутов, Stop/network safety и light/dark comparisons.
 
 ## Архитектура приложения
 
@@ -187,6 +188,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -AppVersion 1.0.0
 - проверка режима обработки файлов;
 - проверка сохранения настроек;
 - smoke-тест импорта и базовой инициализации.
+- полный offline regression из 176 тестов и evidence Task 50.
 
 См. также [`TEST_CHECKLIST.md`](./TEST_CHECKLIST.md).
 

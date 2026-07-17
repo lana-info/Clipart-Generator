@@ -4,6 +4,22 @@ import uuid
 import hashlib
 from datetime import datetime, timedelta, timezone
 from urllib import request, error
+from urllib.parse import urlparse
+
+
+MAX_LICENSE_RESPONSE_BYTES = 2 * 1024 * 1024
+
+
+class LicenseHTTPError(RuntimeError):
+    def __init__(self, status_code, reason):
+        del reason
+        self.status_code = int(status_code)
+        super().__init__(f"HTTP {self.status_code}")
+
+
+class NoRedirectHandler(request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 class LicenseClient:
@@ -98,29 +114,63 @@ class LicenseClient:
             if item and item not in path_variants:
                 path_variants.append(item)
 
-        last_error = None
-        for base_url in urls:
-            for route in path_variants:
-                try:
-                    return self._post(base_url, route, payload)
-                except Exception as e:
-                    last_error = e
-        raise RuntimeError(str(last_error) if last_error else "Не удалось выполнить запрос к серверу лицензий")
+        base_url = urls[0]
+        for index, route in enumerate(path_variants):
+            try:
+                return self._post(base_url, route, payload)
+            except LicenseHTTPError as exc:
+                has_fallback_route = index + 1 < len(path_variants)
+                if exc.status_code in {404, 405} and has_fallback_route:
+                    continue
+                raise
+        raise RuntimeError("Не удалось выполнить запрос к серверу лицензий")
+
+    def _validate_server_url(self, base_url):
+        parsed = urlparse(base_url)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        is_loopback = host in {"localhost", "127.0.0.1", "::1"}
+        if parsed.username or parsed.password:
+            raise RuntimeError("URL сервера лицензий не должен содержать credentials")
+        if parsed.scheme == "https" and host:
+            return base_url
+        if parsed.scheme == "http" and is_loopback:
+            return base_url
+        raise RuntimeError("Удалённый сервер лицензий должен использовать HTTPS")
+
+    def _read_response_limited(self, response):
+        headers = getattr(response, "headers", None)
+        content_length = headers.get("Content-Length") if headers is not None else None
+        if content_length:
+            try:
+                if int(content_length) > MAX_LICENSE_RESPONSE_BYTES:
+                    raise RuntimeError("License response exceeds size limit")
+            except (TypeError, ValueError):
+                pass
+        payload = response.read(MAX_LICENSE_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_LICENSE_RESPONSE_BYTES:
+            raise RuntimeError("License response exceeds size limit")
+        return payload
 
     def _post(self, base_url, path, payload):
-        url = f"{base_url}{path}"
+        url = f"{self._validate_server_url(base_url)}{path}"
         req = request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
+        opener = request.build_opener(NoRedirectHandler())
         try:
-            with request.urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"HTTP {e.code}: {body[:300]}")
+            with opener.open(req, timeout=self.timeout) as resp:
+                raw = self._read_response_limited(resp)
+            result = json.loads(raw.decode("utf-8"))
+            if not isinstance(result, dict):
+                raise RuntimeError("Сервер лицензий вернул некорректный JSON")
+            return result
+        except error.HTTPError as exc:
+            raise LicenseHTTPError(exc.code, exc.reason) from exc
+        except (error.URLError, TimeoutError, OSError) as exc:
+            raise RuntimeError("Не удалось безопасно связаться с сервером лицензий") from exc
 
     def _save_cache(self, response_payload):
         expires_at = datetime.now(timezone.utc) + timedelta(days=3)

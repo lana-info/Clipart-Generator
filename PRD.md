@@ -46,7 +46,8 @@ Clipart Generator должен помогать автору быстро ген
 5. Optional upscale after background removal.
 6. Edge contour removal.
 7. Final trim.
-8. Save PNG.
+8. Optional final metadata/C2PA inspection and cleanup.
+9. Atomic save PNG.
 
 Этот порядок должен оставаться предсказуемым: UI показывает шаги в том же порядке, в котором они выполняются.
 
@@ -79,6 +80,7 @@ Structured hidden-marker result contract: [`PIXEL_WATERMARK_STATUS_CONTRACT.md`]
 - Основной код приложения находится в `main.py`, GUI построен на PyQt6.
 - Пользовательские данные хранятся вне репозитория в `%LOCALAPPDATA%\Clipart Generator`.
 - Нельзя печатать API keys, license keys, пароли или `.env` в логи, документацию и ответы.
+- Удалённые API/license URL должны использовать HTTPS; redirect не должен переносить секретные заголовки или понижать соединение до HTTP, ответы и загрузки должны иметь размерные лимиты, а неоднозначный non-idempotent POST нельзя повторять автоматически.
 - KIE API key требуется только для выбранных шагов, которые реально используют KIE.
 - PhotoRoom API key требуется только при выбранном `PhotoRoom Standard` и хранится в отдельном скрытом поле настроек.
 - Local-only pipeline должен работать без KIE API key.
@@ -137,3 +139,4 @@ Structured hidden-marker result contract: [`PIXEL_WATERMARK_STATUS_CONTRACT.md`]
 - [`TASKS.md`](./TASKS.md)
 - [`CHANGELOG.md`](./CHANGELOG.md)
 - [`TEST_CHECKLIST.md`](./TEST_CHECKLIST.md)
+- [`TASK50_CLEANUP_ACCEPTANCE.md`](./TASK50_CLEANUP_ACCEPTANCE.md)

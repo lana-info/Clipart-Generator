@@ -9,9 +9,11 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, PngImagePlugin
 
 import main
+from metadata_cleanup import cleanup_image_metadata
+from metadata_inspector import inspect_image_metadata
 
 
 DUMMY_PHOTOROOM_KEY = "test-photoroom-secret-must-not-appear-in-logs"
@@ -40,13 +42,23 @@ def create_rgb_source(path, size=(20, 16)):
     image.save(path, format="PNG")
 
 
-def create_photoroom_response_bytes(size=(20, 16)):
+def create_photoroom_response_bytes(size=(20, 16), with_metadata=False):
     image = Image.new("RGBA", size, (180, 70, 100, 0))
     alpha = Image.new("L", size, 0)
     ImageDraw.Draw(alpha).ellipse((3, 2, size[0] - 4, size[1] - 3), fill=255)
     image.putalpha(alpha)
     output = BytesIO()
-    image.save(output, format="PNG")
+    save_kwargs = {}
+    if with_metadata:
+        pnginfo = PngImagePlugin.PngInfo()
+        pnginfo.add_text("Comment", "provider fixture")
+        pnginfo.add_text("parameters", "provider generator fixture")
+        save_kwargs.update(
+            pnginfo=pnginfo,
+            icc_profile=b"photoroom-provider-icc",
+            dpi=(300, 300),
+        )
+    image.save(output, format="PNG", **save_kwargs)
     return output.getvalue()
 
 
@@ -125,6 +137,29 @@ class PhotoRoomProviderTests(unittest.TestCase):
                 invalid_worker._run_photoroom_remove_bg(str(source_path), str(output_path))
             self.assertFalse(output_path.exists())
 
+    def test_oversized_upload_is_rejected_before_photoroom_request(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-upload-limit-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "source.png"
+            output_path = temp_path / "output.png"
+            create_rgb_source(source_path)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                photoroom_settings(),
+                selected_files=[str(source_path)],
+            )
+
+            with (
+                patch.object(main, "MAX_API_UPLOAD_BYTES", 8),
+                patch.object(worker, "_request_with_retries") as request_mock,
+            ):
+                with self.assertRaisesRegex(main.ResponseLimitError, "size limit"):
+                    worker._run_photoroom_remove_bg(str(source_path), str(output_path))
+
+            request_mock.assert_not_called()
+            self.assertFalse(output_path.exists())
+
     def test_process_only_photoroom_does_not_use_kie(self):
         with tempfile.TemporaryDirectory(prefix="clipart-photoroom-pipeline-") as temp_dir:
             temp_path = Path(temp_dir)
@@ -155,6 +190,65 @@ class PhotoRoomProviderTests(unittest.TestCase):
             self.assertEqual(len(outputs), 1)
             with Image.open(outputs[0]) as result:
                 self.assertEqual(result.mode, "RGBA")
+
+    def test_photoroom_output_uses_shared_metadata_cleanup(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-cleanup-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "source.png"
+            create_rgb_source(source_path)
+            source_bytes = source_path.read_bytes()
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                photoroom_settings(
+                    cleanup_remove_comments_text=True,
+                    cleanup_remove_generator_fields=True,
+                ),
+                selected_files=[str(source_path)],
+            )
+            progress = []
+            worker.progress.connect(progress.append)
+
+            def fake_request(worker_self, req, timeout=None):
+                return create_photoroom_response_bytes(with_metadata=True)
+
+            def fail_kie_upload(worker_self, file_path):
+                raise AssertionError("PhotoRoom cleanup flow must not upload to KIE")
+
+            worker._request_with_retries = types.MethodType(fake_request, worker)
+            worker._kie_upload_file = types.MethodType(fail_kie_upload, worker)
+            with patch.object(
+                main,
+                "cleanup_image_metadata",
+                wraps=cleanup_image_metadata,
+            ) as cleanup_mock:
+                worker._mode2_process_files(emit_final=False)
+
+            raw_outputs = list((temp_path / "raw").glob("*_photoroom_nobg_*.png"))
+            final_outputs = list((temp_path / "output").glob("*.png"))
+            self.assertEqual(len(raw_outputs), 1)
+            self.assertEqual(len(final_outputs), 1)
+            cleanup_mock.assert_called_once()
+            self.assertEqual(source_path.read_bytes(), source_bytes)
+
+            with Image.open(raw_outputs[0]) as provider_output, Image.open(final_outputs[0]) as final_output:
+                provider_rgba = provider_output.convert("RGBA")
+                final_rgba = final_output.convert("RGBA")
+                self.assertEqual(final_rgba.size, provider_rgba.size)
+                self.assertEqual(final_rgba.tobytes(), provider_rgba.tobytes())
+                self.assertEqual(
+                    final_rgba.getchannel("A").tobytes(),
+                    provider_rgba.getchannel("A").tobytes(),
+                )
+                self.assertEqual(provider_output.info.get("icc_profile"), b"photoroom-provider-icc")
+                self.assertEqual(final_output.info.get("icc_profile"), b"photoroom-provider-icc")
+                self.assertAlmostEqual(provider_output.info["dpi"][0], 300, places=1)
+                self.assertAlmostEqual(final_output.info["dpi"][0], 300, places=1)
+
+            inspection = inspect_image_metadata(final_outputs[0])
+            self.assertFalse(inspection["categories"]["comments_text"]["present"])
+            self.assertFalse(inspection["categories"]["generator_fields"]["present"])
+            self.assertNotIn(DUMMY_PHOTOROOM_KEY, "\n".join(progress))
 
     def test_settings_lock_validation_and_persistence(self):
         with tempfile.TemporaryDirectory(prefix="clipart-photoroom-ui-") as temp_dir:

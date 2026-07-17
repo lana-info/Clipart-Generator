@@ -122,6 +122,42 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                 allowed[y : y + height, x : x + width] = True
                 self.assertFalse(np.any(changed & ~allowed))
 
+    def test_confirmed_area_log_requires_visual_verification(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-visible-claim-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source = temp_path / "source.png"
+            raw_dir = temp_path / "raw"
+            raw_dir.mkdir()
+            region = create_marked_rgba(source)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {
+                    "visible_mark_cleanup_enabled": True,
+                    "visible_mark_cleanup_mode": "confirmed_area",
+                    "visible_mark_confirmed_regions": {
+                        visible_mark_region_key(source): region,
+                    },
+                    "upscale": False,
+                    "upscale_after": False,
+                    "remove_bg": False,
+                },
+            )
+            progress = []
+            worker.progress.connect(progress.append)
+
+            result_path = worker._visible_mark_cleanup_pipeline_step(
+                str(source),
+                str(raw_dir),
+                1,
+                "file",
+            )
+
+            self.assertTrue(Path(result_path).is_file())
+            joined = "\n".join(progress)
+            self.assertIn("требует визуальной проверки", joined)
+            self.assertNotIn("метка удалена", joined.lower())
+
     def test_gemini_alpha_recovery_preserves_texture_without_a_patch(self):
         class AlphaEngine:
             logo_value = 255.0

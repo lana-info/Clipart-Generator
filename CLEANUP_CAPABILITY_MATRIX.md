@@ -127,3 +127,4 @@ Task 37 сохранил local-only решение и тот же UI, но от�
 - Tasks 38-41 выполнены: status contract зафиксирован, KIE и OpenRouter не прошли универсальный quality/cost gate, live-запуски закрыты.
 - Task 42 выполнен: локальная машина не имеет поддерживаемого accelerator и не является production candidate для CPU diffusion; техническая невозможность plain-SDXL CPU не заявляется.
 - Tasks 43-49 пропущены: одобренного режима перегенерации нет; перейти к общей приёмке Task 50.
+- Task 50 выполнен: metadata/visible-mark cleanup принят в local, mixed KIE и PhotoRoom маршрутах; hidden pixel markers по-прежнему не заявляются удалёнными. Light/dark multi-class evidence и точные проверки сохранены в [`TASK50_CLEANUP_ACCEPTANCE.md`](./TASK50_CLEANUP_ACCEPTANCE.md).
