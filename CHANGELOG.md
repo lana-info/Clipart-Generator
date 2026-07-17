@@ -4,6 +4,23 @@
 
 ### Added
 
+- Completed Task 42 with a pinned, isolated, no-download production-hardware
+  feasibility preflight for `remove-ai-watermarks` SDXL, ControlNet, and Qwen
+  pipelines.
+- Recorded the current Windows machine's local production no-go: no CUDA/XPU/MPS
+  device or upstream DirectML path, `17.95 GiB` total RAM, and audited selected
+  weights of `12.92 GiB` for SDXL, `15.25 GiB` with ControlNet, and `53.74 GiB`
+  for Qwen before its CPU FP32 expansion.
+- Added a bounded official Hugging Face metadata audit plus Task 42 preflight
+  and 13 focused tests that verify source/model revisions, card licenses,
+  selected weight filenames/sizes, upstream constants, clean source checkout,
+  zero model downloads, and `not_verified` detector status.
+- Skipped conditional Tasks 43-49 because Task 42 produced no approved pipeline;
+  no model weights, GPU resources, desktop controls, release, or paid requests
+  were created.
+- Verified Task 42 with 26 pinned-upstream focused tests, 13 local focused tests,
+  all 149 project tests, Python compilation, and offscreen `SMOKE_OK`; `main.py`
+  and application requirement files remain unchanged.
 - Completed the isolated Task 41 managed-editor fidelity benchmark for
   Seedream 4.5 and Riverflow 2.5 Pro with a strict preservation prompt,
   one-shot per-candidate reservations, and the existing multi-class RGBA rubric.

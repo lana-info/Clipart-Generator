@@ -939,7 +939,7 @@ Notes:
 
 ## Task 42 - Local remove-ai-watermarks Feasibility
 
-Status: Todo - activated by the Task 41 managed-API no-go decision
+Status: Done - clear local production hardware no-go documented without model downloads
 
 Goal:
 Measure the local repository's diffusion pipelines without affecting the application environment.
@@ -951,19 +951,45 @@ Steps:
 - Record model downloads, runtime, VRAM/RAM, quality, dimensions, alpha, and detector result.
 
 Acceptance:
-- [ ] The main application environment and requirements remain unchanged.
-- [ ] At least one feasible pipeline or a clear hardware no-go is documented.
-- [ ] Apache-2.0 and model-weight obligations are recorded.
+- [x] The main application environment and requirements remain unchanged.
+- [x] At least one feasible pipeline or a clear hardware no-go is documented.
+- [x] Apache-2.0 and model-weight obligations are recorded.
 
 Verification:
-- [ ] Exact isolated install/run commands and benchmark results are recorded.
+- [x] Exact isolated install/run commands and benchmark results are recorded.
 
 Notes:
 - CPU-only execution may be measured but is not a production deployment candidate.
+- Evaluated upstream commit `190dc89d234fd7e3a61ff755f01251c9c0b87ef0`
+  in `D:\WorkOS\Clipart Generator-task42\.venv-locked` via `uv sync --locked`;
+  the application environment,
+  `requirements.txt`, `requirements-dev.txt`, `main.py`, and UI were unchanged.
+- The machine has `17.95 GiB` physical RAM, an AMD integrated adapter reporting
+  `2 GiB`, and no CUDA/XPU/MPS device. The upstream accepts only
+  `cpu`/`cuda`/`xpu`/`mps`; AMD DirectML is not supported.
+- The CPU path selects FP32. Audited selected weights are `12.92 GiB` for SDXL,
+  `15.25 GiB` for SDXL + ControlNet, and `53.74 GiB` serialized BF16 for Qwen.
+  Model-weight downloads and inference were therefore stopped at preflight.
+- No output exists, so runtime/VRAM/quality/dimensions/alpha are explicitly not
+  measured and detector evidence remains `not_verified`. Details and exact
+  commands are in `TASK42_LOCAL_WATERMARK_FEASIBILITY.md`.
+- Upstream model IDs are not loaded with pinned `revision=` values. The report
+  pins the audited snapshots, and the final preflight verified their SHA,
+  card-license metadata, and selected file sizes through the official Hugging
+  Face metadata API. Any future worker must enforce those revisions and must
+  remain isolated from the desktop environment.
+- The ControlNet component is Apache-2.0 but its combined pipeline retains
+  SDXL Open RAIL++-M obligations. The MIT-marked FP16 VAE is derived from
+  SDXL-VAE, so inherited terms require review before any future distribution.
+- Upstream supports a slow CPU route, but Task 42 excludes CPU-only production;
+  plain-SDXL CPU impossibility is not claimed because inference was not run.
+- Verification passed: 13 focused Task 42 tests, 26 pinned-upstream focused
+  tests, all 149 application tests, Python compilation, and offscreen
+  `SMOKE_OK`. No release/build/workflow was run.
 
 ## Task 43 - GPU Serverless Provider Spike
 
-Status: Todo - conditional on Task 42 feasible pipeline
+Status: Skipped - Task 42 produced no approved feasible pipeline
 
 Goal:
 Choose a scale-to-zero GPU host for the approved local pipeline.
@@ -984,10 +1010,11 @@ Verification:
 
 Notes:
 - Stop and remove unused workers/resources after the spike.
+- No GPU resource, account, payment, worker, or live job was created.
 
 ## Task 44 - GPU Worker Endpoint
 
-Status: Todo - conditional on Task 43 go decision
+Status: Skipped - Task 43 prerequisite was not activated
 
 Goal:
 Expose the approved regeneration pipeline through a minimal asynchronous GPU API.
@@ -1011,7 +1038,7 @@ Notes:
 
 ## Task 45 - Ordinary VPS Gateway And Secret Boundary
 
-Status: Todo - conditional on distributed GPU service
+Status: Skipped - no distributed GPU service was approved
 
 Goal:
 Use the existing ordinary VPS only to protect GPU credentials, authorize clients, and coordinate jobs.
@@ -1035,7 +1062,7 @@ Notes:
 
 ## Task 46 - GPU Service Desktop Adapter
 
-Status: Todo - conditional on Tasks 44-45
+Status: Skipped - no GPU endpoint or gateway was approved
 
 Goal:
 Add a tested desktop client for the selected GPU endpoint without exposing infrastructure details to the pipeline.
@@ -1059,7 +1086,7 @@ Notes:
 
 ## Task 47 - GPU Cost And Reliability Acceptance
 
-Status: Todo - conditional on Tasks 44-46
+Status: Skipped - no custom GPU path reached acceptance
 
 Goal:
 Confirm that the custom GPU path is worth maintaining before exposing it to users.
@@ -1085,7 +1112,7 @@ Notes:
 
 ## Task 48 - Pixel-Regeneration UI And Settings
 
-Status: Todo - conditional on Task 41 or Task 47 go decision
+Status: Skipped - both managed and custom regeneration paths are no-go
 
 Goal:
 Expose the approved whole-image regeneration path as a separate optional action.
@@ -1109,7 +1136,7 @@ Notes:
 
 ## Task 49 - Pixel-Regeneration Pipeline And Reinspection
 
-Status: Todo - conditional on Task 48
+Status: Skipped - no approved regeneration provider exists
 
 Goal:
 Run whole-image regeneration safely and report the actual post-processing marker status.

@@ -1,6 +1,6 @@
 # База знаний проекта Clipart Generator
 
-_Последнее обновление: 2026-07-14_
+_Последнее обновление: 2026-07-16_
 
 ## Кратко
 
@@ -31,6 +31,7 @@ Clipart Generator — это настольное приложение для г
 - [`RELEASE_PROCESS.md`](./RELEASE_PROCESS.md) - процесс выпуска.
 - [`TEST_CHECKLIST.md`](./TEST_CHECKLIST.md) - ручной чеклист перед релизом.
 - [`CLEANUP_CAPABILITY_MATRIX.md`](./CLEANUP_CAPABILITY_MATRIX.md) - подтверждённые возможности и ограничения очистки metadata/C2PA, видимых меток и экспериментальной перегенерации пиксельных watermark.
+- [`TASK42_LOCAL_WATERMARK_FEASIBILITY.md`](./TASK42_LOCAL_WATERMARK_FEASIBILITY.md) - проверенные SHA/лицензии/размеры моделей и доказанный local production hardware no-go для SDXL/ControlNet/Qwen без загрузки весов.
 - [`VISIBLE_MARK_DETECTOR_EVAL.md`](./VISIBLE_MARK_DETECTOR_EVAL.md), [`VISIBLE_MARK_INPAINTING_BENCHMARK.md`](./VISIBLE_MARK_INPAINTING_BENCHMARK.md), [`TASK33_KIE_MASK_BENCHMARK.md`](./TASK33_KIE_MASK_BENCHMARK.md) - evidence и Task 34 decision для будущей local-only очистки небольших видимых меток.
 
 ## Архитектура приложения
@@ -61,6 +62,11 @@ Clipart Generator — это настольное приложение для г
 - Удаление фона.
 - PhotoRoom Standard как отдельный платный провайдер удаления фона с собственным API key.
 - Экспорт готовых файлов.
+
+Whole-image regeneration для скрытых pixel watermark не входит в текущие
+возможности приложения: managed API не прошли quality/cost gate, а локальные
+SDXL/ControlNet/Qwen не подходят текущему компьютеру. Приложение не должно
+показывать успешную обработку как доказанное удаление SynthID.
 
 ## Актуальные модели в меню
 

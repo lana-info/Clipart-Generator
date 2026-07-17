@@ -69,12 +69,12 @@ metadata/C2PA hints и detector evidence хранятся отдельно; `rem
 
 | Кандидат | Что реально даёт | Решение |
 |---|---|---|
-| [`lana-info/remove-ai-watermarks`](https://github.com/lana-info/remove-ai-watermarks) | Apache-2.0 код для metadata/C2PA, локализации известных видимых меток и inpainting; отдельный тяжёлый режим полной diffusion-перегенерации через SDXL/ControlNet/Qwen | Использовать только проверенный detector и templates для Gemini; не переносить upstream removal engines или diffusion backends. Сохранить Apache-2.0 attribution. |
+| [`lana-info/remove-ai-watermarks`](https://github.com/lana-info/remove-ai-watermarks) | Apache-2.0 код для metadata/C2PA, локализации известных видимых меток и inpainting; отдельный тяжёлый режим полной diffusion-перегенерации через SDXL/ControlNet/Qwen | Использовать только уже проверенный detector и templates для Gemini. Task 42 подтвердил local production no-go: нет CUDA/XPU/MPS или DirectML path, CPU использует FP32, а выбранные weights занимают `12.92 GiB` SDXL, `15.25 GiB` с ControlNet и `53.74 GiB` Qwen. Медленный SDXL CPU route не измерен и не объявляется технически невозможным. Diffusion backend и model weights не переносить. Сохранить Apache-2.0 attribution; combined ControlNet/VAE path также требует учёта SDXL Open RAIL++-M. |
 | [`Picsart-AI-Research/MI-GAN`](https://github.com/Picsart-AI-Research/MI-GAN) | MIT-licensed локальный inpainting; официальный проект ссылается на конвертированный ONNX model | Использовать закрепленный ONNX только внутри ограниченной подтвержденной области. Проверять SHA-256 при первом запуске и не менять пиксели вне маски. |
 | KIE | В документации есть масочное редактирование через 4o Image и image-to-image через GPT Image 2/FLUX.2; отдельного документированного удалителя скрытых image-watermark не найдено. | Отклонён и для точечного удаления видимой метки, и как универсальная полная перегенерация. В Task 39 GPT Image 2 потерял alpha и вернул `1254x1254` вместо `1024x1024`; FLUX 2 Pro потерял alpha и распространил контрольную сетку на всё изображение. Оба результата содержали C2PA и остались `not_verified`. |
 | OpenRouter | Унифицированный Image API поддерживает image-to-image/reference editing для доступных image models; отдельной подтверждённой операции удаления скрытого watermark нет. | Отклонён по Tasks 40-41. Recraft заменил сюжет/лицо/текст и добавил `CRFT`; Seedream изменил детали, потерял alpha и добавил C2PA. Riverflow дал лучший визуальный результат и сохранил текст, но потерял alpha, остался `not_verified` и сообщил `$0.264885` против snapshot `$0.130`. Не использовать Google/Nano Banana как remover SynthID: новый Google output сам получает SynthID. |
 
-Источники: [лицензия remove-ai-watermarks](https://github.com/lana-info/remove-ai-watermarks/blob/main/LICENSE), [KIE 4o Image mask editing](https://docs.kie.ai/4o-image-api/quickstart), [KIE GPT Image 2 image-to-image](https://docs.kie.ai/market/gpt/gpt-image-2-image-to-image), [KIE FLUX 2 Pro image-to-image](https://docs.kie.ai/market/flux2/pro-image-to-image), [KIE Sora 2 video remover](https://docs.kie.ai/cn/market/sora2/sora-watermark-remover), [OpenRouter Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation), [OpenRouter image models](https://openrouter.ai/collections/image-models).
+Источники: [лицензия remove-ai-watermarks](https://github.com/lana-info/remove-ai-watermarks/blob/main/LICENSE), [SDXL model/license](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0), [xinsir ControlNet](https://huggingface.co/xinsir/controlnet-canny-sdxl-1.0), [Qwen-Image](https://huggingface.co/Qwen/Qwen-Image), [KIE 4o Image mask editing](https://docs.kie.ai/4o-image-api/quickstart), [KIE GPT Image 2 image-to-image](https://docs.kie.ai/market/gpt/gpt-image-2-image-to-image), [KIE FLUX 2 Pro image-to-image](https://docs.kie.ai/market/flux2/pro-image-to-image), [KIE Sora 2 video remover](https://docs.kie.ai/cn/market/sora2/sora-watermark-remover), [OpenRouter Image API](https://openrouter.ai/docs/guides/overview/multimodal/image-generation), [OpenRouter image models](https://openrouter.ai/collections/image-models).
 
 ## Tasks 34 and 37: quality gate видимых меток
 
@@ -108,7 +108,8 @@ Task 37 сохранил local-only решение и тот же UI, но от�
 8. Видимые метки не входят в metadata cleanup и выполняются отдельным opt-in шагом до первого апскейла.
 9. Автоматическое удаление разрешено только для подтвержденной Gemini-метки; все остальные небольшие служебные метки требуют пользовательского подтверждения области.
 10. Точечное удаление видимых меток выполняется локально: reverse-alpha для Gemini и встроенный MI-GAN для подтвержденной bounded mask. KIE не является selectable provider для этого шага.
-11. KIE и OpenRouter не добавляются как универсальные providers перегенерации: Tasks 39-41 не прошли общий gate по alpha, сюжету/идентичности, detector evidence и предсказуемой стоимости. Task 42 local feasibility активирован.
+11. KIE и OpenRouter не добавляются как универсальные providers перегенерации: Tasks 39-41 не прошли общий gate по alpha, сюжету/идентичности, detector evidence и предсказуемой стоимости.
+12. Task 42 завершён как local production hardware no-go без model downloads. Официальные model SHA/license/file-size metadata проверены; ControlNet/VAE не отменяют SDXL Open RAIL++-M obligations. Tasks 43-49 пропущены, whole-image regeneration не добавляется; скрытые pixel-level markers остаются `UNSUPPORTED` для гарантированного удаления.
 
 ## Ограничения владения и безопасности
 
@@ -124,5 +125,5 @@ Task 37 сохранил local-only решение и тот же UI, но от�
 - Tasks 31-34 выполнены: выбран local-only путь с автоматикой только для Gemini и user-confirmed bounded mask для остальных небольших служебных меток.
 - Tasks 35-37 выполнены: добавлены opt-in UI, локальный шаг до первого upscale и приемка без KIE key.
 - Tasks 38-41 выполнены: status contract зафиксирован, KIE и OpenRouter не прошли универсальный quality/cost gate, live-запуски закрыты.
-- Task 42 активирован; Tasks 43-47 запускать только если локальная diffusion-проверка даст приемлемый результат.
-- Tasks 48-49: добавить только одобренный режим перегенерации и выполнять повторную инспекцию результата.
+- Task 42 выполнен: локальная машина не имеет поддерживаемого accelerator и не является production candidate для CPU diffusion; техническая невозможность plain-SDXL CPU не заявляется.
+- Tasks 43-49 пропущены: одобренного режима перегенерации нет; перейти к общей приёмке Task 50.
