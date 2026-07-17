@@ -4,6 +4,30 @@
 
 ### Added
 
+- Completed the isolated Task 41 managed-editor fidelity benchmark for
+  Seedream 4.5 and Riverflow 2.5 Pro with a strict preservation prompt,
+  one-shot per-candidate reservations, and the existing multi-class RGBA rubric.
+- Excluded FLUX.2 Max from paid execution because its per-megapixel endpoint
+  does not expose a bounded output size, so the request could not prove a hard
+  maximum inside the approved test budget.
+- Added layered paid-request controls: endpoint capabilities/prices and an exact
+  provider tag are checked before reservation; local state uses one-shot locked
+  reservations; pinned HTTPS rejects redirects; byte/pixel/decompression limits
+  cover inputs/results; and secret-safe error parsing never stores raw responses.
+- Added 28 focused Task 41 tests for closed/no-key gates, concurrent one-shot and
+  total-budget behavior, tampered state, actual-cost violations, ambiguous
+  endpoints, key limits, redirect protection, bounded image decoding, Windows
+  lock errors, secret-safe reports, RGB fallback input, and `not_verified`
+  pixel-marker claims.
+- Recorded the paid Task 41 evidence. Seedream RGB cost `$0.040`, lost alpha,
+  changed face/photo detail, added C2PA, and remained `not_verified`. Riverflow
+  preserved the visible image best but lost alpha, remained `not_verified`, and
+  reported `$0.264885` against a `$0.130` endpoint snapshot.
+- Rejected all managed whole-image providers and activated Task 42. Successful
+  Task 41 responses total `$0.304885`; including Task 40, known billed test spend
+  is `$0.339885`. Paid testing stopped and the final authorization list is empty.
+- Verified the final closed-gate state with 28 focused Task 41 tests and all 136
+  project tests; the existing offscreen application main flow remains unchanged.
 - Added the isolated Task 40 OpenRouter benchmark preparation for
   `recraft/recraft-v4.1-utility`, reusing the Task 39 RGBA fixture and quality
   rubric while keeping the production application unchanged.

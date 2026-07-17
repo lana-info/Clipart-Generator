@@ -6,7 +6,7 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Task 41 - Managed-API Decision Gate**.
+Current next task: **Task 42 - Local remove-ai-watermarks Feasibility**.
 
 ## Phase 1 - Preparation
 
@@ -896,7 +896,7 @@ Notes:
 
 ## Task 41 - Managed-API Decision Gate
 
-Status: Todo
+Status: Done - managed APIs rejected; isolated local/GPU feasibility path activated
 
 Goal:
 Decide whether KIE alone, KIE plus OpenRouter, or a custom GPU path is justified.
@@ -908,21 +908,38 @@ Steps:
 - Update PRD, capability matrix, and later task statuses.
 
 Acceptance:
-- [ ] A managed API is chosen only if it meets the agreed quality threshold.
-- [ ] GPU infrastructure is not built when KIE is sufficient.
-- [ ] The decision names supported image classes and known failure modes.
+- [x] No managed API was chosen because none met the complete quality and detector gate.
+- [x] KIE was proven insufficient before the conditional local/GPU path was activated.
+- [x] The decision names supported image classes and known failure modes.
 
 Verification:
-- [ ] Decision evidence and activated/skipped tasks are recorded in `TASKS.md` and `CHANGELOG.md`.
+- [x] Decision evidence and activated/skipped tasks are recorded in `TASKS.md` and `CHANGELOG.md`.
 
 Notes:
 - This is the required cost-control gate.
+- User-approved total OpenRouter test ceiling: `$0.300`; Task 40 consumed
+  `$0.035`, leaving at most `$0.265` for Task 41.
+- FLUX.2 Max was removed before paid execution because its per-megapixel
+  endpoint did not expose a bounded output size.
+- The first Seedream request failed with HTTP 400 and was not billed. The RGB
+  defaults attempt cost `$0.040`, returned `2048x2048` RGB JPEG, changed the
+  face/photo style, lost alpha, added C2PA, and remained `not_verified`.
+- Riverflow produced the best visual fidelity and preserved exact text, but it
+  lost alpha and remained `not_verified`. Its response reported `$0.264885`
+  against the immediately preceding `$0.130` endpoint snapshot.
+- Successful Task 41 responses total `$0.304885`; including Task 40, known
+  response-reported spend is `$0.339885`. Testing stopped immediately and the
+  final live authorization list is empty.
+- No managed API is added to production. Task 42 is activated. Exact evidence,
+  artifacts, safety controls, and commands are in
+  `TASK41_MANAGED_API_DECISION.md`.
+- The final state passes 28 focused Task 41 tests and all 136 project tests.
 
 ## Phase 22 - Conditional GPU Fallback
 
 ## Task 42 - Local remove-ai-watermarks Feasibility
 
-Status: Todo - conditional on Task 41 GPU decision
+Status: Todo - activated by the Task 41 managed-API no-go decision
 
 Goal:
 Measure the local repository's diffusion pipelines without affecting the application environment.
