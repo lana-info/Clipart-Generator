@@ -22,6 +22,11 @@
 - Hardened KIE, PhotoRoom, update, and license transports against HTTPS downgrade
   redirects; remote license URLs require HTTPS, authenticated redirects cannot
   inherit secrets, and provider response/upload sizes are bounded.
+- Added bounded update manifest/installer responses and HTTPS-only update URLs;
+  local Real-ESRGAN, rembg, and BEN2 inputs now reject animated or oversized
+  images before model execution.
+- Added focused security-boundary regression tests and consolidated repeated
+  HTTPS URL validation without changing provider or updater behavior.
 - Kept model preflight fail-closed for transport failures while allowing only a
   bounded, classified reference-schema error without exposing provider bodies.
 - Changed user-confirmed visible-mark wording to report bounded area processing

@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 from urllib import error as urlerror
 from urllib import request, parse
 from datetime import datetime, timedelta, timezone
-from PIL import Image, ImageChops, ImageFilter, PngImagePlugin
+from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from license_client import LicenseClient
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from metadata_inspector import inspect_image_metadata
@@ -84,6 +84,8 @@ MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_API_UPLOAD_BYTES = 128 * 1024 * 1024
 MAX_PROVIDER_IMAGE_DIMENSION = 32_768
 MAX_PROVIDER_IMAGE_PIXELS = 70_000_000
+MAX_UPDATE_MANIFEST_BYTES = 2 * 1024 * 1024
+MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
 
 
 class ProcessingCancelled(RuntimeError):
@@ -505,6 +507,30 @@ def read_response_limited(response, max_bytes):
     if len(payload) > max_bytes:
         raise ResponseLimitError("API response exceeds size limit")
     return payload
+
+
+def validate_https_url(url, label):
+    parsed_url = urlparse(str(url or "").strip())
+    if parsed_url.scheme.lower() != "https" or not parsed_url.hostname:
+        raise RuntimeError(f"{label} must use HTTPS")
+    if parsed_url.username or parsed_url.password:
+        raise RuntimeError(f"{label} must not contain credentials")
+    return parsed_url
+
+
+def validate_local_image_input(image_path):
+    try:
+        with Image.open(image_path) as image:
+            if getattr(image, "n_frames", 1) != 1:
+                raise ValueError("Local input image must be single-frame")
+            if max(image.size) > MAX_PROVIDER_IMAGE_DIMENSION:
+                raise ValueError("Local input image exceeds dimension limit")
+            if image.width * image.height > MAX_PROVIDER_IMAGE_PIXELS:
+                raise ValueError("Local input image exceeds pixel limit")
+    except ValueError:
+        raise
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ValueError("Local input image is invalid") from exc
 
 
 def safe_error_text(error, secrets=(), limit=500):
@@ -1257,6 +1283,7 @@ class WorkerThread(QThread):
         exe_path, error_message = validate_local_realesrgan_exe(self.local_realesrgan_dir)
         if error_message:
             raise ValueError(error_message)
+        validate_local_image_input(input_path)
 
         scale = normalize_local_realesrgan_scale(scale or self.local_realesrgan_scale)
         model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
@@ -1339,6 +1366,7 @@ class WorkerThread(QThread):
         return self.local_rembg_session, self.local_rembg_remove
 
     def _run_local_rembg(self, input_path, output_path):
+        validate_local_image_input(input_path)
         session, remove = self._get_local_rembg_session()
         with open(input_path, "rb") as src:
             result_data = remove(src.read(), session=session)
@@ -1381,6 +1409,7 @@ class WorkerThread(QThread):
         return self.local_ben2_model
 
     def _run_local_ben2(self, input_path, output_path):
+        validate_local_image_input(input_path)
         model = self._get_local_ben2_model()
         with Image.open(input_path) as img:
             source = img.convert("RGB")
@@ -2750,12 +2779,8 @@ class WorkerThread(QThread):
             "Accept-Language": "en-US,en;q=0.9,ru;q=0.8",
         }
 
-        parsed_url = urlparse(url)
+        parsed_url = validate_https_url(url, "Provider download URL")
         host = (parsed_url.hostname or "").lower().rstrip(".")
-        if parsed_url.scheme.lower() != "https" or not host:
-            raise RuntimeError("Provider download URL must use HTTPS")
-        if parsed_url.username or parsed_url.password:
-            raise RuntimeError("Provider download URL must not contain credentials")
         # Некоторые CDN KIE/Redpanda отдают 403 (Cloudflare 1010) без auth-заголовков.
         trusted_kie_host = parsed_url.scheme.lower() == "https" and (
             host in {"kie.ai", "redpandaai.co"}
@@ -6084,6 +6109,7 @@ class MainWindow(QMainWindow):
         return h.hexdigest().lower()
 
     def _download_update_installer(self, download_url, expected_sha256=None):
+        validate_https_url(download_url, "Update download URL")
         req = request.Request(
             download_url,
             headers={
@@ -6093,7 +6119,7 @@ class MainWindow(QMainWindow):
             method="GET",
         )
         with open_url_secure(req, timeout=120, context=build_ssl_context()) as resp:
-            content = resp.read()
+            content = read_response_limited(resp, MAX_UPDATE_INSTALLER_BYTES)
 
         temp_dir = tempfile.gettempdir()
         filename = f"ClipartGenerator-Update-{int(time.time())}.exe"
@@ -6176,7 +6202,7 @@ class MainWindow(QMainWindow):
                 method="GET",
             )
             with open_url_secure(req, timeout=20, context=build_ssl_context()) as resp:
-                manifest = self._parse_update_manifest(resp.read())
+                manifest = self._parse_update_manifest(read_response_limited(resp, MAX_UPDATE_MANIFEST_BYTES))
 
             latest_version = str(manifest.get("latest_version", "")).strip()
             download_url = str(manifest.get("download_url", "")).strip()
@@ -6184,6 +6210,8 @@ class MainWindow(QMainWindow):
 
             if not latest_version or not download_url:
                 raise RuntimeError("version.json не содержит latest_version/download_url")
+
+            validate_https_url(download_url, "Update download URL")
 
             # Источник истины о текущей версии — константа приложения из текущей сборки.
             current_version = APP_VERSION

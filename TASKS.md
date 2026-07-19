@@ -1180,7 +1180,7 @@ Acceptance:
 - [x] Conditional GPU tasks are either verified or explicitly marked `Skipped` with rationale.
 
 Verification:
-- [x] `python -m py_compile .\main.py .\license_client.py .\tests\test_license_client_security.py .\tests\test_kie_routing.py .\tests\test_main_ui_acceptance.py .\tests\test_photoroom_provider.py .\tests\test_visible_mark_pipeline.py`
+- [x] `python -m py_compile .\main.py .\license_client.py .\tests\test_license_client_security.py .\tests\test_kie_routing.py .\tests\test_main_ui_acceptance.py .\tests\test_photoroom_provider.py .\tests\test_visible_mark_pipeline.py .\tests\test_security_boundaries.py`
 - [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest discover -s tests -v` (`176/176` passed)
 - [x] Manual comparisons on light/dark backgrounds and multiple image classes are recorded.
 
@@ -1188,5 +1188,7 @@ Notes:
 - Finish with documentation, commit, and push only. Do not build, tag, publish, or create a release.
 - The first acceptance pass was reopened after independent review reproduced redirect/header leaks, provider-body logging, final-publication cancellation races, ambiguous upload POST fallback, and insufficient provider-image limits.
 - The fixes were covered by regressions and a fresh independent review returned `PASS`, including HTTPS redirect handling and real HTTP 400/422 reference-schema classification.
+- The follow-up review added bounded updater responses, HTTPS-only update URL validation, and local-image preflight limits; a second fresh review and a post-refactor fresh review returned `PASS`.
+- The current session's bundled Python lacked project runtime dependencies (`PyQt6` and `cv2`), so the new focused runtime tests were syntax-checked but not executed here; the previously recorded 176-test acceptance run remains unchanged.
 - Final evidence is recorded in [`TASK50_CLEANUP_ACCEPTANCE.md`](./TASK50_CLEANUP_ACCEPTANCE.md).
 - No paid request, model download, build, tag, workflow, or release was run.
