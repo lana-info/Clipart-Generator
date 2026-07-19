@@ -1192,3 +1192,44 @@ Notes:
 - The current session's bundled Python lacked project runtime dependencies (`PyQt6` and `cv2`), so the new focused runtime tests were syntax-checked but not executed here; the previously recorded 176-test acceptance run remains unchanged.
 - Final evidence is recorded in [`TASK50_CLEANUP_ACCEPTANCE.md`](./TASK50_CLEANUP_ACCEPTANCE.md).
 - No paid request, model download, build, tag, workflow, or release was run.
+
+## Task 51 - Trustworthy Feature Test Coverage
+
+Status: Done - verified in the project's local `.venv`
+
+Goal:
+Cover the application's real user-facing features with deterministic tests that
+assert business outcomes and safe failure behavior rather than only code paths.
+
+Scope:
+- Image generation: KIE model payloads, reference routing, polling, and result extraction.
+- Data validation: supported image boundaries and invalid-input rejection before processing.
+- Information preparation: CSV/BOM/delimiter/quotes, prompt normalization, and reference limits.
+- Publication boundaries: final-output contracts, license cache lifecycle, and verified updater downloads.
+
+Acceptance:
+- [x] A feature matrix is recorded in [`TRUSTWORTHY_TEST_MATRIX.md`](./TRUSTWORTHY_TEST_MATRIX.md).
+- [x] Focused generation/preparation/result tests are in `tests/test_trustworthy_feature_contracts.py`.
+- [x] A network-free generation integration test verifies request payload, polling,
+  download, and publication of one PNG output.
+- [x] Positive license lifecycle tests are in `tests/test_license_client_security.py`.
+- [x] Positive and negative updater/image-boundary tests are in `tests/test_security_boundaries.py`.
+- [x] Negative scenarios cover failed generation, expired license cache, checksum
+  mismatch cleanup, corrupt input, and unsupported result shapes.
+- [x] Existing final-output, cleanup, UI, provider, and local-processing suites remain part of the required regression set.
+- [x] No test performs a paid request, release, publication, commit, or push.
+
+Verification:
+- [x] `python -m py_compile .\main.py .\license_client.py .\tests\test_license_client_security.py .\tests\test_security_boundaries.py .\tests\test_trustworthy_feature_contracts.py`
+- [x] Bundled runtime: `python -m unittest tests.test_license_client_security -v` (`7/7` passed).
+- [x] `git diff --check`.
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; .\.venv\Scripts\python.exe -m unittest discover -s tests -v` (`198/198` passed).
+
+Notes:
+- The bundled Codex runtime lacked `PyQt6` and `cv2`; the project's local
+  `.venv` was created and populated from `requirements.txt` for verification.
+- Independent review rated the first pass `5/10`; the follow-up added the
+  missing generation integration, public activation/cache flow, checksum
+  mismatch cleanup, and corrupt-input regressions. Those import-dependent
+  tests still require the project's normal environment.
+- No production behavior was changed for this testing task.

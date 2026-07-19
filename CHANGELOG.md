@@ -4,6 +4,17 @@
 
 ### Added
 
+- Added a trustworthy test matrix and focused feature contracts for KIE
+  generation, polling, CSV/reference preparation, license cache lifecycle, and
+  verified updater downloads. These tests do not publish, release, or spend
+  provider credits.
+- Strengthened the trustworthy test set with a network-free generation-to-PNG
+  integration flow, public license activation/cache coverage, updater checksum-
+  mismatch cleanup, and corrupt-input rejection; runtime-dependent tests were
+  then verified in the project's full local environment.
+- Verified the complete test suite in the project `.venv`: `198/198` tests pass;
+  also stabilized the concurrent budget-reservation test against transient lock
+  timing without changing production behavior.
 - Completed Task 50 cleanup acceptance across independent metadata choices,
   combined local processing, mixed KIE, and PhotoRoom Standard routes.
 - Added offline light/dark comparison evidence for photo, face, illustration,

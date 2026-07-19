@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import json
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
@@ -22,6 +23,21 @@ class FakeOpener:
         if self.failure is not None:
             raise self.failure
         return self.response
+
+
+class JsonResponse:
+    def __init__(self, payload):
+        self.payload = json.dumps(payload).encode("utf-8")
+        self.headers = {"Content-Length": str(len(self.payload))}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def read(self, limit=-1):
+        return self.payload if limit < 0 else self.payload[:limit]
 
 
 class LicenseClientSecurityTests(unittest.TestCase):
@@ -114,6 +130,48 @@ class LicenseClientSecurityTests(unittest.TestCase):
             self.assertEqual(post_mock.call_count, 2)
             self.assertEqual(post_mock.call_args_list[0].args[0], "https://license.example")
             self.assertEqual(post_mock.call_args_list[1].args[0], "https://license.example")
+
+    def test_valid_activation_response_creates_offline_cache_that_survives_client_restart(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-license-cache-") as temp_dir:
+            client = self.make_client(temp_dir)
+            response_payload = {
+                "ok": True,
+                "license_key": DUMMY_LICENSE_KEY,
+                "token": "cached-token",
+                "expires_at": "2099-01-01T00:00:00+00:00",
+                "updates_until": "2099-01-01",
+                "updates_allowed": True,
+            }
+            opener = FakeOpener(response=JsonResponse(response_payload))
+            with patch.object(license_client.request, "build_opener", return_value=opener):
+                result = client.activate(DUMMY_LICENSE_KEY)
+
+            self.assertEqual(result, response_payload)
+            request_payload = json.loads(opener.requests[0][0].data.decode("utf-8"))
+            self.assertEqual(request_payload["license_key"], DUMMY_LICENSE_KEY)
+            self.assertEqual(request_payload["app_version"], "1.0.2")
+
+            restarted = self.make_client(temp_dir)
+            with patch.object(restarted, "_post_any", side_effect=RuntimeError("offline")):
+                result = restarted.validate(DUMMY_LICENSE_KEY, use_offline=True)
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["offline"])
+        self.assertEqual(result["token"], "cached-token")
+
+    def test_expired_offline_cache_is_not_accepted(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-license-expired-") as temp_dir:
+            client = self.make_client(temp_dir)
+            client._save_cache({"ok": True, "license_key": DUMMY_LICENSE_KEY})
+            cache_path = Path(client.cache_path)
+            cache = json.loads(cache_path.read_text(encoding="utf-8"))
+            cache["cached_until"] = "2000-01-01T00:00:00+00:00"
+            cache_path.write_text(json.dumps(cache), encoding="utf-8")
+
+            result = client._validate_offline_cache(DUMMY_LICENSE_KEY, client.device_fingerprint())
+
+        self.assertFalse(result["ok"])
+        self.assertIn("истёк", result["message"])
 
 
 if __name__ == "__main__":

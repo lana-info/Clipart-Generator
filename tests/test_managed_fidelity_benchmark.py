@@ -187,14 +187,21 @@ class ManagedFidelityBenchmarkTests(unittest.TestCase):
             state = Path(temp_dir) / "state.json"
             code = (
                 "import sys\n"
+                "import time\n"
                 "from pathlib import Path\n"
                 "from scripts import run_managed_fidelity_benchmark as b\n"
-                "try:\n"
-                "    b.reserve_candidate('seedream-4.5', Path(sys.argv[1]), "
+                "for attempt in range(20):\n"
+                "    try:\n"
+                "        b.reserve_candidate('seedream-4.5', Path(sys.argv[1]), "
                 "authorized_candidates=('seedream-4.5',))\n"
-                "    print('reserved')\n"
-                "except b.ManagedFidelityBenchmarkError as error:\n"
-                "    print(str(error))\n"
+                "        print('reserved')\n"
+                "        break\n"
+                "    except b.ManagedFidelityBenchmarkError as error:\n"
+                "        if str(error) == 'Task 41 budget state is locked' and attempt < 19:\n"
+                "            time.sleep(0.01)\n"
+                "            continue\n"
+                "        print(str(error))\n"
+                "        break\n"
             )
             processes = [
                 subprocess.Popen(

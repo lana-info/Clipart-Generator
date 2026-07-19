@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
@@ -27,6 +28,10 @@ class _ResponseContext(_Response):
 
     def __exit__(self, exc_type, exc_value, traceback):
         return False
+
+
+class _UpdateHarness:
+    _sha256_file = main.MainWindow._sha256_file
 
 
 class SecurityBoundaryTests(unittest.TestCase):
@@ -74,6 +79,49 @@ class SecurityBoundaryTests(unittest.TestCase):
         response = _Response(b"0123456789", content_length=10)
         with self.assertRaises(main.ResponseLimitError):
             main.read_response_limited(response, 8)
+
+    def test_update_installer_download_writes_verified_bytes_to_temp_file(self):
+        payload = b"trusted-installer-fixture"
+        response = _ResponseContext(payload, content_length=len(payload))
+        expected_sha256 = hashlib.sha256(payload).hexdigest()
+        with tempfile.TemporaryDirectory(prefix="clipart-update-") as temp_dir:
+            with (
+                patch.object(main, "open_url_secure", return_value=response),
+                patch.object(main.tempfile, "gettempdir", return_value=temp_dir),
+            ):
+                installer_path = main.MainWindow._download_update_installer(
+                    _UpdateHarness(),
+                    "https://updates.example/app.exe",
+                    expected_sha256=expected_sha256,
+                )
+
+            self.assertEqual(Path(installer_path).read_bytes(), payload)
+
+    def test_update_installer_checksum_mismatch_removes_untrusted_temp_file(self):
+        payload = b"untrusted-installer-fixture"
+        response = _ResponseContext(payload, content_length=len(payload))
+        with tempfile.TemporaryDirectory(prefix="clipart-update-mismatch-") as temp_dir:
+            with (
+                patch.object(main, "open_url_secure", return_value=response),
+                patch.object(main.tempfile, "gettempdir", return_value=temp_dir),
+                patch.object(main.time, "time", return_value=123),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "Контрольная сумма"):
+                    main.MainWindow._download_update_installer(
+                    _UpdateHarness(),
+                        "https://updates.example/app.exe",
+                        expected_sha256="0" * 64,
+                    )
+
+            self.assertFalse((Path(temp_dir) / "ClipartGenerator-Update-123.exe").exists())
+
+    def test_local_image_preflight_rejects_corrupt_input(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-local-preflight-corrupt-") as temp_dir:
+            image_path = Path(temp_dir) / "corrupt.png"
+            image_path.write_bytes(b"not-a-png")
+
+            with self.assertRaisesRegex(ValueError, "invalid"):
+                main.validate_local_image_input(image_path)
 
 
 if __name__ == "__main__":
