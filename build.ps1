@@ -28,6 +28,7 @@ python -m PyInstaller `
     --add-data "third_party/migan/migan.onnx;third_party/migan" `
     --add-data "third_party/migan/LICENSE;third_party/migan" `
     --add-data "third_party/migan/NOTICE.md;third_party/migan" `
+    --add-data "realesrgan-ncnn-vulkan-20211212-windows;realesrgan-ncnn-vulkan-20211212-windows" `
     main.py
 
 Write-Host "==> Prepare release directory"

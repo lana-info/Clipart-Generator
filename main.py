@@ -65,6 +65,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QTabWidget,
+    QScrollArea,
     QLineEdit,
     QHeaderView,
     QDialog,
@@ -215,6 +216,17 @@ REALESRGAN_PROFILE_SCALE_MODELS = {
     ("clipart", 2): "RealESRGANv2-animevideo-xsx2",
     ("clipart", 4): "realesrgan-x4plus-anime",
 }
+
+
+def application_base_dir():
+    """Return the directory that contains the source tree or packaged app."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def bundled_local_realesrgan_dir():
+    return os.path.join(application_base_dir(), "realesrgan-ncnn-vulkan-20211212-windows")
 
 
 def resolve_local_realesrgan_exe_path(local_realesrgan_dir):
@@ -3371,7 +3383,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"Clipart Generator v{APP_VERSION}")
-        self.resize(980, 780)
+        self.resize(980, 700)
 
         self.work_dir = ""
         self.worker = None
@@ -3493,10 +3505,7 @@ class MainWindow(QMainWindow):
             "unsharp_amount": 30,
             "unsharp_radius": 100,
             "unsharp_threshold": 0,
-            "local_realesrgan_dir": os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "realesrgan-ncnn-vulkan-20211212-windows",
-            ),
+            "local_realesrgan_dir": bundled_local_realesrgan_dir(),
             "local_realesrgan_profile": "clipart",
             "local_realesrgan_scale": 4,
             "local_realesrgan_after_scale": 4,
@@ -3519,6 +3528,7 @@ class MainWindow(QMainWindow):
             "cleanup_remove_embedded_thumbnail": False,
             "cleanup_remove_generator_fields": False,
             "cleanup_remove_embedded_c2pa": False,
+            "cleanup_remove_all": False,
             "cleanup_preserve_icc": True,
             "cleanup_preserve_dpi": True,
             "kie_upscale_model": "topaz/upscale",
@@ -3541,6 +3551,8 @@ class MainWindow(QMainWindow):
                     self.config[key] = value
         else:
             self.config = default_config
+        # Local Real-ESRGAN is shipped with the application; an old external path is ignored.
+        self.config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
         # URL обновлений всегда фиксированный и не редактируется в UI.
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL
 
@@ -3676,9 +3688,16 @@ class MainWindow(QMainWindow):
         settings_tab = QWidget()
         settings_tab_layout = QVBoxLayout(settings_tab)
         settings_tab_layout.setSpacing(8)
+
+        process_scroll = QScrollArea()
+        process_scroll.setWidgetResizable(True)
+        process_scroll.setWidget(process_tab)
+        settings_scroll = QScrollArea()
+        settings_scroll.setWidgetResizable(True)
+        settings_scroll.setWidget(settings_tab)
         self.tabs.addTab(prompt_tab, "Промпты")
-        self.tabs.addTab(process_tab, "Обработка")
-        self.tabs.addTab(settings_tab, "Настройки")
+        self.tabs.addTab(process_scroll, "Обработка")
+        self.tabs.addTab(settings_scroll, "Настройки")
         main_layout.addWidget(self.tabs)
 
         prompt_btn_layout = QHBoxLayout()
@@ -3763,16 +3782,17 @@ class MainWindow(QMainWindow):
         process_flags_layout = QGridLayout()
         process_flags_layout.setHorizontalSpacing(12)
         process_flags_layout.setVerticalSpacing(8)
-        self.chk_visible_mark_cleanup = QCheckBox("Удалить видимую метку")
+        self.chk_visible_mark_cleanup = QCheckBox("Удалить видимый водяной знак")
         self.chk_visible_mark_cleanup.setChecked(
             bool(self.config.get("visible_mark_cleanup_enabled", False))
         )
         self.chk_visible_mark_cleanup.setToolTip(
-            "Только для собственных или лицензированных изображений"
+            "Удаляет видимый текстовый или логотипный водяной знак. "
+            "Только для собственных или лицензированных изображений."
         )
         self.visible_mark_mode_combo = QComboBox()
-        self.visible_mark_mode_combo.addItem("Gemini автоматически", "gemini_auto")
-        self.visible_mark_mode_combo.addItem("Область с подтверждением", "confirmed_area")
+        self.visible_mark_mode_combo.addItem("Автоматически (Gemini)", "gemini_auto")
+        self.visible_mark_mode_combo.addItem("Выделенная область (с подтверждением)", "confirmed_area")
         visible_mark_mode = normalize_visible_mark_cleanup_mode(
             self.config.get("visible_mark_cleanup_mode", "gemini_auto")
         )
@@ -3873,56 +3893,36 @@ class MainWindow(QMainWindow):
         process_tab_layout.addWidget(self.process_flags_group)
 
         self.cleanup_group = QGroupBox("Очистка файла")
-        cleanup_layout = QGridLayout()
-        cleanup_layout.setHorizontalSpacing(20)
-        cleanup_layout.setVerticalSpacing(6)
+        cleanup_layout = QVBoxLayout()
+        cleanup_layout.setSpacing(6)
 
-        self.chk_cleanup_remove_exif = QCheckBox("Удалить EXIF")
-        self.chk_cleanup_remove_xmp = QCheckBox("Удалить XMP")
-        self.chk_cleanup_remove_iptc = QCheckBox("Удалить IPTC")
-        self.chk_cleanup_remove_comments_text = QCheckBox("Удалить комментарии/текст")
-        self.chk_cleanup_remove_thumbnail = QCheckBox("Удалить встроенную миниатюру")
-        self.chk_cleanup_remove_generator = QCheckBox("Удалить данные генератора")
-        self.chk_cleanup_remove_c2pa = QCheckBox("Удалить встроенный C2PA")
-        self.chk_cleanup_preserve_icc = QCheckBox("Сохранить ICC-профиль")
-        self.chk_cleanup_preserve_dpi = QCheckBox("Сохранить DPI")
-
-        self.chk_cleanup_remove_exif.setChecked(bool(self.config.get("cleanup_remove_exif", False)))
-        self.chk_cleanup_remove_xmp.setChecked(bool(self.config.get("cleanup_remove_xmp", False)))
-        self.chk_cleanup_remove_iptc.setChecked(bool(self.config.get("cleanup_remove_iptc", False)))
-        self.chk_cleanup_remove_comments_text.setChecked(
-            bool(self.config.get("cleanup_remove_comments_text", False))
+        self.chk_cleanup_all = QCheckBox("Очистить данные файла полностью")
+        self.chk_cleanup_all.setToolTip(
+            "Удаляет все служебные данные, кроме ICC-профиля и DPI. "
+            "Пиксели и прозрачность изображения не меняются."
         )
-        self.chk_cleanup_remove_thumbnail.setChecked(
-            bool(self.config.get("cleanup_remove_embedded_thumbnail", False))
+        cleanup_all_enabled = bool(self.config.get("cleanup_remove_all", False)) or any(
+            bool(self.config.get(key, False))
+            for key in (
+                "cleanup_remove_exif",
+                "cleanup_remove_xmp",
+                "cleanup_remove_iptc",
+                "cleanup_remove_comments_text",
+                "cleanup_remove_embedded_thumbnail",
+                "cleanup_remove_generator_fields",
+                "cleanup_remove_embedded_c2pa",
+            )
         )
-        self.chk_cleanup_remove_generator.setChecked(
-            bool(self.config.get("cleanup_remove_generator_fields", False))
+        self.chk_cleanup_all.setChecked(cleanup_all_enabled)
+        cleanup_intro = QLabel(
+            "Удаляются EXIF, XMP, IPTC, комментарии, встроенная миниатюра, "
+            "данные генератора и встроенный C2PA. ICC-профиль и DPI сохраняются."
         )
-        self.chk_cleanup_remove_c2pa.setChecked(
-            bool(self.config.get("cleanup_remove_embedded_c2pa", False))
-        )
-        self.chk_cleanup_preserve_icc.setChecked(bool(self.config.get("cleanup_preserve_icc", True)))
-        self.chk_cleanup_preserve_dpi.setChecked(bool(self.config.get("cleanup_preserve_dpi", True)))
-        self.chk_cleanup_remove_c2pa.setToolTip(
-            "Удаляет только встроенный манифест и поддерживаемые ссылки из нового PNG"
-        )
-
-        cleanup_layout.addWidget(self.chk_cleanup_remove_exif, 0, 0)
-        cleanup_layout.addWidget(self.chk_cleanup_remove_thumbnail, 0, 1)
-        cleanup_layout.addWidget(self.chk_cleanup_preserve_icc, 0, 2)
-        cleanup_layout.addWidget(self.chk_cleanup_remove_xmp, 1, 0)
-        cleanup_layout.addWidget(self.chk_cleanup_remove_generator, 1, 1)
-        cleanup_layout.addWidget(self.chk_cleanup_preserve_dpi, 1, 2)
-        cleanup_layout.addWidget(self.chk_cleanup_remove_iptc, 2, 0)
-        cleanup_layout.addWidget(self.chk_cleanup_remove_c2pa, 2, 1)
-        cleanup_layout.addWidget(self.chk_cleanup_remove_comments_text, 3, 0)
-        cleanup_layout.setColumnStretch(0, 1)
-        cleanup_layout.setColumnStretch(1, 1)
+        cleanup_intro.setWordWrap(True)
+        cleanup_layout.addWidget(self.chk_cleanup_all)
+        cleanup_layout.addWidget(cleanup_intro)
         self.cleanup_group.setLayout(cleanup_layout)
         process_tab_layout.addWidget(self.cleanup_group)
-
-        process_tab_layout.addStretch()
 
         kie_group = QGroupBox("Подключения и генерация")
         kie_group.setMaximumWidth(720)
@@ -4018,17 +4018,34 @@ class MainWindow(QMainWindow):
         reference_options_layout.addWidget(self.reference_resolution_combo)
         reference_options_layout.addStretch()
 
+        def model_with_price(model_combo, price_label):
+            model_widget = QWidget()
+            model_layout = QHBoxLayout(model_widget)
+            model_layout.setContentsMargins(0, 0, 0, 0)
+            model_layout.setSpacing(8)
+            model_layout.addWidget(model_combo)
+            model_layout.addWidget(price_label)
+            model_layout.addStretch()
+            return model_widget
+
+        text_model_widget = model_with_price(
+            self.text_generation_model_combo,
+            self.text_model_price_label,
+        )
+        reference_model_widget = model_with_price(
+            self.reference_generation_model_combo,
+            self.reference_model_price_label,
+        )
+
         kie_layout.addWidget(lbl_api_key, 0, 0)
         kie_layout.addWidget(self.kie_api_key_input, 0, 1)
         kie_layout.addWidget(self.api_key_buttons_widget, 0, 2)
         kie_layout.addWidget(lbl_text_model, 1, 0)
-        kie_layout.addWidget(self.text_generation_model_combo, 1, 1)
-        kie_layout.addWidget(self.text_model_price_label, 1, 2)
+        kie_layout.addWidget(text_model_widget, 1, 1, 1, 3)
         kie_layout.addWidget(lbl_text_options, 2, 0)
         kie_layout.addWidget(text_options_widget, 2, 1)
         kie_layout.addWidget(lbl_reference_model, 3, 0)
-        kie_layout.addWidget(self.reference_generation_model_combo, 3, 1)
-        kie_layout.addWidget(self.reference_model_price_label, 3, 2)
+        kie_layout.addWidget(reference_model_widget, 3, 1, 1, 3)
         kie_layout.addWidget(lbl_reference_options, 4, 0)
         kie_layout.addWidget(reference_options_widget, 4, 1)
         kie_group.setLayout(kie_layout)
@@ -4045,18 +4062,23 @@ class MainWindow(QMainWindow):
         self.btn_photoroom_api_key_lock.clicked.connect(self.toggle_photoroom_api_key_lock)
         photoroom_price_label = QLabel("Standard · $0.02 / изображение")
         photoroom_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
+        photoroom_access_widget = QWidget()
+        photoroom_access_layout = QHBoxLayout(photoroom_access_widget)
+        photoroom_access_layout.setContentsMargins(0, 0, 0, 0)
+        photoroom_access_layout.setSpacing(6)
+        photoroom_access_layout.addWidget(self.photoroom_api_key_input)
+        photoroom_access_layout.addWidget(self.btn_photoroom_api_key_lock)
+        photoroom_access_layout.addWidget(photoroom_price_label)
+        photoroom_access_layout.addStretch()
         lbl_photoroom_api_key = QLabel("PhotoRoom API Key:")
         lbl_photoroom_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         kie_layout.addWidget(lbl_photoroom_api_key, 5, 0)
-        kie_layout.addWidget(self.photoroom_api_key_input, 5, 1)
-        kie_layout.addWidget(self.btn_photoroom_api_key_lock, 5, 2)
-        kie_layout.addWidget(photoroom_price_label, 5, 3)
+        kie_layout.addWidget(photoroom_access_widget, 5, 1, 1, 3)
 
-        process_settings_group = QGroupBox("Провайдеры обработки")
-        process_settings_group.setMaximumWidth(900)
-        process_settings_layout = QGridLayout()
-        process_settings_layout.setHorizontalSpacing(10)
-        process_settings_layout.setVerticalSpacing(6)
+        process_settings_group = QGroupBox("Обработка изображений")
+        process_settings_group.setMaximumWidth(1080)
+        process_settings_layout = QVBoxLayout()
+        process_settings_layout.setSpacing(10)
 
         self.upscale_provider_combo = QComboBox()
         self.upscale_provider_combo.addItem("KIE", "kie")
@@ -4077,7 +4099,13 @@ class MainWindow(QMainWindow):
         )
 
         self.local_realesrgan_dir_input = QLineEdit()
-        self.local_realesrgan_dir_input.setText(str(self.config.get("local_realesrgan_dir", "") or ""))
+        self.local_realesrgan_dir_input.setText(bundled_local_realesrgan_dir())
+        self.local_realesrgan_dir_input.setReadOnly(True)
+        self.local_realesrgan_dir_input.setVisible(False)
+        self.local_realesrgan_bundle_label = QLabel("Встроен в приложение")
+        self.local_realesrgan_bundle_label.setToolTip(
+            "Real-ESRGAN входит в пакет приложения и не требует выбора папки."
+        )
 
         self.local_realesrgan_profile_combo = QComboBox()
         self.local_realesrgan_profile_combo.addItem("Photo", "photo")
@@ -4126,7 +4154,7 @@ class MainWindow(QMainWindow):
         self.remove_bg_provider_combo.addItem("KIE", "kie")
         self.remove_bg_provider_combo.addItem("PhotoRoom Standard", "photoroom")
         self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
-        self.remove_bg_provider_combo.addItem("Local BEN2 (experimental)", "local_ben2")
+        self.remove_bg_provider_combo.addItem("BEN2 (локальный, экспериментальный)", "local_ben2")
         remove_bg_provider = str(self.config.get("remove_bg_provider", "kie") or "kie")
         remove_bg_provider_index = self.remove_bg_provider_combo.findData(remove_bg_provider)
         self.remove_bg_provider_combo.setCurrentIndex(remove_bg_provider_index if remove_bg_provider_index >= 0 else 0)
@@ -4141,10 +4169,10 @@ class MainWindow(QMainWindow):
         self.local_rembg_profile_combo.setCurrentIndex(local_rembg_profile_index if local_rembg_profile_index >= 0 else 0)
 
         self.local_rembg_model_combo = QComboBox()
-        self.local_rembg_model_combo.addItem("birefnet-general", "birefnet-general")
-        self.local_rembg_model_combo.addItem("birefnet-portrait", "birefnet-portrait")
-        self.local_rembg_model_combo.addItem("isnet-anime", "isnet-anime")
-        self.local_rembg_model_combo.addItem("isnet-general-use", "isnet-general-use")
+        self.local_rembg_model_combo.addItem("BiRefNet — общий", "birefnet-general")
+        self.local_rembg_model_combo.addItem("BiRefNet — портрет", "birefnet-portrait")
+        self.local_rembg_model_combo.addItem("IS-Net — аниме", "isnet-anime")
+        self.local_rembg_model_combo.addItem("IS-Net — общий", "isnet-general-use")
         local_rembg_model = str(self.config.get("local_rembg_model", "birefnet-general") or "birefnet-general")
         local_rembg_model_index = self.local_rembg_model_combo.findData(local_rembg_model)
         self.local_rembg_model_combo.setCurrentIndex(local_rembg_model_index if local_rembg_model_index >= 0 else 0)
@@ -4161,7 +4189,7 @@ class MainWindow(QMainWindow):
             local_rembg_edge_quality_index if local_rembg_edge_quality_index >= 0 else 1
         )
 
-        self.local_ben2_refine_checkbox = QCheckBox("refine foreground")
+        self.local_ben2_refine_checkbox = QCheckBox("Уточнять передний план")
         self.local_ben2_refine_checkbox.setChecked(bool(self.config.get("local_ben2_refine_foreground", False)))
         self.local_ben2_alpha_threshold_spin = QSpinBox()
         self.local_ben2_alpha_threshold_spin.setRange(0, 255)
@@ -4242,78 +4270,81 @@ class MainWindow(QMainWindow):
         self.local_ben2_corner_radius_combo.setFixedSize(72, 32)
         self.kie_remove_bg_model_combo.setFixedSize(process_settings_field_width, 32)
 
-        lbl_upscale_provider = QLabel("До фона провайдер:")
-        lbl_upscale_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_realesrgan_dir = QLabel("Real-ESRGAN папка:")
-        lbl_local_realesrgan_dir.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_realesrgan_profile = QLabel("Real-ESRGAN профиль:")
-        lbl_local_realesrgan_profile.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_realesrgan_scale = QLabel("До фона scale:")
-        lbl_local_realesrgan_scale.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_upscale_model = QLabel("До фона модель:")
-        lbl_upscale_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_upscale_after_provider = QLabel("После фона провайдер:")
-        lbl_upscale_after_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_realesrgan_after_scale = QLabel("После фона scale:")
-        lbl_local_realesrgan_after_scale.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_upscale_after_model = QLabel("После фона модель:")
-        lbl_upscale_after_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_remove_bg_provider = QLabel("Фон провайдер:")
-        lbl_remove_bg_provider.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_rembg_profile = QLabel("rembg профиль:")
-        lbl_local_rembg_profile.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_rembg_model = QLabel("rembg модель:")
-        lbl_local_rembg_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_rembg_edge_quality = QLabel("rembg край:")
-        lbl_local_rembg_edge_quality.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_local_ben2 = QLabel("BEN2:")
-        lbl_local_ben2.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_remove_bg = QLabel("Удаление фона:")
-        lbl_remove_bg.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        def make_processing_subgroup(title, rows):
+            subgroup = QGroupBox(title)
+            subgroup_layout = QGridLayout()
+            subgroup_layout.setHorizontalSpacing(12)
+            subgroup_layout.setVerticalSpacing(6)
+            subgroup_layout.setColumnMinimumWidth(0, 320)
+            subgroup_layout.setColumnStretch(1, 1)
+            for row_index, (label_text, widget) in enumerate(rows):
+                label_widget = QLabel(label_text)
+                label_widget.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                subgroup_layout.addWidget(label_widget, row_index, 0)
+                subgroup_layout.addWidget(
+                    widget,
+                    row_index,
+                    1,
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                )
+            subgroup.setLayout(subgroup_layout)
+            return subgroup
 
-        local_ben2_widget = QWidget()
-        local_ben2_layout = QHBoxLayout(local_ben2_widget)
-        local_ben2_layout.setContentsMargins(0, 0, 0, 0)
-        local_ben2_layout.setSpacing(8)
-        local_ben2_layout.addWidget(self.local_ben2_refine_checkbox)
-        local_ben2_layout.addWidget(QLabel("alpha threshold:"))
-        local_ben2_layout.addWidget(self.local_ben2_alpha_threshold_spin)
-        local_ben2_layout.addWidget(QLabel("softness:"))
-        local_ben2_layout.addWidget(self.local_ben2_edge_softness_combo)
-        local_ben2_layout.addWidget(QLabel("radius:"))
-        local_ben2_layout.addWidget(self.local_ben2_corner_radius_combo)
-        local_ben2_layout.addStretch()
-
-        process_settings_layout.addWidget(lbl_upscale_provider, 0, 0)
-        process_settings_layout.addWidget(self.upscale_provider_combo, 0, 1)
-        process_settings_layout.addWidget(lbl_local_realesrgan_dir, 1, 0)
-        process_settings_layout.addWidget(self.local_realesrgan_dir_input, 1, 1, 1, 2)
-        process_settings_layout.addWidget(lbl_local_realesrgan_profile, 2, 0)
-        process_settings_layout.addWidget(self.local_realesrgan_profile_combo, 2, 1)
-        process_settings_layout.addWidget(lbl_local_realesrgan_scale, 2, 2)
-        process_settings_layout.addWidget(self.local_realesrgan_scale_combo, 2, 3)
-        process_settings_layout.addWidget(lbl_upscale_model, 3, 0)
-        process_settings_layout.addWidget(kie_upscale_model_widget, 3, 1, 1, 3)
-        process_settings_layout.addWidget(lbl_upscale_after_provider, 4, 0)
-        process_settings_layout.addWidget(self.upscale_after_provider_combo, 4, 1)
-        process_settings_layout.addWidget(lbl_local_realesrgan_after_scale, 4, 2)
-        process_settings_layout.addWidget(self.local_realesrgan_after_scale_combo, 4, 3)
-        process_settings_layout.addWidget(lbl_upscale_after_model, 5, 0)
-        process_settings_layout.addWidget(kie_upscale_after_model_widget, 5, 1, 1, 3)
-        process_settings_layout.addWidget(lbl_remove_bg_provider, 6, 0)
-        process_settings_layout.addWidget(self.remove_bg_provider_combo, 6, 1)
-        process_settings_layout.addWidget(lbl_local_rembg_profile, 7, 0)
-        process_settings_layout.addWidget(self.local_rembg_profile_combo, 7, 1)
-        process_settings_layout.addWidget(lbl_local_rembg_model, 7, 2)
-        process_settings_layout.addWidget(self.local_rembg_model_combo, 7, 3)
-        process_settings_layout.addWidget(lbl_local_rembg_edge_quality, 8, 0)
-        process_settings_layout.addWidget(self.local_rembg_edge_quality_combo, 8, 1)
-        process_settings_layout.addWidget(lbl_local_ben2, 9, 0)
-        process_settings_layout.addWidget(local_ben2_widget, 9, 1, 1, 3)
-        process_settings_layout.addWidget(lbl_remove_bg, 10, 0)
-        process_settings_layout.addWidget(kie_remove_bg_model_widget, 10, 1, 1, 3)
+        upscale_before_group = make_processing_subgroup(
+            "Апскейл до удаления фона",
+            [
+                ("Провайдер:", self.upscale_provider_combo),
+                ("Модель KIE:", kie_upscale_model_widget),
+                ("Масштаб Local Real-ESRGAN:", self.local_realesrgan_scale_combo),
+                ("Профиль Local Real-ESRGAN:", self.local_realesrgan_profile_combo),
+                ("Local Real-ESRGAN:", self.local_realesrgan_bundle_label),
+            ],
+        )
+        upscale_after_group = make_processing_subgroup(
+            "Апскейл после удаления фона",
+            [
+                ("Провайдер:", self.upscale_after_provider_combo),
+                ("Модель KIE:", kie_upscale_after_model_widget),
+                ("Масштаб Local Real-ESRGAN:", self.local_realesrgan_after_scale_combo),
+            ],
+        )
+        remove_background_group = make_processing_subgroup(
+            "Удаление фона",
+            [
+                ("Провайдер:", self.remove_bg_provider_combo),
+                ("Модель KIE:", kie_remove_bg_model_widget),
+            ],
+        )
+        rembg_group = make_processing_subgroup(
+            "Local rembg",
+            [
+                ("Профиль:", self.local_rembg_profile_combo),
+                ("Модель:", self.local_rembg_model_combo),
+                ("Край:", self.local_rembg_edge_quality_combo),
+            ],
+        )
+        ben2_group = make_processing_subgroup(
+            "BEN2: локальное уточнение маски",
+            [
+                ("Когда:", QLabel("При выборе BEN2: после апскейла до фона, до обрезки края")),
+                ("Уточнять передний план:", self.local_ben2_refine_checkbox),
+                ("Порог прозрачности:", self.local_ben2_alpha_threshold_spin),
+                ("Мягкость края:", self.local_ben2_edge_softness_combo),
+                ("Радиус углов:", self.local_ben2_corner_radius_combo),
+            ],
+        )
+        ben2_group.setToolTip(
+            "BEN2 — отдельный локальный экспериментальный удалитель фона. "
+            "Это не удаление водяных знаков; первый запуск может загружать модель."
+        )
+        process_settings_layout.addWidget(upscale_before_group)
+        process_settings_layout.addWidget(upscale_after_group)
+        process_settings_layout.addWidget(remove_background_group)
+        process_settings_layout.addWidget(rembg_group)
+        process_settings_layout.addWidget(ben2_group)
         process_settings_group.setLayout(process_settings_layout)
-        settings_tab_layout.addWidget(process_settings_group, alignment=Qt.AlignmentFlag.AlignHCenter)
+        process_tab_layout.addWidget(process_settings_group)
+        process_tab_layout.addStretch()
 
         settings_tab_layout.addStretch()
 
@@ -4631,15 +4662,7 @@ class MainWindow(QMainWindow):
         self.chk_unsharp.toggled.connect(self.schedule_settings_save)
         self.chk_export_300_dpi.toggled.connect(self.schedule_settings_save)
         self.chk_edge_shrink.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_remove_exif.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_remove_xmp.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_remove_iptc.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_remove_comments_text.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_remove_thumbnail.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_remove_generator.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_remove_c2pa.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_preserve_icc.toggled.connect(self.schedule_settings_save)
-        self.chk_cleanup_preserve_dpi.toggled.connect(self.schedule_settings_save)
+        self.chk_cleanup_all.toggled.connect(self.schedule_settings_save)
         self.edge_shrink_pixels_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.trim_mode_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.unsharp_amount_spin.valueChanged.connect(self.schedule_settings_save)
@@ -5485,24 +5508,11 @@ class MainWindow(QMainWindow):
     def validate_local_realesrgan_selection(self, run_mode):
         if not self._uses_local_realesrgan_for_run(run_mode):
             return ""
-        _, error_message = validate_local_realesrgan_exe(self.local_realesrgan_dir_input.text())
+        _, error_message = validate_local_realesrgan_exe(bundled_local_realesrgan_dir())
         return error_message
 
     def _cleanup_requested_from_ui(self):
-        return any(
-            (
-                self.chk_cleanup_remove_exif.isChecked(),
-                self.chk_cleanup_remove_xmp.isChecked(),
-                self.chk_cleanup_remove_iptc.isChecked(),
-                self.chk_cleanup_remove_comments_text.isChecked(),
-                self.chk_cleanup_remove_thumbnail.isChecked(),
-                self.chk_cleanup_remove_generator.isChecked(),
-                self.chk_cleanup_remove_c2pa.isChecked(),
-                not self.chk_cleanup_preserve_icc.isChecked(),
-                not self.chk_cleanup_preserve_dpi.isChecked()
-                and not self.chk_export_300_dpi.isChecked(),
-            )
-        )
+        return self.chk_cleanup_all.isChecked()
 
     def start_work(self):
         if not self.work_dir:
@@ -6303,21 +6313,23 @@ class MainWindow(QMainWindow):
         self.config["export_300_dpi"] = self.chk_export_300_dpi.isChecked()
         self.config["edge_shrink_enabled"] = self.chk_edge_shrink.isChecked()
         self.config["edge_shrink_pixels"] = normalize_edge_shrink_pixels(self.edge_shrink_pixels_combo.currentData() or 1)
-        self.config["cleanup_remove_exif"] = self.chk_cleanup_remove_exif.isChecked()
-        self.config["cleanup_remove_xmp"] = self.chk_cleanup_remove_xmp.isChecked()
-        self.config["cleanup_remove_iptc"] = self.chk_cleanup_remove_iptc.isChecked()
-        self.config["cleanup_remove_comments_text"] = self.chk_cleanup_remove_comments_text.isChecked()
-        self.config["cleanup_remove_embedded_thumbnail"] = self.chk_cleanup_remove_thumbnail.isChecked()
-        self.config["cleanup_remove_generator_fields"] = self.chk_cleanup_remove_generator.isChecked()
-        self.config["cleanup_remove_embedded_c2pa"] = self.chk_cleanup_remove_c2pa.isChecked()
-        self.config["cleanup_preserve_icc"] = self.chk_cleanup_preserve_icc.isChecked()
-        self.config["cleanup_preserve_dpi"] = self.chk_cleanup_preserve_dpi.isChecked()
+        cleanup_all = self.chk_cleanup_all.isChecked()
+        self.config["cleanup_remove_exif"] = cleanup_all
+        self.config["cleanup_remove_xmp"] = cleanup_all
+        self.config["cleanup_remove_iptc"] = cleanup_all
+        self.config["cleanup_remove_comments_text"] = cleanup_all
+        self.config["cleanup_remove_embedded_thumbnail"] = cleanup_all
+        self.config["cleanup_remove_generator_fields"] = cleanup_all
+        self.config["cleanup_remove_embedded_c2pa"] = cleanup_all
+        self.config["cleanup_remove_all"] = cleanup_all
+        self.config["cleanup_preserve_icc"] = True
+        self.config["cleanup_preserve_dpi"] = True
         self.config["trim_mode"] = str(self.trim_mode_combo.currentData() or "alpha")
         self.config["upscale_provider"] = str(self.upscale_provider_combo.currentData() or "kie")
         self.config["upscale_after_provider"] = str(
             self.upscale_after_provider_combo.currentData() or "local_realesrgan"
         )
-        self.config["local_realesrgan_dir"] = self.local_realesrgan_dir_input.text().strip()
+        self.config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
         self.config["local_realesrgan_profile"] = str(self.local_realesrgan_profile_combo.currentData() or "clipart")
         self.config["local_realesrgan_scale"] = int(self.local_realesrgan_scale_combo.currentData() or 4)
         self.config["local_realesrgan_after_scale"] = int(

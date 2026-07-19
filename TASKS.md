@@ -1233,3 +1233,95 @@ Notes:
   mismatch cleanup, and corrupt-input regressions. Those import-dependent
   tests still require the project's normal environment.
 - No production behavior was changed for this testing task.
+
+## Task 52 - Processing Settings Clarity And Bundled Local Upscaler
+
+Status: Done - verified without build or release
+
+Goal:
+Make the processing settings understandable and stable for everyday use while
+preserving existing configuration keys and processing behavior.
+
+Scope:
+- Group processing controls by operation: upscale before background removal,
+  upscale after background removal, background removal, Local rembg, and BEN2.
+- Rename visible-watermark and BEN2 controls in user-facing text.
+- Add one full metadata cleanup checkbox that removes all supported metadata
+  while preserving ICC and DPI; retain old config keys only for migration.
+- Treat Real-ESRGAN as an application-bundled resource and add it to the
+  existing PyInstaller build recipe; do not run the build in this task.
+
+Acceptance:
+- [x] Existing provider data values, config keys, and processing order remain
+  compatible with the prior UI.
+- [x] BEN2 is described as a local experimental background-mask model, not a
+  neural watermark remover.
+- [x] Full cleanup preserves ICC/DPI and leaves image pixels/alpha untouched.
+- [x] The bundled Real-ESRGAN path is used for source and packaged runs, and
+  the build recipe includes its folder.
+- [x] No generic hidden neural watermark/SynthID removal claim was added.
+
+Verification:
+- [x] `python -m py_compile .\\main.py`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; .\\.venv\\Scripts\\python.exe -m unittest tests.test_cleanup_ui tests.test_main_ui_acceptance tests.test_visible_mark_ui tests.test_local_processing_acceptance -v` (`20/20` passed)
+- [x] `git diff --check`
+
+Notes:
+- `README.md` is not present in this repository; the review used `README_AUTHOR_SHORT.md`, `PRD.md`, `TASKS.md`, and `CHANGELOG.md`.
+- The executable and installer were not rebuilt, released, committed, or pushed.
+
+## Task 53 - Compact Processing And Cleanup UI
+
+Status: Done - verified without build or release
+
+Goal:
+Keep the application usable on a normal laptop screen while making cleanup
+and processing settings easier to understand.
+
+Scope:
+- Replace the visible metadata sub-checkboxes with one full-cleanup checkbox;
+  preserve ICC and DPI automatically and keep legacy config keys synchronized.
+- Move provider/model processing settings to the `Обработка` tab.
+- Add scrollable content to the processing and settings tabs and reduce the
+  initial window height.
+- Explain in the BEN2 block when local mask refinement runs.
+- Keep generation, PhotoRoom, and processing prices beside their own fields.
+
+Acceptance:
+- [x] One cleanup checkbox enables all supported metadata/C2PA cleanup and
+  always preserves ICC/DPI.
+- [x] BEN2 timing is visible: it runs as the selected background-removal step
+  after the first upscale and before edge shrink/trim.
+- [x] Settings pages can be scrolled instead of forcing a tall main window.
+- [x] Price labels are contained in the same row as their corresponding model
+  or provider field.
+- [x] Existing processing order, provider data values, and API behavior remain
+  unchanged.
+
+Verification:
+- [x] `python -m py_compile .\\main.py .\\tests\\test_cleanup_ui.py`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; .\\.venv\\Scripts\\python.exe -m unittest tests.test_cleanup_ui tests.test_main_ui_acceptance tests.test_visible_mark_ui tests.test_local_processing_acceptance tests.test_photoroom_provider -v` (`25/25` passed)
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; .\\.venv\\Scripts\\python.exe -m unittest discover -s tests -v` (`198/198` passed)
+- [x] `git diff --check`
+
+Notes:
+- No build, release, commit, or push was performed.
+
+## Task 54 - Align Local Background Settings
+
+Status: Done - verified and pushed
+
+Goal:
+Align Local rembg and BEN2 controls with the other processing settings.
+
+Acceptance:
+- [x] Fixed-width controls are left-aligned within a shared settings column.
+- [x] Local rembg and BEN2 fields start on the same vertical line as the
+  upscale/background provider fields.
+- [x] Generation, processing, cleanup, and provider behavior is unchanged.
+
+Verification:
+- [x] Qt geometry smoke check reports the same `x=377` start for the upper
+  provider, Local rembg, and BEN2 controls.
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; .\\.venv\\Scripts\\python.exe -m unittest discover -s tests -v` (`198/198` passed)
+- [x] `git diff --check`

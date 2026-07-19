@@ -451,11 +451,9 @@ class FinalSaveCleanupTests(unittest.TestCase):
                 window.chk_edge_shrink.setChecked(False)
                 window.chk_trim.setChecked(False)
                 window.chk_export_300_dpi.setChecked(True)
-                window.chk_cleanup_preserve_dpi.setChecked(False)
                 self.assertFalse(window._cleanup_requested_from_ui())
                 window.chk_export_300_dpi.setChecked(False)
-                window.chk_cleanup_preserve_dpi.setChecked(True)
-                window.chk_cleanup_remove_exif.setChecked(True)
+                window.chk_cleanup_all.setChecked(True)
                 window.kie_api_key_input.setText("")
 
                 window.start_work()

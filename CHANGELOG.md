@@ -4,6 +4,16 @@
 
 ### Added
 
+- Reorganized processing settings into logical operation groups, clarified the
+  BEN2 and visible-watermark labels, and added a full metadata cleanup option
+  that preserves ICC and DPI while retaining legacy config compatibility.
+- Configured Local Real-ESRGAN as a bundled application resource in the source
+  runtime and existing PyInstaller recipe; no build or release was run.
+- Reduced the initial window height, added scrolling to the processing and
+  settings tabs, moved provider settings to the processing tab, simplified
+  metadata cleanup to one checkbox, and kept model prices beside their fields.
+- Aligned Local rembg and BEN2 controls with the shared processing-settings
+  column so fixed-width fields no longer drift to the right.
 - Added a trustworthy test matrix and focused feature contracts for KIE
   generation, polling, CSV/reference preparation, license cache lifecycle, and
   verified updater downloads. These tests do not publish, release, or spend

@@ -58,7 +58,7 @@ Clipart Generator должен помогать автору быстро ген
 Source of truth for supported claims: [`CLEANUP_CAPABILITY_MATRIX.md`](./CLEANUP_CAPABILITY_MATRIX.md).
 Structured hidden-marker result contract: [`PIXEL_WATERMARK_STATUS_CONTRACT.md`](./PIXEL_WATERMARK_STATUS_CONTRACT.md).
 
-- Добавить отдельный блок очистки итогового файла с независимыми галочками для каждого действия.
+- Добавить отдельный блок очистки итогового файла с одной понятной галочкой полной очистки.
 - Разрешить удаление метаданных: EXIF, XMP, IPTC, комментариев, встроенных миниатюр и служебных данных генератора.
 - Сохранять нужные для экспорта данные отдельно: цветовой профиль и 300 DPI не должны удаляться без явного выбора пользователя.
 - Исследовать обнаружение и удаление видимых служебных меток генераторов, включая метки Nano Banana, только для собственных или лицензированных изображений пользователя.
@@ -122,7 +122,7 @@ Structured hidden-marker result contract: [`PIXEL_WATERMARK_STATUS_CONTRACT.md`]
 - [x] Trim удаляет пустые края в конце pipeline.
 - [x] UI сохраняет и восстанавливает настройки обработки.
 - [x] В `raw/` сохраняются промежуточные файлы для диагностики.
-- [x] Metadata cleanup поддерживает независимые EXIF/XMP/IPTC/comments/thumbnail/generator/C2PA настройки и legacy-safe defaults.
+- [x] Metadata cleanup очищает EXIF/XMP/IPTC/comments/thumbnail/generator/C2PA одной галочкой и сохраняет ICC/DPI.
 - [x] Cleanup-only process запускается без KIE API key и публикует новый PNG атомарно.
 - [x] Metadata-only стадия не меняет размеры, декодированные пиксели или alpha; ICC/DPI сохраняются согласно выбранным настройкам.
 - [x] C2PA cleanup ограничен локальным manifest/ссылкой в новом PNG и не заявляет удаление remote/sidecar/pixel signals.
