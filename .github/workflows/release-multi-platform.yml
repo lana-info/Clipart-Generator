@@ -56,13 +56,17 @@ jobs:
       - name: Download bundled Local Real-ESRGAN
         shell: powershell
         run: |
-          $archiveUrl = "https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases/download/20211212/realesrgan-ncnn-vulkan-20211212-windows.zip"
-          $archivePath = Join-Path $env:RUNNER_TEMP "realesrgan-ncnn-vulkan-20211212-windows.zip"
+          $archiveUrl = "https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases/download/v0.2.0/realesrgan-ncnn-vulkan-v0.2.0-windows.zip"
+          $archivePath = Join-Path $env:RUNNER_TEMP "realesrgan-ncnn-vulkan-v0.2.0-windows.zip"
+          $extractPath = Join-Path $env:RUNNER_TEMP "realesrgan"
+          $targetPath = ".\realesrgan-ncnn-vulkan-20211212-windows"
           Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
-          Expand-Archive -LiteralPath $archivePath -DestinationPath . -Force
-          if (-not (Test-Path ".\realesrgan-ncnn-vulkan-20211212-windows\realesrgan-ncnn-vulkan.exe")) {
+          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+          $exe = Get-ChildItem -LiteralPath $extractPath -Recurse -Filter "realesrgan-ncnn-vulkan.exe" | Select-Object -First 1
+          if (-not $exe) {
             throw "Bundled Local Real-ESRGAN executable was not found after extraction."
           }
+          Copy-Item -LiteralPath $exe.Directory.FullName -Destination $targetPath -Recurse -Force
 
       - name: Build app (PyInstaller)
         shell: powershell
