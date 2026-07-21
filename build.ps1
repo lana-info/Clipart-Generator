@@ -35,6 +35,15 @@ Write-Host "==> Build app with PyInstaller"
     --add-data "realesrgan-ncnn-vulkan-20211212-windows;realesrgan-ncnn-vulkan-20211212-windows" `
     main.py
 
+if ($LASTEXITCODE -ne 0) {
+    throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
+
+$distAppDir = Join-Path $projectRoot "dist\Clipart Generator"
+if (-not (Test-Path -LiteralPath $distAppDir)) {
+    throw "PyInstaller output is missing: $distAppDir"
+}
+
 Write-Host "==> Prepare release directory"
 $releaseDir = Join-Path $projectRoot "release"
 if (-not (Test-Path $releaseDir)) {
