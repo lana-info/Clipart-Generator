@@ -76,7 +76,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-APP_VERSION = "1.0.3"
+APP_VERSION = "2.0"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"

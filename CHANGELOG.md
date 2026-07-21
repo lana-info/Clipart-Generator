@@ -4,7 +4,7 @@
 
 ### Added
 
-- Prepared the application for the next local Windows build as `1.0.3`;
+- Prepared the application for the next multi-platform release as `2.0`;
   hidden SynthID/neural-marker removal remains outside this release pending
   further research.
 - Reorganized processing settings into logical operation groups, clarified the
