@@ -76,7 +76,7 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
@@ -226,7 +226,8 @@ def application_base_dir():
 
 
 def bundled_local_realesrgan_dir():
-    return os.path.join(application_base_dir(), "realesrgan-ncnn-vulkan-20211212-windows")
+    resource_root = getattr(sys, "_MEIPASS", application_base_dir())
+    return os.path.join(resource_root, "realesrgan-ncnn-vulkan-20211212-windows")
 
 
 def resolve_local_realesrgan_exe_path(local_realesrgan_dir):

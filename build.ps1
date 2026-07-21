@@ -1,22 +1,26 @@
 param(
-    [string]$AppVersion = "1.0.2"
+    [string]$AppVersion = "1.0.3"
 )
 
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $projectRoot
+$pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
+if (-not (Test-Path $pythonExe)) {
+    $pythonExe = "python"
+}
 
 Write-Host "==> Install build dependencies"
-python -m pip install -r requirements.txt
-python -m pip install -r requirements-dev.txt
+& $pythonExe -m pip install -r requirements.txt
+& $pythonExe -m pip install -r requirements-dev.txt
 
 Write-Host "==> Clean previous build artifacts"
 if (Test-Path "build") { Remove-Item "build" -Recurse -Force }
 if (Test-Path "dist") { Remove-Item "dist" -Recurse -Force }
 
 Write-Host "==> Build app with PyInstaller"
-python -m PyInstaller `
+& $pythonExe -m PyInstaller `
     --noconfirm `
     --clean `
     --windowed `
@@ -38,6 +42,6 @@ if (-not (Test-Path $releaseDir)) {
 }
 
 $versionFile = Join-Path $releaseDir "VERSION.txt"
-"$AppVersion" | Out-File -FilePath $versionFile -Encoding utf8
+[System.IO.File]::WriteAllText($versionFile, "$AppVersion`r`n", [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Done: dist\\Clipart Generator"

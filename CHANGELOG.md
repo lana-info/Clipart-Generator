@@ -4,6 +4,9 @@
 
 ### Added
 
+- Prepared the application for the next local Windows build as `1.0.3`;
+  hidden SynthID/neural-marker removal remains outside this release pending
+  further research.
 - Reorganized processing settings into logical operation groups, clarified the
   BEN2 and visible-watermark labels, and added a full metadata cleanup option
   that preserves ICC and DPI while retaining legacy config compatibility.
@@ -220,6 +223,10 @@
 
 ### Fixed
 
+- Fixed packaged Local Real-ESRGAN resource lookup so the bundled binary is
+  found inside PyInstaller's `_internal` resource directory.
+- Fixed the Windows build script to use the project `.venv` Python when
+  available, matching the tested local environment.
 - Fixed GPT Image 2 generation by routing text prompts to `gpt-image-2-text-to-image` and reference prompts to `gpt-image-2-image-to-image`, while preserving the existing `gpt-image-2` UI/config id.
 
 ### Verified

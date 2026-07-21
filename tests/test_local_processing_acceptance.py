@@ -70,6 +70,21 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             self.skipTest(error)
         return Path(exe_path)
 
+    def test_bundled_realesrgan_uses_pyinstaller_resource_root(self):
+        previous_meipass = getattr(main.sys, "_MEIPASS", None)
+        had_meipass = hasattr(main.sys, "_MEIPASS")
+        try:
+            main.sys._MEIPASS = str(ROOT_DIR / "_internal")
+            self.assertEqual(
+                main.bundled_local_realesrgan_dir(),
+                str(ROOT_DIR / "_internal" / "realesrgan-ncnn-vulkan-20211212-windows"),
+            )
+        finally:
+            if had_meipass:
+                main.sys._MEIPASS = previous_meipass
+            else:
+                delattr(main.sys, "_MEIPASS")
+
     def assert_quadrant_layout(self, image):
         rgb = image.convert("RGB")
         width, height = rgb.size
