@@ -1,7 +1,7 @@
 ﻿# Задачи Clipart Generator 3.0
 
-Основание: `PRD_3.0.ru.md`  
-Экраны: `UI_WIZARD_3.0.ru.md`  
+Основание: `PRD_3.0.ru.md`
+Экраны: `UI_WIZARD_3.0.ru.md`
 Исследование: `SYNTHID_3_METHOD_BENCHMARK.ru.md`
 
 ## Task 1: Зафиксировать контракты состояния проекта и маршрутов
@@ -362,4 +362,3 @@ Verification:
 
 Notes:
 - Следующий рекомендованный workflow реализации: `$code-vibecoding-workflow`.
-

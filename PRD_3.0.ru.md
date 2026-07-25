@@ -1,6 +1,6 @@
-# PRD Clipart Generator 3.0
+﻿# PRD Clipart Generator 3.0
 
-Статус: Draft approved for task breakdown  
+Статус: Draft approved for task breakdown
 Целевая ветка: `develop/3.0`
 
 ## Goal

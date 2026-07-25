@@ -1,6 +1,6 @@
-# Pilot benchmark трёх методов SynthID
+﻿# Pilot benchmark трёх методов SynthID
 
-Статус: Prepared, not executed  
+Статус: Prepared, not executed
 Назначение: решение о допустимости экспериментальной функции в версии 3.0
 
 ## Цель

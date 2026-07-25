@@ -1,6 +1,6 @@
-# Пошаговый интерфейс Clipart Generator 3.0
+﻿# Пошаговый интерфейс Clipart Generator 3.0
 
-Статус: Screen specification  
+Статус: Screen specification
 Технология: PyQt6, визуальное направление shadcn
 
 ## Общая оболочка
