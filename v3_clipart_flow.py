@@ -1,0 +1,2002 @@
+from __future__ import annotations
+
+import csv
+import io
+import json
+import os
+import re
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QScrollArea,
+    QSpinBox,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from v3_components import (
+    AdvancedSection,
+    ButtonVariant,
+    DEFAULT_TOKENS,
+    FormCard,
+    V3Button,
+    V3DesignTokens,
+)
+from v3_project_state import (
+    MAX_PROMPT_ENTRIES,
+    MAX_PROMPT_GENERATOR_TEXT_LENGTH,
+    MAX_REFERENCES_PER_PROMPT,
+    MAX_TEXT_LENGTH,
+    GenerationData,
+    ImageOperationData,
+    ProjectMode,
+    ProjectState,
+    PromptEntry,
+    PromptGeneratorData,
+    RuntimeData,
+    StepId,
+)
+from v3_prompt_generator import (
+    PromptGeneratorError,
+    generate_into_project,
+    generate_prompt_series,
+    replace_project_prompts,
+)
+from v3_wizard import AppShell
+
+
+MAX_CSV_BYTES = 2 * 1024 * 1024
+MAX_CLIPART_REQUESTS = 5000
+_DOLLAR_PATTERN = re.compile(r"\$(\d+(?:\.\d+)?)")
+
+
+class ClipartFlowError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class GenerationModelOption:
+    model_id: str
+    label: str
+    model_type: str
+    ratios: tuple[str, ...]
+    resolutions: tuple[str, ...]
+    pricing: str | Mapping[str, str] | None
+    reference_compatible_text: bool = False
+
+
+@dataclass(frozen=True)
+class CostEstimate:
+    request_count: int
+    estimated_usd: Decimal
+    complete: bool
+
+    @property
+    def summary(self) -> str:
+        if not self.complete:
+            return (
+                f"{self.request_count} запросов · "
+                "стоимость не рассчитана полностью"
+            )
+        return (
+            f"{self.request_count} запросов · "
+            f"ориентировочно ${self.estimated_usd:.3f}"
+        )
+
+
+@dataclass
+class ClipartRunRequest:
+    mode: str
+    work_dir: str
+    settings: dict[str, Any] = field(repr=False)
+    generated_prompts: list[dict[str, Any]] = field(default_factory=list)
+    selected_files: list[str] = field(default_factory=list)
+
+    def worker_kwargs(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "work_dir": self.work_dir,
+            "settings": dict(self.settings),
+            "selected_files": list(self.selected_files),
+            "generated_prompts": [
+                {
+                    "prompt": entry["prompt"],
+                    "references": list(entry["references"]),
+                }
+                for entry in self.generated_prompts
+            ],
+        }
+
+
+def _legacy_catalog() -> tuple[
+    dict[str, GenerationModelOption],
+    dict[str, str],
+]:
+    import main
+
+    labels: dict[str, str] = {}
+    model_types: dict[str, str] = {}
+    for entry in main.GENERATION_MODELS:
+        model_id = str(entry.get("id") or "")
+        if not model_id:
+            continue
+        labels.setdefault(model_id, str(entry.get("label") or model_id))
+        model_types.setdefault(model_id, str(entry.get("type") or ""))
+
+    options: dict[str, GenerationModelOption] = {}
+    for model_id in sorted(main.VISIBLE_GENERATION_MODEL_IDS):
+        capabilities = main.get_model_capabilities(model_id)
+        options[model_id] = GenerationModelOption(
+            model_id=model_id,
+            label=labels.get(model_id, model_id),
+            model_type=model_types.get(model_id, ""),
+            ratios=tuple(
+                value
+                for value in main.RATIO_OPTIONS_ORDER
+                if value in capabilities["ratios"]
+            )
+            or tuple(sorted(capabilities["ratios"])),
+            resolutions=tuple(
+                value
+                for value in main.RESOLUTION_OPTIONS_ORDER
+                if value in capabilities["resolutions"]
+            )
+            or tuple(sorted(capabilities["resolutions"])),
+            pricing=capabilities["pricing"],
+            reference_compatible_text=capabilities[
+                "reference_compatible_text"
+            ],
+        )
+    return options, dict(main.PROCESSING_PRICING)
+
+
+def generation_model_options(
+    *,
+    references: bool,
+) -> tuple[GenerationModelOption, ...]:
+    options, _ = _legacy_catalog()
+    result: list[GenerationModelOption] = []
+    for option in options.values():
+        if references:
+            allowed = option.model_type in {"image_to_image", "edit"}
+            allowed = allowed or option.reference_compatible_text
+        else:
+            allowed = option.model_type == "text_to_image"
+        if allowed:
+            result.append(option)
+    return tuple(sorted(result, key=lambda option: option.label.casefold()))
+
+
+def _model_option(model_id: str) -> GenerationModelOption:
+    options, _ = _legacy_catalog()
+    try:
+        return options[model_id]
+    except KeyError as error:
+        raise ClipartFlowError(
+            f"Модель не поддерживается текущим каталогом: {model_id}"
+        ) from error
+
+
+def _price_usd(
+    pricing: str | Mapping[str, str] | None,
+    resolution: str,
+) -> Decimal | None:
+    if isinstance(pricing, Mapping):
+        selected = pricing.get(resolution)
+        if selected is None and pricing:
+            selected = next(iter(pricing.values()))
+    else:
+        selected = pricing
+    match = _DOLLAR_PATTERN.search(str(selected or ""))
+    return Decimal(match.group(1)) if match else None
+
+
+def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
+    if not isinstance(state, ProjectState):
+        raise TypeError("state must be a ProjectState")
+    generation = state.clipart.generation
+    variants = generation.variants
+    total = Decimal("0")
+    complete = True
+    provider_request_count = len(state.clipart.prompts) * variants
+
+    for entry in state.clipart.prompts:
+        if entry.references:
+            option = _model_option(generation.reference_model)
+            resolution = generation.reference_resolution
+        else:
+            option = _model_option(generation.model)
+            resolution = generation.resolution
+        unit = _price_usd(option.pricing, resolution)
+        if unit is None:
+            complete = False
+        else:
+            total += unit * variants
+
+    _, processing_pricing = _legacy_catalog()
+    operations = state.clipart.operations
+    processing_models: list[str] = []
+    if operations.upscale_before and operations.upscale_before_provider == "kie":
+        processing_models.append(operations.kie_upscale_model)
+    if operations.remove_background:
+        if operations.remove_background_provider == "kie":
+            processing_models.append(operations.kie_remove_bg_model)
+        elif operations.remove_background_provider == "photoroom":
+            total += Decimal("0.02") * len(state.clipart.prompts) * variants
+            provider_request_count += len(state.clipart.prompts) * variants
+    if operations.upscale_after and operations.upscale_after_provider == "kie":
+        processing_models.append(operations.kie_upscale_after_model)
+
+    output_count = len(state.clipart.prompts) * variants
+    provider_request_count += len(processing_models) * output_count
+    for model_id in processing_models:
+        unit = _price_usd(processing_pricing.get(model_id), "")
+        if unit is None:
+            complete = False
+        else:
+            total += unit * output_count
+
+    return CostEstimate(
+        request_count=provider_request_count,
+        estimated_usd=total,
+        complete=complete,
+    )
+
+
+def clipart_pipeline_steps(
+    operations: ImageOperationData,
+) -> tuple[str, ...]:
+    if not isinstance(operations, ImageOperationData):
+        raise TypeError("operations must be ImageOperationData")
+    steps = ["Генерация изображения"]
+    if operations.visible_mark_cleanup:
+        steps.append("Удаление видимой метки")
+    if operations.upscale_before:
+        steps.append("Апскейл до удаления фона")
+    if operations.unsharp:
+        steps.append("Unsharp Mask")
+    if operations.remove_background:
+        steps.append("Удаление фона")
+    if operations.upscale_after:
+        steps.append("Апскейл после удаления фона")
+    if operations.edge_shrink:
+        steps.append("Очистка края alpha")
+    if operations.trim:
+        steps.append("Trim")
+    if any(
+        (
+            operations.remove_exif,
+            operations.remove_xmp,
+            operations.remove_iptc,
+            operations.remove_comments_text,
+            operations.remove_embedded_thumbnail,
+            operations.remove_generator_fields,
+            operations.remove_embedded_c2pa,
+        )
+    ):
+        steps.append("Очистка данных файла")
+    if operations.export_300_dpi:
+        steps.append("Экспорт 300 DPI")
+    steps.append("Экспорт PNG")
+    return tuple(steps)
+
+
+def _processing_requested(operations: ImageOperationData) -> bool:
+    return len(clipart_pipeline_steps(operations)) > 2
+
+
+def _validate_generation_profile(
+    option: GenerationModelOption,
+    ratio: str,
+    resolution: str,
+) -> None:
+    if option.ratios and ratio not in option.ratios:
+        raise ClipartFlowError(
+            f"Пропорция {ratio} недоступна для модели {option.label}"
+        )
+    if option.resolutions and resolution not in option.resolutions:
+        raise ClipartFlowError(
+            f"Разрешение {resolution} недоступно для модели {option.label}"
+        )
+
+
+def _worker_settings(
+    state: ProjectState,
+    runtime_settings: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    source = runtime_settings or {}
+    settings = {
+        name: value
+        for name in ("kie_api_key", "photoroom_api_key", "local_realesrgan_dir")
+        if isinstance((value := source.get(name)), str)
+    }
+    settings.update(RuntimeData.from_dict(state.runtime.to_dict()).to_dict())
+    generation = state.clipart.generation
+    operations = state.clipart.operations
+    settings.update(
+        {
+            "run_mode": (
+                "both" if _processing_requested(operations) else "generate_only"
+            ),
+            "text_generation_model": generation.model,
+            "text_generation_ratio": generation.ratio,
+            "text_generation_resolution": generation.resolution,
+            "reference_generation_model": generation.reference_model,
+            "reference_generation_ratio": generation.reference_ratio,
+            "reference_generation_resolution": generation.reference_resolution,
+            "visible_mark_cleanup_enabled": operations.visible_mark_cleanup,
+            "visible_mark_cleanup_mode": operations.visible_mark_cleanup_mode,
+            "upscale": operations.upscale_before,
+            "upscale_provider": operations.upscale_before_provider,
+            "upscale_after": operations.upscale_after,
+            "upscale_after_provider": operations.upscale_after_provider,
+            "upscale_factor": operations.upscale_factor,
+            "kie_upscale_model": operations.kie_upscale_model,
+            "kie_upscale_after_model": operations.kie_upscale_after_model,
+            "local_realesrgan_profile": operations.local_realesrgan_profile,
+            "local_realesrgan_scale": operations.local_realesrgan_scale,
+            "local_realesrgan_after_scale": (
+                operations.local_realesrgan_after_scale
+            ),
+            "remove_bg": operations.remove_background,
+            "remove_bg_provider": operations.remove_background_provider,
+            "kie_remove_bg_model": operations.kie_remove_bg_model,
+            "local_rembg_profile": operations.local_rembg_profile,
+            "local_rembg_model": operations.local_rembg_model,
+            "local_rembg_edge_quality": operations.local_rembg_edge_quality,
+            "local_ben2_refine_foreground": (
+                operations.local_ben2_refine_foreground
+            ),
+            "local_ben2_alpha_threshold": (
+                operations.local_ben2_alpha_threshold
+            ),
+            "local_ben2_edge_softness": operations.local_ben2_edge_softness,
+            "local_ben2_corner_radius": operations.local_ben2_corner_radius,
+            "unsharp_enabled": operations.unsharp,
+            "unsharp_amount": operations.unsharp_amount,
+            "unsharp_radius": operations.unsharp_radius,
+            "unsharp_threshold": operations.unsharp_threshold,
+            "edge_shrink_enabled": operations.edge_shrink,
+            "edge_shrink_pixels": operations.edge_shrink_pixels,
+            "trim_enabled": operations.trim,
+            "trim_mode": operations.trim_mode,
+            "export_300_dpi": operations.export_300_dpi,
+            "cleanup_remove_exif": operations.remove_exif,
+            "cleanup_remove_xmp": operations.remove_xmp,
+            "cleanup_remove_iptc": operations.remove_iptc,
+            "cleanup_remove_comments_text": operations.remove_comments_text,
+            "cleanup_remove_embedded_thumbnail": (
+                operations.remove_embedded_thumbnail
+            ),
+            "cleanup_remove_generator_fields": (
+                operations.remove_generator_fields
+            ),
+            "cleanup_remove_embedded_c2pa": operations.remove_embedded_c2pa,
+            "cleanup_preserve_icc": operations.preserve_icc,
+            "cleanup_preserve_dpi": operations.preserve_dpi,
+        }
+    )
+    return settings
+
+
+def _validate_prompt_references(prompts: Sequence[PromptEntry]) -> None:
+    import main
+
+    for entry in prompts:
+        for reference in entry.references:
+            normalized = reference.strip()
+            if normalized.lower().startswith(("https://", "http://")):
+                try:
+                    main.validate_https_url(normalized, "Reference URL")
+                except (RuntimeError, ValueError) as error:
+                    raise ClipartFlowError(
+                        "URL референса должен быть корректным HTTPS-адресом"
+                    ) from error
+                continue
+            path = Path(normalized).expanduser()
+            if not path.is_file():
+                name = path.name or "референс"
+                raise ClipartFlowError(f"Файл референса не найден: {name}")
+            try:
+                main.validate_local_image_input(path)
+            except (OSError, ValueError) as error:
+                raise ClipartFlowError(
+                    f"Файл референса не является допустимым изображением: {path.name}"
+                ) from error
+
+
+def _validate_processing_models(operations: ImageOperationData) -> None:
+    _, pricing = _legacy_catalog()
+    selected: list[str] = []
+    if operations.upscale_before and operations.upscale_before_provider == "kie":
+        selected.append(operations.kie_upscale_model)
+    if operations.upscale_after and operations.upscale_after_provider == "kie":
+        selected.append(operations.kie_upscale_after_model)
+    if operations.remove_background and operations.remove_background_provider == "kie":
+        selected.append(operations.kie_remove_bg_model)
+    unknown = sorted({model for model in selected if model not in pricing})
+    if unknown:
+        raise ClipartFlowError(
+            "Модель обработки не поддерживается: " + ", ".join(unknown)
+        )
+
+
+def build_clipart_run_request(
+    state: ProjectState,
+    runtime_settings: Mapping[str, Any] | None = None,
+) -> ClipartRunRequest:
+    if not isinstance(state, ProjectState):
+        raise TypeError("state must be a ProjectState")
+    if state.mode is not ProjectMode.CLIPART:
+        raise ClipartFlowError("Запуск клипарта доступен только в режиме clipart")
+
+    work_dir = Path(state.common.work_dir).expanduser()
+    if not work_dir.is_dir() or not os.access(work_dir, os.W_OK):
+        raise ClipartFlowError("Рабочая папка не существует или недоступна для записи")
+    if not state.clipart.prompts:
+        raise ClipartFlowError("Добавьте хотя бы один промпт")
+
+    generation = state.clipart.generation
+    operations = state.clipart.operations
+    _validate_prompt_references(state.clipart.prompts)
+    _validate_processing_models(operations)
+    text_option = _model_option(generation.model)
+    if text_option.model_type != "text_to_image":
+        raise ClipartFlowError("Основная модель должна поддерживать text-to-image")
+    _validate_generation_profile(
+        text_option,
+        generation.ratio,
+        generation.resolution,
+    )
+
+    if any(entry.references for entry in state.clipart.prompts):
+        reference_option = _model_option(generation.reference_model)
+        if not (
+            reference_option.model_type in {"image_to_image", "edit"}
+            or reference_option.reference_compatible_text
+        ):
+            raise ClipartFlowError(
+                "Референсная модель не поддерживает image-to-image"
+            )
+        _validate_generation_profile(
+            reference_option,
+            generation.reference_ratio,
+            generation.reference_resolution,
+        )
+
+    request_count = len(state.clipart.prompts) * generation.variants
+    if request_count > MAX_CLIPART_REQUESTS:
+        raise ClipartFlowError(
+            f"Максимум {MAX_CLIPART_REQUESTS} запросов за один запуск"
+        )
+    if (
+        state.clipart.operations.visible_mark_cleanup
+        and state.clipart.operations.visible_mark_cleanup_mode
+        == "confirmed_area"
+    ):
+        raise ClipartFlowError(
+            "Ручная область видимой метки недоступна для ещё не созданных файлов"
+        )
+
+    prompts: list[dict[str, Any]] = []
+    for entry in state.clipart.prompts:
+        if not entry.prompt.strip():
+            raise ClipartFlowError("Пустой промпт нельзя отправить на генерацию")
+        for _ in range(generation.variants):
+            prompts.append(
+                {
+                    "prompt": entry.prompt,
+                    "references": list(entry.references),
+                }
+            )
+
+    settings = _worker_settings(state, runtime_settings)
+    mode = "mode_both" if _processing_requested(operations) else "mode1_generate_only"
+    return ClipartRunRequest(
+        mode=mode,
+        work_dir=str(work_dir),
+        settings=settings,
+        generated_prompts=prompts,
+    )
+
+
+def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
+    missing: list[str] = []
+    if not str(request.settings.get("kie_api_key") or "").strip():
+        missing.append("KIE API Key")
+    if (
+        request.settings.get("remove_bg")
+        and request.settings.get("remove_bg_provider") == "photoroom"
+        and not str(request.settings.get("photoroom_api_key") or "").strip()
+    ):
+        missing.append("PhotoRoom API Key")
+    local_upscale = (
+        request.settings.get("upscale")
+        and request.settings.get("upscale_provider") == "local_realesrgan"
+    ) or (
+        request.settings.get("upscale_after")
+        and request.settings.get("upscale_after_provider") == "local_realesrgan"
+    )
+    if local_upscale:
+        import main
+
+        _, local_error = main.validate_local_realesrgan_exe(
+            request.settings.get("local_realesrgan_dir")
+        )
+        if local_error:
+            missing.append(local_error)
+    return tuple(missing)
+
+
+def parse_prompt_csv(path: str | os.PathLike[str]) -> list[PromptEntry]:
+    source = Path(path)
+    try:
+        size = source.stat().st_size
+    except OSError as error:
+        raise ClipartFlowError("Не удалось прочитать CSV") from error
+    if size > MAX_CSV_BYTES:
+        raise ClipartFlowError("CSV превышает допустимый размер")
+    try:
+        content = source.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError) as error:
+        raise ClipartFlowError("CSV должен быть корректным UTF-8 файлом") from error
+
+    try:
+        reader = csv.DictReader(io.StringIO(content))
+        field_names = {
+            str(name or "").strip().casefold(): name
+            for name in (reader.fieldnames or [])
+        }
+    except csv.Error as error:
+        raise ClipartFlowError("CSV имеет повреждённую структуру") from error
+    prompt_field = field_names.get("prompt")
+    references_field = field_names.get("references")
+    if prompt_field is None:
+        raise ClipartFlowError("В CSV нужен столбец Prompt")
+
+    entries: list[PromptEntry] = []
+    try:
+        for row in reader:
+            prompt = str(row.get(prompt_field) or "").strip()
+            raw_references = (
+                str(row.get(references_field) or "") if references_field else ""
+            )
+            references = [
+                value.strip()
+                for value in raw_references.split("|")
+                if value.strip()
+            ]
+            if len(prompt) > MAX_TEXT_LENGTH:
+                raise ClipartFlowError("Промпт в CSV превышает допустимую длину")
+            if len(references) > MAX_REFERENCES_PER_PROMPT:
+                raise ClipartFlowError(
+                    f"Максимум {MAX_REFERENCES_PER_PROMPT} референсов на промпт"
+                )
+            if any(len(value) > MAX_TEXT_LENGTH for value in references):
+                raise ClipartFlowError("Референс в CSV превышает допустимую длину")
+            entry = PromptEntry.from_value(
+                {"prompt": prompt, "references": references}
+            )
+            if entry is not None and entry.prompt:
+                entries.append(entry)
+            if len(entries) > MAX_PROMPT_ENTRIES:
+                raise ClipartFlowError(
+                    f"Максимум {MAX_PROMPT_ENTRIES} промптов в CSV"
+                )
+    except csv.Error as error:
+        raise ClipartFlowError("CSV имеет повреждённую структуру") from error
+    if not entries:
+        raise ClipartFlowError("CSV не содержит непустых промптов")
+    return entries
+
+
+class _ScrollableStepPage(QScrollArea):
+    def __init__(
+        self,
+        title: str,
+        description: str,
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__()
+        self.setWidgetResizable(True)
+        self.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.card = FormCard(title, description, tokens=tokens)
+        self.setWidget(self.card)
+        self.setAccessibleName(title)
+        self.setAccessibleDescription(description)
+
+    def add_widget(self, widget: QWidget) -> None:
+        self.card.add_widget(widget)
+
+    def refresh_from_state(self) -> None:
+        return
+
+
+class ClipartProjectPage(_ScrollableStepPage):
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            "Проект",
+            "Назовите проект и выберите существующую папку для записи.",
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        form = QFormLayout()
+        self.project_name_edit = QLineEdit(state.common.project_name)
+        self.project_name_edit.setAccessibleName("Название проекта")
+        form.addRow("Название проекта", self.project_name_edit)
+
+        work_widget = QWidget()
+        work_layout = QHBoxLayout(work_widget)
+        work_layout.setContentsMargins(0, 0, 0, 0)
+        self.work_dir_edit = QLineEdit(state.common.work_dir)
+        self.work_dir_edit.setAccessibleName("Рабочая папка")
+        self.browse_button = V3Button("Выбрать", ButtonVariant.SECONDARY)
+        self.browse_button.clicked.connect(self._browse)
+        work_layout.addWidget(self.work_dir_edit, 1)
+        work_layout.addWidget(self.browse_button)
+        form.addRow("Рабочая папка", work_widget)
+        container = QWidget()
+        container.setLayout(form)
+        self.add_widget(container)
+
+        self.path_status = QLabel()
+        self.path_status.setWordWrap(True)
+        self.path_status.setProperty("v3Small", True)
+        self.add_widget(self.path_status)
+
+        self.project_name_edit.textChanged.connect(self._sync)
+        self.work_dir_edit.textChanged.connect(self._sync)
+        self._refresh_status()
+
+    def _browse(self) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "Выберите рабочую папку",
+            self.work_dir_edit.text() or os.getcwd(),
+        )
+        if selected:
+            self.work_dir_edit.setText(selected)
+
+    def _sync(self) -> None:
+        self.state.common.project_name = self.project_name_edit.text().strip()[:200]
+        self.state.common.work_dir = self.work_dir_edit.text().strip()
+        self.state.common.output_dir = (
+            str(Path(self.state.common.work_dir) / "output")
+            if self.state.common.work_dir
+            else ""
+        )
+        self._refresh_status()
+        self.changed()
+
+    def _refresh_status(self) -> None:
+        path = Path(self.work_dir_edit.text().strip()).expanduser()
+        valid = path.is_dir() and os.access(path, os.W_OK)
+        text = (
+            "✓ Папка доступна для записи."
+            if valid
+            else "✕ Выберите существующую папку, доступную для записи."
+        )
+        self.path_status.setText(text)
+        self.path_status.setAccessibleName(text)
+
+    def validation_issues(self) -> tuple[str, ...]:
+        path = Path(self.work_dir_edit.text().strip()).expanduser()
+        if not path.is_dir() or not os.access(path, os.W_OK):
+            return ("work_dir_unavailable",)
+        return ()
+
+
+class ClipartPromptInputPage(_ScrollableStepPage):
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            "Содержание",
+            "Создайте серию, вставьте готовые строки или импортируйте CSV.",
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        self.source_combo = QComboBox()
+        self.source_combo.setAccessibleName("Источник промптов")
+        self.source_combo.addItem("Сгенерировать серию", "generator")
+        self.source_combo.addItem("Вставить готовые промпты", "paste")
+        self.source_combo.addItem("Импортировать CSV", "csv")
+        self.add_widget(self.source_combo)
+
+        self.source_stack = QStackedWidget()
+        self.generator_widget = self._build_generator()
+        self.paste_widget = self._build_paste()
+        self.csv_widget = self._build_csv()
+        for widget in (
+            self.generator_widget,
+            self.paste_widget,
+            self.csv_widget,
+        ):
+            self.source_stack.addWidget(widget)
+        self.add_widget(self.source_stack)
+        self.source_combo.currentIndexChanged.connect(
+            self.source_stack.setCurrentIndex
+        )
+
+    def _build_generator(self) -> QWidget:
+        draft = self.state.clipart.prompt_generator
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        form = QFormLayout()
+        self.theme_edit = QLineEdit(draft.theme)
+        self.subjects_edit = QPlainTextEdit("\n".join(draft.subjects))
+        self.subjects_edit.setMaximumHeight(90)
+        self.style_edit = QLineEdit(draft.style)
+        self.palette_edit = QLineEdit(draft.palette)
+        self.composition_edit = QLineEdit(draft.composition)
+        self.background_edit = QLineEdit(draft.background)
+        for edit in (
+            self.theme_edit,
+            self.style_edit,
+            self.palette_edit,
+            self.composition_edit,
+            self.background_edit,
+        ):
+            edit.setMaxLength(MAX_PROMPT_GENERATOR_TEXT_LENGTH)
+        self.restrictions_edit = QPlainTextEdit("\n".join(draft.restrictions))
+        self.restrictions_edit.setMaximumHeight(90)
+        self.count_spin = QSpinBox()
+        self.count_spin.setRange(1, 500)
+        self.count_spin.setValue(draft.count)
+        fields = (
+            ("Тема", self.theme_edit),
+            ("Объекты — по одному в строке", self.subjects_edit),
+            ("Стиль", self.style_edit),
+            ("Палитра", self.palette_edit),
+            ("Композиция", self.composition_edit),
+            ("Фон", self.background_edit),
+            ("Запреты — по одному в строке", self.restrictions_edit),
+            ("Количество", self.count_spin),
+        )
+        for label, control in fields:
+            control.setAccessibleName(label)
+            form.addRow(label, control)
+        layout.addLayout(form)
+        self.preview_label = QLabel()
+        self.preview_label.setWordWrap(True)
+        self.preview_label.setProperty("v3Small", True)
+        self.preview_label.setAccessibleName("Пример промпта")
+        layout.addWidget(self.preview_label)
+        self.generate_button = V3Button("Создать серию")
+        self.generate_button.clicked.connect(self._generate)
+        layout.addWidget(self.generate_button)
+        for edit in (
+            self.theme_edit,
+            self.style_edit,
+            self.palette_edit,
+            self.composition_edit,
+            self.background_edit,
+        ):
+            edit.textChanged.connect(self._generator_changed)
+        self.subjects_edit.textChanged.connect(self._generator_changed)
+        self.restrictions_edit.textChanged.connect(self._generator_changed)
+        self.count_spin.valueChanged.connect(self._generator_changed)
+        self._preview()
+        return widget
+
+    def _generator_data(self, *, preview: bool = False) -> PromptGeneratorData:
+        return PromptGeneratorData(
+            theme=self.theme_edit.text(),
+            subjects=self.subjects_edit.toPlainText().splitlines(),
+            style=self.style_edit.text(),
+            palette=self.palette_edit.text(),
+            composition=self.composition_edit.text(),
+            background=self.background_edit.text(),
+            restrictions=self.restrictions_edit.toPlainText().splitlines(),
+            count=1 if preview else self.count_spin.value(),
+        )
+
+    def _generator_changed(self, *_: Any) -> None:
+        self.state.clipart.prompt_generator = self._generator_data()
+        self._preview()
+        self.changed()
+    def _preview(self, *_: Any) -> None:
+        try:
+            prompt = generate_prompt_series(
+                ProjectMode.CLIPART,
+                self._generator_data(preview=True),
+            )[0].prompt
+        except PromptGeneratorError:
+            prompt = "Добавьте тему или хотя бы один объект."
+        self.preview_label.setText(prompt[:800])
+
+    def _generate(self) -> None:
+        try:
+            generate_into_project(
+                self.state,
+                ProjectMode.CLIPART,
+                self._generator_data(),
+            )
+        except PromptGeneratorError as error:
+            self.card.set_state("error", str(error))
+            return
+        self.card.set_state("default")
+        self.changed()
+
+    def _build_paste(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.paste_edit = QPlainTextEdit()
+        self.paste_edit.setPlaceholderText("Один промпт в каждой строке")
+        self.paste_edit.setAccessibleName("Готовые промпты")
+        layout.addWidget(self.paste_edit)
+        self.paste_button = V3Button("Заменить список")
+        self.paste_button.clicked.connect(self._apply_paste)
+        layout.addWidget(self.paste_button)
+        return widget
+
+    def _apply_paste(self) -> None:
+        text = self.paste_edit.toPlainText()
+        if len(text) > MAX_CSV_BYTES:
+            self.card.set_state("error", "Вставленный текст превышает допустимый размер")
+            return
+        entries: list[PromptEntry] = []
+        for line in text.splitlines():
+            prompt = line.strip()
+            if not prompt:
+                continue
+            if len(prompt) > MAX_TEXT_LENGTH:
+                self.card.set_state("error", "Один из промптов слишком длинный")
+                return
+            if len(entries) >= MAX_PROMPT_ENTRIES:
+                self.card.set_state(
+                    "error",
+                    f"Максимум {MAX_PROMPT_ENTRIES} промптов",
+                )
+                return
+            entries.append(PromptEntry(prompt=prompt))
+        replace_project_prompts(self.state, ProjectMode.CLIPART, entries)
+        self.card.set_state("default")
+        self.changed()
+
+    def _build_csv(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        text = QLabel("CSV: обязательный столбец Prompt, опциональный References.")
+        text.setWordWrap(True)
+        layout.addWidget(text)
+        self.csv_button = V3Button("Выбрать CSV", ButtonVariant.SECONDARY)
+        self.csv_button.clicked.connect(self._choose_csv)
+        layout.addWidget(self.csv_button)
+        return widget
+
+    def _choose_csv(self) -> None:
+        selected, _ = QFileDialog.getOpenFileName(
+            self,
+            "Импортировать CSV",
+            self.state.common.work_dir or os.getcwd(),
+            "CSV files (*.csv)",
+        )
+        if not selected:
+            return
+        try:
+            entries = parse_prompt_csv(selected)
+        except ClipartFlowError as error:
+            self.card.set_state("error", str(error))
+            return
+        replace_project_prompts(self.state, ProjectMode.CLIPART, entries)
+        self.card.set_state("default")
+        self.changed()
+
+
+class ClipartPromptReviewPage(_ScrollableStepPage):
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            "Проверка промптов",
+            "Редактируйте текст и референсы, удаляйте и меняйте порядок строк.",
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        self._updating = False
+        self.table = QTableWidget(0, 2)
+        self.table.setHorizontalHeaderLabels(["Промпт", "Референсы через |"])
+        self.table.setAccessibleName("Таблица промптов")
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.itemChanged.connect(self._table_changed)
+        self.add_widget(self.table)
+
+        actions = QWidget()
+        action_layout = QHBoxLayout(actions)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        self.add_button = V3Button("Добавить", ButtonVariant.SECONDARY)
+        self.duplicate_button = V3Button("Дублировать", ButtonVariant.SECONDARY)
+        self.delete_button = V3Button("Удалить", ButtonVariant.SECONDARY)
+        self.up_button = V3Button("Выше", ButtonVariant.GHOST)
+        self.down_button = V3Button("Ниже", ButtonVariant.GHOST)
+        for button in (
+            self.add_button,
+            self.duplicate_button,
+            self.delete_button,
+            self.up_button,
+            self.down_button,
+        ):
+            action_layout.addWidget(button)
+        self.add_widget(actions)
+        self.issues_label = QLabel()
+        self.issues_label.setWordWrap(True)
+        self.issues_label.setProperty("v3Small", True)
+        self.add_widget(self.issues_label)
+
+        self.add_button.clicked.connect(self._add)
+        self.duplicate_button.clicked.connect(self._duplicate)
+        self.delete_button.clicked.connect(self._delete)
+        self.up_button.clicked.connect(lambda: self._move(-1))
+        self.down_button.clicked.connect(lambda: self._move(1))
+        self.refresh_from_state()
+
+    def refresh_from_state(self) -> None:
+        self._updating = True
+        self.table.setRowCount(len(self.state.clipart.prompts))
+        for row, entry in enumerate(self.state.clipart.prompts):
+            self.table.setItem(row, 0, QTableWidgetItem(entry.prompt))
+            self.table.setItem(
+                row,
+                1,
+                QTableWidgetItem(" | ".join(entry.references)),
+            )
+        self._updating = False
+        self._refresh_issues()
+
+    def _table_changed(self, _: QTableWidgetItem) -> None:
+        if self._updating:
+            return
+        entries: list[PromptEntry] = []
+        for row in range(self.table.rowCount()):
+            prompt_item = self.table.item(row, 0)
+            refs_item = self.table.item(row, 1)
+            prompt = prompt_item.text() if prompt_item else ""
+            references = [
+                value.strip()
+                for value in (refs_item.text() if refs_item else "").split("|")
+                if value.strip()
+            ]
+            if len(prompt) > MAX_TEXT_LENGTH:
+                self.card.set_state("error", "Промпт превышает допустимую длину")
+                self.refresh_from_state()
+                return
+            if len(references) > MAX_REFERENCES_PER_PROMPT:
+                self.card.set_state(
+                    "error",
+                    f"Максимум {MAX_REFERENCES_PER_PROMPT} референсов на промпт",
+                )
+                self.refresh_from_state()
+                return
+            if any(len(value) > MAX_TEXT_LENGTH for value in references):
+                self.card.set_state("error", "Референс превышает допустимую длину")
+                self.refresh_from_state()
+                return
+            entries.append(PromptEntry(prompt=prompt, references=references))
+        self.state.clipart.prompts = entries
+        self._refresh_issues()
+        self.changed()
+
+    def _selected_row(self) -> int:
+        row = self.table.currentRow()
+        return row if 0 <= row < len(self.state.clipart.prompts) else -1
+
+    def _add(self) -> None:
+        if len(self.state.clipart.prompts) >= MAX_PROMPT_ENTRIES:
+            self.card.set_state("error", f"Максимум {MAX_PROMPT_ENTRIES} промптов")
+            return
+        self.card.set_state("default")
+        self.state.clipart.prompts.append(PromptEntry(prompt="Новый промпт"))
+        self.refresh_from_state()
+        self.table.setCurrentCell(len(self.state.clipart.prompts) - 1, 0)
+        self.changed()
+
+    def _duplicate(self) -> None:
+        row = self._selected_row()
+        if row < 0:
+            return
+        if len(self.state.clipart.prompts) >= MAX_PROMPT_ENTRIES:
+            self.card.set_state("error", f"Максимум {MAX_PROMPT_ENTRIES} промптов")
+            return
+        self.card.set_state("default")
+        source = self.state.clipart.prompts[row]
+        self.state.clipart.prompts.insert(
+            row + 1,
+            PromptEntry(source.prompt, list(source.references)),
+        )
+        self.refresh_from_state()
+        self.table.setCurrentCell(row + 1, 0)
+        self.changed()
+
+    def _delete(self) -> None:
+        row = self._selected_row()
+        if row < 0:
+            return
+        del self.state.clipart.prompts[row]
+        self.refresh_from_state()
+        self.changed()
+
+    def _move(self, offset: int) -> None:
+        row = self._selected_row()
+        target = row + offset
+        if row < 0 or not 0 <= target < len(self.state.clipart.prompts):
+            return
+        prompts = self.state.clipart.prompts
+        prompts[row], prompts[target] = prompts[target], prompts[row]
+        self.refresh_from_state()
+        self.table.setCurrentCell(target, 0)
+        self.changed()
+
+    def _refresh_issues(self) -> None:
+        empty = 0
+        duplicates = 0
+        seen: set[str] = set()
+        for entry in self.state.clipart.prompts:
+            key = entry.prompt.strip().casefold()
+            if not key:
+                empty += 1
+            elif key in seen:
+                duplicates += 1
+            else:
+                seen.add(key)
+        text = (
+            f"Строк: {len(self.state.clipart.prompts)} · "
+            f"пустых: {empty} · дублей: {duplicates}"
+        )
+        self.issues_label.setText(text)
+        self.issues_label.setAccessibleName(text)
+
+    def validation_issues(self) -> tuple[str, ...]:
+        if any(not entry.prompt.strip() for entry in self.state.clipart.prompts):
+            return ("prompt_empty",)
+        return ()
+
+
+class ClipartGenerationPage(_ScrollableStepPage):
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            "Генерация",
+            "Выберите модель, формат и число вариантов до платного запуска.",
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        self.text_options = generation_model_options(references=False)
+        self.reference_options = generation_model_options(references=True)
+        form = QFormLayout()
+        self.model_combo = QComboBox()
+        self.ratio_combo = QComboBox()
+        self.resolution_combo = QComboBox()
+        self.variants_spin = QSpinBox()
+        self.variants_spin.setRange(1, 100)
+        for option in self.text_options:
+            self.model_combo.addItem(option.label, option.model_id)
+        form.addRow("Модель", self.model_combo)
+        form.addRow("Пропорция", self.ratio_combo)
+        form.addRow("Разрешение", self.resolution_combo)
+        form.addRow("Вариантов на промпт", self.variants_spin)
+        container = QWidget()
+        container.setLayout(form)
+        self.add_widget(container)
+
+        advanced = AdvancedSection(tokens=tokens)
+        reference_form = QFormLayout()
+        self.reference_model_combo = QComboBox()
+        self.reference_ratio_combo = QComboBox()
+        self.reference_resolution_combo = QComboBox()
+        for option in self.reference_options:
+            self.reference_model_combo.addItem(option.label, option.model_id)
+        reference_form.addRow("Модель с референсом", self.reference_model_combo)
+        reference_form.addRow("Пропорция с референсом", self.reference_ratio_combo)
+        reference_form.addRow(
+            "Разрешение с референсом",
+            self.reference_resolution_combo,
+        )
+        reference_widget = QWidget()
+        reference_widget.setLayout(reference_form)
+        advanced.add_widget(reference_widget)
+        self.add_widget(advanced)
+
+        self.cost_label = QLabel()
+        self.cost_label.setWordWrap(True)
+        self.cost_label.setProperty("v3Status", True)
+        self.add_widget(self.cost_label)
+        for label, control in (
+            ("Модель", self.model_combo),
+            ("Пропорция", self.ratio_combo),
+            ("Разрешение", self.resolution_combo),
+            ("Вариантов на промпт", self.variants_spin),
+            ("Модель с референсом", self.reference_model_combo),
+            ("Пропорция с референсом", self.reference_ratio_combo),
+            ("Разрешение с референсом", self.reference_resolution_combo),
+        ):
+            control.setAccessibleName(label)
+
+        self._select_model(self.model_combo, state.clipart.generation.model)
+        self._select_model(
+            self.reference_model_combo,
+            state.clipart.generation.reference_model,
+        )
+        self._refresh_profile_controls(primary=True, sync=False)
+        self._refresh_profile_controls(primary=False, sync=False)
+        self.variants_spin.setValue(state.clipart.generation.variants)
+        self.model_combo.currentIndexChanged.connect(
+            lambda: self._refresh_profile_controls(primary=True)
+        )
+        self.reference_model_combo.currentIndexChanged.connect(
+            lambda: self._refresh_profile_controls(primary=False)
+        )
+        self.ratio_combo.currentTextChanged.connect(self._sync)
+        self.resolution_combo.currentIndexChanged.connect(self._sync)
+        self.reference_ratio_combo.currentTextChanged.connect(self._sync)
+        self.reference_resolution_combo.currentIndexChanged.connect(self._sync)
+        self.variants_spin.valueChanged.connect(self._sync)
+        self._sync(mark=False)
+
+    def _select_model(self, combo: QComboBox, model_id: str) -> None:
+        index = combo.findData(model_id)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+
+    def _option_for_combo(self, combo: QComboBox) -> GenerationModelOption:
+        return _model_option(str(combo.currentData() or ""))
+
+    def _set_values(
+        self,
+        combo: QComboBox,
+        values: Sequence[str],
+        preferred: str,
+        *,
+        fixed_value: str | None = None,
+    ) -> None:
+        combo.blockSignals(True)
+        combo.clear()
+        if values:
+            combo.addItems(values)
+            combo.setCurrentText(
+                preferred if preferred in values else str(values[0])
+            )
+            combo.setEnabled(True)
+        else:
+            combo.addItem("Задаётся моделью", fixed_value or "1K")
+            combo.setEnabled(False)
+        combo.blockSignals(False)
+
+    def _refresh_profile_controls(
+        self,
+        *,
+        primary: bool,
+        sync: bool = True,
+    ) -> None:
+        generation = self.state.clipart.generation
+        if primary:
+            option = self._option_for_combo(self.model_combo)
+            self._set_values(
+                self.ratio_combo,
+                option.ratios or ("1:1",),
+                generation.ratio,
+            )
+            self._set_values(
+                self.resolution_combo,
+                option.resolutions,
+                generation.resolution,
+                fixed_value="1K",
+            )
+        else:
+            option = self._option_for_combo(self.reference_model_combo)
+            self._set_values(
+                self.reference_ratio_combo,
+                option.ratios or ("1:1",),
+                generation.reference_ratio,
+            )
+            self._set_values(
+                self.reference_resolution_combo,
+                option.resolutions,
+                generation.reference_resolution,
+                fixed_value="1K",
+            )
+        if sync:
+            self._sync()
+
+    @staticmethod
+    def _combo_value(combo: QComboBox) -> str:
+        return str(combo.currentData() or combo.currentText())
+
+    def _sync(self, *_: Any, mark: bool = True) -> None:
+        self.state.clipart.generation = GenerationData(
+            model=str(self.model_combo.currentData() or ""),
+            ratio=self.ratio_combo.currentText(),
+            resolution=self._combo_value(self.resolution_combo),
+            reference_model=str(self.reference_model_combo.currentData() or ""),
+            reference_ratio=self.reference_ratio_combo.currentText(),
+            reference_resolution=self._combo_value(
+                self.reference_resolution_combo
+            ),
+            variants=self.variants_spin.value(),
+        )
+        estimate = estimate_clipart_cost(self.state)
+        self.cost_label.setText(estimate.summary)
+        self.cost_label.setAccessibleName("Стоимость. " + estimate.summary)
+        if mark:
+            self.changed()
+
+    def refresh_from_state(self) -> None:
+        self._sync(mark=False)
+
+
+class ClipartProcessingPage(_ScrollableStepPage):
+    _BOOL_LABELS = {
+        "visible_mark_cleanup": "Удалить видимую метку автоматически",
+        "upscale_before": "Апскейл до удаления фона",
+        "upscale_after": "Апскейл после удаления фона",
+        "remove_background": "Удалить фон",
+        "local_ben2_refine_foreground": "BEN2: уточнить foreground",
+        "unsharp": "Unsharp Mask",
+        "edge_shrink": "Очистить край alpha",
+        "trim": "Trim",
+        "export_300_dpi": "Экспорт 300 DPI",
+        "remove_exif": "Удалить EXIF",
+        "remove_xmp": "Удалить XMP",
+        "remove_iptc": "Удалить IPTC",
+        "remove_comments_text": "Удалить comments/text",
+        "remove_embedded_thumbnail": "Удалить embedded thumbnail",
+        "remove_generator_fields": "Удалить generator fields",
+        "remove_embedded_c2pa": "Удалить embedded C2PA",
+        "preserve_icc": "Сохранить ICC",
+        "preserve_dpi": "Сохранить DPI",
+    }
+
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            "Обработка",
+            "Рецепт «Готовый клипарт» использует существующий pipeline 2.0.",
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        self.operation_widgets: dict[str, QWidget] = {}
+        operations = state.clipart.operations
+        _, processing_pricing = _legacy_catalog()
+        upscale_models = tuple(
+            (model_id, model_id)
+            for model_id in processing_pricing
+            if "upscale" in model_id
+        )
+        remove_bg_models = tuple(
+            (model_id, model_id)
+            for model_id in processing_pricing
+            if "remove-background" in model_id
+        )
+
+        recipe = QLabel(
+            "Рекомендуемый рецепт: апскейл → удаление фона → экспорт PNG."
+        )
+        recipe.setWordWrap(True)
+        recipe.setProperty("v3Status", True)
+        self.add_widget(recipe)
+
+        pipeline_group = QGroupBox("Операции")
+        form = QFormLayout(pipeline_group)
+        for name in (
+            "visible_mark_cleanup",
+            "upscale_before",
+            "unsharp",
+            "remove_background",
+            "upscale_after",
+            "edge_shrink",
+            "trim",
+            "export_300_dpi",
+        ):
+            self._add_bool(form, name, operations)
+        self._add_combo(
+            form,
+            "upscale_before_provider",
+            "Провайдер первого апскейла",
+            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            operations,
+        )
+        self._add_combo(
+            form,
+            "remove_background_provider",
+            "Провайдер удаления фона",
+            (
+                ("KIE", "kie"),
+                ("PhotoRoom", "photoroom"),
+                ("Local rembg", "local_rembg"),
+                ("Local BEN2", "local_ben2"),
+            ),
+            operations,
+        )
+        self._add_combo(
+            form,
+            "upscale_after_provider",
+            "Провайдер второго апскейла",
+            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            operations,
+        )
+
+        self._add_int(
+            form,
+            "edge_shrink_pixels",
+            "Очистка края, px",
+            1,
+            3,
+            operations,
+        )
+        self._add_combo(
+            form,
+            "trim_mode",
+            "Trim по",
+            (("Alpha", "alpha"), ("Белому", "white"), ("Чёрному", "black")),
+            operations,
+        )
+        self.add_widget(pipeline_group)
+
+        advanced = AdvancedSection("Параметры операций", tokens=tokens)
+        advanced_group = QWidget()
+        advanced_form = QFormLayout(advanced_group)
+        self._add_combo(
+            advanced_form,
+            "kie_upscale_model",
+            "KIE модель апскейла до",
+            upscale_models,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "kie_upscale_after_model",
+            "KIE модель апскейла после",
+            upscale_models,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "kie_remove_bg_model",
+            "KIE модель удаления фона",
+            remove_bg_models,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "local_realesrgan_profile",
+            "Real-ESRGAN профиль",
+            (("Клипарт", "clipart"), ("Фото", "photo")),
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "local_realesrgan_scale",
+            "Real-ESRGAN scale до",
+            (("2x", 2), ("4x", 4)),
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "local_realesrgan_after_scale",
+            "Real-ESRGAN scale после",
+            (("2x", 2), ("4x", 4)),
+            operations,
+        )
+        self._add_text(
+            advanced_form,
+            "local_rembg_profile",
+            "rembg профиль",
+            operations,
+        )
+        self._add_text(
+            advanced_form,
+            "local_rembg_model",
+            "rembg модель",
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "local_rembg_edge_quality",
+            "Качество края rembg",
+            (("Мягкое", "soft"), ("Обычное", "normal"), ("Резкое", "sharp")),
+            operations,
+        )
+        self._add_bool(
+            advanced_form,
+            "local_ben2_refine_foreground",
+            operations,
+        )
+        self._add_int(
+            advanced_form,
+            "local_ben2_alpha_threshold",
+            "BEN2 alpha threshold",
+            0,
+            255,
+            operations,
+        )
+        self._add_int(
+            advanced_form,
+            "local_ben2_edge_softness",
+            "BEN2 мягкость края",
+            0,
+            3,
+            operations,
+        )
+        self._add_int(
+            advanced_form,
+            "local_ben2_corner_radius",
+            "BEN2 радиус углов",
+            0,
+            3,
+            operations,
+        )
+        self._add_int(
+            advanced_form,
+            "unsharp_amount",
+            "Unsharp amount",
+            0,
+            500,
+            operations,
+        )
+        self._add_float(
+            advanced_form,
+            "unsharp_radius",
+            "Unsharp radius",
+            0.1,
+            200.0,
+            operations,
+        )
+        self._add_int(
+            advanced_form,
+            "unsharp_threshold",
+            "Unsharp threshold",
+            0,
+            255,
+            operations,
+        )
+        advanced.add_widget(advanced_group)
+        self.add_widget(advanced)
+
+        cleanup_group = QGroupBox("Центр проверки и очистки файла")
+        cleanup_form = QFormLayout(cleanup_group)
+        for name in (
+            "remove_exif",
+            "remove_xmp",
+            "remove_iptc",
+            "remove_comments_text",
+            "remove_embedded_thumbnail",
+            "remove_generator_fields",
+            "remove_embedded_c2pa",
+            "preserve_icc",
+            "preserve_dpi",
+        ):
+            self._add_bool(cleanup_form, name, operations)
+        self.add_widget(cleanup_group)
+
+        self.pipeline_label = QLabel()
+        self.pipeline_label.setWordWrap(True)
+        self.pipeline_label.setAccessibleName("Порядок обработки")
+        self.add_widget(self.pipeline_label)
+        self._connect_controls()
+        self._refresh_control_visibility()
+        self._refresh_pipeline()
+
+    def _add_bool(
+        self,
+        form: QFormLayout,
+        name: str,
+        operations: ImageOperationData,
+    ) -> None:
+        control = QCheckBox(self._BOOL_LABELS[name])
+        control.setChecked(bool(getattr(operations, name)))
+        control.setAccessibleName(self._BOOL_LABELS[name])
+        form.addRow(control)
+        self.operation_widgets[name] = control
+
+    def _add_combo(
+        self,
+        form: QFormLayout,
+        name: str,
+        label: str,
+        options: Sequence[tuple[str, Any]],
+        operations: ImageOperationData,
+    ) -> None:
+        control = QComboBox()
+        for option_label, value in options:
+            control.addItem(option_label, value)
+        index = control.findData(getattr(operations, name))
+        control.setCurrentIndex(index if index >= 0 else 0)
+        control.setAccessibleName(label)
+        form.addRow(label, control)
+        self.operation_widgets[name] = control
+
+    def _add_int(
+        self,
+        form: QFormLayout,
+        name: str,
+        label: str,
+        minimum: int,
+        maximum: int,
+        operations: ImageOperationData,
+    ) -> None:
+        control = QSpinBox()
+        control.setRange(minimum, maximum)
+        control.setValue(int(getattr(operations, name)))
+        control.setAccessibleName(label)
+        form.addRow(label, control)
+        self.operation_widgets[name] = control
+
+    def _add_float(
+        self,
+        form: QFormLayout,
+        name: str,
+        label: str,
+        minimum: float,
+        maximum: float,
+        operations: ImageOperationData,
+    ) -> None:
+        control = QDoubleSpinBox()
+        control.setRange(minimum, maximum)
+        control.setDecimals(1)
+        control.setValue(float(getattr(operations, name)))
+        control.setAccessibleName(label)
+        form.addRow(label, control)
+        self.operation_widgets[name] = control
+
+    def _add_text(
+        self,
+        form: QFormLayout,
+        name: str,
+        label: str,
+        operations: ImageOperationData,
+    ) -> None:
+        control = QLineEdit(str(getattr(operations, name)))
+        control.setAccessibleName(label)
+        form.addRow(label, control)
+        self.operation_widgets[name] = control
+
+    def _connect_controls(self) -> None:
+        for control in self.operation_widgets.values():
+            if isinstance(control, QCheckBox):
+                control.toggled.connect(self._sync)
+            elif isinstance(control, QComboBox):
+                control.currentIndexChanged.connect(self._sync)
+            elif isinstance(control, (QSpinBox, QDoubleSpinBox)):
+                control.valueChanged.connect(self._sync)
+            elif isinstance(control, QLineEdit):
+                control.textChanged.connect(self._sync)
+
+    @staticmethod
+    def _value(control: QWidget) -> Any:
+        if isinstance(control, QCheckBox):
+            return control.isChecked()
+        if isinstance(control, QComboBox):
+            return control.currentData()
+        if isinstance(control, (QSpinBox, QDoubleSpinBox)):
+            return control.value()
+        if isinstance(control, QLineEdit):
+            return control.text()
+        raise TypeError(f"Unsupported control: {type(control).__name__}")
+
+    def _sync(self, *_: Any) -> None:
+        current = self.state.clipart.operations.to_dict()
+        for name, control in self.operation_widgets.items():
+            current[name] = self._value(control)
+        current["visible_mark_cleanup_mode"] = "gemini_auto"
+        self.state.clipart.operations = ImageOperationData(**current)
+        self._refresh_control_visibility()
+        self._refresh_pipeline()
+        self.changed()
+
+    def _set_control_visible(self, name: str, visible: bool) -> None:
+        control = self.operation_widgets.get(name)
+        if control is None:
+            return
+        control.setVisible(visible)
+        parent = control.parentWidget()
+        layout = parent.layout() if parent is not None else None
+        if isinstance(layout, QFormLayout):
+            label = layout.labelForField(control)
+            if label is not None:
+                label.setVisible(visible)
+
+    def _refresh_control_visibility(self) -> None:
+        operations = self.state.clipart.operations
+        before_kie = operations.upscale_before and operations.upscale_before_provider == "kie"
+        before_local = operations.upscale_before and operations.upscale_before_provider == "local_realesrgan"
+        after_kie = operations.upscale_after and operations.upscale_after_provider == "kie"
+        after_local = operations.upscale_after and operations.upscale_after_provider == "local_realesrgan"
+        remove_kie = operations.remove_background and operations.remove_background_provider == "kie"
+        remove_rembg = operations.remove_background and operations.remove_background_provider == "local_rembg"
+        remove_ben2 = operations.remove_background and operations.remove_background_provider == "local_ben2"
+        visibility = {
+            "upscale_before_provider": operations.upscale_before,
+            "upscale_after_provider": operations.upscale_after,
+            "remove_background_provider": operations.remove_background,
+            "edge_shrink_pixels": operations.edge_shrink,
+            "trim_mode": operations.trim,
+            "kie_upscale_model": before_kie,
+            "kie_upscale_after_model": after_kie,
+            "local_realesrgan_profile": before_local or after_local,
+            "local_realesrgan_scale": before_local,
+            "local_realesrgan_after_scale": after_local,
+            "kie_remove_bg_model": remove_kie,
+            "local_rembg_profile": remove_rembg,
+            "local_rembg_model": remove_rembg,
+            "local_rembg_edge_quality": remove_rembg,
+            "local_ben2_refine_foreground": remove_ben2,
+            "local_ben2_alpha_threshold": remove_ben2,
+            "local_ben2_edge_softness": remove_ben2,
+            "local_ben2_corner_radius": remove_ben2,
+            "unsharp_amount": operations.unsharp,
+            "unsharp_radius": operations.unsharp,
+            "unsharp_threshold": operations.unsharp,
+        }
+        for name, visible in visibility.items():
+            self._set_control_visible(name, visible)
+
+    def _refresh_pipeline(self) -> None:
+        steps = clipart_pipeline_steps(self.state.clipart.operations)
+        text = "Порядок: " + " → ".join(steps)
+        self.pipeline_label.setText(text)
+        self.pipeline_label.setAccessibleName(text)
+
+
+class ClipartReviewRunPage(_ScrollableStepPage):
+    def __init__(
+        self,
+        state: ProjectState,
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            "Проверка и запуск",
+            "Проверьте объём, стоимость и точный порядок до запуска.",
+            tokens=tokens,
+        )
+        self.state = state
+        self.output_label = QLabel()
+        self.output_label.setWordWrap(True)
+        self.summary_label = QLabel()
+        self.summary_label.setWordWrap(True)
+        self.pipeline_label = QLabel()
+        self.pipeline_label.setWordWrap(True)
+        self.requirements_label = QLabel()
+        self.requirements_label.setWordWrap(True)
+        self.requirements_label.setProperty("v3Status", True)
+        self.warning_label = QLabel(
+            "API-ключи не сохраняются в проекте и читаются из настроек только при запуске."
+        )
+        self.warning_label.setWordWrap(True)
+        self.warning_label.setProperty("v3Status", True)
+        self.warning_label.setProperty("state", "warning")
+        self.run_status_label = QLabel()
+        self.run_status_label.setWordWrap(True)
+        self.run_status_label.setProperty("v3Small", True)
+        for widget in (
+            self.output_label,
+            self.summary_label,
+            self.pipeline_label,
+            self.requirements_label,
+            self.warning_label,
+            self.run_status_label,
+        ):
+            self.add_widget(widget)
+        self.refresh_from_state()
+
+    def refresh_from_state(self) -> None:
+        output_dir = (
+            str(Path(self.state.common.work_dir) / "output")
+            if self.state.common.work_dir
+            else "не выбрана"
+        )
+        self.state.common.output_dir = (
+            "" if output_dir == "не выбрана" else output_dir
+        )
+        estimate = estimate_clipart_cost(self.state)
+        generation = self.state.clipart.generation
+        self.output_label.setText(f"Папка результата: {output_dir}")
+        variants = generation.variants
+        text_count = sum(not entry.references for entry in self.state.clipart.prompts) * variants
+        reference_count = sum(bool(entry.references) for entry in self.state.clipart.prompts) * variants
+        model_summary = f"без референса {text_count}: {generation.model}"
+        if reference_count:
+            model_summary += (
+                f" · с референсом {reference_count}: "
+                f"{generation.reference_model}"
+            )
+        output_count = len(self.state.clipart.prompts) * variants
+        self.summary_label.setText(
+            f"{estimate.summary} · изображений {output_count} · {model_summary} · "
+            f"{generation.ratio} · {generation.resolution}"
+        )
+        self.pipeline_label.setText(
+            "Порядок: "
+            + " → ".join(
+                clipart_pipeline_steps(self.state.clipart.operations)
+            )
+        )
+
+    def set_preflight_status(self, text: str, *, ready: bool) -> None:
+        prefix = "✓ " if ready else "✕ "
+        self.requirements_label.setText(prefix + text)
+        self.requirements_label.setProperty(
+            "state",
+            "default" if ready else "error",
+        )
+        self.requirements_label.setAccessibleName(prefix + text)
+    def set_run_status(self, text: str, *, error: bool = False) -> None:
+        prefix = "✕ " if error else "✓ "
+        self.run_status_label.setText(prefix + text)
+        self.run_status_label.setAccessibleName(prefix + text)
+
+
+def _read_legacy_runtime_settings() -> Mapping[str, Any]:
+    import main
+
+    path = Path(main.CONFIG_FILE)
+    if not path.is_file():
+        return {}
+    try:
+        if path.stat().st_size > MAX_CSV_BYTES:
+            return {}
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _safe_runtime_error(
+    error: Any,
+    runtime_settings: Mapping[str, Any] | None = None,
+) -> str:
+    import main
+
+    source = runtime_settings or {}
+    secrets = tuple(
+        source.get(name)
+        for name in ("kie_api_key", "photoroom_api_key")
+        if isinstance(source.get(name), str)
+    )
+    return main.safe_error_text(error, secrets=secrets, limit=500)
+
+
+def _legacy_worker_factory(**kwargs: Any) -> Any:
+    from main import WorkerThread
+
+    return WorkerThread(**kwargs)
+
+
+class ClipartFlowController(QObject):
+    started = pyqtSignal(object)
+    progress = pyqtSignal(str)
+    progress_value = pyqtSignal(int)
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(
+        self,
+        shell: AppShell,
+        *,
+        runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
+        worker_factory: Callable[..., Any] | None = None,
+    ) -> None:
+        super().__init__(shell)
+        self.shell = shell
+        self.runtime_settings_provider = (
+            runtime_settings_provider or _read_legacy_runtime_settings
+        )
+        self.worker_factory = worker_factory or _legacy_worker_factory
+        self.worker: Any | None = None
+        self._runtime_settings: Mapping[str, Any] = {}
+        self.pages: dict[StepId, _ScrollableStepPage] = {}
+        self._install_pages()
+        shell.step_changed.connect(self._step_changed)
+        shell.run_requested.connect(self._run_requested)
+        if (
+            shell.state.mode is ProjectMode.CLIPART
+            and shell.state.current_step is StepId.REVIEW_RUN
+        ):
+            self._refresh_preflight()
+
+    def _install_pages(self) -> None:
+        changed = self.shell.mark_dirty
+        self.pages = {
+            StepId.PROJECT: ClipartProjectPage(
+                self.shell.state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+            StepId.PROMPTS: ClipartPromptInputPage(
+                self.shell.state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+            StepId.PROMPT_REVIEW: ClipartPromptReviewPage(
+                self.shell.state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+            StepId.GENERATION: ClipartGenerationPage(
+                self.shell.state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+            StepId.PROCESSING_OPTIONS: ClipartProcessingPage(
+                self.shell.state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+            StepId.REVIEW_RUN: ClipartReviewRunPage(
+                self.shell.state,
+                tokens=self.shell.tokens,
+            ),
+        }
+        for step, page in self.pages.items():
+            self.shell.set_step_page(ProjectMode.CLIPART, step, page)
+        self.shell.refresh()
+
+    @property
+    def review_page(self) -> ClipartReviewRunPage:
+        page = self.pages[StepId.REVIEW_RUN]
+        if not isinstance(page, ClipartReviewRunPage):
+            raise RuntimeError("Clipart review page is not installed")
+        return page
+
+    def _step_changed(self, mode: str, step: str) -> None:
+        if mode != ProjectMode.CLIPART.value:
+            return
+        normalized_step = StepId(step)
+        page = self.pages.get(normalized_step)
+        if page is not None:
+            page.refresh_from_state()
+        if normalized_step is StepId.REVIEW_RUN:
+            self._refresh_preflight()
+
+    def _refresh_preflight(self) -> None:
+        try:
+            runtime_settings = self.runtime_settings_provider()
+            if not isinstance(runtime_settings, Mapping):
+                raise ClipartFlowError("Настройки запуска повреждены")
+            request = build_clipart_run_request(
+                self.shell.state,
+                runtime_settings,
+            )
+            missing = missing_runtime_requirements(request)
+        except (ClipartFlowError, OSError, TypeError, ValueError) as error:
+            self.review_page.set_preflight_status(str(error)[:500], ready=False)
+            return
+        if missing:
+            self.review_page.set_preflight_status(
+                "Укажите в настройках: " + ", ".join(missing),
+                ready=False,
+            )
+        else:
+            self.review_page.set_preflight_status(
+                "Обязательные поля заполнены; запуск готов.",
+                ready=True,
+            )
+
+    def _run_requested(self, mode: str) -> None:
+        if mode == ProjectMode.CLIPART.value:
+            self.start()
+
+    def start(self) -> ClipartRunRequest | None:
+        if self.worker is not None and bool(self.worker.isRunning()):
+            message = "Запуск уже выполняется"
+            self.review_page.set_run_status(message, error=True)
+            self.error.emit(message)
+            return None
+        try:
+            runtime_settings = self.runtime_settings_provider()
+            if not isinstance(runtime_settings, Mapping):
+                raise ClipartFlowError("Настройки запуска повреждены")
+            request = build_clipart_run_request(
+                self.shell.state,
+                runtime_settings,
+            )
+            self._runtime_settings = runtime_settings
+            missing = missing_runtime_requirements(request)
+            if missing:
+                raise ClipartFlowError(
+                    "Укажите в настройках: " + ", ".join(missing)
+                )
+            worker = self.worker_factory(**request.worker_kwargs())
+        except (ClipartFlowError, OSError, TypeError, ValueError) as error:
+            message = _safe_runtime_error(error, locals().get("runtime_settings"))
+            self.review_page.set_run_status(message, error=True)
+            self.error.emit(message)
+            return None
+
+        self.worker = worker
+        if hasattr(worker, "progress"):
+            worker.progress.connect(self.progress.emit)
+        if hasattr(worker, "progress_value"):
+            worker.progress_value.connect(self.progress_value.emit)
+        if hasattr(worker, "finished"):
+            worker.finished.connect(self._finished)
+        if hasattr(worker, "error"):
+            worker.error.connect(self._error)
+        worker.start()
+        self.review_page.set_run_status("Запуск передан существующему pipeline 2.0")
+        self.started.emit(request)
+        return request
+
+    def stop(self) -> None:
+        if self.worker is not None and hasattr(self.worker, "stop"):
+            self.worker.stop()
+
+    def _finished(self, message: str) -> None:
+        safe_message = _safe_runtime_error(message, self._runtime_settings)
+        self.review_page.set_run_status(safe_message)
+        self.finished.emit(safe_message)
+
+    def _error(self, message: str) -> None:
+        safe_message = _safe_runtime_error(message, self._runtime_settings)
+        self.review_page.set_run_status(safe_message, error=True)
+        self.error.emit(safe_message)
+
+
+def install_clipart_flow(
+    shell: AppShell,
+    *,
+    runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
+    worker_factory: Callable[..., Any] | None = None,
+) -> ClipartFlowController:
+    if not isinstance(shell, AppShell):
+        raise TypeError("shell must be an AppShell")
+    existing = getattr(shell, "clipart_flow_controller", None)
+    if isinstance(existing, ClipartFlowController):
+        return existing
+    controller = ClipartFlowController(
+        shell,
+        runtime_settings_provider=runtime_settings_provider,
+        worker_factory=worker_factory,
+    )
+    shell.clipart_flow_controller = controller
+    return controller

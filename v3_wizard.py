@@ -66,7 +66,9 @@ STEP_DESCRIPTIONS: dict[StepId, str] = {
 
 VALIDATION_MESSAGES: dict[str, str] = {
     "work_dir_required": "Выберите рабочую папку.",
+    "work_dir_unavailable": "Рабочая папка недоступна для записи.",
     "prompts_required": "Добавьте хотя бы один промпт.",
+    "prompt_empty": "Удалите или заполните пустые промпты.",
     "generation_model_required": "Выберите модель генерации.",
     "generation_ratio_required": "Выберите пропорции изображения.",
     "generation_resolution_required": "Выберите разрешение изображения.",
@@ -417,6 +419,17 @@ class AppShell(QWidget):
         self.validation_label.clear()
         self.validation_label.hide()
 
+    def _page_validation_issues(self) -> tuple[str, ...]:
+        validator = getattr(self.current_page, "validation_issues", None)
+        if not callable(validator):
+            return ()
+        issues = validator()
+        if not isinstance(issues, tuple) or not all(
+            isinstance(issue, str) and issue for issue in issues
+        ):
+            raise TypeError("Page validation must return a tuple of issue ids")
+        return issues
+
     def _show_validation(self, issues: tuple[str, ...]) -> None:
         messages = tuple(
             VALIDATION_MESSAGES.get(issue, f"Проверьте поле: {issue}")
@@ -440,7 +453,10 @@ class AppShell(QWidget):
 
         if self.state.current_step is StepId.REVIEW_RUN:
             self._run_request_key = None
-            issues = self.state.validation_issues()
+            issues = (
+                self.state.validation_issues()
+                + self._page_validation_issues()
+            )
             if issues:
                 self._show_validation(issues)
                 return self.state.current_step
@@ -448,6 +464,11 @@ class AppShell(QWidget):
             self._run_request_key = (self.state.mode, self.state.current_step)
             self.run_requested.emit(self.state.mode.value)
             self.refresh()
+            return self.state.current_step
+
+        page_issues = self._page_validation_issues()
+        if page_issues:
+            self._show_validation(page_issues)
             return self.state.current_step
 
         previous = self.state.current_step

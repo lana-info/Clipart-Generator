@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
@@ -208,11 +210,15 @@ class V3ApplicationView(QWidget):
         parent: QWidget | None = None,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
+        worker_factory: Callable[..., Any] | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self._recent_project: ProjectState | None = None
+        self._runtime_settings_provider = runtime_settings_provider
+        self._worker_factory = worker_factory
         self.shell: AppShell | None = None
 
         self.setMinimumSize(980, 700)
@@ -311,6 +317,13 @@ class V3ApplicationView(QWidget):
             previous.deleteLater()
 
         shell = AppShell(state, tokens=self.tokens)
+        from v3_clipart_flow import install_clipart_flow
+
+        install_clipart_flow(
+            shell,
+            runtime_settings_provider=self._runtime_settings_provider,
+            worker_factory=self._worker_factory,
+        )
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         self.shell = shell
         self.stack.addWidget(shell)
