@@ -13,6 +13,9 @@ PROJECT_STATE_SCHEMA_VERSION = 1
 MAX_DRAFT_BYTES = 2 * 1024 * 1024
 MAX_PROMPT_ENTRIES = 5000
 MAX_REFERENCES_PER_PROMPT = 5
+MAX_PROMPT_GENERATOR_ITEMS = 500
+MAX_PROMPT_GENERATOR_TEXT_LENGTH = 4000
+MAX_PROMPT_SERIES_COUNT = 500
 MAX_SELECTED_FILES = 10000
 MAX_TEXT_LENGTH = 20000
 
@@ -169,6 +172,114 @@ class PromptEntry:
             references=_references(value.get("references", [])),
         )
         return entry if entry.prompt or entry.references else None
+
+
+@dataclass
+class PromptGeneratorData:
+    theme: str = ""
+    subjects: list[str] = field(default_factory=list)
+    style: str = ""
+    palette: str = ""
+    composition: str = ""
+    background: str = ""
+    restrictions: list[str] = field(default_factory=list)
+    count: int = 12
+
+    def __post_init__(self) -> None:
+        self.theme = _text(self.theme, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
+        self.subjects = _string_list(
+            self.subjects,
+            limit=MAX_PROMPT_GENERATOR_ITEMS,
+        )
+        self.style = _text(self.style, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
+        self.palette = _text(
+            self.palette, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH
+        )
+        self.composition = _text(
+            self.composition, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH
+        )
+        self.background = _text(
+            self.background, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH
+        )
+        self.restrictions = _string_list(
+            self.restrictions,
+            limit=MAX_PROMPT_GENERATOR_ITEMS,
+        )
+        self.count = _bounded_int(
+            self.count,
+            default=12,
+            minimum=1,
+            maximum=MAX_PROMPT_SERIES_COUNT,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "theme": self.theme,
+            "subjects": list(self.subjects),
+            "style": self.style,
+            "palette": self.palette,
+            "composition": self.composition,
+            "background": self.background,
+            "restrictions": list(self.restrictions),
+            "count": self.count,
+        }
+
+    @classmethod
+    def from_dict(
+        cls,
+        value: Any,
+        *,
+        defaults: PromptGeneratorData | None = None,
+    ) -> PromptGeneratorData:
+        data = value if isinstance(value, Mapping) else {}
+        base = defaults if defaults is not None else cls()
+        return cls(
+            theme=data.get("theme", base.theme),
+            subjects=data.get("subjects", base.subjects),
+            style=data.get("style", base.style),
+            palette=data.get("palette", base.palette),
+            composition=data.get("composition", base.composition),
+            background=data.get("background", base.background),
+            restrictions=data.get("restrictions", base.restrictions),
+            count=data.get("count", base.count),
+        )
+
+
+def clipart_prompt_generator_defaults() -> PromptGeneratorData:
+    return PromptGeneratorData(
+        style="cohesive professional clipart illustration",
+        palette="a consistent harmonious palette across the full series",
+        composition=(
+            "one isolated subject, centered, fully visible, clear silhouette"
+        ),
+        background="pure solid white background, no environment or ground",
+        restrictions=[
+            "no text",
+            "no logo",
+            "no watermark",
+            "no frame",
+            "no cropped parts",
+            "no cast or contact shadow",
+        ],
+    )
+
+
+def pinterest_prompt_generator_defaults() -> PromptGeneratorData:
+    return PromptGeneratorData(
+        style="polished editorial social media image",
+        palette="a consistent harmonious palette across the full series",
+        composition=(
+            "vertical composition, clear focal point, balanced negative space, "
+            "safe zones near the edges"
+        ),
+        background="cohesive full-frame background supporting the main subject",
+        restrictions=[
+            "no watermark",
+            "no logo",
+            "no mandatory text overlay",
+            "no collage or editable layer layout",
+        ],
+    )
 
 
 def _prompt_entries(value: Any) -> list[PromptEntry]:
@@ -568,12 +679,16 @@ class ImageOperationData:
 @dataclass
 class ClipartModeData:
     prompts: list[PromptEntry] = field(default_factory=list)
+    prompt_generator: PromptGeneratorData = field(
+        default_factory=clipart_prompt_generator_defaults
+    )
     generation: GenerationData = field(default_factory=GenerationData)
     operations: ImageOperationData = field(default_factory=ImageOperationData)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "prompts": [entry.to_dict() for entry in self.prompts],
+            "prompt_generator": self.prompt_generator.to_dict(),
             "generation": self.generation.to_dict(),
             "operations": self.operations.to_dict(),
         }
@@ -583,6 +698,10 @@ class ClipartModeData:
         data = value if isinstance(value, Mapping) else {}
         return cls(
             prompts=_prompt_entries(data.get("prompts", [])),
+            prompt_generator=PromptGeneratorData.from_dict(
+                data.get("prompt_generator", {}),
+                defaults=clipart_prompt_generator_defaults(),
+            ),
             generation=GenerationData.from_dict(data.get("generation", {})),
             operations=ImageOperationData.from_dict(data.get("operations", {})),
         )
@@ -591,6 +710,9 @@ class ClipartModeData:
 @dataclass
 class PinterestModeData:
     prompts: list[PromptEntry] = field(default_factory=list)
+    prompt_generator: PromptGeneratorData = field(
+        default_factory=pinterest_prompt_generator_defaults
+    )
     generation: GenerationData = field(
         default_factory=lambda: GenerationData(ratio="9:16")
     )
@@ -598,6 +720,7 @@ class PinterestModeData:
     def to_dict(self) -> dict[str, Any]:
         return {
             "prompts": [entry.to_dict() for entry in self.prompts],
+            "prompt_generator": self.prompt_generator.to_dict(),
             "generation": self.generation.to_dict(),
         }
 
@@ -606,6 +729,10 @@ class PinterestModeData:
         data = value if isinstance(value, Mapping) else {}
         return cls(
             prompts=_prompt_entries(data.get("prompts", [])),
+            prompt_generator=PromptGeneratorData.from_dict(
+                data.get("prompt_generator", {}),
+                defaults=pinterest_prompt_generator_defaults(),
+            ),
             generation=GenerationData.from_dict(
                 data.get("generation", {}),
                 default_ratio="9:16",
@@ -710,6 +837,67 @@ def _validate_prompt_section(section: Mapping[str, Any], name: str) -> None:
             )
 
 
+def _validate_prompt_generator_section(
+    section: Mapping[str, Any],
+    name: str,
+) -> None:
+    _reject_unknown_fields(
+        section,
+        (
+            "theme",
+            "subjects",
+            "style",
+            "palette",
+            "composition",
+            "background",
+            "restrictions",
+            "count",
+        ),
+        name,
+    )
+    for key in (
+        "theme",
+        "style",
+        "palette",
+        "composition",
+        "background",
+    ):
+        value = section.get(key)
+        if not isinstance(value, str):
+            raise ProjectStateError(
+                f"Project draft field {name}.{key} must be a string"
+            )
+        if len(value) > MAX_PROMPT_GENERATOR_TEXT_LENGTH:
+            raise ProjectStateError(
+                f"Project draft field {name}.{key} is too long"
+            )
+    for key in ("subjects", "restrictions"):
+        values = section.get(key)
+        if not isinstance(values, list) or not all(
+            isinstance(value, str) for value in values
+        ):
+            raise ProjectStateError(
+                f"Project draft field {name}.{key} must be a string list"
+            )
+        if len(values) > MAX_PROMPT_GENERATOR_ITEMS:
+            raise ProjectStateError(
+                f"Project draft field {name}.{key} has too many items"
+            )
+        if any(len(value) > MAX_TEXT_LENGTH for value in values):
+            raise ProjectStateError(
+                f"Project draft field {name}.{key} contains a long item"
+            )
+    count = section.get("count")
+    if type(count) is not int:
+        raise ProjectStateError(
+            f"Project draft field {name}.count must be an integer"
+        )
+    if not 1 <= count <= MAX_PROMPT_SERIES_COUNT:
+        raise ProjectStateError(
+            f"Project draft field {name}.count is out of range"
+        )
+
+
 def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     _reject_unknown_fields(
         value,
@@ -748,10 +936,15 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     clipart = _draft_object(value, "clipart")
     _reject_unknown_fields(
         clipart,
-        ("prompts", "generation", "operations"),
+        ("prompts", "prompt_generator", "generation", "operations"),
         "clipart",
     )
     _validate_prompt_section(clipart, "clipart")
+    if "prompt_generator" in clipart:
+        _validate_prompt_generator_section(
+            _draft_object(clipart, "prompt_generator"),
+            "clipart.prompt_generator",
+        )
     _validate_scalar_fields(
         _draft_object(clipart, "generation"),
         GenerationData,
@@ -766,10 +959,15 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     pinterest = _draft_object(value, "pinterest")
     _reject_unknown_fields(
         pinterest,
-        ("prompts", "generation"),
+        ("prompts", "prompt_generator", "generation"),
         "pinterest",
     )
     _validate_prompt_section(pinterest, "pinterest")
+    if "prompt_generator" in pinterest:
+        _validate_prompt_generator_section(
+            _draft_object(pinterest, "prompt_generator"),
+            "pinterest.prompt_generator",
+        )
     _validate_scalar_fields(
         _draft_object(pinterest, "generation"),
         GenerationData,
