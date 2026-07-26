@@ -31,12 +31,12 @@ Verification:
 Notes:
 - Рискованная основа; выполнить до новых QWidget.
 - Вероятные файлы: новый модуль состояния, конфигурация и тесты.
-- Реализовано в 3_project_state.py; модель не импортирует PyQt6.
+- Реализовано в `v3_project_state.py`; модель не импортирует PyQt6.
 - Проверено: 13 focused-тестов, 212 полных тестов и offscreen SMOKE_OK.
 
 ## Task 2: Вынести design tokens и базовые компоненты PyQt6
 
-Status: Todo
+Status: Done
 
 Goal:
 Создать нативный shadcn-inspired слой компонентов без React/Tailwind.
@@ -48,15 +48,18 @@ Steps:
 - Добавить offscreen component smoke.
 
 Acceptance:
-- [ ] Компоненты используют единые токены.
-- [ ] Disabled, focus, warning и error различимы без одного только цвета.
-- [ ] Компоненты корректны при 980×700.
+- [x] Компоненты используют единые токены.
+- [x] Disabled, focus, warning и error различимы без одного только цвета.
+- [x] Компоненты корректны при 980×700.
 
 Verification:
-- [ ] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_v3_components -v`
+- [x] `$env:QT_QPA_PLATFORM='offscreen'; python -m unittest tests.test_v3_components -v`
 
 Notes:
 - Существующий UI пока не переписывать целиком.
+- Реализовано в `v3_components.py`; существующий UI не изменён.
+- Проверено: 7 focused-тестов, 219 полных тестов, offscreen smoke и визуальное превью 980×700.
+- Независимый review-loop: PASS после исправления disabled-state `AdvancedSection`.
 
 ## Task 3: Реализовать оболочку wizard
 
