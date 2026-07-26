@@ -63,7 +63,7 @@ Notes:
 
 ## Task 3: Реализовать оболочку wizard
 
-Status: Todo
+Status: Done
 
 Goal:
 Создать `AppShell` с top bar, stepper, `QStackedWidget` и footer navigation.
@@ -75,16 +75,21 @@ Steps:
 - Добавить обработку несохранённых изменений при смене режима.
 
 Acceptance:
-- [ ] Три тестовых маршрута проходят вперёд и назад.
-- [ ] Невалидный шаг блокирует только переход вперёд.
-- [ ] Состояние не хранится исключительно внутри widgets.
+- [x] Три тестовых маршрута проходят вперёд и назад.
+- [x] Невалидный шаг блокирует только переход вперёд.
+- [x] Состояние не хранится исключительно внутри widgets.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_wizard_navigation -v`
-- [ ] Offscreen smoke оболочки.
+- [x] `python -m unittest tests.test_v3_wizard_navigation -v`
+- [x] Offscreen smoke оболочки.
 
 Notes:
 - Не подключать реальный pipeline до стабильной навигации.
+- Реализовано в `v3_wizard.py`; pipeline не подключён.
+- Проверено: 10 focused-тестов, 229 полных тестов, keyboard flow и
+  визуальный offscreen smoke при 980×700.
+- Независимый review-loop: PASS после защиты ownership страниц и перехода к
+  результатам только после `run_requested`.
 
 ## Task 4: Создать стартовый экран выбора режима
 
