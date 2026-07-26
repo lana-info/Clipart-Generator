@@ -318,8 +318,14 @@ class V3ApplicationView(QWidget):
 
         shell = AppShell(state, tokens=self.tokens)
         from v3_clipart_flow import install_clipart_flow
+        from v3_pinterest_flow import install_pinterest_flow
 
         install_clipart_flow(
+            shell,
+            runtime_settings_provider=self._runtime_settings_provider,
+            worker_factory=self._worker_factory,
+        )
+        install_pinterest_flow(
             shell,
             runtime_settings_provider=self._runtime_settings_provider,
             worker_factory=self._worker_factory,

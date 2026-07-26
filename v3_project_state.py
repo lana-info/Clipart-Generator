@@ -714,7 +714,14 @@ class PinterestModeData:
         default_factory=pinterest_prompt_generator_defaults
     )
     generation: GenerationData = field(
-        default_factory=lambda: GenerationData(ratio="9:16")
+        default_factory=lambda: GenerationData(
+            model="gpt-image-2",
+            ratio="9:16",
+            resolution="1K",
+            reference_model="gpt-image-2",
+            reference_ratio="9:16",
+            reference_resolution="1K",
+        )
     )
 
     def to_dict(self) -> dict[str, Any]:
@@ -734,7 +741,14 @@ class PinterestModeData:
                 defaults=pinterest_prompt_generator_defaults(),
             ),
             generation=GenerationData.from_dict(
-                data.get("generation", {}),
+                {
+                    **cls().generation.to_dict(),
+                    **(
+                        data.get("generation", {})
+                        if isinstance(data.get("generation"), Mapping)
+                        else {}
+                    ),
+                },
                 default_ratio="9:16",
             ),
         )
@@ -1250,16 +1264,7 @@ def migrate_v2_config(
             ),
             operations=operations,
         ),
-        pinterest=PinterestModeData(
-            generation=GenerationData(
-                model=generation_model or "gpt-image/1.5-text-to-image",
-                ratio="9:16",
-                resolution=generation_resolution or "1K",
-                reference_model=reference_model or "gpt-image/1.5-image-to-image",
-                reference_ratio="9:16",
-                reference_resolution=reference_resolution or "1K",
-            )
-        ),
+        pinterest=PinterestModeData(),
         processing=ProcessingModeData(
             selected_files=[],
             recipe="custom",

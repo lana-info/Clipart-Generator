@@ -1125,6 +1125,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.add_widget(container)
 
         advanced = AdvancedSection(tokens=tokens)
+        self.reference_advanced = advanced
         reference_form = QFormLayout()
         self.reference_model_combo = QComboBox()
         self.reference_ratio_combo = QComboBox()
