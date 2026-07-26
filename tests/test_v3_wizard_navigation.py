@@ -210,7 +210,7 @@ class V3WizardNavigationTests(unittest.TestCase):
         shell.close()
         shell.deleteLater()
 
-    def test_processing_results_require_a_successful_run_request(self):
+    def test_results_require_a_successful_run_request(self):
         state = complete_state(ProjectMode.PROCESSING)
         state.set_step(StepId.REVIEW_RUN)
         shell = AppShell(state)

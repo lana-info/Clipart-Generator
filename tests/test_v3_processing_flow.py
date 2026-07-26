@@ -90,7 +90,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         apply_processing_recipe(state, "basic_enhancement")
         return state, source
 
-    def test_application_view_installs_c1_c2_c3_and_c5(self):
+    def test_application_view_installs_c1_to_c6_route(self):
         view = V3ApplicationView(worker_factory=WorkerFactory())
         view.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
         self.app.processEvents()
@@ -104,6 +104,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 StepId.PIPELINE,
                 StepId.EVIDENCE,
                 StepId.REVIEW_RUN,
+                StepId.RESULTS,
             ),
         )
         self.assertIsInstance(pages[StepId.FILES], ProcessingFilesPage)

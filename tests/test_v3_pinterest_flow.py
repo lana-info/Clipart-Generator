@@ -78,7 +78,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         state.pinterest.generation.variants = 2
         return state
 
-    def test_application_view_installs_exact_b1_to_b5_route(self):
+    def test_application_view_installs_exact_b1_to_b6_route(self):
         view = V3ApplicationView(
             runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
             worker_factory=WorkerFactory(),
@@ -96,6 +96,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.REVIEW_RUN,
+                StepId.RESULTS,
             ),
         )
         self.assertNotIn(StepId.PROCESSING_OPTIONS, controller.pages)

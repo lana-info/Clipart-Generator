@@ -580,6 +580,7 @@ class WorkerThread(QThread):
         self.selected_files = selected_files or []
         self.generated_prompts = generated_prompts or []
         self.is_running = True
+        self.stop_after_current_requested = False
         self._publish_lock = threading.Lock()
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
@@ -705,6 +706,18 @@ class WorkerThread(QThread):
         with self._publish_lock:
             self.is_running = False
 
+    def request_stop_after_current(self):
+        with self._publish_lock:
+            self.stop_after_current_requested = True
+
+    def _stop_after_current_if_requested(self):
+        with self._publish_lock:
+            if not self.stop_after_current_requested:
+                return False
+            self.is_running = False
+        self.progress.emit("Остановлено после текущего файла")
+        return True
+
     def _ensure_running(self):
         if not self.is_running:
             raise ProcessingCancelled("Остановлено пользователем")
@@ -792,6 +805,9 @@ class WorkerThread(QThread):
             except Exception as e:
                 self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
+            if self._stop_after_current_if_requested():
+                return
+
         self.progress_value.emit(100)
         if emit_final:
             if done == 0:
@@ -860,6 +876,8 @@ class WorkerThread(QThread):
             try:
                 if not os.path.isfile(file_path):
                     self.progress.emit(f"  Файл не найден: {file_path}")
+                    if self._stop_after_current_if_requested():
+                        return
                     continue
 
                 source_path = file_path
@@ -897,6 +915,9 @@ class WorkerThread(QThread):
                 return
             except Exception as e:
                 self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
+
+            if self._stop_after_current_if_requested():
+                return
 
         self.progress_value.emit(100)
         if emit_final:

@@ -57,6 +57,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
         StepId.GENERATION,
         StepId.PROCESSING_OPTIONS,
         StepId.REVIEW_RUN,
+        StepId.RESULTS,
     ),
     ProjectMode.PINTEREST: (
         StepId.PROJECT,
@@ -64,6 +65,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
         StepId.PROMPT_REVIEW,
         StepId.PIN_FORMAT_MODEL,
         StepId.REVIEW_RUN,
+        StepId.RESULTS,
     ),
     ProjectMode.PROCESSING: (
         StepId.FILES,

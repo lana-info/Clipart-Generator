@@ -1042,6 +1042,9 @@ class ProcessingFlowController(QObject):
         self.worker_factory = worker_factory or _legacy_worker_factory
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
+        from v3_run_queue import RunQueueSupport
+
+        self.run_queue = RunQueueSupport(self, ProjectMode.PROCESSING)
         self.pages: dict[StepId, QWidget] = {}
         self._install_pages()
         shell.step_changed.connect(self._step_changed)
@@ -1071,6 +1074,7 @@ class ProcessingFlowController(QObject):
             StepId.PIPELINE: pipeline_page,
             StepId.EVIDENCE: evidence_page,
             StepId.REVIEW_RUN: review_page,
+            StepId.RESULTS: self.run_queue.page,
         }
         for step, page in self.pages.items():
             self.shell.set_step_page(ProjectMode.PROCESSING, step, page)
@@ -1158,25 +1162,22 @@ class ProcessingFlowController(QObject):
             self.error.emit(message)
             return None
         self.worker = worker
-        if hasattr(worker, "progress"):
-            worker.progress.connect(self.progress.emit)
-        if hasattr(worker, "progress_value"):
-            worker.progress_value.connect(self.progress_value.emit)
-        if hasattr(worker, "finished"):
-            worker.finished.connect(self._finished)
-        if hasattr(worker, "error"):
-            worker.error.connect(self._error)
+        self.run_queue.start_new(request)
+        self.run_queue.connect_worker(worker)
         worker.start()
+        self.shell.show_results()
         self.review_page.set_run_status("Запуск передан pipeline 2.0")
         self.started.emit(request)
         return request
 
     def _finished(self, message: str) -> None:
+        self.run_queue.finished()
         safe = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe)
         self.finished.emit(safe)
 
     def _error(self, message: str) -> None:
+        self.run_queue.fatal_error(message)
         safe = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe, error=True)
         self.error.emit(safe)

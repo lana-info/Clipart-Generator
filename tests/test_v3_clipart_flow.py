@@ -92,7 +92,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.generation.variants = 2
         return state
 
-    def test_application_view_installs_all_six_clipart_pages(self):
+    def test_application_view_installs_full_clipart_route_with_results(self):
         factory = WorkerFactory()
         view = V3ApplicationView(
             runtime_settings_provider=lambda: {"kie_api_key": "test-key"},

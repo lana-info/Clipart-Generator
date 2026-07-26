@@ -308,6 +308,9 @@ class PinterestFlowController(QObject):
         self.worker_factory = worker_factory or _legacy_worker_factory
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
+        from v3_run_queue import RunQueueSupport
+
+        self.run_queue = RunQueueSupport(self, ProjectMode.PINTEREST)
         self.adapter_state = _pinterest_project_adapter(shell.state)
         self.pages: dict[StepId, Any] = {}
         self._install_pages()
@@ -342,7 +345,8 @@ class PinterestFlowController(QObject):
             StepId.REVIEW_RUN: PinterestReviewRunPage(
                 self.adapter_state,
                 tokens=self.shell.tokens,
-            ),
+            ),            StepId.RESULTS: self.run_queue.page,
+
         }
         for step, page in self.pages.items():
             self.shell.set_step_page(ProjectMode.PINTEREST, step, page)
@@ -424,15 +428,10 @@ class PinterestFlowController(QObject):
             return None
 
         self.worker = worker
-        if hasattr(worker, "progress"):
-            worker.progress.connect(self.progress.emit)
-        if hasattr(worker, "progress_value"):
-            worker.progress_value.connect(self.progress_value.emit)
-        if hasattr(worker, "finished"):
-            worker.finished.connect(self._finished)
-        if hasattr(worker, "error"):
-            worker.error.connect(self._error)
+        self.run_queue.start_new(request)
+        self.run_queue.connect_worker(worker)
         worker.start()
+        self.shell.show_results()
         self.review_page.set_run_status(
             "Пакет передан существующей генерации 2.0"
         )
@@ -444,11 +443,13 @@ class PinterestFlowController(QObject):
             self.worker.stop()
 
     def _finished(self, message: str) -> None:
+        self.run_queue.finished()
         safe_message = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe_message)
         self.finished.emit(safe_message)
 
     def _error(self, message: str) -> None:
+        self.run_queue.fatal_error(message)
         safe_message = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe_message, error=True)
         self.error.emit(safe_message)

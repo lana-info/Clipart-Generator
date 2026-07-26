@@ -508,13 +508,12 @@ class AppShell(QWidget):
 
     def show_results(self) -> StepId:
         if (
-            self.state.mode is not ProjectMode.PROCESSING
-            or self.state.current_step is not StepId.REVIEW_RUN
+            self.state.current_step is not StepId.REVIEW_RUN
             or self._run_request_key
-            != (ProjectMode.PROCESSING, StepId.REVIEW_RUN)
+            != (self.state.mode, StepId.REVIEW_RUN)
         ):
             raise RuntimeError(
-                "Results can only follow processing review and run"
+                "Results can only follow an explicit review and run"
             )
         self._run_request_key = None
         current = self.state.next_step(require_valid=False)

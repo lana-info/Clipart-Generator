@@ -36,6 +36,7 @@ class ProjectRoutesTests(unittest.TestCase):
                 StepId.GENERATION,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
+                StepId.RESULTS,
             ),
         )
         self.assertEqual(
@@ -46,6 +47,7 @@ class ProjectRoutesTests(unittest.TestCase):
                 StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.REVIEW_RUN,
+                StepId.RESULTS,
             ),
         )
         self.assertEqual(

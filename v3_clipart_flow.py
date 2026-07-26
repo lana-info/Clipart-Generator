@@ -1835,7 +1835,10 @@ class ClipartFlowController(QObject):
         self.worker_factory = worker_factory or _legacy_worker_factory
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
-        self.pages: dict[StepId, _ScrollableStepPage] = {}
+        from v3_run_queue import RunQueueSupport
+
+        self.run_queue = RunQueueSupport(self, ProjectMode.CLIPART)
+        self.pages: dict[StepId, Any] = {}
         self._install_pages()
         shell.step_changed.connect(self._step_changed)
         shell.run_requested.connect(self._run_requested)
@@ -1876,7 +1879,8 @@ class ClipartFlowController(QObject):
             StepId.REVIEW_RUN: ClipartReviewRunPage(
                 self.shell.state,
                 tokens=self.shell.tokens,
-            ),
+            ),            StepId.RESULTS: self.run_queue.page,
+
         }
         for step, page in self.pages.items():
             self.shell.set_step_page(ProjectMode.CLIPART, step, page)
@@ -1955,15 +1959,10 @@ class ClipartFlowController(QObject):
             return None
 
         self.worker = worker
-        if hasattr(worker, "progress"):
-            worker.progress.connect(self.progress.emit)
-        if hasattr(worker, "progress_value"):
-            worker.progress_value.connect(self.progress_value.emit)
-        if hasattr(worker, "finished"):
-            worker.finished.connect(self._finished)
-        if hasattr(worker, "error"):
-            worker.error.connect(self._error)
+        self.run_queue.start_new(request)
+        self.run_queue.connect_worker(worker)
         worker.start()
+        self.shell.show_results()
         self.review_page.set_run_status("Запуск передан существующему pipeline 2.0")
         self.started.emit(request)
         return request
@@ -1973,11 +1972,13 @@ class ClipartFlowController(QObject):
             self.worker.stop()
 
     def _finished(self, message: str) -> None:
+        self.run_queue.finished()
         safe_message = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe_message)
         self.finished.emit(safe_message)
 
     def _error(self, message: str) -> None:
+        self.run_queue.fatal_error(message)
         safe_message = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe_message, error=True)
         self.error.emit(safe_message)
