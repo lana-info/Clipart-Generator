@@ -503,6 +503,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
         if not self.state.processing.selected_files:
             return
         self.state.processing.selected_files.clear()
+        self.state.processing.verification_records.clear()
         self.file_infos.clear()
         self.rights_checkbox.setChecked(False)
         self.error_label.clear()
@@ -1047,11 +1048,19 @@ class ProcessingFlowController(QObject):
         shell.run_requested.connect(self._run_requested)
 
     def _install_pages(self) -> None:
+        from v3_evidence_center import EvidenceCenterPage
+
         changed = self.shell.mark_dirty
         files_page = ProcessingFilesPage(self.shell.state, changed, tokens=self.shell.tokens)
         recipe_page = ProcessingRecipePage(self.shell.state, changed, tokens=self.shell.tokens)
         pipeline_page = ProcessingPipelinePage(
             self.shell.state, changed, tokens=self.shell.tokens
+        )
+        evidence_page = EvidenceCenterPage(
+            self.shell.state,
+            changed,
+            tokens=self.shell.tokens,
+            inspection_authorized=files_page.rights_checkbox.isChecked,
         )
         review_page = ProcessingReviewRunPage(
             self.shell.state, files_page, pipeline_page, tokens=self.shell.tokens
@@ -1060,6 +1069,7 @@ class ProcessingFlowController(QObject):
             StepId.FILES: files_page,
             StepId.GOAL: recipe_page,
             StepId.PIPELINE: pipeline_page,
+            StepId.EVIDENCE: evidence_page,
             StepId.REVIEW_RUN: review_page,
         }
         for step, page in self.pages.items():

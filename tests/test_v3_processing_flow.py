@@ -98,7 +98,13 @@ class V3ProcessingFlowTests(unittest.TestCase):
         pages = view.shell.processing_flow_controller.pages
         self.assertEqual(
             tuple(pages),
-            (StepId.FILES, StepId.GOAL, StepId.PIPELINE, StepId.REVIEW_RUN),
+            (
+                StepId.FILES,
+                StepId.GOAL,
+                StepId.PIPELINE,
+                StepId.EVIDENCE,
+                StepId.REVIEW_RUN,
+            ),
         )
         self.assertIsInstance(pages[StepId.FILES], ProcessingFilesPage)
         self.assertIsInstance(pages[StepId.GOAL], ProcessingRecipePage)

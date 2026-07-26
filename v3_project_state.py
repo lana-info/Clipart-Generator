@@ -754,11 +754,85 @@ class PinterestModeData:
         )
 
 
+_EVIDENCE_STATUSES = frozenset(
+    {"detected", "not_detected", "not_verified", "unsupported"}
+)
+_EVIDENCE_STAGES = frozenset({"not_checked", "input", "output"})
+
+
+@dataclass
+class VerificationRecordData:
+    file_path: str = ""
+    synthid_status: str = "not_verified"
+    synthid_stage: str = "not_checked"
+    openai_status: str = "not_verified"
+    openai_stage: str = "not_checked"
+
+    def __post_init__(self) -> None:
+        self.file_path = _text(self.file_path, limit=MAX_TEXT_LENGTH)
+        self.synthid_status = self._status(self.synthid_status)
+        self.openai_status = self._status(self.openai_status)
+        self.synthid_stage = self._stage(self.synthid_stage, self.synthid_status)
+        self.openai_stage = self._stage(self.openai_stage, self.openai_status)
+
+    @staticmethod
+    def _status(value: Any) -> str:
+        normalized = _text(value, limit=30).lower()
+        return normalized if normalized in _EVIDENCE_STATUSES else "not_verified"
+
+    @staticmethod
+    def _stage(value: Any, status: str) -> str:
+        normalized = _text(value, limit=30).lower()
+        if status not in {"detected", "not_detected"}:
+            return "not_checked"
+        return normalized if normalized in {"input", "output"} else "input"
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "file_path": self.file_path,
+            "synthid_status": self.synthid_status,
+            "synthid_stage": self.synthid_stage,
+            "openai_status": self.openai_status,
+            "openai_stage": self.openai_stage,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Any) -> VerificationRecordData:
+        data = value if isinstance(value, Mapping) else {}
+        return cls(
+            file_path=data.get("file_path", ""),
+            synthid_status=data.get("synthid_status", "not_verified"),
+            synthid_stage=data.get("synthid_stage", "not_checked"),
+            openai_status=data.get("openai_status", "not_verified"),
+            openai_stage=data.get("openai_stage", "not_checked"),
+        )
+
+
+def _verification_records(value: Any) -> list[VerificationRecordData]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    records: list[VerificationRecordData] = []
+    seen: set[str] = set()
+    for item in value:
+        record = (
+            item
+            if isinstance(item, VerificationRecordData)
+            else VerificationRecordData.from_dict(item)
+        )
+        if not record.file_path or record.file_path in seen:
+            continue
+        records.append(record)
+        seen.add(record.file_path)
+        if len(records) >= MAX_SELECTED_FILES:
+            break
+    return records
+
 @dataclass
 class ProcessingModeData:
     selected_files: list[str] = field(default_factory=list)
     recipe: str = "custom"
     operations: ImageOperationData = field(default_factory=ImageOperationData)
+    verification_records: list[VerificationRecordData] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.selected_files = _string_list(
@@ -766,12 +840,16 @@ class ProcessingModeData:
             limit=MAX_SELECTED_FILES,
         )
         self.recipe = _text(self.recipe, limit=100) or "custom"
+        self.verification_records = _verification_records(self.verification_records)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "selected_files": list(self.selected_files),
             "recipe": self.recipe,
             "operations": self.operations.to_dict(),
+            "verification_records": [
+                record.to_dict() for record in self.verification_records
+            ],
         }
 
     @classmethod
@@ -784,6 +862,9 @@ class ProcessingModeData:
             ),
             recipe=data.get("recipe", "custom"),
             operations=ImageOperationData.from_dict(data.get("operations", {})),
+            verification_records=_verification_records(
+                data.get("verification_records", [])
+            ),
         )
 
 def _reject_unknown_fields(
@@ -912,6 +993,53 @@ def _validate_prompt_generator_section(
         )
 
 
+def _validate_verification_records(processing: Mapping[str, Any]) -> None:
+    if "verification_records" not in processing:
+        return
+    records = processing.get("verification_records")
+    if not isinstance(records, list) or len(records) > MAX_SELECTED_FILES:
+        raise ProjectStateError(
+            "Project draft field processing.verification_records must be a bounded list"
+        )
+    allowed = (
+        "file_path",
+        "synthid_status",
+        "synthid_stage",
+        "openai_status",
+        "openai_stage",
+    )
+    selected_files = processing.get("selected_files", [])
+    seen_paths: set[str] = set()
+    for index, record in enumerate(records):
+        if not isinstance(record, Mapping):
+            raise ProjectStateError(
+                "Project draft verification record must be an object"
+            )
+        name = f"processing.verification_records[{index}]"
+        _reject_unknown_fields(record, allowed, name)
+        if set(record) != set(allowed):
+            raise ProjectStateError(f"Project draft field {name} is incomplete")
+        if not all(isinstance(record[field], str) for field in allowed):
+            raise ProjectStateError(f"Project draft field {name} has an invalid type")
+        file_path = record["file_path"]
+        if not file_path or len(file_path) > MAX_TEXT_LENGTH:
+            raise ProjectStateError(f"Project draft field {name}.file_path is invalid")
+        if file_path not in selected_files or file_path in seen_paths:
+            raise ProjectStateError(
+                f"Project draft field {name}.file_path is not a unique selected file"
+            )
+        seen_paths.add(file_path)
+        for prefix in ("synthid", "openai"):
+            status = record[f"{prefix}_status"]
+            stage = record[f"{prefix}_stage"]
+            if status not in _EVIDENCE_STATUSES or stage not in _EVIDENCE_STAGES:
+                raise ProjectStateError(f"Project draft field {name} has an invalid status")
+            checked = status in {"detected", "not_detected"}
+            if checked != (stage in {"input", "output"}):
+                raise ProjectStateError(
+                    f"Project draft field {name} has an inconsistent evidence stage"
+                )
+
 def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     _reject_unknown_fields(
         value,
@@ -991,7 +1119,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     processing = _draft_object(value, "processing")
     _reject_unknown_fields(
         processing,
-        ("selected_files", "recipe", "operations"),
+        ("selected_files", "recipe", "operations", "verification_records"),
         "processing",
     )
     selected_files = processing.get("selected_files")
@@ -1003,6 +1131,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         )
     if not isinstance(processing.get("recipe"), str):
         raise ProjectStateError("Project draft field processing.recipe must be a string")
+    _validate_verification_records(processing)
     _validate_scalar_fields(
         _draft_object(processing, "operations"),
         ImageOperationData,

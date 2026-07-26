@@ -252,7 +252,7 @@ Verification:
 
 ## Task 9: Реализовать центр проверки и очистки
 
-Status: Todo
+Status: Done
 
 Goal:
 Показывать file hints, C2PA и pixel evidence как независимые категории.
@@ -265,14 +265,19 @@ Steps:
 - Обеспечить безопасный экспорт отчёта.
 
 Acceptance:
-- [ ] Metadata cleanup не меняет `pixel_evidence`.
-- [ ] `not_detected` не отображается как «создано человеком».
-- [ ] Внешняя проверка не отправляет файл автоматически.
-- [ ] Лог не содержит путей, prompt, metadata values или ключей.
+- [x] Metadata cleanup не меняет `pixel_evidence`.
+- [x] `not_detected` не отображается как «создано человеком».
+- [x] Внешняя проверка не отправляет файл автоматически.
+- [x] Лог не содержит путей, prompt, metadata values или ключей.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_evidence_center -v`
-- [ ] Существующие watermark status и security tests.
+- [x] `python -m unittest tests.test_v3_evidence_center -v`
+- [x] Существующие watermark status и security tests.
+
+Notes:
+- [x] Focused evidence-center tests: 14/14.
+- [x] Полная регрессия: 315/315.
+- [x] Независимый review pass 2: PASS.
 
 ## Task 10: Реализовать общий экран выполнения и результатов
 
