@@ -226,7 +226,7 @@ Notes:
 
 ## Task 8: Собрать вертикальный срез режима «Обработка»
 
-Status: Todo
+Status: Done
 
 Goal:
 Провести локальные файлы через выбранный рецепт и существующий pipeline.
@@ -238,13 +238,17 @@ Steps:
 - Показать и валидировать порядок операций.
 
 Acceptance:
-- [ ] Рецепт можно изменить до запуска.
-- [ ] Недопустимые сочетания объясняются до запуска.
-- [ ] Исходник не перезаписывается.
+- [x] Рецепт можно изменить до запуска.
+- [x] Недопустимые сочетания объясняются до запуска.
+- [x] Исходник не перезаписывается.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_processing_flow -v`
-- [ ] Существующие local processing acceptance tests.
+- [x] `python -m unittest tests.test_v3_processing_flow -v` — 17/17.
+- [x] `python -m unittest tests.test_local_processing_acceptance -v` — 8/8.
+- [x] Полная регрессия `python -m unittest discover -s tests -p 'test_*.py'` — 301/301.
+- [x] Offscreen UI smoke 980×700 для C1/C3/C5.
+- [x] Review loop — 3 прохода; все найденные блокеры исправлены и покрыты regression-тестами.
+- [x] Security: тип/размер/декодирование файлов, batch-limit, collision preflight, explicit consent, fail-closed providers, secret/path-safe errors.
 
 ## Task 9: Реализовать центр проверки и очистки
 

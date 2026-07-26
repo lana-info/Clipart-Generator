@@ -73,6 +73,14 @@ VALIDATION_MESSAGES: dict[str, str] = {
     "generation_ratio_required": "Выберите пропорции изображения.",
     "generation_resolution_required": "Выберите разрешение изображения.",
     "selected_files_required": "Добавьте хотя бы один исходный файл.",
+    "invalid_selected_files": "Удалите недоступные или недопустимые файлы.",
+    "file_rights_confirmation_required": "Подтвердите право обрабатывать выбранные файлы.",
+    "processing_file_limit_exceeded": "Уменьшите пакет до 200 файлов.",
+    "duplicate_output_names": "Файлы с одинаковыми именами создадут один путь результата. Переименуйте их.",
+    "processing_operation_required": "Включите хотя бы одну операцию обработки.",
+    "confirmed_area_unavailable": "Ручная область метки пока недоступна в этом интерфейсе.",
+    "full_image_change_consent_required": "Подтвердите операцию, меняющую всё изображение.",
+    "external_transfer_consent_required": "Подтвердите передачу файлов выбранному внешнему сервису.",
 }
 
 

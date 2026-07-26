@@ -108,7 +108,7 @@ class ClipartRunRequest:
     work_dir: str
     settings: dict[str, Any] = field(repr=False)
     generated_prompts: list[dict[str, Any]] = field(default_factory=list)
-    selected_files: list[str] = field(default_factory=list)
+    selected_files: list[str] = field(default_factory=list, repr=False)
 
     def worker_kwargs(self) -> dict[str, Any]:
         return {
