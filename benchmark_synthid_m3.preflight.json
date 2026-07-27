@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "status": "m3_preflight_blocked_no_cuda_local_or_cloud_contract",
+  "purpose": "Task 13 - Qwen/Canny pilot",
+  "method": {
+    "id": "M3",
+    "name": "Synthid-Bypass V2",
+    "source": "https://github.com/cebeuq/Synthid-Bypass",
+    "class": "qwen_canny_structure_guided_regeneration",
+    "source_revision": null,
+    "license": {
+      "status": "unknown_not_pinned",
+      "note": "license/source pin not yet recorded before safe execution"
+    }
+  },
+  "gates": {
+    "requires_gpu_recommended": true,
+    "network_upload_requires_explicit_consent": true,
+    "paid_run_requires_explicit_consent": true,
+    "source_revision_required_before_run": true,
+    "official_input_and_output_evidence_required": true,
+    "no_gpu_is_no_go_for_local_run": true,
+    "gpu_path_prepared": false
+  },
+  "hardware": {
+    "gpu_count": 1,
+    "cuda_available": false,
+    "cpu_cores": 4,
+    "memory_total_gb": 17.95
+  },
+  "decision": {
+    "preflight_ok": false,
+    "blocking_reason": "No CUDA is available in this workstation profile; local GPU worker path for Qwen/Canny is unavailable, cloud/gateway contract not yet approved.",
+    "next_step": "Run Task 13 only after explicit provider/cost/privacy approval and pinned source/model refresh."
+  },
+  "created_at": "2026-07-27"
+}

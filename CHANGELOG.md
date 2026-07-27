@@ -1,6 +1,10 @@
-# CHANGELOG
+﻿# CHANGELOG
 
 ## Unreleased
+
+- Enabled startup auto-application of newer manifested releases on next run, with update installer download retried in bounded chunks before checksum verification for legacy versions to reach `2.0` without manual approval.
+
+
 
 ### Added
 
@@ -343,3 +347,4 @@
 - Verified Local BEN2 UI settings save/load and hard-alpha post-processing with targeted smoke tests.
 - Verified Local Real-ESRGAN model selection maps `Clipart 2x` to the x2 model and `Clipart 4x` to the x4 model.
 - Verified Local Real-ESRGAN preserves alpha on the affected trimmed bird PNG during a real `2x` run.
+

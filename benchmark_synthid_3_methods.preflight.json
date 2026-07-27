@@ -65,7 +65,8 @@
             "source": "https://github.com/cebeuq/Synthid-Bypass",
             "class": "qwen_canny_structure_guided_regeneration",
             "source_revision": null,
-            "execution_status": "not_run"
+            "execution_status": "preflight_blocked_no_cuda_no_cloud_ready",
+            "preflight_manifest": "benchmark_synthid_m3.preflight.json"
         }
     ],
     "gates": {

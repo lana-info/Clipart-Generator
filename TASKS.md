@@ -1325,3 +1325,26 @@ Verification:
   provider, Local rembg, and BEN2 controls.
 - [x] `$env:QT_QPA_PLATFORM='offscreen'; .\\.venv\\Scripts\\python.exe -m unittest discover -s tests -v` (`198/198` passed)
 - [x] `git diff --check`
+
+## Task 55 - Silent Auto-Update to 2.0
+
+Status: In Progress
+
+Goal:
+Enable legacy 1.x installs to auto-upgrade to `2.0` during startup without requiring
+manual click, using the existing manifest and installer flow.
+
+Scope:
+- Keep update manifest parsing and HTTPS validation unchanged.
+- Keep checksum validation and download limits in place.
+- Add auto-apply behavior when `check_for_updates` is triggered at app startup.
+- Download large installers in chunks with bounded retries to avoid partial files.
+
+Acceptance:
+- [x] Update manifest check uses `latest_version` from public `version.json` and respects `APP_VERSION` comparison.
+- [x] Auto-apply path skips the interactive confirmation on startup update checks.
+- [x] Installer download is bounded, streamed, and cleaned up on checksum/failure errors.
+- [ ] Manual and offline validation on `1.3` -> `2.0` flow is run on real clients.
+
+Notes:
+- No release/build workflow is started by this task.

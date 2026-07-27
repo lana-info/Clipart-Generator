@@ -361,7 +361,7 @@ Notes:
 
 ## Task 13: Выполнить M3 pilot Qwen/Canny
 
-Status: Todo
+Status: In Progress
 
 Goal:
 Проверить structure-guided реконструкцию на тех же входах.
@@ -380,6 +380,11 @@ Acceptance:
 
 Verification:
 - [ ] Проверка benchmark manifest, contact sheet и official evidence.
+- [x] Hardware preflight выполнен; блок локального run из-за отсутствия CUDA зафиксирован в `benchmark_synthid_m3.preflight.json`.
+
+Notes:
+- Для M3 пока зафиксирован no-go: CUDA отсутствует (1 GPU-адаптер без CUDA), локальный запуск и cloud-агрегат не согласованы с провайдером/бюджетом.
+  Файл preflight: `benchmark_synthid_m3.preflight.json`.
 
 ## Task 14: Принять SynthID architecture decision
 
