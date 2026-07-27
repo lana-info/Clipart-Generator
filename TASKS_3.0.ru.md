@@ -326,7 +326,7 @@ Acceptance:
 
 Verification:
 - [x] Повтор одного профиля даёт сопоставимый отчёт.
-- [ ] Manifest проверен; визуальная проверка contact sheet ожидает доступа к viewer (локально: `.scratch/reverse-synthid-m1/run-20260726/contact-sheets/m1-contact-sheet.png`).
+- [ ] Manifest формально проверен: contact sheet декодируется и его sha256 совпадает с зафиксированным в `benchmark_synthid_m1.pilot.json`; визуальная проверка ожидает доступа к viewer (локально: `.scratch/reverse-synthid-m1/run-20260726/contact-sheets/m1-contact-sheet.png`).
 
 Notes:
 - Никаких заявлений об удалении до официальной проверки выхода.
@@ -429,3 +429,4 @@ Verification:
 
 Notes:
 - Следующий рекомендованный workflow реализации: `$code-vibecoding-workflow`.
+
