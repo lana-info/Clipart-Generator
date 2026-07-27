@@ -56,7 +56,8 @@
             "source": "https://github.com/mertizci/noai-watermark",
             "class": "low_strength_diffusion_img2img",
             "source_revision": null,
-            "execution_status": "not_run"
+            "execution_status": "preflight_blocked_no_cuda_no_local_run",
+            "preflight_manifest": "benchmark_synthid_m2.preflight.json"
         },
         {
             "id": "M3",
@@ -84,4 +85,3 @@
         "external_transfer_performed": false
     }
 }
-
