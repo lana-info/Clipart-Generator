@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "pilot_id": "M1",
+  "status": "secure_repeat_complete_official_evidence_pending",
+  "method": "reverse-SynthID V4 Round-06",
+  "research_only": true,
+  "production_integration_allowed": false,
+  "upstream_commit": "b11083676fd3ee3ff97ce9d03c0e409e46905902",
+  "model_revision": "31f26fdeee1355a5c34592e401dd41e45d25a493",
+  "safe_codebook": {
+    "sha256": "56062cd85398d5e9d63f28c4ca8ecdb879954a15290e72b62100a71100ac300c",
+    "pickle_allowed": false,
+    "tracked": false
+  },
+  "execution_trust_boundary": {
+    "pinned_upstream_hashes": true,
+    "pickle_allowed": false,
+    "python_socket_connections_blocked": true,
+    "os_filesystem_sandbox": false
+  },
+  "input": {
+    "id": "O1",
+    "sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
+    "ownership": "user_owned_documented"
+  },
+  "run": {
+    "profile": "final",
+    "purpose": "secure_repeat",
+    "output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1",
+    "output_bytes": 1430588,
+    "wall_seconds": 573.477862,
+    "peak_rss_bytes": 2109325312,
+    "psnr_rgb_db": 23.822557,
+    "global_ssim_luma": 0.965238,
+    "runtime": "local_cpu",
+    "cost_usd": 0.0
+  },
+  "comparison": {
+    "recorded_output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1",
+    "secure_output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1",
+    "output_sha256_equal": true,
+    "psnr_absolute_delta": 0.0,
+    "ssim_absolute_delta": 0.0,
+    "comparable": true
+  },
+  "source_hash_unchanged": true,
+  "processing": "succeeded",
+  "pixel_evidence": "not_verified",
+  "official_handoff": {
+    "required": true,
+    "performed": false,
+    "network_upload_performed": false
+  },
+  "decision": "inconclusive_official_evidence_pending"
+}

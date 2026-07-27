@@ -1,0 +1,123 @@
+{
+    "schema_version": 1,
+    "status": "prepared_explicit_consent_pending",
+    "provider": "Google Gemini Apps",
+    "official_verification_url": "https://gemini.google.com",
+    "official_instructions": "https://support.google.com/gemini/answer/16722517",
+    "official_privacy_hub": "https://support.google.com/gemini/answer/13594961",
+    "external_transfer_performed": false,
+    "explicit_user_consent": false,
+    "scope": {
+        "files": 9,
+        "inputs": 3,
+        "outputs": 6,
+        "secure_repeat_included": false,
+        "one_file_per_check": true,
+        "collages_forbidden": true
+    },
+    "standard_prompt": "Was this image created or edited using Google AI? Check specifically for a SynthID watermark.",
+    "privacy_notice": {
+        "temporary_chat_or_keep_activity_off_recommended": true,
+        "retention_with_keep_activity_off": "72_hours",
+        "training_with_keep_activity_off_and_no_feedback": false,
+        "keep_activity_on_may_be_used_to_improve_models": true,
+        "reviewed_data_may_be_retained": "up_to_3_years",
+        "user_must_confirm_settings_before_upload": true
+    },
+    "capture_policy": {
+        "store_normalized_status_only": true,
+        "allowed_statuses": [
+            "detected",
+            "not_detected",
+            "unsupported"
+        ],
+        "store_raw_chat": false,
+        "store_provider_response_body": false
+    },
+    "items": [
+        {
+            "id": "O1",
+            "kind": "input",
+            "relative_path": "ai-metla-test-20260719/single-gemini-owned/before.png",
+            "sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
+            "bytes": 1435948,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O2",
+            "kind": "input",
+            "relative_path": "ai-metla-test-20260719/single-gemini-owned/after.png",
+            "sha256": "226fb2daf426e0f701fd7e21f666aae8a38a849627ac1237c717a3fdbdb620bc",
+            "bytes": 2439638,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O3",
+            "kind": "input",
+            "relative_path": ".scratch/ai-metla-test-20260719/01-gemini-owned-normal-cleaned.png",
+            "sha256": "e89ce0c0d931b5a9362d4401ef7cca6615bf344e2201489ac092dfb8fc331243",
+            "bytes": 1532245,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O1-final",
+            "kind": "output",
+            "input_id": "O1",
+            "profile": "final",
+            "relative_path": ".scratch/reverse-synthid-m1/run-20260726/outputs/O1__final.png",
+            "sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1",
+            "bytes": 1430588,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O1-nuke",
+            "kind": "output",
+            "input_id": "O1",
+            "profile": "nuke",
+            "relative_path": ".scratch/reverse-synthid-m1/run-20260726/outputs/O1__nuke.png",
+            "sha256": "685253d5018dd02c43ae281129bc8c93945428cb7aec0896f46450a873af4a49",
+            "bytes": 1279471,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O2-final",
+            "kind": "output",
+            "input_id": "O2",
+            "profile": "final",
+            "relative_path": ".scratch/reverse-synthid-m1/run-20260726/outputs/O2__final.png",
+            "sha256": "c9c84288e1b867ab44228b0f2a837ff1120b165fb61875a1c33a4d0b0a4265ec",
+            "bytes": 1624273,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O2-nuke",
+            "kind": "output",
+            "input_id": "O2",
+            "profile": "nuke",
+            "relative_path": ".scratch/reverse-synthid-m1/run-20260726/outputs/O2__nuke.png",
+            "sha256": "f272416d6b9c14602c01141a227286b3645ab944025b51a5a60e0203e6598495",
+            "bytes": 1396477,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O3-final",
+            "kind": "output",
+            "input_id": "O3",
+            "profile": "final",
+            "relative_path": ".scratch/reverse-synthid-m1/run-20260726/outputs/O3__final.png",
+            "sha256": "41830693b477523d881c7d4286571eef5a3d845e0d1cada067b01dfedb393cc4",
+            "bytes": 1271193,
+            "pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O3-nuke",
+            "kind": "output",
+            "input_id": "O3",
+            "profile": "nuke",
+            "relative_path": ".scratch/reverse-synthid-m1/run-20260726/outputs/O3__nuke.png",
+            "sha256": "73fcd258f5f7e87ef1ae253afef3ce5b8c3ff81c099a19d4f6690cadbb885202",
+            "bytes": 1119514,
+            "pixel_evidence": "not_verified"
+        }
+    ]
+}

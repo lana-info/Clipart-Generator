@@ -1,4 +1,4 @@
-# Задачи Clipart Generator 3.0
+﻿# Задачи Clipart Generator 3.0
 
 Основание: `PRD_3.0.ru.md`
 Экраны: `UI_WIZARD_3.0.ru.md`
@@ -326,11 +326,11 @@ Acceptance:
 
 Verification:
 - [x] Повтор одного профиля даёт сопоставимый отчёт.
-- [ ] Manifest проверен; визуальная проверка contact sheet ожидает доступного viewer.
+- [ ] Manifest проверен; визуальная проверка contact sheet ожидает доступа к viewer (локально: `.scratch/reverse-synthid-m1/run-20260726/contact-sheets/m1-contact-sheet.png`).
 
 Notes:
 - Никаких заявлений об удалении до официальной проверки выхода.
-- Локальный recorded run сохранён как inconclusive; после security review создан pickle-free codebook, secure repeat ещё не выполнен.
+- Локальный recorded run сохранён как inconclusive; после security review создан pickle-free codebook, secure repeat выполнен с точным воспроизводимым совпадением O1/final (не хватает официального pixel evidence).
 - Проверено: 20/20 focused, 350/350 full regression; третий review-проход — без замечаний.
 
 ## Task 12: Выполнить M2 pilot CtrlRegen

@@ -224,6 +224,79 @@ class ReverseSynthIdPilotTests(unittest.TestCase):
             self.assertIn("global_ssim_luma", metrics)
             self.assertIn("output_sha256", metrics)
 
+    def test_secure_repeat_report_compares_pinned_output_and_preserves_source(self):
+        source_record = {
+            "id": "O1",
+            "source_path": Path("private/source.png"),
+            "sha256": "a" * 64,
+            "bytes": 1,
+            "size": [1, 1],
+            "mode": "RGB",
+            "ownership": "user_owned_documented",
+            "independent_scene": True,
+        }
+        copied_record = {**source_record, "copied_path": Path("private/copy.png")}
+        run = {
+            "input_id": "O1",
+            "input_sha256": "a" * 64,
+            "output_sha256": pilot.RECORDED_O1_FINAL["output_sha256"],
+            "metrics": {
+                "psnr_rgb_db": pilot.RECORDED_O1_FINAL["psnr_rgb_db"],
+                "global_ssim_luma": pilot.RECORDED_O1_FINAL["global_ssim_luma"],
+            },
+            "processing": {"status": "succeeded"},
+            "pixel_evidence": {"output": "not_verified"},
+        }
+        with (
+            mock.patch.object(pilot, "audit_upstream", return_value={"commit": "pinned"}),
+            mock.patch.object(pilot, "audit_model", return_value={"revision": "pinned"}),
+            mock.patch.object(pilot, "audit_safe_codebook", return_value={"sha256": "safe"}),
+            mock.patch.object(pilot, "audit_runtime", return_value={"environment": "venv"}),
+            mock.patch.object(pilot, "validate_inputs", return_value=[source_record]),
+            mock.patch.object(pilot, "prepare_run_directory", return_value=[copied_record]),
+            mock.patch.object(pilot, "execute_secure_repeat", return_value=run),
+            mock.patch.object(pilot, "sha256_file", return_value="a" * 64),
+        ):
+            report = pilot.build_secure_repeat_report(
+                upstream=Path("."),
+                model_dir=Path("."),
+                codebook_path=Path("."),
+                input_root=Path("."),
+                output_dir=Path("output"),
+                research_license_acknowledged=True,
+                ownership_confirmed=True,
+            )
+
+        self.assertTrue(report["comparison"]["comparable"])
+        self.assertTrue(report["comparison"]["output_sha256_equal"])
+        self.assertTrue(report["source_hash_unchanged"])
+        self.assertEqual(report["processing"], "succeeded")
+        self.assertEqual(report["pixel_evidence"], "not_verified")
+        self.assertFalse(report["execution_trust_boundary"]["pickle_allowed"])
+        self.assertFalse(report["execution_trust_boundary"]["os_filesystem_sandbox"])
+        self.assertNotIn("source_path", json.dumps(report))
+        self.assertNotIn("copied_path", json.dumps(report))
+
+    def test_secure_repeat_requires_both_execution_acknowledgements(self):
+        arguments = {
+            "upstream": Path("."),
+            "model_dir": Path("."),
+            "codebook_path": Path("."),
+            "input_root": Path("."),
+            "output_dir": Path("output"),
+        }
+        with self.assertRaisesRegex(pilot.PilotError, "license acknowledgement"):
+            pilot.build_secure_repeat_report(
+                **arguments,
+                research_license_acknowledged=False,
+                ownership_confirmed=True,
+            )
+        with self.assertRaisesRegex(pilot.PilotError, "ownership"):
+            pilot.build_secure_repeat_report(
+                **arguments,
+                research_license_acknowledged=True,
+                ownership_confirmed=False,
+            )
     def test_report_keeps_processing_and_pixel_evidence_separate(self):
         source_records = [
             {
@@ -307,11 +380,35 @@ class ReverseSynthIdPilotTests(unittest.TestCase):
         self.assertNotIn("D:\\", report_text)
         self.assertNotIn("C:\\Users", report_text)
 
+    def test_gemini_handoff_is_complete_but_closed_without_consent(self):
+        root = Path(__file__).resolve().parents[1]
+        handoff_path = root / "benchmark_synthid_m1.gemini_handoff.json"
+        handoff_text = handoff_path.read_text(encoding="utf-8")
+        handoff = json.loads(handoff_text)
+
+        self.assertEqual(handoff["status"], "prepared_explicit_consent_pending")
+        self.assertFalse(handoff["external_transfer_performed"])
+        self.assertFalse(handoff["explicit_user_consent"])
+        self.assertEqual(handoff["scope"]["files"], 9)
+        self.assertEqual(len(handoff["items"]), 9)
+        self.assertTrue(handoff["scope"]["one_file_per_check"])
+        self.assertTrue(handoff["scope"]["collages_forbidden"])
+        self.assertEqual(
+            handoff["capture_policy"]["allowed_statuses"],
+            ["detected", "not_detected", "unsupported"],
+        )
+        self.assertTrue(all(item["pixel_evidence"] == "not_verified" for item in handoff["items"]))
+        self.assertEqual(len({item["id"] for item in handoff["items"]}), 9)
+        self.assertTrue(all(len(item["sha256"]) == 64 for item in handoff["items"]))
+        self.assertNotIn("D:\\", handoff_text)
+        self.assertNotIn("C:\\Users", handoff_text)
     def test_task11_documents_have_no_hidden_control_characters(self):
         root = Path(__file__).resolve().parents[1]
         for name in (
             "M1_REVERSE_SYNTHID_PILOT_2026-07-26.md",
+            "M1_GEMINI_HANDOFF.ru.md",
             "SYNTHID_3_METHOD_BENCHMARK.ru.md",
+            "benchmark_synthid_m1.gemini_handoff.json",
         ):
             text = (root / name).read_text(encoding="utf-8-sig")
             hidden = [char for char in text if ord(char) < 32 and char not in "\n\r\t"]

@@ -28,8 +28,8 @@
 - Результат пока `inconclusive`: официальная проверка входов и выходов не
   выполнена, коммерческая интеграция запрещена исследовательской лицензией.
 - Security review выявил `allow_pickle=True` в первом запуске. Подготовлен
-  pickle-free codebook и exact-path loader; secure repeat ещё не выполнен.
-- Подробности: `M1_REVERSE_SYNTHID_PILOT_2026-07-26.md` и
+- Security review выявил `allow_pickle=True` в первом запуске. Подготовлен
+  pickle-free codebook и exact-path loader; secure repeat выполнен и O1/final воспроизводимо до побитной эквивалентности.
   `benchmark_synthid_m1.pilot.json`.
 
 ### M2. noai-watermark / CtrlRegen
@@ -203,3 +203,5 @@ benchmark-output/
   воспроизводим, но CPU-время составляет 11–30 минут на изображение.
 - Официальная Gemini-проверка M1, а также M2 и M3 не выполнялись. Платных
   запросов и внешних загрузок не было.
+- Для M1 подготовлен локальный handoff из 9 отдельных файлов; он закрыт до
+  отдельного consent и учитывает актуальные privacy/retention условия Google.

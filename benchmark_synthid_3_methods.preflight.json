@@ -1,6 +1,6 @@
 {
     "schema_version": 1,
-    "status": "m1_local_executed_secure_repeat_and_official_evidence_pending",
+    "status": "m1_local_executed_secure_repeat_complete_official_evidence_pending",
     "purpose": "Clipart Generator 3.0 SynthID pilot",
     "inputs": [
         {
@@ -46,7 +46,7 @@
             "source": "https://github.com/aloshdenny/reverse-SynthID",
             "class": "local_spectral_geometric",
             "source_revision": "b11083676fd3ee3ff97ce9d03c0e409e46905902",
-            "execution_status": "recorded_run_preserved_secure_repeat_pending",
+            "execution_status": "recorded_run_preserved_secure_repeat_exact",
             "pilot_report": "benchmark_synthid_m1.pilot.json",
             "pickle_free_codebook_sha256": "56062cd85398d5e9d63f28c4ca8ecdb879954a15290e72b62100a71100ac300c"
         },
@@ -75,5 +75,13 @@
         "overwrite_inputs": false,
         "claim_removed": false
     },
-    "protocol": "SYNTHID_3_METHOD_BENCHMARK.ru.md"
+    "protocol": "SYNTHID_3_METHOD_BENCHMARK.ru.md",
+    "official_handoff": {
+        "manifest": "benchmark_synthid_m1.gemini_handoff.json",
+        "instructions": "M1_GEMINI_HANDOFF.ru.md",
+        "status": "prepared_explicit_consent_pending",
+        "files": 9,
+        "external_transfer_performed": false
+    }
 }
+

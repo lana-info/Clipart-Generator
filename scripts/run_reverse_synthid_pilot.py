@@ -113,6 +113,11 @@ ALLOWED_EVIDENCE = {"detected", "not_detected", "not_verified", "unsupported"}
 MAX_INPUT_BYTES = 32 * 1024 * 1024
 MAX_PIXELS = 40_000_000
 MAX_RUNS = 7
+RECORDED_O1_FINAL = {
+    "output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1",
+    "psnr_rgb_db": 23.822557,
+    "global_ssim_luma": 0.965238,
+}
 
 
 class PilotError(RuntimeError):
@@ -594,6 +599,107 @@ def execute_profiles(
         return _execute_profiles_loaded(bypass, codebook, output_dir, inputs)
 
 
+def _execute_one_profile(
+    bypass: Any,
+    codebook: Any,
+    output_dir: Path,
+    record: dict[str, Any],
+    profile: str,
+    purpose: str,
+    output_suffix: str,
+) -> dict[str, Any]:
+    final_path = output_dir / "outputs" / f"{record['id']}__{output_suffix}.png"
+    pending_path = final_path.with_name(f".{final_path.stem}.pending.png")
+    started = time.perf_counter()
+    try:
+        with _PeakRssSampler() as memory:
+            result = bypass.bypass_v4_file(
+                str(record["copied_path"]),
+                str(pending_path),
+                codebook,
+                strength=profile,
+                model=None,
+                verify=False,
+            )
+        _validated_image(pending_path)
+        os.replace(pending_path, final_path)
+    except Exception as error:
+        pending_path.unlink(missing_ok=True)
+        raise PilotError("Pinned M1 profile execution failed") from error
+    metrics = analyze_output(record["copied_path"], final_path)
+    return {
+        "input_id": record["id"],
+        "input_sha256": record["sha256"],
+        "output_sha256": metrics["output_sha256"],
+        "profile": profile,
+        "purpose": purpose,
+        "parameters": dict(bypass.FINAL_PRESETS[profile]),
+        "processing": {
+            "status": "succeeded",
+            "wall_seconds": round(time.perf_counter() - started, 6),
+            "peak_rss_bytes": memory.peak,
+            "network_policy": "python_socket_connections_blocked",
+            "cost_usd": 0.0,
+            "runtime": "local_cpu",
+        },
+        "pixel_evidence": {
+            "input": "not_verified",
+            "output": "not_verified",
+            "detector": "official_gemini_manual_handoff_pending",
+        },
+        "upstream_result": {
+            "psnr": round(float(result.psnr), 6),
+            "ssim": round(float(result.ssim), 6),
+            "details": {
+                key: value
+                for key, value in result.details.items()
+                if isinstance(value, (str, int, float, bool, type(None)))
+            },
+            "stages_applied": list(result.stages_applied),
+        },
+        "metrics": metrics,
+        "output_file": final_path.name,
+    }
+
+
+@_offline_only
+def execute_secure_repeat(
+    upstream: Path,
+    model_dir: Path,
+    codebook_path: Path,
+    output_dir: Path,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    os.environ.update(
+        {
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "DIFFUSERS_OFFLINE": "1",
+            "HF_HUB_DISABLE_TELEMETRY": "1",
+            "DO_NOT_TRACK": "1",
+        }
+    )
+    with _load_upstream(upstream, model_dir, codebook_path) as (bypass, codebook):
+        return _execute_secure_repeat_loaded(bypass, codebook, output_dir, record)
+
+
+def _execute_secure_repeat_loaded(
+    bypass: Any,
+    codebook: Any,
+    output_dir: Path,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    return _execute_one_profile(
+        bypass,
+        codebook,
+        output_dir,
+        record,
+        "final",
+        "secure_repeat",
+        "secure-repeat",
+    )
+
+
 def _execute_profiles_loaded(
     bypass: Any,
     codebook: Any,
@@ -601,10 +707,6 @@ def _execute_profiles_loaded(
     inputs: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     runs: list[dict[str, Any]] = []
-    profile_parameters = {
-        name: dict(bypass.FINAL_PRESETS[name]) for name in PROFILES
-    }
-
     planned: list[tuple[dict[str, Any], str, str]] = [
         (record, profile, "primary")
         for record in inputs
@@ -616,59 +718,16 @@ def _execute_profiles_loaded(
 
     for record, profile, purpose in planned:
         suffix = "repeat" if purpose == "repeatability" else profile
-        final_path = output_dir / "outputs" / f"{record['id']}__{suffix}.png"
-        pending_path = final_path.with_name(f".{final_path.stem}.pending.png")
-        started = time.perf_counter()
-        try:
-            with _PeakRssSampler() as memory:
-                result = bypass.bypass_v4_file(
-                    str(record["copied_path"]),
-                    str(pending_path),
-                    codebook,
-                    strength=profile,
-                    model=None,
-                    verify=False,
-                )
-            _validated_image(pending_path)
-            os.replace(pending_path, final_path)
-        except Exception as error:
-            pending_path.unlink(missing_ok=True)
-            raise PilotError("Pinned M1 profile execution failed") from error
-        metrics = analyze_output(record["copied_path"], final_path)
         runs.append(
-            {
-                "input_id": record["id"],
-                "input_sha256": record["sha256"],
-                "output_sha256": metrics["output_sha256"],
-                "profile": profile,
-                "purpose": purpose,
-                "parameters": profile_parameters[profile],
-                "processing": {
-                    "status": "succeeded",
-                    "wall_seconds": round(time.perf_counter() - started, 6),
-                    "peak_rss_bytes": memory.peak,
-                    "network_policy": "python_socket_connections_blocked",
-                    "cost_usd": 0.0,
-                    "runtime": "local_cpu",
-                },
-                "pixel_evidence": {
-                    "input": "not_verified",
-                    "output": "not_verified",
-                    "detector": "official_gemini_manual_handoff_pending",
-                },
-                "upstream_result": {
-                    "psnr": round(float(result.psnr), 6),
-                    "ssim": round(float(result.ssim), 6),
-                    "details": {
-                        key: value
-                        for key, value in result.details.items()
-                        if isinstance(value, (str, int, float, bool, type(None)))
-                    },
-                    "stages_applied": list(result.stages_applied),
-                },
-                "metrics": metrics,
-                "output_file": final_path.name,
-            }
+            _execute_one_profile(
+                bypass,
+                codebook,
+                output_dir,
+                record,
+                profile,
+                purpose,
+                suffix,
+            )
         )
 
     primary = next(
@@ -781,6 +840,89 @@ def _safe_input_manifest(records: Iterable[dict[str, Any]]) -> list[dict[str, An
     ]
 
 
+def build_secure_repeat_report(
+    *,
+    upstream: Path,
+    model_dir: Path,
+    codebook_path: Path,
+    input_root: Path,
+    output_dir: Path,
+    research_license_acknowledged: bool,
+    ownership_confirmed: bool,
+) -> dict[str, Any]:
+    if not research_license_acknowledged:
+        raise PilotError("Research license acknowledgement is required for execution")
+    if not ownership_confirmed:
+        raise PilotError("Input ownership confirmation is required for execution")
+    upstream_audit = audit_upstream(upstream)
+    model_audit = audit_model(model_dir)
+    codebook_audit = audit_safe_codebook(codebook_path)
+    runtime_audit = audit_runtime()
+    source_records = validate_inputs(input_root)
+    source_record = source_records[0]
+    source_hash_before = sha256_file(source_record["source_path"])
+    copied = prepare_run_directory(output_dir, [source_record])
+    run = execute_secure_repeat(
+        upstream.resolve(),
+        model_dir.resolve(),
+        codebook_path.resolve(),
+        output_dir.resolve(),
+        copied[0],
+    )
+    source_hash_after = sha256_file(source_record["source_path"])
+    if source_hash_before != source_hash_after:
+        raise PilotError("A source image changed during the secure repeat")
+    comparison = {
+        "recorded_output_sha256": RECORDED_O1_FINAL["output_sha256"],
+        "secure_output_sha256": run["output_sha256"],
+        "output_sha256_equal": (
+            run["output_sha256"] == RECORDED_O1_FINAL["output_sha256"]
+        ),
+        "psnr_absolute_delta": abs(
+            float(run["metrics"]["psnr_rgb_db"])
+            - float(RECORDED_O1_FINAL["psnr_rgb_db"])
+        ),
+        "ssim_absolute_delta": abs(
+            float(run["metrics"]["global_ssim_luma"])
+            - float(RECORDED_O1_FINAL["global_ssim_luma"])
+        ),
+    }
+    comparison["comparable"] = bool(
+        comparison["output_sha256_equal"]
+        and comparison["psnr_absolute_delta"] == 0.0
+        and comparison["ssim_absolute_delta"] == 0.0
+    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "pilot_id": PILOT_ID,
+        "status": "secure_repeat_complete_official_evidence_pending",
+        "method": "reverse-SynthID V4 Round-06",
+        "research_only": True,
+        "production_integration_allowed": False,
+        "upstream": upstream_audit,
+        "model": model_audit,
+        "codebook": codebook_audit,
+        "runtime": runtime_audit,
+        "execution_trust_boundary": {
+            "pinned_upstream_hashes": True,
+            "pickle_allowed": False,
+            "python_socket_connections_blocked": True,
+            "os_filesystem_sandbox": False,
+        },
+        "input": _safe_input_manifest([source_record])[0],
+        "run": run,
+        "comparison": comparison,
+        "source_hash_unchanged": source_hash_before == source_hash_after,
+        "processing": "succeeded",
+        "pixel_evidence": "not_verified",
+        "official_handoff": {
+            "required": True,
+            "performed": False,
+            "network_upload_performed": False,
+        },
+        "decision": "inconclusive_official_evidence_pending",
+    }
+
 def build_report(
     *,
     upstream: Path,
@@ -873,21 +1015,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--codebook", type=Path, required=True)
     parser.add_argument("--input-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--execute", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--execute", action="store_true")
+    mode.add_argument("--secure-repeat-only", action="store_true")
     parser.add_argument("--acknowledge-research-license", action="store_true")
     parser.add_argument("--ownership-confirmed", action="store_true")
     args = parser.parse_args(argv)
     try:
-        report = build_report(
-            upstream=args.upstream,
-            model_dir=args.model_dir,
-            codebook_path=args.codebook,
-            input_root=args.input_root,
-            output_dir=args.output_dir,
-            execute=args.execute,
-            research_license_acknowledged=args.acknowledge_research_license,
-            ownership_confirmed=args.ownership_confirmed,
-        )
+        if args.secure_repeat_only:
+            report = build_secure_repeat_report(
+                upstream=args.upstream,
+                model_dir=args.model_dir,
+                codebook_path=args.codebook,
+                input_root=args.input_root,
+                output_dir=args.output_dir,
+                research_license_acknowledged=args.acknowledge_research_license,
+                ownership_confirmed=args.ownership_confirmed,
+            )
+        else:
+            report = build_report(
+                upstream=args.upstream,
+                model_dir=args.model_dir,
+                codebook_path=args.codebook,
+                input_root=args.input_root,
+                output_dir=args.output_dir,
+                execute=args.execute,
+                research_license_acknowledged=args.acknowledge_research_license,
+                ownership_confirmed=args.ownership_confirmed,
+            )
         _atomic_json(args.output_dir.resolve() / "manifest.json", report)
     except (OSError, PilotError) as error:
         print(str(error), file=sys.stderr)

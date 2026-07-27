@@ -836,7 +836,7 @@
         "No output may be described as removed without official input/output evidence.",
         "O2 may be derived from O1 and is not an independent scene.",
         "This three-input pilot cannot establish universal effectiveness.",
-        "The recorded run predates the pickle-free codebook and exact-path import hardening; a secure repeat is required before any adoption decision."
+        "The recorded run predates the pickle-free codebook and exact-path import hardening; the separate secure repeat reproduced O1/final exactly, with exact hash/PSNR/SSIM match."
     ],
     "recorded_run_trust_boundary": {
         "original_codebook_sha256": "f105de83ae3aca85330793bf8780d4bcd364a1df009685c1abf24af26dbe5366",
@@ -856,10 +856,11 @@
         "exact_path_module_loading": true,
         "socket_connections_blocked": true,
         "used_for_recorded_runs": false,
-        "secure_repeat_status": "pending",
+        "secure_repeat_status": "complete_exact_match",
         "deterministic_repack_verified": true,
         "review_loop": "pass3_clear",
         "focused_tests": "20/20_pass",
         "full_regression": "350/350_pass"
     }
 }
+
