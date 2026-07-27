@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import json
 import ast
@@ -123,7 +123,7 @@ REFERENCE_MODEL_SHORTLIST = {
     "flux-2/flex-image-to-image",
 }
 
-# ÐŸÐ¾ÐºÐ°Ð·Ñ‹Ð²Ð°ÐµÐ¼ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ðµ Ð¼Ð¾Ð´ÐµÐ»Ð¸; Ð¾ÑÑ‚Ð°Ð»ÑŒÐ½Ñ‹Ðµ Ð¾ÑÑ‚Ð°ÑŽÑ‚ÑÑ Ð² ÐºÐ¾Ð´Ðµ, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð±Ñ‹ÑÑ‚Ñ€Ð¾ Ð²ÐµÑ€Ð½ÑƒÑ‚ÑŒ Ð¸Ñ… Ð¾Ð±Ñ€Ð°Ñ‚Ð½Ð¾.
+# Показываем только выбранные модели; остальные остаются в коде, чтобы быстро вернуть их обратно.
 VISIBLE_GENERATION_MODEL_IDS = {
     "gpt-image/1.5-text-to-image",
     "gpt-image-2",
@@ -247,19 +247,19 @@ def resolve_local_realesrgan_exe_path(local_realesrgan_dir):
 def validate_local_realesrgan_exe(local_realesrgan_dir):
     raw_path = str(local_realesrgan_dir or "").strip().strip('"')
     if not raw_path:
-        return "", "Ð£ÐºÐ°Ð¶Ð¸Ñ‚Ðµ Ð¿Ð°Ð¿ÐºÑƒ Local Real-ESRGAN Ð² Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ°Ñ… Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ¸"
+        return "", "Укажите папку Local Real-ESRGAN в настройках обработки"
 
     resolved_path = os.path.abspath(os.path.expanduser(os.path.expandvars(raw_path)))
     base_dir = os.path.dirname(resolved_path) if os.path.basename(resolved_path).lower() == REALESRGAN_EXE_NAME.lower() else resolved_path
     exe_path = resolve_local_realesrgan_exe_path(resolved_path)
 
     if not os.path.isdir(base_dir):
-        return "", f"ÐŸÐ°Ð¿ÐºÐ° Real-ESRGAN Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°: {base_dir}"
+        return "", f"Папка Real-ESRGAN не найдена: {base_dir}"
     if not os.path.isfile(exe_path):
-        return "", f"ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½ {REALESRGAN_EXE_NAME}: {exe_path}"
+        return "", f"Не найден {REALESRGAN_EXE_NAME}: {exe_path}"
     models_dir = os.path.join(base_dir, "models")
     if not os.path.isdir(models_dir):
-        return "", f"ÐŸÐ°Ð¿ÐºÐ° models Real-ESRGAN Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð°: {models_dir}"
+        return "", f"Папка models Real-ESRGAN не найдена: {models_dir}"
     return exe_path, ""
 
 
@@ -411,8 +411,8 @@ SUPPORTED_GENERATION_MODEL_IDS = {
 
 GENERATION_MODELS = [
     # Text -> Image
-    {"id": "gpt4o-image", "label": "GPTâ€‘4o Image", "type": "text_to_image"},
-    {"id": "gpt-image/1.5-text-to-image", "label": "GPT Image 1.5 (Textâ†’Image)", "type": "text_to_image"},
+    {"id": "gpt4o-image", "label": "GPT‑4o Image", "type": "text_to_image"},
+    {"id": "gpt-image/1.5-text-to-image", "label": "GPT Image 1.5 (Text→Image)", "type": "text_to_image"},
     {"id": "gpt-image-2", "label": "GPT Image 2", "type": "text_to_image"},
     {"id": "nano-banana-2", "label": "Nano Banana 2", "type": "text_to_image"},
     {"id": "z-image", "label": "Z-Image", "type": "text_to_image"},
@@ -421,29 +421,29 @@ GENERATION_MODELS = [
     {"id": "google/imagen4-ultra", "label": "Google Imagen 4 Ultra", "type": "text_to_image"},
     {"id": "google/nano-banana", "label": "Google Nano Banana", "type": "text_to_image"},
     {"id": "qwen-image-2", "label": "Qwen Image 2.0", "type": "text_to_image"},
-    {"id": "flux-2/flex-text-to-image", "label": "FLUX.2 Flex (Textâ†’Image)", "type": "text_to_image"},
-    {"id": "flux-2/pro-text-to-image", "label": "FLUX.2 Pro (Textâ†’Image)", "type": "text_to_image"},
-    {"id": "grok-imagine/text-to-image", "label": "Grok Imagine (Textâ†’Image)", "type": "text_to_image"},
-    {"id": "qwen/text-to-image", "label": "Qwen (Textâ†’Image)", "type": "text_to_image"},
+    {"id": "flux-2/flex-text-to-image", "label": "FLUX.2 Flex (Text→Image)", "type": "text_to_image"},
+    {"id": "flux-2/pro-text-to-image", "label": "FLUX.2 Pro (Text→Image)", "type": "text_to_image"},
+    {"id": "grok-imagine/text-to-image", "label": "Grok Imagine (Text→Image)", "type": "text_to_image"},
+    {"id": "qwen/text-to-image", "label": "Qwen (Text→Image)", "type": "text_to_image"},
 
     # Image -> Image
     {"id": "nano-banana-pro", "label": "Google Nano Banana Pro", "type": "image_to_image"},
     {"id": "gpt-image-2", "label": "GPT Image 2", "type": "image_to_image"},
     {"id": "nano-banana-2", "label": "Nano Banana 2", "type": "image_to_image"},
-    {"id": "flux-2/pro-image-to-image", "label": "FLUX.2 Pro (Imageâ†’Image)", "type": "image_to_image"},
-    {"id": "flux-2/flex-image-to-image", "label": "FLUX.2 Flex (Imageâ†’Image)", "type": "image_to_image"},
+    {"id": "flux-2/pro-image-to-image", "label": "FLUX.2 Pro (Image→Image)", "type": "image_to_image"},
+    {"id": "flux-2/flex-image-to-image", "label": "FLUX.2 Flex (Image→Image)", "type": "image_to_image"},
     {"id": "qwen-image-2", "label": "Qwen Image 2.0", "type": "edit"},
-    {"id": "grok-imagine/image-to-image", "label": "Grok Imagine (Imageâ†’Image)", "type": "image_to_image"},
-    {"id": "gpt-image/1.5-image-to-image", "label": "GPT Image 1.5 (Imageâ†’Image)", "type": "image_to_image"},
-    {"id": "qwen/image-to-image", "label": "Qwen (Imageâ†’Image)", "type": "image_to_image"},
+    {"id": "grok-imagine/image-to-image", "label": "Grok Imagine (Image→Image)", "type": "image_to_image"},
+    {"id": "gpt-image/1.5-image-to-image", "label": "GPT Image 1.5 (Image→Image)", "type": "image_to_image"},
+    {"id": "qwen/image-to-image", "label": "Qwen (Image→Image)", "type": "image_to_image"},
 
     # Edit
     {"id": "google/nano-banana-edit", "label": "Google Nano Banana Edit", "type": "edit"},
     {"id": "qwen/image-edit", "label": "Qwen Image Edit", "type": "edit"},
 ]
 
-# Ð”Ð»Ñ Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹, ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ðµ Ð²ÑÑ‚Ñ€ÐµÑ‡Ð°ÑŽÑ‚ÑÑ Ð½ÐµÑÐºÐ¾Ð»ÑŒÐºÐ¾ Ñ€Ð°Ð· (text/image/edit),
-# Ð² Ð±Ð°Ð·Ð¾Ð²Ð¾Ð¹ ÐºÐ°Ñ€Ñ‚Ðµ Ñ„Ð¸ÐºÑÐ¸Ñ€ÑƒÐµÐ¼ Ð¿ÐµÑ€Ð²Ð¾Ðµ Ð¾Ð±ÑŠÑÐ²Ð»ÐµÐ½Ð¸Ðµ (Ð¾Ð±Ñ‹Ñ‡Ð½Ð¾ text_to_image).
+# Для моделей, которые встречаются несколько раз (text/image/edit),
+# в базовой карте фиксируем первое объявление (обычно text_to_image).
 GENERATION_MODEL_META = {}
 for _entry in GENERATION_MODELS:
     _model_id = _entry.get("id")
@@ -483,7 +483,7 @@ LICENSE_CACHE_FILE = os.path.join(USER_DATA_DIR, "license_cache.json")
 
 
 def build_ssl_context():
-    """Ð¡Ð¾Ð·Ð´Ð°Ñ‘Ñ‚ SSL-ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚ Ñ ÑÐ¸ÑÑ‚ÐµÐ¼Ð½Ñ‹Ð¼Ð¸ ÑÐµÑ€Ñ‚Ð¸Ñ„Ð¸ÐºÐ°Ñ‚Ð°Ð¼Ð¸ Ð¸ fallback Ð½Ð° certifi."""
+    """Создаёт SSL-контекст с системными сертификатами и fallback на certifi."""
     if certifi is not None:
         try:
             return ssl.create_default_context(cafile=certifi.where())
@@ -718,12 +718,12 @@ class WorkerThread(QThread):
             if not self.stop_after_current_requested:
                 return False
             self.is_running = False
-        self.progress.emit("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾ÑÐ»Ðµ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ Ñ„Ð°Ð¹Ð»Ð°")
+        self.progress.emit("Остановлено после текущего файла")
         return True
 
     def _ensure_running(self):
         if not self.is_running:
-            raise ProcessingCancelled("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+            raise ProcessingCancelled("Остановлено пользователем")
 
     def _safe_error_text(self, error, limit=500):
         return safe_error_text(error, self._secret_values, limit=limit)
@@ -732,12 +732,12 @@ class WorkerThread(QThread):
         protect_secret_headers_from_redirects(req)
 
     def _mode1_generate(self, process_generated, emit_final=True):
-        self.progress.emit("Mode 1: Ð“ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ñ Ð¸Ð· Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð²")
-        self.progress.emit(f"Ð Ð°Ð±Ð¾Ñ‡Ð°Ñ Ð¿Ð°Ð¿ÐºÐ°: {self.work_dir}")
+        self.progress.emit("Mode 1: Генерация из промптов")
+        self.progress.emit(f"Рабочая папка: {self.work_dir}")
         if not self.kie_api_key:
-            raise ValueError("ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½ KIE API Key")
+            raise ValueError("Не указан KIE API Key")
         if process_generated and self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
-            raise ValueError("ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½ PhotoRoom API Key")
+            raise ValueError("Не указан PhotoRoom API Key")
         if process_generated:
             self._log_upscale_plan()
 
@@ -749,19 +749,19 @@ class WorkerThread(QThread):
         entries = self._normalize_prompt_entries(self.generated_prompts)
         if not entries:
             if emit_final:
-                self.finished.emit("Mode 1: ÐÐµÑ‚ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹. Ð”Ð¾Ð±Ð°Ð²ÑŒÑ‚Ðµ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ñ‹")
+                self.finished.emit("Mode 1: Нет записей. Добавьте промпты")
             return
 
         total = len(entries)
         done = 0
-        self.progress.emit(f"Ð—Ð°Ð¿Ð¸ÑÐµÐ¹ Ðº Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐµ: {total}")
+        self.progress.emit(f"Записей к обработке: {total}")
 
         for idx, entry in enumerate(entries, start=1):
             if not self.is_running:
-                self.progress.emit("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                self.progress.emit("Остановлено пользователем")
                 return
 
-            self.progress.emit(f"[{idx}/{total}] Ð“ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ñ")
+            self.progress.emit(f"[{idx}/{total}] Генерация")
             self.progress_value.emit(int(((idx - 1) / total) * 100))
             try:
                 prompt_text = entry.get("prompt", "")
@@ -771,7 +771,7 @@ class WorkerThread(QThread):
                 gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
                 self._download_file(image_url, gen_path)
                 self._ensure_running()
-                self.progress.emit(f"  Ð¡Ð³ÐµÐ½ÐµÑ€Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¾: {gen_path}")
+                self.progress.emit(f"  Сгенерировано: {gen_path}")
 
                 source_path = gen_path
 
@@ -800,12 +800,13 @@ class WorkerThread(QThread):
                     idx,
                     "gen",
                 )
-                self.progress.emit(f"  Ð˜Ñ‚Ð¾Ð³ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {out_path}")
+                self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
             except (ProcessingCancelled, VisibleMarkCleanupCancelled):
-                self.progress.emit("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                self.progress.emit("Остановлено пользователем")
                 return
-            except Exception as e:\r\n                self.progress.emit(f"  ÐžÑˆÐ¸Ð±ÐºÐ°: {self._safe_error_text(e)}")
+            except Exception as e:
+                self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
             if self._stop_after_current_if_requested():
                 return
@@ -813,9 +814,9 @@ class WorkerThread(QThread):
         self.progress_value.emit(100)
         if emit_final:
             if done == 0:
-                self.finished.emit(f"Mode 1: Ð“Ð¾Ñ‚Ð¾Ð²Ð¾ (0/{total}). Ð˜Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ Ð½Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ñ‹.")
+                self.finished.emit(f"Mode 1: Готово (0/{total}). Изображения не созданы.")
             else:
-                self.finished.emit(f"Mode 1: Ð“Ð¾Ñ‚Ð¾Ð²Ð¾ ({done}/{total})")
+                self.finished.emit(f"Mode 1: Готово ({done}/{total})")
 
     def _normalize_prompt_entries(self, raw_entries):
         entries = []
@@ -832,8 +833,8 @@ class WorkerThread(QThread):
         return entries
 
     def _mode2_process_files(self, emit_final=True):
-        self.progress.emit("Mode 2: ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° ÑÑƒÑ‰ÐµÑÑ‚Ð²ÑƒÑŽÑ‰Ð¸Ñ… Ñ„Ð°Ð¹Ð»Ð¾Ð²")
-        self.progress.emit(f"Ð Ð°Ð±Ð¾Ñ‡Ð°Ñ Ð¿Ð°Ð¿ÐºÐ°: {self.work_dir}")
+        self.progress.emit("Mode 2: Обработка существующих файлов")
+        self.progress.emit(f"Рабочая папка: {self.work_dir}")
         self._log_upscale_plan()
 
         if not (
@@ -847,18 +848,18 @@ class WorkerThread(QThread):
             or self._metadata_cleanup_requested()
         ):
             raise ValueError(
-                "Ð’ÐºÐ»ÑŽÑ‡Ð¸Ñ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð¸Ð½ ÑÑ‚Ð°Ð¿: ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ Ð¼ÐµÑ‚ÐºÐ¸, Ð°Ð¿ÑÐºÐµÐ¹Ð», "
-                "ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð°, trim Ð¸Ð»Ð¸ Ð¾Ñ‡Ð¸ÑÑ‚ÐºÑƒ Ñ„Ð°Ð¹Ð»Ð°"
+                "Включите хотя бы один этап: удаление видимой метки, апскейл, "
+                "удаление фона, trim или очистку файла"
             )
 
         if (self._uses_any_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
-            raise ValueError("ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½ KIE API Key")
+            raise ValueError("Не указан KIE API Key")
         if self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
-            raise ValueError("ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½ PhotoRoom API Key")
+            raise ValueError("Не указан PhotoRoom API Key")
 
         if not self.selected_files:
             if emit_final:
-                self.finished.emit("Mode 2: Ð¤Ð°Ð¹Ð»Ñ‹ Ð½Ðµ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ñ‹")
+                self.finished.emit("Mode 2: Файлы не выбраны")
             return
 
         raw_dir = os.path.join(self.work_dir, "raw")
@@ -870,14 +871,14 @@ class WorkerThread(QThread):
         done = 0
         for idx, file_path in enumerate(self.selected_files, start=1):
             if not self.is_running:
-                self.progress.emit("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                self.progress.emit("Остановлено пользователем")
                 return
 
-            self.progress.emit(f"[{idx}/{total}] ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°: {os.path.basename(file_path)}")
+            self.progress.emit(f"[{idx}/{total}] Обработка файла: {os.path.basename(file_path)}")
             self.progress_value.emit(int(((idx - 1) / total) * 100))
             try:
                 if not os.path.isfile(file_path):
-                    self.progress.emit(f"  Ð¤Ð°Ð¹Ð» Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½: {file_path}")
+                    self.progress.emit(f"  Файл не найден: {file_path}")
                     if self._stop_after_current_if_requested():
                         return
                     continue
@@ -910,12 +911,13 @@ class WorkerThread(QThread):
                     "file",
                 )
 
-                self.progress.emit(f"  Ð˜Ñ‚Ð¾Ð³ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½: {out_path}")
+                self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
             except (ProcessingCancelled, VisibleMarkCleanupCancelled):
-                self.progress.emit("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                self.progress.emit("Остановлено пользователем")
                 return
-            except Exception as e:\r\n                self.progress.emit(f"  ÐžÑˆÐ¸Ð±ÐºÐ°: {self._safe_error_text(e)}")
+            except Exception as e:
+                self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
             if self._stop_after_current_if_requested():
                 return
@@ -923,9 +925,9 @@ class WorkerThread(QThread):
         self.progress_value.emit(100)
         if emit_final:
             if done == 0:
-                self.finished.emit(f"Mode 2: Ð“Ð¾Ñ‚Ð¾Ð²Ð¾ (0/{total}). Ð˜Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ Ð½Ðµ ÑÐ¾Ð·Ð´Ð°Ð½Ñ‹.")
+                self.finished.emit(f"Mode 2: Готово (0/{total}). Изображения не созданы.")
             else:
-                self.finished.emit(f"Mode 2: Ð“Ð¾Ñ‚Ð¾Ð²Ð¾ ({done}/{total})")
+                self.finished.emit(f"Mode 2: Готово ({done}/{total})")
 
     def _uses_local_upscale(self):
         return self.upscale and self.upscale_provider == "local_realesrgan"
@@ -965,7 +967,7 @@ class WorkerThread(QThread):
 
     def _log_upscale_plan(self):
         if self.upscale or self.upscale_after:
-            self.progress.emit(f"Ð˜Ñ‚Ð¾Ð³Ð¾Ð²Ð°Ñ ÐºÑ€Ð°Ñ‚Ð½Ð¾ÑÑ‚ÑŒ Ð°Ð¿ÑÐºÐµÐ¹Ð»Ð°: {self._combined_upscale_factor()}x")
+            self.progress.emit(f"Итоговая кратность апскейла: {self._combined_upscale_factor()}x")
 
     def _uses_local_rembg_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_rembg"
@@ -997,7 +999,7 @@ class WorkerThread(QThread):
         if current_url:
             return current_url
         uploaded_url = self._kie_upload_file(current_path)
-        self.progress.emit("  Ð—Ð°Ð³Ñ€ÑƒÐ¶ÐµÐ½Ð¾ Ð² KIE")
+        self.progress.emit("  Загружено в KIE")
         return uploaded_url
 
     def _ensure_local_path(self, current_path, current_url, raw_dir, idx, prefix, step_name):
@@ -1005,7 +1007,7 @@ class WorkerThread(QThread):
             return current_path
         local_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
         self._download_file(current_url, local_path)
-        self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº: {local_path}")
+        self.progress.emit(f"  Промежуточный локальный источник: {local_path}")
         return local_path
 
     def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
@@ -1014,7 +1016,7 @@ class WorkerThread(QThread):
             uploaded_url = source_url or self._kie_upload_file(source_path)
             self._ensure_running()
             if not source_url:
-                self.progress.emit("  Ð—Ð°Ð³Ñ€ÑƒÐ¶ÐµÐ½Ð¾ Ð² KIE")
+                self.progress.emit("  Загружено в KIE")
             result = self._run_kie_processing_pipeline(
                 uploaded_url,
                 raw_dir,
@@ -1076,7 +1078,7 @@ class WorkerThread(QThread):
                 current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
                 nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
                 self._run_local_rembg(current_path, nobg_path)
-                self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð±ÐµÐ· Ñ„Ð¾Ð½Ð°: {nobg_path}")
+                self.progress.emit(f"  Промежуточный локальный без фона: {nobg_path}")
                 current_path = nobg_path
                 current_url = None
                 local_result = True
@@ -1084,7 +1086,7 @@ class WorkerThread(QThread):
                 current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
                 nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
                 self._run_local_ben2(current_path, nobg_path)
-                self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ BEN2 Ð±ÐµÐ· Ñ„Ð¾Ð½Ð°: {nobg_path}")
+                self.progress.emit(f"  Промежуточный BEN2 без фона: {nobg_path}")
                 current_path = nobg_path
                 current_url = None
                 local_result = True
@@ -1099,17 +1101,17 @@ class WorkerThread(QThread):
                 )
                 nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
                 self._run_photoroom_remove_bg(current_path, nobg_path)
-                self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ PhotoRoom Ð±ÐµÐ· Ñ„Ð¾Ð½Ð°: {nobg_path}")
+                self.progress.emit(f"  Промежуточный PhotoRoom без фона: {nobg_path}")
                 current_path = nobg_path
                 current_url = None
                 local_result = True
             else:
                 current_url = self._ensure_kie_url(current_url, current_path)
-                self.progress.emit(f"  Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð° Ñ‡ÐµÑ€ÐµÐ· {self.kie_remove_bg_model}...")
+                self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
                 current_url = self._kie_run_model_task(self.kie_remove_bg_model, current_url)
                 nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
                 self._download_file(current_url, nobg_path)
-                self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ð±ÐµÐ· Ñ„Ð¾Ð½Ð°: {nobg_path}")
+                self.progress.emit(f"  Промежуточный без фона: {nobg_path}")
                 current_path = nobg_path
                 local_result = False
             self._ensure_running()
@@ -1135,7 +1137,7 @@ class WorkerThread(QThread):
                 current_url = None
                 local_result = True
             else:
-                self.progress.emit("  Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ ÐºÐ¾Ð½Ñ‚ÑƒÑ€Ð°: Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð¾, Ñƒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ Ð½ÐµÑ‚ alpha-ÐºÐ°Ð½Ð°Ð»Ð°")
+                self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
             self._ensure_running()
 
         return current_path if local_result else current_url
@@ -1147,7 +1149,7 @@ class WorkerThread(QThread):
                 visible_mark_region_key(input_path)
             )
             if confirmed_region is None:
-                self.progress.emit("  Ð’Ð¸Ð´Ð¸Ð¼Ð°Ñ Ð¼ÐµÑ‚ÐºÐ°: Ñ„Ð°Ð¹Ð» Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½, Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒ Ð½Ðµ Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð°")
+                self.progress.emit("  Видимая метка: файл пропущен, область не подтверждена")
                 return None
 
         output_path = os.path.join(
@@ -1155,11 +1157,11 @@ class WorkerThread(QThread):
             f"{prefix}_visible_mark_{idx:03d}_{self.run_stamp}.png",
         )
         mode_label = (
-            "Gemini Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸"
+            "Gemini автоматически"
             if self.visible_mark_cleanup_mode == "gemini_auto"
-            else "Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð½Ð°Ñ Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒ, MI-GAN"
+            else "подтвержденная область, MI-GAN"
         )
-        self.progress.emit(f"  Ð’Ð¸Ð´Ð¸Ð¼Ð°Ñ Ð¼ÐµÑ‚ÐºÐ°: Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð°Ñ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° ({mode_label})...")
+        self.progress.emit(f"  Видимая метка: локальная обработка ({mode_label})...")
         result = cleanup_visible_mark(
             input_path,
             output_path,
@@ -1171,22 +1173,22 @@ class WorkerThread(QThread):
         if not result.changed:
             if self.visible_mark_cleanup_mode == "gemini_auto":
                 self.progress.emit(
-                    f"  Ð’Ð¸Ð´Ð¸Ð¼Ð°Ñ Ð¼ÐµÑ‚ÐºÐ° Gemini Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° ÑƒÐ²ÐµÑ€ÐµÐ½Ð½Ð¾ ({result.confidence:.3f}); Ñ„Ð°Ð¹Ð» Ð½Ðµ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½"
+                    f"  Видимая метка Gemini не найдена уверенно ({result.confidence:.3f}); файл не изменен"
                 )
             else:
-                self.progress.emit("  Ð’Ð¸Ð´Ð¸Ð¼Ð°Ñ Ð¼ÐµÑ‚ÐºÐ°: Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð½Ð°Ñ Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒ Ð½Ðµ Ð¿Ð¾Ñ‚Ñ€ÐµÐ±Ð¾Ð²Ð°Ð»Ð° Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ð¹")
+                self.progress.emit("  Видимая метка: подтвержденная область не потребовала изменений")
             return None
 
         if self.visible_mark_cleanup_mode == "gemini_auto":
             self.progress.emit(
-                f"  Ð’Ð¸Ð´Ð¸Ð¼Ð°Ñ Ð¼ÐµÑ‚ÐºÐ° Gemini ÑƒÐ´Ð°Ð»ÐµÐ½Ð° Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾: {output_path} "
-                f"(Ð²Ð½Ðµ Ð¾Ð±Ð»Ð°ÑÑ‚Ð¸ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾ {result.changed_pixels_outside_mask} px)"
+                f"  Видимая метка Gemini удалена локально: {output_path} "
+                f"(вне области изменено {result.changed_pixels_outside_mask} px)"
             )
         else:
             self.progress.emit(
-                f"  ÐŸÐ¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð½Ð°Ñ Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚Ð°Ð½Ð° Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾: {output_path} "
-                f"(Ð²Ð½Ðµ Ð¾Ð±Ð»Ð°ÑÑ‚Ð¸ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¾ {result.changed_pixels_outside_mask} px); "
-                "Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚ Ñ‚Ñ€ÐµÐ±ÑƒÐµÑ‚ Ð²Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ð¾Ð¹ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸"
+                f"  Подтвержденная область обработана локально: {output_path} "
+                f"(вне области изменено {result.changed_pixels_outside_mask} px); "
+                "результат требует визуальной проверки"
             )
         return output_path
 
@@ -1255,11 +1257,11 @@ class WorkerThread(QThread):
             )
 
         if self.remove_bg:
-            self.progress.emit(f"  Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð° Ñ‡ÐµÑ€ÐµÐ· {self.kie_remove_bg_model}...")
+            self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
             pipeline_url = self._kie_run_model_task(self.kie_remove_bg_model, pipeline_url)
             nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
             self._download_file(pipeline_url, nobg_path)
-            self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ð±ÐµÐ· Ñ„Ð¾Ð½Ð°: {nobg_path}")
+            self.progress.emit(f"  Промежуточный без фона: {nobg_path}")
             if self.edge_shrink_enabled:
                 return self._edge_shrink_pipeline_step(nobg_path, raw_dir, idx, prefix)
 
@@ -1276,7 +1278,7 @@ class WorkerThread(QThread):
         model_name=None,
     ):
         model_name = (model_name or self.kie_upscale_model).strip()
-        self.progress.emit(f"  ÐÐ¿ÑÐºÐµÐ¹Ð» Ñ‡ÐµÑ€ÐµÐ· {model_name}...")
+        self.progress.emit(f"  Апскейл через {model_name}...")
         if model_name == "topaz/upscale":
             upscale_input = {
                 "image_url": image_url,
@@ -1286,11 +1288,11 @@ class WorkerThread(QThread):
             upscale_input = None
         else:
             upscale_input = {"scale": upscale_factor}
-        self.progress.emit(f"  ÐšÑ€Ð°Ñ‚Ð½Ð¾ÑÑ‚ÑŒ Ð°Ð¿ÑÐºÐµÐ¹Ð»Ð°: {upscale_factor}x")
+        self.progress.emit(f"  Кратность апскейла: {upscale_factor}x")
         pipeline_url = self._kie_run_model_task(model_name, image_url, extra_input=upscale_input)
         upscaled_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
         self._download_file(pipeline_url, upscaled_path)
-        self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ð°Ð¿ÑÐºÐµÐ¹Ð»: {upscaled_path}")
+        self.progress.emit(f"  Промежуточный апскейл: {upscaled_path}")
         return pipeline_url
 
     def _local_realesrgan_pipeline_step(self, input_path, raw_dir, idx, prefix, step_name):
@@ -1299,9 +1301,9 @@ class WorkerThread(QThread):
             getattr(self, "_active_local_realesrgan_scale", self.local_realesrgan_scale)
         )
         model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
-        self.progress.emit(f"  Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð°Ð¿ÑÐºÐµÐ¹Ð» Real-ESRGAN: {model_name}, {scale}x...")
+        self.progress.emit(f"  Локальный апскейл Real-ESRGAN: {model_name}, {scale}x...")
         self._run_local_realesrgan(input_path, upscaled_path, scale=scale)
-        self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ Ð°Ð¿ÑÐºÐµÐ¹Ð»: {upscaled_path}")
+        self.progress.emit(f"  Промежуточный локальный апскейл: {upscaled_path}")
         return upscaled_path
 
     def _unsharp_mask_pipeline_step(self, input_path, raw_dir, idx, prefix):
@@ -1311,7 +1313,7 @@ class WorkerThread(QThread):
             f"threshold {self.unsharp_threshold}..."
         )
         self._apply_unsharp_mask_file(input_path, output_path)
-        self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ð°Ñ Ñ€ÐµÐ·ÐºÐ¾ÑÑ‚ÑŒ: {output_path}")
+        self.progress.emit(f"  Промежуточная резкость: {output_path}")
         return output_path
 
     def _run_local_realesrgan(self, input_path, output_path, scale=None):
@@ -1394,7 +1396,7 @@ class WorkerThread(QThread):
         if self.local_rembg_session is None or self.local_rembg_remove is None:
             new_session, remove = import_rembg_tools()
             self.progress.emit(
-                f"  Local rembg: Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»Ð¸ {self.local_rembg_model}. ÐŸÐµÑ€Ð²Ñ‹Ð¹ Ð·Ð°Ð¿ÑƒÑÐº Ð¼Ð¾Ð¶ÐµÑ‚ Ð±Ñ‹Ñ‚ÑŒ Ð´Ð¾Ð»Ð³Ð¸Ð¼..."
+                f"  Local rembg: загрузка модели {self.local_rembg_model}. Первый запуск может быть долгим..."
             )
             self.local_rembg_session = new_session(self.local_rembg_model)
             self.local_rembg_remove = remove
@@ -1436,7 +1438,7 @@ class WorkerThread(QThread):
                     "git+https://github.com/PramaLLC/BEN2.git"
                 ) from exc
 
-            self.progress.emit("  Local BEN2: Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»Ð¸. ÐŸÐµÑ€Ð²Ñ‹Ð¹ Ð·Ð°Ð¿ÑƒÑÐº Ð¼Ð¾Ð¶ÐµÑ‚ Ð±Ñ‹Ñ‚ÑŒ Ð´Ð¾Ð»Ð³Ð¸Ð¼...")
+            self.progress.emit("  Local BEN2: загрузка модели. Первый запуск может быть долгим...")
             model = AutoModel.from_pretrained("PramaLLC/BEN2")
             model.to(torch.device("cpu"))
             model.eval()
@@ -1477,14 +1479,14 @@ class WorkerThread(QThread):
 
     def _edge_shrink_pipeline_step(self, input_path, raw_dir, idx, prefix):
         edge_path = os.path.join(raw_dir, f"{prefix}_edgeshrink_{idx:03d}_{self.run_stamp}.png")
-        self.progress.emit(f"  Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ ÐºÐ¾Ð½Ñ‚ÑƒÑ€Ð°: {self.edge_shrink_pixels} px...")
+        self.progress.emit(f"  Удаление контура: {self.edge_shrink_pixels} px...")
         self._shrink_alpha_edges(input_path, edge_path, self.edge_shrink_pixels)
-        self.progress.emit(f"  ÐŸÑ€Ð¾Ð¼ÐµÐ¶ÑƒÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹ Ð±ÐµÐ· ÐºÐ¾Ð½Ñ‚ÑƒÑ€Ð°: {edge_path}")
+        self.progress.emit(f"  Промежуточный без контура: {edge_path}")
         return edge_path
 
     def _edge_shrink_alpha_source_if_available(self, input_path, raw_dir, idx, prefix):
         if not self._has_alpha_channel(input_path):
-            self.progress.emit("  Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ ÐºÐ¾Ð½Ñ‚ÑƒÑ€Ð°: Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð¾, Ñƒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ Ð½ÐµÑ‚ alpha-ÐºÐ°Ð½Ð°Ð»Ð°")
+            self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
             return None
         return self._edge_shrink_pipeline_step(input_path, raw_dir, idx, prefix)
 
@@ -1568,7 +1570,7 @@ class WorkerThread(QThread):
                 self._trim_image_file(
                     source_path,
                     stage_path,
-                    "Ð² ÐºÐ¾Ð½Ñ†Ðµ",
+                    "в конце",
                     trim_mode=self._normalize_trim_mode(self.trim_mode),
                 )
             else:
@@ -1609,15 +1611,15 @@ class WorkerThread(QThread):
                     raise MetadataCleanupError("C2PA XMP references cannot be classified safely")
         except MetadataCleanupError as error:
             self._log_metadata_cleanup_inspection(inspection)
-            message = str(error).strip() or "Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸"
-            self.progress.emit(f"  ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°: Ð¾ÑˆÐ¸Ð±ÐºÐ° â€” {message}; Ð¸Ñ‚Ð¾Ð³ Ð½Ðµ Ð¾Ð¿ÑƒÐ±Ð»Ð¸ÐºÐ¾Ð²Ð°Ð½")
-            raise RuntimeError(f"ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð° Ð½Ðµ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°: {message}") from error
+            message = str(error).strip() or "неизвестная ошибка проверки"
+            self.progress.emit(f"  Очистка файла: ошибка — {message}; итог не опубликован")
+            raise RuntimeError(f"Очистка файла не выполнена: {message}") from error
         return inspection
 
     def _replace_output_if_running(self, stage_path, output_path):
         with self._publish_lock:
             if not self.is_running:
-                raise ProcessingCancelled("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                raise ProcessingCancelled("Остановлено пользователем")
             os.replace(stage_path, output_path)
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
@@ -1650,12 +1652,12 @@ class WorkerThread(QThread):
         except ProcessingCancelled:
             raise
         except MetadataCleanupError as error:
-            message = str(error).strip() or "Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸"
-            self.progress.emit(f"  ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°: Ð¾ÑˆÐ¸Ð±ÐºÐ° â€” {message}; Ð¸Ñ‚Ð¾Ð³ Ð½Ðµ Ð¾Ð¿ÑƒÐ±Ð»Ð¸ÐºÐ¾Ð²Ð°Ð½")
-            raise RuntimeError(f"ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð° Ð½Ðµ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°: {message}") from error
+            message = str(error).strip() or "неизвестная ошибка проверки"
+            self.progress.emit(f"  Очистка файла: ошибка — {message}; итог не опубликован")
+            raise RuntimeError(f"Очистка файла не выполнена: {message}") from error
         except Exception as error:
-            self.progress.emit("  ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°: Ð½ÐµÐ¿Ñ€ÐµÐ´Ð²Ð¸Ð´ÐµÐ½Ð½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°; Ð¸Ñ‚Ð¾Ð³ Ð½Ðµ Ð¾Ð¿ÑƒÐ±Ð»Ð¸ÐºÐ¾Ð²Ð°Ð½")
-            raise RuntimeError("ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð° Ð½Ðµ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°; Ð¸Ñ‚Ð¾Ð³ Ð½Ðµ Ð¾Ð¿ÑƒÐ±Ð»Ð¸ÐºÐ¾Ð²Ð°Ð½") from error
+            self.progress.emit("  Очистка файла: непредвиденная ошибка; итог не опубликован")
+            raise RuntimeError("Очистка файла не выполнена; итог не опубликован") from error
         finally:
             if publish_path and os.path.exists(publish_path):
                 try:
@@ -1699,43 +1701,43 @@ class WorkerThread(QThread):
             "exif": "EXIF",
             "xmp": "XMP",
             "iptc": "IPTC",
-            "comments_text": "ÐºÐ¾Ð¼Ð¼ÐµÐ½Ñ‚Ð°Ñ€Ð¸Ð¸/Ñ‚ÐµÐºÑÑ‚",
-            "embedded_thumbnail": "Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ð°Ñ Ð¼Ð¸Ð½Ð¸Ð°Ñ‚ÑŽÑ€Ð°",
-            "icc_profile": "ICC-Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ",
+            "comments_text": "комментарии/текст",
+            "embedded_thumbnail": "встроенная миниатюра",
+            "icc_profile": "ICC-профиль",
             "dpi": "DPI",
-            "generator_fields": "Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð³ÐµÐ½ÐµÑ€Ð°Ñ‚Ð¾Ñ€Ð°",
+            "generator_fields": "данные генератора",
         }
         if inspection.get("status") != "ok":
-            self.progress.emit("  ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°: Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾ â€” Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¸Ñ‚Ð¾Ð³Ð¾Ð²Ð¾Ð³Ð¾ Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚Ð° Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚ÑÑ")
+            self.progress.emit("  Очистка файла: найдено — проверка итогового формата не поддерживается")
             return
 
         categories = inspection.get("categories", {})
         found = [label for key, label in labels.items() if categories.get(key, {}).get("present")]
         c2pa = inspection.get("c2pa", {})
         if c2pa.get("embedded_presence") == "present":
-            found.append("Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ñ‹Ð¹ C2PA")
+            found.append("встроенный C2PA")
         if c2pa.get("embedded_reference_presence") == "present":
-            found.append("Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ð°Ñ ÑÑÑ‹Ð»ÐºÐ° C2PA")
+            found.append("встроенная ссылка C2PA")
         if c2pa.get("external_reference_presence") == "present":
-            found.append("Ð²Ð½ÐµÑˆÐ½ÑÑ ÑÑÑ‹Ð»ÐºÐ° C2PA")
+            found.append("внешняя ссылка C2PA")
         if c2pa.get("unclassified_reference_presence") not in {None, "not_present"}:
-            found.append("Ð½ÐµÐ¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ñ‘Ð½Ð½Ð°Ñ ÑÑÑ‹Ð»ÐºÐ° provenance")
-        self.progress.emit(f"  ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°: Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾ â€” {', '.join(found) if found else 'Ð½ÐµÑ‚'}")
+            found.append("неопределённая ссылка provenance")
+        self.progress.emit(f"  Очистка файла: найдено — {', '.join(found) if found else 'нет'}")
 
     def _log_metadata_cleanup_result(self, result):
         labels = {
             "exif": "EXIF",
             "xmp": "XMP",
             "iptc": "IPTC",
-            "comments_text": "ÐºÐ¾Ð¼Ð¼ÐµÐ½Ñ‚Ð°Ñ€Ð¸Ð¸/Ñ‚ÐµÐºÑÑ‚",
-            "embedded_thumbnail": "Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ð°Ñ Ð¼Ð¸Ð½Ð¸Ð°Ñ‚ÑŽÑ€Ð°",
-            "generator_fields": "Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð³ÐµÐ½ÐµÑ€Ð°Ñ‚Ð¾Ñ€Ð°",
-            "icc_profile": "ICC-Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ",
+            "comments_text": "комментарии/текст",
+            "embedded_thumbnail": "встроенная миниатюра",
+            "generator_fields": "данные генератора",
+            "icc_profile": "ICC-профиль",
             "dpi": "DPI",
-            "embedded_c2pa": "Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ñ‹Ð¹ C2PA",
-            "c2pa_external_reference": "Ð²Ð½ÐµÑˆÐ½ÑÑ ÑÑÑ‹Ð»ÐºÐ° C2PA",
-            "c2pa_embedded_reference": "Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ð°Ñ ÑÑÑ‹Ð»ÐºÐ° C2PA",
-            "c2pa_unclassified_reference": "Ð½ÐµÐ¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ñ‘Ð½Ð½Ð°Ñ ÑÑÑ‹Ð»ÐºÐ° provenance",
+            "embedded_c2pa": "встроенный C2PA",
+            "c2pa_external_reference": "внешняя ссылка C2PA",
+            "c2pa_embedded_reference": "встроенная ссылка C2PA",
+            "c2pa_unclassified_reference": "неопределённая ссылка provenance",
         }
         removed_statuses = {
             "removed",
@@ -1758,19 +1760,19 @@ class WorkerThread(QThread):
                 groups["failed"].append(label)
 
         messages = (
-            ("ÑƒÐ´Ð°Ð»ÐµÐ½Ð¾", groups["removed"]),
-            ("ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¾", groups["preserved"]),
-            ("Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚ÑÑ", groups["unsupported"]),
-            ("Ð½Ðµ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¾", groups["failed"]),
+            ("удалено", groups["removed"]),
+            ("сохранено", groups["preserved"]),
+            ("не поддерживается", groups["unsupported"]),
+            ("не выполнено", groups["failed"]),
         )
         for title, values in messages:
-            self.progress.emit(f"  ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°: {title} â€” {', '.join(values) if values else 'Ð½ÐµÑ‚'}")
+            self.progress.emit(f"  Очистка файла: {title} — {', '.join(values) if values else 'нет'}")
 
     def _save_pipeline_result(self, result_url, output_path, raw_dir, idx, prefix):
         if os.path.isfile(str(result_url)):
             inspection = self._inspect_precleanup_source(result_url)
             if self.trim_enabled:
-                self._trim_image_file(result_url, output_path, "Ð² ÐºÐ¾Ð½Ñ†Ðµ", trim_mode=self._normalize_trim_mode(self.trim_mode))
+                self._trim_image_file(result_url, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
             else:
                 self._save_image_as_png(result_url, output_path)
             return inspection
@@ -1778,7 +1780,7 @@ class WorkerThread(QThread):
             pretrim_path = os.path.join(raw_dir, f"{prefix}_pretrim_{idx:03d}_{self.run_stamp}.png")
             self._download_precleanup_result(result_url, pretrim_path)
             inspection = self._inspect_precleanup_source(pretrim_path)
-            self._trim_image_file(pretrim_path, output_path, "Ð² ÐºÐ¾Ð½Ñ†Ðµ", trim_mode=self._normalize_trim_mode(self.trim_mode))
+            self._trim_image_file(pretrim_path, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
             return inspection
         self._download_precleanup_result(result_url, output_path)
         inspection = self._inspect_precleanup_source(output_path)
@@ -1863,18 +1865,18 @@ class WorkerThread(QThread):
         with Image.open(source_path) as img:
             bbox = self._detect_trim_bbox(img, trim_mode=trim_mode)
             if not bbox:
-                self.progress.emit(f"  Trim {stage_label}: Ð¿ÑƒÑÑ‚Ñ‹Ðµ ÐºÑ€Ð°Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ñ‹")
+                self.progress.emit(f"  Trim {stage_label}: пустые края не найдены")
                 self._save_image_as_png(source_path, output_path)
                 return output_path
 
             if bbox == (0, 0, img.width, img.height):
-                self.progress.emit(f"  Trim {stage_label}: Ð¾Ð±Ñ€ÐµÐ·ÐºÐ° Ð½Ðµ Ñ‚Ñ€ÐµÐ±ÑƒÐµÑ‚ÑÑ")
+                self.progress.emit(f"  Trim {stage_label}: обрезка не требуется")
                 self._save_image_as_png(source_path, output_path)
                 return output_path
 
             cropped = img.crop(bbox)
             self._save_image_object_as_png(cropped, output_path)
-            self.progress.emit(f"  Trim {stage_label}: {img.width}x{img.height} â†’ {cropped.width}x{cropped.height}")
+            self.progress.emit(f"  Trim {stage_label}: {img.width}x{img.height} → {cropped.width}x{cropped.height}")
             return output_path
 
     def _detect_trim_bbox(self, image, trim_mode=None):
@@ -1888,9 +1890,9 @@ class WorkerThread(QThread):
     def _detect_alpha_trim_bbox(self, image):
         rgba = image.convert("RGBA")
         alpha = rgba.split()[-1]
-        # Ð£ Ð½ÐµÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ñ… Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹ Ð¿Ð¾ ÐºÑ€Ð°ÑÐ¼ Ð¾ÑÑ‚Ð°Ñ‘Ñ‚ÑÑ Â«Ð³Ñ€ÑÐ·Ð½Ð°ÑÂ» Ð¿Ð¾Ð»ÑƒÐ¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ð¾ÑÑ‚ÑŒ
-        # (alpha 1..10), Ð¸Ð·-Ð·Ð° ÐºÐ¾Ñ‚Ð¾Ñ€Ð¾Ð¹ getbbox() Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ Ð²ÐµÑÑŒ ÐºÐ°Ð´Ñ€.
-        # Ð¡Ñ‡Ð¸Ñ‚Ð°ÐµÐ¼ Ð¿Ð¾Ð»ÐµÐ·Ð½Ð¾Ð¹ Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒÑŽ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð¿Ð¸ÐºÑÐµÐ»Ð¸ Ñ Ð·Ð°Ð¼ÐµÑ‚Ð½Ð¾Ð¹ Ð½ÐµÐ¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ð¾ÑÑ‚ÑŒÑŽ.
+        # У некоторых моделей по краям остаётся «грязная» полупрозрачность
+        # (alpha 1..10), из-за которой getbbox() возвращает весь кадр.
+        # Считаем полезной областью только пиксели с заметной непрозрачностью.
         alpha_threshold = 12
         solid_alpha = alpha.point(lambda v: 255 if v > alpha_threshold else 0)
         bbox = solid_alpha.getbbox()
@@ -1901,9 +1903,9 @@ class WorkerThread(QThread):
         if bbox != full_bbox:
             return bbox
 
-        # Ð•ÑÐ»Ð¸ ÐºÐ°Ñ€Ñ‚Ð¸Ð½ÐºÐ° Ð¿Ð¾Ð»Ð½Ð¾ÑÑ‚ÑŒÑŽ Ð½ÐµÐ¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ð°Ñ, Ð¼Ð½Ð¾Ð³Ð¸Ðµ Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð²ÑÑ‘ Ñ€Ð°Ð²Ð½Ð¾
-        # Ð´Ð¾Ñ€Ð¸ÑÐ¾Ð²Ñ‹Ð²Ð°ÑŽÑ‚ Ð±ÐµÐ»Ñ‹Ðµ Ð¿Ð¾Ð»Ñ Ð±ÐµÐ· Ð¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ð¾ÑÑ‚Ð¸. Ð’ Ñ‚Ð°ÐºÐ¾Ð¼ ÑÐ»ÑƒÑ‡Ð°Ðµ Ð´ÐµÐ»Ð°ÐµÐ¼
-        # Ð·Ð°Ð¿Ð°ÑÐ½Ð¾Ð¹ Ð¿Ð¾Ð¸ÑÐº Ð¿Ð¾ Ð¿Ð¾Ñ‡Ñ‚Ð¸ Ð±ÐµÐ»Ð¾Ð¼Ñƒ Ñ„Ð¾Ð½Ñƒ, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Trim Ñ€Ð°Ð±Ð¾Ñ‚Ð°Ð» Ð¿Ñ€ÐµÐ´ÑÐºÐ°Ð·ÑƒÐµÐ¼Ð¾.
+        # Если картинка полностью непрозрачная, многие модели всё равно
+        # дорисовывают белые поля без прозрачности. В таком случае делаем
+        # запасной поиск по почти белому фону, чтобы Trim работал предсказуемо.
         if self._is_fully_opaque(alpha):
             fallback_bbox = self._detect_white_trim_bbox(image)
             if fallback_bbox:
@@ -1991,8 +1993,8 @@ class WorkerThread(QThread):
             "not supported",
             "model unavailable",
             "unsupported model",
-            "Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶",
-            "Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿",
+            "не поддерж",
+            "недоступ",
         ]
         return any(marker in text for marker in markers)
 
@@ -2040,7 +2042,7 @@ class WorkerThread(QThread):
                     (self.kie_api_key,),
                 )
                 self.progress.emit(
-                    f"Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð½Ðµ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð° ({safe_message})"
+                    f"Запуск остановлен: проверка модели не завершена ({safe_message})"
                 )
                 return False
 
@@ -2048,28 +2050,28 @@ class WorkerThread(QThread):
             fallback_label = self._get_model_label(fallback_model)
             answer = QMessageBox.question(
                 self,
-                "ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°",
+                "Модель недоступна",
                 (
-                    f'ÐœÐ¾Ð´ÐµÐ»ÑŒ "{unavailable_label}" Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°.\n'
-                    f'Ð—Ð°Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ "{fallback_label}"?'
+                    f'Модель "{unavailable_label}" недоступна.\n'
+                    f'Заменить на модель по умолчанию "{fallback_label}"?'
                 ),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )
             if answer != QMessageBox.StandardButton.Yes:
-                self.log("Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð¾Ñ‚ÐºÐ°Ð·Ð°Ð»ÑÑ Ð¾Ñ‚ Ð·Ð°Ð¼ÐµÐ½Ñ‹ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾Ð¹ Ð¼Ð¾Ð´ÐµÐ»Ð¸")
+                self.log("Запуск остановлен: пользователь отказался от замены недоступной модели")
                 return False
 
             if selected_model == fallback_model:
                 QMessageBox.warning(
                     self,
-                    "ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°",
-                    f'ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ "{fallback_label}" Ñ‚Ð¾Ð¶Ðµ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°. Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½.',
+                    "Модель недоступна",
+                    f'Модель по умолчанию "{fallback_label}" тоже недоступна. Запуск остановлен.',
                 )
-                self.log(f"Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ '{fallback_label}' Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°")
+                self.log(f"Запуск остановлен: модель по умолчанию '{fallback_label}' недоступна")
                 return False
 
-            self.log(f"ÐœÐ¾Ð´ÐµÐ»ÑŒ '{unavailable_label}' Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°. ÐŸÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ÑÑ Ð½Ð° '{fallback_label}'.")
+            self.log(f"Модель '{unavailable_label}' недоступна. Переключаемся на '{fallback_label}'.")
             selected_model = fallback_model
 
     def _ensure_models_available_before_run(self, run_mode, prompts):
@@ -2143,25 +2145,26 @@ class WorkerThread(QThread):
             except urlerror.HTTPError as e:
                 last_error = RuntimeError(f"HTTP {e.code}")
 
-                # ÐÐµ Ñ€ÐµÑ‚Ñ€Ð°Ð¸Ð¼ Ð¾ÑˆÐ¸Ð±ÐºÐ¸ Ð°Ð²Ñ‚Ð¾Ñ€Ð¸Ð·Ð°Ñ†Ð¸Ð¸/Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð°, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð»Ð¾Ð³ Ð±Ñ‹Ð» Ð¿Ð¾Ð½ÑÑ‚Ð½ÐµÐµ.
+                # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
                 if e.code in {400, 401, 402, 403, 404}:
                     break
 
                 if attempt >= retry_limit:
                     break
-                self.progress.emit(f"  ÐŸÐ¾Ð²Ñ‚Ð¾Ñ€ Ð·Ð°Ð¿Ñ€Ð¾ÑÐ° {attempt + 1}/{retry_limit}")
+                self.progress.emit(f"  Повтор запроса {attempt + 1}/{retry_limit}")
                 time.sleep(min(2 * (attempt + 1), 6))
             except ProcessingCancelled:
                 raise
             except ResponseLimitError as error:
                 last_error = error
                 break
-            except Exception as e:\r\n                last_error = e
+            except Exception as e:
+                last_error = e
                 if attempt >= retry_limit:
                     break
-                self.progress.emit(f"  ÐŸÐ¾Ð²Ñ‚Ð¾Ñ€ Ð·Ð°Ð¿Ñ€Ð¾ÑÐ° {attempt + 1}/{retry_limit}")
+                self.progress.emit(f"  Повтор запроса {attempt + 1}/{retry_limit}")
                 time.sleep(min(2 * (attempt + 1), 6))
-        raise RuntimeError(f"ÐžÑˆÐ¸Ð±ÐºÐ° HTTP-Ð·Ð°Ð¿Ñ€Ð¾ÑÐ°: {self._safe_error_text(last_error)}")
+        raise RuntimeError(f"Ошибка HTTP-запроса: {self._safe_error_text(last_error)}")
 
     def _request_json(self, url, method="GET", payload=None, headers=None, timeout=None):
         req_headers = headers or {}
@@ -2183,9 +2186,9 @@ class WorkerThread(QThread):
 
     def _run_photoroom_remove_bg(self, input_path, output_path):
         if not self.photoroom_api_key:
-            raise ValueError("ÐÐµ ÑƒÐºÐ°Ð·Ð°Ð½ PhotoRoom API Key")
+            raise ValueError("Не указан PhotoRoom API Key")
         if not os.path.isfile(input_path):
-            raise FileNotFoundError(f"Ð¤Ð°Ð¹Ð» Ð´Ð»Ñ PhotoRoom Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½: {input_path}")
+            raise FileNotFoundError(f"Файл для PhotoRoom не найден: {input_path}")
 
         boundary = "----ClipartPhotoRoomBoundary" + uuid.uuid4().hex
         filename = re.sub(r'[\r\n"]', "_", os.path.basename(input_path)) or "image.png"
@@ -2231,18 +2234,18 @@ class WorkerThread(QThread):
             method="POST",
         )
 
-        self.progress.emit("  Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð° Ñ‡ÐµÑ€ÐµÐ· PhotoRoom Standard...")
+        self.progress.emit("  Удаление фона через PhotoRoom Standard...")
         response_bytes = self._request_with_retries(req, timeout=max(60, self.timeout))
         try:
             with Image.open(BytesIO(response_bytes)) as response_image:
                 if response_image.format != "PNG" or "A" not in response_image.getbands():
-                    raise ValueError("Ð¾Ñ‚Ð²ÐµÑ‚ Ð½Ðµ ÑÐ²Ð»ÑÐµÑ‚ÑÑ PNG Ñ alpha-ÐºÐ°Ð½Ð°Ð»Ð¾Ð¼")
+                    raise ValueError("ответ не является PNG с alpha-каналом")
                 if getattr(response_image, "n_frames", 1) != 1:
-                    raise ValueError("Ð¾Ñ‚Ð²ÐµÑ‚ Ð´Ð¾Ð»Ð¶ÐµÐ½ ÑÐ¾Ð´ÐµÑ€Ð¶Ð°Ñ‚ÑŒ Ð¾Ð´Ð¸Ð½ ÐºÐ°Ð´Ñ€")
+                    raise ValueError("ответ должен содержать один кадр")
                 if max(response_image.size) > MAX_PROVIDER_IMAGE_DIMENSION:
-                    raise ValueError("Ð¾Ñ‚Ð²ÐµÑ‚ Ð¿Ñ€ÐµÐ²Ñ‹ÑˆÐ°ÐµÑ‚ Ð»Ð¸Ð¼Ð¸Ñ‚ ÑÑ‚Ð¾Ñ€Ð¾Ð½Ñ‹ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ")
+                    raise ValueError("ответ превышает лимит стороны изображения")
                 if response_image.width * response_image.height > MAX_PROVIDER_IMAGE_PIXELS:
-                    raise ValueError("Ð¾Ñ‚Ð²ÐµÑ‚ Ð¿Ñ€ÐµÐ²Ñ‹ÑˆÐ°ÐµÑ‚ Ð»Ð¸Ð¼Ð¸Ñ‚ Ð¿Ð¸ÐºÑÐµÐ»ÐµÐ¹")
+                    raise ValueError("ответ превышает лимит пикселей")
                 response_image.load()
                 self._ensure_running()
                 result_image = response_image.convert("RGBA").copy()
@@ -2250,7 +2253,7 @@ class WorkerThread(QThread):
         except ProcessingCancelled:
             raise
         except Exception as exc:
-            raise RuntimeError("PhotoRoom Ð²ÐµÑ€Ð½ÑƒÐ» Ð½ÐµÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾Ðµ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ") from exc
+            raise RuntimeError("PhotoRoom вернул некорректное изображение") from exc
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         result_image.save(output_path, format="PNG", **save_kwargs)
@@ -2296,7 +2299,7 @@ class WorkerThread(QThread):
             raise
         except Exception as error:
             raise RuntimeError(
-                f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ñ„Ð°Ð¹Ð» Ð² KIE: {self._safe_error_text(error)}"
+                f"Не удалось загрузить файл в KIE: {self._safe_error_text(error)}"
             ) from error
 
     def _kie_create_task(self, model, input_payload):
@@ -2313,7 +2316,7 @@ class WorkerThread(QThread):
             raise RuntimeError(f"KIE createTask rejected the request (code {result.get('code', '-')})")
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
-            raise RuntimeError("KIE createTask Ð½Ðµ Ð²ÐµÑ€Ð½ÑƒÐ» taskId")
+            raise RuntimeError("KIE createTask не вернул taskId")
         return task_id
 
     def _kie_run_model_task(self, model, image_url, extra_input=None):
@@ -2332,14 +2335,14 @@ class WorkerThread(QThread):
         if parsed.scheme in {"http", "https"}:
             return ref
         if not os.path.isfile(ref):
-            raise RuntimeError(f"Ð ÐµÑ„ÐµÑ€ÐµÐ½Ñ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½: {ref}")
-        self.progress.emit(f"  Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ°: {os.path.basename(ref)}")
+            raise RuntimeError(f"Референс не найден: {ref}")
+        self.progress.emit(f"  Загрузка референса: {os.path.basename(ref)}")
         return self._kie_upload_file(ref)
 
     def _resolve_reference_urls(self, references=None):
         ref_items = split_references(references or [])
         if len(ref_items) > MAX_REFERENCES_PER_PROMPT:
-            raise RuntimeError(f"ÐœÐ°ÐºÑÐ¸Ð¼ÑƒÐ¼ {MAX_REFERENCES_PER_PROMPT} Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ¾Ð² Ð½Ð° Ð¾Ð´Ð¸Ð½ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚")
+            raise RuntimeError(f"Максимум {MAX_REFERENCES_PER_PROMPT} референсов на один промпт")
         urls = []
         for ref in ref_items:
             resolved = self._resolve_reference_url(ref)
@@ -2354,11 +2357,11 @@ class WorkerThread(QThread):
         model_type = model_meta.get("type", "text_to_image")
 
         if model_type in {"image_to_image", "edit"} and not reference_urls:
-            raise RuntimeError("Ð”Ð»Ñ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð¹ Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð½ÑƒÐ¶ÐµÐ½ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½Ñ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ")
+            raise RuntimeError("Для выбранной модели нужен референс изображения")
 
         if normalized_model == "gpt4o-image":
             if reference_urls:
-                raise RuntimeError("ÐœÐ¾Ð´ÐµÐ»ÑŒ GPTâ€‘4o Image Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½Ñ Ð² ÑÑ‚Ð¾Ð¼ Ñ€ÐµÐ¶Ð¸Ð¼Ðµ")
+                raise RuntimeError("Модель GPT‑4o Image не поддерживает референс в этом режиме")
             return self._kie_generate_4o_image(prompt)
         return self._kie_generate_generic_model(normalized_model, prompt, reference_urls=reference_urls)
 
@@ -2368,7 +2371,7 @@ class WorkerThread(QThread):
             return ratio
         fallback_ratio = "1:1" if "1:1" in allowed else next(iter(sorted(allowed)))
         self.progress.emit(
-            f"  Ð¡Ð¾Ð¾Ñ‚Ð½Ð¾ÑˆÐµÐ½Ð¸Ðµ {ratio} Ð½Ðµ Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¾ Ð´Ð»Ñ {model_name}. Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ {fallback_ratio}."
+            f"  Соотношение {ratio} не подтверждено для {model_name}. Используем {fallback_ratio}."
         )
         return fallback_ratio
 
@@ -2401,7 +2404,7 @@ class WorkerThread(QThread):
             prompt_ratio = self._extract_ratio_from_prompt(prompt)
             if prompt_ratio:
                 ratio_setting = prompt_ratio
-                self.progress.emit(f"  ÐŸÑ€Ð¾Ð¿Ð¾Ñ€Ñ†Ð¸Ñ Ð¸Ð· Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð°: {prompt_ratio} (UI=auto)")
+                self.progress.emit(f"  Пропорция из промпта: {prompt_ratio} (UI=auto)")
         ratio = self._normalize_model_ratio(model_name, ratio_setting)
         quality = self._normalize_model_quality(model_name)
         capabilities = self._get_model_capabilities(model_name)
@@ -2515,8 +2518,8 @@ class WorkerThread(QThread):
         fallback = self._default_generation_model("image_to_image" if has_references else "text_to_image")
         self.progress.emit(
             (
-                f"  Ð’Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð°Ñ Ð¼Ð¾Ð´ÐµÐ»ÑŒ '{normalized}' Ð½Ðµ Ð¿Ð¾Ð´Ñ…Ð¾Ð´Ð¸Ñ‚ Ð´Ð»Ñ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ Ñ€ÐµÐ¶Ð¸Ð¼Ð°. "
-                f"Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ '{fallback}'."
+                f"  Выбранная модель '{normalized}' не подходит для текущего режима. "
+                f"Используем '{fallback}'."
             )
         )
         return fallback
@@ -2533,7 +2536,7 @@ class WorkerThread(QThread):
     def _normalize_generation_model(self, model_name):
         model = (model_name or "").strip()
         if not model:
-            self.progress.emit("  ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð½Ðµ ÑƒÐºÐ°Ð·Ð°Ð½Ð°. Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ gpt-image/1.5-text-to-image.")
+            self.progress.emit("  Модель не указана. Используем gpt-image/1.5-text-to-image.")
             return "gpt-image/1.5-text-to-image"
 
         if model in {"gpt4o-image", "gpt-image-1", "gpt-image-1.5"}:
@@ -2564,8 +2567,8 @@ class WorkerThread(QThread):
                 return "gpt-image-2"
             return model
 
-        # Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÐ¼ Ð¸ÑÑ…Ð¾Ð´Ð½Ð¾Ðµ Ð¸Ð¼Ñ, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°Ñ‚ÑŒ Ð½Ð¾Ð²Ñ‹Ðµ Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð±ÐµÐ· Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ ÐºÐ¾Ð´Ð°.
-        self.progress.emit(f"  Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ÑÑ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒÑÐºÐ°Ñ Ð¼Ð¾Ð´ÐµÐ»ÑŒ: {model}")
+        # Возвращаем исходное имя, чтобы поддерживать новые модели без обновления кода.
+        self.progress.emit(f"  Используется пользовательская модель: {model}")
         return model
 
     def _kie_generate_4o_image(self, prompt):
@@ -2585,7 +2588,7 @@ class WorkerThread(QThread):
 
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
-            raise RuntimeError("4o Image Ð½Ðµ Ð²ÐµÑ€Ð½ÑƒÐ» taskId")
+            raise RuntimeError("4o Image не вернул taskId")
         self.progress.emit(f"  4o Task ID: {task_id}")
         return self._kie_wait_4o_result(task_id)
 
@@ -2752,16 +2755,16 @@ class WorkerThread(QThread):
 
             data = result.get("data") or {}
             status = str(data.get("status", "")).upper()
-            self.progress.emit(f"  4o ÑÑ‚Ð°Ñ‚ÑƒÑ: {status}")
+            self.progress.emit(f"  4o статус: {status}")
             if status == "SUCCESS":
                 urls = ((data.get("response") or {}).get("resultUrls") or [])
                 if urls:
                     return urls[0]
-                raise RuntimeError("4o Image Ð½Ðµ Ð²ÐµÑ€Ð½ÑƒÐ» resultUrls")
+                raise RuntimeError("4o Image не вернул resultUrls")
             if status in {"FAILED", "FAIL", "ERROR"}:
-                raise RuntimeError(data.get("errorMessage") or "4o Image Ð²ÐµÑ€Ð½ÑƒÐ» Ð¾ÑˆÐ¸Ð±ÐºÑƒ")
+                raise RuntimeError(data.get("errorMessage") or "4o Image вернул ошибку")
             time.sleep(self.status_poll_interval)
-        raise TimeoutError("ÐŸÑ€ÐµÐ²Ñ‹ÑˆÐµÐ½Ð¾ Ð²Ñ€ÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ 4o Image")
+        raise TimeoutError("Превышено время ожидания 4o Image")
 
     def _kie_wait_result(self, task_id):
         timeout_sec = self.generation_wait_timeout
@@ -2777,17 +2780,17 @@ class WorkerThread(QThread):
 
             data = result.get("data") or {}
             state = str(data.get("state", "")).lower()
-            self.progress.emit(f"  Ð¡Ñ‚Ð°Ñ‚ÑƒÑ: {state}")
+            self.progress.emit(f"  Статус: {state}")
             if state in {"success", "succeeded"}:
                 return self._extract_result_url(data.get("resultJson"))
             if state in {"fail", "failed", "error"}:
-                raise RuntimeError(data.get("failMsg") or "KIE Ð²ÐµÑ€Ð½ÑƒÐ» fail")
+                raise RuntimeError(data.get("failMsg") or "KIE вернул fail")
             time.sleep(self.status_poll_interval)
-        raise TimeoutError("ÐŸÑ€ÐµÐ²Ñ‹ÑˆÐµÐ½Ð¾ Ð²Ñ€ÐµÐ¼Ñ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð° KIE")
+        raise TimeoutError("Превышено время ожидания результата KIE")
 
     def _extract_result_url(self, result_json_raw):
         if not result_json_raw:
-            raise RuntimeError("KIE Ð½Ðµ Ð²ÐµÑ€Ð½ÑƒÐ» resultJson")
+            raise RuntimeError("KIE не вернул resultJson")
 
         parsed = result_json_raw
         if isinstance(result_json_raw, str):
@@ -2801,7 +2804,7 @@ class WorkerThread(QThread):
             if isinstance(output, dict) and output.get("mediaUrl"):
                 return output["mediaUrl"]
 
-        raise RuntimeError("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¸Ð·Ð²Ð»ÐµÑ‡ÑŒ URL Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð° Ð¸Ð· resultJson")
+        raise RuntimeError("Не удалось извлечь URL результата из resultJson")
 
     def _download_file(self, url, output_path):
         headers = {
@@ -2815,7 +2818,7 @@ class WorkerThread(QThread):
 
         parsed_url = validate_https_url(url, "Provider download URL")
         host = (parsed_url.hostname or "").lower().rstrip(".")
-        # ÐÐµÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ðµ CDN KIE/Redpanda Ð¾Ñ‚Ð´Ð°ÑŽÑ‚ 403 (Cloudflare 1010) Ð±ÐµÐ· auth-Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¾Ð².
+        # Некоторые CDN KIE/Redpanda отдают 403 (Cloudflare 1010) без auth-заголовков.
         trusted_kie_host = parsed_url.scheme.lower() == "https" and (
             host in {"kie.ai", "redpandaai.co"}
             or host.endswith((".kie.ai", ".redpandaai.co"))
@@ -2843,13 +2846,14 @@ class WorkerThread(QThread):
                 return
             except ProcessingCancelled:
                 raise
-            except Exception as e:\r\n                last_error = e
+            except Exception as e:
+                last_error = e
                 self.progress.emit(
-                    f"  Download Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ° {idx} Ð½Ðµ ÑƒÐ´Ð°Ð»Ð°ÑÑŒ: {self._safe_error_text(e)}"
+                    f"  Download попытка {idx} не удалась: {self._safe_error_text(e)}"
                 )
 
         raise RuntimeError(
-            f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐºÐ°Ñ‡Ð°Ñ‚ÑŒ Ñ„Ð°Ð¹Ð» Ð¿Ð¾ URL ({host}): {self._safe_error_text(last_error)}"
+            f"Не удалось скачать файл по URL ({host}): {self._safe_error_text(last_error)}"
         )
 
     def _save_png_from_any_image_bytes(self, content, output_path):
@@ -2872,14 +2876,14 @@ class WorkerThread(QThread):
                         self._set_png_dpi(output_path, dpi=300)
                     return
                 self._save_image_object_as_png(img, output_path)
-            self.progress.emit("  Ð¤Ð¾Ñ€Ð¼Ð°Ñ‚ Ð¾Ñ‚Ð²ÐµÑ‚Ð° Ð½Ðµ PNG: Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð° ÐºÐ¾Ð½Ð²ÐµÑ€Ñ‚Ð°Ñ†Ð¸Ñ Ð² PNG")
+            self.progress.emit("  Формат ответа не PNG: выполнена конвертация в PNG")
             return
         except ProcessingCancelled:
             raise
         except RuntimeError:
             raise
         except Exception as error:
-            raise RuntimeError("Ð¡ÐµÑ€Ð²ÐµÑ€ Ð²ÐµÑ€Ð½ÑƒÐ» Ð½ÐµÐ²Ð°Ð»Ð¸Ð´Ð½Ñ‹Ð¹ ÐºÐ¾Ð½Ñ‚ÐµÐ½Ñ‚ Ð²Ð¼ÐµÑÑ‚Ð¾ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ") from error
+            raise RuntimeError("Сервер вернул невалидный контент вместо изображения") from error
 
     def _set_png_dpi(self, file_path, dpi=300):
         try:
@@ -2891,8 +2895,9 @@ class WorkerThread(QThread):
                     format="PNG",
                     **self._get_png_save_kwargs(img, dpi_override=dpi),
                 )
-            self.progress.emit(f"  Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½ DPI {dpi} Ð´Ð»Ñ {os.path.basename(file_path)}")
-        except Exception as e:\r\n            self.progress.emit(f"  ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ DPI Ð´Ð»Ñ {os.path.basename(file_path)}: {e}")
+            self.progress.emit(f"  Установлен DPI {dpi} для {os.path.basename(file_path)}")
+        except Exception as e:
+            self.progress.emit(f"  Не удалось установить DPI для {os.path.basename(file_path)}: {e}")
 
 
 class PromptTableWidget(QTableWidget):
@@ -2920,28 +2925,28 @@ class CsvImportDialog(QDialog):
         self._reload_data()
 
     def _setup_ui(self):
-        self.setWindowTitle("Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ð¸Ð· CSV")
+        self.setWindowTitle("Импорт промптов из CSV")
         self.resize(760, 520)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
         self.delimiter_combo = QComboBox()
-        self.delimiter_combo.addItem("ÐÐ²Ñ‚Ð¾", "auto")
+        self.delimiter_combo.addItem("Авто", "auto")
         self.delimiter_combo.addItem(",", ",")
         self.delimiter_combo.addItem(";", ";")
-        self.delimiter_combo.addItem("Ð¢Ð°Ð±", "\t")
+        self.delimiter_combo.addItem("Таб", "\t")
         self.delimiter_combo.addItem("|", "|")
 
-        self.header_checkbox = QCheckBox("ÐŸÐµÑ€Ð²Ð°Ñ ÑÑ‚Ñ€Ð¾ÐºÐ° â€” Ð·Ð°Ð³Ð¾Ð»Ð¾Ð²ÐºÐ¸")
+        self.header_checkbox = QCheckBox("Первая строка — заголовки")
         self.header_checkbox.setChecked(True)
 
         self.column_combo = QComboBox()
         self.references_column_combo = QComboBox()
 
-        form.addRow("Ð Ð°Ð·Ð´ÐµÐ»Ð¸Ñ‚ÐµÐ»ÑŒ:", self.delimiter_combo)
-        form.addRow("ÐšÐ¾Ð»Ð¾Ð½ÐºÐ° Ñ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð¼:", self.column_combo)
-        form.addRow("ÐšÐ¾Ð»Ð¾Ð½ÐºÐ° Ñ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ°Ð¼Ð¸:", self.references_column_combo)
+        form.addRow("Разделитель:", self.delimiter_combo)
+        form.addRow("Колонка с промптом:", self.column_combo)
+        form.addRow("Колонка с референсами:", self.references_column_combo)
         form.addRow("", self.header_checkbox)
         layout.addLayout(form)
 
@@ -2950,13 +2955,13 @@ class CsvImportDialog(QDialog):
 
         self.preview_text = QTextEdit()
         self.preview_text.setReadOnly(True)
-        self.preview_text.setPlaceholderText("Ð—Ð´ÐµÑÑŒ Ð±ÑƒÐ´ÐµÑ‚ Ð¿Ñ€ÐµÐ´Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð²")
+        self.preview_text.setPlaceholderText("Здесь будет предпросмотр промптов")
         layout.addWidget(self.preview_text)
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
         if ok_button:
-            ok_button.setText("Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ")
+            ok_button.setText("Импортировать")
         layout.addWidget(self.button_box)
 
         self.delimiter_combo.currentIndexChanged.connect(self._reload_data)
@@ -2973,8 +2978,9 @@ class CsvImportDialog(QDialog):
             try:
                 with open(self.file_path, "r", encoding=enc, newline="") as f:
                     return f.read()
-            except Exception as e:\r\n                last_error = e
-        raise RuntimeError(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¾Ñ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ CSV: {last_error}")
+            except Exception as e:
+                last_error = e
+        raise RuntimeError(f"Не удалось прочитать CSV: {last_error}")
 
     def _detect_delimiter(self, sample_text):
         selected = self.delimiter_combo.currentData()
@@ -2990,7 +2996,7 @@ class CsvImportDialog(QDialog):
         reader = csv.reader(StringIO(text), delimiter=delimiter)
         rows = [row for row in reader if any(str(cell).strip() for cell in row)]
         if not rows:
-            raise RuntimeError("CSV-Ñ„Ð°Ð¹Ð» Ð¿ÑƒÑÑ‚ Ð¸Ð»Ð¸ Ð½Ðµ ÑÐ¾Ð´ÐµÑ€Ð¶Ð¸Ñ‚ Ð´Ð°Ð½Ð½Ñ‹Ñ…")
+            raise RuntimeError("CSV-файл пуст или не содержит данных")
         return rows
 
     def _reload_data(self):
@@ -3005,15 +3011,15 @@ class CsvImportDialog(QDialog):
 
             has_header = self.header_checkbox.isChecked()
             if has_header:
-                headers = [str(h).strip() or f"ÐšÐ¾Ð»Ð¾Ð½ÐºÐ° {i + 1}" for i, h in enumerate(rows[0])]
+                headers = [str(h).strip() or f"Колонка {i + 1}" for i, h in enumerate(rows[0])]
                 data_rows = rows[1:]
             else:
                 max_cols = max(len(r) for r in rows)
-                headers = [f"ÐšÐ¾Ð»Ð¾Ð½ÐºÐ° {i + 1}" for i in range(max_cols)]
+                headers = [f"Колонка {i + 1}" for i in range(max_cols)]
                 data_rows = rows
 
             max_cols = max(len(headers), max((len(r) for r in data_rows), default=0))
-            headers = headers + [f"ÐšÐ¾Ð»Ð¾Ð½ÐºÐ° {i + 1}" for i in range(len(headers), max_cols)]
+            headers = headers + [f"Колонка {i + 1}" for i in range(len(headers), max_cols)]
             normalized_rows = [r + [""] * (max_cols - len(r)) for r in data_rows]
 
             self._headers = headers
@@ -3029,7 +3035,7 @@ class CsvImportDialog(QDialog):
 
             self.references_column_combo.blockSignals(True)
             self.references_column_combo.clear()
-            self.references_column_combo.addItem("Ð‘ÐµÐ· Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ¾Ð²", -1)
+            self.references_column_combo.addItem("Без референсов", -1)
             for index, name in enumerate(self._headers):
                 self.references_column_combo.addItem(name, index)
             if isinstance(prev_references_column, int) and -1 <= prev_references_column < len(self._headers):
@@ -3044,13 +3050,14 @@ class CsvImportDialog(QDialog):
             self._entries = self._build_entries(selected_col, selected_refs_col)
             delim_name = "TAB" if delimiter == "\t" else delimiter
             self.info_label.setText(
-                f"Ð¡Ñ‚Ñ€Ð¾Ðº Ð´Ð°Ð½Ð½Ñ‹Ñ…: {len(self._rows)} | Ð Ð°ÑÐ¿Ð¾Ð·Ð½Ð°Ð½Ð¾ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹: {len(self._entries)} | Ð Ð°Ð·Ð´ÐµÐ»Ð¸Ñ‚ÐµÐ»ÑŒ: {delim_name}"
+                f"Строк данных: {len(self._rows)} | Распознано записей: {len(self._entries)} | Разделитель: {delim_name}"
             )
             self._refresh_preview()
-        except Exception as e:\r\n            self._headers = []
+        except Exception as e:
+            self._headers = []
             self._rows = []
             self._last_error = str(e)
-            self.info_label.setText(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð°: {self._last_error}")
+            self.info_label.setText(f"Ошибка импорта: {self._last_error}")
             self.preview_text.setPlainText("")
 
     def _build_entries(self, prompt_column_index, references_column_index):
@@ -3078,7 +3085,7 @@ class CsvImportDialog(QDialog):
         self._entries = self._build_entries(selected_col, selected_refs_col)
         preview_items = self._entries[:8]
         if not preview_items:
-            self.preview_text.setPlainText("ÐÐµÑ‚ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹ Ð´Ð»Ñ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ñ… ÐºÐ¾Ð»Ð¾Ð½Ð¾Ðº")
+            self.preview_text.setPlainText("Нет записей для выбранных колонок")
             return
         parts = []
         for idx, entry in enumerate(preview_items, start=1):
@@ -3086,9 +3093,9 @@ class CsvImportDialog(QDialog):
             references_text = join_references(entry.get("references", []))
             detail_lines = [f"{idx}. {prompt_text}"]
             if references_text:
-                detail_lines.append(f"Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹: {references_text}")
+                detail_lines.append(f"Референсы: {references_text}")
             parts.append("\n".join(detail_lines))
-        self.preview_text.setPlainText("\n\nâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n\n".join(parts))
+        self.preview_text.setPlainText("\n\n──────────\n\n".join(parts))
 
     def get_entries(self):
         result = []
@@ -3105,7 +3112,7 @@ class PromptReferencesDialog(QDialog):
         super().__init__(parent)
         self.refs_only = refs_only
         self._source_prompt = str(prompt_text or "")
-        self.setWindowTitle("Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð°" if refs_only else "Ð ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ðµ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð° Ð¸ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ¾Ð²")
+        self.setWindowTitle("Референсы промпта" if refs_only else "Редактирование промпта и референсов")
         self.resize(760, 520)
 
         self.prompt_edit = QTextEdit()
@@ -3129,19 +3136,19 @@ class PromptReferencesDialog(QDialog):
 
         main_layout = QVBoxLayout(self)
         if not self.refs_only:
-            main_layout.addWidget(QLabel("ÐŸÑ€Ð¾Ð¼Ð¿Ñ‚:"))
+            main_layout.addWidget(QLabel("Промпт:"))
             main_layout.addWidget(self.prompt_edit)
 
         refs_header = QHBoxLayout()
-        refs_header.addWidget(QLabel("Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹ (Ð´Ð¾ 5):"))
+        refs_header.addWidget(QLabel("Референсы (до 5):"))
         refs_header.addStretch()
         main_layout.addLayout(refs_header)
         main_layout.addWidget(self.references_list)
 
         buttons_row = QHBoxLayout()
-        self.btn_add_files = QPushButton("Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ñ„Ð°Ð¹Ð»Ñ‹")
-        self.btn_remove_selected = QPushButton("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¹")
-        self.btn_clear_all = QPushButton("ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ð²ÑÐµ")
+        self.btn_add_files = QPushButton("Добавить файлы")
+        self.btn_remove_selected = QPushButton("Удалить выбранный")
+        self.btn_clear_all = QPushButton("Очистить все")
         buttons_row.addWidget(self.btn_add_files)
         buttons_row.addWidget(self.btn_remove_selected)
         buttons_row.addWidget(self.btn_clear_all)
@@ -3151,7 +3158,7 @@ class PromptReferencesDialog(QDialog):
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         ok_btn = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
         if ok_btn:
-            ok_btn.setText("ÐŸÑ€Ð¸Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ" if self.refs_only else "Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ")
+            ok_btn.setText("Применить" if self.refs_only else "Сохранить")
         main_layout.addWidget(self.button_box)
 
         self.btn_add_files.clicked.connect(self.add_files)
@@ -3163,7 +3170,7 @@ class PromptReferencesDialog(QDialog):
     def add_files(self):
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ",
+            "Выбрать изображения",
             "",
             "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif)",
         )
@@ -3182,8 +3189,8 @@ class PromptReferencesDialog(QDialog):
         if len(merged) > MAX_REFERENCES_PER_PROMPT:
             QMessageBox.warning(
                 self,
-                "ÐžÐ³Ñ€Ð°Ð½Ð¸Ñ‡ÐµÐ½Ð¸Ðµ",
-                f"ÐœÐ¾Ð¶Ð½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð¼Ð°ÐºÑÐ¸Ð¼ÑƒÐ¼ {MAX_REFERENCES_PER_PROMPT} Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ¾Ð²",
+                "Ограничение",
+                f"Можно добавить максимум {MAX_REFERENCES_PER_PROMPT} референсов",
             )
             merged = merged[:MAX_REFERENCES_PER_PROMPT]
 
@@ -3231,7 +3238,7 @@ class ImageRegionSelector(QLabel):
         super().__init__(parent)
         source_pixmap = QPixmap(image_path)
         if source_pixmap.isNull():
-            raise ValueError(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ: {image_path}")
+            raise ValueError(f"Не удалось открыть изображение: {image_path}")
 
         self.source_size = source_pixmap.size()
         self.display_pixmap = source_pixmap.scaled(
@@ -3319,7 +3326,7 @@ class ImageRegionSelector(QLabel):
 class VisibleMarkRegionDialog(QDialog):
     def __init__(self, image_path, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("ÐžÐ±Ð»Ð°ÑÑ‚ÑŒ Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ Ð¼ÐµÑ‚ÐºÐ¸")
+        self.setWindowTitle("Область видимой метки")
         self._selected_region = None
         self._skipped = False
 
@@ -3331,14 +3338,14 @@ class VisibleMarkRegionDialog(QDialog):
         self.selector = ImageRegionSelector(image_path, self)
         layout.addWidget(self.selector, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        self.selection_status = QLabel("ÐžÐ±Ð»Ð°ÑÑ‚ÑŒ Ð½Ðµ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð°")
+        self.selection_status = QLabel("Область не выбрана")
         layout.addWidget(self.selection_status)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         self.skip_button = self.button_box.addButton(
-            "ÐŸÑ€Ð¾Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑŒ Ñ„Ð°Ð¹Ð»",
+            "Пропустить файл",
             QDialogButtonBox.ButtonRole.ActionRole,
         )
         self.ok_button = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
@@ -3355,7 +3362,7 @@ class VisibleMarkRegionDialog(QDialog):
         if region is None:
             self.ok_button.setEnabled(False)
             self.selection_status.setStyleSheet("")
-            self.selection_status.setText("ÐžÐ±Ð»Ð°ÑÑ‚ÑŒ Ð½Ðµ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð°")
+            self.selection_status.setText("Область не выбрана")
             return
         try:
             region = normalize_confirmed_region(
@@ -3369,7 +3376,7 @@ class VisibleMarkRegionDialog(QDialog):
             return
         self.ok_button.setEnabled(True)
         self.selection_status.setStyleSheet("")
-        self.selection_status.setText(f"ÐžÐ±Ð»Ð°ÑÑ‚ÑŒ: {region[2]} x {region[3]} px")
+        self.selection_status.setText(f"Область: {region[2]} x {region[3]} px")
 
     def _accept_selection(self):
         region = self.selector.selected_source_region()
@@ -3426,8 +3433,8 @@ class MainWindow(QMainWindow):
         self.restore_last_work_dir()
         self.load_saved_prompts()
         self.setup_settings_autosave_connections()
-        # ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð¿Ñ€Ð¸ ÑÑ‚Ð°Ñ€Ñ‚Ðµ: Ð±ÐµÐ· Ð»Ð¸ÑˆÐ½Ð¸Ñ… ÑÐ¾Ð¾Ð±Ñ‰ÐµÐ½Ð¸Ð¹,
-        # Ð½Ð¾ ÐµÑÐ»Ð¸ ÐµÑÑ‚ÑŒ Ð½Ð¾Ð²Ð°Ñ Ð²ÐµÑ€ÑÐ¸Ñ â€” ÑÐ¿Ñ€Ð¾ÑÐ¸Ð¼, ÑÐºÐ°Ñ‡Ð¸Ð²Ð°Ñ‚ÑŒ Ð¸Ð»Ð¸ Ð½ÐµÑ‚.
+        # Проверяем обновления при старте: без лишних сообщений,
+        # но если есть новая версия — спросим, скачивать или нет.
         QTimer.singleShot(1200, lambda: self.check_for_updates(silent=True, auto_apply=True))
 
     def load_saved_prompts(self):
@@ -3466,7 +3473,8 @@ class MainWindow(QMainWindow):
             self.generated_prompts = entries
             if hasattr(self, "table"):
                 self.refresh_prompts_table()
-        except Exception as e:\r\n            self.log(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½Ð½Ñ‹Ðµ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ñ‹: {e}")
+        except Exception as e:
+            self.log(f"Не удалось загрузить сохранённые промпты: {e}")
 
     def save_prompts_storage(self):
         try:
@@ -3487,7 +3495,8 @@ class MainWindow(QMainWindow):
             }
             with open(PROMPTS_STORAGE_FILE, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2, ensure_ascii=False)
-        except Exception as e:\r\n            self.log(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ñ‹: {e}")
+        except Exception as e:
+            self.log(f"Не удалось сохранить промпты: {e}")
 
     def load_config(self):
         default_config = {
@@ -3569,7 +3578,7 @@ class MainWindow(QMainWindow):
             self.config = default_config
         # Local Real-ESRGAN is shipped with the application; an old external path is ignored.
         self.config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
-        # URL Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹ Ð²ÑÐµÐ³Ð´Ð° Ñ„Ð¸ÐºÑÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ Ð¸ Ð½Ðµ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€ÑƒÐµÑ‚ÑÑ Ð² UI.
+        # URL обновлений всегда фиксированный и не редактируется в UI.
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL
 
         legacy_generation_model = self._normalize_generation_model_id(self.config.get("generation_model", "gpt-image/1.5-text-to-image"))
@@ -3603,11 +3612,11 @@ class MainWindow(QMainWindow):
         self.config["text_generation_resolution"] = str(self.config.get("text_generation_resolution", "1K") or "1K")
         self.config["reference_generation_resolution"] = str(self.config.get("reference_generation_resolution", "1K") or "1K")
 
-        # ÐžÑÑ‚Ð°Ð²Ð»ÑÐµÐ¼ legacy-ÐºÐ»ÑŽÑ‡ Ð´Ð»Ñ Ð¾Ð±Ñ€Ð°Ñ‚Ð½Ð¾Ð¹ ÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð¸Ð¼Ð¾ÑÑ‚Ð¸.
+        # Оставляем legacy-ключ для обратной совместимости.
         self.config["generation_model"] = self.config["text_generation_model"]
 
-        # Ð¢ÐµÐºÑƒÑ‰Ð°Ñ Ð²ÐµÑ€ÑÐ¸Ñ Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ð±ÐµÑ€Ñ‘Ñ‚ÑÑ Ð¸Ð· ÐºÐ¾Ð´Ð° ÑÐ±Ð¾Ñ€ÐºÐ¸, Ð° Ð½Ðµ Ð¸Ð· Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒÑÐºÐ¾Ð³Ð¾ ÐºÐ¾Ð½Ñ„Ð¸Ð³Ð°.
-        # Ð­Ñ‚Ð¾ Ð¿Ñ€ÐµÐ´Ð¾Ñ‚Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ Ñ†Ð¸ÐºÐ» Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹, ÐµÑÐ»Ð¸ Ð² ÐºÐ¾Ð½Ñ„Ð¸Ð³Ðµ Ð¾ÑÑ‚Ð°Ð»Ð¾ÑÑŒ ÑÑ‚Ð°Ñ€Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ.
+        # Текущая версия приложения берётся из кода сборки, а не из пользовательского конфига.
+        # Это предотвращает цикл обновлений, если в конфиге осталось старое значение.
         self.config["app_version"] = APP_VERSION
 
     def save_config(self):
@@ -3655,8 +3664,8 @@ class MainWindow(QMainWindow):
         )
 
         top_layout = QHBoxLayout()
-        self.lbl_work_dir = QLabel("Ð Ð°Ð±Ð¾Ñ‡Ð°Ñ Ð¿Ð°Ð¿ÐºÐ°: Ð½Ðµ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð°")
-        self.btn_select_dir = QPushButton("Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ð¿Ð°Ð¿ÐºÑƒ")
+        self.lbl_work_dir = QLabel("Рабочая папка: не выбрана")
+        self.btn_select_dir = QPushButton("Выбрать папку")
         self.btn_select_dir.setFixedSize(self.standard_button_width, self.standard_button_height)
         self.btn_select_dir.setStyleSheet(self.primary_button_style)
         self.btn_select_dir.clicked.connect(self.select_work_dir)
@@ -3666,13 +3675,13 @@ class MainWindow(QMainWindow):
         top_layout.addStretch()
         main_layout.addLayout(top_layout)
 
-        run_mode_group = QGroupBox("Ð¡Ñ†ÐµÐ½Ð°Ñ€Ð¸Ð¹ Ð·Ð°Ð¿ÑƒÑÐºÐ°")
+        run_mode_group = QGroupBox("Сценарий запуска")
         run_mode_layout = QHBoxLayout()
         self.run_mode_group = QButtonGroup()
 
-        self.radio_run_generate = QRadioButton("Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ð³ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ñ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹")
-        self.radio_run_process = QRadioButton("Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð¾Ð²")
-        self.radio_run_both = QRadioButton("Ð’ÑÐµ Ð²Ð¼ÐµÑÑ‚Ðµ")
+        self.radio_run_generate = QRadioButton("Только генерация изображений")
+        self.radio_run_process = QRadioButton("Только обработка файлов")
+        self.radio_run_both = QRadioButton("Все вместе")
 
         run_mode = self.config.get("run_mode", "generate_only")
         if run_mode == "process_only":
@@ -3711,30 +3720,30 @@ class MainWindow(QMainWindow):
         settings_scroll = QScrollArea()
         settings_scroll.setWidgetResizable(True)
         settings_scroll.setWidget(settings_tab)
-        self.tabs.addTab(prompt_tab, "ÐŸÑ€Ð¾Ð¼Ð¿Ñ‚Ñ‹")
-        self.tabs.addTab(process_scroll, "ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ°")
-        self.tabs.addTab(settings_scroll, "ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸")
+        self.tabs.addTab(prompt_tab, "Промпты")
+        self.tabs.addTab(process_scroll, "Обработка")
+        self.tabs.addTab(settings_scroll, "Настройки")
         main_layout.addWidget(self.tabs)
 
         prompt_btn_layout = QHBoxLayout()
         self.btn_add_prompt_row = QPushButton("+")
         self.btn_add_prompt_row.clicked.connect(self.add_prompt_row)
-        self.btn_add_prompt_row.setToolTip("Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ ÑÑ‚Ñ€Ð¾ÐºÑƒ")
-        self.btn_add_refs_selected = QPushButton("ðŸ–¼+")
+        self.btn_add_prompt_row.setToolTip("Добавить строку")
+        self.btn_add_refs_selected = QPushButton("🖼+")
         self.btn_add_refs_selected.clicked.connect(self.add_references_to_selected_prompts)
-        self.btn_add_refs_selected.setToolTip("Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹ Ðº Ð²Ñ‹Ð´ÐµÐ»ÐµÐ½Ð½Ñ‹Ð¼ ÑÑ‚Ñ€Ð¾ÐºÐ°Ð¼")
-        self.btn_clear_refs_selected = QPushButton("ðŸ–¼âˆ’")
+        self.btn_add_refs_selected.setToolTip("Добавить референсы к выделенным строкам")
+        self.btn_clear_refs_selected = QPushButton("🖼−")
         self.btn_clear_refs_selected.clicked.connect(self.clear_references_for_selected_prompts)
-        self.btn_clear_refs_selected.setToolTip("ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹ Ñƒ Ð²Ñ‹Ð´ÐµÐ»ÐµÐ½Ð½Ñ‹Ñ… ÑÑ‚Ñ€Ð¾Ðº")
-        self.btn_import_csv = QPushButton("Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ CSV")
+        self.btn_clear_refs_selected.setToolTip("Очистить референсы у выделенных строк")
+        self.btn_import_csv = QPushButton("Импорт CSV")
         self.btn_import_csv.clicked.connect(self.import_prompts_from_csv)
-        self.btn_import_csv.setToolTip("Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€ÑƒÐµÑ‚ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ñ‹ Ð¸Ð· CSV-Ñ„Ð°Ð¹Ð»Ð°")
-        self.btn_export_csv = QPushButton("Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ CSV")
+        self.btn_import_csv.setToolTip("Импортирует промпты из CSV-файла")
+        self.btn_export_csv = QPushButton("Экспорт CSV")
         self.btn_export_csv.clicked.connect(self.export_prompts)
-        self.btn_export_csv.setToolTip("Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€ÑƒÐµÑ‚ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ñ‹ Ð¸ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹ Ð² CSV-Ñ„Ð°Ð¹Ð»")
-        self.btn_clear_prompts = QPushButton("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²ÑÐµ")
+        self.btn_export_csv.setToolTip("Экспортирует промпты и референсы в CSV-файл")
+        self.btn_clear_prompts = QPushButton("Удалить все")
         self.btn_clear_prompts.clicked.connect(self.clear_all_prompts)
-        self.btn_clear_prompts.setToolTip("ÐžÑ‡Ð¸Ñ‰Ð°ÐµÑ‚ ÑÐ¿Ð¸ÑÐ¾Ðº Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ð² Ð¿Ñ€ÐµÐ´Ð¿Ñ€Ð¾ÑÐ¼Ð¾Ñ‚Ñ€Ðµ")
+        self.btn_clear_prompts.setToolTip("Очищает список промптов в предпросмотре")
         self.btn_import_csv.setFixedSize(self.standard_button_width, self.standard_button_height)
         self.btn_export_csv.setFixedSize(self.standard_button_width, self.standard_button_height)
         self.btn_clear_prompts.setFixedSize(self.standard_button_width, self.standard_button_height)
@@ -3755,10 +3764,10 @@ class MainWindow(QMainWindow):
         prompt_btn_layout.addWidget(self.btn_clear_prompts)
         prompt_tab_layout.addLayout(prompt_btn_layout)
 
-        preview_group = QGroupBox("Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð·Ð°Ð¿Ð¸ÑÐµÐ¹")
+        preview_group = QGroupBox("Список записей")
         preview_layout = QVBoxLayout()
         self.table = PromptTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["ÐŸÑ€Ð¾Ð¼Ð¿Ñ‚", "ðŸ–¼", "", ""])
+        self.table.setHorizontalHeaderLabels(["Промпт", "🖼", "", ""])
         self.table.verticalHeader().setVisible(True)
         self.table.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
@@ -3782,33 +3791,33 @@ class MainWindow(QMainWindow):
         preview_group.setLayout(preview_layout)
         prompt_tab_layout.addWidget(preview_group)
 
-        files_group = QGroupBox("Ð¤Ð°Ð¹Ð»Ñ‹ Ð´Ð»Ñ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ¸")
+        files_group = QGroupBox("Файлы для обработки")
         files_layout = QVBoxLayout()
-        self.btn_select_files = QPushButton("Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ñ„Ð°Ð¹Ð»Ñ‹")
+        self.btn_select_files = QPushButton("Выбрать файлы")
         self.btn_select_files.setFixedSize(self.standard_button_width, self.standard_button_height)
         self.btn_select_files.setStyleSheet(self.primary_button_style)
         self.btn_select_files.clicked.connect(self.select_files)
-        self.lbl_files_count = QLabel("Ð¤Ð°Ð¹Ð»Ð¾Ð² Ð½Ðµ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð¾")
+        self.lbl_files_count = QLabel("Файлов не выбрано")
         files_layout.addWidget(self.btn_select_files)
         files_layout.addWidget(self.lbl_files_count)
         files_group.setLayout(files_layout)
         process_tab_layout.addWidget(files_group)
 
-        self.process_flags_group = QGroupBox("ÐŸÐ°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ¸")
+        self.process_flags_group = QGroupBox("Параметры обработки")
         process_flags_layout = QGridLayout()
         process_flags_layout.setHorizontalSpacing(12)
         process_flags_layout.setVerticalSpacing(8)
-        self.chk_visible_mark_cleanup = QCheckBox("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²Ð¸Ð´Ð¸Ð¼Ñ‹Ð¹ Ð²Ð¾Ð´ÑÐ½Ð¾Ð¹ Ð·Ð½Ð°Ðº")
+        self.chk_visible_mark_cleanup = QCheckBox("Удалить видимый водяной знак")
         self.chk_visible_mark_cleanup.setChecked(
             bool(self.config.get("visible_mark_cleanup_enabled", False))
         )
         self.chk_visible_mark_cleanup.setToolTip(
-            "Ð£Ð´Ð°Ð»ÑÐµÑ‚ Ð²Ð¸Ð´Ð¸Ð¼Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚Ð¾Ð²Ñ‹Ð¹ Ð¸Ð»Ð¸ Ð»Ð¾Ð³Ð¾Ñ‚Ð¸Ð¿Ð½Ñ‹Ð¹ Ð²Ð¾Ð´ÑÐ½Ð¾Ð¹ Ð·Ð½Ð°Ðº. "
-            "Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ð´Ð»Ñ ÑÐ¾Ð±ÑÑ‚Ð²ÐµÐ½Ð½Ñ‹Ñ… Ð¸Ð»Ð¸ Ð»Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ñ… Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹."
+            "Удаляет видимый текстовый или логотипный водяной знак. "
+            "Только для собственных или лицензированных изображений."
         )
         self.visible_mark_mode_combo = QComboBox()
-        self.visible_mark_mode_combo.addItem("ÐÐ²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸ (Gemini)", "gemini_auto")
-        self.visible_mark_mode_combo.addItem("Ð’Ñ‹Ð´ÐµÐ»ÐµÐ½Ð½Ð°Ñ Ð¾Ð±Ð»Ð°ÑÑ‚ÑŒ (Ñ Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¸ÐµÐ¼)", "confirmed_area")
+        self.visible_mark_mode_combo.addItem("Автоматически (Gemini)", "gemini_auto")
+        self.visible_mark_mode_combo.addItem("Выделенная область (с подтверждением)", "confirmed_area")
         visible_mark_mode = normalize_visible_mark_cleanup_mode(
             self.config.get("visible_mark_cleanup_mode", "gemini_auto")
         )
@@ -3819,23 +3828,23 @@ class MainWindow(QMainWindow):
         self.visible_mark_mode_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.visible_mark_mode_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.visible_mark_mode_combo.setFixedHeight(32)
-        self.visible_mark_confirmation_label = QLabel("ÐÑƒÐ¶Ð½Ð¾ Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¸Ðµ")
+        self.visible_mark_confirmation_label = QLabel("Нужно подтверждение")
         self.visible_mark_confirmation_label.setStyleSheet("color:#14b8a6; font-weight:600;")
-        self.chk_upscale = QCheckBox("ÐÐ¿ÑÐºÐµÐ¹Ð» Ð´Ð¾ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ Ñ„Ð¾Ð½Ð°")
+        self.chk_upscale = QCheckBox("Апскейл до удаления фона")
         self.chk_upscale.setChecked(self.config.get("upscale", True))
-        self.chk_upscale_after = QCheckBox("ÐÐ¿ÑÐºÐµÐ¹Ð» Ð¿Ð¾ÑÐ»Ðµ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ Ñ„Ð¾Ð½Ð°")
+        self.chk_upscale_after = QCheckBox("Апскейл после удаления фона")
         self.chk_upscale_after.setChecked(bool(self.config.get("upscale_after", False)))
         self.upscale_total_label = QLabel("")
         self.upscale_total_label.setStyleSheet("color:#14b8a6; font-weight:700;")
-        self.chk_remove_bg = QCheckBox("Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð°")
+        self.chk_remove_bg = QCheckBox("Удаление фона")
         self.chk_remove_bg.setChecked(self.config.get("remove_bg", True))
-        self.chk_trim = QCheckBox("Trim (Ð¾Ð±Ñ€ÐµÐ·ÐºÐ° Ð¿ÑƒÑÑ‚Ñ‹Ñ… ÐºÑ€Ð°Ñ‘Ð²)")
+        self.chk_trim = QCheckBox("Trim (обрезка пустых краёв)")
         self.chk_trim.setChecked(bool(self.config.get("trim_enabled", False)))
         self.chk_unsharp = QCheckBox("Unsharp Mask")
         self.chk_unsharp.setChecked(bool(self.config.get("unsharp_enabled", False)))
-        self.chk_export_300_dpi = QCheckBox("Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ Ð´Ð»Ñ Ð¿ÐµÑ‡Ð°Ñ‚Ð¸ (300 DPI)")
+        self.chk_export_300_dpi = QCheckBox("Экспорт для печати (300 DPI)")
         self.chk_export_300_dpi.setChecked(bool(self.config.get("export_300_dpi", False)))
-        self.chk_edge_shrink = QCheckBox("Ð£Ð´Ð°Ð»ÑÑ‚ÑŒ ÐºÐ¾Ð½Ñ‚ÑƒÑ€")
+        self.chk_edge_shrink = QCheckBox("Удалять контур")
         self.chk_edge_shrink.setChecked(bool(self.config.get("edge_shrink_enabled", False)))
         self.edge_shrink_pixels_combo = QComboBox()
         for pixel_value in (1, 2, 3):
@@ -3847,9 +3856,9 @@ class MainWindow(QMainWindow):
         self.edge_shrink_pixels_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         self.edge_shrink_pixels_combo.setFixedSize(72, 32)
         self.trim_mode_combo = QComboBox()
-        self.trim_mode_combo.addItem("ÐŸÑ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ñ‹Ðµ ÐºÑ€Ð°Ñ", "alpha")
-        self.trim_mode_combo.addItem("Ð‘ÐµÐ»Ñ‹Ðµ ÐºÑ€Ð°Ñ", "white")
-        self.trim_mode_combo.addItem("Ð§ÐµÑ€Ð½Ñ‹Ðµ ÐºÑ€Ð°Ñ", "black")
+        self.trim_mode_combo.addItem("Прозрачные края", "alpha")
+        self.trim_mode_combo.addItem("Белые края", "white")
+        self.trim_mode_combo.addItem("Черные края", "black")
         trim_mode = str(self.config.get("trim_mode", "alpha") or "alpha")
         trim_mode_index = self.trim_mode_combo.findData(trim_mode)
         self.trim_mode_combo.setCurrentIndex(trim_mode_index if trim_mode_index >= 0 else 0)
@@ -3879,7 +3888,7 @@ class MainWindow(QMainWindow):
         trim_params_layout = QHBoxLayout(trim_params_widget)
         trim_params_layout.setContentsMargins(0, 0, 0, 0)
         trim_params_layout.setSpacing(8)
-        trim_params_layout.addWidget(QLabel("Ð£Ð´Ð°Ð»ÑÐµÐ¼Ñ‹Ð¹ Ñ†Ð²ÐµÑ‚:"))
+        trim_params_layout.addWidget(QLabel("Удаляемый цвет:"))
         trim_params_layout.addWidget(self.trim_mode_combo)
         trim_params_layout.addStretch()
 
@@ -3908,14 +3917,14 @@ class MainWindow(QMainWindow):
         self.process_flags_group.setLayout(process_flags_layout)
         process_tab_layout.addWidget(self.process_flags_group)
 
-        self.cleanup_group = QGroupBox("ÐžÑ‡Ð¸ÑÑ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð°")
+        self.cleanup_group = QGroupBox("Очистка файла")
         cleanup_layout = QVBoxLayout()
         cleanup_layout.setSpacing(6)
 
-        self.chk_cleanup_all = QCheckBox("ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ Ð´Ð°Ð½Ð½Ñ‹Ðµ Ñ„Ð°Ð¹Ð»Ð° Ð¿Ð¾Ð»Ð½Ð¾ÑÑ‚ÑŒÑŽ")
+        self.chk_cleanup_all = QCheckBox("Очистить данные файла полностью")
         self.chk_cleanup_all.setToolTip(
-            "Ð£Ð´Ð°Ð»ÑÐµÑ‚ Ð²ÑÐµ ÑÐ»ÑƒÐ¶ÐµÐ±Ð½Ñ‹Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ, ÐºÑ€Ð¾Ð¼Ðµ ICC-Ð¿Ñ€Ð¾Ñ„Ð¸Ð»Ñ Ð¸ DPI. "
-            "ÐŸÐ¸ÐºÑÐµÐ»Ð¸ Ð¸ Ð¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ð¾ÑÑ‚ÑŒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ Ð½Ðµ Ð¼ÐµÐ½ÑÑŽÑ‚ÑÑ."
+            "Удаляет все служебные данные, кроме ICC-профиля и DPI. "
+            "Пиксели и прозрачность изображения не меняются."
         )
         cleanup_all_enabled = bool(self.config.get("cleanup_remove_all", False)) or any(
             bool(self.config.get(key, False))
@@ -3931,8 +3940,8 @@ class MainWindow(QMainWindow):
         )
         self.chk_cleanup_all.setChecked(cleanup_all_enabled)
         cleanup_intro = QLabel(
-            "Ð£Ð´Ð°Ð»ÑÑŽÑ‚ÑÑ EXIF, XMP, IPTC, ÐºÐ¾Ð¼Ð¼ÐµÐ½Ñ‚Ð°Ñ€Ð¸Ð¸, Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ð°Ñ Ð¼Ð¸Ð½Ð¸Ð°Ñ‚ÑŽÑ€Ð°, "
-            "Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð³ÐµÐ½ÐµÑ€Ð°Ñ‚Ð¾Ñ€Ð° Ð¸ Ð²ÑÑ‚Ñ€Ð¾ÐµÐ½Ð½Ñ‹Ð¹ C2PA. ICC-Ð¿Ñ€Ð¾Ñ„Ð¸Ð»ÑŒ Ð¸ DPI ÑÐ¾Ñ…Ñ€Ð°Ð½ÑÑŽÑ‚ÑÑ."
+            "Удаляются EXIF, XMP, IPTC, комментарии, встроенная миниатюра, "
+            "данные генератора и встроенный C2PA. ICC-профиль и DPI сохраняются."
         )
         cleanup_intro.setWordWrap(True)
         cleanup_layout.addWidget(self.chk_cleanup_all)
@@ -3940,7 +3949,7 @@ class MainWindow(QMainWindow):
         self.cleanup_group.setLayout(cleanup_layout)
         process_tab_layout.addWidget(self.cleanup_group)
 
-        kie_group = QGroupBox("ÐŸÐ¾Ð´ÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ñ Ð¸ Ð³ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ñ")
+        kie_group = QGroupBox("Подключения и генерация")
         kie_group.setMaximumWidth(720)
         kie_layout = QGridLayout()
         kie_layout.setHorizontalSpacing(6)
@@ -3950,9 +3959,9 @@ class MainWindow(QMainWindow):
         self.kie_api_key_input.setText(self.config.get("kie_api_key", ""))
         self.kie_api_key_input.setReadOnly(True)
 
-        self.btn_api_key_lock = QPushButton("ðŸ”’")
+        self.btn_api_key_lock = QPushButton("🔒")
         self.btn_api_key_lock.setFixedSize(40, 32)
-        self.btn_api_key_lock.setToolTip("ÐšÐ»ÑŽÑ‡ Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
+        self.btn_api_key_lock.setToolTip("Ключ заблокирован")
         self.btn_api_key_lock.clicked.connect(self.toggle_api_key_lock)
 
         self.text_generation_model_combo = QComboBox()
@@ -3986,7 +3995,7 @@ class MainWindow(QMainWindow):
         self.text_resolution_combo = QComboBox()
         self.reference_ratio_combo = QComboBox()
         self.reference_resolution_combo = QComboBox()
-        self.btn_check_balance = QPushButton("ÐŸÑ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Ð±Ð°Ð»Ð°Ð½Ñ")
+        self.btn_check_balance = QPushButton("Проверить баланс")
         self.btn_check_balance.setFixedSize(130, 32)
         self.btn_check_balance.setStyleSheet(self.compact_button_style)
         self.btn_check_balance.clicked.connect(self.check_kie_balance)
@@ -4009,13 +4018,13 @@ class MainWindow(QMainWindow):
 
         lbl_api_key = QLabel("KIE API Key:")
         lbl_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_text_model = QLabel("Ð”Ð»Ñ Ñ‚ÐµÐºÑÑ‚Ð¾Ð²Ñ‹Ñ… Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð²:")
+        lbl_text_model = QLabel("Для текстовых промптов:")
         lbl_text_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_reference_model = QLabel("Ð”Ð»Ñ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ñ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ°Ð¼Ð¸:")
+        lbl_reference_model = QLabel("Для промптов с референсами:")
         lbl_reference_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_text_options = QLabel("ÐŸÐ°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ Ñ‚ÐµÐºÑÑ‚Ð°:")
+        lbl_text_options = QLabel("Параметры текста:")
         lbl_text_options.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        lbl_reference_options = QLabel("ÐŸÐ°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ°:")
+        lbl_reference_options = QLabel("Параметры референса:")
         lbl_reference_options.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         text_options_widget = QWidget()
@@ -4072,11 +4081,11 @@ class MainWindow(QMainWindow):
         self.photoroom_api_key_input.setText(self.config.get("photoroom_api_key", ""))
         self.photoroom_api_key_input.setReadOnly(True)
         self.photoroom_api_key_input.setFixedSize(settings_field_width, 32)
-        self.btn_photoroom_api_key_lock = QPushButton("ðŸ”’")
+        self.btn_photoroom_api_key_lock = QPushButton("🔒")
         self.btn_photoroom_api_key_lock.setFixedSize(40, 32)
-        self.btn_photoroom_api_key_lock.setToolTip("ÐšÐ»ÑŽÑ‡ Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
+        self.btn_photoroom_api_key_lock.setToolTip("Ключ заблокирован")
         self.btn_photoroom_api_key_lock.clicked.connect(self.toggle_photoroom_api_key_lock)
-        photoroom_price_label = QLabel("Standard Â· $0.02 / Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ")
+        photoroom_price_label = QLabel("Standard · $0.02 / изображение")
         photoroom_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
         photoroom_access_widget = QWidget()
         photoroom_access_layout = QHBoxLayout(photoroom_access_widget)
@@ -4091,7 +4100,7 @@ class MainWindow(QMainWindow):
         kie_layout.addWidget(lbl_photoroom_api_key, 5, 0)
         kie_layout.addWidget(photoroom_access_widget, 5, 1, 1, 3)
 
-        process_settings_group = QGroupBox("ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹")
+        process_settings_group = QGroupBox("Обработка изображений")
         process_settings_group.setMaximumWidth(1080)
         process_settings_layout = QVBoxLayout()
         process_settings_layout.setSpacing(10)
@@ -4118,9 +4127,9 @@ class MainWindow(QMainWindow):
         self.local_realesrgan_dir_input.setText(bundled_local_realesrgan_dir())
         self.local_realesrgan_dir_input.setReadOnly(True)
         self.local_realesrgan_dir_input.setVisible(False)
-        self.local_realesrgan_bundle_label = QLabel("Ð’ÑÑ‚Ñ€Ð¾ÐµÐ½ Ð² Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ")
+        self.local_realesrgan_bundle_label = QLabel("Встроен в приложение")
         self.local_realesrgan_bundle_label.setToolTip(
-            "Real-ESRGAN Ð²Ñ…Ð¾Ð´Ð¸Ñ‚ Ð² Ð¿Ð°ÐºÐµÑ‚ Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ð¸ Ð½Ðµ Ñ‚Ñ€ÐµÐ±ÑƒÐµÑ‚ Ð²Ñ‹Ð±Ð¾Ñ€Ð° Ð¿Ð°Ð¿ÐºÐ¸."
+            "Real-ESRGAN входит в пакет приложения и не требует выбора папки."
         )
 
         self.local_realesrgan_profile_combo = QComboBox()
@@ -4170,7 +4179,7 @@ class MainWindow(QMainWindow):
         self.remove_bg_provider_combo.addItem("KIE", "kie")
         self.remove_bg_provider_combo.addItem("PhotoRoom Standard", "photoroom")
         self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
-        self.remove_bg_provider_combo.addItem("BEN2 (Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹, ÑÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚Ð°Ð»ÑŒÐ½Ñ‹Ð¹)", "local_ben2")
+        self.remove_bg_provider_combo.addItem("BEN2 (локальный, экспериментальный)", "local_ben2")
         remove_bg_provider = str(self.config.get("remove_bg_provider", "kie") or "kie")
         remove_bg_provider_index = self.remove_bg_provider_combo.findData(remove_bg_provider)
         self.remove_bg_provider_combo.setCurrentIndex(remove_bg_provider_index if remove_bg_provider_index >= 0 else 0)
@@ -4185,18 +4194,18 @@ class MainWindow(QMainWindow):
         self.local_rembg_profile_combo.setCurrentIndex(local_rembg_profile_index if local_rembg_profile_index >= 0 else 0)
 
         self.local_rembg_model_combo = QComboBox()
-        self.local_rembg_model_combo.addItem("BiRefNet â€” Ð¾Ð±Ñ‰Ð¸Ð¹", "birefnet-general")
-        self.local_rembg_model_combo.addItem("BiRefNet â€” Ð¿Ð¾Ñ€Ñ‚Ñ€ÐµÑ‚", "birefnet-portrait")
-        self.local_rembg_model_combo.addItem("IS-Net â€” Ð°Ð½Ð¸Ð¼Ðµ", "isnet-anime")
-        self.local_rembg_model_combo.addItem("IS-Net â€” Ð¾Ð±Ñ‰Ð¸Ð¹", "isnet-general-use")
+        self.local_rembg_model_combo.addItem("BiRefNet — общий", "birefnet-general")
+        self.local_rembg_model_combo.addItem("BiRefNet — портрет", "birefnet-portrait")
+        self.local_rembg_model_combo.addItem("IS-Net — аниме", "isnet-anime")
+        self.local_rembg_model_combo.addItem("IS-Net — общий", "isnet-general-use")
         local_rembg_model = str(self.config.get("local_rembg_model", "birefnet-general") or "birefnet-general")
         local_rembg_model_index = self.local_rembg_model_combo.findData(local_rembg_model)
         self.local_rembg_model_combo.setCurrentIndex(local_rembg_model_index if local_rembg_model_index >= 0 else 0)
 
         self.local_rembg_edge_quality_combo = QComboBox()
-        self.local_rembg_edge_quality_combo.addItem("ÐœÑÐ³ÐºÐ¸Ð¹", "soft")
-        self.local_rembg_edge_quality_combo.addItem("ÐžÐ±Ñ‹Ñ‡Ð½Ñ‹Ð¹", "normal")
-        self.local_rembg_edge_quality_combo.addItem("Ð§ÐµÑ‚ÐºÐ¸Ð¹", "sharp")
+        self.local_rembg_edge_quality_combo.addItem("Мягкий", "soft")
+        self.local_rembg_edge_quality_combo.addItem("Обычный", "normal")
+        self.local_rembg_edge_quality_combo.addItem("Четкий", "sharp")
         local_rembg_edge_quality = normalize_local_rembg_edge_quality(
             self.config.get("local_rembg_edge_quality", "normal")
         )
@@ -4205,7 +4214,7 @@ class MainWindow(QMainWindow):
             local_rembg_edge_quality_index if local_rembg_edge_quality_index >= 0 else 1
         )
 
-        self.local_ben2_refine_checkbox = QCheckBox("Ð£Ñ‚Ð¾Ñ‡Ð½ÑÑ‚ÑŒ Ð¿ÐµÑ€ÐµÐ´Ð½Ð¸Ð¹ Ð¿Ð»Ð°Ð½")
+        self.local_ben2_refine_checkbox = QCheckBox("Уточнять передний план")
         self.local_ben2_refine_checkbox.setChecked(bool(self.config.get("local_ben2_refine_foreground", False)))
         self.local_ben2_alpha_threshold_spin = QSpinBox()
         self.local_ben2_alpha_threshold_spin.setRange(0, 255)
@@ -4307,51 +4316,51 @@ class MainWindow(QMainWindow):
             return subgroup
 
         upscale_before_group = make_processing_subgroup(
-            "ÐÐ¿ÑÐºÐµÐ¹Ð» Ð´Ð¾ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ Ñ„Ð¾Ð½Ð°",
+            "Апскейл до удаления фона",
             [
-                ("ÐŸÑ€Ð¾Ð²Ð°Ð¹Ð´ÐµÑ€:", self.upscale_provider_combo),
-                ("ÐœÐ¾Ð´ÐµÐ»ÑŒ KIE:", kie_upscale_model_widget),
-                ("ÐœÐ°ÑÑˆÑ‚Ð°Ð± Local Real-ESRGAN:", self.local_realesrgan_scale_combo),
-                ("ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ Local Real-ESRGAN:", self.local_realesrgan_profile_combo),
+                ("Провайдер:", self.upscale_provider_combo),
+                ("Модель KIE:", kie_upscale_model_widget),
+                ("Масштаб Local Real-ESRGAN:", self.local_realesrgan_scale_combo),
+                ("Профиль Local Real-ESRGAN:", self.local_realesrgan_profile_combo),
                 ("Local Real-ESRGAN:", self.local_realesrgan_bundle_label),
             ],
         )
         upscale_after_group = make_processing_subgroup(
-            "ÐÐ¿ÑÐºÐµÐ¹Ð» Ð¿Ð¾ÑÐ»Ðµ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ñ Ñ„Ð¾Ð½Ð°",
+            "Апскейл после удаления фона",
             [
-                ("ÐŸÑ€Ð¾Ð²Ð°Ð¹Ð´ÐµÑ€:", self.upscale_after_provider_combo),
-                ("ÐœÐ¾Ð´ÐµÐ»ÑŒ KIE:", kie_upscale_after_model_widget),
-                ("ÐœÐ°ÑÑˆÑ‚Ð°Ð± Local Real-ESRGAN:", self.local_realesrgan_after_scale_combo),
+                ("Провайдер:", self.upscale_after_provider_combo),
+                ("Модель KIE:", kie_upscale_after_model_widget),
+                ("Масштаб Local Real-ESRGAN:", self.local_realesrgan_after_scale_combo),
             ],
         )
         remove_background_group = make_processing_subgroup(
-            "Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð°",
+            "Удаление фона",
             [
-                ("ÐŸÑ€Ð¾Ð²Ð°Ð¹Ð´ÐµÑ€:", self.remove_bg_provider_combo),
-                ("ÐœÐ¾Ð´ÐµÐ»ÑŒ KIE:", kie_remove_bg_model_widget),
+                ("Провайдер:", self.remove_bg_provider_combo),
+                ("Модель KIE:", kie_remove_bg_model_widget),
             ],
         )
         rembg_group = make_processing_subgroup(
             "Local rembg",
             [
-                ("ÐŸÑ€Ð¾Ñ„Ð¸Ð»ÑŒ:", self.local_rembg_profile_combo),
-                ("ÐœÐ¾Ð´ÐµÐ»ÑŒ:", self.local_rembg_model_combo),
-                ("ÐšÑ€Ð°Ð¹:", self.local_rembg_edge_quality_combo),
+                ("Профиль:", self.local_rembg_profile_combo),
+                ("Модель:", self.local_rembg_model_combo),
+                ("Край:", self.local_rembg_edge_quality_combo),
             ],
         )
         ben2_group = make_processing_subgroup(
-            "BEN2: Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ð¾Ðµ ÑƒÑ‚Ð¾Ñ‡Ð½ÐµÐ½Ð¸Ðµ Ð¼Ð°ÑÐºÐ¸",
+            "BEN2: локальное уточнение маски",
             [
-                ("ÐšÐ¾Ð³Ð´Ð°:", QLabel("ÐŸÑ€Ð¸ Ð²Ñ‹Ð±Ð¾Ñ€Ðµ BEN2: Ð¿Ð¾ÑÐ»Ðµ Ð°Ð¿ÑÐºÐµÐ¹Ð»Ð° Ð´Ð¾ Ñ„Ð¾Ð½Ð°, Ð´Ð¾ Ð¾Ð±Ñ€ÐµÐ·ÐºÐ¸ ÐºÑ€Ð°Ñ")),
-                ("Ð£Ñ‚Ð¾Ñ‡Ð½ÑÑ‚ÑŒ Ð¿ÐµÑ€ÐµÐ´Ð½Ð¸Ð¹ Ð¿Ð»Ð°Ð½:", self.local_ben2_refine_checkbox),
-                ("ÐŸÐ¾Ñ€Ð¾Ð³ Ð¿Ñ€Ð¾Ð·Ñ€Ð°Ñ‡Ð½Ð¾ÑÑ‚Ð¸:", self.local_ben2_alpha_threshold_spin),
-                ("ÐœÑÐ³ÐºÐ¾ÑÑ‚ÑŒ ÐºÑ€Ð°Ñ:", self.local_ben2_edge_softness_combo),
-                ("Ð Ð°Ð´Ð¸ÑƒÑ ÑƒÐ³Ð»Ð¾Ð²:", self.local_ben2_corner_radius_combo),
+                ("Когда:", QLabel("При выборе BEN2: после апскейла до фона, до обрезки края")),
+                ("Уточнять передний план:", self.local_ben2_refine_checkbox),
+                ("Порог прозрачности:", self.local_ben2_alpha_threshold_spin),
+                ("Мягкость края:", self.local_ben2_edge_softness_combo),
+                ("Радиус углов:", self.local_ben2_corner_radius_combo),
             ],
         )
         ben2_group.setToolTip(
-            "BEN2 â€” Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ð»Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ ÑÐºÑÐ¿ÐµÑ€Ð¸Ð¼ÐµÐ½Ñ‚Ð°Ð»ÑŒÐ½Ñ‹Ð¹ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÐµÐ»ÑŒ Ñ„Ð¾Ð½Ð°. "
-            "Ð­Ñ‚Ð¾ Ð½Ðµ ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð²Ð¾Ð´ÑÐ½Ñ‹Ñ… Ð·Ð½Ð°ÐºÐ¾Ð²; Ð¿ÐµÑ€Ð²Ñ‹Ð¹ Ð·Ð°Ð¿ÑƒÑÐº Ð¼Ð¾Ð¶ÐµÑ‚ Ð·Ð°Ð³Ñ€ÑƒÐ¶Ð°Ñ‚ÑŒ Ð¼Ð¾Ð´ÐµÐ»ÑŒ."
+            "BEN2 — отдельный локальный экспериментальный удалитель фона. "
+            "Это не удаление водяных знаков; первый запуск может загружать модель."
         )
         process_settings_layout.addWidget(upscale_before_group)
         process_settings_layout.addWidget(upscale_after_group)
@@ -4364,7 +4373,7 @@ class MainWindow(QMainWindow):
 
         settings_tab_layout.addStretch()
 
-        log_group = QGroupBox("Ð›Ð¾Ð³ Ð¸ Ð¿Ñ€Ð¾Ð³Ñ€ÐµÑÑ")
+        log_group = QGroupBox("Лог и прогресс")
         log_layout = QVBoxLayout()
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
@@ -4440,8 +4449,8 @@ class MainWindow(QMainWindow):
 
     def _model_type_title(self, model_type):
         return {
-            "text_to_image": "Textâ†’Image",
-            "image_to_image": "Imageâ†’Image",
+            "text_to_image": "Text→Image",
+            "image_to_image": "Image→Image",
             "edit": "Edit",
         }.get(model_type or "", "Other")
 
@@ -4554,12 +4563,12 @@ class MainWindow(QMainWindow):
         ref_resolutions = self._get_ordered_resolutions_for_model(reference_model)
         self._set_combo_values(
             self.text_resolution_combo,
-            text_resolutions or ["â€”"],
+            text_resolutions or ["—"],
             preferred_text_resolution,
         )
         self._set_combo_values(
             self.reference_resolution_combo,
-            ref_resolutions or ["â€”"],
+            ref_resolutions or ["—"],
             preferred_reference_resolution,
         )
         self.text_resolution_combo.setEnabled(bool(text_resolutions))
@@ -4614,11 +4623,11 @@ class MainWindow(QMainWindow):
         table.insertRow(row)
         prefix = str(table.property("placeholderPrefix") or "")
         item = QTableWidgetItem("")
-        item.setToolTip(f"{prefix}: Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ Ð´Ð»Ñ Ð¿Ð¾Ð´ÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ¸")
+        item.setToolTip(f"{prefix}: значение для подстановки")
         table.setItem(row, 0, item)
 
-        delete_btn = QPushButton("ðŸ—‘")
-        delete_btn.setToolTip("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ ÑÑ‚Ñ€Ð¾ÐºÑƒ")
+        delete_btn = QPushButton("🗑")
+        delete_btn.setToolTip("Удалить строку")
         delete_btn.setMinimumHeight(24)
         delete_btn.clicked.connect(lambda _, r=row, t=table: self.remove_template_value_row(t, r))
         table.setCellWidget(row, 1, delete_btn)
@@ -4632,8 +4641,8 @@ class MainWindow(QMainWindow):
 
     def refresh_template_value_delete_buttons(self, table):
         for row in range(table.rowCount()):
-            delete_btn = QPushButton("ðŸ—‘")
-            delete_btn.setToolTip("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ ÑÑ‚Ñ€Ð¾ÐºÑƒ")
+            delete_btn = QPushButton("🗑")
+            delete_btn.setToolTip("Удалить строку")
             delete_btn.setMinimumHeight(24)
             delete_btn.clicked.connect(lambda _, r=row, t=table: self.remove_template_value_row(t, r))
             table.setCellWidget(row, 1, delete_btn)
@@ -4767,7 +4776,7 @@ class MainWindow(QMainWindow):
                 self.local_realesrgan_after_scale_combo,
                 self.kie_upscale_after_model_combo,
             )
-        self.upscale_total_label.setText(f"Ð˜Ñ‚Ð¾Ð³Ð¾Ð²Ñ‹Ð¹ Ð¼Ð°ÑÑˆÑ‚Ð°Ð±: {factor}x")
+        self.upscale_total_label.setText(f"Итоговый масштаб: {factor}x")
 
     def update_remove_bg_provider_controls_state(self, *_):
         is_kie = self.remove_bg_provider_combo.currentData() == "kie"
@@ -4789,36 +4798,36 @@ class MainWindow(QMainWindow):
             self.tabs.setCurrentIndex(1 if is_process else 0)
 
     def select_work_dir(self):
-        path = QFileDialog.getExistingDirectory(self, "Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ñ€Ð°Ð±Ð¾Ñ‡ÑƒÑŽ Ð¿Ð°Ð¿ÐºÑƒ")
+        path = QFileDialog.getExistingDirectory(self, "Выбрать рабочую папку")
         if path:
             self.work_dir = path
-            self.lbl_work_dir.setText(f"Ð Ð°Ð±Ð¾Ñ‡Ð°Ñ Ð¿Ð°Ð¿ÐºÐ°: {path}")
+            self.lbl_work_dir.setText(f"Рабочая папка: {path}")
             os.makedirs(os.path.join(path, "raw"), exist_ok=True)
             os.makedirs(os.path.join(path, "output"), exist_ok=True)
             self.config["last_work_dir"] = path
             self.save_config()
-            self.log(f"Ð¡Ð¾Ð·Ð´Ð°Ð½Ñ‹/Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐµÐ½Ñ‹ Ð¿Ð°Ð¿ÐºÐ¸ raw Ð¸ output Ð² {path}")
+            self.log(f"Созданы/проверены папки raw и output в {path}")
 
     def restore_last_work_dir(self):
         last_work_dir = str(self.config.get("last_work_dir", "")).strip()
         if not last_work_dir or not os.path.isdir(last_work_dir):
             return
         self.work_dir = last_work_dir
-        self.lbl_work_dir.setText(f"Ð Ð°Ð±Ð¾Ñ‡Ð°Ñ Ð¿Ð°Ð¿ÐºÐ°: {last_work_dir}")
+        self.lbl_work_dir.setText(f"Рабочая папка: {last_work_dir}")
         os.makedirs(os.path.join(last_work_dir, "raw"), exist_ok=True)
         os.makedirs(os.path.join(last_work_dir, "output"), exist_ok=True)
 
     def select_files(self):
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ñ",
+            "Выбрать изображения",
             "",
             "Images (*.png *.jpg *.jpeg *.webp);;All files (*.*)",
         )
         if files:
             self.selected_files = files
-            self.lbl_files_count.setText(f"Ð’Ñ‹Ð±Ñ€Ð°Ð½Ð¾ Ñ„Ð°Ð¹Ð»Ð¾Ð²: {len(files)}")
-            self.log(f"Ð’Ñ‹Ð±Ñ€Ð°Ð½Ð¾ Ñ„Ð°Ð¹Ð»Ð¾Ð²: {len(files)}")
+            self.lbl_files_count.setText(f"Выбрано файлов: {len(files)}")
+            self.log(f"Выбрано файлов: {len(files)}")
 
     def collect_visible_mark_regions(self):
         confirmed_regions = {}
@@ -4828,8 +4837,8 @@ class MainWindow(QMainWindow):
             except Exception as error:
                 QMessageBox.warning(
                     self,
-                    "ÐžÐ±Ð»Ð°ÑÑ‚ÑŒ Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ Ð¼ÐµÑ‚ÐºÐ¸",
-                    f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ {os.path.basename(file_path)}: {error}",
+                    "Область видимой метки",
+                    f"Не удалось открыть {os.path.basename(file_path)}: {error}",
                 )
                 return None
 
@@ -4872,7 +4881,7 @@ class MainWindow(QMainWindow):
     def _pick_reference_files(self):
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            "Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹",
+            "Выбрать референсы",
             "",
             "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif)",
         )
@@ -4907,12 +4916,12 @@ class MainWindow(QMainWindow):
 
     def add_references_to_selected_prompts(self):
         if not self.generated_prompts:
-            QMessageBox.warning(self, "Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹", "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ð¿ÑƒÑÑ‚")
+            QMessageBox.warning(self, "Референсы", "Список промптов пуст")
             return
 
         selected_rows = self._get_selected_prompt_rows()
         if not selected_rows:
-            QMessageBox.warning(self, "Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹", "Ð’Ñ‹Ð´ÐµÐ»Ð¸Ñ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð½Ñƒ ÑÑ‚Ñ€Ð¾ÐºÑƒ")
+            QMessageBox.warning(self, "Референсы", "Выделите хотя бы одну строку")
             return
 
         files = self._pick_reference_files()
@@ -4926,16 +4935,16 @@ class MainWindow(QMainWindow):
 
         self.refresh_prompts_table()
         self.save_prompts_storage()
-        self.log(f"Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹ Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ñ‹ Ðº ÑÑ‚Ñ€Ð¾ÐºÐ°Ð¼: {len(selected_rows)} | Ð¤Ð°Ð¹Ð»Ð¾Ð²: {len(files)}")
+        self.log(f"Референсы добавлены к строкам: {len(selected_rows)} | Файлов: {len(files)}")
 
     def clear_references_for_selected_prompts(self):
         if not self.generated_prompts:
-            QMessageBox.warning(self, "Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹", "Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ð¿ÑƒÑÑ‚")
+            QMessageBox.warning(self, "Референсы", "Список промптов пуст")
             return
 
         selected_rows = self._get_selected_prompt_rows()
         if not selected_rows:
-            QMessageBox.warning(self, "Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹", "Ð’Ñ‹Ð´ÐµÐ»Ð¸Ñ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð½Ñƒ ÑÑ‚Ñ€Ð¾ÐºÑƒ")
+            QMessageBox.warning(self, "Референсы", "Выделите хотя бы одну строку")
             return
 
         for idx in selected_rows:
@@ -4945,7 +4954,7 @@ class MainWindow(QMainWindow):
 
         self.refresh_prompts_table()
         self.save_prompts_storage()
-        self.log(f"Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹ Ð¾Ñ‡Ð¸Ñ‰ÐµÐ½Ñ‹ Ñƒ ÑÑ‚Ñ€Ð¾Ðº: {len(selected_rows)}")
+        self.log(f"Референсы очищены у строк: {len(selected_rows)}")
 
     def open_prompt_editor(self, row_index):
         if not (0 <= row_index < len(self.generated_prompts)):
@@ -5000,7 +5009,7 @@ class MainWindow(QMainWindow):
 
     def build_prompts(self):
         if not hasattr(self, "master_prompt"):
-            self.log("Ð¨Ð°Ð±Ð»Ð¾Ð½Ð½Ñ‹Ð¹ Ñ€ÐµÐ¶Ð¸Ð¼ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ð¾Ñ‚ÐºÐ»ÑŽÑ‡Ñ‘Ð½ Ð² Ñ‚ÐµÐºÑƒÑ‰ÐµÐ¼ Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹ÑÐµ")
+            self.log("Шаблонный режим промптов отключён в текущем интерфейсе")
             return
         template = self.master_prompt.toPlainText().strip()
         a = self.get_template_values(self.field_a)
@@ -5008,7 +5017,7 @@ class MainWindow(QMainWindow):
         c = self.get_template_values(self.field_c)
 
         if not template:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Master Prompt")
+            QMessageBox.warning(self, "Ошибка", "Введите Master Prompt")
             return
 
         self.generated_prompts = []
@@ -5027,7 +5036,7 @@ class MainWindow(QMainWindow):
                 self.generated_prompts.append({"prompt": prompt, "references": []})
         self.refresh_prompts_table()
 
-        self.log(f"Ð¡Ð¾Ð·Ð´Ð°Ð½Ð¾ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð²: {len(self.generated_prompts)}")
+        self.log(f"Создано промптов: {len(self.generated_prompts)}")
 
     def build_prompts_from_template_inputs(self):
         if not hasattr(self, "master_prompt"):
@@ -5068,33 +5077,33 @@ class MainWindow(QMainWindow):
 
     def import_prompts_from_template(self):
         if not hasattr(self, "master_prompt"):
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð¨Ð°Ð±Ð»Ð¾Ð½Ð½Ñ‹Ð¹ Ñ€ÐµÐ¶Ð¸Ð¼ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½")
+            QMessageBox.warning(self, "Ошибка", "Шаблонный режим промптов недоступен")
             return
         raw_text = self.master_prompt.toPlainText().strip()
         if not raw_text:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð’ÑÑ‚Ð°Ð²ÑŒÑ‚Ðµ ÑÐ¿Ð¸ÑÐ¾Ðº Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ð² Ð¿Ð¾Ð»Ðµ Master Prompt")
+            QMessageBox.warning(self, "Ошибка", "Вставьте список промптов в поле Master Prompt")
             return
 
         prompts = self._split_prompts_text(raw_text)
         if not prompts:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ñ€Ð°ÑÐ¿Ð¾Ð·Ð½Ð°Ñ‚ÑŒ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ñ‹")
+            QMessageBox.warning(self, "Ошибка", "Не удалось распознать промпты")
             return
 
         self.generated_prompts = [{"prompt": p, "references": []} for p in prompts]
         self.refresh_prompts_table()
-        self.log(f"Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¾ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð²: {len(self.generated_prompts)}")
+        self.log(f"Импортировано промптов: {len(self.generated_prompts)}")
 
     def on_table_bulk_paste(self, raw_text):
         prompts = self._split_prompts_text(raw_text)
         self.generated_prompts = [{"prompt": p, "references": []} for p in prompts]
         self.refresh_prompts_table()
         self.save_prompts_storage()
-        self.log(f"Ð’ÑÑ‚Ð°Ð²Ð»ÐµÐ½Ð¾ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð²: {len(self.generated_prompts)}")
+        self.log(f"Вставлено промптов: {len(self.generated_prompts)}")
 
     def import_prompts_from_csv(self):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ CSV-Ñ„Ð°Ð¹Ð» Ñ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð°Ð¼Ð¸",
+            "Выбрать CSV-файл с промптами",
             "",
             "CSV files (*.csv);;All files (*.*)",
         )
@@ -5107,17 +5116,17 @@ class MainWindow(QMainWindow):
 
         imported_entries = dialog.get_entries()
         if not imported_entries:
-            QMessageBox.warning(self, "Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ CSV", "ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾ Ð½Ð¸ Ð¾Ð´Ð½Ð¾Ð¹ Ð·Ð°Ð¿Ð¸ÑÐ¸ Ð´Ð»Ñ Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð°")
+            QMessageBox.warning(self, "Импорт CSV", "Не найдено ни одной записи для импорта")
             return
 
         choice_box = QMessageBox(self)
         choice_box.setIcon(QMessageBox.Icon.Question)
-        choice_box.setWindowTitle("Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ CSV")
-        choice_box.setText(f"ÐÐ°Ð¹Ð´ÐµÐ½Ð¾ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹: {len(imported_entries)}")
-        choice_box.setInformativeText("ÐšÐ°Ðº Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº?")
-        replace_btn = choice_box.addButton("Ð—Ð°Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ñ‚ÐµÐºÑƒÑ‰Ð¸Ðµ", QMessageBox.ButtonRole.AcceptRole)
-        append_btn = choice_box.addButton("Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ðº Ñ‚ÐµÐºÑƒÑ‰Ð¸Ð¼", QMessageBox.ButtonRole.ActionRole)
-        cancel_btn = choice_box.addButton("ÐžÑ‚Ð¼ÐµÐ½Ð°", QMessageBox.ButtonRole.RejectRole)
+        choice_box.setWindowTitle("Импорт CSV")
+        choice_box.setText(f"Найдено записей: {len(imported_entries)}")
+        choice_box.setInformativeText("Как импортировать список?")
+        replace_btn = choice_box.addButton("Заменить текущие", QMessageBox.ButtonRole.AcceptRole)
+        append_btn = choice_box.addButton("Добавить к текущим", QMessageBox.ButtonRole.ActionRole)
+        cancel_btn = choice_box.addButton("Отмена", QMessageBox.ButtonRole.RejectRole)
         choice_box.setDefaultButton(replace_btn)
         choice_box.exec()
 
@@ -5126,10 +5135,10 @@ class MainWindow(QMainWindow):
             return
         if clicked == replace_btn:
             self.generated_prompts = imported_entries
-            self.log(f"CSV Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚: Ð·Ð°Ð¼ÐµÐ½ÐµÐ½Ð¾ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹: {len(imported_entries)}")
+            self.log(f"CSV импорт: заменено записей: {len(imported_entries)}")
         elif clicked == append_btn:
             self.generated_prompts.extend(imported_entries)
-            self.log(f"CSV Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚: Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¾ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹: {len(imported_entries)}")
+            self.log(f"CSV импорт: добавлено записей: {len(imported_entries)}")
         else:
             return
 
@@ -5180,13 +5189,13 @@ class MainWindow(QMainWindow):
             self.table.setItem(row, 0, prompt_item)
             self.table.setItem(row, 1, references_item)
 
-            delete_btn = QPushButton("ðŸ—‘")
-            delete_btn.setToolTip("Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð·Ð°Ð¿Ð¸ÑÑŒ")
+            delete_btn = QPushButton("🗑")
+            delete_btn.setToolTip("Удалить запись")
             delete_btn.setMinimumHeight(28)
             delete_btn.clicked.connect(lambda _, r=index: self.remove_prompt_row(r))
 
-            edit_btn = QPushButton("ðŸ–¼")
-            edit_btn.setToolTip("Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ñ„Ð°Ð¹Ð»Ñ‹ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ¾Ð²")
+            edit_btn = QPushButton("🖼")
+            edit_btn.setToolTip("Выбрать файлы референсов")
             edit_btn.setMinimumHeight(28)
             edit_btn.clicked.connect(lambda _, r=index: self.pick_references_for_prompt_row(r))
 
@@ -5198,7 +5207,7 @@ class MainWindow(QMainWindow):
         items = split_references(references)
         if not items:
             return ""
-        html_parts = ["<div><b>Ð ÐµÑ„ÐµÑ€ÐµÐ½ÑÑ‹:</b></div>"]
+        html_parts = ["<div><b>Референсы:</b></div>"]
         for ref in items[:3]:
             normalized_path = os.path.abspath(ref) if os.path.isfile(ref) else ""
             label = os.path.basename(ref) or ref
@@ -5208,7 +5217,7 @@ class MainWindow(QMainWindow):
             else:
                 html_parts.append(f"<div style='margin-top:4px;'>{label}</div>")
         if len(items) > 3:
-            html_parts.append(f"<div style='margin-top:4px;'>Ð˜ ÐµÑ‰Ñ‘: {len(items) - 3}</div>")
+            html_parts.append(f"<div style='margin-top:4px;'>И ещё: {len(items) - 3}</div>")
         return "".join(html_parts)
 
     def on_prompt_item_changed(self, item):
@@ -5229,25 +5238,25 @@ class MainWindow(QMainWindow):
         del self.generated_prompts[row_index]
         self.refresh_prompts_table()
         self.save_prompts_storage()
-        self.log(f"Ð£Ð´Ð°Ð»ÐµÐ½Ð° Ð·Ð°Ð¿Ð¸ÑÑŒ. ÐžÑÑ‚Ð°Ð»Ð¾ÑÑŒ: {len(self.generated_prompts)}")
+        self.log(f"Удалена запись. Осталось: {len(self.generated_prompts)}")
 
     def clear_all_prompts(self):
         self.generated_prompts = []
         self.refresh_prompts_table()
         self.save_prompts_storage()
-        self.log("Ð¡Ð¿Ð¸ÑÐ¾Ðº Ð·Ð°Ð¿Ð¸ÑÐµÐ¹ Ð¾Ñ‡Ð¸Ñ‰ÐµÐ½")
+        self.log("Список записей очищен")
 
     def export_prompts(self):
         entries = self.get_list_mode_prompts()
         if not entries:
-            QMessageBox.warning(self, "Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ CSV", "ÐÐµÑ‚ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹ Ð´Ð»Ñ ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð°")
+            QMessageBox.warning(self, "Экспорт CSV", "Нет записей для экспорта")
             return
 
         base_dir = self.work_dir if self.work_dir else os.getcwd()
         default_path = os.path.join(base_dir, "prompts_export.csv")
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Ð¡Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ CSV Ñ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð°Ð¼Ð¸",
+            "Сохранить CSV с промптами",
             default_path,
             "CSV files (*.csv)",
         )
@@ -5265,13 +5274,14 @@ class MainWindow(QMainWindow):
                     prompt_text = str(entry.get("prompt", "")).strip()
                     references_text = join_references(entry.get("references", []))
                     writer.writerow([prompt_text, references_text])
-            self.log(f"CSV ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½: {file_path}")
+            self.log(f"CSV экспортирован: {file_path}")
             QMessageBox.information(
                 self,
-                "Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ CSV",
-                "Ð¤Ð°Ð¹Ð» ÑƒÑÐ¿ÐµÑˆÐ½Ð¾ ÑÐºÑÐ¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½.",
+                "Экспорт CSV",
+                "Файл успешно экспортирован.",
             )
-        except Exception as e:\r\n            QMessageBox.warning(self, "Ð­ÐºÑÐ¿Ð¾Ñ€Ñ‚ CSV", f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ CSV: {e}")
+        except Exception as e:
+            QMessageBox.warning(self, "Экспорт CSV", f"Не удалось сохранить CSV: {e}")
 
     def _get_model_label(self, model_id):
         normalized = self._normalize_generation_model_id(model_id)
@@ -5287,8 +5297,8 @@ class MainWindow(QMainWindow):
             "not supported",
             "model unavailable",
             "unsupported model",
-            "Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶",
-            "Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿",
+            "не поддерж",
+            "недоступ",
         ]
         return any(marker in text for marker in markers)
 
@@ -5328,31 +5338,31 @@ class MainWindow(QMainWindow):
         fallback_label = self._get_model_label(fallback_model)
         answer = QMessageBox.question(
             self,
-            "ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð½Ðµ Ð¿Ð¾Ð´Ñ…Ð¾Ð´Ð¸Ñ‚ Ð´Ð»Ñ Ñ€ÐµÐ¶Ð¸Ð¼Ð°",
+            "Модель не подходит для режима",
             (
-                f'ÐœÐ¾Ð´ÐµÐ»ÑŒ "{selected_label}" Ð½Ðµ Ð¿Ð¾Ð´Ñ…Ð¾Ð´Ð¸Ñ‚ Ð´Ð»Ñ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ Ñ€ÐµÐ¶Ð¸Ð¼Ð°.\n'
-                f"ÐŸÑ€Ð¸Ñ‡Ð¸Ð½Ð°: {reason_text}\n\n"
-                f'Ð—Ð°Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ "{fallback_label}"?'
+                f'Модель "{selected_label}" не подходит для текущего режима.\n'
+                f"Причина: {reason_text}\n\n"
+                f'Заменить на модель по умолчанию "{fallback_label}"?'
             ),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
         if answer != QMessageBox.StandardButton.Yes:
-            self.log("Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð¾Ñ‚ÐºÐ°Ð·Ð°Ð»ÑÑ Ð¾Ñ‚ Ð·Ð°Ð¼ÐµÐ½Ñ‹ Ð½ÐµÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð¸Ð¼Ð¾Ð¹ Ð¼Ð¾Ð´ÐµÐ»Ð¸")
+            self.log("Запуск остановлен: пользователь отказался от замены несовместимой модели")
             return False
 
         if selected_model == fallback_model:
             QMessageBox.warning(
                 self,
-                "ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð½Ðµ Ð¿Ð¾Ð´Ñ…Ð¾Ð´Ð¸Ñ‚ Ð´Ð»Ñ Ñ€ÐµÐ¶Ð¸Ð¼Ð°",
-                f'ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ "{fallback_label}" Ñ‚Ð¾Ð¶Ðµ Ð½Ðµ Ð¿Ð¾Ð´Ñ…Ð¾Ð´Ð¸Ñ‚. Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½.',
+                "Модель не подходит для режима",
+                f'Модель по умолчанию "{fallback_label}" тоже не подходит. Запуск остановлен.',
             )
-            self.log(f"Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ '{fallback_label}' Ð½Ðµ Ð¿Ð¾Ð´Ñ…Ð¾Ð´Ð¸Ñ‚ Ð´Ð»Ñ Ñ€ÐµÐ¶Ð¸Ð¼Ð°")
+            self.log(f"Запуск остановлен: модель по умолчанию '{fallback_label}' не подходит для режима")
             return False
 
         self.log(
-            f"ÐœÐ¾Ð´ÐµÐ»ÑŒ '{selected_label}' Ð½Ðµ Ð¿Ð¾Ð´Ñ…Ð¾Ð´Ð¸Ñ‚ Ð´Ð»Ñ Ñ€ÐµÐ¶Ð¸Ð¼Ð° ({reason_text}). "
-            f"ÐŸÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ÑÑ Ð½Ð° '{fallback_label}'."
+            f"Модель '{selected_label}' не подходит для режима ({reason_text}). "
+            f"Переключаемся на '{fallback_label}'."
         )
         self._select_combo_model_id(combo_box, fallback_model)
         return True
@@ -5403,11 +5413,11 @@ class MainWindow(QMainWindow):
                     error_message,
                     (probe_settings.get("kie_api_key", ""),),
                 )
-                self.log(f"Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð½Ðµ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð° ({safe_message})")
+                self.log(f"Запуск остановлен: проверка модели не завершена ({safe_message})")
                 QMessageBox.warning(
                     self,
-                    "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»Ð¸",
-                    "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾ Ð¿Ñ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Ð¼Ð¾Ð´ÐµÐ»ÑŒ. Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð´ÑƒÐ±Ð»Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ Ð¿Ð»Ð°Ñ‚Ð½Ñ‹Ð¹ Ð·Ð°Ð¿Ñ€Ð¾Ñ.",
+                    "Проверка модели",
+                    "Не удалось безопасно проверить модель. Запуск остановлен, чтобы не дублировать платный запрос.",
                 )
                 return False
 
@@ -5415,28 +5425,28 @@ class MainWindow(QMainWindow):
             fallback_label = self._get_model_label(fallback_model)
             answer = QMessageBox.question(
                 self,
-                "ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°",
+                "Модель недоступна",
                 (
-                    f'ÐœÐ¾Ð´ÐµÐ»ÑŒ "{unavailable_label}" Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°.\n'
-                    f'Ð—Ð°Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ "{fallback_label}"?'
+                    f'Модель "{unavailable_label}" недоступна.\n'
+                    f'Заменить на модель по умолчанию "{fallback_label}"?'
                 ),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,
             )
             if answer != QMessageBox.StandardButton.Yes:
-                self.log("Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ Ð¾Ñ‚ÐºÐ°Ð·Ð°Ð»ÑÑ Ð¾Ñ‚ Ð·Ð°Ð¼ÐµÐ½Ñ‹ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾Ð¹ Ð¼Ð¾Ð´ÐµÐ»Ð¸")
+                self.log("Запуск остановлен: пользователь отказался от замены недоступной модели")
                 return False
 
             if selected_model == fallback_model:
                 QMessageBox.warning(
                     self,
-                    "ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°",
-                    f'ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ "{fallback_label}" Ñ‚Ð¾Ð¶Ðµ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°. Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½.',
+                    "Модель недоступна",
+                    f'Модель по умолчанию "{fallback_label}" тоже недоступна. Запуск остановлен.',
                 )
-                self.log(f"Ð—Ð°Ð¿ÑƒÑÐº Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½: Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ '{fallback_label}' Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°")
+                self.log(f"Запуск остановлен: модель по умолчанию '{fallback_label}' недоступна")
                 return False
 
-            self.log(f"ÐœÐ¾Ð´ÐµÐ»ÑŒ '{unavailable_label}' Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð°. ÐŸÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ÑÑ Ð½Ð° '{fallback_label}'.")
+            self.log(f"Модель '{unavailable_label}' недоступна. Переключаемся на '{fallback_label}'.")
             selected_model = fallback_model
 
     def _ensure_models_available_before_run(self, run_mode, prompts, runtime_settings=None):
@@ -5455,7 +5465,7 @@ class MainWindow(QMainWindow):
             selected_model_id=text_model,
             fallback_model_id="gpt-image/1.5-text-to-image",
             needs_references=False,
-            reason_text="ÑÑ‚Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ñ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ½Ñ‹Ð¼ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸ÐµÐ¼ (image-to-image/edit)",
+            reason_text="эта модель работает только с референсным изображением (image-to-image/edit)",
         ):
             return False
 
@@ -5466,7 +5476,7 @@ class MainWindow(QMainWindow):
                 selected_model_id=reference_model,
                 fallback_model_id="gpt-image/1.5-image-to-image",
                 needs_references=True,
-                reason_text="Ð´Ð»Ñ Ð·Ð°Ð¿Ð¸ÑÐµÐ¹ Ñ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ°Ð¼Ð¸ Ð½ÑƒÐ¶Ð½Ð° image-to-image/edit Ð¼Ð¾Ð´ÐµÐ»ÑŒ",
+                reason_text="для записей с референсами нужна image-to-image/edit модель",
             ):
                 return False
 
@@ -5531,12 +5541,12 @@ class MainWindow(QMainWindow):
 
     def start_work(self):
         if not self.work_dir:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð’Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ€Ð°Ð±Ð¾Ñ‡ÑƒÑŽ Ð¿Ð°Ð¿ÐºÑƒ")
+            QMessageBox.warning(self, "Ошибка", "Выберите рабочую папку")
             return
 
         validation_error = self.validate_generation_selection()
         if validation_error:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", validation_error)
+            QMessageBox.warning(self, "Ошибка", validation_error)
             return
 
         self.persist_ui_settings()
@@ -5556,7 +5566,7 @@ class MainWindow(QMainWindow):
             )
         )
         if needs_kie_api and not current_api_key:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð£ÐºÐ°Ð¶Ð¸Ñ‚Ðµ KIE API Key Ð½Ð° Ð²ÐºÐ»Ð°Ð´ÐºÐµ Â«ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸Â»")
+            QMessageBox.warning(self, "Ошибка", "Укажите KIE API Key на вкладке «Настройки»")
             return
 
         will_process = self.radio_run_process.isChecked() or self.radio_run_both.isChecked()
@@ -5566,7 +5576,7 @@ class MainWindow(QMainWindow):
             and self.remove_bg_provider_combo.currentData() == "photoroom"
         )
         if needs_photoroom_api and not current_photoroom_api_key:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð£ÐºÐ°Ð¶Ð¸Ñ‚Ðµ PhotoRoom API Key Ð½Ð° Ð²ÐºÐ»Ð°Ð´ÐºÐµ Â«ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸Â»")
+            QMessageBox.warning(self, "Ошибка", "Укажите PhotoRoom API Key на вкладке «Настройки»")
             return
 
         runtime_settings = dict(self.config)
@@ -5579,7 +5589,7 @@ class MainWindow(QMainWindow):
         if run_mode == "process_only":
             mode = "mode2_process"
             if not self.selected_files:
-                QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð”Ð»Ñ Ñ€ÐµÐ¶Ð¸Ð¼Ð° Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ¸ Ð²Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ñ„Ð°Ð¹Ð»Ñ‹")
+                QMessageBox.warning(self, "Ошибка", "Для режима обработки выберите файлы")
                 return
             if not (
                 self.chk_visible_mark_cleanup.isChecked()
@@ -5593,9 +5603,9 @@ class MainWindow(QMainWindow):
             ):
                 QMessageBox.warning(
                     self,
-                    "ÐžÑˆÐ¸Ð±ÐºÐ°",
-                    "Ð’ÐºÐ»ÑŽÑ‡Ð¸Ñ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð¸Ð½ ÑÑ‚Ð°Ð¿: ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ Ð¼ÐµÑ‚ÐºÐ¸, Ð°Ð¿ÑÐºÐµÐ¹Ð», "
-                    "ÑƒÐ´Ð°Ð»ÐµÐ½Ð¸Ðµ Ñ„Ð¾Ð½Ð°, trim Ð¸Ð»Ð¸ Ð¾Ñ‡Ð¸ÑÑ‚ÐºÑƒ Ñ„Ð°Ð¹Ð»Ð°",
+                    "Ошибка",
+                    "Включите хотя бы один этап: удаление видимой метки, апскейл, "
+                    "удаление фона, trim или очистку файла",
                 )
                 return
             if (
@@ -5612,14 +5622,14 @@ class MainWindow(QMainWindow):
             ):
                 QMessageBox.warning(
                     self,
-                    "ÐžÐ±Ð»Ð°ÑÑ‚ÑŒ Ð²Ð¸Ð´Ð¸Ð¼Ð¾Ð¹ Ð¼ÐµÑ‚ÐºÐ¸",
-                    "Ð ÑƒÑ‡Ð½Ð¾Ðµ Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð¸Ðµ Ð¾Ð±Ð»Ð°ÑÑ‚Ð¸ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð´Ð»Ñ ÑƒÐ¶Ðµ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ñ… Ñ„Ð°Ð¹Ð»Ð¾Ð². "
-                    "Ð”Ð»Ñ ÑÐ¾Ð·Ð´Ð°Ð²Ð°ÐµÐ¼Ñ‹Ñ… Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹ Ð²Ñ‹Ð±ÐµÑ€Ð¸Ñ‚Ðµ Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸Ð¹ Ñ€ÐµÐ¶Ð¸Ð¼ Gemini.",
+                    "Область видимой метки",
+                    "Ручное подтверждение области доступно только для уже выбранных файлов. "
+                    "Для создаваемых изображений выберите автоматический режим Gemini.",
                 )
                 return
             active_prompts = self.get_list_mode_prompts()
             if not active_prompts:
-                QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð”Ð¾Ð±Ð°Ð²ÑŒÑ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð½Ñƒ Ð·Ð°Ð¿Ð¸ÑÑŒ")
+                QMessageBox.warning(self, "Ошибка", "Добавьте хотя бы одну запись")
                 return
             self.generated_prompts = active_prompts
             self.refresh_prompts_table()
@@ -5627,7 +5637,7 @@ class MainWindow(QMainWindow):
         else:
             active_prompts = self.get_list_mode_prompts()
             if not active_prompts:
-                QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð”Ð¾Ð±Ð°Ð²ÑŒÑ‚Ðµ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ Ð¾Ð´Ð½Ñƒ Ð·Ð°Ð¿Ð¸ÑÑŒ")
+                QMessageBox.warning(self, "Ошибка", "Добавьте хотя бы одну запись")
                 return
 
             self.generated_prompts = active_prompts
@@ -5636,15 +5646,15 @@ class MainWindow(QMainWindow):
 
         local_realesrgan_error = self.validate_local_realesrgan_selection(run_mode)
         if local_realesrgan_error:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", local_realesrgan_error)
+            QMessageBox.warning(self, "Ошибка", local_realesrgan_error)
             return
 
         launch_mode_label = {
-            "generate_only": "Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ð³ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ñ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ð¹",
-            "process_only": "Ð¢Ð¾Ð»ÑŒÐºÐ¾ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ñ„Ð°Ð¹Ð»Ð¾Ð²",
-            "both": "Ð’ÑÐµ Ð²Ð¼ÐµÑÑ‚Ðµ",
+            "generate_only": "Только генерация изображений",
+            "process_only": "Только обработка файлов",
+            "both": "Все вместе",
         }.get(run_mode, run_mode)
-        self.log(f"Ð¡Ñ†ÐµÐ½Ð°Ñ€Ð¸Ð¹ Ð·Ð°Ð¿ÑƒÑÐºÐ°: {launch_mode_label}")
+        self.log(f"Сценарий запуска: {launch_mode_label}")
 
         if not self._ensure_models_available_before_run(run_mode, self.generated_prompts, runtime_settings):
             return
@@ -5682,13 +5692,13 @@ class MainWindow(QMainWindow):
         reference_caps = self._get_model_capabilities(reference_model)
 
         if text_caps["ratios"] and text_ratio not in text_caps["ratios"]:
-            return f"Ð¡Ð¾Ð¾Ñ‚Ð½Ð¾ÑˆÐµÐ½Ð¸Ðµ {text_ratio} Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ Ð´Ð»Ñ Ð¼Ð¾Ð´ÐµÐ»Ð¸ {text_model}"
+            return f"Соотношение {text_ratio} недоступно для модели {text_model}"
         if reference_caps["ratios"] and reference_ratio not in reference_caps["ratios"]:
-            return f"Ð¡Ð¾Ð¾Ñ‚Ð½Ð¾ÑˆÐµÐ½Ð¸Ðµ {reference_ratio} Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ Ð´Ð»Ñ Ð¼Ð¾Ð´ÐµÐ»Ð¸ {reference_model}"
+            return f"Соотношение {reference_ratio} недоступно для модели {reference_model}"
         if text_caps["resolutions"] and text_resolution not in text_caps["resolutions"]:
-            return f"Ð Ð°Ð·Ð¼ÐµÑ€ {text_resolution} Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ Ð´Ð»Ñ Ð¼Ð¾Ð´ÐµÐ»Ð¸ {text_model}"
+            return f"Размер {text_resolution} недоступен для модели {text_model}"
         if reference_caps["resolutions"] and reference_resolution not in reference_caps["resolutions"]:
-            return f"Ð Ð°Ð·Ð¼ÐµÑ€ {reference_resolution} Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ Ð´Ð»Ñ Ð¼Ð¾Ð´ÐµÐ»Ð¸ {reference_model}"
+            return f"Размер {reference_resolution} недоступен для модели {reference_model}"
         return ""
 
     def stop_work(self):
@@ -5700,7 +5710,7 @@ class MainWindow(QMainWindow):
         if not self.stop_pending:
             self.stop_pending = True
             self.worker.stop()
-            self.log("ÐžÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ° Ð·Ð°Ð¿Ñ€Ð¾ÑˆÐµÐ½Ð°...")
+            self.log("Остановка запрошена...")
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(False)
         self._finish_stop_when_worker_exits()
@@ -5714,7 +5724,7 @@ class MainWindow(QMainWindow):
         self.stop_pending = False
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
-        self.log("ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾")
+        self.log("Остановлено")
         self.offer_open_output_folder_after_stop()
 
     def on_finished(self, message):
@@ -5727,7 +5737,7 @@ class MainWindow(QMainWindow):
         self.offer_open_output_folder(message)
 
     def offer_open_output_folder(self, message):
-        if "Ð“Ð¾Ñ‚Ð¾Ð²Ð¾" not in (message or ""):
+        if "Готово" not in (message or ""):
             return
         if not self.work_dir:
             return
@@ -5736,15 +5746,16 @@ class MainWindow(QMainWindow):
             return
         answer = QMessageBox.question(
             self,
-            "Ð“Ð¾Ñ‚Ð¾Ð²Ð¾",
-            f"{message}\n\nÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¿Ð°Ð¿ÐºÑƒ Ñ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð°Ð¼Ð¸?",
+            "Готово",
+            f"{message}\n\nОткрыть папку с результатами?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
         if answer == QMessageBox.StandardButton.Yes:
             try:
                 os.startfile(output_dir)
-            except Exception as e:\r\n                self.log(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¿Ð°Ð¿ÐºÑƒ output: {e}")
+            except Exception as e:
+                self.log(f"Не удалось открыть папку output: {e}")
 
     def offer_open_output_folder_after_stop(self):
         output_dir = os.path.join(self.work_dir, "output") if self.work_dir else ""
@@ -5754,25 +5765,26 @@ class MainWindow(QMainWindow):
             return
         answer = QMessageBox.question(
             self,
-            "ÐžÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ°",
-            "ÐžÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ° Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°. ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¿Ð°Ð¿ÐºÑƒ Ñ ÑƒÐ¶Ðµ Ð³Ð¾Ñ‚Ð¾Ð²Ñ‹Ð¼Ð¸ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð°Ð¼Ð¸?",
+            "Остановка",
+            "Остановка выполнена. Открыть папку с уже готовыми результатами?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
         if answer == QMessageBox.StandardButton.Yes:
             try:
                 os.startfile(output_dir)
-            except Exception as e:\r\n                self.log(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¿Ð°Ð¿ÐºÑƒ output: {e}")
+            except Exception as e:
+                self.log(f"Не удалось открыть папку output: {e}")
 
     def on_error(self, err):
         if self.stop_pending:
             return
-        self.log(f"ÐžÑˆÐ¸Ð±ÐºÐ°: {err}")
+        self.log(f"Ошибка: {err}")
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
 
     def log(self, msg):
-        if "Ð˜Ñ‚Ð¾Ð³ ÑÐ¾Ñ…Ñ€Ð°Ð½Ñ‘Ð½:" in (msg or ""):
+        if "Итог сохранён:" in (msg or ""):
             self.has_generated_output_in_run = True
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {msg}")
@@ -5789,37 +5801,37 @@ class MainWindow(QMainWindow):
         if self.api_key_locked:
             self.kie_api_key_input.setReadOnly(True)
             self.kie_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-            self.btn_api_key_lock.setText("ðŸ”’")
-            self.btn_api_key_lock.setToolTip("ÐšÐ»ÑŽÑ‡ Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
-            self.log("KIE API Key Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
+            self.btn_api_key_lock.setText("🔒")
+            self.btn_api_key_lock.setToolTip("Ключ заблокирован")
+            self.log("KIE API Key заблокирован")
             return
 
         self.kie_api_key_input.setReadOnly(False)
         self.kie_api_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
-        self.btn_api_key_lock.setText("ðŸ”“")
-        self.btn_api_key_lock.setToolTip("ÐšÐ»ÑŽÑ‡ Ñ€Ð°Ð·Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
-        self.log("KIE API Key Ñ€Ð°Ð·Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½: Ð¼Ð¾Ð¶Ð½Ð¾ ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ Ð¸ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ")
+        self.btn_api_key_lock.setText("🔓")
+        self.btn_api_key_lock.setToolTip("Ключ разблокирован")
+        self.log("KIE API Key разблокирован: можно смотреть и редактировать")
 
     def toggle_photoroom_api_key_lock(self):
         self.photoroom_api_key_locked = not self.photoroom_api_key_locked
         if self.photoroom_api_key_locked:
             self.photoroom_api_key_input.setReadOnly(True)
             self.photoroom_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-            self.btn_photoroom_api_key_lock.setText("ðŸ”’")
-            self.btn_photoroom_api_key_lock.setToolTip("ÐšÐ»ÑŽÑ‡ Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
-            self.log("PhotoRoom API Key Ð·Ð°Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
+            self.btn_photoroom_api_key_lock.setText("🔒")
+            self.btn_photoroom_api_key_lock.setToolTip("Ключ заблокирован")
+            self.log("PhotoRoom API Key заблокирован")
             return
 
         self.photoroom_api_key_input.setReadOnly(False)
         self.photoroom_api_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
-        self.btn_photoroom_api_key_lock.setText("ðŸ”“")
-        self.btn_photoroom_api_key_lock.setToolTip("ÐšÐ»ÑŽÑ‡ Ñ€Ð°Ð·Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½")
-        self.log("PhotoRoom API Key Ñ€Ð°Ð·Ð±Ð»Ð¾ÐºÐ¸Ñ€Ð¾Ð²Ð°Ð½: Ð¼Ð¾Ð¶Ð½Ð¾ ÑÐ¼Ð¾Ñ‚Ñ€ÐµÑ‚ÑŒ Ð¸ Ñ€ÐµÐ´Ð°ÐºÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ")
+        self.btn_photoroom_api_key_lock.setText("🔓")
+        self.btn_photoroom_api_key_lock.setToolTip("Ключ разблокирован")
+        self.log("PhotoRoom API Key разблокирован: можно смотреть и редактировать")
 
     def check_generation_model(self):
         api_key = self.kie_api_key_input.text().strip()
         if not api_key:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð¡Ð½Ð°Ñ‡Ð°Ð»Ð° ÑƒÐºÐ°Ð¶Ð¸Ñ‚Ðµ KIE API Key")
+            QMessageBox.warning(self, "Ошибка", "Сначала укажите KIE API Key")
             return
 
         text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
@@ -5838,14 +5850,14 @@ class MainWindow(QMainWindow):
         try:
             text_ok, text_msg, text_task_id = self._probe_model_with_ratio(text_model, "1:1", headers, timeout)
             if not text_ok:
-                raise RuntimeError(f"ÐÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð´Ð»Ñ Ñ‚ÐµÐºÑÑ‚Ð¾Ð²Ñ‹Ñ… Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð²: {text_model}. {text_msg}")
+                raise RuntimeError(f"Недоступна модель для текстовых промптов: {text_model}. {text_msg}")
 
-            # Ð•ÑÐ»Ð¸ ÑƒÐ¶Ðµ Ð¿Ñ€Ð¾Ð²ÐµÑ€Ð¸Ð»Ð¸ 1:1 Ð¸ Ð²Ñ‹Ð±Ñ€Ð°Ð½ Ñ‚Ð¾Ð¶Ðµ 1:1, Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€Ð½Ñ‹Ð¹ ÑÐµÑ‚ÐµÐ²Ð¾Ð¹ Ð·Ð°Ð¿Ñ€Ð¾Ñ Ð½Ðµ Ð½ÑƒÐ¶ÐµÐ½.
+            # Если уже проверили 1:1 и выбран тоже 1:1, повторный сетевой запрос не нужен.
             if text_ratio != "1:1":
                 ratio_ok, ratio_msg, _ = self._probe_model_with_ratio(text_model, text_ratio, headers, timeout)
                 if not ratio_ok:
                     raise RuntimeError(
-                        f"ÐÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ ÑÐ¾Ð¾Ñ‚Ð½Ð¾ÑˆÐµÐ½Ð¸Ðµ {text_ratio} Ð´Ð»Ñ Ð¼Ð¾Ð´ÐµÐ»Ð¸ {text_model}. {ratio_msg}"
+                        f"Недоступно соотношение {text_ratio} для модели {text_model}. {ratio_msg}"
                     )
 
             ref_ok, ref_msg, ref_task_id = self._probe_model_with_ratio(
@@ -5861,8 +5873,8 @@ class MainWindow(QMainWindow):
                 and "This field is required" in str(ref_msg)
             ):
                 self.log(
-                    "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° image-to-image Ð´Ð»Ñ gpt-image/1.5-image-to-image Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð°: "
-                    "API Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ schema-Ð¾ÑˆÐ¸Ð±ÐºÑƒ Ð½Ð° Ñ‚ÐµÑÑ‚Ð¾Ð²Ð¾Ð¼ Ð·Ð°Ð¿Ñ€Ð¾ÑÐµ, Ð½Ð¾ Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¼Ð¾Ð¶ÐµÑ‚ Ñ€Ð°Ð±Ð¾Ñ‚Ð°Ñ‚ÑŒ Ð² Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾Ð¼ Ð·Ð°Ð¿ÑƒÑÐºÐµ."
+                    "Проверка image-to-image для gpt-image/1.5-image-to-image пропущена: "
+                    "API возвращает schema-ошибку на тестовом запросе, но модель может работать в реальном запуске."
                 )
                 ref_ok = True
                 ref_task_id = "schema-check-skipped"
@@ -5872,13 +5884,13 @@ class MainWindow(QMainWindow):
                 and self._is_schema_required_error(ref_msg)
             ):
                 self.log(
-                    "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° image-to-image/edit Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð¿ÐµÑ€ÐµÐ²ÐµÐ´ÐµÐ½Ð° Ð² Ð¼ÑÐ³ÐºÐ¸Ð¹ Ñ€ÐµÐ¶Ð¸Ð¼: "
-                    "API Ð²ÐµÑ€Ð½ÑƒÐ» schema-Ð¾ÑˆÐ¸Ð±ÐºÑƒ Ð½Ð° Ñ‚ÐµÑÑ‚Ð¾Ð²Ð¾Ð¼ Ð·Ð°Ð¿Ñ€Ð¾ÑÐµ. ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð±ÑƒÐ´ÐµÑ‚ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐµÐ½Ð° Ñ€ÐµÐ°Ð»ÑŒÐ½Ñ‹Ð¼ Ð·Ð°Ð¿ÑƒÑÐºÐ¾Ð¼."
+                    "Проверка image-to-image/edit модели переведена в мягкий режим: "
+                    "API вернул schema-ошибку на тестовом запросе. Модель будет проверена реальным запуском."
                 )
                 ref_ok = True
                 ref_task_id = "schema-check-skipped"
             if not ref_ok:
-                raise RuntimeError(f"ÐÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð´Ð»Ñ Ð¿Ñ€Ð¾Ð¼Ð¿Ñ‚Ð¾Ð² Ñ Ñ€ÐµÑ„ÐµÑ€ÐµÐ½ÑÐ°Ð¼Ð¸: {reference_model}. {ref_msg}")
+                raise RuntimeError(f"Недоступна модель для промптов с референсами: {reference_model}. {ref_msg}")
 
             if reference_ratio != "1:1":
                 ref_ratio_ok, ref_ratio_msg, _ = self._probe_model_with_ratio(
@@ -5894,8 +5906,8 @@ class MainWindow(QMainWindow):
                     and "This field is required" in str(ref_ratio_msg)
                 ):
                     self.log(
-                        "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° ÑÐ¾Ð¾Ñ‚Ð½Ð¾ÑˆÐµÐ½Ð¸Ñ Ð´Ð»Ñ gpt-image/1.5-image-to-image Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð°: "
-                        "API Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ schema-Ð¾ÑˆÐ¸Ð±ÐºÑƒ Ð½Ð° Ñ‚ÐµÑÑ‚Ð¾Ð²Ð¾Ð¼ Ð·Ð°Ð¿Ñ€Ð¾ÑÐµ."
+                        "Проверка соотношения для gpt-image/1.5-image-to-image пропущена: "
+                        "API возвращает schema-ошибку на тестовом запросе."
                     )
                     ref_ratio_ok = True
                 elif (
@@ -5904,30 +5916,31 @@ class MainWindow(QMainWindow):
                     and self._is_schema_required_error(ref_ratio_msg)
                 ):
                     self.log(
-                        "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° ÑÐ¾Ð¾Ñ‚Ð½Ð¾ÑˆÐµÐ½Ð¸Ñ Ð´Ð»Ñ image-to-image/edit Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½Ð°: "
-                        "API Ð²ÐµÑ€Ð½ÑƒÐ» schema-Ð¾ÑˆÐ¸Ð±ÐºÑƒ Ð½Ð° Ñ‚ÐµÑÑ‚Ð¾Ð²Ð¾Ð¼ Ð·Ð°Ð¿Ñ€Ð¾ÑÐµ."
+                        "Проверка соотношения для image-to-image/edit модели пропущена: "
+                        "API вернул schema-ошибку на тестовом запросе."
                     )
                     ref_ratio_ok = True
                 if not ref_ratio_ok:
                     raise RuntimeError(
-                        f"ÐÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ ÑÐ¾Ð¾Ñ‚Ð½Ð¾ÑˆÐµÐ½Ð¸Ðµ {reference_ratio} Ð´Ð»Ñ Ð¼Ð¾Ð´ÐµÐ»Ð¸ {reference_model}. {ref_ratio_msg}"
+                        f"Недоступно соотношение {reference_ratio} для модели {reference_model}. {ref_ratio_msg}"
                     )
 
             self.log(
                 (
-                    "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹ ÑƒÑÐ¿ÐµÑˆÐ½Ð°. "
-                    f"Textâ†’Image: {text_model} (Task ID: {text_task_id}) | "
-                    f"Imageâ†’Image: {reference_model} (Task ID: {ref_task_id})"
+                    "Проверка моделей успешна. "
+                    f"Text→Image: {text_model} (Task ID: {text_task_id}) | "
+                    f"Image→Image: {reference_model} (Task ID: {ref_task_id})"
                 )
             )
-            QMessageBox.information(self, "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹", "ÐžÐ±Ðµ Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹")
+            QMessageBox.information(self, "Проверка моделей", "Обе модели доступны")
         except urlerror.HTTPError as e:
             msg = f"HTTP {e.code}"
-            self.log(f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹ Ð½Ðµ Ð¿Ñ€Ð¾Ð¹Ð´ÐµÐ½Ð°: {msg}")
-            QMessageBox.warning(self, "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹", f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð½Ðµ Ð¿Ñ€Ð¾Ð¹Ð´ÐµÐ½Ð°\n{msg}")
-        except Exception as e:\r\n            msg = safe_error_text(e, (self.kie_api_key_input.text().strip(),))
-            self.log(f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹ Ð½Ðµ Ð¿Ñ€Ð¾Ð¹Ð´ÐµÐ½Ð°: {msg}")
-            QMessageBox.warning(self, "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¼Ð¾Ð´ÐµÐ»ÐµÐ¹", f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸: {msg}")
+            self.log(f"Проверка моделей не пройдена: {msg}")
+            QMessageBox.warning(self, "Проверка моделей", f"Проверка не пройдена\n{msg}")
+        except Exception as e:
+            msg = safe_error_text(e, (self.kie_api_key_input.text().strip(),))
+            self.log(f"Проверка моделей не пройдена: {msg}")
+            QMessageBox.warning(self, "Проверка моделей", f"Ошибка проверки: {msg}")
 
     def _is_schema_required_error(self, message):
         return is_schema_required_error_message(message)
@@ -5967,7 +5980,7 @@ class MainWindow(QMainWindow):
                 if key in payload:
                     return key, payload.get(key)
 
-            # Ð§Ð°ÑÑ‚Ñ‹Ð¹ Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚: data = Ñ‡Ð¸ÑÐ»Ð¾/ÑÑ‚Ñ€Ð¾ÐºÐ° Ñ Ñ‡Ð¸ÑÐ»Ð¾Ð¼
+            # Частый формат: data = число/строка с числом
             if "data" in payload and _looks_like_number(payload.get("data")):
                 return "data", payload.get("data")
 
@@ -5987,7 +6000,7 @@ class MainWindow(QMainWindow):
     def check_kie_balance(self):
         api_key = self.kie_api_key_input.text().strip()
         if not api_key:
-            QMessageBox.warning(self, "ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð¡Ð½Ð°Ñ‡Ð°Ð»Ð° ÑƒÐºÐ°Ð¶Ð¸Ñ‚Ðµ KIE API Key")
+            QMessageBox.warning(self, "Ошибка", "Сначала укажите KIE API Key")
             return
 
         timeout = max(10, int(self.config.get("timeout", 60)))
@@ -5999,7 +6012,7 @@ class MainWindow(QMainWindow):
         }
 
         self.btn_check_balance.setEnabled(False)
-        self.btn_check_balance.setText("ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ°...")
+        self.btn_check_balance.setText("Проверка...")
         try:
             req = request.Request("https://api.kie.ai/api/v1/chat/credit", headers=headers, method="GET")
             protect_secret_headers_from_redirects(req)
@@ -6014,32 +6027,33 @@ class MainWindow(QMainWindow):
 
             extracted = self._extract_credit_value(result)
             if extracted is None:
-                self.log("Ð‘Ð°Ð»Ð°Ð½Ñ KIE: Ð¿Ð¾Ð»Ðµ Ñ ÐºÑ€ÐµÐ´Ð¸Ñ‚Ð°Ð¼Ð¸ Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾")
+                self.log("Баланс KIE: поле с кредитами не найдено")
                 QMessageBox.information(
                     self,
-                    "Ð‘Ð°Ð»Ð°Ð½Ñ KIE",
-                    "Ð—Ð°Ð¿Ñ€Ð¾Ñ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÐµÐ½, Ð½Ð¾ Ð¿Ð¾Ð»Ðµ Ð±Ð°Ð»Ð°Ð½ÑÐ° Ð½Ðµ Ñ€Ð°ÑÐ¿Ð¾Ð·Ð½Ð°Ð½Ð¾.",
+                    "Баланс KIE",
+                    "Запрос выполнен, но поле баланса не распознано.",
                 )
                 return
 
             key, value = extracted
-            self.log(f"Ð‘Ð°Ð»Ð°Ð½Ñ KIE: {value} ÐºÑ€ÐµÐ´Ð¸Ñ‚Ð¾Ð²")
-            QMessageBox.information(self, "Ð‘Ð°Ð»Ð°Ð½Ñ KIE", f"{value} ÐºÑ€ÐµÐ´Ð¸Ñ‚Ð¾Ð²")
+            self.log(f"Баланс KIE: {value} кредитов")
+            QMessageBox.information(self, "Баланс KIE", f"{value} кредитов")
         except urlerror.HTTPError as e:
             msg = f"HTTP {e.code}"
-            self.log(f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð±Ð°Ð»Ð°Ð½ÑÐ° Ð½Ðµ Ð¿Ñ€Ð¾Ð¹Ð´ÐµÐ½Ð°: {msg}")
-            QMessageBox.warning(self, "Ð‘Ð°Ð»Ð°Ð½Ñ KIE", f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð½Ðµ Ð¿Ñ€Ð¾Ð¹Ð´ÐµÐ½Ð°\n{msg}")
-        except Exception as e:\r\n            msg = safe_error_text(e, (api_key,))
-            self.log(f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð±Ð°Ð»Ð°Ð½ÑÐ° Ð½Ðµ Ð¿Ñ€Ð¾Ð¹Ð´ÐµÐ½Ð°: {msg}")
-            QMessageBox.warning(self, "Ð‘Ð°Ð»Ð°Ð½Ñ KIE", f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸: {msg}")
+            self.log(f"Проверка баланса не пройдена: {msg}")
+            QMessageBox.warning(self, "Баланс KIE", f"Проверка не пройдена\n{msg}")
+        except Exception as e:
+            msg = safe_error_text(e, (api_key,))
+            self.log(f"Проверка баланса не пройдена: {msg}")
+            QMessageBox.warning(self, "Баланс KIE", f"Ошибка проверки: {msg}")
         finally:
             self.btn_check_balance.setEnabled(True)
-            self.btn_check_balance.setText("ÐŸÑ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Ð±Ð°Ð»Ð°Ð½Ñ")
+            self.btn_check_balance.setText("Проверить баланс")
 
     def check_license_key(self):
         license_key = self.license_key_input.text().strip()
         if not license_key:
-            QMessageBox.warning(self, "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ", "Ð’Ð²ÐµÐ´Ð¸Ñ‚Ðµ Ð»Ð¸Ñ†ÐµÐ½Ð·Ð¸Ð¾Ð½Ð½Ñ‹Ð¹ ÐºÐ»ÑŽÑ‡")
+            QMessageBox.warning(self, "Лицензия", "Введите лицензионный ключ")
             return
 
         try:
@@ -6047,8 +6061,8 @@ class MainWindow(QMainWindow):
             if not (license_client.server_url or license_client.backup_server_url):
                 QMessageBox.warning(
                     self,
-                    "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ",
-                    "ÐÐµ Ð·Ð°Ð´Ð°Ð½ URL ÑÐµÑ€Ð²ÐµÑ€Ð° Ð»Ð¸Ñ†ÐµÐ½Ð·Ð¸Ð¹ Ð² config.json",
+                    "Лицензия",
+                    "Не задан URL сервера лицензий в config.json",
                 )
                 return
 
@@ -6062,11 +6076,11 @@ class MainWindow(QMainWindow):
 
             if not result.get("ok"):
                 message = safe_error_text(
-                    result.get("message") or "ÐšÐ»ÑŽÑ‡ Ð½Ðµ Ð¿Ñ€Ð¾ÑˆÑ‘Ð» Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÑƒ",
+                    result.get("message") or "Ключ не прошёл проверку",
                     (license_key,),
                 )
-                self.log(f"Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ Ð½Ðµ Ð¿Ñ€Ð¾ÑˆÐ»Ð° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÑƒ: {message}")
-                QMessageBox.warning(self, "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ", message)
+                self.log(f"Лицензия не прошла проверку: {message}")
+                QMessageBox.warning(self, "Лицензия", message)
                 return
 
             self.config["license_key"] = license_key
@@ -6074,19 +6088,20 @@ class MainWindow(QMainWindow):
 
             expires_at = str(result.get("expires_at") or "-")
             updates_until = str(result.get("updates_until") or "-")
-            updates_allowed = "Ð”Ð°" if result.get("updates_allowed", True) else "ÐÐµÑ‚"
-            state_text = "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ Ð°ÐºÑ‚Ð¸Ð²Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð°" if activated_now else "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ Ð¿Ð¾Ð´Ñ‚Ð²ÐµÑ€Ð¶Ð´ÐµÐ½Ð°"
+            updates_allowed = "Да" if result.get("updates_allowed", True) else "Нет"
+            state_text = "Лицензия активирована" if activated_now else "Лицензия подтверждена"
             message = (
                 f"{state_text}\n"
-                f"Ð¡Ñ€Ð¾Ðº Ð»Ð¸Ñ†ÐµÐ½Ð·Ð¸Ð¸: {expires_at}\n"
-                f"ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð´Ð¾: {updates_until}\n"
-                f"ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹: {updates_allowed}"
+                f"Срок лицензии: {expires_at}\n"
+                f"Обновления до: {updates_until}\n"
+                f"Обновления доступны: {updates_allowed}"
             )
-            self.log(f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð»Ð¸Ñ†ÐµÐ½Ð·Ð¸Ð¸ ÑƒÑÐ¿ÐµÑˆÐ½Ð°: {state_text}")
-            QMessageBox.information(self, "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ", message)
-        except Exception as e:\r\n            message = safe_error_text(e, (license_key,))
-            self.log(f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð»Ð¸Ñ†ÐµÐ½Ð·Ð¸Ð¸ Ð½Ðµ Ð¿Ñ€Ð¾Ð¹Ð´ÐµÐ½Ð°: {message}")
-            QMessageBox.warning(self, "Ð›Ð¸Ñ†ÐµÐ½Ð·Ð¸Ñ", f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸: {message}")
+            self.log(f"Проверка лицензии успешна: {state_text}")
+            QMessageBox.information(self, "Лицензия", message)
+        except Exception as e:
+            message = safe_error_text(e, (license_key,))
+            self.log(f"Проверка лицензии не пройдена: {message}")
+            QMessageBox.warning(self, "Лицензия", f"Ошибка проверки: {message}")
 
     def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout, reference_urls=None):
         probe_settings = dict(self.config)
@@ -6135,12 +6150,19 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    def _validate_update_checksum(self, checksum):
+        normalized = str(checksum or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", normalized):
+            raise RuntimeError("version.json не содержит корректную SHA-256 сумму обновления")
+        return normalized
+
     def _download_update_installer(self, download_url, expected_sha256=None):
         validate_https_url(download_url, "Update download URL")
         last_error = None
         for attempt in range(1, MAX_UPDATE_DOWNLOAD_RETRIES + 1):
             temp_dir = tempfile.gettempdir()
-            filename = f"ClipartGenerator-Update-{int(time.time())}_{attempt}.exe"
+            retry_suffix = "" if attempt == 1 else f"_{attempt}"
+            filename = f"ClipartGenerator-Update-{int(time.time())}{retry_suffix}.exe"
             installer_path = os.path.join(temp_dir, filename)
 
             try:
@@ -6153,7 +6175,11 @@ class MainWindow(QMainWindow):
                     method="GET",
                 )
                 with open_url_secure(req, timeout=UPDATE_DOWNLOAD_TIMEOUT_SECONDS, context=build_ssl_context()) as resp:
-                    content_length = resp.getheader("Content-Length")
+                    get_header = getattr(resp, "getheader", None)
+                    if callable(get_header):
+                        content_length = get_header("Content-Length")
+                    else:
+                        content_length = getattr(resp, "headers", {}).get("Content-Length")
                     if content_length:
                         try:
                             total = int(content_length)
@@ -6176,18 +6202,23 @@ class MainWindow(QMainWindow):
                 if expected_sha256:
                     actual = self._sha256_file(installer_path)
                     if actual != expected_sha256.lower().strip():
-                        self._cleanup_update_file(installer_path)
+                        MainWindow._cleanup_update_file(self, installer_path)
                         raise RuntimeError("Контрольная сумма обновления не совпала")
 
                 return installer_path
 
+            except ResponseLimitError:
+                MainWindow._cleanup_update_file(self, installer_path)
+                raise
             except Exception as e:
                 last_error = e
-                self._cleanup_update_file(installer_path)
+                MainWindow._cleanup_update_file(self, installer_path)
                 if attempt >= MAX_UPDATE_DOWNLOAD_RETRIES:
                     break
                 time.sleep(min(2, attempt))
-                self.log(f"Ошибка скачивания апдейта (попытка {attempt}): {e}")
+                logger = getattr(self, "log", None)
+                if callable(logger):
+                    logger(f"Ошибка скачивания апдейта (попытка {attempt}): {e}")
 
         raise RuntimeError(f"Не удалось скачать установщик: {last_error}")
 
@@ -6228,15 +6259,15 @@ class MainWindow(QMainWindow):
         stripped = raw_text.lstrip()
 
         if "<<<<<<<" in raw_text or "=======" in raw_text or ">>>>>>>" in raw_text:
-            raise RuntimeError("version.json ÑÐ¾Ð´ÐµÑ€Ð¶Ð¸Ñ‚ Ð¼Ð°Ñ€ÐºÐµÑ€Ñ‹ git-ÐºÐ¾Ð½Ñ„Ð»Ð¸ÐºÑ‚Ð°")
+            raise RuntimeError("version.json содержит маркеры git-конфликта")
 
         if stripped.startswith("<!DOCTYPE") or stripped.startswith("<html"):
-            raise RuntimeError("ÑÐµÑ€Ð²ÐµÑ€ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹ Ð²ÐµÑ€Ð½ÑƒÐ» HTML Ð²Ð¼ÐµÑÑ‚Ð¾ JSON")
+            raise RuntimeError("сервер обновлений вернул HTML вместо JSON")
 
         try:
             return json.loads(raw_text)
         except json.JSONDecodeError as e:
-            raise RuntimeError(f"ÐÐµÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ñ‹Ð¹ JSON Ð² version.json: {e}") from e
+            raise RuntimeError(f"Некорректный JSON в version.json: {e}") from e
 
     def check_for_updates(self, silent=False, auto_apply=False):
         manifest_url = UPDATE_MANIFEST_URL
@@ -6259,7 +6290,7 @@ class MainWindow(QMainWindow):
 
             latest_version = str(manifest.get("latest_version", "")).strip()
             download_url = str(manifest.get("download_url", "")).strip()
-            checksum = str(manifest.get("sha256", "")).strip()
+            checksum = self._validate_update_checksum(manifest.get("sha256"))
 
             if not latest_version or not download_url:
                 raise RuntimeError("version.json не содержит latest_version/download_url")
@@ -6311,15 +6342,15 @@ class MainWindow(QMainWindow):
             if isinstance(e, urlerror.URLError):
                 reason = getattr(e, "reason", None)
                 if reason is not None and ("11001" in str(reason) or "getaddrinfo" in str(reason).lower()):
-                    human_error = "ÐÐµÑ‚ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð° Ðº ÑÐµÑ‚Ð¸ Ð¸Ð»Ð¸ DNS Ð½Ðµ Ð¼Ð¾Ð¶ÐµÑ‚ Ñ€Ð°Ð·Ñ€ÐµÑˆÐ¸Ñ‚ÑŒ Ð°Ð´Ñ€ÐµÑ ÑÐµÑ€Ð²ÐµÑ€Ð° Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹"
+                    human_error = "Нет доступа к сети или DNS не может разрешить адрес сервера обновлений"
                 elif reason is not None and "certificate_verify_failed" in str(reason).lower():
                     human_error = (
-                        "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ SSL-ÑÐµÑ€Ñ‚Ð¸Ñ„Ð¸ÐºÐ°Ñ‚. ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ Ð´Ð°Ñ‚Ñƒ/Ð²Ñ€ÐµÐ¼Ñ Windows, "
-                        "Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ ÐºÐ¾Ñ€Ð½ÐµÐ²Ñ‹Ñ… ÑÐµÑ€Ñ‚Ð¸Ñ„Ð¸ÐºÐ°Ñ‚Ð¾Ð² Ð¸ Ð´Ð¾ÑÑ‚ÑƒÐ¿ Ðº github.com"
+                        "Не удалось проверить SSL-сертификат. Проверьте дату/время Windows, "
+                        "обновления корневых сертификатов и доступ к github.com"
                     )
-            self.log(f"ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ð¹: {human_error}")
+            self.log(f"Проверка обновлений: {human_error}")
             if not silent:
-                QMessageBox.warning(self, "ÐžÐ±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ", f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ñ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ: {human_error}")
+                QMessageBox.warning(self, "Обновления", f"Не удалось проверить обновления: {human_error}")
 
     def _ratio_to_legacy_size_ui(self, ratio):
         return {
@@ -6426,14 +6457,10 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    # Ð—Ð°Ñ‰Ð¸Ñ‚Ð° Ð¾Ñ‚ ÑÐ»ÑƒÑ‡Ð°Ð¹Ð½Ð¾Ð³Ð¾ Ð·Ð°Ð¿ÑƒÑÐºÐ° Ð² offscreen-Ñ€ÐµÐ¶Ð¸Ð¼Ðµ Ð² Ñ€Ð°Ð±Ð¾Ñ‡ÐµÐ¼ Ñ‚ÐµÑ€Ð¼Ð¸Ð½Ð°Ð»Ðµ.
+    # Защита от случайного запуска в offscreen-режиме в рабочем терминале.
     if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
         os.environ["QT_QPA_PLATFORM"] = "windows"
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
-
-
-
-

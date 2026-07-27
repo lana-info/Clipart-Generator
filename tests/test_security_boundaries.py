@@ -12,14 +12,19 @@ import main
 class _Response:
     def __init__(self, payload, content_length=None):
         self.payload = payload
+        self.offset = 0
         self.headers = {}
         if content_length is not None:
             self.headers["Content-Length"] = str(content_length)
 
     def read(self, limit=-1):
         if limit < 0:
-            return self.payload
-        return self.payload[:limit]
+            chunk = self.payload[self.offset :]
+            self.offset = len(self.payload)
+            return chunk
+        chunk = self.payload[self.offset : self.offset + limit]
+        self.offset += len(chunk)
+        return chunk
 
 
 class _ResponseContext(_Response):
@@ -67,6 +72,17 @@ class SecurityBoundaryTests(unittest.TestCase):
     def test_update_installer_rejects_credentials_in_url(self):
         with self.assertRaisesRegex(RuntimeError, "credentials"):
             main.MainWindow._download_update_installer(object(), "https://user:pass@updates.example/app.exe")
+
+    def test_update_manifest_requires_sha256_checksum(self):
+        with self.assertRaisesRegex(RuntimeError, "SHA-256"):
+            main.MainWindow._validate_update_checksum(object(), "")
+
+    def test_update_manifest_normalizes_sha256_checksum(self):
+        checksum = "A" * 64
+        self.assertEqual(
+            main.MainWindow._validate_update_checksum(object(), f" {checksum} "),
+            checksum.lower(),
+        )
 
     def test_update_installer_response_is_size_limited(self):
         response = _ResponseContext(b"0123456789", content_length=10)
