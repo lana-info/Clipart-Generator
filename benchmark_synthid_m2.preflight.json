@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "status": "m2_preflight_blocked_no_cuda_local_only_run_not_allowed",
+  "purpose": "Task 12 - CtrlRegen (noai-watermark)",
+  "method": {
+    "id": "M2",
+    "name": "noai-watermark CtrlRegen",
+    "source": "https://github.com/mertizci/noai-watermark",
+    "class": "low_strength_diffusion_img2img",
+    "source_revision": null,
+    "source_revision_status": "pending_manual_pin_needed",
+    "license": {
+      "status": "unknown_not_pinned",
+      "commercial_use": "requires_manual_review_after_preflight",
+      "note": "source license and pin not yet inspected in the repo"
+    }
+  },
+  "models": {
+    "status": "not_pinned",
+    "notes": "No local pinned model list available yet for Task 12; remote providers or local downloads would require additional consent and budget pre-authorization."
+  },
+  "gates": {
+    "network_upload_requires_explicit_consent": true,
+    "paid_run_requires_explicit_consent": true,
+    "source_revision_required_before_run": true,
+    "official_input_and_output_evidence_required": true,
+    "no_gpu_is_no_go_for_local_run": true,
+    "claim_removed": false
+  },
+  "hardware": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu_logical_cores": 4,
+    "memory_total_gb": 17.95,
+    "memory_used_percent": "unknown_without_psutil",
+    "disk_gb": {
+      "total": 931.5,
+      "free": 259.05,
+      "used": 672.45
+    }
+  },
+  "gpu": {
+    "adapter_count": 1,
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "decision": "local_preflight_no_go: cuda unavailable in current workstation"
+  },
+  "assessment": {
+    "preflight_ok": false,
+    "blocking_reason": "No CUDA device detected; local diffused reconstruction for M2 requires isolated non-CPU path per task constraints. Cloud path remains unavailable without explicit provider + cost approval.",
+    "next_step": "Set source/model pin + license review, then re-run after explicit consent for either cloud provider or GPU worker environment."
+  },
+  "source_snapshot": "benchmark_synthid_m2.preflight.json",
+  "created_at": "2026-07-26",
+  "commit": "89d1dfa"
+}

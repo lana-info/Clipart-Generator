@@ -39,6 +39,8 @@
 - Гипотеза: низкий strength изменит пиксельный сигнал, сохранив сюжет.
 - Риск: diffusion меняет детали; CPU может быть слишком медленным, а публичный
   demo требует загрузки файла третьей стороне.
+- Предварительный шаг выполнен: hardware/disk preflight зафиксирован как no-go.
+  (без CUDA, `benchmark_synthid_m2.preflight.json`).
 
 ### M3. Synthid-Bypass V2
 

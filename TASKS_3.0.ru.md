@@ -335,7 +335,7 @@ Notes:
 
 ## Task 12: Выполнить M2 pilot CtrlRegen
 
-Status: Todo
+Status: In Progress
 
 Goal:
 Проверить малосильную diffusion-реконструкцию в изолированной среде.
@@ -353,7 +353,11 @@ Acceptance:
 - [ ] No-go является допустимым воспроизводимым результатом.
 
 Verification:
+- [x] Hardware/disk preflight выполнен, блокировка локального запуска из-за отсутствия CUDA зафиксирована в `benchmark_synthid_m2.preflight.json`.
 - [ ] Проверка benchmark manifest, cost ledger и official evidence.
+
+Notes:
+- Для M2 пока зафиксирован no-go: CUDA отсутствует (1 GPU-адаптер без CUDA), source/model/license не зафиксированы в pinned-режиме, cloud-путь требует отдельного согласия на провайдера и бюджет. Файл preflight: `benchmark_synthid_m2.preflight.json`.
 
 ## Task 13: Выполнить M3 pilot Qwen/Canny
 
@@ -429,4 +433,5 @@ Verification:
 
 Notes:
 - Следующий рекомендованный workflow реализации: `$code-vibecoding-workflow`.
+
 
