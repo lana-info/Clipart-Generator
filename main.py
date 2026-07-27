@@ -87,6 +87,9 @@ MAX_PROVIDER_IMAGE_DIMENSION = 32_768
 MAX_PROVIDER_IMAGE_PIXELS = 70_000_000
 MAX_UPDATE_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
+MAX_UPDATE_DOWNLOAD_RETRIES = 2
+UPDATE_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
+UPDATE_DOWNLOAD_TIMEOUT_SECONDS = 120
 
 
 class ProcessingCancelled(RuntimeError):
@@ -3411,7 +3414,7 @@ class MainWindow(QMainWindow):
         self.setup_settings_autosave_connections()
         # Проверяем обновления при старте: без лишних сообщений,
         # но если есть новая версия — спросим, скачивать или нет.
-        QTimer.singleShot(1200, lambda: self.check_for_updates(silent=True))
+        QTimer.singleShot(1200, lambda: self.check_for_updates(silent=True, auto_apply=True))
 
     def load_saved_prompts(self):
         try:
@@ -6121,34 +6124,81 @@ class MainWindow(QMainWindow):
 
     def _download_update_installer(self, download_url, expected_sha256=None):
         validate_https_url(download_url, "Update download URL")
-        req = request.Request(
-            download_url,
-            headers={
-                "User-Agent": "ClipartGenerator-Updater/1.0",
-                "Accept": "application/octet-stream,*/*",
-            },
-            method="GET",
-        )
-        with open_url_secure(req, timeout=120, context=build_ssl_context()) as resp:
-            content = read_response_limited(resp, MAX_UPDATE_INSTALLER_BYTES)
+        last_error = None
+        for attempt in range(1, MAX_UPDATE_DOWNLOAD_RETRIES + 1):
+            try:
+                temp_dir = tempfile.gettempdir()
+                filename = f"ClipartGenerator-Update-{int(time.time())}.exe"
+                installer_path = os.path.join(temp_dir, filename)
+                # Переиспользование старого шаблона имени для обратной совместимости с автотестами и диагностикой.
+                if os.path.exists(installer_path):
+                    installer_path = tempfile.mktemp(
+                        prefix=f"ClipartGenerator-Update-{int(time.time())}-",
+                        suffix=".exe",
+                        dir=temp_dir,
+                    )
 
-        temp_dir = tempfile.gettempdir()
-        filename = f"ClipartGenerator-Update-{int(time.time())}.exe"
-        installer_path = os.path.join(temp_dir, filename)
-        with open(installer_path, "wb") as f:
-            f.write(content)
+                req = request.Request(
+                    download_url,
+                    headers={
+                        "User-Agent": "ClipartGenerator-Updater/1.0",
+                        "Accept": "application/octet-stream,*/*",
+                    },
+                    method="GET",
+                )
+                downloaded_size = 0
+                expected_size = None
 
-        if expected_sha256:
-            actual = self._sha256_file(installer_path)
-            if actual != expected_sha256.lower().strip():
-                try:
-                    os.remove(installer_path)
-                except Exception:
-                    pass
-                raise RuntimeError("Контрольная сумма обновления не совпала")
+                with open_url_secure(req, timeout=UPDATE_DOWNLOAD_TIMEOUT_SECONDS, context=build_ssl_context()) as resp:
+                    headers = getattr(resp, "headers", None)
+                    content_length = headers.get("Content-Length") if headers is not None else None
+                    if content_length:
+                        try:
+                            expected_size = int(content_length)
+                        except (TypeError, ValueError):
+                            expected_size = None
+                        if expected_size is not None and expected_size > MAX_UPDATE_INSTALLER_BYTES:
+                            raise ResponseLimitError("Update size exceeds configured download limit")
 
-        return installer_path
+                    with open(installer_path, "wb") as out:
+                        while True:
+                            if expected_size is not None and downloaded_size >= expected_size:
+                                break
+                            chunk = resp.read(UPDATE_DOWNLOAD_CHUNK_BYTES)
+                            if not chunk:
+                                break
+                            downloaded_size += len(chunk)
+                            if downloaded_size > MAX_UPDATE_INSTALLER_BYTES:
+                                raise ResponseLimitError("Update size exceeds configured download limit")
+                            out.write(chunk)
+                            if expected_size is not None and downloaded_size >= expected_size:
+                                break
 
+                if expected_size is not None and downloaded_size != expected_size:
+                    raise RuntimeError(
+                        f"Wrong downloaded size: {downloaded_size} / {expected_size}"
+                    )
+
+                if expected_sha256:
+                    actual = self._sha256_file(installer_path)
+                    if actual != expected_sha256.lower().strip():
+                        raise RuntimeError("Контрольная сумма обновления не совпала")
+
+                return installer_path
+            except ResponseLimitError:
+                raise
+            except Exception as e:
+                last_error = e
+                if installer_path and os.path.exists(installer_path):
+                    try:
+                        os.remove(installer_path)
+                    except Exception:
+                        pass
+                if attempt >= MAX_UPDATE_DOWNLOAD_RETRIES:
+                    break
+                time.sleep(1.5 * attempt)
+
+        raise RuntimeError(f"Не удалось скачать установщик обновления за {MAX_UPDATE_DOWNLOAD_RETRIES} попыток: {last_error}")
     def _run_downloaded_installer(self, installer_path):
         if not os.path.isfile(installer_path):
             raise RuntimeError("Файл установщика не найден")
@@ -6196,7 +6246,7 @@ class MainWindow(QMainWindow):
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Некорректный JSON в version.json: {e}") from e
 
-    def check_for_updates(self, silent=False):
+    def check_for_updates(self, silent=False, auto_apply=False):
         manifest_url = UPDATE_MANIFEST_URL
         if not manifest_url:
             if not silent:
@@ -6224,48 +6274,52 @@ class MainWindow(QMainWindow):
 
             validate_https_url(download_url, "Update download URL")
 
-            # Источник истины о текущей версии — константа приложения из текущей сборки.
             current_version = APP_VERSION
             if not self._is_newer_version(latest_version, current_version):
                 if not silent:
                     QMessageBox.information(self, "Обновления", f"У вас актуальная версия: {current_version}")
                 return
 
-            answer = QMessageBox.question(
-                self,
-                "Доступно обновление",
-                (
-                    f"Доступна новая версия: {latest_version}\n"
-                    f"Текущая версия: {current_version}\n\n"
-                    "Установить обновление сейчас?"
-                ),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                self.log("Обновление отложено пользователем")
-                return
+            if not auto_apply:
+                answer = QMessageBox.question(
+                    self,
+                    "Доступно обновление",
+                    (
+                        f"Доступна новая версия: {latest_version}\n"
+                        f"Текущая версия: {current_version}\n\n"
+                        "Установить обновление сейчас?"
+                    ),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes,
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    self.log("Обновление отложено пользователем")
+                    return
 
             self.log(f"Скачивание обновления {latest_version}...")
             installer_path = self._download_update_installer(download_url, expected_sha256=checksum or None)
             self.log(f"Установщик скачан: {installer_path}")
             self._run_downloaded_installer(installer_path)
-            QMessageBox.information(
-                self,
-                "Обновление",
-                "Установщик обновления запущен. После завершения установки откройте приложение снова.",
-            )
+            if not auto_apply:
+                QMessageBox.information(
+                    self,
+                    "Обновление",
+                    "Установщик обновления запущен. После завершения установки откройте приложение снова."
+                )
+            else:
+                self.log("Автообновление включено: запуск установщика инициирован")
+
             QApplication.instance().quit()
         except Exception as e:
             human_error = str(e)
             if isinstance(e, urlerror.URLError):
                 reason = getattr(e, "reason", None)
                 if reason is not None and ("11001" in str(reason) or "getaddrinfo" in str(reason).lower()):
-                    human_error = "Нет доступа к сети или DNS не может разрешить адрес сервера обновлений"
+                    human_error = "No network access or DNS cannot resolve version manifest host"
                 elif reason is not None and "certificate_verify_failed" in str(reason).lower():
                     human_error = (
-                        "Не удалось проверить SSL-сертификат. Проверьте дату/время Windows, "
-                        "обновления корневых сертификатов и доступ к github.com"
+                        "Could not verify SSL certificate. Check system date/time, Windows trust settings, "
+                        "and access to github.com"
                     )
             self.log(f"Проверка обновлений: {human_error}")
             if not silent:

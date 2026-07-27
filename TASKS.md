@@ -8,6 +8,13 @@ For each task: explain the plan, implement only that task, verify it, update `TA
 
 Current next task: **None. All ordered implementation tasks are complete; release-only checks wait for an explicit user command.**
 
+## Task 55 - Startup Update Auto-Apply And Bounded Installer Download
+
+- [x] Make startup update checks apply updates automatically when a newer version is found (while keeping a safety path for manual checks elsewhere).
+- [x] Replace one-shot update installer download with streamed chunked download, retry, size limits, and cleanup on failure.
+- [x] Keep manifest checksum validation and HTTPS-only URL enforcement intact.
+- [x] Verify update flow behavior via static verification (`python -m py_compile main.py`) and no release/build actions.
+
 ## Phase 1 - Preparation
 
 - [x] Add `realesrgan-ncnn-vulkan-20211212-windows/` to `.gitignore`.

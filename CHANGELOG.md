@@ -21,6 +21,9 @@
   generation, polling, CSV/reference preparation, license cache lifecycle, and
   verified updater downloads. These tests do not publish, release, or spend
   provider credits.
+- Added startup auto-update behavior so versioned installs launch auto-update when
+  a newer release is found, plus robust streaming update-installer download with
+  retry and size-limit safeguards before checksum validation.
 - Strengthened the trustworthy test set with a network-free generation-to-PNG
   integration flow, public license activation/cache coverage, updater checksum-
   mismatch cleanup, and corrupt-input rejection; runtime-dependent tests were
