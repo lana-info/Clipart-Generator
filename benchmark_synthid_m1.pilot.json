@@ -1,0 +1,865 @@
+{
+    "schema_version": 1,
+    "pilot_id": "M1",
+    "status": "local_execution_complete_official_evidence_pending",
+    "method": "reverse-SynthID V4 Round-06",
+    "research_only": true,
+    "production_integration_allowed": false,
+    "upstream": {
+        "repository": "https://github.com/aloshdenny/reverse-SynthID",
+        "commit": "b11083676fd3ee3ff97ce9d03c0e409e46905902",
+        "working_tree_clean": true,
+        "license": "reverse-SynthID Research License v1.0",
+        "license_sha256": "4ab00ab4e98d7316afabd6228d9c568472e8125168c99801bf8642c4e56e146c",
+        "commercial_integration_allowed": false,
+        "required_attribution": "reverse-SynthID by Alosh Denny \u2014 github.com/aloshdenny/reverse-SynthID",
+        "audited_files": {
+            "requirements.txt": "67e755333674decac85b7397d73197a5745acd9d3aafd34d30ec153ef95a6c61",
+            "scripts/dissolve_batch.py": "63c42169eec1e7a93285141b827ef739695da27008fcd52e9d8b4375f2aa646e",
+            "src/extraction/synthid_bypass_v4.py": "0ff9d8357115686ff6e951490027a14eb3cc9335a4bb6d62e01f59b44dd7b779",
+            "src/extraction/vae_regen.py": "ec347d545e34a717a1e03e65671d642cb149c35cef98ebc732ea5c0eb18c7667",
+            "artifacts/spectral_codebook_v4.npz": "f105de83ae3aca85330793bf8780d4bcd364a1df009685c1abf24af26dbe5366",
+            "src/extraction/synthid_bypass.py": "812712437fba06f819808914f1aad260b6f929577a9c4928091414e9407b6eed"
+        }
+    },
+    "model": {
+        "repository": "stabilityai/sd-vae-ft-mse",
+        "revision": "31f26fdeee1355a5c34592e401dd41e45d25a493",
+        "license": "MIT",
+        "files": {
+            "config.json": "92d3dfb746fca211a2c9e019e285f8597412211728dce3c5bcf4eda0f2d62e7e",
+            "diffusion_pytorch_model.safetensors": "a1d993488569e928462932c8c38a0760b874d166399b14414135bd9c42df5815"
+        },
+        "network_required_during_run": false
+    },
+    "runtime": {
+        "python": "3.12.10",
+        "packages": {
+            "torch": "2.11.0",
+            "numpy": "2.3.5",
+            "scipy": "1.17.0",
+            "opencv-python": "4.13.0.92",
+            "Pillow": "12.1.1",
+            "safetensors": "0.8.0",
+            "diffusers": "0.36.0",
+            "accelerate": "1.12.0",
+            "psutil": "7.2.2"
+        },
+        "auto_update": false,
+        "environment": "isolated_venv"
+    },
+    "inputs": [
+        {
+            "id": "O1",
+            "sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
+            "bytes": 1435948,
+            "size": [
+                912,
+                1147
+            ],
+            "mode": "RGBA",
+            "ownership": "user_owned_documented",
+            "independent_scene": true
+        },
+        {
+            "id": "O2",
+            "sha256": "226fb2daf426e0f701fd7e21f666aae8a38a849627ac1237c717a3fdbdb620bc",
+            "bytes": 2439638,
+            "size": [
+                911,
+                1146
+            ],
+            "mode": "RGBA",
+            "ownership": "user_owned_documented",
+            "independent_scene": false
+        },
+        {
+            "id": "O3",
+            "sha256": "e89ce0c0d931b5a9362d4401ef7cca6615bf344e2201489ac092dfb8fc331243",
+            "bytes": 1532245,
+            "size": [
+                1142,
+                746
+            ],
+            "mode": "RGB",
+            "ownership": "user_owned_documented",
+            "independent_scene": true
+        }
+    ],
+    "profiles": [
+        "final",
+        "nuke"
+    ],
+    "runs": [
+        {
+            "input_id": "O1",
+            "profile": "final",
+            "purpose": "primary",
+            "parameters": {
+                "vae_strength": 1.0,
+                "elastic_alpha": 1.8,
+                "elastic_sigma": 56.0,
+                "squeeze_ratio": 0.9,
+                "geo_rotation_deg": 0.3,
+                "geo_zoom": 0.008,
+                "brightness": 0.008,
+                "contrast": 0.012,
+                "saturation": -0.01,
+                "hue_deg": 0.3,
+                "do_residual": true,
+                "residual_mag_cap": 0.3,
+                "residual_removal": 0.9,
+                "residual_harvest_k": 72,
+                "residual_consensus_floor": 0.55,
+                "residual_denoise_h": 10.0,
+                "post_jpeg_q_chain": [
+                    92,
+                    88
+                ],
+                "post_noise_sigma": 0.4,
+                "psnr_floor": 14.0
+            },
+            "processing": {
+                "status": "succeeded",
+                "wall_seconds": 1753.975349,
+                "peak_rss_bytes": 2263576576,
+                "cost_usd": 0.0,
+                "runtime": "local_cpu",
+                "offline_environment_flags": true,
+                "network_capture": "not_instrumented",
+                "external_upload_performed": false
+            },
+            "pixel_evidence": {
+                "input": "not_verified",
+                "output": "not_verified",
+                "detector": "official_gemini_manual_handoff_pending"
+            },
+            "upstream_result": {
+                "psnr": 23.822557,
+                "ssim": 0.755507,
+                "details": {
+                    "version": "v4_final",
+                    "strength": "final",
+                    "profile_key": "gemini-3.1-flash-image-preview/1024x1024",
+                    "exact_match": false,
+                    "n_passes_applied": 1,
+                    "n_passes_requested": 1,
+                    "n_passes_rolled_back": 0,
+                    "n_vae_passes": 1,
+                    "elastic_alpha": 1.8,
+                    "elastic_sigma": 56.0,
+                    "squeeze_ratio": 0.9
+                },
+                "stages_applied": [
+                    "vae_pass_0(psnr=27.3)",
+                    "elastic(a=1.80,s=56)(psnr=27.0)",
+                    "geo(deg=+0.30,zoom=0.008,shift=0px)(psnr=24.0)",
+                    "squeeze(r=0.90)(psnr=24.3)",
+                    "color(b=+0.008,c=+0.012,s=-0.010,h=+0.3)(psnr=23.7)",
+                    "residual_subtract(bins=96,psnr=23.8)",
+                    "jpeg0_q92(psnr=23.8)",
+                    "jpeg1_q88(psnr=23.7)",
+                    "luma_noise_s0.4(psnr=23.8)"
+                ]
+            },
+            "metrics": {
+                "source_size": [
+                    912,
+                    1147
+                ],
+                "source_mode": "RGBA",
+                "output_size": [
+                    912,
+                    1147
+                ],
+                "output_mode": "RGB",
+                "output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1",
+                "output_bytes": 1430588,
+                "psnr_rgb_db": 23.822557,
+                "global_ssim_luma": 0.965238,
+                "rgb_changed_pixel_ratio_gt2": 0.915438,
+                "rgb_mean_abs_delta": 10.853153,
+                "source_transparent_pixels": 0,
+                "output_transparent_pixels": 0,
+                "alpha_changed_pixel_ratio": 0.0,
+                "alpha_iou": 1.0
+            },
+            "output_file": "O1__final.png",
+            "input_sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
+            "output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1"
+        },
+        {
+            "input_id": "O1",
+            "profile": "nuke",
+            "purpose": "primary",
+            "parameters": {
+                "vae_strength": 1.0,
+                "vae_passes": 2,
+                "elastic_alpha": 2.8,
+                "elastic_sigma": 44.0,
+                "squeeze_ratio": 0.82,
+                "geo_rotation_deg": 0.6,
+                "geo_zoom": 0.015,
+                "brightness": 0.012,
+                "contrast": 0.02,
+                "saturation": -0.018,
+                "hue_deg": 0.6,
+                "do_residual": true,
+                "residual_mag_cap": 0.45,
+                "residual_removal": 1.05,
+                "residual_harvest_k": 128,
+                "residual_consensus_floor": 0.45,
+                "residual_denoise_h": 12.0,
+                "post_jpeg_q_chain": [
+                    88,
+                    84,
+                    90
+                ],
+                "post_noise_sigma": 0.8,
+                "post_bilateral_d": 5,
+                "post_bilateral_sigma": 10.0,
+                "post_pixel_shift": 1,
+                "psnr_floor": 11.0
+            },
+            "processing": {
+                "status": "succeeded",
+                "wall_seconds": 1778.759734,
+                "peak_rss_bytes": 1989218304,
+                "cost_usd": 0.0,
+                "runtime": "local_cpu",
+                "offline_environment_flags": true,
+                "network_capture": "not_instrumented",
+                "external_upload_performed": false
+            },
+            "pixel_evidence": {
+                "input": "not_verified",
+                "output": "not_verified",
+                "detector": "official_gemini_manual_handoff_pending"
+            },
+            "upstream_result": {
+                "psnr": 20.465275,
+                "ssim": 0.729435,
+                "details": {
+                    "version": "v4_final",
+                    "strength": "nuke",
+                    "profile_key": "gemini-3.1-flash-image-preview/1024x1024",
+                    "exact_match": false,
+                    "n_passes_applied": 1,
+                    "n_passes_requested": 1,
+                    "n_passes_rolled_back": 0,
+                    "n_vae_passes": 2,
+                    "elastic_alpha": 2.8,
+                    "elastic_sigma": 44.0,
+                    "squeeze_ratio": 0.82
+                },
+                "stages_applied": [
+                    "vae_pass_0(psnr=27.3)",
+                    "vae_pass_1(psnr=24.1)",
+                    "elastic(a=2.80,s=44)(psnr=23.9)",
+                    "geo(deg=+0.60,zoom=0.015,shift=0px)(psnr=20.9)",
+                    "squeeze(r=0.82)(psnr=21.0)",
+                    "color(b=+0.012,c=+0.020,s=-0.018,h=+0.6)(psnr=20.3)",
+                    "residual_subtract(bins=152,psnr=20.4)",
+                    "jpeg0_q88(psnr=20.4)",
+                    "jpeg1_q84(psnr=20.4)",
+                    "jpeg2_q90(psnr=20.4)",
+                    "luma_noise_s0.8(psnr=20.5)",
+                    "bilateral_d5(psnr=20.5)",
+                    "pixel_shift_1px(psnr=20.5)"
+                ]
+            },
+            "metrics": {
+                "source_size": [
+                    912,
+                    1147
+                ],
+                "source_mode": "RGBA",
+                "output_size": [
+                    912,
+                    1147
+                ],
+                "output_mode": "RGB",
+                "output_sha256": "685253d5018dd02c43ae281129bc8c93945428cb7aec0896f46450a873af4a49",
+                "output_bytes": 1279471,
+                "psnr_rgb_db": 20.465275,
+                "global_ssim_luma": 0.934145,
+                "rgb_changed_pixel_ratio_gt2": 0.953967,
+                "rgb_mean_abs_delta": 16.936367,
+                "source_transparent_pixels": 0,
+                "output_transparent_pixels": 0,
+                "alpha_changed_pixel_ratio": 0.0,
+                "alpha_iou": 1.0
+            },
+            "output_file": "O1__nuke.png",
+            "input_sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
+            "output_sha256": "685253d5018dd02c43ae281129bc8c93945428cb7aec0896f46450a873af4a49"
+        },
+        {
+            "input_id": "O2",
+            "profile": "final",
+            "purpose": "primary",
+            "parameters": {
+                "vae_strength": 1.0,
+                "elastic_alpha": 1.8,
+                "elastic_sigma": 56.0,
+                "squeeze_ratio": 0.9,
+                "geo_rotation_deg": 0.3,
+                "geo_zoom": 0.008,
+                "brightness": 0.008,
+                "contrast": 0.012,
+                "saturation": -0.01,
+                "hue_deg": 0.3,
+                "do_residual": true,
+                "residual_mag_cap": 0.3,
+                "residual_removal": 0.9,
+                "residual_harvest_k": 72,
+                "residual_consensus_floor": 0.55,
+                "residual_denoise_h": 10.0,
+                "post_jpeg_q_chain": [
+                    92,
+                    88
+                ],
+                "post_noise_sigma": 0.4,
+                "psnr_floor": 14.0
+            },
+            "processing": {
+                "status": "succeeded",
+                "wall_seconds": 817.46347,
+                "peak_rss_bytes": 1213677568,
+                "cost_usd": 0.0,
+                "runtime": "local_cpu",
+                "offline_environment_flags": true,
+                "network_capture": "not_instrumented",
+                "external_upload_performed": false
+            },
+            "pixel_evidence": {
+                "input": "not_verified",
+                "output": "not_verified",
+                "detector": "official_gemini_manual_handoff_pending"
+            },
+            "upstream_result": {
+                "psnr": 23.418982,
+                "ssim": 0.656247,
+                "details": {
+                    "version": "v4_final",
+                    "strength": "final",
+                    "profile_key": "gemini-3.1-flash-image-preview/1024x1024",
+                    "exact_match": false,
+                    "n_passes_applied": 1,
+                    "n_passes_requested": 1,
+                    "n_passes_rolled_back": 0,
+                    "n_vae_passes": 1,
+                    "elastic_alpha": 1.8,
+                    "elastic_sigma": 56.0,
+                    "squeeze_ratio": 0.9
+                },
+                "stages_applied": [
+                    "vae_pass_0(psnr=26.1)",
+                    "elastic(a=1.80,s=56)(psnr=26.0)",
+                    "geo(deg=+0.30,zoom=0.008,shift=0px)(psnr=23.5)",
+                    "squeeze(r=0.90)(psnr=23.8)",
+                    "color(b=+0.008,c=+0.012,s=-0.010,h=+0.3)(psnr=23.3)",
+                    "residual_subtract(bins=96,psnr=23.4)",
+                    "jpeg0_q92(psnr=23.4)",
+                    "jpeg1_q88(psnr=23.3)",
+                    "luma_noise_s0.4(psnr=23.4)"
+                ]
+            },
+            "metrics": {
+                "source_size": [
+                    911,
+                    1146
+                ],
+                "source_mode": "RGBA",
+                "output_size": [
+                    911,
+                    1146
+                ],
+                "output_mode": "RGB",
+                "output_sha256": "c9c84288e1b867ab44228b0f2a837ff1120b165fb61875a1c33a4d0b0a4265ec",
+                "output_bytes": 1624273,
+                "psnr_rgb_db": 23.418982,
+                "global_ssim_luma": 0.96329,
+                "rgb_changed_pixel_ratio_gt2": 0.984428,
+                "rgb_mean_abs_delta": 11.831103,
+                "source_transparent_pixels": 717428,
+                "output_transparent_pixels": 0,
+                "alpha_changed_pixel_ratio": 0.687188,
+                "alpha_iou": 0.990342
+            },
+            "output_file": "O2__final.png",
+            "input_sha256": "226fb2daf426e0f701fd7e21f666aae8a38a849627ac1237c717a3fdbdb620bc",
+            "output_sha256": "c9c84288e1b867ab44228b0f2a837ff1120b165fb61875a1c33a4d0b0a4265ec"
+        },
+        {
+            "input_id": "O2",
+            "profile": "nuke",
+            "purpose": "primary",
+            "parameters": {
+                "vae_strength": 1.0,
+                "vae_passes": 2,
+                "elastic_alpha": 2.8,
+                "elastic_sigma": 44.0,
+                "squeeze_ratio": 0.82,
+                "geo_rotation_deg": 0.6,
+                "geo_zoom": 0.015,
+                "brightness": 0.012,
+                "contrast": 0.02,
+                "saturation": -0.018,
+                "hue_deg": 0.6,
+                "do_residual": true,
+                "residual_mag_cap": 0.45,
+                "residual_removal": 1.05,
+                "residual_harvest_k": 128,
+                "residual_consensus_floor": 0.45,
+                "residual_denoise_h": 12.0,
+                "post_jpeg_q_chain": [
+                    88,
+                    84,
+                    90
+                ],
+                "post_noise_sigma": 0.8,
+                "post_bilateral_d": 5,
+                "post_bilateral_sigma": 10.0,
+                "post_pixel_shift": 1,
+                "psnr_floor": 11.0
+            },
+            "processing": {
+                "status": "succeeded",
+                "wall_seconds": 1768.46656,
+                "peak_rss_bytes": 1183715328,
+                "cost_usd": 0.0,
+                "runtime": "local_cpu",
+                "offline_environment_flags": true,
+                "network_capture": "not_instrumented",
+                "external_upload_performed": false
+            },
+            "pixel_evidence": {
+                "input": "not_verified",
+                "output": "not_verified",
+                "detector": "official_gemini_manual_handoff_pending"
+            },
+            "upstream_result": {
+                "psnr": 20.338075,
+                "ssim": 0.647011,
+                "details": {
+                    "version": "v4_final",
+                    "strength": "nuke",
+                    "profile_key": "gemini-3.1-flash-image-preview/1024x1024",
+                    "exact_match": false,
+                    "n_passes_applied": 1,
+                    "n_passes_requested": 1,
+                    "n_passes_rolled_back": 0,
+                    "n_vae_passes": 2,
+                    "elastic_alpha": 2.8,
+                    "elastic_sigma": 44.0,
+                    "squeeze_ratio": 0.82
+                },
+                "stages_applied": [
+                    "vae_pass_0(psnr=26.1)",
+                    "vae_pass_1(psnr=23.7)",
+                    "elastic(a=2.80,s=44)(psnr=23.6)",
+                    "geo(deg=+0.60,zoom=0.015,shift=0px)(psnr=20.7)",
+                    "squeeze(r=0.82)(psnr=20.8)",
+                    "color(b=+0.012,c=+0.020,s=-0.018,h=+0.6)(psnr=20.2)",
+                    "residual_subtract(bins=152,psnr=20.3)",
+                    "jpeg0_q88(psnr=20.3)",
+                    "jpeg1_q84(psnr=20.3)",
+                    "jpeg2_q90(psnr=20.3)",
+                    "luma_noise_s0.8(psnr=20.3)",
+                    "bilateral_d5(psnr=20.4)",
+                    "pixel_shift_1px(psnr=20.3)"
+                ]
+            },
+            "metrics": {
+                "source_size": [
+                    911,
+                    1146
+                ],
+                "source_mode": "RGBA",
+                "output_size": [
+                    911,
+                    1146
+                ],
+                "output_mode": "RGB",
+                "output_sha256": "f272416d6b9c14602c01141a227286b3645ab944025b51a5a60e0203e6598495",
+                "output_bytes": 1396477,
+                "psnr_rgb_db": 20.338075,
+                "global_ssim_luma": 0.931338,
+                "rgb_changed_pixel_ratio_gt2": 0.989218,
+                "rgb_mean_abs_delta": 16.854075,
+                "source_transparent_pixels": 717428,
+                "output_transparent_pixels": 0,
+                "alpha_changed_pixel_ratio": 0.687188,
+                "alpha_iou": 0.990342
+            },
+            "output_file": "O2__nuke.png",
+            "input_sha256": "226fb2daf426e0f701fd7e21f666aae8a38a849627ac1237c717a3fdbdb620bc",
+            "output_sha256": "f272416d6b9c14602c01141a227286b3645ab944025b51a5a60e0203e6598495"
+        },
+        {
+            "input_id": "O3",
+            "profile": "final",
+            "purpose": "primary",
+            "parameters": {
+                "vae_strength": 1.0,
+                "elastic_alpha": 1.8,
+                "elastic_sigma": 56.0,
+                "squeeze_ratio": 0.9,
+                "geo_rotation_deg": 0.3,
+                "geo_zoom": 0.008,
+                "brightness": 0.008,
+                "contrast": 0.012,
+                "saturation": -0.01,
+                "hue_deg": 0.3,
+                "do_residual": true,
+                "residual_mag_cap": 0.3,
+                "residual_removal": 0.9,
+                "residual_harvest_k": 72,
+                "residual_consensus_floor": 0.55,
+                "residual_denoise_h": 10.0,
+                "post_jpeg_q_chain": [
+                    92,
+                    88
+                ],
+                "post_noise_sigma": 0.4,
+                "psnr_floor": 14.0
+            },
+            "processing": {
+                "status": "succeeded",
+                "wall_seconds": 711.052437,
+                "peak_rss_bytes": 1174159360,
+                "cost_usd": 0.0,
+                "runtime": "local_cpu",
+                "offline_environment_flags": true,
+                "network_capture": "not_instrumented",
+                "external_upload_performed": false
+            },
+            "pixel_evidence": {
+                "input": "not_verified",
+                "output": "not_verified",
+                "detector": "official_gemini_manual_handoff_pending"
+            },
+            "upstream_result": {
+                "psnr": 23.545216,
+                "ssim": 0.686278,
+                "details": {
+                    "version": "v4_final",
+                    "strength": "final",
+                    "profile_key": "gemini-3.1-flash-image-preview/843x1264",
+                    "exact_match": false,
+                    "n_passes_applied": 1,
+                    "n_passes_requested": 1,
+                    "n_passes_rolled_back": 0,
+                    "n_vae_passes": 1,
+                    "elastic_alpha": 1.8,
+                    "elastic_sigma": 56.0,
+                    "squeeze_ratio": 0.9
+                },
+                "stages_applied": [
+                    "vae_pass_0(psnr=28.3)",
+                    "elastic(a=1.80,s=56)(psnr=27.5)",
+                    "geo(deg=+0.30,zoom=0.008,shift=0px)(psnr=23.4)",
+                    "squeeze(r=0.90)(psnr=23.7)",
+                    "color(b=+0.008,c=+0.012,s=-0.010,h=+0.3)(psnr=23.5)",
+                    "residual_subtract(bins=86,psnr=23.5)",
+                    "jpeg0_q92(psnr=23.6)",
+                    "jpeg1_q88(psnr=23.5)",
+                    "luma_noise_s0.4(psnr=23.5)"
+                ]
+            },
+            "metrics": {
+                "source_size": [
+                    1142,
+                    746
+                ],
+                "source_mode": "RGB",
+                "output_size": [
+                    1142,
+                    746
+                ],
+                "output_mode": "RGB",
+                "output_sha256": "41830693b477523d881c7d4286571eef5a3d845e0d1cada067b01dfedb393cc4",
+                "output_bytes": 1271193,
+                "psnr_rgb_db": 23.545216,
+                "global_ssim_luma": 0.960909,
+                "rgb_changed_pixel_ratio_gt2": 0.967107,
+                "rgb_mean_abs_delta": 9.82326,
+                "source_transparent_pixels": 0,
+                "output_transparent_pixels": 0,
+                "alpha_changed_pixel_ratio": 0.0,
+                "alpha_iou": 1.0
+            },
+            "output_file": "O3__final.png",
+            "input_sha256": "e89ce0c0d931b5a9362d4401ef7cca6615bf344e2201489ac092dfb8fc331243",
+            "output_sha256": "41830693b477523d881c7d4286571eef5a3d845e0d1cada067b01dfedb393cc4"
+        },
+        {
+            "input_id": "O3",
+            "profile": "nuke",
+            "purpose": "primary",
+            "parameters": {
+                "vae_strength": 1.0,
+                "vae_passes": 2,
+                "elastic_alpha": 2.8,
+                "elastic_sigma": 44.0,
+                "squeeze_ratio": 0.82,
+                "geo_rotation_deg": 0.6,
+                "geo_zoom": 0.015,
+                "brightness": 0.012,
+                "contrast": 0.02,
+                "saturation": -0.018,
+                "hue_deg": 0.6,
+                "do_residual": true,
+                "residual_mag_cap": 0.45,
+                "residual_removal": 1.05,
+                "residual_harvest_k": 128,
+                "residual_consensus_floor": 0.45,
+                "residual_denoise_h": 12.0,
+                "post_jpeg_q_chain": [
+                    88,
+                    84,
+                    90
+                ],
+                "post_noise_sigma": 0.8,
+                "post_bilateral_d": 5,
+                "post_bilateral_sigma": 10.0,
+                "post_pixel_shift": 1,
+                "psnr_floor": 11.0
+            },
+            "processing": {
+                "status": "succeeded",
+                "wall_seconds": 1338.613476,
+                "peak_rss_bytes": 1195180032,
+                "cost_usd": 0.0,
+                "runtime": "local_cpu",
+                "offline_environment_flags": true,
+                "network_capture": "not_instrumented",
+                "external_upload_performed": false
+            },
+            "pixel_evidence": {
+                "input": "not_verified",
+                "output": "not_verified",
+                "detector": "official_gemini_manual_handoff_pending"
+            },
+            "upstream_result": {
+                "psnr": 20.445945,
+                "ssim": 0.650454,
+                "details": {
+                    "version": "v4_final",
+                    "strength": "nuke",
+                    "profile_key": "gemini-3.1-flash-image-preview/843x1264",
+                    "exact_match": false,
+                    "n_passes_applied": 1,
+                    "n_passes_requested": 1,
+                    "n_passes_rolled_back": 0,
+                    "n_vae_passes": 2,
+                    "elastic_alpha": 2.8,
+                    "elastic_sigma": 44.0,
+                    "squeeze_ratio": 0.82
+                },
+                "stages_applied": [
+                    "vae_pass_0(psnr=28.3)",
+                    "vae_pass_1(psnr=26.0)",
+                    "elastic(a=2.80,s=44)(psnr=25.3)",
+                    "geo(deg=+0.60,zoom=0.015,shift=0px)(psnr=20.5)",
+                    "squeeze(r=0.82)(psnr=20.7)",
+                    "color(b=+0.012,c=+0.020,s=-0.018,h=+0.6)(psnr=20.4)",
+                    "residual_subtract(bins=138,psnr=20.4)",
+                    "jpeg0_q88(psnr=20.4)",
+                    "jpeg1_q84(psnr=20.4)",
+                    "jpeg2_q90(psnr=20.4)",
+                    "luma_noise_s0.8(psnr=20.5)",
+                    "bilateral_d5(psnr=20.5)",
+                    "pixel_shift_1px(psnr=20.4)"
+                ]
+            },
+            "metrics": {
+                "source_size": [
+                    1142,
+                    746
+                ],
+                "source_mode": "RGB",
+                "output_size": [
+                    1142,
+                    746
+                ],
+                "output_mode": "RGB",
+                "output_sha256": "73fcd258f5f7e87ef1ae253afef3ce5b8c3ff81c099a19d4f6690cadbb885202",
+                "output_bytes": 1119514,
+                "psnr_rgb_db": 20.445945,
+                "global_ssim_luma": 0.925777,
+                "rgb_changed_pixel_ratio_gt2": 0.978677,
+                "rgb_mean_abs_delta": 14.613368,
+                "source_transparent_pixels": 0,
+                "output_transparent_pixels": 0,
+                "alpha_changed_pixel_ratio": 0.0,
+                "alpha_iou": 1.0
+            },
+            "output_file": "O3__nuke.png",
+            "input_sha256": "e89ce0c0d931b5a9362d4401ef7cca6615bf344e2201489ac092dfb8fc331243",
+            "output_sha256": "73fcd258f5f7e87ef1ae253afef3ce5b8c3ff81c099a19d4f6690cadbb885202"
+        },
+        {
+            "input_id": "O1",
+            "profile": "final",
+            "purpose": "repeatability",
+            "parameters": {
+                "vae_strength": 1.0,
+                "elastic_alpha": 1.8,
+                "elastic_sigma": 56.0,
+                "squeeze_ratio": 0.9,
+                "geo_rotation_deg": 0.3,
+                "geo_zoom": 0.008,
+                "brightness": 0.008,
+                "contrast": 0.012,
+                "saturation": -0.01,
+                "hue_deg": 0.3,
+                "do_residual": true,
+                "residual_mag_cap": 0.3,
+                "residual_removal": 0.9,
+                "residual_harvest_k": 72,
+                "residual_consensus_floor": 0.55,
+                "residual_denoise_h": 10.0,
+                "post_jpeg_q_chain": [
+                    92,
+                    88
+                ],
+                "post_noise_sigma": 0.4,
+                "psnr_floor": 14.0
+            },
+            "processing": {
+                "status": "succeeded",
+                "wall_seconds": 682.681473,
+                "peak_rss_bytes": 1241522176,
+                "cost_usd": 0.0,
+                "runtime": "local_cpu",
+                "offline_environment_flags": true,
+                "network_capture": "not_instrumented",
+                "external_upload_performed": false
+            },
+            "pixel_evidence": {
+                "input": "not_verified",
+                "output": "not_verified",
+                "detector": "official_gemini_manual_handoff_pending"
+            },
+            "upstream_result": {
+                "psnr": 23.822557,
+                "ssim": 0.755507,
+                "details": {
+                    "version": "v4_final",
+                    "strength": "final",
+                    "profile_key": "gemini-3.1-flash-image-preview/1024x1024",
+                    "exact_match": false,
+                    "n_passes_applied": 1,
+                    "n_passes_requested": 1,
+                    "n_passes_rolled_back": 0,
+                    "n_vae_passes": 1,
+                    "elastic_alpha": 1.8,
+                    "elastic_sigma": 56.0,
+                    "squeeze_ratio": 0.9
+                },
+                "stages_applied": [
+                    "vae_pass_0(psnr=27.3)",
+                    "elastic(a=1.80,s=56)(psnr=27.0)",
+                    "geo(deg=+0.30,zoom=0.008,shift=0px)(psnr=24.0)",
+                    "squeeze(r=0.90)(psnr=24.3)",
+                    "color(b=+0.008,c=+0.012,s=-0.010,h=+0.3)(psnr=23.7)",
+                    "residual_subtract(bins=96,psnr=23.8)",
+                    "jpeg0_q92(psnr=23.8)",
+                    "jpeg1_q88(psnr=23.7)",
+                    "luma_noise_s0.4(psnr=23.8)"
+                ]
+            },
+            "metrics": {
+                "source_size": [
+                    912,
+                    1147
+                ],
+                "source_mode": "RGBA",
+                "output_size": [
+                    912,
+                    1147
+                ],
+                "output_mode": "RGB",
+                "output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1",
+                "output_bytes": 1430588,
+                "psnr_rgb_db": 23.822557,
+                "global_ssim_luma": 0.965238,
+                "rgb_changed_pixel_ratio_gt2": 0.915438,
+                "rgb_mean_abs_delta": 10.853153,
+                "source_transparent_pixels": 0,
+                "output_transparent_pixels": 0,
+                "alpha_changed_pixel_ratio": 0.0,
+                "alpha_iou": 1.0
+            },
+            "output_file": "O1__repeat.png",
+            "input_sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
+            "output_sha256": "6222fc5656c1a7db8735672af3f3e13db9d3bfc4d24c91225dd35884961a3af1"
+        }
+    ],
+    "repeatability": {
+        "input_id": "O1",
+        "profile": "final",
+        "comparable": true,
+        "output_sha256_equal": true,
+        "psnr_absolute_delta": 0.0,
+        "ssim_absolute_delta": 0.0
+    },
+    "source_hashes_unchanged": true,
+    "contact_sheet": {
+        "tracked": false,
+        "relative_local_path": ".scratch/reverse-synthid-m1/run-20260726/contact-sheets/m1-contact-sheet.png",
+        "sha256": "43a4f05fdcc6653127b1a28d1454743c227d77a0b6b4eb4c1155abd2cbd42fba",
+        "bytes": 1113431,
+        "width": 1080,
+        "height": 1032,
+        "decodable": true,
+        "manual_visual_review": "pending_sandbox_viewer_unavailable"
+    },
+    "processing": "succeeded",
+    "pixel_evidence": "not_verified",
+    "official_handoff": {
+        "required": true,
+        "performed": false,
+        "network_upload_performed": false,
+        "allowed_statuses": [
+            "detected",
+            "not_detected",
+            "not_verified",
+            "unsupported"
+        ]
+    },
+    "decision": "inconclusive_official_evidence_pending",
+    "limitations": [
+        "The upstream research license prohibits commercial integration without a separate agreement.",
+        "No output may be described as removed without official input/output evidence.",
+        "O2 may be derived from O1 and is not an independent scene.",
+        "This three-input pilot cannot establish universal effectiveness.",
+        "The recorded run predates the pickle-free codebook and exact-path import hardening; a secure repeat is required before any adoption decision."
+    ],
+    "recorded_run_trust_boundary": {
+        "original_codebook_sha256": "f105de83ae3aca85330793bf8780d4bcd364a1df009685c1abf24af26dbe5366",
+        "original_codebook_used_allow_pickle": true,
+        "os_filesystem_sandbox": false,
+        "isolated_venv": true,
+        "offline_environment_flags": true,
+        "network_capture": "not_instrumented",
+        "external_upload_performed": false,
+        "review_disposition": "recorded_results_preserved_but_secure_rerun_required_for_adoption"
+    },
+    "post_review_hardening": {
+        "pickle_free_codebook_sha256": "56062cd85398d5e9d63f28c4ca8ecdb879954a15290e72b62100a71100ac300c",
+        "pickle_free_codebook_bytes": 26470883,
+        "object_arrays": 0,
+        "loader_allow_pickle": false,
+        "exact_path_module_loading": true,
+        "socket_connections_blocked": true,
+        "used_for_recorded_runs": false,
+        "secure_repeat_status": "pending",
+        "deterministic_repack_verified": true,
+        "review_loop": "pass3_clear",
+        "focused_tests": "20/20_pass",
+        "full_regression": "350/350_pass"
+    }
+}

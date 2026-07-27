@@ -4,6 +4,10 @@
 
 ### Added
 
+- Completed the local research-only M1 reverse-SynthID pilot with pinned
+  source/model hashes, two profiles on three user-owned inputs,
+  reproducibility and fidelity/resource reports; official Gemini evidence
+  remains pending and no removal claim or production integration was made.
 - Prepared the application for the next multi-platform release as `2.0`;
   hidden SynthID/neural-marker removal remains outside this release pending
   further research.

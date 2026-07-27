@@ -306,30 +306,32 @@ Notes:
 
 ## Task 11: Выполнить M1 pilot reverse-SynthID
 
-Status: Todo
+Status: In Progress
 
 Goal:
 Получить воспроизводимые результаты M1 на основном наборе без изменения
 окружения приложения.
 
 Steps:
-- Провести license/security review и зафиксировать commit SHA.
-- Создать изолированную среду и закрыть auto-update.
-- Подтвердить официально обнаруживаемые входы.
-- Выполнить два разрешённых профиля.
-- Собрать evidence, fidelity и resource metrics.
+- [x] Провести license/security review и зафиксировать commit SHA.
+- [x] Создать изолированную среду и закрыть auto-update.
+- [ ] Подтвердить официально обнаруживаемые входы — требуется отдельное согласие на передачу Google.
+- [x] Выполнить два разрешённых профиля.
+- [x] Собрать локальные evidence-status, fidelity и resource metrics.
 
 Acceptance:
-- [ ] Все результаты связаны с SHA-256 входа, commit и параметрами.
-- [ ] Исходники неизменны.
-- [ ] `processing` и `pixel_evidence` разделены.
+- [x] Все результаты связаны с SHA-256 входа, commit и параметрами.
+- [x] Исходники неизменны.
+- [x] `processing` и `pixel_evidence` разделены.
 
 Verification:
-- [ ] Повтор одного профиля даёт сопоставимый отчёт.
-- [ ] Ручная проверка manifest и contact sheet.
+- [x] Повтор одного профиля даёт сопоставимый отчёт.
+- [ ] Manifest проверен; визуальная проверка contact sheet ожидает доступного viewer.
 
 Notes:
 - Никаких заявлений об удалении до официальной проверки выхода.
+- Локальный recorded run сохранён как inconclusive; после security review создан pickle-free codebook, secure repeat ещё не выполнен.
+- Проверено: 20/20 focused, 350/350 full regression; третий review-проход — без замечаний.
 
 ## Task 12: Выполнить M2 pilot CtrlRegen
 

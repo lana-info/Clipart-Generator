@@ -1,77 +1,79 @@
 {
-  "schema_version": 1,
-  "status": "prepared_not_executed",
-  "purpose": "Clipart Generator 3.0 SynthID pilot",
-  "inputs": [
-    {
-      "id": "O1",
-      "path": "ai-metla-test-20260719/single-gemini-owned/before.png",
-      "sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
-      "bytes": 1435948,
-      "width": 912,
-      "height": 1147,
-      "mode": "RGBA",
-      "ownership_class": "user_owned_documented",
-      "input_pixel_evidence": "not_verified"
+    "schema_version": 1,
+    "status": "m1_local_executed_secure_repeat_and_official_evidence_pending",
+    "purpose": "Clipart Generator 3.0 SynthID pilot",
+    "inputs": [
+        {
+            "id": "O1",
+            "path": "ai-metla-test-20260719/single-gemini-owned/before.png",
+            "sha256": "d0d006a9fc9055726f2a84d3ef3aae1796ddcb18aa0b345d4b5a69cef3e26db9",
+            "bytes": 1435948,
+            "width": 912,
+            "height": 1147,
+            "mode": "RGBA",
+            "ownership_class": "user_owned_documented",
+            "input_pixel_evidence": "not_verified"
+        },
+        {
+            "id": "O2",
+            "path": "ai-metla-test-20260719/single-gemini-owned/after.png",
+            "sha256": "226fb2daf426e0f701fd7e21f666aae8a38a849627ac1237c717a3fdbdb620bc",
+            "bytes": 2439638,
+            "width": 911,
+            "height": 1146,
+            "mode": "RGBA",
+            "ownership_class": "user_owned_documented",
+            "input_pixel_evidence": "not_verified",
+            "independence_note": "May be derived from O1; do not count as an independent scene."
+        },
+        {
+            "id": "O3",
+            "path": ".scratch/ai-metla-test-20260719/01-gemini-owned-normal-cleaned.png",
+            "sha256": "e89ce0c0d931b5a9362d4401ef7cca6615bf344e2201489ac092dfb8fc331243",
+            "bytes": 1532245,
+            "width": 1142,
+            "height": 746,
+            "mode": "RGB",
+            "ownership_class": "user_owned_documented",
+            "input_pixel_evidence": "not_verified",
+            "storage_note": "Copy to the run input directory without adding the image to Git."
+        }
+    ],
+    "methods": [
+        {
+            "id": "M1",
+            "name": "reverse-SynthID V4",
+            "source": "https://github.com/aloshdenny/reverse-SynthID",
+            "class": "local_spectral_geometric",
+            "source_revision": "b11083676fd3ee3ff97ce9d03c0e409e46905902",
+            "execution_status": "recorded_run_preserved_secure_repeat_pending",
+            "pilot_report": "benchmark_synthid_m1.pilot.json",
+            "pickle_free_codebook_sha256": "56062cd85398d5e9d63f28c4ca8ecdb879954a15290e72b62100a71100ac300c"
+        },
+        {
+            "id": "M2",
+            "name": "noai-watermark CtrlRegen",
+            "source": "https://github.com/mertizci/noai-watermark",
+            "class": "low_strength_diffusion_img2img",
+            "source_revision": null,
+            "execution_status": "not_run"
+        },
+        {
+            "id": "M3",
+            "name": "Synthid-Bypass V2",
+            "source": "https://github.com/cebeuq/Synthid-Bypass",
+            "class": "qwen_canny_structure_guided_regeneration",
+            "source_revision": null,
+            "execution_status": "not_run"
+        }
+    ],
+    "gates": {
+        "network_upload_requires_explicit_consent": true,
+        "paid_run_requires_explicit_consent": true,
+        "source_revision_required_before_run": true,
+        "official_input_and_output_evidence_required": true,
+        "overwrite_inputs": false,
+        "claim_removed": false
     },
-    {
-      "id": "O2",
-      "path": "ai-metla-test-20260719/single-gemini-owned/after.png",
-      "sha256": "226fb2daf426e0f701fd7e21f666aae8a38a849627ac1237c717a3fdbdb620bc",
-      "bytes": 2439638,
-      "width": 911,
-      "height": 1146,
-      "mode": "RGBA",
-      "ownership_class": "user_owned_documented",
-      "input_pixel_evidence": "not_verified",
-      "independence_note": "May be derived from O1; do not count as an independent scene."
-    },
-    {
-      "id": "O3",
-      "path": ".scratch/ai-metla-test-20260719/01-gemini-owned-normal-cleaned.png",
-      "sha256": "e89ce0c0d931b5a9362d4401ef7cca6615bf344e2201489ac092dfb8fc331243",
-      "bytes": 1532245,
-      "width": 1142,
-      "height": 746,
-      "mode": "RGB",
-      "ownership_class": "user_owned_documented",
-      "input_pixel_evidence": "not_verified",
-      "storage_note": "Copy to the run input directory without adding the image to Git."
-    }
-  ],
-  "methods": [
-    {
-      "id": "M1",
-      "name": "reverse-SynthID V4",
-      "source": "https://github.com/aloshdenny/reverse-SynthID",
-      "class": "local_spectral_geometric",
-      "source_revision": null,
-      "execution_status": "not_run"
-    },
-    {
-      "id": "M2",
-      "name": "noai-watermark CtrlRegen",
-      "source": "https://github.com/mertizci/noai-watermark",
-      "class": "low_strength_diffusion_img2img",
-      "source_revision": null,
-      "execution_status": "not_run"
-    },
-    {
-      "id": "M3",
-      "name": "Synthid-Bypass V2",
-      "source": "https://github.com/cebeuq/Synthid-Bypass",
-      "class": "qwen_canny_structure_guided_regeneration",
-      "source_revision": null,
-      "execution_status": "not_run"
-    }
-  ],
-  "gates": {
-    "network_upload_requires_explicit_consent": true,
-    "paid_run_requires_explicit_consent": true,
-    "source_revision_required_before_run": true,
-    "official_input_and_output_evidence_required": true,
-    "overwrite_inputs": false,
-    "claim_removed": false
-  },
-  "protocol": "SYNTHID_3_METHOD_BENCHMARK.ru.md"
+    "protocol": "SYNTHID_3_METHOD_BENCHMARK.ru.md"
 }
