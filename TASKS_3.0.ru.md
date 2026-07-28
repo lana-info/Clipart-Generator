@@ -1,11 +1,14 @@
 ﻿# Задачи Clipart Generator 3.0
 
 Основание: `PRD_3.0.ru.md`
+PRD Key: `CG3-PRD-001`
+Task Set Key: `CG3-TASKSET-001`
 Экраны: `UI_WIZARD_3.0.ru.md`
 Исследование: `SYNTHID_3_METHOD_BENCHMARK.ru.md`
 
 ## Task 1: Зафиксировать контракты состояния проекта и маршрутов
 
+Key: `CG3-TASK-001`
 Status: Done
 
 Goal:
@@ -36,6 +39,7 @@ Notes:
 
 ## Task 2: Вынести design tokens и базовые компоненты PyQt6
 
+Key: `CG3-TASK-002`
 Status: Done
 
 Goal:
@@ -63,6 +67,7 @@ Notes:
 
 ## Task 3: Реализовать оболочку wizard
 
+Key: `CG3-TASK-003`
 Status: Done
 
 Goal:
@@ -90,9 +95,12 @@ Notes:
   визуальный offscreen smoke при 980×700.
 - Независимый review-loop: PASS после защиты ownership страниц и перехода к
   результатам только после `run_requested`.
+- Пункт о предупреждении несохранённых изменений отменён новым требованием
+  `CG3-FR-002` и заменяется в `CG3-TASK-016`.
 
 ## Task 4: Создать стартовый экран выбора режима
 
+Key: `CG3-TASK-004`
 Status: Done
 
 Goal:
@@ -119,9 +127,12 @@ Notes:
   offscreen smoke при 980×700.
 - Независимый review-loop: PASS после добавления явного возврата с экрана смены
   режима и очистки скрытых accessibility-атрибутов.
+- Формулировки «последний/новый проект» исторические; пользовательский маршрут
+  без сущности проекта реализуется в `CG3-TASK-016`.
 
 ## Task 5: Реализовать генератор серий промптов
 
+Key: `CG3-TASK-005`
 Status: Done
 
 Goal:
@@ -156,6 +167,7 @@ Notes:
 
 ## Task 6: Собрать вертикальный срез режима «Клипарт»
 
+Key: `CG3-TASK-006`
 Status: Done
 
 Goal:
@@ -191,6 +203,7 @@ Notes:
 
 ## Task 7: Собрать вертикальный срез режима «Pinterest-пины»
 
+Key: `CG3-TASK-007`
 Status: Done
 
 Goal:
@@ -226,6 +239,7 @@ Notes:
 
 ## Task 8: Собрать вертикальный срез режима «Обработка»
 
+Key: `CG3-TASK-008`
 Status: Done
 
 Goal:
@@ -252,6 +266,7 @@ Verification:
 
 ## Task 9: Реализовать центр проверки и очистки
 
+Key: `CG3-TASK-009`
 Status: Done
 
 Goal:
@@ -281,6 +296,7 @@ Notes:
 
 ## Task 10: Реализовать общий экран выполнения и результатов
 
+Key: `CG3-TASK-010`
 Status: Done
 
 Goal:
@@ -306,7 +322,9 @@ Notes:
 
 ## Task 11: Выполнить M1 pilot reverse-SynthID
 
+Key: `CG3-TASK-011`
 Status: In Progress
+Requirements: `CG3-RS-001`, `CG3-RS-002`, `CG3-RS-003`, `CG3-RS-004`
 
 Goal:
 Получить воспроизводимые результаты M1 на основном наборе без изменения
@@ -335,7 +353,9 @@ Notes:
 
 ## Task 12: Выполнить M2 pilot CtrlRegen
 
+Key: `CG3-TASK-012`
 Status: In Progress
+Requirements: `CG3-RS-001`, `CG3-RS-002`, `CG3-RS-003`, `CG3-RS-004`
 
 Goal:
 Проверить малосильную diffusion-реконструкцию в изолированной среде.
@@ -361,7 +381,9 @@ Notes:
 
 ## Task 13: Выполнить M3 pilot Qwen/Canny
 
+Key: `CG3-TASK-013`
 Status: In Progress
+Requirements: `CG3-RS-001`, `CG3-RS-002`, `CG3-RS-003`, `CG3-RS-004`
 
 Goal:
 Проверить structure-guided реконструкцию на тех же входах.
@@ -388,7 +410,10 @@ Notes:
 
 ## Task 14: Принять SynthID architecture decision
 
+Key: `CG3-TASK-014`
 Status: Todo
+Requirements: `CG3-RS-005`, `CG3-FR-062`, `CG3-FR-063`, `CG3-FR-064`,
+`CG3-AC-019`
 
 Goal:
 По одинаковым правилам выбрать `adopt_local_experimental`,
@@ -399,12 +424,16 @@ Steps:
 - Проверить pilot gates.
 - Провести privacy, license, cost и packaging review победителя.
 - Записать ADR/DECISION без маркетингового преувеличения.
+- Зафиксировать, что provenance tool необязателен, онлайн-upload отсутствует, а
+  обычный production pipeline не зависит от проверки SynthID.
 - При pass создать отдельные implementation tasks; при fail не добавлять control.
 
 Acceptance:
 - [ ] Решение опирается на официальные before/after evidence.
 - [ ] Малый pilot не представлен как универсальное доказательство.
 - [ ] До решения production UI не содержит работающей SynthID-перегенерации.
+- [ ] UI не обещает гарантированное удаление или человеческое происхождение.
+- [ ] Генерация, обработка и экспорт не блокируются provenance tool.
 
 Verification:
 - [ ] Независимая проверка отчёта и соответствия
@@ -412,7 +441,8 @@ Verification:
 
 ## Task 15: Регрессия, миграция и release readiness 3.0
 
-Status: Todo
+Key: `CG3-TASK-015`
+Status: Superseded by `CG3-TASK-030`
 
 Goal:
 Подтвердить сохранность функций 2.0 и готовность нового wizard.
@@ -437,6 +467,436 @@ Verification:
 - [ ] Отдельные build checks Windows/macOS.
 
 Notes:
-- Следующий рекомендованный workflow реализации: `$code-vibecoding-workflow`.
+- Заменена после ручного тестирования более полным release gate
+  `CG3-TASK-030`; историческая задача сохранена.
+
+---
+
+## Revised UX and architecture backlog
+
+Этот раздел переводит комментарии ручного тестирования в задачи по исправленному
+`CG3-PRD-001`. Первая безопасная задача: `CG3-TASK-016`.
+
+## Task 16: Убрать сущность «проект» из пользовательских маршрутов
+
+Key: `CG3-TASK-016`
+Status: Ready — first safe task
+Requirements: `CG3-FR-001`, `CG3-FR-002`, `CG3-AR-002`, `CG3-AR-010`,
+`CG3-FR-021`, `CG3-AC-001`, `CG3-AC-010`, `CG3-AC-020`
+
+Goal:
+Пользователь выбирает режим и папку без названия проекта и без предупреждения
+при переключении режима.
+
+Steps:
+- Убрать поле названия проекта и его валидацию из Clipart/Pinterest.
+- Оставить чтение legacy `project_name` только для совместимости черновиков.
+- Автоматически хранить независимый draft каждого режима.
+- Атомарно автосохранять промпты, их порядок и references после изменений и
+  восстанавливать их при следующем запуске.
+- Удалить modal confirmation о несохранённых данных при переключении режима.
+- Обновить тесты состояния, навигации и миграции.
+
+Acceptance:
+- [ ] Новый маршрут не показывает и не требует название проекта.
+- [ ] Переключение режима происходит сразу и сохраняет данные обоих режимов.
+- [ ] Старый draft с `project_name` открывается без ошибки.
+- [ ] Перезапуск приложения восстанавливает независимые prompt drafts режимов.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_project_state tests.test_v3_mode_selection tests.test_v3_wizard_navigation -v`
+
+Notes:
+- Вероятные файлы: `v3_project_state.py`, `v3_wizard.py`,
+  `v3_mode_selection.py`, `v3_clipart_flow.py`, `v3_pinterest_flow.py`.
+
+## Task 17: Создать общую модель и оболочку PromptWorkspace
+
+Key: `CG3-TASK-017`
+Status: Todo
+Requirements: `CG3-FR-010`, `CG3-FR-011`, `CG3-FR-012`, `CG3-FR-013`,
+`CG3-FR-022`, `CG3-AR-003`, `CG3-AR-009`, `CG3-AC-002`, `CG3-AC-020`
+
+Goal:
+Клипарт и Pinterest используют один редактор списка промптов.
+
+Steps:
+- Вынести общий model/view из отдельных input/review pages.
+- Объединить ввод и проверку промптов в один маршрутный шаг.
+- Добавить строковые действия «дублировать» и «удалить».
+- Добавить «Новый промпт» и «Удалить все промпты».
+- После подтверждения «Удалить все промпты» очищать также их references и
+  сохранять пустой draft текущего режима.
+- Реализовать drag-and-drop reorder с сохранением references.
+
+Acceptance:
+- [ ] Оба режима создают один и тот же компонент PromptWorkspace.
+- [ ] Порядок меняется перетаскиванием без потери текста и референсов.
+- [ ] Кнопок «выше/ниже» и отдельного шага проверки нет.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_prompt_workspace -v`
+- [ ] Offscreen smoke drag/drop model reorder.
+
+Notes:
+- Не копировать QWidget между flow-модулями; нужен общий модуль.
+
+## Task 18: Реализовать редактор локальных референсов
+
+Key: `CG3-TASK-018`
+Status: Todo
+Requirements: `CG3-FR-014`, `CG3-FR-015`, `CG3-FR-016`, `CG3-FR-017`,
+`CG3-FR-023`, `CG3-FR-024`, `CG3-AC-016`, `CG3-AC-020`
+
+Goal:
+Референсы выбираются файлами и управляются на уровне строки, выделения и всего
+списка.
+
+Steps:
+- Открывать полный prompt editor по двойному клику.
+- Показывать референсы с миниатюрой, именем и отдельной корзиной.
+- Добавить выбор нескольких локальных изображений.
+- Добавить bulk add для выделенных/всех строк.
+- Добавить bulk replace с явной областью действия.
+- Добавить «Удалить все референсы» без удаления текстов промптов.
+- При восстановлении помечать отсутствующие локальные файлы, не удаляя промпт.
+- Проверять существование и допустимый формат файла без загрузки в сеть.
+
+Acceptance:
+- [ ] Текстовый ввод URL/пути не является основным способом добавления.
+- [ ] Удаление одного референса не затрагивает остальные.
+- [ ] Replace меняет только выбранные строки.
+- [ ] «Удалить все референсы» сохраняет тексты и порядок промптов.
+- [ ] После перезапуска очищенные references не появляются снова.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_prompt_references -v`
+- [ ] Ручной smoke: один, несколько, selected/all, replace и delete.
+
+## Task 19: Переделать CSV-import на ручное сопоставление столбцов
+
+Key: `CG3-TASK-019`
+Status: Todo
+Requirements: `CG3-FR-018`, `CG3-FR-019`, `CG3-FR-020`, `CG3-AC-003`
+
+Goal:
+Импортировать таблицы с любыми названиями столбцов без ложной ошибки
+«нет столбца prompt/references».
+
+Steps:
+- Показывать preview и выбор prompt/references columns.
+- Добавить выбор наличия строки заголовков.
+- Заменить неоднозначные подписи на «Добавить к списку» и
+  «Заменить все промпты».
+- Собирать ошибки с номерами строк, сохраняя валидный preview.
+- Общий dialog использовать в Clipart и Pinterest.
+
+Acceptance:
+- [ ] CSV с произвольными заголовками импортируется после mapping.
+- [ ] References column необязателен.
+- [ ] Ошибка содержит номера и причины проблемных строк.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_prompt_csv_import -v`
+
+## Task 20: Сделать генератор серии понятным и необязательным
+
+Key: `CG3-TASK-020`
+Status: Todo
+Requirements: `CG3-FR-025`, `CG3-FR-026`, `CG3-FR-027`, `CG3-FR-028`,
+`CG3-AC-018`
+
+Goal:
+Пользователь понимает, что функция создаёт варианты текста, и может полностью
+её пропустить.
+
+Steps:
+- Переименовать блок в «Создать варианты промптов по шаблону».
+- Поместить его в необязательную раскрываемую секцию PromptWorkspace.
+- Добавить короткое объяснение и preview.
+- После preview дать действия «Добавить варианты» и
+  «Заменить все промпты».
+- Сохранить прямую вставку готовых промптов.
+
+Acceptance:
+- [ ] До действия видны объяснение и будущие варианты.
+- [ ] Создание вариантов не запускает генерацию изображений.
+- [ ] Основной маршрут работает без открытия блока.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_prompt_generator tests.test_v3_prompt_workspace -v`
+
+## Task 21: Упростить выбор моделей и reference-mode
+
+Key: `CG3-TASK-021`
+Status: Todo
+Requirements: `CG3-FR-030`, `CG3-FR-031`, `CG3-FR-032`, `CG3-FR-033`,
+`CG3-AC-017`
+
+Goal:
+Подходящие модели и режим генерации очевидны до запуска.
+
+Steps:
+- Всегда показывать основной выбор модели.
+- Автоматически раскрывать reference-models при наличии референса.
+- Связать доступность модели с её capabilities.
+- Показать причину несовместимости вместо молчаливого сброса настройки.
+- Сохранить Pinterest как генерацию изображений без layout/editor функций.
+
+Acceptance:
+- [ ] Reference-capable models видны сразу при наличии references.
+- [ ] Несовместимая модель не может попасть в run plan.
+- [ ] Формат и стоимость пересчитываются после смены модели.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_clipart_flow tests.test_v3_pinterest_flow -v`
+
+## Task 22: Ввести реестр возможностей провайдеров
+
+Key: `CG3-TASK-022`
+Status: Todo
+Requirements: `CG3-FR-045`, `CG3-FR-046`, `CG3-AR-005`
+
+Goal:
+UI строит настройки KIE, PhotoRoom и локальных провайдеров по единому
+проверяемому контракту.
+
+Steps:
+- Описать provider id, операции, параметры, network/cost и alpha capability.
+- Перенести правила видимости controls в registry.
+- Запретить неизвестные provider/profile до worker.
+- Добавить contract tests для KIE, PhotoRoom, rembg, BEN2 и Real-ESRGAN.
+
+Acceptance:
+- [ ] Выбранный provider показывает только свои поддерживаемые параметры.
+- [ ] Неизвестный provider не запускает обработку.
+- [ ] UI и run plan читают один registry.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_provider_registry -v`
+
+## Task 23: Создать общий ProcessingPipelineEditor
+
+Key: `CG3-TASK-023`
+Status: Todo
+Requirements: `CG3-FR-040`, `CG3-FR-041`, `CG3-FR-042`, `CG3-AR-004`,
+`CG3-AR-006`, `CG3-AR-009`, `CG3-AC-004`
+
+Goal:
+Все режимы используют один компонент, одну модель рецепта и один builder
+pipeline.
+
+Steps:
+- Вынести processing controls из flow-модулей.
+- Описать единый ProcessingRecipe с mode defaults.
+- Подключить компонент через тонкие адаптеры Clipart/Pinterest/Processing.
+- Строить отображаемый порядок и worker settings из одного RunPlanBuilder.
+- Удалить дублирующие provider controls после миграции тестов.
+
+Acceptance:
+- [ ] Изменение общей операции отражается во всех трёх режимах.
+- [ ] Отображаемый порядок совпадает с worker order.
+- [ ] Flow-контроллеры не создают собственные processing widgets.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_processing_editor tests.test_v3_clipart_flow tests.test_v3_pinterest_flow tests.test_v3_processing_flow -v`
+
+## Task 24: Свести очистку к одной безопасной настройке
+
+Key: `CG3-TASK-024`
+Status: Todo
+Requirements: `CG3-FR-050`, `CG3-FR-051`, `CG3-FR-052`, `CG3-FR-053`,
+`CG3-FR-054`, `CG3-FR-060`, `CG3-FR-061`, `CG3-AC-005`, `CG3-AC-009`
+
+Goal:
+Одна галочка очищает поддерживаемые служебные данные и гарантированно сохраняет
+ICC, DPI и декодированные пиксели.
+
+Steps:
+- Заменить набор пользовательских флагов одним cleanup preset.
+- Зафиксировать внутренний preset EXIF/XMP/IPTC/comments/thumbnail/generator/C2PA.
+- Удалить из UI controls ICC/DPI и всегда сохранять их.
+- Сделать file preflight внутренним, без отдельного обязательного шага.
+- Удалить legal checkbox и обязательный experimental opt-in из обычного
+  processing flow; experimental consent показывать только внутри явно
+  выбранного будущего эксперимента.
+- Проверять decoded-pixel equality для cleanup-only PNG/JPEG.
+
+Acceptance:
+- [ ] Одна галочка управляет полным preset.
+- [ ] ICC/DPI сохраняются и не имеют переключателей удаления.
+- [ ] Cleanup-only тест подтверждает неизменность декодированных пикселей.
+- [ ] Обычная обработка запускается без legal/experimental подтверждений.
+
+Verification:
+- [ ] `python -m unittest tests.test_metadata_cleanup tests.test_c2pa_cleanup tests.test_v3_evidence_center -v`
+
+## Task 25: Зафиксировать defaults клипарта и alpha-safe upscale
+
+Key: `CG3-TASK-025`
+Status: Todo
+Requirements: `CG3-FR-043`, `CG3-FR-044`, `CG3-AC-006`, `CG3-AC-007`
+
+Goal:
+Новый клипарт-рецепт сразу готовит PNG 300 DPI и не теряет прозрачность после
+удаления фона.
+
+Steps:
+- Включить defaults: upscale-before, remove background, trim, 300 DPI.
+- Проверять alpha capability для upscale-after.
+- Скрывать/блокировать несовместимый provider/profile для прозрачного входа.
+- Добавить integration fixture с alpha PNG.
+
+Acceptance:
+- [ ] Новый state получает четыре требуемых defaults.
+- [ ] Alpha-safe pipeline сохраняет ненулевую прозрачность.
+- [ ] Несовместимый post-background upscale не запускается.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_project_state tests.test_v3_clipart_flow tests.test_local_processing_acceptance -v`
+
+## Task 26: Улучшить выбор файлов и выходной папки обработки
+
+Key: `CG3-TASK-026`
+Status: Todo
+Requirements: `CG3-FR-003`, `CG3-FR-004`, `CG3-FR-005`, `CG3-AC-008`,
+`CG3-AC-014`
+
+Goal:
+Пользователь управляет каждым входным файлом и явно выбирает безопасную папку
+результата.
+
+Steps:
+- Добавить отдельную корзину возле каждого файла.
+- Сохранить drag-and-drop, добавление и «Очистить список».
+- Добавить отдельный WorkspaceSelector для output folder.
+- Валидировать конфликт input/output и безопасно разрешать одинаковые имена.
+
+Acceptance:
+- [ ] Один файл удаляется без очистки списка.
+- [ ] Output folder виден до запуска.
+- [ ] Исходник не перезаписывается даже при совпадении имени.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_processing_flow tests.test_v3_output_paths -v`
+
+## Task 27: Создать единые настройки API и проверок провайдера
+
+Key: `CG3-TASK-027`
+Status: Todo
+Requirements: `CG3-FR-070`, `CG3-FR-071`, `CG3-FR-072`, `CG3-FR-073`,
+`CG3-AR-008`, `CG3-AR-011`, `CG3-AC-013`
+
+Goal:
+KIE и PhotoRoom настраиваются в одном понятном месте без раскрытия секретов.
+
+Steps:
+- Создать постоянный entry point «Настройки».
+- Добавить единый EnvCredentialStore с платформенными user-data paths.
+- Добавить маскированные KIE/PhotoRoom fields.
+- Атомарно мигрировать legacy plaintext keys: сначала записать и проверить
+  пользовательский `.env`, затем удалить секрет из `config.json`.
+- Ограничить права `.env`, исключить его из Git/build/diagnostic bundles.
+- Реализовать безопасную проверку подключения.
+- Подключить KIE balance только к подтверждённому endpoint.
+- Disable balance для неподдерживаемого provider с явной подсказкой.
+- Проверить redaction логов и ошибок.
+
+Acceptance:
+- [ ] Ключ не появляется в UI status, exception и логах.
+- [ ] После успешной миграции ключ отсутствует в `config.json`.
+- [ ] Ошибка записи `.env` не удаляет legacy key и блокирует сетевой
+  запуск с понятным сообщением.
+- [ ] Приложение использует user-data `.env`, а не `.env` из репозитория.
+- [ ] Connection check не запускает платную генерацию.
+- [ ] Balance не имитируется для неподдерживаемого API.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_provider_settings tests.test_v3_credential_store tests.test_main_ui_acceptance -v`
+
+## Task 28: Ввести структурированный прогресс выполнения
+
+Key: `CG3-TASK-028`
+Status: Todo
+Requirements: `CG3-FR-080`, `CG3-FR-081`, `CG3-FR-082`, `CG3-FR-083`,
+`CG3-FR-084`, `CG3-AR-007`, `CG3-AC-012`
+
+Goal:
+Во время любой очереди видно файл, этап, активность, общий прогресс и результат.
+
+Steps:
+- Определить progress event contract.
+- Адаптировать legacy WorkerThread messages к structured events.
+- Рассчитать монотонный общий progress по файлам и известным этапам.
+- Для долгого неизвестного ожидания включать indeterminate activity и timer.
+- Показать per-file errors, stop и «Открыть папку».
+
+Acceptance:
+- [ ] Progress не остаётся на 0% при выполняющемся этапе без объяснения.
+- [ ] Текущий файл и этап всегда видны.
+- [ ] Stop не удаляет готовые результаты и не меняет исходники.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_run_queue tests.test_v3_progress_events -v`
+- [ ] Offscreen smoke с fake slow provider.
+
+## Task 29: Завершить принудительную контрастную тёмную тему
+
+Key: `CG3-TASK-029`
+Status: Todo
+Requirements: `CG3-FR-090`, `CG3-FR-091`, `CG3-FR-092`, `CG3-FR-093`,
+`CG3-FR-094`, `CG3-AR-001`, `CG3-AC-011`
+
+Goal:
+Весь текст и все состояния читаемы при любой системной теме.
+
+Steps:
+- Применить одну тёмную палитру на уровне QApplication.
+- Покрыть токенами tables, combo popups, tooltips, dialogs и disabled states.
+- Добавить emerald/teal primary actions и заметный keyboard focus.
+- Проверить contrast ratios и offscreen screenshots.
+- Провести ручное сравнение при светлой и тёмной теме Windows.
+
+Acceptance:
+- [ ] Нет сочетаний «светлый на светлом» или «тёмный на тёмном».
+- [ ] Контраст соответствует порогам PRD.
+- [ ] Системная тема не меняет читабельность приложения.
+
+Verification:
+- [ ] `python -m unittest tests.test_v3_components tests.test_v3_theme_contrast -v`
+- [ ] Visual smoke: Windows light + dark.
+
+## Task 30: Провести полную регрессию и release gate 3.0
+
+Key: `CG3-TASK-030`
+Status: Todo
+Requirements: `CG3-AC-001`–`CG3-AC-020`
+
+Goal:
+Подтвердить выполнение исправленного PRD без регрессии pipeline 2.0.
+
+Steps:
+- Прогнать unit, integration, security и offscreen UI tests.
+- Проверить migration обезличенного config/draft 2.0.
+- Выполнить именованные smoke-сценарии трёх режимов.
+- Проверить Windows/macOS build без публикации.
+- Обновить `UI_WIZARD_3.0.ru.md`, пользовательскую инструкцию и changelog.
+- Составить traceability table PRD Key → Task Key → Test/Evidence.
+
+Acceptance:
+- [ ] Все критерии `CG3-PRD-001` имеют test/evidence или явный research status.
+- [ ] Существующий pipeline не потерял поддерживаемые возможности.
+- [ ] В release нет секретов, пользовательских файлов и benchmark inputs.
+- [ ] Release/tag/publish выполняются только отдельной явно разрешённой задачей.
+
+Verification:
+- [ ] `python -m unittest discover -s tests -v`
+- [ ] `python -m py_compile main.py v3_*.py`
+- [ ] Offscreen smoke всех маршрутов и fake-provider run.
+- [ ] Отдельные build checks Windows/macOS.
+
+Notes:
+- Следующий рекомендованный workflow реализации:
+  `$code-vibecoding-workflow`, начиная с `CG3-TASK-016`.
 
 
