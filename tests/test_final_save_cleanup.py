@@ -433,6 +433,7 @@ class FinalSaveCleanupTests(unittest.TestCase):
 
             with (
                 patch.object(main, "CONFIG_FILE", str(config_path)),
+                patch.object(main, "ENV_FILE", str(temp_path / ".env")),
                 patch.object(main, "PROMPTS_STORAGE_FILE", str(temp_path / "prompts.json")),
                 patch.object(main, "LICENSE_CACHE_FILE", str(temp_path / "license.json")),
                 patch.object(main.MainWindow, "_migrate_legacy_local_files", return_value=None),

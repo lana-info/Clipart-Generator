@@ -198,6 +198,7 @@ class KieRoutingTests(unittest.TestCase):
                     case_dir.mkdir()
                     with (
                         patch.object(main, "CONFIG_FILE", str(case_dir / "config.json")),
+                        patch.object(main, "ENV_FILE", str(case_dir / ".env")),
                         patch.object(main, "PROMPTS_STORAGE_FILE", str(case_dir / "prompts.json")),
                         patch.object(main, "LICENSE_CACHE_FILE", str(case_dir / "license_cache.json")),
                         patch.object(main.MainWindow, "_migrate_legacy_local_files", return_value=None),

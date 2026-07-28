@@ -478,8 +478,67 @@ def get_user_data_dir():
 
 USER_DATA_DIR = get_user_data_dir()
 CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
+ENV_FILE = os.path.join(USER_DATA_DIR, ".env")
 PROMPTS_STORAGE_FILE = os.path.join(USER_DATA_DIR, "prompts.json")
 LICENSE_CACHE_FILE = os.path.join(USER_DATA_DIR, "license_cache.json")
+
+SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key", "license_key")
+
+
+class EnvCredentialStore:
+    def __init__(self, path):
+        self.path = path
+
+    def load(self):
+        if not os.path.exists(self.path):
+            return {}
+        values = {}
+        try:
+            with open(self.path, "r", encoding="utf-8") as handle:
+                for raw_line in handle:
+                    line = raw_line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, raw_value = line.split("=", 1)
+                    key = key.strip()
+                    if not key:
+                        continue
+                    value = raw_value.strip()
+                    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                        try:
+                            value = ast.literal_eval(value)
+                        except Exception:
+                            value = value[1:-1]
+                    values[key] = value
+        except Exception:
+            return {}
+        return values
+
+    def save(self, values):
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        lines = []
+        for key in SECRET_CONFIG_KEYS:
+            value = str(values.get(key, "")).strip()
+            if value:
+                lines.append(f"{key}={value}")
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=os.path.dirname(self.path),
+            prefix=".env.",
+            suffix=".tmp",
+            text=True,
+        )
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write("\n".join(lines))
+                if lines:
+                    handle.write("\n")
+            os.replace(tmp_path, self.path)
+        except Exception:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise
 
 
 def build_ssl_context():
@@ -3445,6 +3504,9 @@ class MainWindow(QMainWindow):
         self.stop_pending = False
         self.api_key_locked = True
         self.photoroom_api_key_locked = True
+        self.secret_settings = {key: "" for key in SECRET_CONFIG_KEYS}
+        self.credential_store = EnvCredentialStore(ENV_FILE)
+        self.credential_store_error = ""
         self.is_updating_prompts_table = False
         self.settings_save_timer = QTimer(self)
         self.settings_save_timer.setSingleShot(True)
@@ -3533,8 +3595,6 @@ class MainWindow(QMainWindow):
             "status_poll_interval": 20,
             "app_version": APP_VERSION,
             "update_manifest_url": UPDATE_MANIFEST_URL,
-            "kie_api_key": "",
-            "photoroom_api_key": "",
             "kie_upload_path": "clipart-generator",
             "text_generation_model": "gpt-image/1.5-text-to-image",
             "reference_generation_model": "gpt-image/1.5-image-to-image",
@@ -3589,7 +3649,6 @@ class MainWindow(QMainWindow):
             "run_mode": "generate_only",
             "prompt_input_mode": "list",
             "last_work_dir": "",
-            "license_key": "",
             "license_server_url": "",
             "license_backup_server_url": "",
             "last_updates_expired_notice_at": "",
@@ -3645,10 +3704,60 @@ class MainWindow(QMainWindow):
         # Текущая версия приложения берётся из кода сборки, а не из пользовательского конфига.
         # Это предотвращает цикл обновлений, если в конфиге осталось старое значение.
         self.config["app_version"] = APP_VERSION
+        self._sync_credential_settings()
 
-    def save_config(self):
+    def save_config(self, *, include_secrets: bool = False):
+        sanitized = dict(self.config)
+        if include_secrets:
+            sanitized.update(
+                {
+                    key: self.secret_settings.get(key, "").strip()
+                    for key in SECRET_CONFIG_KEYS
+                    if self.secret_settings.get(key, "").strip()
+                }
+            )
+        else:
+            sanitized = {
+                key: value
+                for key, value in sanitized.items()
+                if key not in SECRET_CONFIG_KEYS
+            }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=2, ensure_ascii=False)
+            json.dump(sanitized, f, indent=2, ensure_ascii=False)
+
+    def _sync_credential_settings(self):
+        existing_file_values = {
+            key: str(value).strip()
+            for key, value in self.credential_store.load().items()
+            if key in SECRET_CONFIG_KEYS and str(value).strip()
+        }
+        legacy_values = {
+            key: str(self.config.get(key, "")).strip()
+            for key in SECRET_CONFIG_KEYS
+            if str(self.config.get(key, "")).strip()
+        }
+        if legacy_values:
+            merged_values = dict(existing_file_values)
+            merged_values.update(legacy_values)
+            if merged_values != existing_file_values:
+                try:
+                    self.credential_store.save(merged_values)
+                except Exception as error:
+                    self.credential_store_error = safe_error_text(error)
+                    if hasattr(self, "log_text"):
+                        self.log(
+                            f"Не удалось сохранить секреты в user-data .env: {self.credential_store_error}"
+                        )
+                    return
+                existing_file_values = merged_values
+        self.secret_settings.update(existing_file_values)
+        changed = False
+        for key in SECRET_CONFIG_KEYS:
+            if key in self.config:
+                self.config.pop(key, None)
+                changed = True
+        if changed:
+            self.save_config()
 
     def _migrate_legacy_local_files(self):
         try:
@@ -3983,7 +4092,9 @@ class MainWindow(QMainWindow):
         kie_layout.setVerticalSpacing(6)
         self.kie_api_key_input = QLineEdit()
         self.kie_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.kie_api_key_input.setText(self.config.get("kie_api_key", ""))
+        self.kie_api_key_input.setText(
+            self.secret_settings.get("kie_api_key", self.config.get("kie_api_key", ""))
+        )
         self.kie_api_key_input.setReadOnly(True)
 
         self.btn_api_key_lock = QPushButton("🔒")
@@ -4105,7 +4216,11 @@ class MainWindow(QMainWindow):
 
         self.photoroom_api_key_input = QLineEdit()
         self.photoroom_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.photoroom_api_key_input.setText(self.config.get("photoroom_api_key", ""))
+        self.photoroom_api_key_input.setText(
+            self.secret_settings.get(
+                "photoroom_api_key", self.config.get("photoroom_api_key", "")
+            )
+        )
         self.photoroom_api_key_input.setReadOnly(True)
         self.photoroom_api_key_input.setFixedSize(settings_field_width, 32)
         self.btn_photoroom_api_key_lock = QPushButton("🔒")
@@ -5408,7 +5523,9 @@ class MainWindow(QMainWindow):
         selected_model = self._normalize_generation_model_id(preferred_model_id)
         fallback_model = self._normalize_generation_model_id(fallback_model_id)
         probe_settings = dict(runtime_settings or self.config)
-        probe_settings["kie_api_key"] = probe_settings.get("kie_api_key", "").strip()
+        probe_settings["kie_api_key"] = self.secret_settings.get("kie_api_key", "").strip()
+        probe_settings["photoroom_api_key"] = self.secret_settings.get("photoroom_api_key", "").strip()
+        probe_settings["license_key"] = self.secret_settings.get("license_key", "").strip()
         probe_worker = WorkerThread(
             "mode1_generate_only",
             self.work_dir or os.getcwd(),
@@ -5577,8 +5694,8 @@ class MainWindow(QMainWindow):
             return
 
         self.persist_ui_settings()
-        current_api_key = self.config.get("kie_api_key", "").strip()
-        current_photoroom_api_key = self.config.get("photoroom_api_key", "").strip()
+        current_api_key = self.secret_settings.get("kie_api_key", "").strip()
+        current_photoroom_api_key = self.secret_settings.get("photoroom_api_key", "").strip()
 
         needs_kie_api = (
             not self.radio_run_process.isChecked()
@@ -5605,9 +5722,20 @@ class MainWindow(QMainWindow):
         if needs_photoroom_api and not current_photoroom_api_key:
             QMessageBox.warning(self, "Ошибка", "Укажите PhotoRoom API Key на вкладке «Настройки»")
             return
+        if self.credential_store_error and (needs_kie_api or needs_photoroom_api):
+            QMessageBox.warning(
+                self,
+                "Ошибка",
+                "Не удалось сохранить секреты в user-data .env. Исправьте доступ к папке и попробуйте снова.",
+            )
+            return
 
         runtime_settings = dict(self.config)
         runtime_settings["kie_api_key"] = current_api_key
+        runtime_settings["photoroom_api_key"] = current_photoroom_api_key
+        runtime_settings["license_key"] = self.secret_settings.get(
+            "license_key", self.config.get("license_key", "")
+        )
         self.has_generated_output_in_run = False
         active_prompts = []
         visible_mark_confirmed_regions = {}
@@ -5688,6 +5816,10 @@ class MainWindow(QMainWindow):
         self.persist_ui_settings()
         runtime_settings = dict(self.config)
         runtime_settings["kie_api_key"] = current_api_key
+        runtime_settings["photoroom_api_key"] = current_photoroom_api_key
+        runtime_settings["license_key"] = self.secret_settings.get(
+            "license_key", self.config.get("license_key", "")
+        )
         runtime_settings["visible_mark_confirmed_regions"] = visible_mark_confirmed_regions
 
         self.stop_pending = False
@@ -6110,8 +6242,21 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Лицензия", message)
                 return
 
-            self.config["license_key"] = license_key
-            self.save_config()
+            self.secret_settings["license_key"] = license_key
+            try:
+                self.credential_store.save(self.secret_settings)
+                self.credential_store_error = ""
+            except Exception as error:
+                self.credential_store_error = safe_error_text(error)
+                self.log(
+                    f"Не удалось сохранить секреты в user-data .env: {self.credential_store_error}"
+                )
+                QMessageBox.warning(
+                    self,
+                    "Лицензия",
+                    "Не удалось сохранить лицензионный ключ в user-data .env",
+                )
+                return
 
             expires_at = str(result.get("expires_at") or "-")
             updates_until = str(result.get("updates_until") or "-")
@@ -6132,7 +6277,9 @@ class MainWindow(QMainWindow):
 
     def _probe_model_with_ratio(self, raw_model, ratio, headers, timeout, reference_urls=None):
         probe_settings = dict(self.config)
-        probe_settings["kie_api_key"] = self.kie_api_key_input.text().strip()
+        probe_settings["kie_api_key"] = self.secret_settings.get("kie_api_key", "").strip()
+        probe_settings["photoroom_api_key"] = self.secret_settings.get("photoroom_api_key", "").strip()
+        probe_settings["license_key"] = self.secret_settings.get("license_key", "").strip()
         probe_worker = WorkerThread(
             "mode1_generate_only",
             self.work_dir or os.getcwd(),
@@ -6279,7 +6426,7 @@ class MainWindow(QMainWindow):
 
     def _mark_updates_expired_notice_shown(self):
         self.config["last_updates_expired_notice_at"] = datetime.now(timezone.utc).isoformat()
-        self.save_config()
+        self.save_config(include_secrets=bool(self.credential_store_error))
 
     def _parse_update_manifest(self, raw_bytes):
         raw_text = raw_bytes.decode("utf-8-sig", errors="replace")
@@ -6389,10 +6536,10 @@ class MainWindow(QMainWindow):
         }.get(ratio, "1024x1024")
 
     def persist_ui_settings(self):
-        self.config["kie_api_key"] = self.kie_api_key_input.text().strip()
-        self.config["photoroom_api_key"] = self.photoroom_api_key_input.text().strip()
+        self.secret_settings["kie_api_key"] = self.config["kie_api_key"] = self.kie_api_key_input.text().strip()
+        self.secret_settings["photoroom_api_key"] = self.config["photoroom_api_key"] = self.photoroom_api_key_input.text().strip()
         if hasattr(self, "license_key_input"):
-            self.config["license_key"] = self.license_key_input.text().strip()
+            self.secret_settings["license_key"] = self.config["license_key"] = self.license_key_input.text().strip()
         if hasattr(self, "license_server_url_input"):
             self.config["license_server_url"] = self.license_server_url_input.text().strip()
         if hasattr(self, "license_backup_server_url_input"):
@@ -6471,6 +6618,16 @@ class MainWindow(QMainWindow):
             self.config["run_mode"] = "both"
         else:
             self.config["run_mode"] = "generate_only"
+        try:
+            self.credential_store.save(self.secret_settings)
+            self.credential_store_error = ""
+        except Exception as error:
+            self.credential_store_error = safe_error_text(error)
+            self.log(
+                f"Не удалось сохранить секреты в user-data .env: {self.credential_store_error}"
+            )
+        if self.credential_store_error:
+            return
         self.save_config()
 
     def closeEvent(self, event):

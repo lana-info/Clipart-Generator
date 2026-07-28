@@ -21,6 +21,7 @@ class MainUiAcceptanceTests(unittest.TestCase):
     def isolated_paths(self, root):
         return (
             patch.object(main, "CONFIG_FILE", str(root / "config.json")),
+            patch.object(main, "ENV_FILE", str(root / ".env")),
             patch.object(main, "PROMPTS_STORAGE_FILE", str(root / "prompts.json")),
             patch.object(main, "LICENSE_CACHE_FILE", str(root / "license_cache.json")),
             patch.object(main.MainWindow, "_migrate_legacy_local_files", return_value=None),
@@ -32,10 +33,10 @@ class MainUiAcceptanceTests(unittest.TestCase):
             temp_path = Path(temp_dir)
             work_dir = temp_path / "work"
             work_dir.mkdir()
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 self.assertTrue(window.windowTitle().startswith("Clipart Generator v"))
                 self.assertTrue(window.api_key_locked)
@@ -110,10 +111,10 @@ class MainUiAcceptanceTests(unittest.TestCase):
             work_dir = temp_path / "work"
             output_dir = work_dir / "output"
             output_dir.mkdir(parents=True)
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 window.work_dir = str(work_dir)
                 window.radio_run_process.setChecked(True)
@@ -162,11 +163,11 @@ class MainUiAcceptanceTests(unittest.TestCase):
     def test_stop_is_non_blocking_and_finishes_after_worker_exits(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-stop-") as temp_dir:
             temp_path = Path(temp_dir)
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
             scheduled = []
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 worker = types.SimpleNamespace(running=True, stopped=False)
 
@@ -210,7 +211,7 @@ class MainUiAcceptanceTests(unittest.TestCase):
     def test_balance_request_protects_key_and_never_logs_provider_body(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-balance-") as temp_dir:
             temp_path = Path(temp_dir)
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
             provider_marker = "private-provider-response-body"
@@ -232,7 +233,7 @@ class MainUiAcceptanceTests(unittest.TestCase):
                     BytesIO(f"{provider_marker} {api_key}".encode("utf-8")),
                 )
 
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 window.kie_api_key_input.setText(api_key)
                 logs = []
@@ -260,10 +261,10 @@ class MainUiAcceptanceTests(unittest.TestCase):
     def test_main_window_model_probe_uses_worker_probe(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-probe-") as temp_dir:
             temp_path = Path(temp_dir)
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 window.kie_api_key_input.setText("test-probe-key")
                 with patch.object(
@@ -288,10 +289,10 @@ class MainUiAcceptanceTests(unittest.TestCase):
     def test_model_preflight_fails_closed_on_transport_error(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-probe-closed-") as temp_dir:
             temp_path = Path(temp_dir)
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 window.kie_api_key_input.setText("test-probe-key")
                 with (
@@ -321,10 +322,10 @@ class MainUiAcceptanceTests(unittest.TestCase):
     def test_reference_model_preflight_soft_allows_classified_schema_error(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-probe-schema-") as temp_dir:
             temp_path = Path(temp_dir)
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 window.kie_api_key_input.setText("test-probe-key")
                 with (
@@ -355,10 +356,10 @@ class MainUiAcceptanceTests(unittest.TestCase):
     def test_check_generation_model_runs_text_and_reference_probes(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-check-models-") as temp_dir:
             temp_path = Path(temp_dir)
-            config_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
                 self.isolated_paths(temp_path)
             )
-            with config_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
                 window.kie_api_key_input.setText("test-probe-key")
                 window.text_ratio_combo.setCurrentText("1:1")

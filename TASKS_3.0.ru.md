@@ -786,7 +786,7 @@ Verification:
 ## Task 27: Создать единые настройки API и проверок провайдера
 
 Key: `CG3-TASK-027`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-070`, `CG3-FR-071`, `CG3-FR-072`, `CG3-FR-073`,
 `CG3-AR-008`, `CG3-AR-011`, `CG3-AC-013`
 
@@ -806,16 +806,16 @@ Steps:
 - Проверить redaction логов и ошибок.
 
 Acceptance:
-- [ ] Ключ не появляется в UI status, exception и логах.
-- [ ] После успешной миграции ключ отсутствует в `config.json`.
-- [ ] Ошибка записи `.env` не удаляет legacy key и блокирует сетевой
+- [x] Ключ не появляется в UI status, exception и логах.
+- [x] После успешной миграции ключ отсутствует в `config.json`.
+- [x] Ошибка записи `.env` не удаляет legacy key и блокирует сетевой
   запуск с понятным сообщением.
-- [ ] Приложение использует user-data `.env`, а не `.env` из репозитория.
-- [ ] Connection check не запускает платную генерацию.
-- [ ] Balance не имитируется для неподдерживаемого API.
+- [x] Приложение использует user-data `.env`, а не `.env` из репозитория.
+- [x] Connection check не запускает платную генерацию.
+- [x] Balance не имитируется для неподдерживаемого API.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_provider_settings tests.test_v3_credential_store tests.test_main_ui_acceptance -v`
+- [x] `python -m unittest tests.test_v3_provider_settings tests.test_v3_credential_store tests.test_main_ui_acceptance -v`
 
 ## Task 28: Ввести структурированный прогресс выполнения
 

@@ -19,6 +19,7 @@ class VisibleMarkUiTests(unittest.TestCase):
     def isolated_paths(self, root):
         return (
             patch.object(main, "CONFIG_FILE", str(root / "config.json")),
+            patch.object(main, "ENV_FILE", str(root / ".env")),
             patch.object(main, "PROMPTS_STORAGE_FILE", str(root / "prompts.json")),
             patch.object(main, "LICENSE_CACHE_FILE", str(root / "license_cache.json")),
             patch.object(main.MainWindow, "_migrate_legacy_local_files", return_value=None),
