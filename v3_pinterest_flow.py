@@ -107,10 +107,6 @@ def build_pinterest_run_request(
         _pinterest_project_adapter(state),
         runtime_settings,
     )
-    if request.mode != "mode1_generate_only":
-        raise ClipartFlowError(
-            "Pinterest-пины должны использовать только генерацию изображений"
-        )
     return request
 
 
@@ -349,6 +345,7 @@ class PinterestReviewRunPage(ClipartReviewRunPage):
         )
         self.warning_label.setText(
             "Будут созданы только цельные изображения. "
+            "Для Pinterest чаще всего дополнительная обработка изображений не требуется. "
             "Редактора текста, шаблонов и публикации в Pinterest нет."
         )
 
