@@ -78,6 +78,19 @@ class RunQueueError(ValueError):
     pass
 
 
+@dataclass(frozen=True, slots=True)
+class ProgressEvent:
+    """Stable progress contract; legacy worker text is adapted into this shape."""
+
+    item_index: int | None = None
+    total_items: int | None = None
+    stage: str = ""
+    status: str = "running"
+    message: str = ""
+    percent: int | None = None
+    indeterminate: bool = False
+
+
 class RunItemStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
@@ -232,6 +245,10 @@ class RunQueueSession(QObject):
         self.items = _request_items(request, mode)
         self.active_order = list(range(len(self.items)))
         self.current_index: int | None = None
+        self.current_stage = ""
+        self.activity_indeterminate = False
+        self._item_progress: dict[int, int] = {}
+        self._last_progress = 0
         self.running = True
         self.stop_after_current_requested = False
         self._deferred_stop: Callable[[], None] | None = None
@@ -265,7 +282,15 @@ class RunQueueSession(QObject):
             }
             for item in self.items
         )
-        return round((terminal / len(self.items)) * 100) if self.items else 0
+        completed = round((terminal / len(self.items)) * 100) if self.items else 0
+        active = 0
+        if self.current_index is not None:
+            active = self._item_progress.get(self.current_index, 0)
+            if active:
+                active = round(active / max(len(self.items), 1))
+        value = max(completed, completed + active)
+        self._last_progress = max(self._last_progress, min(100, value))
+        return self._last_progress
 
     @property
     def failed_indices(self) -> list[int]:
@@ -293,6 +318,26 @@ class RunQueueSession(QObject):
         return self.items[global_index]
 
     def handle_progress(self, message: Any) -> None:
+        if isinstance(message, dict):
+            message = ProgressEvent(
+                item_index=message.get("item_index"),
+                total_items=message.get("total_items"),
+                stage=str(message.get("stage") or ""),
+                status=str(message.get("status") or "running"),
+                message=str(message.get("message") or ""),
+                percent=message.get("percent"),
+                indeterminate=bool(message.get("indeterminate", False)),
+            )
+        if isinstance(message, ProgressEvent):
+            if message.percent is not None:
+                self.handle_progress_value(message.percent)
+            if message.stage:
+                self.current_stage = message.stage
+            self.activity_indeterminate = message.indeterminate
+            if message.message:
+                message = message.message
+            else:
+                message = ""
         text = str(message or "").strip()
         match = _ITEM_START.match(text)
         if match:
@@ -303,6 +348,8 @@ class RunQueueSession(QObject):
                 self._event("worker_progress_rejected", reason="index_mismatch")
                 return
             self.current_index = item.index - 1
+            self.current_stage = "generation"
+            self.activity_indeterminate = True
             item.status = RunItemStatus.RUNNING
             item.short_message = "Выполняется."
             if isinstance(item.payload, dict):
@@ -333,6 +380,7 @@ class RunQueueSession(QObject):
             )
             self.changed.emit()
             return
+
         if text.startswith(_GENERATED_PREFIX) and item is not None:
             raw = text[len(_GENERATED_PREFIX) :].strip()
             trusted = _trusted_worker_path(raw, self.work_dir / "raw")
@@ -404,6 +452,19 @@ class RunQueueSession(QObject):
             self.running = False
             self._event("run_cancelled")
             self.changed.emit()
+
+    def handle_progress_value(self, value: Any) -> None:
+        if self.current_index is None:
+            return
+        try:
+            numeric = max(0, min(100, int(value)))
+        except (TypeError, ValueError):
+            return
+        self._item_progress[self.current_index] = max(
+            self._item_progress.get(self.current_index, 0), numeric
+        )
+        self.activity_indeterminate = numeric <= 0
+        self.changed.emit()
 
     def _after_terminal_item(self) -> None:
         if self.stop_after_current_requested and self._deferred_stop is not None:
@@ -792,7 +853,9 @@ class RunResultsPage(QScrollArea):
             f"{counts['succeeded']} · Ошибки: {counts['failed']} · "
             f"Отменено: {counts['cancelled']} · Всего: {len(session.items)}"
         )
-        self.progress_bar.setValue(session.progress_percent)
+        self.progress_bar.setRange(0, 0 if session.running and session.activity_indeterminate else 100)
+        if not (session.running and session.activity_indeterminate):
+            self.progress_bar.setValue(session.progress_percent)
         current = (
             session.items[session.current_index]
             if session.current_index is not None
@@ -800,7 +863,7 @@ class RunResultsPage(QScrollArea):
             else None
         )
         self.current_label.setText(
-            f"Текущий файл: {current.display_name}"
+            f"Текущий файл: {current.display_name} · этап: {session.current_stage or 'подготовка'}"
             if current is not None and session.running
             else "Текущий файл: —"
         )
@@ -1036,6 +1099,8 @@ class RunQueueSupport:
             local_value = 0
         elif local_value > 100:
             local_value = 100
+
+        self.session.handle_progress_value(local_value)
 
         base = (current_index / total_items) * 100
         overall = int(base + local_value / total_items)

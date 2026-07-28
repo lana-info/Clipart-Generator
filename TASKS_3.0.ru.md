@@ -825,7 +825,7 @@ Verification:
 ## Task 28: Ввести структурированный прогресс выполнения
 
 Key: `CG3-TASK-028`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-080`, `CG3-FR-081`, `CG3-FR-082`, `CG3-FR-083`,
 `CG3-FR-084`, `CG3-AR-007`, `CG3-AC-012`
 
@@ -840,13 +840,18 @@ Steps:
 - Показать per-file errors, stop и «Открыть папку».
 
 Acceptance:
-- [ ] Progress не остаётся на 0% при выполняющемся этапе без объяснения.
-- [ ] Текущий файл и этап всегда видны.
-- [ ] Stop не удаляет готовые результаты и не меняет исходники.
+- [x] Progress не остаётся на 0% при выполняющемся этапе без объяснения.
+- [x] Текущий файл и этап всегда видны.
+- [x] Stop не удаляет готовые результаты и не меняет исходники.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_run_queue tests.test_v3_progress_events -v`
-- [ ] Offscreen smoke с fake slow provider.
+- [x] `python -m unittest tests.test_v3_run_queue tests.test_v3_progress_events -v` — 17/17.
+- [x] Offscreen results-page smoke покрыт `tests.test_v3_run_queue`.
+
+Notes:
+- Добавлен `ProgressEvent` contract с адаптацией legacy сообщений.
+- Для неизвестного долгого этапа progress bar становится indeterminate, а UI
+  показывает текущий файл и этап; известный `progress_value` считается монотонно.
 
 ## Task 29: Завершить принудительную контрастную тёмную тему
 
