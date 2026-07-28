@@ -35,7 +35,7 @@ def load_credentials(path: Path | None = None) -> dict[str, str]:
 def save_credentials(values: Mapping[str, str], path: Path | None = None) -> Path:
     destination = path or user_env_path()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    allowed = {"kie_api_key", "photoroom_api_key", "license_key"}
+    allowed = {"kie_api_key", "photoroom_api_key", "license_key", "runpod_api_key", "runpod_endpoint_id"}
     content = "".join(
         f"{key}={str(values.get(key) or '').strip()}\n"
         for key in sorted(allowed)
@@ -98,10 +98,14 @@ class ApiSettingsDialog(QDialog):
         form = QFormLayout()
         self.kie_edit = QLineEdit(values.get("kie_api_key", ""))
         self.photo_edit = QLineEdit(values.get("photoroom_api_key", ""))
-        for edit in (self.kie_edit, self.photo_edit):
+        self.runpod_key_edit = QLineEdit(values.get("runpod_api_key", ""))
+        self.runpod_endpoint_edit = QLineEdit(values.get("runpod_endpoint_id", ""))
+        for edit in (self.kie_edit, self.photo_edit, self.runpod_key_edit):
             edit.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("KIE API Key", self.kie_edit)
         form.addRow("PhotoRoom API Key", self.photo_edit)
+        form.addRow("RunPod API Key (необязательно)", self.runpod_key_edit)
+        form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
         layout.addLayout(form)
         actions = QVBoxLayout()
         self.balance_button = V3Button("Проверить баланс KIE", ButtonVariant.SECONDARY)
@@ -127,6 +131,8 @@ class ApiSettingsDialog(QDialog):
         self.settings = {
             "kie_api_key": self.kie_edit.text().strip(),
             "photoroom_api_key": self.photo_edit.text().strip(),
+            "runpod_api_key": self.runpod_key_edit.text().strip(),
+            "runpod_endpoint_id": self.runpod_endpoint_edit.text().strip(),
         }
         save_credentials(self.settings)
         self.accept()

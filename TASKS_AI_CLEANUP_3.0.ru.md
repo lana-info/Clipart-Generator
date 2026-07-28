@@ -109,6 +109,16 @@ CUDA GPU. Обычная обработка не блокируется. Про�
 tests/test_ai_watermark_backend.py` — 6/6; текущий workstation показывает
 `gpu_backend_available=False`.
 
+## Task 8: Подготовить RunPod Serverless adapter
+
+Key: `CG3-AI-TASK-008`
+
+Status: Done — cloud execution awaits API key, endpoint and upload consent
+
+Добавлены безопасный `RunPodClient`, валидация endpoint/API key, ограниченный
+JSON response и поля RunPod в настройках API. Сетевой запрос не выполняется
+автоматически. Проверено: `pytest -q tests/test_cloud_gpu_backend.py` — 2/2.
+
 ## Traceability
 
 | PRD requirement | Task | Evidence |
