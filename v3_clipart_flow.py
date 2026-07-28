@@ -1604,6 +1604,13 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.refresh_from_state()
         self.changed()
 
+    # Backward-compatible test and keyboard action name.
+    def _delete_all_references(self) -> None:
+        for entry in self.state.clipart.prompts:
+            entry.references = []
+        self.refresh_from_state()
+        self.changed()
+
     def _table_changed(self, _: QTableWidgetItem) -> None:
         if self._updating:
             return

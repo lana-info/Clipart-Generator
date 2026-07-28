@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -226,6 +226,7 @@ class AppShell(QWidget):
         self.change_mode_button.clicked.connect(self.mode_picker_requested.emit)
         layout.addWidget(self.change_mode_button)
         self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
+        self.api_settings_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         layout.addWidget(self.api_settings_button)
         return frame

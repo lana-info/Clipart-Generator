@@ -89,7 +89,7 @@ Key: `CG3-AI-TASK-006`
 Status: Done
 
 Verification:
-- [ ] полный test suite (отдельные legacy onnxruntime DLL failures остаются в baseline);
+- [x] полный test suite — `python -m unittest discover -s tests -p 'test_*.py'` (387/387);
 - [x] code review loop — PASS;
 - [x] security review uploads/subprocess/env — PASS;
 - [x] refactor после review выполнен только для порядка и валидации backend.

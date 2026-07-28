@@ -645,6 +645,8 @@ class WorkerThread(QThread):
         self.is_running = True
         self.stop_after_current_requested = False
         self._publish_lock = threading.Lock()
+        self._precleaned_paths: set[str] = set()
+        self._metadata_cleaned_for_current_item = False
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
@@ -1121,7 +1123,12 @@ class WorkerThread(QThread):
         current_url = source_url
         local_result = False
 
-        if self._metadata_cleanup_requested():
+        if (
+            self._metadata_cleanup_requested()
+            and not self._uses_any_kie_upscale()
+            and not self._uses_kie_remove_bg()
+            and not self._uses_photoroom_remove_bg()
+        ):
             current_path = self._ensure_local_path(
                 current_path, current_url, raw_dir, idx, prefix, "metadata_source"
             )
@@ -1131,6 +1138,8 @@ class WorkerThread(QThread):
                     current_path, metadata_path, self.metadata_cleanup_options
                 )
                 current_path, current_url, local_result = metadata_path, None, True
+                self._precleaned_paths.add(os.path.abspath(metadata_path))
+                self._metadata_cleaned_for_current_item = True
             except MetadataCleanupError as error:
                 self.progress.emit(f"  Очистка файла: ошибка — {error}")
                 raise
@@ -1742,6 +1751,10 @@ class WorkerThread(QThread):
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
         self._ensure_running()
+        if self._metadata_cleaned_for_current_item:
+            self._metadata_cleaned_for_current_item = False
+            self._replace_output_if_running(stage_path, output_path)
+            return None
         if not self._metadata_cleanup_requested():
             self._replace_output_if_running(stage_path, output_path)
             return None
