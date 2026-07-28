@@ -11,6 +11,8 @@
 - Locked clipart defaults to upscale-before, remove-background, trim, and 300 DPI export; added an alpha-safe guard so post-background upscale must preserve transparency.
 - Added per-file deletion, a visible processing output-folder selector, and safe output-path routing so processed files keep their source intact.
 - Added a user-data `.env` credential store for KIE, PhotoRoom, and license secrets, with atomic migration from legacy `config.json` keys and a fail-closed network block if secret persistence cannot be written.
+- Fixed result preview rejection when a custom processing output folder is selected; the queue now validates the actual request output directory.
+- Simplified the evidence cleanup UI to one “Очистить все служебные данные” checkbox and switched the visible AI-image check handoff to ZeroGPT (manual upload only; no automatic file transfer).
 
 
 

@@ -45,6 +45,7 @@ GEMINI_HELP_URL = (
     "https://support.google.com/gemini/answer/16722517?hl=en"
 )
 OPENAI_VERIFY_URL = "https://openai.com/research/verify/"
+ZEROGPT_IMAGE_DETECTOR_URL = "https://www.zerogpt.com/ai-image-detector"
 MAX_EVIDENCE_REPORT_BYTES = 2 * 1024 * 1024
 
 _RECORDED_STATUSES = (
@@ -462,6 +463,11 @@ class EvidenceCenterPage(QScrollArea):
             tokens=tokens,
         )
         self.cleanup_widgets: dict[str, QCheckBox] = {}
+        self.cleanup_checkbox = QCheckBox(
+            "Очистить все служебные данные изображения"
+        )
+        self.cleanup_checkbox.toggled.connect(self._cleanup_all_changed)
+        self.file_card.add_widget(self.cleanup_checkbox)
         for field, label in (
             ("remove_exif", "Удалить EXIF"),
             ("remove_xmp", "Удалить XMP"),
@@ -476,6 +482,8 @@ class EvidenceCenterPage(QScrollArea):
             )
             self.cleanup_widgets[field] = checkbox
             self.file_card.add_widget(checkbox)
+        for checkbox in self.cleanup_widgets.values():
+            checkbox.setVisible(False)
         self.content_layout.addWidget(self.file_card)
 
         self.c2pa_card = EvidenceCard(
@@ -493,6 +501,7 @@ class EvidenceCenterPage(QScrollArea):
             )
         )
         self.c2pa_card.add_widget(self.remove_c2pa_checkbox)
+        self.remove_c2pa_checkbox.setVisible(False)
         self.content_layout.addWidget(self.c2pa_card)
 
         self.pixel_card = EvidenceCard(
@@ -503,7 +512,7 @@ class EvidenceCenterPage(QScrollArea):
         )
         self.synthid_status, self.synthid_stage = self._handoff_row(
             "Gemini / SynthID",
-            GEMINI_VERIFY_URL,
+            ZEROGPT_IMAGE_DETECTOR_URL,
             "synthid",
             self.pixel_card.content_layout,
         )
@@ -537,6 +546,7 @@ class EvidenceCenterPage(QScrollArea):
             openai_layout,
         )
         self.content_layout.addWidget(self.openai_handoff_group)
+        self.openai_handoff_group.setVisible(False)
 
         export_row = QWidget()
         export_layout = QHBoxLayout(export_row)
@@ -597,6 +607,16 @@ class EvidenceCenterPage(QScrollArea):
 
     def _cleanup_changed(self, field: str, checked: bool) -> None:
         setattr(self.state.processing.operations, field, bool(checked))
+        self.state.processing.recipe = "custom"
+        self.changed()
+        self._refresh_cards()
+
+    def _cleanup_all_changed(self, checked: bool) -> None:
+        for field in (
+            "remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text",
+            "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa",
+        ):
+            setattr(self.state.processing.operations, field, bool(checked))
         self.state.processing.recipe = "custom"
         self.changed()
         self._refresh_cards()
@@ -762,6 +782,15 @@ class EvidenceCenterPage(QScrollArea):
             operations.remove_embedded_c2pa
         )
         self.remove_c2pa_checkbox.blockSignals(False)
+        self.cleanup_checkbox.blockSignals(True)
+        self.cleanup_checkbox.setChecked(all(
+            bool(getattr(operations, field))
+            for field in (
+                "remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text",
+                "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa",
+            )
+        ))
+        self.cleanup_checkbox.blockSignals(False)
         self._refresh_pixel_status()
 
     def validation_issues(self) -> tuple[str, ...]:

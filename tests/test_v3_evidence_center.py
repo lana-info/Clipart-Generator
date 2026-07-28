@@ -21,6 +21,7 @@ from v3_evidence_center import (
     export_evidence_report,
     format_evidence_log,
     set_verification_result,
+    ZEROGPT_IMAGE_DETECTOR_URL,
 )
 from v3_processing_flow import install_processing_flow
 from v3_project_state import (
@@ -78,6 +79,8 @@ class V3EvidenceCenterTests(unittest.TestCase):
             self.assertIsNot(page.file_card, page.c2pa_card)
             self.assertIsNot(page.file_card, page.pixel_card)
             self.assertIsNot(page.c2pa_card, page.pixel_card)
+            self.assertFalse(page.cleanup_checkbox.isHidden())
+            self.assertTrue(all(not checkbox.isVisible() for checkbox in page.cleanup_widgets.values()))
             self.assertEqual(page.file_card.title(), "Данные файла")
             self.assertEqual(page.c2pa_card.title(), "Content Credentials")
             self.assertEqual(page.pixel_card.title(), "Пиксельные маркеры")

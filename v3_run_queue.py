@@ -241,7 +241,14 @@ class RunQueueSession(QObject):
         self.work_dir = Path(str(getattr(request, "work_dir", ""))).resolve(
             strict=False
         )
-        self.output_dir = self.work_dir / "output"
+        requested_output = str(
+            (getattr(request, "settings", {}) or {}).get("output_dir") or ""
+        ).strip()
+        self.output_dir = (
+            Path(requested_output).resolve(strict=False)
+            if requested_output
+            else self.work_dir / "output"
+        )
         self.items = _request_items(request, mode)
         self.active_order = list(range(len(self.items)))
         self.current_index: int | None = None
