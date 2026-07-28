@@ -11,10 +11,14 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
     QCheckBox,
+    QButtonGroup,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -23,8 +27,12 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QPlainTextEdit,
     QScrollArea,
+    QRadioButton,
+    QPushButton,
     QSpinBox,
     QStackedWidget,
     QTableWidget,
@@ -632,6 +640,191 @@ class _ScrollableStepPage(QScrollArea):
         return
 
 
+def _supported_local_reference(path: str) -> bool:
+    source = Path(path)
+    return source.is_file() and source.suffix.lower() in {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".bmp",
+        ".gif",
+        ".tif",
+        ".tiff",
+    }
+
+
+def _reference_icon(path: str) -> QIcon:
+    if _supported_local_reference(path):
+        pixmap = QPixmap(path)
+        if not pixmap.isNull():
+            return QIcon(pixmap.scaled(48, 48))
+    placeholder = QPixmap(48, 48)
+    placeholder.fill()
+    return QIcon(placeholder)
+
+
+def _reference_label(path: str) -> str:
+    name = Path(path).name or path
+    if _supported_local_reference(path):
+        return name
+    return f"{name} (нет файла)"
+
+
+def _reference_summary(paths: Sequence[str]) -> str:
+    if not paths:
+        return "Нет референсов"
+    missing = sum(1 for path in paths if not _supported_local_reference(path))
+    names = ", ".join(_reference_label(path) for path in paths[:3])
+    if len(paths) > 3:
+        names = f"{names}, …"
+    if missing:
+        return f"{len(paths)} референсов, {missing} недоступно: {names}"
+    return f"{len(paths)} референсов: {names}"
+
+
+class PromptReferenceEditorDialog(QDialog):
+    def __init__(
+        self,
+        entry: PromptEntry,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Редактор промпта")
+        self.setModal(True)
+        self._prompt_edit = QPlainTextEdit(entry.prompt)
+        self._prompt_edit.setMinimumHeight(120)
+        self._references = QListWidget()
+        self._references.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+        self._load_references(entry.references)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Промпт"))
+        layout.addWidget(self._prompt_edit)
+        layout.addWidget(QLabel("Референсы"))
+        layout.addWidget(self._references, 1)
+
+        buttons = QHBoxLayout()
+        self.add_files_button = V3Button("Добавить файлы", ButtonVariant.SECONDARY)
+        self.remove_button = V3Button("Удалить выбранные", ButtonVariant.SECONDARY)
+        buttons.addWidget(self.add_files_button)
+        buttons.addWidget(self.remove_button)
+        buttons.addStretch()
+        layout.addLayout(buttons)
+
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box)
+
+        self.add_files_button.clicked.connect(self._choose_files)
+        self.remove_button.clicked.connect(self._remove_selected)
+
+    def _load_references(self, references: Sequence[str]) -> None:
+        self._references.clear()
+        for reference in references:
+            item = QListWidgetItem(_reference_icon(reference), _reference_label(reference))
+            item.setData(Qt.ItemDataRole.UserRole, reference)
+            item.setToolTip(reference)
+            self._references.addItem(item)
+
+    def _choose_files(self) -> None:
+        selected, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Выберите изображения",
+            "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff)",
+        )
+        self.add_references(selected)
+
+    def add_references(self, references: Sequence[str]) -> None:
+        existing = [self._references.item(index).data(Qt.ItemDataRole.UserRole) for index in range(self._references.count())]
+        for reference in references:
+            normalized = str(Path(reference))
+            if (
+                not normalized
+                or normalized in existing
+                or not _supported_local_reference(normalized)
+            ):
+                continue
+            if len(existing) >= MAX_REFERENCES_PER_PROMPT:
+                break
+            item = QListWidgetItem(_reference_icon(normalized), _reference_label(normalized))
+            item.setData(Qt.ItemDataRole.UserRole, normalized)
+            item.setToolTip(normalized)
+            self._references.addItem(item)
+            existing.append(normalized)
+
+    def _remove_selected(self) -> None:
+        for item in list(self._references.selectedItems()):
+            row = self._references.row(item)
+            self._references.takeItem(row)
+
+    def prompt_text(self) -> str:
+        return self._prompt_edit.toPlainText().strip()[:MAX_TEXT_LENGTH]
+
+    def references(self) -> list[str]:
+        references: list[str] = []
+        for index in range(self._references.count()):
+            reference = str(
+                self._references.item(index).data(Qt.ItemDataRole.UserRole) or ""
+            ).strip()
+            if reference:
+                references.append(reference)
+        return references[:MAX_REFERENCES_PER_PROMPT]
+
+    def prompt_entry(self) -> PromptEntry:
+        return PromptEntry(self.prompt_text(), self.references())
+
+
+class ReferenceScopeDialog(QDialog):
+    def __init__(
+        self,
+        *,
+        has_selection: bool,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Область действия")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("К каким промптам применить изменения?"))
+
+        self.scope_group = QButtonGroup(self)
+        self.current_radio = QRadioButton("Текущая строка")
+        self.selected_radio = QRadioButton("Выбранные строки")
+        self.all_radio = QRadioButton("Все промпты")
+        for index, button in enumerate(
+            (self.current_radio, self.selected_radio, self.all_radio)
+        ):
+            self.scope_group.addButton(button, index)
+            layout.addWidget(button)
+
+        self.current_radio.setChecked(not has_selection)
+        self.selected_radio.setChecked(has_selection)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def scope(self) -> str:
+        if self.all_radio.isChecked():
+            return "all"
+        if self.selected_radio.isChecked():
+            return "selected"
+        return "current"
+
+
 class ClipartProjectPage(_ScrollableStepPage):
     def __init__(
         self,
@@ -933,10 +1126,17 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.table.setHorizontalHeaderLabels(["Промпт", "Референсы через |"])
         self.table.setAccessibleName("Таблица промптов")
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.table.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
         self.table.setDragEnabled(True)
         self.table.setAcceptDrops(True)
         self.table.setDropIndicatorShown(True)
         self.table.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.table.cellDoubleClicked.connect(self._edit_row)
         self.table.itemChanged.connect(self._table_changed)
         self.table.model().rowsMoved.connect(self._rows_moved)
         self.add_widget(self.table)
@@ -947,12 +1147,18 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.add_button = V3Button("Добавить", ButtonVariant.SECONDARY)
         self.duplicate_button = V3Button("Дублировать", ButtonVariant.SECONDARY)
         self.delete_button = V3Button("Удалить", ButtonVariant.SECONDARY)
+        self.add_refs_button = V3Button("Добавить референсы", ButtonVariant.SECONDARY)
+        self.replace_refs_button = V3Button("Заменить референсы", ButtonVariant.SECONDARY)
+        self.clear_refs_button = V3Button("Удалить все референсы", ButtonVariant.SECONDARY)
         self.up_button = V3Button("Выше", ButtonVariant.GHOST)
         self.down_button = V3Button("Ниже", ButtonVariant.GHOST)
         for button in (
             self.add_button,
             self.duplicate_button,
             self.delete_button,
+            self.add_refs_button,
+            self.replace_refs_button,
+            self.clear_refs_button,
             self.up_button,
             self.down_button,
         ):
@@ -966,6 +1172,9 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.add_button.clicked.connect(self._add)
         self.duplicate_button.clicked.connect(self._duplicate)
         self.delete_button.clicked.connect(self._delete)
+        self.add_refs_button.clicked.connect(self._add_references)
+        self.replace_refs_button.clicked.connect(self._replace_references)
+        self.clear_refs_button.clicked.connect(self._delete_all_references)
         self.up_button.clicked.connect(lambda: self._move(-1))
         self.down_button.clicked.connect(lambda: self._move(1))
         self.refresh_from_state()
@@ -978,13 +1187,99 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.table.setRowCount(len(self.state.clipart.prompts))
         for row, entry in enumerate(self.state.clipart.prompts):
             self.table.setItem(row, 0, QTableWidgetItem(entry.prompt))
-            self.table.setItem(
-                row,
-                1,
-                QTableWidgetItem(" | ".join(entry.references)),
-            )
+            refs_item = QTableWidgetItem(_reference_summary(entry.references))
+            refs_item.setToolTip("\n".join(entry.references) or "Нет референсов")
+            self.table.setItem(row, 1, refs_item)
         self._updating = False
         self._refresh_issues()
+
+    def _selected_rows(self) -> list[int]:
+        rows = {
+            index.row()
+            for index in self.table.selectionModel().selectedRows()
+            if 0 <= index.row() < len(self.state.clipart.prompts)
+        }
+        return sorted(rows)
+
+    def _edit_row(self, row: int, *_: Any) -> None:
+        if not 0 <= row < len(self.state.clipart.prompts):
+            return
+        entry = self.state.clipart.prompts[row]
+        dialog = PromptReferenceEditorDialog(entry, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.state.clipart.prompts[row] = dialog.prompt_entry()
+        self.refresh_from_state()
+        self.changed()
+
+    def _pick_reference_scope(self) -> str | None:
+        dialog = ReferenceScopeDialog(
+            has_selection=bool(self.table.selectionModel().selectedRows()),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        return dialog.scope()
+
+    def _choose_reference_files(self) -> list[str]:
+        selected, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Выберите изображения",
+            self.state.common.work_dir or os.getcwd(),
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff)",
+        )
+        files = [str(Path(path)) for path in selected if path]
+        return [path for path in files if _supported_local_reference(path)]
+
+    def _apply_references(
+        self,
+        *,
+        replace: bool,
+    ) -> None:
+        scope = self._pick_reference_scope()
+        if scope is None:
+            return
+        if scope == "all":
+            rows = list(range(len(self.state.clipart.prompts)))
+        elif scope == "selected":
+            rows = self._selected_rows()
+        else:
+            row = self._selected_row()
+            rows = [row] if row >= 0 else []
+        if not rows:
+            return
+        files = self._choose_reference_files()
+        if not files or not rows:
+            return
+        changed_any = False
+        for row in rows:
+            entry = self.state.clipart.prompts[row]
+            if replace:
+                entry.references = list(files[:MAX_REFERENCES_PER_PROMPT])
+            else:
+                merged = list(entry.references)
+                for reference in files:
+                    if reference not in merged:
+                        merged.append(reference)
+                entry.references = merged[:MAX_REFERENCES_PER_PROMPT]
+            changed_any = True
+        if changed_any:
+            self.refresh_from_state()
+            self.changed()
+
+    def _add_references(self) -> None:
+        self._apply_references(replace=False)
+
+    def _replace_references(self) -> None:
+        self._apply_references(replace=True)
+
+    def _delete_all_references(self) -> None:
+        if not self.state.clipart.prompts:
+            return
+        for entry in self.state.clipart.prompts:
+            entry.references = []
+        self.refresh_from_state()
+        self.changed()
 
     def _table_changed(self, _: QTableWidgetItem) -> None:
         if self._updating:

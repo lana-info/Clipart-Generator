@@ -544,7 +544,7 @@ Notes:
 ## Task 18: Реализовать редактор локальных референсов
 
 Key: `CG3-TASK-018`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-014`, `CG3-FR-015`, `CG3-FR-016`, `CG3-FR-017`,
 `CG3-FR-023`, `CG3-FR-024`, `CG3-AC-016`, `CG3-AC-020`
 
