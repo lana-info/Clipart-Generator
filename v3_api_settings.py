@@ -98,6 +98,7 @@ class ApiSettingsDialog(QDialog):
         runpod_help = QLabel(
             '<b>RunPod:</b> создайте аккаунт, пополните баланс и Serverless Endpoint; '
             '<a href="https://www.runpod.io/console/user/settings">получить API-ключ</a> · '
+            '<a href="https://console.runpod.io/user/billing">открыть баланс и пополнить</a> · '
             '<a href="https://docs.runpod.io/serverless/overview">инструкция Serverless</a> · '
             '<a href="https://www.runpod.io/pricing">цены</a>'
         )
