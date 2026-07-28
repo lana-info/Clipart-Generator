@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -22,7 +23,7 @@ class RunPodConfig:
     def validate(self) -> None:
         if not self.api_key.strip():
             raise CloudGpuError("Не указан RunPod API key")
-        if not self.endpoint_id.strip() or len(self.endpoint_id) > 128:
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", self.endpoint_id.strip()):
             raise CloudGpuError("Не указан корректный RunPod endpoint ID")
         if not 1 <= self.timeout_seconds <= 120:
             raise CloudGpuError("Недопустимый timeout RunPod")
@@ -59,7 +60,9 @@ class RunPodClient:
             raise CloudGpuError("RunPod вернул неожиданный формат ответа")
         return result
 
-    def submit(self, worker_input: Mapping[str, Any]) -> dict[str, Any]:
+    def submit(self, worker_input: Mapping[str, Any], *, allow_upload: bool = False) -> dict[str, Any]:
+        if not allow_upload:
+            raise CloudGpuError("Передача файла в RunPod не подтверждена")
         if not isinstance(worker_input, Mapping):
             raise TypeError("worker_input должен быть объектом")
         return self._request("run", {"input": dict(worker_input)})

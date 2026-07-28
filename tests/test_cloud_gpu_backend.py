@@ -28,8 +28,21 @@ def test_runpod_submit_uses_bounded_json_request(monkeypatch):
         return Response()
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    result = RunPodClient(RunPodConfig("secret", "ep-1")).submit({"mode": "invisible"})
+    result = RunPodClient(RunPodConfig("secret", "ep-1")).submit(
+        {"mode": "invisible"}, allow_upload=True
+    )
     assert result["id"] == "job-1"
     assert seen["limit"] == 2 * 1024 * 1024
     assert seen["url"].endswith("/run")
     assert seen["auth"] == "secret"
+
+
+def test_runpod_requires_upload_consent():
+    client = RunPodClient(RunPodConfig("secret", "ep-1"))
+    with pytest.raises(CloudGpuError, match="не подтверждена"):
+        client.submit({"mode": "invisible"})
+
+
+def test_runpod_rejects_unsafe_endpoint_id():
+    with pytest.raises(CloudGpuError):
+        RunPodConfig("secret", "../endpoint").validate()
