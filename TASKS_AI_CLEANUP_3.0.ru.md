@@ -113,10 +113,12 @@ tests/test_ai_watermark_backend.py` — 6/6; текущий workstation пока
 
 Key: `CG3-AI-TASK-008`
 
-Status: Done — cloud execution awaits API key, endpoint and upload consent
+Status: Done — cloud execution awaits only the user's RunPod API key and Endpoint ID
 
 Добавлены безопасный `RunPodClient`, валидация endpoint/API key, ограниченный
-JSON response и поля RunPod в настройках API. Сетевой запрос не выполняется
+JSON response и поля RunPod в настройках API. Добавлены ссылки на создание аккаунта,
+ключ, Serverless-документацию, цены и отдельная инструкция проекта. Сетевой запрос
+выполняется только после явного нажатия кнопки облачной обработки.
 автоматически. Проверено: `pytest -q tests/test_cloud_gpu_backend.py` — 2/2.
 
 ## Traceability

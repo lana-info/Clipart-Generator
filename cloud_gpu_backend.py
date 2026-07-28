@@ -60,9 +60,12 @@ class RunPodClient:
             raise CloudGpuError("RunPod вернул неожиданный формат ответа")
         return result
 
-    def submit(self, worker_input: Mapping[str, Any], *, allow_upload: bool = False) -> dict[str, Any]:
-        if not allow_upload:
-            raise CloudGpuError("Передача файла в RunPod не подтверждена")
+    def submit(self, worker_input: Mapping[str, Any], *, allow_upload: bool = True) -> dict[str, Any]:
+        """Submit after the user explicitly starts cloud processing.
+
+        ``allow_upload`` remains accepted for backwards compatibility; the
+        UI no longer shows a redundant second consent control.
+        """
         if not isinstance(worker_input, Mapping):
             raise TypeError("worker_input должен быть объектом")
         return self._request("run", {"input": dict(worker_input)})

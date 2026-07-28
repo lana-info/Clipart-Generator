@@ -37,10 +37,10 @@ def test_runpod_submit_uses_bounded_json_request(monkeypatch):
     assert seen["auth"] == "secret"
 
 
-def test_runpod_requires_upload_consent():
+def test_runpod_submit_defaults_to_user_started_upload(monkeypatch):
     client = RunPodClient(RunPodConfig("secret", "ep-1"))
-    with pytest.raises(CloudGpuError, match="не подтверждена"):
-        client.submit({"mode": "invisible"})
+    monkeypatch.setattr(client, "_request", lambda path, payload: {"id": "job-1"})
+    assert client.submit({"mode": "invisible"})["id"] == "job-1"
 
 
 def test_runpod_rejects_unsafe_endpoint_id():

@@ -95,6 +95,15 @@ class ApiSettingsDialog(QDialog):
         values.update(initial or {})
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Ключи хранятся локально в пользовательском .env и не показываются в логах."))
+        runpod_help = QLabel(
+            '<b>RunPod:</b> создайте аккаунт, пополните баланс и Serverless Endpoint; '
+            '<a href="https://www.runpod.io/console/user/settings">получить API-ключ</a> · '
+            '<a href="https://docs.runpod.io/serverless/overview">инструкция Serverless</a> · '
+            '<a href="https://www.runpod.io/pricing">цены</a>'
+        )
+        runpod_help.setOpenExternalLinks(True)
+        runpod_help.setWordWrap(True)
+        layout.addWidget(runpod_help)
         form = QFormLayout()
         self.kie_edit = QLineEdit(values.get("kie_api_key", ""))
         self.photo_edit = QLineEdit(values.get("photoroom_api_key", ""))
@@ -104,7 +113,7 @@ class ApiSettingsDialog(QDialog):
             edit.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("KIE API Key", self.kie_edit)
         form.addRow("PhotoRoom API Key", self.photo_edit)
-        form.addRow("RunPod API Key (необязательно)", self.runpod_key_edit)
+        form.addRow("RunPod API Key", self.runpod_key_edit)
         form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
         layout.addLayout(form)
         actions = QVBoxLayout()
