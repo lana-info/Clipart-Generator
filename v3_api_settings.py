@@ -7,7 +7,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Mapping
 
-from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, QVBoxLayout
+from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout
 
 from v3_components import ButtonVariant, V3Button
 
@@ -86,6 +86,27 @@ def check_kie_balance(api_key: str, timeout: float = 15.0) -> str:
     return "Баланс KIE получен, формат ответа требует уточнения."
 
 
+def check_photoroom_balance(api_key: str, timeout: float = 15.0) -> str:
+    key = str(api_key or "").strip()
+    if not key:
+        raise ValueError("Введите PhotoRoom API Key")
+    request = urllib.request.Request("https://image-api.photoroom.com/v2/account", headers={"x-api-key": key, "Accept": "application/json"}, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            raw = response.read(256 * 1024).decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError) as error:
+        raise RuntimeError("Не удалось проверить баланс PhotoRoom") from error
+    try:
+        import json
+        payload: Any = json.loads(raw)
+    except ValueError as error:
+        raise RuntimeError("PhotoRoom вернул неподдерживаемый ответ") from error
+    images = payload.get("images", {}) if isinstance(payload, dict) else {}
+    if isinstance(images, dict) and "available" in images:
+        return f"Баланс PhotoRoom: {images['available']} из {images.get('subscription', '?')} изображений"
+    return "Баланс PhotoRoom получен, формат ответа требует уточнения."
+
+
 class ApiSettingsDialog(QDialog):
     def __init__(self, initial: Mapping[str, str] | None = None, parent=None) -> None:
         super().__init__(parent)
@@ -123,7 +144,12 @@ class ApiSettingsDialog(QDialog):
         for edit in (self.kie_edit, self.photo_edit, self.runpod_key_edit):
             edit.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("KIE API Key", self.kie_edit)
-        form.addRow("PhotoRoom API Key", self.photo_edit)
+        photo_row = QHBoxLayout()
+        photo_row.addWidget(self.photo_edit)
+        self.photo_balance_button = V3Button("Проверить баланс", ButtonVariant.SECONDARY)
+        self.photo_balance_button.clicked.connect(self._check_photoroom_balance)
+        photo_row.addWidget(self.photo_balance_button)
+        form.addRow("PhotoRoom API Key", photo_row)
         form.addRow("RunPod API Key", self.runpod_key_edit)
         form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
         layout.addLayout(form)
@@ -144,6 +170,12 @@ class ApiSettingsDialog(QDialog):
     def _check_balance(self) -> None:
         try:
             self.status.setText(check_kie_balance(self.kie_edit.text()))
+        except (RuntimeError, ValueError) as error:
+            self.status.setText(str(error))
+
+    def _check_photoroom_balance(self) -> None:
+        try:
+            self.status.setText(check_photoroom_balance(self.photo_edit.text()))
         except (RuntimeError, ValueError) as error:
             self.status.setText(str(error))
 
