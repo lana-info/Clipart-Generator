@@ -5,6 +5,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPalette
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from v3_components import (
@@ -19,6 +20,19 @@ from v3_components import (
     apply_v3_theme,
     build_v3_stylesheet,
 )
+
+
+def _contrast_ratio(foreground: str, background: str) -> float:
+    def channel(value: int) -> float:
+        value /= 255
+        return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+    def luminance(value: str) -> float:
+        value = value.lstrip("#")
+        return 0.2126 * channel(int(value[0:2], 16)) + 0.7152 * channel(int(value[2:4], 16)) + 0.0722 * channel(int(value[4:6], 16))
+
+    light, dark = sorted((luminance(foreground), luminance(background)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
 
 
 class V3ComponentTests(unittest.TestCase):
@@ -187,6 +201,17 @@ class V3ComponentTests(unittest.TestCase):
         self.assertTrue(root.styleSheet())
 
         root.close()
+        root.deleteLater()
+
+    def test_theme_applies_global_dark_palette_and_contrast(self):
+        root = QWidget()
+        apply_v3_theme(root)
+        palette = self.app.palette()
+        self.assertEqual(palette.color(QPalette.ColorRole.Window).name(), DEFAULT_TOKENS.canvas)
+        self.assertEqual(palette.color(QPalette.ColorRole.Text).name(), DEFAULT_TOKENS.text)
+        self.assertGreaterEqual(
+            _contrast_ratio(DEFAULT_TOKENS.text, DEFAULT_TOKENS.canvas), 7.0
+        )
         root.deleteLater()
 
 

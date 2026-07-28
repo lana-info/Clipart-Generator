@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from enum import Enum
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -86,6 +88,17 @@ QWidget {{
 }}
 QMainWindow {{
     background: {tokens.canvas};
+}}
+QDialog,
+QMessageBox {{
+    background: {tokens.canvas};
+    color: {tokens.text};
+}}
+QToolTip {{
+    background: {tokens.surface_muted};
+    color: {tokens.text};
+    border: 1px solid {tokens.border};
+    padding: {tokens.space_1}px {tokens.space_2}px;
 }}
 QFrame[v3Card="true"] {{
     background: {tokens.surface};
@@ -341,6 +354,22 @@ def apply_v3_theme(
     root: QWidget,
     tokens: V3DesignTokens = DEFAULT_TOKENS,
 ) -> None:
+    app = QApplication.instance()
+    if app is not None:
+        palette = QPalette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(tokens.canvas))
+        palette.setColor(QPalette.ColorRole.Base, QColor(tokens.surface))
+        palette.setColor(QPalette.ColorRole.AlternateBase, QColor(tokens.surface_muted))
+        palette.setColor(QPalette.ColorRole.Text, QColor(tokens.text))
+        palette.setColor(QPalette.ColorRole.WindowText, QColor(tokens.text))
+        palette.setColor(QPalette.ColorRole.Button, QColor(tokens.surface))
+        palette.setColor(QPalette.ColorRole.ButtonText, QColor(tokens.text))
+        palette.setColor(QPalette.ColorRole.Highlight, QColor(tokens.accent))
+        palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor(tokens.disabled))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(tokens.disabled))
+        palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(tokens.disabled))
+        app.setPalette(palette)
     root.setProperty("v3Root", True)
     root.setStyleSheet(build_v3_stylesheet(tokens))
 

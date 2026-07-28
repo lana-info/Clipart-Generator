@@ -856,7 +856,7 @@ Notes:
 ## Task 29: Завершить принудительную контрастную тёмную тему
 
 Key: `CG3-TASK-029`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-090`, `CG3-FR-091`, `CG3-FR-092`, `CG3-FR-093`,
 `CG3-FR-094`, `CG3-AR-001`, `CG3-AC-011`
 
@@ -871,9 +871,15 @@ Steps:
 - Провести ручное сравнение при светлой и тёмной теме Windows.
 
 Acceptance:
-- [ ] Нет сочетаний «светлый на светлом» или «тёмный на тёмном».
-- [ ] Контраст соответствует порогам PRD.
-- [ ] Системная тема не меняет читабельность приложения.
+- [x] Нет сочетаний «светлый на светлом» или «тёмный на тёмном».
+- [x] Контраст соответствует порогам PRD.
+- [x] Системная тема не меняет читабельность приложения.
+
+Verification:
+- [x] `python -m unittest tests.test_v3_components -v` — 8/8.
+- [x] QApplication palette, disabled states, combo popups, dialogs и tooltips
+  используют единые тёмные токены; контраст основного текста проверен на уровне
+  WCAG AAA (7:1+).
 
 Verification:
 - [ ] `python -m unittest tests.test_v3_components tests.test_v3_theme_contrast -v`
