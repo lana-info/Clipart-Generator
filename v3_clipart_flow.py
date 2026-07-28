@@ -49,6 +49,7 @@ from v3_components import (
     V3Button,
     V3DesignTokens,
 )
+from v3_prompt_csv_import import PromptCsvImportDialog
 from v3_project_state import (
     MAX_PROMPT_ENTRIES,
     MAX_PROMPT_GENERATOR_TEXT_LENGTH,
@@ -1079,7 +1080,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        text = QLabel("CSV: обязательный столбец Prompt, опциональный References.")
+        text = QLabel("CSV: сопоставьте столбцы и выберите действие импорта.")
         text.setWordWrap(True)
         layout.addWidget(text)
         self.csv_button = V3Button("Выбрать CSV", ButtonVariant.SECONDARY)
@@ -1097,11 +1098,25 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         if not selected:
             return
         try:
-            entries = parse_prompt_csv(selected)
-        except ClipartFlowError as error:
+            dialog = PromptCsvImportDialog(selected, self)
+        except RuntimeError as error:
             self.card.set_state("error", str(error))
             return
-        replace_project_prompts(self.state, ProjectMode.CLIPART, entries)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        entries = [PromptEntry.from_value(entry) for entry in dialog.get_entries()]
+        normalized_entries = [entry for entry in entries if entry is not None]
+        if not normalized_entries:
+            self.card.set_state("error", "Не найдено ни одной валидной строки CSV")
+            return
+        if dialog.import_action() == "append":
+            replace_project_prompts(
+                self.state,
+                ProjectMode.CLIPART,
+                list(self.state.clipart.prompts) + normalized_entries,
+            )
+        else:
+            replace_project_prompts(self.state, ProjectMode.CLIPART, normalized_entries)
         self.card.set_state("default")
         self.changed()
 

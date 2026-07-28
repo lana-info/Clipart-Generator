@@ -576,7 +576,7 @@ Verification:
 ## Task 19: Переделать CSV-import на ручное сопоставление столбцов
 
 Key: `CG3-TASK-019`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-018`, `CG3-FR-019`, `CG3-FR-020`, `CG3-AC-003`
 
 Goal:
