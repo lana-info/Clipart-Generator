@@ -16,11 +16,11 @@ Steps:
 - покрыть контракт тестами.
 
 Acceptance:
-- [ ] порядок очистка → метка → optional invisible → обычная обработка задокументирован;
+- [x] порядок очистка → метка → optional invisible → обычная обработка задокументирован;
 - [x] зафиксированы PNG/JPEG/WebP, alpha, ICC/DPI и запрет перезаписи исходника.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_processing_flow -v`
+- [x] `python -m unittest tests.test_v3_processing_flow -v` (17/17).
 
 ## Task 2: Вынести optional backend remove-ai-watermarks
 
