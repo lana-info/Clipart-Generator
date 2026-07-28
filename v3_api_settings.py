@@ -105,6 +105,16 @@ class ApiSettingsDialog(QDialog):
         runpod_help.setOpenExternalLinks(True)
         runpod_help.setWordWrap(True)
         layout.addWidget(runpod_help)
+        provider_help = QLabel(
+            '<b>Пополнение и управление:</b> '
+            '<a href="https://kie.ai/billing">KIE Billing</a> · '
+            '<a href="https://kie.ai/api-key">KIE API Key</a> · '
+            '<a href="https://www.photoroom.com/api">PhotoRoom API</a> · '
+            '<a href="https://docs.photoroom.com/getting-started/pricing">PhotoRoom тарифы и кредиты</a>'
+        )
+        provider_help.setOpenExternalLinks(True)
+        provider_help.setWordWrap(True)
+        layout.addWidget(provider_help)
         form = QFormLayout()
         self.kie_edit = QLineEdit(values.get("kie_api_key", ""))
         self.photo_edit = QLineEdit(values.get("photoroom_api_key", ""))
