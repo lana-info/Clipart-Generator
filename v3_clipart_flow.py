@@ -693,6 +693,9 @@ def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
             seen.add(label)
             missing.append(label)
 
+    if request.generated_prompts and not str(request.settings.get("kie_api_key") or "").strip():
+        add_missing("KIE API Key")
+
     for enabled_field, provider_field in (
         ("upscale", "upscale_provider"),
         ("upscale_after", "upscale_after_provider"),

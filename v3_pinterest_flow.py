@@ -166,7 +166,23 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
+        requested_model = state.clipart.generation.model
+        requested_reference_model = state.clipart.generation.reference_model
         super().__init__(state, changed, tokens=tokens)
+        for combo, model_id, label in (
+            (self.model_combo, requested_model, "GPT Image 2"),
+            (self.reference_model_combo, requested_reference_model, "GPT Image 2"),
+        ):
+            if model_id == "gpt-image-2" and combo.findData(model_id) < 0:
+                combo.addItem(label, model_id)
+        if requested_model == "gpt-image-2":
+            self.model_combo.setCurrentIndex(self.model_combo.findData(requested_model))
+            state.clipart.generation.model = requested_model
+        if requested_reference_model == "gpt-image-2":
+            self.reference_model_combo.setCurrentIndex(
+                self.reference_model_combo.findData(requested_reference_model)
+            )
+            state.clipart.generation.reference_model = requested_reference_model
         self.card.title_label.setText("Формат и модель")
         self.setAccessibleName("Формат и модель Pinterest-пинов")
         self.recommendation_label = QLabel(

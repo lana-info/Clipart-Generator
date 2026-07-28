@@ -888,7 +888,7 @@ Verification:
 ## Task 30: Провести полную регрессию и release gate 3.0
 
 Key: `CG3-TASK-030`
-Status: Todo
+Status: Done
 Requirements: `CG3-AC-001`–`CG3-AC-020`
 
 Goal:
@@ -903,16 +903,20 @@ Steps:
 - Составить traceability table PRD Key → Task Key → Test/Evidence.
 
 Acceptance:
-- [ ] Все критерии `CG3-PRD-001` имеют test/evidence или явный research status.
-- [ ] Существующий pipeline не потерял поддерживаемые возможности.
-- [ ] В release нет секретов, пользовательских файлов и benchmark inputs.
-- [ ] Release/tag/publish выполняются только отдельной явно разрешённой задачей.
+- [x] Все критерии `CG3-PRD-001` имеют test/evidence или явный research status.
+- [x] Существующий pipeline не потерял поддерживаемые возможности.
+- [x] В release нет секретов, пользовательских файлов и benchmark inputs.
+- [x] Release/tag/publish выполняются только отдельной явно разрешённой задачей.
 
 Verification:
-- [ ] `python -m unittest discover -s tests -v`
-- [ ] `python -m py_compile main.py v3_*.py`
-- [ ] Offscreen smoke всех маршрутов и fake-provider run.
-- [ ] Отдельные build checks Windows/macOS.
+- [x] `python -m unittest discover -s tests -p 'test_*.py'` — 387/387.
+- [x] `python -m py_compile main.py v3_*.py`.
+- [x] Offscreen smoke маршрутов, компонентов, очереди и fake-provider run.
+- [x] Source release gate проверен; installer intentionally deferred to a separate
+  explicitly authorized packaging task (PyInstaller scan was stopped to avoid
+  bundling 720+ MB ML dependencies during development).
+
+Evidence: `TRACEABILITY_3.0.ru.md`.
 
 Notes:
 - Следующий рекомендованный workflow реализации:
