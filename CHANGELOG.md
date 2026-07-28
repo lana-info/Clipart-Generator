@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Enabled startup auto-application of newer manifested releases on next run, with update installer download retried in bounded chunks before checksum verification for legacy versions to reach `2.0` without manual approval.
+- Simplified the cleanup workflow into one safe preset, removed the ordinary processing rights gate, preserved ICC/DPI automatically, and added cleanup-only pixel-parity coverage for PNG and JPEG inputs.
 
 
 

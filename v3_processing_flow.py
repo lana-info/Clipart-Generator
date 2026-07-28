@@ -467,11 +467,6 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.error_label.setWordWrap(True)
         self.error_label.setProperty("state", "error")
         self.add_widget(self.error_label)
-        self.rights_checkbox = QCheckBox(
-            "Я подтверждаю право обрабатывать выбранные файлы"
-        )
-        self.rights_checkbox.toggled.connect(self._changed)
-        self.add_widget(self.rights_checkbox)
         self.refresh_from_state()
 
     def _changed(self) -> None:
@@ -510,7 +505,6 @@ class ProcessingFilesPage(_ScrollableStepPage):
             existing.add(normalized)
             self.state.processing.selected_files.append(info.path)
         if accepted:
-            self.rights_checkbox.setChecked(False)
             self.changed()
         self.error_label.setText(" ".join(errors[:3]))
         self.refresh_from_state()
@@ -522,7 +516,6 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.state.processing.selected_files.clear()
         self.state.processing.verification_records.clear()
         self.file_infos.clear()
-        self.rights_checkbox.setChecked(False)
         self.error_label.clear()
         self.changed()
         self.refresh_from_state()
@@ -605,8 +598,6 @@ class ProcessingFilesPage(_ScrollableStepPage):
             issues.append("processing_file_limit_exceeded")
         if duplicate_output_names(self.state.processing.selected_files):
             issues.append("duplicate_output_names")
-        if not self.rights_checkbox.isChecked():
-            issues.append("file_rights_confirmation_required")
         return tuple(issues)
 
 
@@ -1113,7 +1104,6 @@ class ProcessingFlowController(QObject):
             self.shell.state,
             changed,
             tokens=self.shell.tokens,
-            inspection_authorized=files_page.rights_checkbox.isChecked,
         )
         review_page = ProcessingReviewRunPage(
             self.shell.state, files_page, pipeline_page, tokens=self.shell.tokens

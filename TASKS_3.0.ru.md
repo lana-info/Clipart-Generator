@@ -707,7 +707,7 @@ Verification:
 ## Task 24: Свести очистку к одной безопасной настройке
 
 Key: `CG3-TASK-024`
-Status: Todo
+Status: Done - cleanup preset unified, legacy gates removed from ordinary flow, decoded-pixel parity verified
 Requirements: `CG3-FR-050`, `CG3-FR-051`, `CG3-FR-052`, `CG3-FR-053`,
 `CG3-FR-054`, `CG3-FR-060`, `CG3-FR-061`, `CG3-AC-005`, `CG3-AC-009`
 
@@ -726,13 +726,13 @@ Steps:
 - Проверять decoded-pixel equality для cleanup-only PNG/JPEG.
 
 Acceptance:
-- [ ] Одна галочка управляет полным preset.
-- [ ] ICC/DPI сохраняются и не имеют переключателей удаления.
-- [ ] Cleanup-only тест подтверждает неизменность декодированных пикселей.
-- [ ] Обычная обработка запускается без legal/experimental подтверждений.
+- [x] Одна галочка управляет полным preset.
+- [x] ICC/DPI сохраняются и не имеют переключателей удаления.
+- [x] Cleanup-only тест подтверждает неизменность декодированных пикселей.
+- [x] Обычная обработка запускается без legal/experimental подтверждений.
 
 Verification:
-- [ ] `python -m unittest tests.test_metadata_cleanup tests.test_c2pa_cleanup tests.test_v3_evidence_center -v`
+- [x] `python -m unittest tests.test_metadata_cleanup tests.test_c2pa_cleanup tests.test_v3_evidence_center -v`
 
 ## Task 25: Зафиксировать defaults клипарта и alpha-safe upscale
 

@@ -103,6 +103,12 @@ def image_pixels(path):
         return image.mode, image.size, image.tobytes()
 
 
+def decoded_rgba_pixels(path):
+    with Image.open(path) as image:
+        image.load()
+        return image.size, image.convert("RGBA").tobytes()
+
+
 def output_xmp_attributes(image):
     payload = image.text["XML:com.adobe.xmp"].encode("utf-8")
     root = ElementTree.fromstring(payload)
@@ -255,6 +261,35 @@ class MetadataCleanupTests(unittest.TestCase):
                 self.assertEqual(after.mode, "P")
                 self.assertEqual(after.info["transparency"], transparency)
                 self.assertEqual(after.convert("RGBA").tobytes(), before_rgba)
+
+    def test_cleanup_only_preserves_decoded_pixels_for_png_and_jpeg(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-metadata-cleanup-pixels-") as temp_dir:
+            temp_path = Path(temp_dir)
+            png_source = temp_path / "source.png"
+            jpeg_source = temp_path / "source.jpg"
+            png_output = temp_path / "png-output.png"
+            jpeg_output = temp_path / "jpeg-output.png"
+
+            create_png_fixture(png_source)
+            create_jpeg_fixture(jpeg_source)
+
+            png_source_pixels = decoded_rgba_pixels(png_source)
+            jpeg_source_pixels = decoded_rgba_pixels(jpeg_source)
+
+            cleanup_only = MetadataCleanupOptions(
+                remove_exif=True,
+                remove_xmp=True,
+                remove_iptc=True,
+                remove_comments_text=True,
+                remove_embedded_thumbnail=True,
+                remove_generator_fields=True,
+                remove_embedded_c2pa=True,
+            )
+            cleanup_image_metadata(png_source, png_output, cleanup_only)
+            cleanup_image_metadata(jpeg_source, jpeg_output, cleanup_only)
+
+            self.assertEqual(decoded_rgba_pixels(png_output), png_source_pixels)
+            self.assertEqual(decoded_rgba_pixels(jpeg_output), jpeg_source_pixels)
 
     def test_rgb_transparency_changes_the_pixel_fingerprint(self):
         first = Image.new("RGB", (2, 2), (10, 20, 30))

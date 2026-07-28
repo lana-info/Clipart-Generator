@@ -245,15 +245,29 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(
             set(page.operation_widgets)
             | {"visible_mark_cleanup_mode", "upscale_factor"},
-            field_names,
+            field_names - {
+                "remove_exif",
+                "remove_xmp",
+                "remove_iptc",
+                "remove_comments_text",
+                "remove_embedded_thumbnail",
+                "remove_generator_fields",
+                "remove_embedded_c2pa",
+                "preserve_icc",
+                "preserve_dpi",
+            },
         )
         self.assertIsInstance(
             page.operation_widgets["remove_background"],
             QCheckBox,
         )
+        self.assertIsNotNone(page.cleanup_checkbox)
         page.operation_widgets["trim"].setChecked(True)
         self.assertTrue(state.clipart.operations.trim)
         self.assertIn("Trim", page.pipeline_label.text())
+        page.cleanup_checkbox.setChecked(True)
+        self.assertTrue(state.clipart.operations.remove_exif)
+        self.assertTrue(state.clipart.operations.preserve_icc)
 
     def test_pipeline_summary_matches_real_worker_order(self):
         operations = ImageOperationData(

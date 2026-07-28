@@ -88,7 +88,6 @@ class V3EvidenceCenterTests(unittest.TestCase):
             page = EvidenceCenterPage(
                 state,
                 lambda: None,
-                inspection_authorized=lambda: True,
             )
             before = file_hash(source)
 
@@ -182,7 +181,7 @@ class V3EvidenceCenterTests(unittest.TestCase):
                 json.dumps(report, ensure_ascii=False).casefold(),
             )
 
-    def test_inspector_is_deferred_until_c1_rights_confirmation(self):
+    def test_inspector_is_available_without_a_manual_c1_gate(self):
         with tempfile.TemporaryDirectory(prefix="evidence-rights-") as temp:
             state, source = self.make_state(temp)
             shell = AppShell(state)
@@ -191,24 +190,21 @@ class V3EvidenceCenterTests(unittest.TestCase):
                 return_value={"status": "invalid", "categories": {}, "c2pa": {}},
             ) as inspector:
                 controller = install_processing_flow(shell)
-                self.assertFalse(controller.files_page.rights_checkbox.isChecked())
-                inspector.assert_not_called()
-
-                with self.assertRaises(EvidenceCenterError):
-                    build_evidence_report(
-                        state,
-                        str(source),
-                        rights_confirmed=False,
-                    )
-                inspector.assert_not_called()
-
-                controller.files_page.rights_checkbox.setChecked(True)
+                self.assertNotIn(
+                    "file_rights_confirmation_required",
+                    controller.files_page.validation_issues(),
+                )
+                build_evidence_report(
+                    state,
+                    str(source),
+                    rights_confirmed=False,
+                )
                 state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.EVIDENCE
                 controller._step_changed(
                     ProjectMode.PROCESSING.value,
                     StepId.EVIDENCE.value,
                 )
-                inspector.assert_called_once_with(str(source))
+                self.assertGreaterEqual(inspector.call_count, 1)
 
     def test_openai_generic_result_is_not_rendered_as_pixel_evidence(self):
         with tempfile.TemporaryDirectory(prefix="evidence-openai-ui-") as temp:
@@ -223,7 +219,6 @@ class V3EvidenceCenterTests(unittest.TestCase):
             page = EvidenceCenterPage(
                 state,
                 lambda: None,
-                inspection_authorized=lambda: True,
             )
 
             self.assertNotIn("OpenAI", page.pixel_card.status_label.text())

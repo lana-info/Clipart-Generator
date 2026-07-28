@@ -127,9 +127,6 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertEqual((accepted[0].width, accepted[0].height), (7, 9))
             self.assertIn("RGBA", accepted[0].summary)
             self.assertFalse(page.thumbnail_labels[0].pixmap().isNull())
-            self.assertIn("file_rights_confirmation_required", page.validation_issues())
-
-            page.rights_checkbox.setChecked(True)
             self.assertEqual(page.validation_issues(), ())
 
     def test_drag_and_drop_accepts_only_valid_local_images(self):
@@ -395,7 +392,6 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertEqual(factory.workers, [])
             shell.go_next()
             self.assertEqual(factory.workers, [])
-            controller.files_page.rights_checkbox.setChecked(True)
             controller.pipeline_page.allow_full_image_changes.setChecked(True)
 
             shell.go_next()

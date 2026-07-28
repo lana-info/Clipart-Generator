@@ -188,6 +188,15 @@ class ProcessingPipelineEditor(QScrollArea):
         "preserve_icc": "Сохранить ICC",
         "preserve_dpi": "Сохранить DPI",
     }
+    _CLEANUP_FIELDS = (
+        "remove_exif",
+        "remove_xmp",
+        "remove_iptc",
+        "remove_comments_text",
+        "remove_embedded_thumbnail",
+        "remove_generator_fields",
+        "remove_embedded_c2pa",
+    )
 
     def __init__(
         self,
@@ -397,19 +406,19 @@ class ProcessingPipelineEditor(QScrollArea):
         if include_cleanup:
             cleanup = QGroupBox("Центр проверки и очистки файла")
             cleanup_form = QFormLayout(cleanup)
-            for name in (
-                "remove_exif",
-                "remove_xmp",
-                "remove_iptc",
-                "remove_comments_text",
-                "remove_embedded_thumbnail",
-                "remove_generator_fields",
-                "remove_embedded_c2pa",
-                "preserve_icc",
-                "preserve_dpi",
-            ):
-                self._add_bool(cleanup_form, name, operations)
+            self.cleanup_checkbox = QCheckBox("Очистить служебные данные")
+            self.cleanup_checkbox.setAccessibleName("Очистить служебные данные")
+            cleanup_form.addRow(self.cleanup_checkbox)
+            cleanup_hint = QLabel(
+                "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
+                "generator fields и embedded C2PA. ICC и DPI всегда сохраняются."
+            )
+            cleanup_hint.setWordWrap(True)
+            cleanup_form.addRow(cleanup_hint)
             self.add_widget(cleanup)
+            self.cleanup_checkbox.toggled.connect(self._sync)
+        else:
+            self.cleanup_checkbox = None
 
         self.pipeline_label = QLabel()
         self.pipeline_label.setWordWrap(True)
@@ -517,6 +526,12 @@ class ProcessingPipelineEditor(QScrollArea):
         current = self.state_owner.operations.to_dict()
         for name, control in self.operation_widgets.items():
             current[name] = self._value(control)
+        if self.cleanup_checkbox is not None:
+            cleanup_enabled = self.cleanup_checkbox.isChecked()
+            for name in self._CLEANUP_FIELDS:
+                current[name] = cleanup_enabled
+            current["preserve_icc"] = True
+            current["preserve_dpi"] = True
         current["visible_mark_cleanup_mode"] = "gemini_auto"
         operations = self.state_owner.operations
         for name, value in current.items():
@@ -582,15 +597,6 @@ class ProcessingPipelineEditor(QScrollArea):
             and "local_ben2_edge_softness" in remove_controls,
             "local_ben2_corner_radius": operations.remove_background
             and "local_ben2_corner_radius" in remove_controls,
-            "remove_exif": self.include_cleanup,
-            "remove_xmp": self.include_cleanup,
-            "remove_iptc": self.include_cleanup,
-            "remove_comments_text": self.include_cleanup,
-            "remove_embedded_thumbnail": self.include_cleanup,
-            "remove_generator_fields": self.include_cleanup,
-            "remove_embedded_c2pa": self.include_cleanup,
-            "preserve_icc": self.include_cleanup,
-            "preserve_dpi": self.include_cleanup,
             "unsharp_amount": operations.unsharp,
             "unsharp_radius": operations.unsharp,
             "unsharp_threshold": operations.unsharp,
@@ -623,6 +629,16 @@ class ProcessingPipelineEditor(QScrollArea):
             elif isinstance(control, QLineEdit):
                 control.setText(str(getattr(operations, name)))
             control.blockSignals(False)
+        if self.cleanup_checkbox is not None:
+            cleanup_enabled = all(
+                bool(getattr(operations, name))
+                for name in self._CLEANUP_FIELDS
+            ) and bool(getattr(operations, "preserve_icc", True)) and bool(
+                getattr(operations, "preserve_dpi", True)
+            )
+            self.cleanup_checkbox.blockSignals(True)
+            self.cleanup_checkbox.setChecked(cleanup_enabled)
+            self.cleanup_checkbox.blockSignals(False)
         self._refresh_control_visibility()
         self._refresh_pipeline()
 

@@ -244,10 +244,9 @@ def build_evidence_report(
     state: ProjectState,
     file_path: str,
     *,
-    rights_confirmed: bool,
+    rights_confirmed: bool = True,
 ) -> dict[str, Any]:
-    if not rights_confirmed:
-        raise EvidenceCenterError("Подтвердите право обрабатывать выбранный файл")
+    _ = rights_confirmed
     record = _record_for_file(state, file_path)
     inspection = inspect_image_metadata(file_path)
     metadata_hint, c2pa_hint = _file_hint_status(inspection)
@@ -423,14 +422,12 @@ class EvidenceCenterPage(QScrollArea):
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
         url_opener: Callable[[str], bool] | None = None,
-        inspection_authorized: Callable[[], bool] | None = None,
     ) -> None:
         super().__init__()
         self.state = state
         self.changed = changed
         self.tokens = tokens
         self.url_opener = url_opener or _default_url_opener
-        self.inspection_authorized = inspection_authorized or (lambda: False)
         self.setWidgetResizable(True)
 
         content = QWidget()
@@ -614,11 +611,6 @@ class EvidenceCenterPage(QScrollArea):
         file_path = self._current_path()
         if not file_path:
             return
-        if not bool(self.inspection_authorized()):
-            self.action_status.setText(
-                "Сначала подтвердите право обрабатывать файл на шаге C1."
-            )
-            return
         status_combo = (
             self.synthid_status
             if provider == "synthid"
@@ -657,11 +649,6 @@ class EvidenceCenterPage(QScrollArea):
         if not file_path:
             self.action_status.setText("Сначала выберите файл.")
             return
-        if not bool(self.inspection_authorized()):
-            self.action_status.setText(
-                "Сначала подтвердите право обрабатывать файл на шаге C1."
-            )
-            return
         destination, _ = QFileDialog.getSaveFileName(
             self,
             "Сохранить evidence report",
@@ -675,7 +662,7 @@ class EvidenceCenterPage(QScrollArea):
                 self.state,
                 file_path,
                 destination,
-                rights_confirmed=bool(self.inspection_authorized()),
+                rights_confirmed=True,
             )
         except (EvidenceCenterError, OSError, TypeError, ValueError):
             self.action_status.setText("Не удалось экспортировать отчёт.")
@@ -708,15 +695,6 @@ class EvidenceCenterPage(QScrollArea):
             self.file_card.set_status("Файл не выбран.", warning=True)
             self.c2pa_card.set_status("Файл не выбран.", warning=True)
             self._refresh_pixel_status()
-            return
-        if not bool(self.inspection_authorized()):
-            message = "Сначала подтвердите право обрабатывать файл на шаге C1."
-            self.file_card.set_status(message, warning=True)
-            self.c2pa_card.set_status("Локальная проверка ещё не запускалась.", warning=True)
-            self.pixel_card.set_status("Пиксельная проверка ещё не записана.", warning=True)
-            self.openai_status_label.setText(
-                "OpenAI handoff ещё не записан; это не pixel evidence."
-            )
             return
         inspection = inspect_image_metadata(file_path)
         if inspection.get("status") != "ok":
@@ -787,10 +765,6 @@ class EvidenceCenterPage(QScrollArea):
         self._refresh_pixel_status()
 
     def validation_issues(self) -> tuple[str, ...]:
-        if self.state.processing.selected_files and not bool(
-            self.inspection_authorized()
-        ):
-            return ("file_rights_confirmation_required",)
         return ()
     def refresh_from_state(self) -> None:
         selected_path = self._current_path()

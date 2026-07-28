@@ -43,7 +43,13 @@ class ProcessingEditorTests(unittest.TestCase):
 
         self.assertIn("Удаление фона", editor.pipeline_label.text())
         self.assertFalse(editor.operation_widgets["kie_remove_bg_model"].isHidden())
-        self.assertFalse(editor.operation_widgets["remove_exif"].isHidden())
+        self.assertTrue(hasattr(editor, "cleanup_checkbox"))
+        self.assertFalse(editor.cleanup_checkbox.isChecked())
+        editor.cleanup_checkbox.setChecked(True)
+        self.assertTrue(state.processing.operations.remove_exif)
+        self.assertTrue(state.processing.operations.remove_embedded_c2pa)
+        self.assertTrue(state.processing.operations.preserve_icc)
+        self.assertTrue(state.processing.operations.preserve_dpi)
 
     def test_shared_steps_match_current_pipeline_contract(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
