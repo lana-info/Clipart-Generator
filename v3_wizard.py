@@ -115,6 +115,7 @@ class AppShell(QWidget):
     validation_failed = pyqtSignal(str, object)
     unsaved_mode_switch_requested = pyqtSignal(str, str)
     mode_picker_requested = pyqtSignal()
+    api_settings_requested = pyqtSignal()
     run_requested = pyqtSignal(str)
     finish_requested = pyqtSignal(str)
 
@@ -224,6 +225,9 @@ class AppShell(QWidget):
         )
         self.change_mode_button.clicked.connect(self.mode_picker_requested.emit)
         layout.addWidget(self.change_mode_button)
+        self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
+        self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
+        layout.addWidget(self.api_settings_button)
         return frame
 
     def _build_sidebar(self) -> QFrame:

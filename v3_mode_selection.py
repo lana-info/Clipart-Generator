@@ -224,6 +224,7 @@ class V3ApplicationView(QWidget):
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self._recent_project: ProjectState | None = None
         self._runtime_settings_provider = runtime_settings_provider
+        self._v3_runtime_settings: dict[str, str] = {}
         self._worker_factory = worker_factory
         self._draft_path = Path(draft_path) if draft_path is not None else None
         self.shell: AppShell | None = None
@@ -249,6 +250,19 @@ class V3ApplicationView(QWidget):
         if recent_project is not None:
             self.set_recent_project(recent_project)
         self.show_new_project()
+
+    def _runtime_settings(self) -> Mapping[str, Any]:
+        base = dict(self._runtime_settings_provider() or {}) if self._runtime_settings_provider else {}
+        base.update(self._v3_runtime_settings)
+        return base
+
+    def _show_api_settings(self) -> None:
+        from v3_api_settings import ApiSettingsDialog
+        dialog = ApiSettingsDialog(initial=self._runtime_settings(), parent=self.shell or self)
+        if dialog.exec():
+            self._v3_runtime_settings.update(dialog.settings)
+            if self.shell is not None:
+                self.shell.state_changed.emit()
 
     @property
     def project_state(self) -> ProjectState | None:
@@ -349,21 +363,22 @@ class V3ApplicationView(QWidget):
 
         install_clipart_flow(
             shell,
-            runtime_settings_provider=self._runtime_settings_provider,
+            runtime_settings_provider=self._runtime_settings,
             worker_factory=self._worker_factory,
         )
         install_pinterest_flow(
             shell,
-            runtime_settings_provider=self._runtime_settings_provider,
+            runtime_settings_provider=self._runtime_settings,
             worker_factory=self._worker_factory,
         )
         install_processing_flow(
             shell,
-            runtime_settings_provider=self._runtime_settings_provider,
+            runtime_settings_provider=self._runtime_settings,
             worker_factory=self._worker_factory,
         )
         shell.state_changed.connect(self._save_draft)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
+        shell.api_settings_requested.connect(self._show_api_settings)
         self.shell = shell
         self.stack.addWidget(shell)
         self.stack.setCurrentWidget(shell)
