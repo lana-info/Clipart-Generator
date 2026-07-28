@@ -171,7 +171,7 @@ class RunPlanBuilder:
 
 class ProcessingPipelineEditor(QScrollArea):
     _BOOL_LABELS = {
-        "visible_mark_cleanup": "Удалить видимую метку автоматически",
+        "visible_mark_cleanup": "Удалить обнаруженную видимую метку Gemini",
         "upscale_before": "Апскейл до удаления фона",
         "upscale_after": "Апскейл после удаления фона",
         "remove_background": "Удалить фон",
@@ -436,6 +436,11 @@ class ProcessingPipelineEditor(QScrollArea):
         control = QCheckBox(self._BOOL_LABELS[name])
         control.setChecked(bool(getattr(operations, name)))
         control.setAccessibleName(self._BOOL_LABELS[name])
+        if name == "visible_mark_cleanup":
+            control.setToolTip(
+                "Пытается удалить только подтверждённую видимую метку на пикселях. "
+                "Метаданные и SynthID эта настройка не удаляет."
+            )
         form.addRow(control)
         self.operation_widgets[name] = control
 

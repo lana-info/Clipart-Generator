@@ -1777,8 +1777,10 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.model_capability_label.setProperty("v3Small", True)
         self.add_widget(self.model_capability_label)
 
-        advanced = AdvancedSection(tokens=tokens)
+        advanced = AdvancedSection("Генерация по референсам", tokens=tokens)
         self.reference_advanced = advanced
+        advanced.toggle_button.setVisible(False)
+        advanced.set_expanded(True)
         self.reference_capability_label = QLabel()
         self.reference_capability_label.setWordWrap(True)
         self.reference_capability_label.setProperty("v3Small", True)
