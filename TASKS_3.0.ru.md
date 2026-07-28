@@ -344,7 +344,10 @@ Acceptance:
 
 Verification:
 - [x] Повтор одного профиля даёт сопоставимый отчёт.
-- [ ] Manifest формально проверен: contact sheet декодируется и его sha256 совпадает с зафиксированным в `benchmark_synthid_m1.pilot.json`; визуальная проверка ожидает доступа к viewer (локально: `.scratch/reverse-synthid-m1/run-20260726/contact-sheets/m1-contact-sheet.png`).
+- [x] Manifest формально проверен: contact sheet декодируется (1080×1032 PNG),
+  а sha256 `43a4f05fdcc6653127b1a28d1454743c227d77a0b6b4eb4c1155abd2cbd42fba`
+  совпадает с `benchmark_synthid_m1.pilot.json`.
+- [ ] Официальное pixel evidence всё ещё требует отдельной ручной проверки Google.
 
 Notes:
 - Никаких заявлений об удалении до официальной проверки выхода.
