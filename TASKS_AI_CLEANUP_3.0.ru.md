@@ -43,6 +43,8 @@ Acceptance:
 
 Verification:
 - [x] `pytest -q tests/test_ai_watermark_backend.py` — 4/4; broken executable is fail-closed.
+- [x] Optional package `remove-ai-watermarks==0.20.1` установлена и CLI отвечает;
+  GPU-based invisible mode остаётся недоступным без CUDA.
 
 ## Task 3: Обновить UI первого этапа
 
