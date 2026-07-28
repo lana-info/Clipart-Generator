@@ -424,6 +424,8 @@ class ProcessingPipelineEditor(QScrollArea):
                 gpu_ready = gpu_backend_available()
             except Exception:
                 gpu_ready = False
+            if not gpu_ready and operations.invisible_watermark_cleanup:
+                operations.invisible_watermark_cleanup = False
             invisible_control.setEnabled(gpu_ready)
             invisible_control.setToolTip(
                 "Требуется установленный remove-ai-watermarks и NVIDIA CUDA GPU. "

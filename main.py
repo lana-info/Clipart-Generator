@@ -22,7 +22,11 @@ from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from license_client import LicenseClient
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
-from ai_watermark_backend import WatermarkBackendError, clean_invisible_watermark
+from ai_watermark_backend import (
+    WatermarkBackendError,
+    clean_invisible_watermark,
+    gpu_backend_available,
+)
 from metadata_inspector import inspect_image_metadata
 from visible_mark_cleanup import (
     VisibleMarkCleanupCancelled,
@@ -686,7 +690,7 @@ class WorkerThread(QThread):
         self.visible_mark_cleanup_enabled = bool(settings.get("visible_mark_cleanup_enabled", False))
         self.invisible_watermark_cleanup_enabled = bool(
             settings.get("invisible_watermark_cleanup_enabled", False)
-        )
+        ) and gpu_backend_available()
         self.visible_mark_cleanup_mode = normalize_visible_mark_cleanup_mode(
             settings.get("visible_mark_cleanup_mode", "gemini_auto")
         )
