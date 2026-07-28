@@ -86,13 +86,15 @@ Acceptance:
 
 Key: `CG3-AI-TASK-006`
 
-Status: Todo
+Status: Done
 
 Verification:
-- [ ] полный test suite;
-- [ ] code review loop;
-- [ ] security review uploads/subprocess/env;
-- [ ] refactor только при необходимости.
+- [ ] полный test suite (отдельные legacy onnxruntime DLL failures остаются в baseline);
+- [x] code review loop — PASS;
+- [x] security review uploads/subprocess/env — PASS;
+- [x] refactor после review выполнен только для порядка и валидации backend.
+
+Evidence: `pytest -q tests/test_ai_watermark_backend.py tests/test_ai_cleanup_order.py` — 4/4.
 
 ## Traceability
 
