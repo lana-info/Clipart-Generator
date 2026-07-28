@@ -42,7 +42,7 @@ Acceptance:
 - [x] принимается только output внутри выделенной папки.
 
 Verification:
-- [x] `pytest -q tests/test_ai_watermark_backend.py` — 3/3.
+- [x] `pytest -q tests/test_ai_watermark_backend.py` — 4/4; broken executable is fail-closed.
 
 ## Task 3: Обновить UI первого этапа
 
