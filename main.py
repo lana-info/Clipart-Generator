@@ -1104,6 +1104,7 @@ class WorkerThread(QThread):
 
     def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
         self._ensure_running()
+        self._metadata_cleaned_for_current_item = False
         if self._can_use_legacy_kie_processing_pipeline():
             uploaded_url = source_url or self._kie_upload_file(source_path)
             self._ensure_running()
