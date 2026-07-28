@@ -39,6 +39,7 @@ def clean_invisible_watermark(
     output: Path,
     *,
     timeout_seconds: int = 300,
+    output_root: Path | None = None,
 ) -> Path:
     source = Path(source).resolve()
     output = Path(output).resolve()
@@ -52,6 +53,12 @@ def clean_invisible_watermark(
     output.parent.mkdir(parents=True, exist_ok=True)
     if output == source or source.parent == output.parent and output.name == source.name:
         raise WatermarkBackendError("Выходной файл должен отличаться от исходного")
+    if output_root is not None:
+        root = Path(output_root).resolve()
+        try:
+            output.relative_to(root)
+        except ValueError as error:
+            raise WatermarkBackendError("Выходной файл находится вне рабочей папки") from error
     command = [executable, "invisible", str(source), "-o", str(output), "--force"]
     safe_env = {"PATH": os.environ.get("PATH", "")}
     try:

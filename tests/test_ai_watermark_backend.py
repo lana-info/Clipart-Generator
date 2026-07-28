@@ -47,3 +47,11 @@ def test_backend_accepts_only_created_output(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr("subprocess.run", fake_run)
     assert clean_invisible_watermark(source, output) == output.resolve()
+
+
+def test_backend_rejects_output_outside_root(tmp_path: Path, monkeypatch):
+    source = tmp_path / "source.png"
+    source.write_bytes(b"input")
+    monkeypatch.setattr("shutil.which", lambda _: "remove-ai-watermarks")
+    with pytest.raises(WatermarkBackendError, match="вне рабочей папки"):
+        clean_invisible_watermark(source, tmp_path / "nested" / "out.png", output_root=tmp_path / "other")

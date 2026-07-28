@@ -1174,7 +1174,9 @@ class WorkerThread(QThread):
             invisible_path = os.path.join(raw_dir, f"{prefix}_invisible_{idx:03d}_{self.run_stamp}.png")
             try:
                 self.progress.emit("  Экспериментальная очистка невидимого watermark")
-                clean_invisible_watermark(Path(current_path), Path(invisible_path))
+                clean_invisible_watermark(
+                    Path(current_path), Path(invisible_path), output_root=Path(raw_dir)
+                )
                 current_path, current_url, local_result = invisible_path, None, True
             except WatermarkBackendError as error:
                 self.progress.emit(f"  Экспериментальный этап пропущен: {error}")
