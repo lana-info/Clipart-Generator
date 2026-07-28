@@ -123,6 +123,18 @@ def processing_pipeline_steps(
     include_cleanup: bool = False,
 ) -> tuple[str, ...]:
     steps: list[str] = []
+    if include_cleanup and any(
+        (
+            operations.remove_exif,
+            operations.remove_xmp,
+            operations.remove_iptc,
+            operations.remove_comments_text,
+            operations.remove_embedded_thumbnail,
+            operations.remove_generator_fields,
+            operations.remove_embedded_c2pa,
+        )
+    ):
+        steps.append("Очистка метаданных")
     if operations.visible_mark_cleanup:
         steps.append("Удаление видимой метки")
     if operations.upscale_before:
@@ -137,18 +149,6 @@ def processing_pipeline_steps(
         steps.append("Очистка края alpha")
     if operations.trim:
         steps.append("Trim")
-    if include_cleanup and any(
-        (
-            operations.remove_exif,
-            operations.remove_xmp,
-            operations.remove_iptc,
-            operations.remove_comments_text,
-            operations.remove_embedded_thumbnail,
-            operations.remove_generator_fields,
-            operations.remove_embedded_c2pa,
-        )
-    ):
-        steps.append("Очистка данных файла")
     if operations.export_300_dpi:
         steps.append("Экспорт 300 DPI")
     if steps:
@@ -238,8 +238,7 @@ class ProcessingPipelineEditor(QScrollArea):
 
         operations_group = QGroupBox("Операции")
         form = QFormLayout(operations_group)
-        for name in (
-            "visible_mark_cleanup",
+        operation_names = (
             "upscale_before",
             "unsharp",
             "remove_background",
@@ -247,8 +246,11 @@ class ProcessingPipelineEditor(QScrollArea):
             "edge_shrink",
             "trim",
             "export_300_dpi",
-        ):
+        )
+        for name in operation_names:
             self._add_bool(form, name, operations)
+        if not include_cleanup:
+            self._add_bool(form, "visible_mark_cleanup", operations)
         self._add_combo(
             form,
             "upscale_before_provider",
@@ -406,17 +408,24 @@ class ProcessingPipelineEditor(QScrollArea):
         self.add_widget(advanced)
 
         if include_cleanup:
-            cleanup = QGroupBox("Центр проверки и очистки файла")
+            cleanup = QGroupBox("Очистка следов ИИ")
             cleanup_form = QFormLayout(cleanup)
             self.cleanup_checkbox = QCheckBox("Очистить служебные данные")
             self.cleanup_checkbox.setAccessibleName("Очистить служебные данные")
             cleanup_form.addRow(self.cleanup_checkbox)
+            self._add_bool(cleanup_form, "visible_mark_cleanup", operations)
             cleanup_hint = QLabel(
                 "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
                 "generator fields и embedded C2PA. ICC и DPI всегда сохраняются."
             )
             cleanup_hint.setWordWrap(True)
             cleanup_form.addRow(cleanup_hint)
+            cleanup_note = QLabel(
+                "Сначала очищаются метаданные и видимая метка. Пересоздание через KIE "
+                "будет отдельным необязательным действием, так как оно может изменить изображение."
+            )
+            cleanup_note.setWordWrap(True)
+            cleanup_form.addRow(cleanup_note)
             self.add_widget(cleanup)
             self.cleanup_checkbox.toggled.connect(self._sync)
         else:
