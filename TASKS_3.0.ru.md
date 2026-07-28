@@ -737,7 +737,7 @@ Verification:
 ## Task 25: Зафиксировать defaults клипарта и alpha-safe upscale
 
 Key: `CG3-TASK-025`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-043`, `CG3-FR-044`, `CG3-AC-006`, `CG3-AC-007`
 
 Goal:
@@ -751,12 +751,12 @@ Steps:
 - Добавить integration fixture с alpha PNG.
 
 Acceptance:
-- [ ] Новый state получает четыре требуемых defaults.
-- [ ] Alpha-safe pipeline сохраняет ненулевую прозрачность.
-- [ ] Несовместимый post-background upscale не запускается.
+- [x] Новый state получает четыре требуемых defaults.
+- [x] Alpha-safe pipeline сохраняет ненулевую прозрачность.
+- [x] Несовместимый post-background upscale не запускается.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_project_state tests.test_v3_clipart_flow tests.test_local_processing_acceptance -v`
+- [x] `python -m unittest tests.test_v3_project_state tests.test_v3_clipart_flow tests.test_local_processing_acceptance -v`
 
 ## Task 26: Улучшить выбор файлов и выходной папки обработки
 

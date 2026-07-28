@@ -75,10 +75,12 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
         title="Подготовить клипарт",
         description="Локальное удаление фона, очистка края и trim.",
         operations=_operations(
+            upscale_before=True,
             remove_background=True,
             remove_background_provider="local_rembg",
             edge_shrink=True,
             trim=True,
+            export_300_dpi=True,
         ),
     ),
     "check_cleanup": ProcessingRecipe(

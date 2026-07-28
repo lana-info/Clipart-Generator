@@ -146,6 +146,13 @@ class ProjectSerializationTests(unittest.TestCase):
         self.assertEqual(restored.to_dict(), source.to_dict())
         self.assertEqual(restored.current_step, StepId.PROMPTS)
 
+    def test_clipart_mode_starts_with_clipart_specific_defaults(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        self.assertTrue(state.clipart.operations.upscale_before)
+        self.assertTrue(state.clipart.operations.remove_background)
+        self.assertTrue(state.clipart.operations.trim)
+        self.assertTrue(state.clipart.operations.export_300_dpi)
+
     def test_atomic_draft_save_and_load(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-draft-") as temp_dir:
             path = Path(temp_dir) / "project.clipart.json"

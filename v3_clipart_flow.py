@@ -77,6 +77,7 @@ from v3_prompt_generator import (
 from v3_provider_registry import (
     KIE_MODEL_OPTIONS,
     processing_provider_options,
+    provider_preserves_alpha,
     provider_requires_api_key,
     provider_supports_operation,
     provider_visible_controls,
@@ -594,6 +595,14 @@ def _validate_processing_providers(operations: ImageOperationData) -> None:
         raise ClipartFlowError(f"Неизвестный провайдер: {error.args[0]}") from error
 
 
+def _validate_alpha_safe_upscale(operations: ImageOperationData) -> None:
+    if not (operations.remove_background and operations.upscale_after):
+        return
+    if provider_preserves_alpha(operations.upscale_after_provider):
+        return
+    raise ClipartFlowError("Апскейл после удаления фона должен сохранять прозрачность")
+
+
 def build_clipart_run_request(
     state: ProjectState,
     runtime_settings: Mapping[str, Any] | None = None,
@@ -613,6 +622,7 @@ def build_clipart_run_request(
     operations = state.clipart.operations
     _validate_prompt_references(state.clipart.prompts)
     _validate_processing_providers(operations)
+    _validate_alpha_safe_upscale(operations)
     _validate_processing_models(operations)
     text_option = _model_option(generation.model)
     if text_option.model_type != "text_to_image":

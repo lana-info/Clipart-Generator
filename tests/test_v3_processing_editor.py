@@ -25,6 +25,9 @@ class ProcessingEditorTests(unittest.TestCase):
         state = ProjectState(mode=ProjectMode.PROCESSING)
         apply_processing_recipe(state, "prepare_clipart")
         self.assertTrue(state.processing.operations.remove_background)
+        self.assertTrue(state.processing.operations.upscale_before)
+        self.assertTrue(state.processing.operations.trim)
+        self.assertTrue(state.processing.operations.export_300_dpi)
         self.assertEqual(state.processing.recipe, "prepare_clipart")
         self.assertIn("локальное удаление фона", PROCESSING_RECIPES["prepare_clipart"].description.lower())
 

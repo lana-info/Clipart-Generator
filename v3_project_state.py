@@ -676,6 +676,15 @@ class ImageOperationData:
             preserve_dpi=_boolean(config.get("cleanup_preserve_dpi"), default=True),
         )
 
+
+def clipart_operation_defaults() -> ImageOperationData:
+    return ImageOperationData(
+        upscale_before=True,
+        remove_background=True,
+        trim=True,
+        export_300_dpi=True,
+    )
+
 @dataclass
 class ClipartModeData:
     prompts: list[PromptEntry] = field(default_factory=list)
@@ -683,7 +692,7 @@ class ClipartModeData:
         default_factory=clipart_prompt_generator_defaults
     )
     generation: GenerationData = field(default_factory=GenerationData)
-    operations: ImageOperationData = field(default_factory=ImageOperationData)
+    operations: ImageOperationData = field(default_factory=clipart_operation_defaults)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -703,7 +712,16 @@ class ClipartModeData:
                 defaults=clipart_prompt_generator_defaults(),
             ),
             generation=GenerationData.from_dict(data.get("generation", {})),
-            operations=ImageOperationData.from_dict(data.get("operations", {})),
+            operations=ImageOperationData.from_dict(
+                {
+                    **clipart_operation_defaults().to_dict(),
+                    **(
+                        data.get("operations", {})
+                        if isinstance(data.get("operations"), Mapping)
+                        else {}
+                    ),
+                }
+            ),
         )
 
 

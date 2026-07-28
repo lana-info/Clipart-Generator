@@ -6,6 +6,7 @@ import unittest
 from dataclasses import fields as dataclass_fields
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -318,6 +319,20 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(estimate.request_count, 12)
         self.assertEqual(estimate.estimated_usd, Decimal("0.900"))
         self.assertTrue(estimate.complete)
+
+    def test_alpha_safe_upscale_rejects_non_alpha_preserving_provider_after_bg_removal(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-alpha-safe-") as temp:
+            state = self.make_state(temp)
+            state.clipart.operations.remove_background = True
+            state.clipart.operations.upscale_after = True
+            state.clipart.operations.upscale_after_provider = "local_realesrgan"
+
+            with patch("v3_clipart_flow.provider_preserves_alpha", return_value=False):
+                with self.assertRaisesRegex(ClipartFlowError, "прозрачность"):
+                    build_clipart_run_request(
+                        state,
+                        {"kie_api_key": "test-key"},
+                    )
 
     def test_request_is_accepted_by_real_worker_constructor(self):
         from main import WorkerThread
