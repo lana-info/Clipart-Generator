@@ -247,6 +247,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             "gpt-image/1.5-text-to-image": "gpt-image/1.5-image-to-image",
             "gpt-image-2": "gpt-image-2",
             "nano-banana-2": "nano-banana-2",
+            "nano-banana-pro": "nano-banana-pro",
             "qwen-image-2": "qwen-image-2",
         }
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-model-pairs-") as temp:

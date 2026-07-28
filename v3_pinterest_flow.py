@@ -47,6 +47,7 @@ _PINTEREST_REFERENCE_MODEL_BY_TEXT = {
     "gpt-image/1.5-text-to-image": "gpt-image/1.5-image-to-image",
     "gpt-image-2": "gpt-image-2",
     "nano-banana-2": "nano-banana-2",
+    "nano-banana-pro": "nano-banana-pro",
     "qwen-image-2": "qwen-image-2",
 }
 
@@ -155,7 +156,7 @@ class PinterestPromptInputPage(ClipartPromptInputPage):
 
 
 class PinterestFormatModelPage(ClipartGenerationPage):
-    allow_shared_text_models = False
+    allow_shared_text_models = True
 
     def __init__(
         self,

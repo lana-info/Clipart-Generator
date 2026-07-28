@@ -15,6 +15,7 @@
 - Simplified the evidence cleanup UI to one “Очистить все служебные данные” checkbox and switched the visible AI-image check handoff to ZeroGPT (manual upload only; no automatic file transfer).
 - Separated text-generation and reference-generation settings into distinct visible sections, kept processing on its own wizard step, enlarged reference previews, and clarified visible-marker cleanup wording.
 - Expanded the Clipart text-generation model list to include GPT Image 2, Nano Banana 2, Qwen Image 2.0, FLUX.2 Flex/Pro, and GPT Image 1.5 with their supported aspect ratios.
+- Unified the Clipart and Pinterest model selectors and aspect-ratio catalogs, including Nano Banana Pro and its reference pairing.
 
 
 
