@@ -121,10 +121,12 @@ class V3PinterestFlowTests(unittest.TestCase):
 
         self.assertIn("vertical", page.composition_edit.text().lower())
         self.assertIn("safe zones", page.composition_edit.text().lower())
+        page.generator_section.set_expanded(True)
         page.theme_edit.setText("Small balcony ideas")
         page.subjects_edit.setPlainText("Herb garden\nReading corner")
         page.count_spin.setValue(3)
-        page.generate_button.click()
+        page.preview_button.click()
+        page.replace_variants_button.click()
 
         self.assertEqual(len(state.pinterest.prompts), 3)
         self.assertTrue(
@@ -313,7 +315,6 @@ class V3PinterestFlowTests(unittest.TestCase):
             project.work_dir_edit.setText(temp)
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
             prompts = controller.pages[StepId.PROMPTS]
-            prompts.source_combo.setCurrentIndex(1)
             prompts.paste_edit.setPlainText("Kitchen idea\nGarden idea")
             prompts.paste_button.click()
             self.assertEqual(shell.go_next(), StepId.PIN_FORMAT_MODEL)

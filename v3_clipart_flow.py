@@ -937,12 +937,26 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.source_combo.currentIndexChanged.connect(
             self.source_stack.setCurrentIndex
         )
+        self.source_combo.setCurrentIndex(1)
 
     def _build_generator(self) -> QWidget:
         draft = self.state.clipart.prompt_generator
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
+        self.generator_section = AdvancedSection(
+            "Создать варианты промптов по шаблону"
+        )
+        self.generator_section.set_expanded(False)
+        layout.addWidget(self.generator_section)
+
+        section_intro = QLabel(
+            "Этот блок помогает быстро собрать варианты промптов по шаблону. "
+            "Он не запускает генерацию изображений и его можно пропустить."
+        )
+        section_intro.setWordWrap(True)
+        self.generator_section.add_widget(section_intro)
+
         form = QFormLayout()
         self.theme_edit = QLineEdit(draft.theme)
         self.subjects_edit = QPlainTextEdit("\n".join(draft.subjects))
@@ -977,15 +991,44 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         for label, control in fields:
             control.setAccessibleName(label)
             form.addRow(label, control)
-        layout.addLayout(form)
-        self.preview_label = QLabel()
+        form_widget = QWidget()
+        form_widget.setLayout(form)
+        self.generator_section.add_widget(form_widget)
+
+        self.preview_label = QLabel(
+            "Нажмите «Создать варианты», чтобы увидеть будущие промпты."
+        )
         self.preview_label.setWordWrap(True)
         self.preview_label.setProperty("v3Small", True)
-        self.preview_label.setAccessibleName("Пример промпта")
-        layout.addWidget(self.preview_label)
-        self.generate_button = V3Button("Создать серию")
-        self.generate_button.clicked.connect(self._generate)
-        layout.addWidget(self.generate_button)
+        self.preview_label.setAccessibleName("Предпросмотр вариантов")
+        self.generator_section.add_widget(self.preview_label)
+
+        self.preview_button = V3Button("Создать варианты")
+        self.preview_button.clicked.connect(self._preview)
+        self.generate_button = self.preview_button
+        self.generator_section.add_widget(self.preview_button)
+
+        self.generated_variants_label = QLabel("")
+        self.generated_variants_label.setWordWrap(True)
+        self.generated_variants_label.setProperty("v3Small", True)
+        self.generator_section.add_widget(self.generated_variants_label)
+
+        action_row = QWidget()
+        action_layout = QHBoxLayout(action_row)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        self.add_variants_button = V3Button("Добавить варианты")
+        self.replace_variants_button = V3Button("Заменить все промпты")
+        self.add_variants_button.setEnabled(False)
+        self.replace_variants_button.setEnabled(False)
+        action_layout.addWidget(self.add_variants_button)
+        action_layout.addWidget(self.replace_variants_button)
+        action_layout.addStretch()
+        self.generator_section.add_widget(action_row)
+
+        self.add_variants_button.clicked.connect(lambda: self._apply_generated("append"))
+        self.replace_variants_button.clicked.connect(lambda: self._apply_generated("replace"))
+
+        self._generated_variants: list[PromptEntry] = []
         for edit in (
             self.theme_edit,
             self.style_edit,
@@ -997,7 +1040,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.subjects_edit.textChanged.connect(self._generator_changed)
         self.restrictions_edit.textChanged.connect(self._generator_changed)
         self.count_spin.valueChanged.connect(self._generator_changed)
-        self._preview()
+        self._clear_preview()
         return widget
 
     def _generator_data(self, *, preview: bool = False) -> PromptGeneratorData:
@@ -1014,30 +1057,69 @@ class ClipartPromptInputPage(_ScrollableStepPage):
 
     def _generator_changed(self, *_: Any) -> None:
         self.state.clipart.prompt_generator = self._generator_data()
-        self._preview()
+        self._clear_preview()
         self.changed()
+
+    def _clear_preview(self) -> None:
+        self._generated_variants = []
+        self.preview_label.setText(
+            "Нажмите «Создать варианты», чтобы увидеть будущие промпты."
+        )
+        self.generated_variants_label.setText("")
+        self.add_variants_button.setEnabled(False)
+        self.replace_variants_button.setEnabled(False)
+
     def _preview(self, *_: Any) -> None:
         try:
-            prompt = generate_prompt_series(
-                ProjectMode.CLIPART,
-                self._generator_data(preview=True),
-            )[0].prompt
-        except PromptGeneratorError:
-            prompt = "Добавьте тему или хотя бы один объект."
-        self.preview_label.setText(prompt[:800])
-
-    def _generate(self) -> None:
-        try:
-            generate_into_project(
-                self.state,
+            entries = generate_prompt_series(
                 ProjectMode.CLIPART,
                 self._generator_data(),
             )
+        except PromptGeneratorError:
+            self.card.set_state("error", "Добавьте тему или хотя бы один объект.")
+            self._clear_preview()
+            return
+        self.card.set_state("default")
+        self._generated_variants = entries
+        self.preview_label.setText(
+            "Будущие промпты готовы. Ниже можно добавить их к текущему списку "
+            "или заменить все промпты."
+        )
+        preview_lines = []
+        for index, entry in enumerate(entries[:8], start=1):
+            preview_lines.append(f"{index}. {entry.prompt}")
+        if len(entries) > 8:
+            preview_lines.append(f"… и ещё {len(entries) - 8} вариантов")
+        self.generated_variants_label.setText("\n".join(preview_lines))
+        self.add_variants_button.setEnabled(True)
+        self.replace_variants_button.setEnabled(True)
+
+    def _apply_generated(self, action: str) -> None:
+        if not self._generated_variants:
+            self._preview()
+        if not self._generated_variants:
+            return
+        if action == "append":
+            replace_project_prompts(
+                self.state,
+                ProjectMode.CLIPART,
+                list(self.state.clipart.prompts) + list(self._generated_variants),
+            )
+        else:
+            replace_project_prompts(
+                self.state,
+                ProjectMode.CLIPART,
+                list(self._generated_variants),
+            )
+        self.card.set_state("default")
+        self.changed()
+
+    def _generate(self) -> None:
+        try:
+            self._preview()
         except PromptGeneratorError as error:
             self.card.set_state("error", str(error))
             return
-        self.card.set_state("default")
-        self.changed()
 
     def _build_paste(self) -> QWidget:
         widget = QWidget()

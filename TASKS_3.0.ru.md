@@ -602,7 +602,7 @@ Verification:
 ## Task 20: Сделать генератор серии понятным и необязательным
 
 Key: `CG3-TASK-020`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-025`, `CG3-FR-026`, `CG3-FR-027`, `CG3-FR-028`,
 `CG3-AC-018`
 

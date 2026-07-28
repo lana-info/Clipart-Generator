@@ -134,7 +134,6 @@ class V3ClipartFlowTests(unittest.TestCase):
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
 
             prompt_page = controller.pages[StepId.PROMPTS]
-            prompt_page.source_combo.setCurrentIndex(1)
             prompt_page.paste_edit.setPlainText("Fox\nBear")
             prompt_page.paste_button.click()
             self.assertEqual(shell.go_next(), StepId.GENERATION)
@@ -161,6 +160,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         shell = AppShell(state)
         controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROMPTS]
+        page.generator_section.set_expanded(True)
         page.theme_edit.setText("Woodland babies")
         page.subjects_edit.setPlainText("Fox\nBear")
         page.count_spin.setValue(3)
@@ -170,7 +170,10 @@ class V3ClipartFlowTests(unittest.TestCase):
         restored = ProjectState.from_dict(state.to_dict())
         self.assertEqual(restored.clipart.prompt_generator.count, 3)
 
-        page.generate_button.click()
+        page.preview_button.click()
+        self.assertTrue(page.add_variants_button.isEnabled())
+        self.assertTrue(page.replace_variants_button.isEnabled())
+        page.replace_variants_button.click()
         self.assertEqual(len(state.clipart.prompts), 3)
         self.assertTrue(all(isinstance(item, PromptEntry) for item in state.clipart.prompts))
         state.clipart.prompts[0].prompt = "Manual edit"

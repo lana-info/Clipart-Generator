@@ -22,6 +22,7 @@ class V3PromptWorkspaceTests(unittest.TestCase):
         state = ProjectState(mode=ProjectMode.CLIPART)
         workspace = PromptWorkspacePage(state, lambda: None)
 
+        self.assertFalse(workspace.generator_section.is_expanded)
         self.assertTrue(workspace.review_section.up_button.isHidden())
         self.assertTrue(workspace.review_section.down_button.isHidden())
         self.assertTrue(hasattr(workspace, "theme_edit"))
