@@ -279,7 +279,12 @@ def _legacy_catalog() -> tuple[
 ]:
     options: dict[str, GenerationModelOption] = {}
     labels = {entry["id"]: entry["label"] for entry in _LEGACY_GENERATION_MODELS}
-    model_types = {entry["id"]: entry["type"] for entry in _LEGACY_GENERATION_MODELS}
+    # Some legacy catalog rows describe the same model twice (text and
+    # reference variants). Keep the first, primary text capability so the
+    # model remains selectable for ordinary clipart prompts.
+    model_types: dict[str, str] = {}
+    for entry in _LEGACY_GENERATION_MODELS:
+        model_types.setdefault(entry["id"], entry["type"])
     for model_id in sorted(_LEGACY_VISIBLE_GENERATION_MODEL_IDS):
         capabilities = _legacy_model_capabilities(model_id)
         options[model_id] = GenerationModelOption(
