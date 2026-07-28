@@ -322,7 +322,12 @@ def generation_model_options(
             allowed = option.model_type in {"image_to_image", "edit"}
             allowed = allowed or option.reference_compatible_text
         else:
-            allowed = option.model_type == "text_to_image"
+            # Some KIE models expose a shared text/reference endpoint and are
+            # catalogued as image-to-image while still supporting plain prompts.
+            allowed = (
+                option.model_type == "text_to_image"
+                or option.reference_compatible_text
+            )
         if allowed:
             result.append(option)
     return tuple(sorted(result, key=lambda option: option.label.casefold()))
@@ -871,7 +876,19 @@ def _capability_summary(option: GenerationModelOption) -> str:
         if option.reference_compatible_text or option.model_type in {"image_to_image", "edit"}
         else "без reference-mode"
     )
-    return f"{option.label} · {reference_mode} · форматы: {ratios} · разрешения: {resolutions}"
+    best_for = {
+        "gpt-image/1.5-text-to-image": "совместимость со старыми проектами",
+        "gpt-image-2": "универсальный клипарт и точное следование промпту",
+        "nano-banana-2": "быстрые иллюстрации и работа с референсами",
+        "nano-banana-pro": "детализированный клипарт и сложные референсы",
+        "qwen-image-2": "стилизованные иллюстрации и вариации",
+        "flux-2/flex-text-to-image": "разные художественные стили",
+        "flux-2/pro-text-to-image": "финальное качество и детализация",
+    }.get(option.model_id, "универсальные изображения")
+    return (
+        f"Лучше всего для: {best_for}. {option.label} · {reference_mode} · "
+        f"форматы: {ratios} · разрешения: {resolutions}"
+    )
 
 
 class PromptReferenceEditorDialog(QDialog):
