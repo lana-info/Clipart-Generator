@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from ai_watermark_backend import WatermarkBackendError, clean_invisible_watermark
 
@@ -31,7 +32,7 @@ def test_backend_accepts_only_created_output(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _: "remove-ai-watermarks")
 
     def fake_run(*args, **kwargs):
-        output.write_bytes(b"clean")
+        Image.new("RGBA", (2, 2), (1, 2, 3, 255)).save(output, format="PNG")
         return subprocess.CompletedProcess(args, 0, "", "")
 
     monkeypatch.setattr("subprocess.run", fake_run)

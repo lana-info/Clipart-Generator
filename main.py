@@ -1121,6 +1121,34 @@ class WorkerThread(QThread):
         current_url = source_url
         local_result = False
 
+        if self.invisible_watermark_cleanup_enabled:
+            current_path = self._ensure_local_path(
+                current_path, current_url, raw_dir, idx, prefix, "invisible_source"
+            )
+            invisible_path = os.path.join(raw_dir, f"{prefix}_invisible_{idx:03d}_{self.run_stamp}.png")
+            try:
+                self.progress.emit("  Экспериментальная очистка невидимого watermark")
+                clean_invisible_watermark(Path(current_path), Path(invisible_path))
+                current_path, current_url, local_result = invisible_path, None, True
+            except WatermarkBackendError as error:
+                self.progress.emit(f"  Экспериментальный этап пропущен: {error}")
+            self._ensure_running()
+
+        if self._metadata_cleanup_requested():
+            current_path = self._ensure_local_path(
+                current_path, current_url, raw_dir, idx, prefix, "metadata_source"
+            )
+            metadata_path = os.path.join(raw_dir, f"{prefix}_metadata_{idx:03d}_{self.run_stamp}.png")
+            try:
+                cleanup_image_metadata(
+                    current_path, metadata_path, self.metadata_cleanup_options
+                )
+                current_path, current_url, local_result = metadata_path, None, True
+            except MetadataCleanupError as error:
+                self.progress.emit(f"  Очистка файла: ошибка — {error}")
+                raise
+            self._ensure_running()
+
         if self.visible_mark_cleanup_enabled:
             current_path = self._ensure_local_path(
                 current_path,
@@ -1714,26 +1742,8 @@ class WorkerThread(QThread):
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
         self._ensure_running()
-        invisible_path = None
-        if self.invisible_watermark_cleanup_enabled:
-            with tempfile.NamedTemporaryFile(
-                mode="wb", prefix=".clipart-invisible-", suffix=".png", delete=False
-            ) as invisible_file:
-                invisible_path = invisible_file.name
-            os.remove(invisible_path)
-            try:
-                self.progress.emit("  Экспериментальная очистка невидимого watermark")
-                clean_invisible_watermark(Path(stage_path), Path(invisible_path))
-                stage_path = invisible_path
-            except WatermarkBackendError as error:
-                self.progress.emit(f"  Экспериментальный этап пропущен: {error}")
-                invisible_path = None
         if not self._metadata_cleanup_requested():
-            try:
-                self._replace_output_if_running(stage_path, output_path)
-            finally:
-                if invisible_path and os.path.exists(invisible_path):
-                    os.remove(invisible_path)
+            self._replace_output_if_running(stage_path, output_path)
             return None
 
         publish_path = None
@@ -1770,11 +1780,6 @@ class WorkerThread(QThread):
             if publish_path and os.path.exists(publish_path):
                 try:
                     os.remove(publish_path)
-                except OSError:
-                    pass
-            if invisible_path and os.path.exists(invisible_path):
-                try:
-                    os.remove(invisible_path)
                 except OSError:
                     pass
 

@@ -46,6 +46,7 @@ GEMINI_HELP_URL = (
 )
 OPENAI_VERIFY_URL = "https://openai.com/research/verify/"
 ZEROGPT_IMAGE_DETECTOR_URL = "https://www.zerogpt.com/ai-image-detector"
+SYNTHID_OFFICIAL_URL = "https://deepmind.google/models/synthid/"
 MAX_EVIDENCE_REPORT_BYTES = 2 * 1024 * 1024
 
 _RECORDED_STATUSES = (
@@ -514,6 +515,12 @@ class EvidenceCenterPage(QScrollArea):
             "Gemini / SynthID",
             ZEROGPT_IMAGE_DETECTOR_URL,
             "synthid",
+            self.pixel_card.content_layout,
+        )
+        self.synthid_official_status, self.synthid_official_stage = self._handoff_row(
+            "Официальная информация SynthID",
+            SYNTHID_OFFICIAL_URL,
+            "synthid_official",
             self.pixel_card.content_layout,
         )
         self.scope_warning = QLabel(

@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from PIL import Image
+
 MAX_OUTPUT_BYTES = 128 * 1024 * 1024
 
 class WatermarkBackendError(RuntimeError):
@@ -43,9 +45,8 @@ def clean_invisible_watermark(
             cwd=str(output.parent),
             env=safe_env,
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             timeout=timeout_seconds,
             check=False,
             shell=False,
@@ -60,4 +61,13 @@ def clean_invisible_watermark(
         raise WatermarkBackendError("Экспериментальный backend не создал результат")
     if output.stat().st_size > MAX_OUTPUT_BYTES:
         raise WatermarkBackendError("Экспериментальный backend создал слишком большой файл")
+    try:
+        with Image.open(output) as image:
+            image.verify()
+            if image.width * image.height > 100_000_000:
+                raise WatermarkBackendError("Экспериментальный backend создал слишком большое изображение")
+    except WatermarkBackendError:
+        raise
+    except Exception as error:
+        raise WatermarkBackendError("Экспериментальный backend создал недопустимое изображение") from error
     return output
