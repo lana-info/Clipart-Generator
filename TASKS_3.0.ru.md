@@ -323,7 +323,7 @@ Notes:
 ## Task 11: Выполнить M1 pilot reverse-SynthID
 
 Key: `CG3-TASK-011`
-Status: In Progress
+Status: Blocked — внешнее подтверждение Google не доступно без ручной проверки/доступа к SynthID Detector
 Requirements: `CG3-RS-001`, `CG3-RS-002`, `CG3-RS-003`, `CG3-RS-004`
 
 Goal:
@@ -357,7 +357,7 @@ Notes:
 ## Task 12: Выполнить M2 pilot CtrlRegen
 
 Key: `CG3-TASK-012`
-Status: In Progress
+Status: Blocked — локально нет CUDA; cloud-run требует согласования провайдера, privacy и бюджета
 Requirements: `CG3-RS-001`, `CG3-RS-002`, `CG3-RS-003`, `CG3-RS-004`
 
 Goal:
@@ -385,7 +385,7 @@ Notes:
 ## Task 13: Выполнить M3 pilot Qwen/Canny
 
 Key: `CG3-TASK-013`
-Status: In Progress
+Status: Blocked — локально нет CUDA; cloud-run требует согласования провайдера, privacy и бюджета
 Requirements: `CG3-RS-001`, `CG3-RS-002`, `CG3-RS-003`, `CG3-RS-004`
 
 Goal:
