@@ -18,22 +18,23 @@ from PyQt6.QtWidgets import (
 
 @dataclass(frozen=True)
 class V3DesignTokens:
-    canvas: str = "#f7f6f2"
-    surface: str = "#ffffff"
-    surface_muted: str = "#f3f4f6"
-    text: str = "#17212b"
-    text_muted: str = "#5f6b76"
-    border: str = "#d7dce1"
-    accent: str = "#0f9f90"
-    accent_hover: str = "#0b8579"
-    accent_soft: str = "#e5f7f4"
-    focus: str = "#2563eb"
-    warning: str = "#a15c00"
-    warning_soft: str = "#fff7df"
-    error: str = "#b42318"
-    error_soft: str = "#fff0ee"
-    disabled: str = "#8a949e"
-    disabled_soft: str = "#eceff1"
+    # Default dark theme tuned for strong contrast on Windows default dark mode.
+    canvas: str = "#101827"
+    surface: str = "#1f2937"
+    surface_muted: str = "#273549"
+    text: str = "#e5eef7"
+    text_muted: str = "#92a2b3"
+    border: str = "#304054"
+    accent: str = "#2dd4bf"
+    accent_hover: str = "#14b8a6"
+    accent_soft: str = "#12363f"
+    focus: str = "#60a5fa"
+    warning: str = "#f59e0b"
+    warning_soft: str = "#4a2f0f"
+    error: str = "#f87171"
+    error_soft: str = "#441d1d"
+    disabled: str = "#7c8a9a"
+    disabled_soft: str = "#253242"
 
     font_family: str = "Segoe UI"
     font_size_body: int = 14
@@ -79,6 +80,12 @@ QWidget[v3Root="true"] {{
     color: {tokens.text};
     font-family: "{tokens.font_family}";
     font-size: {tokens.font_size_body}px;
+}}
+QWidget {{
+    color: {tokens.text};
+}}
+QMainWindow {{
+    background: {tokens.canvas};
 }}
 QFrame[v3Card="true"] {{
     background: {tokens.surface};
@@ -136,6 +143,128 @@ QLabel[v3Selection="true"] {{
     font-weight: {tokens.font_weight_bold};
     background: transparent;
     border: none;
+}}
+QLabel {{
+    color: {tokens.text};
+    background: transparent;
+    border: none;
+}}
+QGroupBox {{
+    color: {tokens.text};
+    background: transparent;
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_control}px;
+    padding-top: 1.2em;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    left: {tokens.space_3}px;
+    padding: 0 {tokens.space_1}px;
+    color: {tokens.text};
+}}
+QLineEdit,
+QTextEdit,
+QPlainTextEdit,
+QComboBox,
+QDateEdit,
+QSpinBox,
+QDoubleSpinBox,
+QAbstractSpinBox {{
+    background: {tokens.surface};
+    color: {tokens.text};
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_control}px;
+    padding: {tokens.space_1}px {tokens.space_2}px;
+}}
+QLineEdit:focus,
+QTextEdit:focus,
+QPlainTextEdit:focus,
+QComboBox:focus,
+QDateEdit:focus,
+QSpinBox:focus,
+QDoubleSpinBox:focus,
+QAbstractSpinBox:focus {{
+    border-color: {tokens.accent};
+}}
+QLineEdit:disabled,
+QTextEdit:disabled,
+QPlainTextEdit:disabled,
+QComboBox:disabled,
+QDateEdit:disabled,
+QSpinBox:disabled,
+QDoubleSpinBox:disabled,
+QAbstractSpinBox:disabled {{
+    background: {tokens.surface_muted};
+    color: {tokens.disabled};
+}}
+QComboBox QAbstractItemView {{
+    background: {tokens.surface};
+    color: {tokens.text};
+    border: 1px solid {tokens.border};
+    selection-background-color: {tokens.accent};
+    selection-color: white;
+}}
+QComboBox::drop-down {{
+    border: 0;
+}}
+QComboBox::down-arrow {{
+    width: 10px;
+    height: 10px;
+}}
+QTableWidget,
+QListWidget,
+QListView {{
+    background: {tokens.surface};
+    color: {tokens.text};
+    border: 1px solid {tokens.border};
+    alternate-background-color: {tokens.surface_muted};
+    selection-background-color: {tokens.accent_soft};
+    selection-color: {tokens.text};
+}}
+QTableWidget::item,
+QListWidget::item {{
+    color: {tokens.text};
+}}
+QTableWidget::item:selected,
+QListWidget::item:selected {{
+    background: {tokens.accent};
+    color: white;
+}}
+QHeaderView::section {{
+    color: {tokens.text};
+    background: {tokens.surface_muted};
+    border: 1px solid {tokens.border};
+    padding: 4px;
+}}
+QCheckBox,
+QRadioButton {{
+    color: {tokens.text};
+}}
+QCheckBox::indicator,
+QRadioButton::indicator {{
+    width: 14px;
+    height: 14px;
+    border: 1px solid {tokens.border};
+    background: {tokens.surface};
+}}
+QCheckBox::indicator:checked,
+QRadioButton::indicator:checked {{
+    background: {tokens.accent};
+}}
+QScrollBar:vertical,
+QScrollBar:horizontal {{
+    background: {tokens.surface_muted};
+    width: 10px;
+    height: 10px;
+}}
+QScrollBar::handle:vertical,
+QScrollBar::handle:horizontal {{
+    background: {tokens.border};
+    border-radius: 5px;
+}}
+QScrollBar::handle:hover:vertical,
+QScrollBar::handle:hover:horizontal {{
+    background: {tokens.text_muted};
 }}
 QPushButton[v3Button="true"] {{
     min-height: {tokens.control_height}px;
