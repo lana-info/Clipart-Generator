@@ -411,7 +411,7 @@ Notes:
 ## Task 14: Принять SynthID architecture decision
 
 Key: `CG3-TASK-014`
-Status: Todo
+Status: Done
 Requirements: `CG3-RS-005`, `CG3-FR-062`, `CG3-FR-063`, `CG3-FR-064`,
 `CG3-AC-019`
 
@@ -438,6 +438,9 @@ Acceptance:
 Verification:
 - [ ] Независимая проверка отчёта и соответствия
   `PIXEL_WATERMARK_STATUS_CONTRACT.md`.
+
+Decision:
+`research_only`. Подробности: `docs/decisions/ADR-001-synthid-architecture.md`.
 
 ## Task 15: Регрессия, миграция и release readiness 3.0
 
