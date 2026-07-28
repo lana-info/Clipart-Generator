@@ -1121,19 +1121,6 @@ class WorkerThread(QThread):
         current_url = source_url
         local_result = False
 
-        if self.invisible_watermark_cleanup_enabled:
-            current_path = self._ensure_local_path(
-                current_path, current_url, raw_dir, idx, prefix, "invisible_source"
-            )
-            invisible_path = os.path.join(raw_dir, f"{prefix}_invisible_{idx:03d}_{self.run_stamp}.png")
-            try:
-                self.progress.emit("  Экспериментальная очистка невидимого watermark")
-                clean_invisible_watermark(Path(current_path), Path(invisible_path))
-                current_path, current_url, local_result = invisible_path, None, True
-            except WatermarkBackendError as error:
-                self.progress.emit(f"  Экспериментальный этап пропущен: {error}")
-            self._ensure_running()
-
         if self._metadata_cleanup_requested():
             current_path = self._ensure_local_path(
                 current_path, current_url, raw_dir, idx, prefix, "metadata_source"
@@ -1168,6 +1155,19 @@ class WorkerThread(QThread):
                 current_path = visible_mark_path
                 current_url = None
                 local_result = True
+            self._ensure_running()
+
+        if self.invisible_watermark_cleanup_enabled:
+            current_path = self._ensure_local_path(
+                current_path, current_url, raw_dir, idx, prefix, "invisible_source"
+            )
+            invisible_path = os.path.join(raw_dir, f"{prefix}_invisible_{idx:03d}_{self.run_stamp}.png")
+            try:
+                self.progress.emit("  Экспериментальная очистка невидимого watermark")
+                clean_invisible_watermark(Path(current_path), Path(invisible_path))
+                current_path, current_url, local_result = invisible_path, None, True
+            except WatermarkBackendError as error:
+                self.progress.emit(f"  Экспериментальный этап пропущен: {error}")
             self._ensure_running()
 
         if self.upscale:
