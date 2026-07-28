@@ -1,5 +1,7 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -124,6 +126,37 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.close()
         view.deleteLater()
 
+    def test_recent_project_draft_is_restored_from_disk(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-draft-") as temp:
+            draft_path = Path(temp) / "project_state.json"
+            view = V3ApplicationView(draft_path=draft_path)
+            view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+            state = view.project_state
+            state.common.work_dir = temp
+            state.clipart.prompts.append(PromptEntry("restored clipart prompt"))
+            state.pinterest.prompts.append(PromptEntry("restored pinterest prompt"))
+            view.shell.mark_dirty()
+            view.close()
+            view.deleteLater()
+
+            restored = V3ApplicationView(draft_path=draft_path)
+            self.assertFalse(restored.mode_selection.recent_project_card.isHidden())
+            self.assertTrue(
+                restored.mode_selection.continue_button.accessibleDescription()
+            )
+            restored.mode_selection.continue_button.click()
+            restored_state = restored.project_state
+            self.assertEqual(
+                restored_state.clipart.prompts[0].prompt,
+                "restored clipart prompt",
+            )
+            self.assertEqual(
+                restored_state.pinterest.prompts[0].prompt,
+                "restored pinterest prompt",
+            )
+            restored.close()
+            restored.deleteLater()
+
     def test_continue_is_unavailable_without_a_recent_project(self):
         view = V3ApplicationView()
         self.assertTrue(view.mode_selection.recent_project_card.isHidden())
@@ -132,7 +165,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.close()
         view.deleteLater()
 
-    def test_mode_switcher_reuses_project_and_shows_unsaved_confirmation(self):
+    def test_mode_switcher_reuses_project_and_switches_immediately(self):
         view = V3ApplicationView()
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
         state = view.project_state
@@ -145,24 +178,14 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertTrue(view.mode_selection.recent_project_card.isHidden())
         self.assertFalse(view.mode_selection.cancel_button.isHidden())
 
-        view.mode_selection.cancel_button.click()
-        self.assertIs(view.stack.currentWidget(), view.shell)
-        self.assertEqual(state.mode, ProjectMode.CLIPART)
-
-        view.shell.change_mode_button.click()
-        self.assertIs(view.stack.currentWidget(), view.mode_selection)
-
         view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
         self.assertIs(view.stack.currentWidget(), view.shell)
-        self.assertEqual(state.mode, ProjectMode.CLIPART)
-        self.assertFalse(view.shell.mode_switch_banner.isHidden())
-
-        view.shell.continue_mode_button.click()
         self.assertEqual(state.mode, ProjectMode.PINTEREST)
         self.assertEqual(
             state.clipart.prompts[0].prompt,
             "kept clipart prompt",
         )
+        self.assertTrue(view.shell.mode_switch_banner.isHidden())
         view.close()
         view.deleteLater()
 

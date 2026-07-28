@@ -135,29 +135,12 @@ class V3WizardNavigationTests(unittest.TestCase):
         shell.close()
         shell.deleteLater()
 
-    def test_unsaved_mode_switch_requires_confirmation_and_preserves_data(self):
+    def test_mode_switch_applies_immediately_and_preserves_data(self):
         state = complete_state(ProjectMode.CLIPART)
         shell = AppShell(state)
         shell.mark_dirty()
-        requests = []
-        shell.unsaved_mode_switch_requested.connect(
-            lambda old, new: requests.append((old, new))
-        )
 
-        self.assertFalse(shell.request_mode_switch(ProjectMode.PINTEREST))
-        self.assertEqual(
-            requests,
-            [(ProjectMode.CLIPART.value, ProjectMode.PINTEREST.value)],
-        )
-        self.assertEqual(state.mode, ProjectMode.CLIPART)
-        self.assertFalse(shell.mode_switch_banner.isHidden())
-        shell.stay_mode_button.click()
-        self.assertEqual(state.mode, ProjectMode.CLIPART)
-        self.assertTrue(shell.mode_switch_banner.isHidden())
-
-        self.assertFalse(shell.request_mode_switch(ProjectMode.PINTEREST))
-        self.assertFalse(shell.mode_switch_banner.isHidden())
-        shell.continue_mode_button.click()
+        self.assertTrue(shell.request_mode_switch(ProjectMode.PINTEREST))
         self.assertEqual(state.mode, ProjectMode.PINTEREST)
         self.assertEqual(state.clipart.prompts[0].prompt, "blue whale")
         self.assertTrue(shell.is_dirty)
@@ -251,9 +234,9 @@ class V3WizardNavigationTests(unittest.TestCase):
         self.assertLess(shell.next_button.width(), 200)
 
         shell.mark_dirty()
-        shell.request_mode_switch(ProjectMode.CLIPART)
+        self.assertTrue(shell.request_mode_switch(ProjectMode.CLIPART))
         self.app.processEvents()
-        self.assertFalse(shell.mode_switch_banner.isHidden())
+        self.assertTrue(shell.mode_switch_banner.isHidden())
         self.assertLessEqual(
             shell.mode_switch_banner.geometry().bottom(),
             shell.contentsRect().bottom(),

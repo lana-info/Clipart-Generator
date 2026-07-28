@@ -104,6 +104,9 @@ class V3ClipartFlowTests(unittest.TestCase):
         controller = view.shell.clipart_flow_controller
         self.assertEqual(set(controller.pages), set(view.shell.state.route))
         self.assertIsInstance(controller.pages[StepId.PROJECT], ClipartProjectPage)
+        self.assertFalse(
+            hasattr(controller.pages[StepId.PROJECT], "project_name_edit")
+        )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
             ClipartPromptInputPage,
@@ -131,7 +134,6 @@ class V3ClipartFlowTests(unittest.TestCase):
                 worker_factory=WorkerFactory(),
             )
             project_page = controller.pages[StepId.PROJECT]
-            project_page.project_name_edit.setText("Forest pack")
             project_page.work_dir_edit.setText(temp)
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
 
@@ -147,7 +149,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
             self.assertEqual(shell.go_back(), StepId.PROJECT)
 
-            self.assertEqual(state.common.project_name, "Forest pack")
+            self.assertEqual(state.common.project_name, "")
             self.assertEqual(state.common.work_dir, temp)
             self.assertEqual(
                 [entry.prompt for entry in state.clipart.prompts],

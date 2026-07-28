@@ -1,10 +1,19 @@
 ﻿from __future__ import annotations
 
 import sys
+from pathlib import Path
 
+from PyQt6.QtCore import QStandardPaths
 from PyQt6.QtWidgets import QApplication
 
 from v3_mode_selection import V3ApplicationView
+
+
+def _draft_path() -> Path:
+    app_data = QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppDataLocation
+    )
+    return Path(app_data) / "project_state.json"
 
 
 def main() -> int:
@@ -12,7 +21,7 @@ def main() -> int:
     app.setApplicationName("Clipart Generator")
     app.setApplicationDisplayName("Clipart Generator 3.0")
 
-    window = V3ApplicationView()
+    window = V3ApplicationView(draft_path=_draft_path())
     window.setWindowTitle("Clipart Generator 3.0")
     window.resize(1120, 780)
     window.show()

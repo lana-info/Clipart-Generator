@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from PyQt6.QtCore import pyqtSignal
@@ -25,6 +26,7 @@ from v3_components import (
     apply_v3_theme,
 )
 from v3_project_state import ProjectMode, ProjectState
+from v3_project_state import ProjectStateError, load_project_draft, save_project_draft
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
 
 
@@ -147,7 +149,7 @@ class ModeSelectionScreen(QWidget):
         recent_layout.addWidget(self.recent_project_label, 1)
 
         self.continue_button = V3Button(
-            "Продолжить последний проект",
+            "Продолжить черновик",
             ButtonVariant.SECONDARY,
         )
         self.continue_button.clicked.connect(
@@ -158,7 +160,7 @@ class ModeSelectionScreen(QWidget):
         layout.addWidget(self.recent_project_card)
 
         self.cancel_button = V3Button(
-            "Вернуться к проекту",
+            "Вернуться",
             ButtonVariant.SECONDARY,
         )
         self.cancel_button.clicked.connect(self.cancel_requested.emit)
@@ -185,7 +187,7 @@ class ModeSelectionScreen(QWidget):
 
         project_name = state.common.project_name.strip() or "Без названия"
         summary = (
-            f"Последний проект: {project_name} · "
+            f"Последний черновик: {project_name} · "
             f"{MODE_TITLES[state.mode]} · "
             f"шаг «{STEP_TITLES[state.current_step]}»"
         )
@@ -212,6 +214,7 @@ class V3ApplicationView(QWidget):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
+        draft_path: str | Path | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
@@ -219,6 +222,7 @@ class V3ApplicationView(QWidget):
         self._recent_project: ProjectState | None = None
         self._runtime_settings_provider = runtime_settings_provider
         self._worker_factory = worker_factory
+        self._draft_path = Path(draft_path) if draft_path is not None else None
         self.shell: AppShell | None = None
 
         self.setMinimumSize(980, 700)
@@ -237,6 +241,8 @@ class V3ApplicationView(QWidget):
         self.mode_selection.cancel_requested.connect(self.cancel_mode_switch)
         self.stack.addWidget(self.mode_selection)
 
+        if recent_project is None and self._draft_path is not None:
+            recent_project = self._load_recent_project()
         if recent_project is not None:
             self.set_recent_project(recent_project)
         self.show_new_project()
@@ -310,9 +316,29 @@ class V3ApplicationView(QWidget):
         self.project_continued.emit(state.mode.value)
         return True
 
+    def _load_recent_project(self) -> ProjectState | None:
+        path = self._draft_path
+        if path is None or not path.is_file():
+            return None
+        try:
+            return load_project_draft(path)
+        except ProjectStateError:
+            return None
+
+    def _save_draft(self) -> None:
+        path = self._draft_path
+        if path is None or self.shell is None:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            save_project_draft(self.shell.state, path)
+        except ProjectStateError:
+            return
+
     def _replace_shell(self, state: ProjectState) -> None:
         previous = self.shell
         if previous is not None:
+            previous.state_changed.disconnect(self._save_draft)
             self.stack.removeWidget(previous)
             previous.deleteLater()
 
@@ -336,8 +362,10 @@ class V3ApplicationView(QWidget):
             runtime_settings_provider=self._runtime_settings_provider,
             worker_factory=self._worker_factory,
         )
+        shell.state_changed.connect(self._save_draft)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         self.shell = shell
         self.stack.addWidget(shell)
         self.stack.setCurrentWidget(shell)
         self.screen_changed.emit("wizard")
+        self._save_draft()

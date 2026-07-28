@@ -480,7 +480,7 @@ Notes:
 ## Task 16: Убрать сущность «проект» из пользовательских маршрутов
 
 Key: `CG3-TASK-016`
-Status: Ready — first safe task
+Status: Done
 Requirements: `CG3-FR-001`, `CG3-FR-002`, `CG3-AR-002`, `CG3-AR-010`,
 `CG3-FR-021`, `CG3-AC-001`, `CG3-AC-010`, `CG3-AC-020`
 
@@ -498,13 +498,13 @@ Steps:
 - Обновить тесты состояния, навигации и миграции.
 
 Acceptance:
-- [ ] Новый маршрут не показывает и не требует название проекта.
-- [ ] Переключение режима происходит сразу и сохраняет данные обоих режимов.
-- [ ] Старый draft с `project_name` открывается без ошибки.
-- [ ] Перезапуск приложения восстанавливает независимые prompt drafts режимов.
+- [x] Новый маршрут не показывает и не требует название проекта.
+- [x] Переключение режима происходит сразу и сохраняет данные обоих режимов.
+- [x] Старый draft с `project_name` открывается без ошибки.
+- [x] Перезапуск приложения восстанавливает независимые prompt drafts режимов.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_project_state tests.test_v3_mode_selection tests.test_v3_wizard_navigation -v`
+- [x] `python -m unittest tests.test_v3_project_state tests.test_v3_mode_selection tests.test_v3_wizard_navigation -v`
 
 Notes:
 - Вероятные файлы: `v3_project_state.py`, `v3_wizard.py`,

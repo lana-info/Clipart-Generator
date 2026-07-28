@@ -35,7 +35,7 @@ MODE_TITLES: dict[ProjectMode, str] = {
 }
 
 STEP_TITLES: dict[StepId, str] = {
-    StepId.PROJECT: "Проект",
+    StepId.PROJECT: "Рабочая папка",
     StepId.PROMPTS: "Промпты",
     StepId.PROMPT_REVIEW: "Проверка промптов",
     StepId.GENERATION: "Генерация",
@@ -50,7 +50,7 @@ STEP_TITLES: dict[StepId, str] = {
 }
 
 STEP_DESCRIPTIONS: dict[StepId, str] = {
-    StepId.PROJECT: "Выберите рабочую папку и основные параметры проекта.",
+    StepId.PROJECT: "Выберите рабочую папку для сохранения результатов.",
     StepId.PROMPTS: "Введите, вставьте, импортируйте или создайте список промптов.",
     StepId.PROMPT_REVIEW: "Проверьте и отредактируйте итоговую серию промптов.",
     StepId.GENERATION: "Выберите модель, пропорции, разрешение и варианты.",
@@ -112,6 +112,7 @@ class AppShell(QWidget):
     step_changed = pyqtSignal(str, str)
     mode_changed = pyqtSignal(str)
     dirty_changed = pyqtSignal(bool)
+    state_changed = pyqtSignal()
     validation_failed = pyqtSignal(str, object)
     unsaved_mode_switch_requested = pyqtSignal(str, str)
     mode_picker_requested = pyqtSignal()
@@ -414,6 +415,7 @@ class AppShell(QWidget):
         if not self._dirty:
             self._dirty = True
             self.dirty_changed.emit(True)
+        self.state_changed.emit()
         self.refresh()
 
     def mark_saved(self) -> None:
@@ -528,22 +530,8 @@ class AppShell(QWidget):
             self._pending_mode = None
             self.mode_switch_banner.hide()
             return True
-        if self._dirty:
-            self._pending_mode = normalized
-            self.mode_switch_label.setText(
-                "⚠ Есть несохранённые изменения. "
-                f"Перейти в режим «{MODE_TITLES[normalized]}»? "
-                "Введённые данные останутся в проекте."
-            )
-            self.mode_switch_label.setAccessibleName(
-                self.mode_switch_label.text()
-            )
-            self.mode_switch_banner.show()
-            self.unsaved_mode_switch_requested.emit(
-                self.state.mode.value,
-                normalized.value,
-            )
-            return False
+        self._pending_mode = None
+        self.mode_switch_banner.hide()
         self._switch_mode(normalized)
         return True
 

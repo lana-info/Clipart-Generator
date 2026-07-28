@@ -640,17 +640,13 @@ class ClipartProjectPage(_ScrollableStepPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__(
-            "Проект",
-            "Назовите проект и выберите существующую папку для записи.",
+            "Рабочая папка",
+            "Выберите папку для записи результатов.",
             tokens=tokens,
         )
         self.state = state
         self.changed = changed
         form = QFormLayout()
-        self.project_name_edit = QLineEdit(state.common.project_name)
-        self.project_name_edit.setAccessibleName("Название проекта")
-        form.addRow("Название проекта", self.project_name_edit)
-
         work_widget = QWidget()
         work_layout = QHBoxLayout(work_widget)
         work_layout.setContentsMargins(0, 0, 0, 0)
@@ -670,7 +666,6 @@ class ClipartProjectPage(_ScrollableStepPage):
         self.path_status.setProperty("v3Small", True)
         self.add_widget(self.path_status)
 
-        self.project_name_edit.textChanged.connect(self._sync)
         self.work_dir_edit.textChanged.connect(self._sync)
         self._refresh_status()
 
@@ -684,7 +679,6 @@ class ClipartProjectPage(_ScrollableStepPage):
             self.work_dir_edit.setText(selected)
 
     def _sync(self) -> None:
-        self.state.common.project_name = self.project_name_edit.text().strip()[:200]
         self.state.common.work_dir = self.work_dir_edit.text().strip()
         self.state.common.output_dir = (
             str(Path(self.state.common.work_dir) / "output")

@@ -310,7 +310,6 @@ class V3PinterestFlowTests(unittest.TestCase):
                 worker_factory=WorkerFactory(),
             )
             project = controller.pages[StepId.PROJECT]
-            project.project_name_edit.setText("Pins")
             project.work_dir_edit.setText(temp)
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
             prompts = controller.pages[StepId.PROMPTS]
@@ -325,7 +324,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             self.assertEqual(shell.go_back(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
 
-        self.assertEqual(state.common.project_name, "Pins")
+        self.assertEqual(state.common.project_name, "")
         self.assertEqual(
             [entry.prompt for entry in state.pinterest.prompts],
             ["Kitchen idea", "Garden idea"],
