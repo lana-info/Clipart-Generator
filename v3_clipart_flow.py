@@ -314,6 +314,7 @@ def _legacy_catalog() -> tuple[
 def generation_model_options(
     *,
     references: bool,
+    include_shared_reference_text: bool = False,
 ) -> tuple[GenerationModelOption, ...]:
     options, _ = _legacy_catalog()
     result: list[GenerationModelOption] = []
@@ -324,9 +325,8 @@ def generation_model_options(
         else:
             # Some KIE models expose a shared text/reference endpoint and are
             # catalogued as image-to-image while still supporting plain prompts.
-            allowed = (
-                option.model_type == "text_to_image"
-                or option.reference_compatible_text
+            allowed = option.model_type == "text_to_image" or (
+                include_shared_reference_text and option.reference_compatible_text
             )
         if allowed:
             result.append(option)
@@ -1762,6 +1762,7 @@ class PromptWorkspacePage(_ScrollableStepPage):
 
 
 class ClipartGenerationPage(_ScrollableStepPage):
+    allow_shared_text_models = True
     def __init__(
         self,
         state: ProjectState,
@@ -1776,7 +1777,10 @@ class ClipartGenerationPage(_ScrollableStepPage):
         )
         self.state = state
         self.changed = changed
-        self.text_options = generation_model_options(references=False)
+        self.text_options = generation_model_options(
+            references=False,
+            include_shared_reference_text=self.allow_shared_text_models,
+        )
         self.reference_options = generation_model_options(references=True)
         form = QFormLayout()
         self.model_combo = QComboBox()

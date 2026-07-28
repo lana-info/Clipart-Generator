@@ -155,6 +155,8 @@ class PinterestPromptInputPage(ClipartPromptInputPage):
 
 
 class PinterestFormatModelPage(ClipartGenerationPage):
+    allow_shared_text_models = False
+
     def __init__(
         self,
         state: ProjectState,
