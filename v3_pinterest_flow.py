@@ -16,6 +16,7 @@ from v3_clipart_flow import (
     ClipartPromptReviewPage,
     ClipartReviewRunPage,
     ClipartRunRequest,
+    PromptWorkspacePage,
     V3DesignTokens,
     _legacy_worker_factory,
     _read_legacy_runtime_settings,
@@ -327,15 +328,11 @@ class PinterestFlowController(QObject):
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.PROMPTS: PinterestPromptInputPage(
+            StepId.PROMPTS: PromptWorkspacePage(
                 self.adapter_state,
                 changed,
                 tokens=self.shell.tokens,
-            ),
-            StepId.PROMPT_REVIEW: ClipartPromptReviewPage(
-                self.adapter_state,
-                changed,
-                tokens=self.shell.tokens,
+                input_page_cls=PinterestPromptInputPage,
             ),
             StepId.PIN_FORMAT_MODEL: PinterestFormatModelPage(
                 self.adapter_state,

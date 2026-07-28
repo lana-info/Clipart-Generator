@@ -32,7 +32,6 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
-                StepId.PROMPT_REVIEW,
                 StepId.GENERATION,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
@@ -44,7 +43,6 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
-                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
@@ -71,7 +69,7 @@ class ProjectRoutesTests(unittest.TestCase):
         state.common.work_dir = "D:/work"
         self.assertEqual(state.next_step(), StepId.PROMPTS)
         state.clipart.prompts.append(PromptEntry("blue whale"))
-        self.assertEqual(state.next_step(), StepId.PROMPT_REVIEW)
+        self.assertEqual(state.next_step(), StepId.GENERATION)
         state.clipart.prompts[0].prompt = "small blue whale"
         self.assertEqual(state.previous_step(), StepId.PROMPTS)
         self.assertEqual(state.clipart.prompts[0].prompt, "small blue whale")
@@ -137,7 +135,7 @@ class ProjectSerializationTests(unittest.TestCase):
             ),
             current_step_by_mode={
                 ProjectMode.CLIPART: StepId.GENERATION,
-                ProjectMode.PINTEREST: StepId.PROMPT_REVIEW,
+                ProjectMode.PINTEREST: StepId.PROMPTS,
                 ProjectMode.PROCESSING: StepId.PIPELINE,
             },
         )
@@ -146,7 +144,7 @@ class ProjectSerializationTests(unittest.TestCase):
         source = self.complete_state()
         restored = ProjectState.from_dict(source.to_dict())
         self.assertEqual(restored.to_dict(), source.to_dict())
-        self.assertEqual(restored.current_step, StepId.PROMPT_REVIEW)
+        self.assertEqual(restored.current_step, StepId.PROMPTS)
 
     def test_atomic_draft_save_and_load(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-draft-") as temp_dir:

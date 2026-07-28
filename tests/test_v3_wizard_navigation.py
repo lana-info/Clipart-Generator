@@ -107,16 +107,15 @@ class V3WizardNavigationTests(unittest.TestCase):
         state = complete_state(ProjectMode.PINTEREST)
         first_shell = AppShell(state)
         first_shell.go_next()
-        first_shell.go_next()
-        self.assertEqual(state.current_step, StepId.PROMPT_REVIEW)
+        self.assertEqual(state.current_step, StepId.PROMPTS)
         first_shell.close()
         first_shell.deleteLater()
 
         restored_shell = AppShell(state)
-        self.assertEqual(restored_shell.state.current_step, StepId.PROMPT_REVIEW)
+        self.assertEqual(restored_shell.state.current_step, StepId.PROMPTS)
         self.assertIn(
-            STEP_TITLES[StepId.PROMPT_REVIEW],
-            restored_shell.step_labels[2].text(),
+            STEP_TITLES[StepId.PROMPTS],
+            restored_shell.step_labels[1].text(),
         )
         self.assertIs(restored_shell.page_stack.currentWidget(), restored_shell.current_page)
         restored_shell.close()

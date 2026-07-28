@@ -13,6 +13,7 @@ from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -932,7 +933,12 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.table.setHorizontalHeaderLabels(["Промпт", "Референсы через |"])
         self.table.setAccessibleName("Таблица промптов")
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setDragEnabled(True)
+        self.table.setAcceptDrops(True)
+        self.table.setDropIndicatorShown(True)
+        self.table.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.table.itemChanged.connect(self._table_changed)
+        self.table.model().rowsMoved.connect(self._rows_moved)
         self.add_widget(self.table)
 
         actions = QWidget()
@@ -963,6 +969,9 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.up_button.clicked.connect(lambda: self._move(-1))
         self.down_button.clicked.connect(lambda: self._move(1))
         self.refresh_from_state()
+
+    def _rows_moved(self, *_: Any) -> None:
+        self._table_changed(None)
 
     def refresh_from_state(self) -> None:
         self._updating = True
@@ -1083,6 +1092,56 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         if any(not entry.prompt.strip() for entry in self.state.clipart.prompts):
             return ("prompt_empty",)
         return ()
+
+
+class PromptWorkspacePage(_ScrollableStepPage):
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+        input_page_cls: type[ClipartPromptInputPage] = ClipartPromptInputPage,
+        review_page_cls: type[ClipartPromptReviewPage] = ClipartPromptReviewPage,
+    ) -> None:
+        super().__init__(
+            "Промпты",
+            "Создавайте, импортируйте и редактируйте промпты в одном месте.",
+            tokens=tokens,
+        )
+        self.state = state
+        self._external_changed = changed
+        self.input_section = input_page_cls(
+            state,
+            self._on_section_changed,
+            tokens=tokens,
+        )
+        self.review_section = review_page_cls(
+            state,
+            self._on_section_changed,
+            tokens=tokens,
+        )
+        self.review_section.up_button.hide()
+        self.review_section.down_button.hide()
+        self.add_widget(self.input_section)
+        self.add_widget(self.review_section)
+
+    def _on_section_changed(self) -> None:
+        self.review_section.refresh_from_state()
+        self._external_changed()
+
+    def __getattr__(self, name: str) -> Any:
+        if hasattr(self.input_section, name):
+            return getattr(self.input_section, name)
+        if hasattr(self.review_section, name):
+            return getattr(self.review_section, name)
+        raise AttributeError(name)
+
+    def refresh_from_state(self) -> None:
+        self.review_section.refresh_from_state()
+
+    def validation_issues(self) -> tuple[str, ...]:
+        return self.review_section.validation_issues()
 
 
 class ClipartGenerationPage(_ScrollableStepPage):
@@ -1850,12 +1909,7 @@ class ClipartFlowController(QObject):
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.PROMPTS: ClipartPromptInputPage(
-                self.shell.state,
-                changed,
-                tokens=self.shell.tokens,
-            ),
-            StepId.PROMPT_REVIEW: ClipartPromptReviewPage(
+            StepId.PROMPTS: PromptWorkspacePage(
                 self.shell.state,
                 changed,
                 tokens=self.shell.tokens,

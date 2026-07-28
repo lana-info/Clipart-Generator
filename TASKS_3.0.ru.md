@@ -513,7 +513,7 @@ Notes:
 ## Task 17: Создать общую модель и оболочку PromptWorkspace
 
 Key: `CG3-TASK-017`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-010`, `CG3-FR-011`, `CG3-FR-012`, `CG3-FR-013`,
 `CG3-FR-022`, `CG3-AR-003`, `CG3-AR-009`, `CG3-AC-002`, `CG3-AC-020`
 
@@ -530,13 +530,13 @@ Steps:
 - Реализовать drag-and-drop reorder с сохранением references.
 
 Acceptance:
-- [ ] Оба режима создают один и тот же компонент PromptWorkspace.
-- [ ] Порядок меняется перетаскиванием без потери текста и референсов.
-- [ ] Кнопок «выше/ниже» и отдельного шага проверки нет.
+- [x] Оба режима создают один и тот же компонент PromptWorkspace.
+- [x] Порядок меняется перетаскиванием без потери текста и референсов.
+- [x] Кнопок «выше/ниже» и отдельного шага проверки нет.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_prompt_workspace -v`
-- [ ] Offscreen smoke drag/drop model reorder.
+- [x] `python -m unittest tests.test_v3_prompt_workspace -v`
+- [x] Offscreen smoke drag/drop model reorder.
 
 Notes:
 - Не копировать QWidget между flow-модулями; нужен общий модуль.

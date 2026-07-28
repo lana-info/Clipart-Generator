@@ -102,7 +102,7 @@ class V3ModeSelectionTests(unittest.TestCase):
                 prompts=[PromptEntry("vertical beach pin")],
             ),
         )
-        recent.set_step(StepId.PROMPT_REVIEW)
+        recent.set_step(StepId.PROMPTS)
         view = V3ApplicationView(recent)
         continued = []
         view.project_continued.connect(continued.append)
@@ -117,7 +117,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.mode_selection.continue_button.click()
         state = view.project_state
         self.assertEqual(state.mode, ProjectMode.PINTEREST)
-        self.assertEqual(state.current_step, StepId.PROMPT_REVIEW)
+        self.assertEqual(state.current_step, StepId.PROMPTS)
         self.assertEqual(
             state.pinterest.prompts[0].prompt,
             "vertical beach pin",

@@ -20,8 +20,8 @@ from v3_clipart_flow import (
     ClipartProcessingPage,
     ClipartProjectPage,
     ClipartPromptInputPage,
-    ClipartPromptReviewPage,
     ClipartReviewRunPage,
+    PromptWorkspacePage,
     build_clipart_run_request,
     clipart_pipeline_steps,
     estimate_clipart_cost,
@@ -109,11 +109,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
-            ClipartPromptInputPage,
-        )
-        self.assertIsInstance(
-            controller.pages[StepId.PROMPT_REVIEW],
-            ClipartPromptReviewPage,
+            PromptWorkspacePage,
         )
         self.assertIsInstance(
             controller.pages[StepId.PROCESSING_OPTIONS],
@@ -141,9 +137,9 @@ class V3ClipartFlowTests(unittest.TestCase):
             prompt_page.source_combo.setCurrentIndex(1)
             prompt_page.paste_edit.setPlainText("Fox\nBear")
             prompt_page.paste_button.click()
-            self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
+            self.assertEqual(shell.go_next(), StepId.GENERATION)
 
-            review_page = controller.pages[StepId.PROMPT_REVIEW]
+            review_page = controller.pages[StepId.PROMPTS].review_section
             review_page.table.item(0, 0).setText("Red fox")
             review_page.table.item(0, 1).setText("D:/fox.png")
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
@@ -218,10 +214,13 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         input_page.paste_button.click()
         self.assertEqual(state.clipart.prompts, [])
-        self.assertIn("Максимум", input_page.card.status_label.text())
+        self.assertIn(
+            "Максимум",
+            input_page.input_section.card.status_label.text(),
+        )
 
         state.clipart.prompts = [PromptEntry("First")]
-        review_page = controller.pages[StepId.PROMPT_REVIEW]
+        review_page = controller.pages[StepId.PROMPTS].review_section
         review_page.refresh_from_state()
         review_page.table.setCurrentCell(0, 0)
         state.clipart.prompts = [PromptEntry(f"Prompt {index}") for index in range(MAX_PROMPT_ENTRIES)]
@@ -490,7 +489,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.prompts = [PromptEntry("Original")]
         shell = AppShell(state)
         controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROMPT_REVIEW]
+        page = controller.pages[StepId.PROMPTS].review_section
         page.table.item(0, 0).setText("x" * (20_000 + 1))
         self.assertEqual(state.clipart.prompts[0].prompt, "Original")
         self.assertEqual(page.table.item(0, 0).text(), "Original")
