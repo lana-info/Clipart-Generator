@@ -35,6 +35,13 @@ from v3_clipart_flow import (
     _worker_settings,
 )
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
+from v3_processing_editor import (
+    PROCESSING_RECIPES as _SHARED_PROCESSING_RECIPES,
+    ProcessingPipelineEditor,
+    RunPlanBuilder,
+    apply_processing_recipe as _shared_apply_processing_recipe,
+    processing_pipeline_steps as _shared_processing_pipeline_steps,
+)
 from v3_provider_registry import (
     KIE_MODEL_OPTIONS,
     processing_provider_options,
@@ -152,7 +159,7 @@ def apply_processing_recipe(state: ProjectState, recipe: str) -> None:
     if recipe not in PROCESSING_RECIPES:
         raise ProcessingFlowError("Неизвестный рецепт обработки")
     state.processing.recipe = recipe
-    preset = PROCESSING_RECIPES[recipe][2]
+    preset = PROCESSING_RECIPES[recipe].operations
     if preset is None:
         return
     current = state.processing.operations
@@ -195,6 +202,11 @@ def processing_pipeline_steps(
     if steps:
         steps.append("Экспорт нового PNG")
     return tuple(steps)
+
+
+PROCESSING_RECIPES = _SHARED_PROCESSING_RECIPES
+apply_processing_recipe = _shared_apply_processing_recipe
+processing_pipeline_steps = _shared_processing_pipeline_steps
 
 
 def uses_full_image_changes(operations: ImageOperationData) -> bool:
@@ -616,8 +628,8 @@ class ProcessingRecipePage(_ScrollableStepPage):
         self.buttons: dict[str, QRadioButton] = {}
         group = QGroupBox("Рецепты")
         layout = QVBoxLayout(group)
-        for recipe, (title, description, _) in PROCESSING_RECIPES.items():
-            button = QRadioButton(f"{title} — {description}")
+        for recipe, spec in PROCESSING_RECIPES.items():
+            button = QRadioButton(f"{spec.title} — {spec.description}")
             button.toggled.connect(
                 lambda checked, value=recipe: self._select(value, checked)
             )
@@ -868,6 +880,40 @@ class ProcessingPipelinePage(_ScrollableStepPage):
             allow_full_image_changes=self.allow_full_image_changes.isChecked(),
         )
 
+
+class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            state.processing,
+            changed,
+            title="Pipeline",
+            description="Операции выполняются сверху вниз; рецепт можно полностью изменить.",
+            include_cleanup=False,
+            tokens=tokens,
+        )
+        self.project_state = state
+        self.allow_full_image_changes = QCheckBox(
+            "Разрешаю экспериментальную операцию, меняющую всё изображение"
+        )
+        self.allow_full_image_changes.toggled.connect(changed)
+        self.add_widget(self.allow_full_image_changes)
+
+    def validation_issues(self) -> tuple[str, ...]:
+        return operation_validation_issues(
+            self.project_state.processing.operations,
+            allow_full_image_changes=self.allow_full_image_changes.isChecked(),
+        )
+
+
+ProcessingPipelinePage = _SharedProcessingPipelinePage
+
+
 class ProcessingReviewRunPage(_ScrollableStepPage):
     def __init__(
         self,
@@ -923,9 +969,13 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         steps = processing_pipeline_steps(operations)
         removed, preserved = processing_change_summary(operations)
         cost = estimate_processing_cost(operations, len(files))
+        recipe = PROCESSING_RECIPES.get(
+            self.state.processing.recipe,
+            PROCESSING_RECIPES["custom"],
+        )
         self.summary_label.setText(
             f"Файлов: {len(files)} · рецепт: "
-            f"{PROCESSING_RECIPES.get(self.state.processing.recipe, PROCESSING_RECIPES['custom'])[0]} "
+            f"{recipe.title} "
             f"· стоимость: {cost} · очищается: {removed} · сохраняется: {preserved}"
         )
         self.pipeline_label.setText(

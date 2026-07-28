@@ -49,6 +49,10 @@ from v3_components import (
     V3Button,
     V3DesignTokens,
 )
+from v3_processing_editor import (
+    ProcessingPipelineEditor,
+    RunPlanBuilder,
+)
 from v3_prompt_csv_import import PromptCsvImportDialog
 from v3_project_state import (
     MAX_PROMPT_ENTRIES,
@@ -143,37 +147,153 @@ class ClipartRunRequest:
         }
 
 
+_LEGACY_VISIBLE_GENERATION_MODEL_IDS = {
+    "gpt-image/1.5-text-to-image",
+    "gpt-image-2",
+    "nano-banana-2",
+    "nano-banana-pro",
+    "qwen-image-2",
+    "flux-2/pro-text-to-image",
+    "flux-2/flex-text-to-image",
+    "gpt-image/1.5-image-to-image",
+    "flux-2/pro-image-to-image",
+    "flux-2/flex-image-to-image",
+}
+
+_LEGACY_MODEL_CAPABILITIES: dict[str, dict[str, Any]] = {
+    "gpt-image/1.5-text-to-image": {
+        "ratios": {"1:1", "2:3", "3:2"},
+        "qualities": {"medium", "high"},
+        "pricing": "4 / 22 credits ($0.02 / $0.11)",
+        "reference_compatible_text": False,
+    },
+    "gpt-image/1.5-image-to-image": {
+        "ratios": {"1:1", "2:3", "3:2"},
+        "qualities": {"medium", "high"},
+        "pricing": "4 / 22 credits ($0.02 / $0.11)",
+        "reference_compatible_text": False,
+    },
+    "gpt-image-2": {
+        "ratios": {"auto", "1:1", "9:16", "16:9", "4:3", "3:4"},
+        "resolutions": {"1K", "2K", "4K"},
+        "pricing": {"1K": "6 credits / $0.03", "2K": "10 credits / $0.05", "4K": "16 credits / $0.08"},
+        "reference_compatible_text": True,
+    },
+    "nano-banana-2": {
+        "ratios": {"auto", "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"},
+        "resolutions": {"1K", "2K", "4K"},
+        "pricing": {"1K": "8 credits / $0.04", "2K": "12 credits / $0.06", "4K": "18 credits / $0.09"},
+        "reference_compatible_text": True,
+    },
+    "nano-banana-pro": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"},
+        "resolutions": {"1K", "2K", "4K"},
+        "pricing": {"1K": "18 credits / $0.09", "2K": "18 credits / $0.09", "4K": "24 credits / $0.12"},
+        "reference_compatible_text": True,
+    },
+    "qwen-image-2": {
+        "ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"},
+        "pricing": "6 credits / $0.03",
+        "reference_compatible_text": True,
+    },
+    "flux-2/flex-text-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
+        "reference_compatible_text": False,
+    },
+    "flux-2/pro-text-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
+        "reference_compatible_text": False,
+    },
+    "flux-2/flex-image-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"},
+        "reference_compatible_text": False,
+    },
+    "flux-2/pro-image-to-image": {
+        "ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"},
+        "resolutions": {"1K", "2K"},
+        "pricing": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"},
+        "reference_compatible_text": False,
+    },
+}
+
+_LEGACY_GENERATION_MODELS = (
+    {"id": "gpt4o-image", "label": "GPT‑4o Image", "type": "text_to_image"},
+    {"id": "gpt-image/1.5-text-to-image", "label": "GPT Image 1.5 (Text→Image)", "type": "text_to_image"},
+    {"id": "gpt-image-2", "label": "GPT Image 2", "type": "text_to_image"},
+    {"id": "nano-banana-2", "label": "Nano Banana 2", "type": "text_to_image"},
+    {"id": "z-image", "label": "Z-Image", "type": "text_to_image"},
+    {"id": "google/imagen4", "label": "Google Imagen 4", "type": "text_to_image"},
+    {"id": "google/imagen4-fast", "label": "Google Imagen 4 Fast", "type": "text_to_image"},
+    {"id": "google/imagen4-ultra", "label": "Google Imagen 4 Ultra", "type": "text_to_image"},
+    {"id": "google/nano-banana", "label": "Google Nano Banana", "type": "text_to_image"},
+    {"id": "qwen-image-2", "label": "Qwen Image 2.0", "type": "text_to_image"},
+    {"id": "flux-2/flex-text-to-image", "label": "FLUX.2 Flex (Text→Image)", "type": "text_to_image"},
+    {"id": "flux-2/pro-text-to-image", "label": "FLUX.2 Pro (Text→Image)", "type": "text_to_image"},
+    {"id": "grok-imagine/text-to-image", "label": "Grok Imagine (Text→Image)", "type": "text_to_image"},
+    {"id": "qwen/text-to-image", "label": "Qwen (Text→Image)", "type": "text_to_image"},
+    {"id": "nano-banana-pro", "label": "Google Nano Banana Pro", "type": "image_to_image"},
+    {"id": "gpt-image-2", "label": "GPT Image 2", "type": "image_to_image"},
+    {"id": "nano-banana-2", "label": "Nano Banana 2", "type": "image_to_image"},
+    {"id": "flux-2/pro-image-to-image", "label": "FLUX.2 Pro (Image→Image)", "type": "image_to_image"},
+    {"id": "flux-2/flex-image-to-image", "label": "FLUX.2 Flex (Image→Image)", "type": "image_to_image"},
+    {"id": "qwen-image-2", "label": "Qwen Image 2.0", "type": "edit"},
+    {"id": "grok-imagine/image-to-image", "label": "Grok Imagine (Image→Image)", "type": "image_to_image"},
+    {"id": "gpt-image/1.5-image-to-image", "label": "GPT Image 1.5 (Image→Image)", "type": "image_to_image"},
+    {"id": "qwen/image-to-image", "label": "Qwen (Image→Image)", "type": "image_to_image"},
+    {"id": "google/nano-banana-edit", "label": "Google Nano Banana Edit", "type": "edit"},
+    {"id": "qwen/image-edit", "label": "Qwen Image Edit", "type": "edit"},
+)
+
+_LEGACY_RATIO_OPTIONS_ORDER = (
+    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"
+)
+_LEGACY_RESOLUTION_OPTIONS_ORDER = ("1K", "2K", "4K", "8K")
+_LEGACY_PROCESSING_PRICING = {
+    "topaz/upscale": "40 credits / $0.20",
+    "recraft/crisp-upscale": "0.5 credits / $0.0025",
+    "recraft/remove-background": "1 credit / $0.005",
+}
+
+
+def _legacy_model_capabilities(model_id: str) -> dict[str, Any]:
+    limits = _LEGACY_MODEL_CAPABILITIES.get(model_id) or {}
+    return {
+        "ratios": set(limits.get("ratios") or set()),
+        "resolutions": set(limits.get("resolutions") or set()),
+        "qualities": set(limits.get("qualities") or set()),
+        "pricing": limits.get("pricing"),
+        "reference_compatible_text": bool(limits.get("reference_compatible_text", False)),
+    }
+
+
 def _legacy_catalog() -> tuple[
     dict[str, GenerationModelOption],
     dict[str, str],
 ]:
-    import main
-
-    labels: dict[str, str] = {}
-    model_types: dict[str, str] = {}
-    for entry in main.GENERATION_MODELS:
-        model_id = str(entry.get("id") or "")
-        if not model_id:
-            continue
-        labels.setdefault(model_id, str(entry.get("label") or model_id))
-        model_types.setdefault(model_id, str(entry.get("type") or ""))
-
     options: dict[str, GenerationModelOption] = {}
-    for model_id in sorted(main.VISIBLE_GENERATION_MODEL_IDS):
-        capabilities = main.get_model_capabilities(model_id)
+    labels = {entry["id"]: entry["label"] for entry in _LEGACY_GENERATION_MODELS}
+    model_types = {entry["id"]: entry["type"] for entry in _LEGACY_GENERATION_MODELS}
+    for model_id in sorted(_LEGACY_VISIBLE_GENERATION_MODEL_IDS):
+        capabilities = _legacy_model_capabilities(model_id)
         options[model_id] = GenerationModelOption(
             model_id=model_id,
             label=labels.get(model_id, model_id),
             model_type=model_types.get(model_id, ""),
             ratios=tuple(
                 value
-                for value in main.RATIO_OPTIONS_ORDER
+                for value in _LEGACY_RATIO_OPTIONS_ORDER
                 if value in capabilities["ratios"]
             )
             or tuple(sorted(capabilities["ratios"])),
             resolutions=tuple(
                 value
-                for value in main.RESOLUTION_OPTIONS_ORDER
+                for value in _LEGACY_RESOLUTION_OPTIONS_ORDER
                 if value in capabilities["resolutions"]
             )
             or tuple(sorted(capabilities["resolutions"])),
@@ -182,7 +302,7 @@ def _legacy_catalog() -> tuple[
                 "reference_compatible_text"
             ],
         )
-    return options, dict(main.PROCESSING_PRICING)
+    return options, dict(_LEGACY_PROCESSING_PRICING)
 
 
 def generation_model_options(
@@ -2203,6 +2323,29 @@ class ClipartProcessingPage(_ScrollableStepPage):
         text = "Порядок: " + " → ".join(steps)
         self.pipeline_label.setText(text)
         self.pipeline_label.setAccessibleName(text)
+
+
+class _SharedClipartProcessingPage(ProcessingPipelineEditor):
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        super().__init__(
+            state.clipart,
+            changed,
+            title="Обработка",
+            description="Рецепт «Готовый клипарт» использует существующий pipeline 2.0.",
+            include_cleanup=True,
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+
+
+ClipartProcessingPage = _SharedClipartProcessingPage
 
 
 class ClipartReviewRunPage(_ScrollableStepPage):

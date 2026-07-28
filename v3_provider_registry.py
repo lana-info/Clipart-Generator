@@ -28,6 +28,7 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
         visible_controls=(
             "kie_upscale_model",
             "kie_upscale_after_model",
+            "kie_remove_bg_model",
         ),
     ),
     "photoroom": ProviderSpec(

@@ -27,6 +27,9 @@ from v3_components import (
 )
 from v3_project_state import ProjectMode, ProjectState
 from v3_project_state import ProjectStateError, load_project_draft, save_project_draft
+from v3_clipart_flow import install_clipart_flow
+from v3_pinterest_flow import install_pinterest_flow
+from v3_processing_flow import install_processing_flow
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
 
 
@@ -343,9 +346,6 @@ class V3ApplicationView(QWidget):
             previous.deleteLater()
 
         shell = AppShell(state, tokens=self.tokens)
-        from v3_clipart_flow import install_clipart_flow
-        from v3_pinterest_flow import install_pinterest_flow
-        from v3_processing_flow import install_processing_flow
 
         install_clipart_flow(
             shell,
