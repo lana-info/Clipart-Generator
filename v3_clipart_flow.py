@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -830,8 +830,8 @@ def _reference_icon(path: str) -> QIcon:
     if _supported_local_reference(path):
         pixmap = QPixmap(path)
         if not pixmap.isNull():
-            return QIcon(pixmap.scaled(48, 48))
-    placeholder = QPixmap(48, 48)
+            return QIcon(pixmap.scaled(120, 120, Qt.AspectRatioMode.KeepAspectRatio))
+    placeholder = QPixmap(120, 120)
     placeholder.fill()
     return QIcon(placeholder)
 
@@ -881,6 +881,8 @@ class PromptReferenceEditorDialog(QDialog):
         self._prompt_edit = QPlainTextEdit(entry.prompt)
         self._prompt_edit.setMinimumHeight(120)
         self._references = QListWidget()
+        self._references.setIconSize(QSize(120, 120))
+        self._references.setMinimumHeight(190)
         self._references.setSelectionMode(
             QAbstractItemView.SelectionMode.ExtendedSelection
         )
@@ -1426,21 +1428,27 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         actions = QWidget()
         action_layout = QHBoxLayout(actions)
         action_layout.setContentsMargins(0, 0, 0, 0)
+        prompt_actions_label = QLabel("Промпты:")
+        prompt_actions_label.setProperty("v3Small", True)
+        action_layout.addWidget(prompt_actions_label)
         self.add_button = V3Button("Добавить", ButtonVariant.SECONDARY)
         self.duplicate_button = V3Button("Дублировать", ButtonVariant.SECONDARY)
         self.delete_button = V3Button("Удалить", ButtonVariant.SECONDARY)
+        action_layout.addWidget(self.add_button)
+        action_layout.addWidget(self.duplicate_button)
+        action_layout.addWidget(self.delete_button)
+        references_actions_label = QLabel("Референсы:")
+        references_actions_label.setProperty("v3Small", True)
+        action_layout.addWidget(references_actions_label)
         self.add_refs_button = V3Button("Добавить референсы", ButtonVariant.SECONDARY)
         self.replace_refs_button = V3Button("Заменить референсы", ButtonVariant.SECONDARY)
-        self.clear_refs_button = V3Button("Удалить все референсы", ButtonVariant.SECONDARY)
+        self.delete_refs_button = V3Button("Удалить референсы", ButtonVariant.SECONDARY)
         self.up_button = V3Button("Выше", ButtonVariant.GHOST)
         self.down_button = V3Button("Ниже", ButtonVariant.GHOST)
         for button in (
-            self.add_button,
-            self.duplicate_button,
-            self.delete_button,
             self.add_refs_button,
             self.replace_refs_button,
-            self.clear_refs_button,
+            self.delete_refs_button,
             self.up_button,
             self.down_button,
         ):
@@ -1456,7 +1464,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.delete_button.clicked.connect(self._delete)
         self.add_refs_button.clicked.connect(self._add_references)
         self.replace_refs_button.clicked.connect(self._replace_references)
-        self.clear_refs_button.clicked.connect(self._delete_all_references)
+        self.delete_refs_button.clicked.connect(self._delete_references)
         self.up_button.clicked.connect(lambda: self._move(-1))
         self.down_button.clicked.connect(lambda: self._move(1))
         self.refresh_from_state()
@@ -1555,11 +1563,21 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
     def _replace_references(self) -> None:
         self._apply_references(replace=True)
 
-    def _delete_all_references(self) -> None:
+    def _delete_references(self) -> None:
         if not self.state.clipart.prompts:
             return
-        for entry in self.state.clipart.prompts:
-            entry.references = []
+        scope = self._pick_reference_scope()
+        if scope is None:
+            return
+        if scope == "all":
+            rows = range(len(self.state.clipart.prompts))
+        elif scope == "selected":
+            rows = self._selected_rows()
+        else:
+            row = self._selected_row()
+            rows = [row] if row >= 0 else []
+        for row in rows:
+            self.state.clipart.prompts[row].references = []
         self.refresh_from_state()
         self.changed()
 

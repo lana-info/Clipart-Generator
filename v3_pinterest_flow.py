@@ -331,7 +331,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         width = max(20, round(width_value * scale))
         height = max(20, round(height_value * scale))
         self.ratio_preview.setFixedSize(width, height)
-        text = f"Предпросмотр {ratio}"
+        text = ratio
         self.ratio_preview_label.setText(text)
         self.ratio_preview.setAccessibleName(text)
 
