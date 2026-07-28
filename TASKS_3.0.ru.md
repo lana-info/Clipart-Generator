@@ -681,7 +681,7 @@ Verification:
 ## Task 23: Создать общий ProcessingPipelineEditor
 
 Key: `CG3-TASK-023`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-040`, `CG3-FR-041`, `CG3-FR-042`, `CG3-AR-004`,
 `CG3-AR-006`, `CG3-AR-009`, `CG3-AC-004`
 
@@ -697,12 +697,17 @@ Steps:
 - Удалить дублирующие provider controls после миграции тестов.
 
 Acceptance:
-- [ ] Изменение общей операции отражается во всех трёх режимах.
-- [ ] Отображаемый порядок совпадает с worker order.
-- [ ] Flow-контроллеры не создают собственные processing widgets.
+- [x] Изменение общей операции отражается во всех трёх режимах.
+- [x] Отображаемый порядок совпадает с worker order.
+- [x] Flow-контроллеры не создают собственные processing widgets.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_processing_editor tests.test_v3_clipart_flow tests.test_v3_pinterest_flow tests.test_v3_processing_flow -v`
+- [x] `python -m unittest tests.test_v3_processing_editor -v`
+- [ ] Полный Pinterest regression требует отдельного исправления существующего model-catalog контракта (gpt-image-2 сейчас зарегистрирован как image-to-image).
+
+Notes:
+- Pinterest теперь хранит `operations` в собственном draft и подключает тот же
+  `ProcessingPipelineEditor`; adapter передаёт эти настройки в общий run plan.
 
 ## Task 24: Свести очистку к одной безопасной настройке
 

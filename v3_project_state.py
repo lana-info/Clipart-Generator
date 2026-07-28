@@ -741,12 +741,19 @@ class PinterestModeData:
             reference_resolution="1K",
         )
     )
+    operations: ImageOperationData = field(
+        default_factory=lambda: ImageOperationData(
+            upscale_before=False,
+            remove_background=False,
+        )
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "prompts": [entry.to_dict() for entry in self.prompts],
             "prompt_generator": self.prompt_generator.to_dict(),
             "generation": self.generation.to_dict(),
+            "operations": self.operations.to_dict(),
         }
 
     @classmethod
@@ -768,6 +775,11 @@ class PinterestModeData:
                     ),
                 },
                 default_ratio="9:16",
+            ),
+            operations=ImageOperationData.from_dict(
+                data.get("operations", {})
+                if isinstance(data.get("operations"), Mapping)
+                else {}
             ),
         )
 
@@ -1119,7 +1131,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     pinterest = _draft_object(value, "pinterest")
     _reject_unknown_fields(
         pinterest,
-        ("prompts", "prompt_generator", "generation"),
+        ("prompts", "prompt_generator", "generation", "operations"),
         "pinterest",
     )
     _validate_prompt_section(pinterest, "pinterest")
@@ -1132,6 +1144,11 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         _draft_object(pinterest, "generation"),
         GenerationData,
         "pinterest.generation",
+    )
+    _validate_scalar_fields(
+        _draft_object(pinterest, "operations"),
+        ImageOperationData,
+        "pinterest.operations",
     )
 
     processing = _draft_object(value, "processing")

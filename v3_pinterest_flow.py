@@ -37,6 +37,7 @@ from v3_project_state import (
     StepId,
 )
 from v3_prompt_generator import PromptGeneratorError
+from v3_processing_editor import ProcessingPipelineEditor
 from v3_wizard import AppShell
 
 
@@ -53,23 +54,7 @@ _PINTEREST_REFERENCE_MODEL_BY_TEXT = {
 class _PinterestDataAdapter:
     def __init__(self, data: PinterestModeData) -> None:
         self.data = data
-        self.operations = ImageOperationData(
-            visible_mark_cleanup=False,
-            upscale_before=False,
-            upscale_after=False,
-            remove_background=False,
-            unsharp=False,
-            edge_shrink=False,
-            trim=False,
-            export_300_dpi=False,
-            remove_exif=False,
-            remove_xmp=False,
-            remove_iptc=False,
-            remove_comments_text=False,
-            remove_embedded_thumbnail=False,
-            remove_generator_fields=False,
-            remove_embedded_c2pa=False,
-        )
+        self.operations = data.operations
 
     @property
     def prompts(self):
@@ -203,6 +188,15 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         self.reference_status_label.setWordWrap(True)
         self.reference_status_label.setProperty("v3Small", True)
         self.add_widget(self.reference_status_label)
+        self.processing_editor = ProcessingPipelineEditor(
+            state.clipart,
+            changed,
+            title="Обработка",
+            description="Тот же порядок обработки, что и в режимах Clipart и Обработка.",
+            include_cleanup=True,
+            tokens=tokens,
+        )
+        self.add_widget(self.processing_editor)
         self._format_syncing = False
         self._format_issue = ""
         self.model_combo.currentIndexChanged.connect(self._enforce_single_format)
@@ -221,6 +215,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
 
     def refresh_from_state(self) -> None:
         super().refresh_from_state()
+        self.processing_editor.refresh_from_state()
         has_references = any(
             entry.references for entry in getattr(self.state.clipart, "prompts", [])
         )

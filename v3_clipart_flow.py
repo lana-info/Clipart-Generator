@@ -625,7 +625,7 @@ def build_clipart_run_request(
     _validate_alpha_safe_upscale(operations)
     _validate_processing_models(operations)
     text_option = _model_option(generation.model)
-    if text_option.model_type != "text_to_image":
+    if text_option.model_type != "text_to_image" and not text_option.reference_compatible_text:
         raise ClipartFlowError("Основная модель должна поддерживать text-to-image")
     _validate_generation_profile(
         text_option,

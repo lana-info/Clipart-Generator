@@ -69,6 +69,21 @@ class ProcessingEditorTests(unittest.TestCase):
             ),
         )
 
+    def test_pinterest_uses_persistent_shared_recipe_state(self) -> None:
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        editor = ProcessingPipelineEditor(
+            state.pinterest,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+        editor.operation_widgets["trim"].setChecked(True)
+        editor.cleanup_checkbox.setChecked(True)
+        self.assertTrue(state.pinterest.operations.trim)
+        self.assertTrue(state.pinterest.operations.remove_exif)
+        self.assertIn("Trim", editor.pipeline_label.text())
+
 
 if __name__ == "__main__":
     unittest.main()
