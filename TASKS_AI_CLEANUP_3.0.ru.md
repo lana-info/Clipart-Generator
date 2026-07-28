@@ -48,18 +48,18 @@ Verification:
 
 Key: `CG3-AI-TASK-003`
 
-Status: Todo
+Status: Done
 
 Goal: сгруппировать metadata, visible mark и optional invisible cleanup в одной карточке.
 
 Acceptance:
-- [ ] одна основная кнопка очистки метаданных;
-- [ ] optional invisible cleanup явно помечен как экспериментальный;
-- [ ] обычная обработка не требует experimental consent.
-- [ ] видимая метка имеет понятный confidence/fallback статус.
+- [x] одна основная кнопка очистки метаданных;
+- [x] optional invisible cleanup явно помечен как экспериментальный;
+- [x] обычная обработка не требует experimental consent.
+- [x] видимая метка имеет понятный confidence/fallback статус.
 
 Verification:
-- [ ] offscreen widget tests.
+- [x] `python -m unittest tests.test_v3_processing_editor tests.test_v3_project_state -v` — 18/18.
 
 ## Task 4: Улучшить сообщения прогресса
 

@@ -492,6 +492,7 @@ def _worker_settings(
             "reference_generation_resolution": generation.reference_resolution,
             "visible_mark_cleanup_enabled": operations.visible_mark_cleanup,
             "visible_mark_cleanup_mode": operations.visible_mark_cleanup_mode,
+            "invisible_watermark_cleanup_enabled": operations.invisible_watermark_cleanup,
             "upscale": operations.upscale_before,
             "upscale_provider": operations.upscale_before_provider,
             "upscale_after": operations.upscale_after,

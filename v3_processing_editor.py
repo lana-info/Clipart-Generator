@@ -137,6 +137,8 @@ def processing_pipeline_steps(
         steps.append("Очистка метаданных")
     if operations.visible_mark_cleanup:
         steps.append("Удаление видимой метки")
+    if operations.invisible_watermark_cleanup:
+        steps.append("Экспериментальная очистка невидимого watermark")
     if operations.upscale_before:
         steps.append("Апскейл до удаления фона")
     if operations.unsharp:
@@ -172,6 +174,7 @@ class RunPlanBuilder:
 class ProcessingPipelineEditor(QScrollArea):
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить обнаруженную видимую метку Gemini",
+        "invisible_watermark_cleanup": "Экспериментально очистить невидимый watermark",
         "upscale_before": "Апскейл до удаления фона",
         "upscale_after": "Апскейл после удаления фона",
         "remove_background": "Удалить фон",
@@ -414,6 +417,11 @@ class ProcessingPipelineEditor(QScrollArea):
             self.cleanup_checkbox.setAccessibleName("Очистить служебные данные")
             cleanup_form.addRow(self.cleanup_checkbox)
             self._add_bool(cleanup_form, "visible_mark_cleanup", operations)
+            self._add_bool(cleanup_form, "invisible_watermark_cleanup", operations)
+            self.operation_widgets["invisible_watermark_cleanup"].setToolTip(
+                "Запускается только если локальный remove-ai-watermarks установлен; "
+                "может изменить детали изображения."
+            )
             cleanup_hint = QLabel(
                 "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
                 "generator fields и embedded C2PA. ICC и DPI всегда сохраняются."

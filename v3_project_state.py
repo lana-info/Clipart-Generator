@@ -431,6 +431,7 @@ class GenerationData:
 class ImageOperationData:
     visible_mark_cleanup: bool = False
     visible_mark_cleanup_mode: str = "gemini_auto"
+    invisible_watermark_cleanup: bool = False
     upscale_before: bool = True
     upscale_before_provider: str = "kie"
     upscale_after: bool = False

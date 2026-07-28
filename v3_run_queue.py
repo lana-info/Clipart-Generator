@@ -55,6 +55,7 @@ _STOP_MARKERS = (
     "Остановлено после текущего файла",
 )
 _STAGE_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("Экспериментальная очистка невидимого watermark", "invisible_watermark_cleanup"),
     ("Видимая метка:", "visible_mark_cleanup"),
     ("Локальный апскейл", "upscale"),
     ("Апскейл через", "upscale"),

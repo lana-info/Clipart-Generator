@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from license_client import LicenseClient
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
+from ai_watermark_backend import WatermarkBackendError, clean_invisible_watermark
 from metadata_inspector import inspect_image_metadata
 from visible_mark_cleanup import (
     VisibleMarkCleanupCancelled,
@@ -681,6 +682,9 @@ class WorkerThread(QThread):
 
         # Legacy `upscale` remains the before-background pass for old configs.
         self.visible_mark_cleanup_enabled = bool(settings.get("visible_mark_cleanup_enabled", False))
+        self.invisible_watermark_cleanup_enabled = bool(
+            settings.get("invisible_watermark_cleanup_enabled", False)
+        )
         self.visible_mark_cleanup_mode = normalize_visible_mark_cleanup_mode(
             settings.get("visible_mark_cleanup_mode", "gemini_auto")
         )
@@ -1710,8 +1714,26 @@ class WorkerThread(QThread):
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
         self._ensure_running()
+        invisible_path = None
+        if self.invisible_watermark_cleanup_enabled:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", prefix=".clipart-invisible-", suffix=".png", delete=False
+            ) as invisible_file:
+                invisible_path = invisible_file.name
+            os.remove(invisible_path)
+            try:
+                self.progress.emit("  Экспериментальная очистка невидимого watermark")
+                clean_invisible_watermark(Path(stage_path), Path(invisible_path))
+                stage_path = invisible_path
+            except WatermarkBackendError as error:
+                self.progress.emit(f"  Экспериментальный этап пропущен: {error}")
+                invisible_path = None
         if not self._metadata_cleanup_requested():
-            self._replace_output_if_running(stage_path, output_path)
+            try:
+                self._replace_output_if_running(stage_path, output_path)
+            finally:
+                if invisible_path and os.path.exists(invisible_path):
+                    os.remove(invisible_path)
             return None
 
         publish_path = None
@@ -1748,6 +1770,11 @@ class WorkerThread(QThread):
             if publish_path and os.path.exists(publish_path):
                 try:
                     os.remove(publish_path)
+                except OSError:
+                    pass
+            if invisible_path and os.path.exists(invisible_path):
+                try:
+                    os.remove(invisible_path)
                 except OSError:
                     pass
 
