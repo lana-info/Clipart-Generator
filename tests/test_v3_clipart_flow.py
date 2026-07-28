@@ -174,6 +174,10 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertTrue(page.add_variants_button.isEnabled())
         self.assertTrue(page.replace_variants_button.isEnabled())
         page.replace_variants_button.click()
+        state.clipart.prompts[0].references = ["D:/fox.png"]
+        generation_page = controller.pages[StepId.GENERATION]
+        generation_page.refresh_from_state()
+        self.assertTrue(generation_page.reference_advanced.is_expanded)
         self.assertEqual(len(state.clipart.prompts), 3)
         self.assertTrue(all(isinstance(item, PromptEntry) for item in state.clipart.prompts))
         state.clipart.prompts[0].prompt = "Manual edit"

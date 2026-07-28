@@ -632,7 +632,7 @@ Verification:
 ## Task 21: Упростить выбор моделей и reference-mode
 
 Key: `CG3-TASK-021`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-030`, `CG3-FR-031`, `CG3-FR-032`, `CG3-FR-033`,
 `CG3-AC-017`
 

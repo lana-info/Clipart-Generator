@@ -684,6 +684,20 @@ def _reference_summary(paths: Sequence[str]) -> str:
     return f"{len(paths)} референсов: {names}"
 
 
+def _capability_summary(option: GenerationModelOption) -> str:
+    ratios = ", ".join(option.ratios[:4]) if option.ratios else "любой"
+    if option.resolutions:
+        resolutions = ", ".join(option.resolutions[:4])
+    else:
+        resolutions = "задаётся моделью"
+    reference_mode = (
+        "поддерживает reference-mode"
+        if option.reference_compatible_text or option.model_type in {"image_to_image", "edit"}
+        else "без reference-mode"
+    )
+    return f"{option.label} · {reference_mode} · форматы: {ratios} · разрешения: {resolutions}"
+
+
 class PromptReferenceEditorDialog(QDialog):
     def __init__(
         self,
@@ -1569,8 +1583,17 @@ class ClipartGenerationPage(_ScrollableStepPage):
         container.setLayout(form)
         self.add_widget(container)
 
+        self.model_capability_label = QLabel()
+        self.model_capability_label.setWordWrap(True)
+        self.model_capability_label.setProperty("v3Small", True)
+        self.add_widget(self.model_capability_label)
+
         advanced = AdvancedSection(tokens=tokens)
         self.reference_advanced = advanced
+        self.reference_capability_label = QLabel()
+        self.reference_capability_label.setWordWrap(True)
+        self.reference_capability_label.setProperty("v3Small", True)
+        advanced.add_widget(self.reference_capability_label)
         reference_form = QFormLayout()
         self.reference_model_combo = QComboBox()
         self.reference_ratio_combo = QComboBox()
@@ -1623,6 +1646,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.reference_resolution_combo.currentIndexChanged.connect(self._sync)
         self.variants_spin.valueChanged.connect(self._sync)
         self._sync(mark=False)
+        ClipartGenerationPage.refresh_from_state(self)
 
     def _select_model(self, combo: QComboBox, model_id: str) -> None:
         index = combo.findData(model_id)
@@ -1661,6 +1685,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
         generation = self.state.clipart.generation
         if primary:
             option = self._option_for_combo(self.model_combo)
+            self.model_capability_label.setText(_capability_summary(option))
             self._set_values(
                 self.ratio_combo,
                 option.ratios or ("1:1",),
@@ -1674,6 +1699,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
             )
         else:
             option = self._option_for_combo(self.reference_model_combo)
+            self.reference_capability_label.setText(_capability_summary(option))
             self._set_values(
                 self.reference_ratio_combo,
                 option.ratios or ("1:1",),
@@ -1711,6 +1737,13 @@ class ClipartGenerationPage(_ScrollableStepPage):
             self.changed()
 
     def refresh_from_state(self) -> None:
+        has_references = any(
+            entry.references for entry in getattr(self.state.clipart, "prompts", [])
+        )
+        self.reference_advanced.set_expanded(has_references)
+        self.reference_advanced.setVisible(True)
+        current = self._option_for_combo(self.model_combo)
+        self.model_capability_label.setText(_capability_summary(current))
         self._sync(mark=False)
 
 

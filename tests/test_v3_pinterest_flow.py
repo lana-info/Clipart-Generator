@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -138,6 +139,31 @@ class V3PinterestFlowTests(unittest.TestCase):
             "Manual Pinterest edit",
         )
 
+    def test_reference_models_expand_and_report_incompatibility(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-ref-") as temp:
+            image_path = Path(temp) / "reference.png"
+            Image.new("RGB", (4, 6), "white").save(image_path)
+            state = self.make_state(temp)
+            state.pinterest.prompts[0].references = [str(image_path)]
+            shell = AppShell(state)
+            controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+            page = controller.pages[StepId.PIN_FORMAT_MODEL]
+            page.refresh_from_state()
+
+            self.assertFalse(page.reference_advanced.isHidden())
+            self.assertTrue(page.reference_advanced.is_expanded)
+
+            current_model = str(page.model_combo.currentData())
+            with patch.dict(
+                v3_pinterest_flow._PINTEREST_REFERENCE_MODEL_BY_TEXT,
+                {current_model: "missing-reference-model"},
+                clear=False,
+            ):
+                page._enforce_single_format()
+
+            self.assertIn("Нет парной reference-модели", page.reference_status_label.text())
+            self.assertIn("incompatible_reference_model", page.validation_issues())
+
     def test_vertical_ratio_is_default_and_supported_ratio_can_change(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         self.assertEqual(state.pinterest.generation.ratio, "9:16")
@@ -235,7 +261,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 worker_factory=WorkerFactory(),
             )
             page = controller.pages[StepId.PIN_FORMAT_MODEL]
-            self.assertTrue(page.reference_advanced.isHidden())
+            self.assertFalse(page.reference_advanced.isHidden())
 
             for index in range(page.model_combo.count()):
                 page.model_combo.setCurrentIndex(index)

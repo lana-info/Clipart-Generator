@@ -163,7 +163,7 @@ class PinterestPromptInputPage(ClipartPromptInputPage):
             )
             replace_project_prompts(
                 self.state,
-                ProjectMode.CLIPART,
+                ProjectMode.PINTEREST,
                 entries,
             )
         except PromptGeneratorError as error:
@@ -199,7 +199,12 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         self.ratio_preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_layout.addWidget(self.ratio_preview_label)
         self.add_widget(self.ratio_preview)
+        self.reference_status_label = QLabel()
+        self.reference_status_label.setWordWrap(True)
+        self.reference_status_label.setProperty("v3Small", True)
+        self.add_widget(self.reference_status_label)
         self._format_syncing = False
+        self._format_issue = ""
         self.model_combo.currentIndexChanged.connect(self._enforce_single_format)
         self.ratio_combo.currentTextChanged.connect(self._enforce_single_format)
         self.resolution_combo.currentIndexChanged.connect(
@@ -211,7 +216,18 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         self.ratio_combo.currentTextChanged.connect(self._refresh_ratio_preview)
         self._enforce_single_format()
         self._refresh_ratio_preview()
-        self.reference_advanced.hide()
+        self.reference_advanced.setVisible(False)
+        self.refresh_from_state()
+
+    def refresh_from_state(self) -> None:
+        super().refresh_from_state()
+        has_references = any(
+            entry.references for entry in getattr(self.state.clipart, "prompts", [])
+        )
+        visible = has_references or bool(self._format_issue)
+        self.reference_advanced.setVisible(visible)
+        self.reference_advanced.set_expanded(visible)
+        self._enforce_single_format()
 
     def _enforce_single_format(self, *_: Any) -> None:
         if self._format_syncing:
@@ -234,10 +250,31 @@ class PinterestFormatModelPage(ClipartGenerationPage):
                 )
             ]
             if not compatible:
-                raise ClipartFlowError(
+                self._format_issue = (
                     "Нет парной reference-модели для "
-                    f"{primary_model}, {ratio} / {resolution}"
+                    f"{primary_model}, {ratio} / {resolution}. "
+                    "Выберите другую модель или другой формат."
                 )
+                self.reference_status_label.setText(self._format_issue)
+                self.reference_advanced.setVisible(True)
+                self.reference_advanced.set_expanded(True)
+                self.reference_model_combo.blockSignals(True)
+                self.reference_model_combo.clear()
+                self.reference_model_combo.addItem(
+                    "Нет совместимой reference-модели", primary_model
+                )
+                self.reference_model_combo.setEnabled(False)
+                self.reference_ratio_combo.setEnabled(False)
+                self.reference_resolution_combo.setEnabled(False)
+                self.reference_model_combo.blockSignals(False)
+                self.state.clipart.generation.reference_model = primary_model
+                ClipartGenerationPage._sync(self, mark=False)
+                return
+
+            self._format_issue = ""
+            self.reference_status_label.setText(
+                "Reference-mode готов: выбранная модель и формат совместимы."
+            )
             current_model = compatible[0].model_id
             self.reference_model_combo.blockSignals(True)
             self.reference_model_combo.clear()
@@ -245,6 +282,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
                 self.reference_model_combo.addItem(option.label, option.model_id)
             self._select_model(self.reference_model_combo, current_model)
             self.reference_model_combo.blockSignals(False)
+            self.reference_model_combo.setEnabled(True)
 
             self._set_values(
                 self.reference_ratio_combo,
@@ -258,9 +296,17 @@ class PinterestFormatModelPage(ClipartGenerationPage):
                 resolution,
             )
             self.reference_resolution_combo.setEnabled(False)
+            self.reference_advanced.setVisible(True)
+            self.reference_advanced.set_expanded(True)
             ClipartGenerationPage._sync(self, mark=False)
         finally:
             self._format_syncing = False
+
+    def validation_issues(self) -> tuple[str, ...]:
+        issues = list(super().validation_issues()) if hasattr(super(), "validation_issues") else []
+        if self._format_issue:
+            issues.append("incompatible_reference_model")
+        return tuple(issues)
 
     def _refresh_ratio_preview(self, *_: Any) -> None:
         ratio = self.ratio_combo.currentText()
