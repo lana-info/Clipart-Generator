@@ -1020,8 +1020,29 @@ class RunQueueSupport:
     ) -> None:
         if not self._is_active(worker, generation):
             return
-        value = self.session.progress_percent if self.session is not None else 0
-        self.controller.progress_value.emit(value)
+        if self.session is None:
+            self.controller.progress_value.emit(0)
+            return
+        total_items = max(len(self.session.items), 1)
+        current_index = self.session.current_index
+        if current_index is None:
+            self.controller.progress_value.emit(self.session.progress_percent)
+            return
+        try:
+            local_value = int(_value)
+        except (TypeError, ValueError):
+            local_value = 0
+        if local_value < 0:
+            local_value = 0
+        elif local_value > 100:
+            local_value = 100
+
+        base = (current_index / total_items) * 100
+        overall = int(base + local_value / total_items)
+        terminal = self.session.progress_percent
+        if overall < terminal:
+            overall = terminal
+        self.controller.progress_value.emit(overall)
 
     def _dispatch_finished(
         self,

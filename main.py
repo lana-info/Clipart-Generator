@@ -762,21 +762,25 @@ class WorkerThread(QThread):
                 return
 
             self.progress.emit(f"[{idx}/{total}] Генерация")
-            self.progress_value.emit(int(((idx - 1) / total) * 100))
+            self._emit_file_progress(idx, total, 4)
             try:
                 prompt_text = entry.get("prompt", "")
                 references = entry.get("references", [])
+                self._emit_file_progress(idx, total, 18)
                 image_url = self._kie_generate_image(prompt_text, references)
+                self._emit_file_progress(idx, total, 36)
                 self._ensure_running()
                 gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
                 self._download_file(image_url, gen_path)
                 self._ensure_running()
                 self.progress.emit(f"  Сгенерировано: {gen_path}")
+                self._emit_file_progress(idx, total, 50)
 
                 source_path = gen_path
 
                 final_url = image_url
                 if process_generated:
+                    self._emit_file_progress(idx, total, 58)
                     if (
                         self.visible_mark_cleanup_enabled
                         or self.upscale
@@ -789,7 +793,11 @@ class WorkerThread(QThread):
                         final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "gen")
                     else:
                         final_url = None
+                    self._emit_file_progress(idx, total, 84)
+                else:
+                    self._emit_file_progress(idx, total, 70)
 
+                self._emit_file_progress(idx, total, 92)
                 self._ensure_running()
                 out_path = os.path.join(output_dir, f"result_{idx:03d}_{self.run_stamp}.png")
                 self._save_final_output(
@@ -800,6 +808,7 @@ class WorkerThread(QThread):
                     idx,
                     "gen",
                 )
+                self._emit_file_progress(idx, total, 100)
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
             except (ProcessingCancelled, VisibleMarkCleanupCancelled):
@@ -817,6 +826,18 @@ class WorkerThread(QThread):
                 self.finished.emit(f"Mode 1: Готово (0/{total}). Изображения не созданы.")
             else:
                 self.finished.emit(f"Mode 1: Готово ({done}/{total})")
+
+    def _emit_file_progress(
+        self,
+        item_index: int,
+        total_items: int,
+        local_percent: int,
+    ) -> None:
+        if total_items <= 0:
+            return
+        local = max(0, min(100, int(local_percent)))
+        base = ((item_index - 1) / total_items) * 100
+        self.progress_value.emit(int(base + local / total_items))
 
     def _normalize_prompt_entries(self, raw_entries):
         entries = []
@@ -875,7 +896,7 @@ class WorkerThread(QThread):
                 return
 
             self.progress.emit(f"[{idx}/{total}] Обработка файла: {os.path.basename(file_path)}")
-            self.progress_value.emit(int(((idx - 1) / total) * 100))
+            self._emit_file_progress(idx, total, 4)
             try:
                 if not os.path.isfile(file_path):
                     self.progress.emit(f"  Файл не найден: {file_path}")
@@ -892,12 +913,16 @@ class WorkerThread(QThread):
                     or self.unsharp_enabled
                     or self.remove_bg
                 ):
+                    self._emit_file_progress(idx, total, 24)
                     final_url = self._run_processing_pipeline(source_path, None, raw_dir, idx, "file")
                 elif self.edge_shrink_enabled:
+                    self._emit_file_progress(idx, total, 40)
                     final_url = self._edge_shrink_alpha_source_if_available(source_path, raw_dir, idx, "file")
                 else:
+                    self._emit_file_progress(idx, total, 50)
                     final_url = None
 
+                self._emit_file_progress(idx, total, 80)
                 self._ensure_running()
                 base = os.path.splitext(os.path.basename(file_path))[0]
                 out_path = os.path.join(output_dir, f"{base}_processed_{self.run_stamp}.png")
@@ -910,6 +935,7 @@ class WorkerThread(QThread):
                     idx,
                     "file",
                 )
+                self._emit_file_progress(idx, total, 100)
 
                 self.progress.emit(f"  Итог сохранён: {out_path}")
                 done += 1
