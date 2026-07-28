@@ -761,7 +761,7 @@ Verification:
 ## Task 26: Улучшить выбор файлов и выходной папки обработки
 
 Key: `CG3-TASK-026`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-003`, `CG3-FR-004`, `CG3-FR-005`, `CG3-AC-008`,
 `CG3-AC-014`
 
@@ -776,12 +776,12 @@ Steps:
 - Валидировать конфликт input/output и безопасно разрешать одинаковые имена.
 
 Acceptance:
-- [ ] Один файл удаляется без очистки списка.
-- [ ] Output folder виден до запуска.
-- [ ] Исходник не перезаписывается даже при совпадении имени.
+- [x] Один файл удаляется без очистки списка.
+- [x] Output folder виден до запуска.
+- [x] Исходник не перезаписывается даже при совпадении имени.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_processing_flow tests.test_v3_output_paths -v`
+- [x] `python -m unittest tests.test_v3_processing_flow tests.test_v3_output_paths -v`
 
 ## Task 27: Создать единые настройки API и проверок провайдера
 

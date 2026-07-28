@@ -19,8 +19,11 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QRadioButton,
     QSpinBox,
+    QStyle,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -85,6 +88,48 @@ class LocalImageInfo:
             f"{self.name} · {self.width}×{self.height} · "
             f"{self.color_mode} · {size_mb:.1f} МБ"
         )
+
+
+class WorkspaceSelector(QWidget):
+    def __init__(
+        self,
+        title: str,
+        path: str,
+        *,
+        browse_text: str = "Выбрать",
+        changed: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__()
+        self._changed = changed
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        self.label = QLabel(title)
+        self.edit = QLineEdit(path)
+        self.edit.setPlaceholderText(title)
+        self.browse_button = V3Button(browse_text, ButtonVariant.SECONDARY)
+        self.browse_button.clicked.connect(self._browse)
+        row.addWidget(self.label)
+        row.addWidget(self.edit, 1)
+        row.addWidget(self.browse_button)
+
+    def path(self) -> str:
+        return self.edit.text().strip()
+
+    def set_path(self, path: str) -> None:
+        self.edit.blockSignals(True)
+        self.edit.setText(path)
+        self.edit.blockSignals(False)
+
+    def _browse(self) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            self.label.text(),
+            self.path() or os.getcwd(),
+        )
+        if selected:
+            self.set_path(selected)
+            if self._changed is not None:
+                self._changed()
 
 
 _OPERATION_FIELDS = tuple(ImageOperationData.__dataclass_fields__)
@@ -452,6 +497,14 @@ class ProcessingFilesPage(_ScrollableStepPage):
         row_layout.addStretch(1)
         self.add_widget(row)
 
+        self.output_selector = WorkspaceSelector(
+            "Папка результата",
+            self._default_output_dir(),
+            changed=self._sync_output_dir,
+        )
+        self.output_selector.edit.textChanged.connect(self._sync_output_dir)
+        self.add_widget(self.output_selector)
+
         self.drop_label = QLabel(
             "Перетащите изображения сюда. URL и папки не принимаются."
         )
@@ -470,6 +523,15 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.refresh_from_state()
 
     def _changed(self) -> None:
+        self.changed()
+
+    def _default_output_dir(self) -> str:
+        work_dir = self.state.common.work_dir.strip()
+        return str(Path(work_dir) / "output") if work_dir else ""
+
+    def _sync_output_dir(self, *_: Any) -> None:
+        value = self.output_selector.path()
+        self.state.common.output_dir = value
         self.changed()
 
     def _choose_files(self) -> None:
@@ -520,6 +582,23 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.changed()
         self.refresh_from_state()
 
+    def remove_file(self, path: str) -> None:
+        target = os.path.normcase(os.path.abspath(path))
+        before = len(self.state.processing.selected_files)
+        self.state.processing.selected_files = [
+            existing
+            for existing in self.state.processing.selected_files
+            if os.path.normcase(os.path.abspath(existing)) != target
+        ]
+        self.state.processing.verification_records = [
+            record
+            for record in self.state.processing.verification_records
+            if os.path.normcase(os.path.abspath(record.file_path)) != target
+        ]
+        if len(self.state.processing.selected_files) != before:
+            self.changed()
+        self.refresh_from_state()
+
     def dragEnterEvent(self, event: Any) -> None:
         mime = event.mimeData()
         if mime.hasUrls() and all(url.isLocalFile() for url in mime.urls()):
@@ -540,6 +619,11 @@ class ProcessingFilesPage(_ScrollableStepPage):
             event.ignore()
 
     def refresh_from_state(self) -> None:
+        default_output = self._default_output_dir()
+        if not self.state.common.output_dir and default_output:
+            self.state.common.output_dir = default_output
+        if not self.output_selector.path():
+            self.output_selector.set_path(self.state.common.output_dir or default_output)
         infos: list[LocalImageInfo] = []
         errors: list[str] = []
         for path in self.state.processing.selected_files:
@@ -578,6 +662,15 @@ class ProcessingFilesPage(_ScrollableStepPage):
                 metadata = QLabel(info.summary)
                 metadata.setWordWrap(True)
                 row.addWidget(metadata, 1)
+                remove_button = QToolButton()
+                remove_button.setIcon(
+                    self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
+                )
+                remove_button.setToolTip(f"Удалить {info.name}")
+                remove_button.clicked.connect(
+                    lambda _checked=False, target=info.path: self.remove_file(target)
+                )
+                row.addWidget(remove_button)
                 self.files_layout.addWidget(card)
                 self.thumbnail_labels.append(thumbnail)
         else:
@@ -954,9 +1047,12 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         operations = self.state.processing.operations
         files = self.state.processing.selected_files
         work_dir = self.state.common.work_dir
-        output_dir = str(Path(work_dir) / "output") if work_dir else "не выбрана"
-        if work_dir:
+        output_dir = self.state.common.output_dir.strip()
+        if not output_dir and work_dir:
+            output_dir = str(Path(work_dir) / "output")
             self.state.common.output_dir = output_dir
+        if not output_dir:
+            output_dir = "не выбрана"
         steps = processing_pipeline_steps(operations)
         removed, preserved = processing_change_summary(operations)
         cost = estimate_processing_cost(operations, len(files))
@@ -1053,6 +1149,7 @@ def build_processing_run_request(
     adapter = _ProcessingStateAdapter(state)
     settings = _worker_settings(adapter, runtime_settings)
     settings["run_mode"] = "process_only"
+    settings["output_dir"] = state.common.output_dir or str(work_dir / "output")
     return ClipartRunRequest(
         mode="mode2_process",
         work_dir=str(work_dir),

@@ -618,6 +618,7 @@ class WorkerThread(QThread):
         self.retries = max(0, int(settings.get("retries", 3)))
         self.generation_wait_timeout = max(120, int(settings.get("generation_wait_timeout", 300)))
         self.status_poll_interval = max(5.0, min(60.0, float(settings.get("status_poll_interval", 20))))
+        self.output_dir = settings.get("output_dir") or os.path.join(self.work_dir, "output")
 
         # Legacy `upscale` remains the before-background pass for old configs.
         self.visible_mark_cleanup_enabled = bool(settings.get("visible_mark_cleanup_enabled", False))
@@ -742,7 +743,7 @@ class WorkerThread(QThread):
             self._log_upscale_plan()
 
         raw_dir = os.path.join(self.work_dir, "raw")
-        output_dir = os.path.join(self.work_dir, "output")
+        output_dir = self.output_dir
         os.makedirs(raw_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
 
@@ -884,7 +885,7 @@ class WorkerThread(QThread):
             return
 
         raw_dir = os.path.join(self.work_dir, "raw")
-        output_dir = os.path.join(self.work_dir, "output")
+        output_dir = self.output_dir
         os.makedirs(raw_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
 

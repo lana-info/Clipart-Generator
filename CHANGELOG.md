@@ -5,6 +5,7 @@
 - Enabled startup auto-application of newer manifested releases on next run, with update installer download retried in bounded chunks before checksum verification for legacy versions to reach `2.0` without manual approval.
 - Simplified the cleanup workflow into one safe preset, removed the ordinary processing rights gate, preserved ICC/DPI automatically, and added cleanup-only pixel-parity coverage for PNG and JPEG inputs.
 - Locked clipart defaults to upscale-before, remove-background, trim, and 300 DPI export; added an alpha-safe guard so post-background upscale must preserve transparency.
+- Added per-file deletion, a visible processing output-folder selector, and safe output-path routing so processed files keep their source intact.
 
 
 
