@@ -16,7 +16,22 @@ class WatermarkBackendError(RuntimeError):
 
 
 def backend_available() -> bool:
-    return shutil.which("remove-ai-watermarks") is not None
+    executable = shutil.which("remove-ai-watermarks")
+    if not executable:
+        return False
+    try:
+        probe = subprocess.run(
+            [executable, "--help"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+            shell=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
 
 
 def clean_invisible_watermark(
