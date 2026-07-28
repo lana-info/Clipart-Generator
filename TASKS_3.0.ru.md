@@ -657,7 +657,7 @@ Verification:
 ## Task 22: Ввести реестр возможностей провайдеров
 
 Key: `CG3-TASK-022`
-Status: Todo
+Status: Done
 Requirements: `CG3-FR-045`, `CG3-FR-046`, `CG3-AR-005`
 
 Goal:
@@ -671,12 +671,12 @@ Steps:
 - Добавить contract tests для KIE, PhotoRoom, rembg, BEN2 и Real-ESRGAN.
 
 Acceptance:
-- [ ] Выбранный provider показывает только свои поддерживаемые параметры.
-- [ ] Неизвестный provider не запускает обработку.
-- [ ] UI и run plan читают один registry.
+- [x] Выбранный provider показывает только свои поддерживаемые параметры.
+- [x] Неизвестный provider не запускает обработку.
+- [x] UI и run plan читают один registry.
 
 Verification:
-- [ ] `python -m unittest tests.test_v3_provider_registry -v`
+- [x] `python -m unittest tests.test_v3_provider_registry tests.test_v3_processing_flow tests.test_v3_clipart_flow -v`
 
 ## Task 23: Создать общий ProcessingPipelineEditor
 

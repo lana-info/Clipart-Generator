@@ -35,6 +35,13 @@ from v3_clipart_flow import (
     _worker_settings,
 )
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
+from v3_provider_registry import (
+    KIE_MODEL_OPTIONS,
+    processing_provider_options,
+    provider_requires_api_key,
+    provider_requires_network,
+    provider_supports_operation,
+)
 from v3_project_state import (
     GenerationData,
     ImageOperationData,
@@ -217,40 +224,40 @@ def operation_validation_issues(
 
 
 def uses_external_processing(operations: ImageOperationData) -> bool:
-    return bool(
-        (
-            operations.upscale_before
-            and operations.upscale_before_provider != "local_realesrgan"
-        )
-        or (
-            operations.upscale_after
-            and operations.upscale_after_provider != "local_realesrgan"
-        )
-        or (
-            operations.remove_background
-            and operations.remove_background_provider
-            not in {"local_rembg", "local_ben2"}
-        )
-    )
+    selected: list[str] = []
+    if operations.upscale_before:
+        selected.append(operations.upscale_before_provider)
+    if operations.upscale_after:
+        selected.append(operations.upscale_after_provider)
+    if operations.remove_background:
+        selected.append(operations.remove_background_provider)
+    try:
+        return any(provider_requires_network(provider_id) for provider_id in selected)
+    except KeyError:
+        return True
 
 
 def validate_processing_providers(operations: ImageOperationData) -> None:
-    if (
-        operations.upscale_before
-        and operations.upscale_before_provider not in {"kie", "local_realesrgan"}
-    ):
-        raise ProcessingFlowError("Неизвестный провайдер апскейла до удаления фона")
-    if (
-        operations.upscale_after
-        and operations.upscale_after_provider not in {"kie", "local_realesrgan"}
-    ):
-        raise ProcessingFlowError("Неизвестный провайдер апскейла после удаления фона")
-    if (
-        operations.remove_background
-        and operations.remove_background_provider
-        not in {"kie", "photoroom", "local_rembg", "local_ben2"}
-    ):
-        raise ProcessingFlowError("Неизвестный провайдер удаления фона")
+    try:
+        if operations.upscale_before and not provider_supports_operation(
+            operations.upscale_before_provider,
+            "upscale_before",
+        ):
+            raise ProcessingFlowError("?????????????????????? ?????????????????? ???????????????? ???? ???????????????? ????????")
+        if operations.upscale_after and not provider_supports_operation(
+            operations.upscale_after_provider,
+            "upscale_after",
+        ):
+            raise ProcessingFlowError("?????????????????????? ?????????????????? ???????????????? ?????????? ???????????????? ????????")
+        if operations.remove_background and not provider_supports_operation(
+            operations.remove_background_provider,
+            "remove_background",
+        ):
+            raise ProcessingFlowError("?????????????????????? ?????????????????? ???????????????? ????????")
+    except KeyError as error:
+        raise ProcessingFlowError(
+            f"\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440: {error.args[0]}"
+        ) from error
 
 
 def duplicate_output_names(paths: Sequence[str]) -> tuple[str, ...]:
@@ -324,27 +331,25 @@ def missing_processing_runtime_requirements(
     request: ClipartRunRequest,
 ) -> tuple[str, ...]:
     settings = request.settings
-    needs_kie = bool(
-        (settings.get("upscale") and settings.get("upscale_provider") != "local_realesrgan")
-        or (
-            settings.get("upscale_after")
-            and settings.get("upscale_after_provider") != "local_realesrgan"
-        )
-        or (
-            settings.get("remove_bg")
-            and settings.get("remove_bg_provider") not in {"photoroom", "local_rembg", "local_ben2"}
-        )
-
-    )
     missing: list[str] = []
-    if needs_kie and not str(settings.get("kie_api_key") or "").strip():
-        missing.append("KIE API Key")
-    if (
-        settings.get("remove_bg")
-        and settings.get("remove_bg_provider") == "photoroom"
-        and not str(settings.get("photoroom_api_key") or "").strip()
+    seen: set[str] = set()
+    def add_missing(label: str) -> None:
+        if label not in seen:
+            seen.add(label)
+            missing.append(label)
+    for enabled_field, provider_field in (
+        ("upscale", "upscale_provider"),
+        ("upscale_after", "upscale_after_provider"),
+        ("remove_bg", "remove_bg_provider"),
     ):
-        missing.append("PhotoRoom API Key")
+        if not settings.get(enabled_field):
+            continue
+        provider_id = str(settings.get(provider_field) or "")
+        api_key_name = "photoroom_api_key" if provider_id == "photoroom" else "kie_api_key"
+        if provider_requires_api_key(provider_id) and not str(settings.get(api_key_name) or "").strip():
+            add_missing(
+                "KIE API Key" if api_key_name == "kie_api_key" else "PhotoRoom API Key"
+            )
     needs_local_upscale = bool(
         (
             settings.get("upscale")
@@ -701,36 +706,31 @@ class ProcessingPipelinePage(_ScrollableStepPage):
             provider_layout,
             "Апскейл до",
             "upscale_before_provider",
-            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            processing_provider_options("upscale_before_provider"),
         )
         self.remove_background_provider = self._provider_combo(
             provider_layout,
             "Удаление фона",
             "remove_background_provider",
-            (
-                ("KIE", "kie"),
-                ("PhotoRoom", "photoroom"),
-                ("Local rembg", "local_rembg"),
-                ("Local BEN2", "local_ben2"),
-            ),
+            processing_provider_options("remove_background_provider"),
         )
         self.upscale_after_provider = self._provider_combo(
             provider_layout,
             "Апскейл после",
             "upscale_after_provider",
-            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            processing_provider_options("upscale_after_provider"),
         )
         self.kie_upscale_model = self._provider_combo(
             provider_layout,
             "KIE модель апскейла до",
             "kie_upscale_model",
-            (("Topaz", "topaz/upscale"), ("Recraft Crisp", "recraft/crisp-upscale")),
+            KIE_MODEL_OPTIONS,
         )
         self.kie_upscale_after_model = self._provider_combo(
             provider_layout,
             "KIE модель апскейла после",
             "kie_upscale_after_model",
-            (("Topaz", "topaz/upscale"), ("Recraft Crisp", "recraft/crisp-upscale")),
+            KIE_MODEL_OPTIONS,
         )
         self.add_widget(provider_group)
 

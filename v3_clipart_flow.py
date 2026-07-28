@@ -70,6 +70,13 @@ from v3_prompt_generator import (
     generate_prompt_series,
     replace_project_prompts,
 )
+from v3_provider_registry import (
+    KIE_MODEL_OPTIONS,
+    processing_provider_options,
+    provider_requires_api_key,
+    provider_supports_operation,
+    provider_visible_controls,
+)
 from v3_wizard import AppShell
 
 
@@ -449,6 +456,24 @@ def _validate_processing_models(operations: ImageOperationData) -> None:
         )
 
 
+def _validate_processing_providers(operations: ImageOperationData) -> None:
+    try:
+        for operation_field, provider_field in (
+            ("upscale_before", "upscale_before_provider"),
+            ("remove_background", "remove_background_provider"),
+            ("upscale_after", "upscale_after_provider"),
+        ):
+            if not getattr(operations, operation_field):
+                continue
+            provider_id = getattr(operations, provider_field)
+            if not provider_supports_operation(provider_id, operation_field):
+                raise ClipartFlowError(
+                    f"Провайдер {provider_id} не поддерживает операцию {operation_field}"
+                )
+    except KeyError as error:
+        raise ClipartFlowError(f"Неизвестный провайдер: {error.args[0]}") from error
+
+
 def build_clipart_run_request(
     state: ProjectState,
     runtime_settings: Mapping[str, Any] | None = None,
@@ -467,6 +492,7 @@ def build_clipart_run_request(
     generation = state.clipart.generation
     operations = state.clipart.operations
     _validate_prompt_references(state.clipart.prompts)
+    _validate_processing_providers(operations)
     _validate_processing_models(operations)
     text_option = _model_option(generation.model)
     if text_option.model_type != "text_to_image":
@@ -530,14 +556,26 @@ def build_clipart_run_request(
 
 def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
     missing: list[str] = []
-    if not str(request.settings.get("kie_api_key") or "").strip():
-        missing.append("KIE API Key")
-    if (
-        request.settings.get("remove_bg")
-        and request.settings.get("remove_bg_provider") == "photoroom"
-        and not str(request.settings.get("photoroom_api_key") or "").strip()
+    seen: set[str] = set()
+
+    def add_missing(label: str) -> None:
+        if label not in seen:
+            seen.add(label)
+            missing.append(label)
+
+    for enabled_field, provider_field in (
+        ("upscale", "upscale_provider"),
+        ("upscale_after", "upscale_after_provider"),
+        ("remove_bg", "remove_bg_provider"),
     ):
-        missing.append("PhotoRoom API Key")
+        if not request.settings.get(enabled_field):
+            continue
+        provider_id = str(request.settings.get(provider_field) or "")
+        api_key_name = "photoroom_api_key" if provider_id == "photoroom" else "kie_api_key"
+        if provider_requires_api_key(provider_id) and not str(request.settings.get(api_key_name) or "").strip():
+            add_missing(
+                "KIE API Key" if api_key_name == "kie_api_key" else "PhotoRoom API Key"
+            )
     local_upscale = (
         request.settings.get("upscale")
         and request.settings.get("upscale_provider") == "local_realesrgan"
@@ -1785,17 +1823,8 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self.changed = changed
         self.operation_widgets: dict[str, QWidget] = {}
         operations = state.clipart.operations
-        _, processing_pricing = _legacy_catalog()
-        upscale_models = tuple(
-            (model_id, model_id)
-            for model_id in processing_pricing
-            if "upscale" in model_id
-        )
-        remove_bg_models = tuple(
-            (model_id, model_id)
-            for model_id in processing_pricing
-            if "remove-background" in model_id
-        )
+        upscale_models = KIE_MODEL_OPTIONS
+        remove_bg_models = KIE_MODEL_OPTIONS
 
         recipe = QLabel(
             "Рекомендуемый рецепт: апскейл → удаление фона → экспорт PNG."
@@ -1821,26 +1850,21 @@ class ClipartProcessingPage(_ScrollableStepPage):
             form,
             "upscale_before_provider",
             "Провайдер первого апскейла",
-            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            processing_provider_options("upscale_before_provider"),
             operations,
         )
         self._add_combo(
             form,
             "remove_background_provider",
             "Провайдер удаления фона",
-            (
-                ("KIE", "kie"),
-                ("PhotoRoom", "photoroom"),
-                ("Local rembg", "local_rembg"),
-                ("Local BEN2", "local_ben2"),
-            ),
+            processing_provider_options("remove_background_provider"),
             operations,
         )
         self._add_combo(
             form,
             "upscale_after_provider",
             "Провайдер второго апскейла",
-            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            processing_provider_options("upscale_after_provider"),
             operations,
         )
 
@@ -2126,32 +2150,47 @@ class ClipartProcessingPage(_ScrollableStepPage):
 
     def _refresh_control_visibility(self) -> None:
         operations = self.state.clipart.operations
-        before_kie = operations.upscale_before and operations.upscale_before_provider == "kie"
-        before_local = operations.upscale_before and operations.upscale_before_provider == "local_realesrgan"
-        after_kie = operations.upscale_after and operations.upscale_after_provider == "kie"
-        after_local = operations.upscale_after and operations.upscale_after_provider == "local_realesrgan"
-        remove_kie = operations.remove_background and operations.remove_background_provider == "kie"
-        remove_rembg = operations.remove_background and operations.remove_background_provider == "local_rembg"
-        remove_ben2 = operations.remove_background and operations.remove_background_provider == "local_ben2"
+        before_controls = set(provider_visible_controls(operations.upscale_before_provider))
+        after_controls = set(provider_visible_controls(operations.upscale_after_provider))
+        remove_controls = set(provider_visible_controls(operations.remove_background_provider))
         visibility = {
             "upscale_before_provider": operations.upscale_before,
             "upscale_after_provider": operations.upscale_after,
             "remove_background_provider": operations.remove_background,
             "edge_shrink_pixels": operations.edge_shrink,
             "trim_mode": operations.trim,
-            "kie_upscale_model": before_kie,
-            "kie_upscale_after_model": after_kie,
-            "local_realesrgan_profile": before_local or after_local,
-            "local_realesrgan_scale": before_local,
-            "local_realesrgan_after_scale": after_local,
-            "kie_remove_bg_model": remove_kie,
-            "local_rembg_profile": remove_rembg,
-            "local_rembg_model": remove_rembg,
-            "local_rembg_edge_quality": remove_rembg,
-            "local_ben2_refine_foreground": remove_ben2,
-            "local_ben2_alpha_threshold": remove_ben2,
-            "local_ben2_edge_softness": remove_ben2,
-            "local_ben2_corner_radius": remove_ben2,
+            "kie_upscale_model": operations.upscale_before
+            and "kie_upscale_model" in before_controls,
+            "kie_upscale_after_model": operations.upscale_after
+            and "kie_upscale_after_model" in after_controls,
+            "local_realesrgan_profile": (
+                operations.upscale_before
+                and "local_realesrgan_profile" in before_controls
+            )
+            or (
+                operations.upscale_after
+                and "local_realesrgan_profile" in after_controls
+            ),
+            "local_realesrgan_scale": operations.upscale_before
+            and "local_realesrgan_scale" in before_controls,
+            "local_realesrgan_after_scale": operations.upscale_after
+            and "local_realesrgan_after_scale" in after_controls,
+            "kie_remove_bg_model": operations.remove_background
+            and "kie_remove_bg_model" in remove_controls,
+            "local_rembg_profile": operations.remove_background
+            and "local_rembg_profile" in remove_controls,
+            "local_rembg_model": operations.remove_background
+            and "local_rembg_model" in remove_controls,
+            "local_rembg_edge_quality": operations.remove_background
+            and "local_rembg_edge_quality" in remove_controls,
+            "local_ben2_refine_foreground": operations.remove_background
+            and "local_ben2_refine_foreground" in remove_controls,
+            "local_ben2_alpha_threshold": operations.remove_background
+            and "local_ben2_alpha_threshold" in remove_controls,
+            "local_ben2_edge_softness": operations.remove_background
+            and "local_ben2_edge_softness" in remove_controls,
+            "local_ben2_corner_radius": operations.remove_background
+            and "local_ben2_corner_radius" in remove_controls,
             "unsharp_amount": operations.unsharp,
             "unsharp_radius": operations.unsharp,
             "unsharp_threshold": operations.unsharp,
