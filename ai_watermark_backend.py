@@ -34,6 +34,28 @@ def backend_available() -> bool:
     return probe.returncode == 0
 
 
+def gpu_backend_available() -> bool:
+    """Return whether the optional backend and an NVIDIA CUDA device are present."""
+    if not backend_available():
+        return False
+    nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi:
+        return False
+    try:
+        probe = subprocess.run(
+            [nvidia_smi, "-L"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+            shell=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
 def clean_invisible_watermark(
     source: Path,
     output: Path,

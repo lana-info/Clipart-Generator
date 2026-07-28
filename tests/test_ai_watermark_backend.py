@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from ai_watermark_backend import WatermarkBackendError, clean_invisible_watermark
-from ai_watermark_backend import backend_available
+from ai_watermark_backend import backend_available, gpu_backend_available
 
 
 def test_missing_backend_fails_closed(tmp_path: Path, monkeypatch):
@@ -23,6 +23,12 @@ def test_broken_executable_is_not_reported_available(monkeypatch):
         lambda *args, **kwargs: subprocess.CompletedProcess(args, 1, "", ""),
     )
     assert backend_available() is False
+
+
+def test_gpu_backend_requires_nvidia_smi(monkeypatch):
+    monkeypatch.setattr("ai_watermark_backend.backend_available", lambda: True)
+    monkeypatch.setattr("shutil.which", lambda name: None if name == "nvidia-smi" else "tool")
+    assert gpu_backend_available() is False
 
 
 def test_backend_output_is_checked(tmp_path: Path, monkeypatch):

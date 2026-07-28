@@ -418,9 +418,16 @@ class ProcessingPipelineEditor(QScrollArea):
             cleanup_form.addRow(self.cleanup_checkbox)
             self._add_bool(cleanup_form, "visible_mark_cleanup", operations)
             self._add_bool(cleanup_form, "invisible_watermark_cleanup", operations)
-            self.operation_widgets["invisible_watermark_cleanup"].setToolTip(
-                "Запускается только если локальный remove-ai-watermarks установлен; "
-                "может изменить детали изображения."
+            invisible_control = self.operation_widgets["invisible_watermark_cleanup"]
+            try:
+                from ai_watermark_backend import gpu_backend_available
+                gpu_ready = gpu_backend_available()
+            except Exception:
+                gpu_ready = False
+            invisible_control.setEnabled(gpu_ready)
+            invisible_control.setToolTip(
+                "Требуется установленный remove-ai-watermarks и NVIDIA CUDA GPU. "
+                "Без GPU режим недоступен; обычная обработка продолжает работать."
             )
             cleanup_hint = QLabel(
                 "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "

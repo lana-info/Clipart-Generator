@@ -98,6 +98,17 @@ Verification:
 
 Evidence: `pytest -q tests/test_ai_watermark_backend.py tests/test_ai_cleanup_order.py` — 4/4.
 
+## Task 7: Локальный GPU preflight
+
+Key: `CG3-AI-TASK-007`
+
+Status: Done
+
+Режим невидимой очистки автоматически отключается без рабочего CLI или NVIDIA
+CUDA GPU. Обычная обработка не блокируется. Проверено: `pytest -q
+tests/test_ai_watermark_backend.py` — 6/6; текущий workstation показывает
+`gpu_backend_available=False`.
+
 ## Traceability
 
 | PRD requirement | Task | Evidence |
