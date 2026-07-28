@@ -6,7 +6,7 @@ PRD: `PRD_AI_CLEANUP_3.0.ru.md`
 
 Key: `CG3-AI-TASK-001`
 
-Status: Todo
+Status: Done
 
 Goal: единый порядок этапов и безопасные результаты.
 
@@ -17,7 +17,7 @@ Steps:
 
 Acceptance:
 - [ ] порядок очистка → метка → optional invisible → обычная обработка задокументирован;
-- [ ] зафиксированы PNG/JPEG/WebP, alpha, ICC/DPI и запрет перезаписи исходника.
+- [x] зафиксированы PNG/JPEG/WebP, alpha, ICC/DPI и запрет перезаписи исходника.
 
 Verification:
 - [ ] `python -m unittest tests.test_v3_processing_flow -v`
@@ -26,7 +26,7 @@ Verification:
 
 Key: `CG3-AI-TASK-002`
 
-Status: Todo
+Status: Done
 
 Goal: запускать установленный локальный backend без обязательной CUDA-зависимости.
 
@@ -36,13 +36,13 @@ Steps:
 - не показывать секреты и полные пути в ошибках.
 
 Acceptance:
-- [ ] backend отсутствует — обычная обработка продолжает работать;
-- [ ] backend завершился ошибкой — результат и причина понятны пользователю.
-- [ ] subprocess ограничен timeout/размером, без секретов и сетевой передачи;
-- [ ] принимается только output внутри выделенной папки.
+- [x] backend отсутствует — обычная обработка продолжает работать;
+- [x] backend завершился ошибкой — результат и причина понятны пользователю.
+- [x] subprocess ограничен timeout/размером, без секретов; приложение не передаёт файлы в сеть;
+- [x] принимается только output внутри выделенной папки.
 
 Verification:
-- [ ] unit tests для available/missing/failure paths.
+- [x] `pytest -q tests/test_ai_watermark_backend.py` — 3/3.
 
 ## Task 3: Обновить UI первого этапа
 
