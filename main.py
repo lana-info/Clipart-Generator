@@ -3960,7 +3960,7 @@ class MainWindow(QMainWindow):
 
         preview_group = QGroupBox("Список записей")
         preview_layout = QVBoxLayout()
-        self.table = PromptTableWidget(0, 4)
+        self.table = PromptTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["Промпт", "🖼", "", ""])
         self.table.verticalHeader().setVisible(True)
         self.table.verticalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3972,7 +3972,10 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self.table.setColumnWidth(1, 52)
-        self.table.setColumnWidth(2, 44)
+        self.table.setColumnWidth(2, 38)
+        self.table.setColumnWidth(3, 38)
+        self.table.setColumnWidth(4, 38)
+        self.table.setColumnWidth(5, 38)
         self.table.setColumnWidth(3, 44)
         self.table.setWordWrap(False)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -5208,6 +5211,17 @@ class MainWindow(QMainWindow):
         self.refresh_prompts_table()
         self.save_prompts_storage()
 
+    def replace_references_for_prompt_row(self, row_index):
+        if not (0 <= row_index < len(self.generated_prompts)):
+            return
+        files = self._pick_reference_files()
+        if files:
+            self._set_row_references(row_index, files)
+
+    def remove_references_for_prompt_row(self, row_index):
+        if 0 <= row_index < len(self.generated_prompts):
+            self._set_row_references(row_index, [])
+
     def on_prompt_item_double_clicked(self, item):
         if item.column() in {0, 1}:
             self.open_prompt_editor(item.row())
@@ -5404,8 +5418,18 @@ class MainWindow(QMainWindow):
             edit_btn.setMinimumHeight(28)
             edit_btn.clicked.connect(lambda _, r=index: self.pick_references_for_prompt_row(r))
 
+            replace_btn = QPushButton("🖼↻")
+            replace_btn.setToolTip("Заменить референсы")
+            replace_btn.setMinimumHeight(28)
+            replace_btn.clicked.connect(lambda _, r=index: self.replace_references_for_prompt_row(r))
+            remove_ref_btn = QPushButton("🖼−")
+            remove_ref_btn.setToolTip("Удалить референсы")
+            remove_ref_btn.setMinimumHeight(28)
+            remove_ref_btn.clicked.connect(lambda _, r=index: self.remove_references_for_prompt_row(r))
             self.table.setCellWidget(row, 2, edit_btn)
-            self.table.setCellWidget(row, 3, delete_btn)
+            self.table.setCellWidget(row, 3, replace_btn)
+            self.table.setCellWidget(row, 4, remove_ref_btn)
+            self.table.setCellWidget(row, 5, delete_btn)
         self.is_updating_prompts_table = False
 
     def _build_references_tooltip(self, references):
