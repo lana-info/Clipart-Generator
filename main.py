@@ -4308,6 +4308,13 @@ class MainWindow(QMainWindow):
         kie_layout.addWidget(lbl_photoroom_api_key, 5, 0)
         kie_layout.addWidget(photoroom_access_widget, 5, 1, 1, 3)
 
+        self.btn_next_to_processing = QPushButton("Далее: обработка →")
+        self.btn_next_to_processing.setFixedSize(190, 36)
+        self.btn_next_to_processing.setStyleSheet(self.primary_button_style)
+        self.btn_next_to_processing.setToolTip("Перейти к отдельному шагу настроек обработки")
+        self.btn_next_to_processing.clicked.connect(lambda: self.tabs.setCurrentIndex(1))
+        settings_tab_layout.addWidget(self.btn_next_to_processing, alignment=Qt.AlignmentFlag.AlignRight)
+
         process_settings_group = QGroupBox("Обработка изображений")
         process_settings_group.setMaximumWidth(1080)
         process_settings_layout = QVBoxLayout()
