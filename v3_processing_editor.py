@@ -83,9 +83,9 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
             export_300_dpi=True,
         ),
     ),
-    "check_cleanup": ProcessingRecipe(
-        key="check_cleanup",
-        title="Проверить и очистить",
+    "metadata_cleanup": ProcessingRecipe(
+        key="metadata_cleanup",
+        title="Очистить служебные метаданные",
         description="Удаление служебных метаданных с сохранением ICC и DPI.",
         operations=_operations(
             remove_exif=True,
@@ -95,6 +95,12 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
             remove_embedded_thumbnail=True,
             remove_generator_fields=True,
         ),
+    ),
+    "export_300_dpi": ProcessingRecipe(
+        key="export_300_dpi",
+        title="Экспорт 300 DPI",
+        description="Сохранить изображение с параметрами для печати 300 DPI.",
+        operations=_operations(export_300_dpi=True),
     ),
     "custom": ProcessingRecipe(
         key="custom",
@@ -106,6 +112,8 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
 
 
 def apply_processing_recipe(state: ProjectState, recipe: str) -> None:
+    if recipe == "check_cleanup":
+        recipe = "metadata_cleanup"
     if recipe not in PROCESSING_RECIPES:
         raise ValueError("Неизвестный рецепт обработки")
     state.processing.recipe = recipe
