@@ -174,7 +174,7 @@ class RunPlanBuilder:
 class ProcessingPipelineEditor(QScrollArea):
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить обнаруженную видимую метку Gemini",
-        "invisible_watermark_cleanup": "Экспериментально очистить невидимый watermark",
+        "invisible_watermark_cleanup": "Обработать скрытые водяные знаки (SynthID)",
         "upscale_before": "Апскейл до удаления фона",
         "upscale_after": "Апскейл после удаления фона",
         "remove_background": "Удалить фон",
@@ -428,8 +428,9 @@ class ProcessingPipelineEditor(QScrollArea):
                 operations.invisible_watermark_cleanup = False
             invisible_control.setEnabled(gpu_ready)
             invisible_control.setToolTip(
-                "Требуется установленный remove-ai-watermarks и NVIDIA CUDA GPU. "
-                "Без GPU режим недоступен; обычная обработка продолжает работать."
+                "Экспериментальная обработка скрытых водяных знаков (SynthID). "
+                "Может потребоваться NVIDIA CUDA или подключённая облачная видеокарта; "
+                "обычная очистка метаданных работает без этого режима."
             )
             cleanup_hint = QLabel(
                 "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
