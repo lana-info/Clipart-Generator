@@ -3861,6 +3861,11 @@ class MainWindow(QMainWindow):
         top_layout.addSpacing(8)
         top_layout.addWidget(self.btn_select_dir)
         top_layout.addStretch()
+        self.btn_api_settings = QPushButton("Настройки API")
+        self.btn_api_settings.setFixedSize(150, self.standard_button_height)
+        self.btn_api_settings.setStyleSheet(self.compact_button_style)
+        self.btn_api_settings.setToolTip("Общие настройки API для всех режимов")
+        top_layout.addWidget(self.btn_api_settings)
         main_layout.addLayout(top_layout)
 
         run_mode_group = QGroupBox("Сценарий запуска")
@@ -3911,6 +3916,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(prompt_tab, "Промпты")
         self.tabs.addTab(process_scroll, "Обработка")
         self.tabs.addTab(settings_scroll, "Настройки")
+        self.btn_api_settings.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
         main_layout.addWidget(self.tabs)
 
         prompt_btn_layout = QHBoxLayout()
@@ -4279,6 +4285,10 @@ class MainWindow(QMainWindow):
         self.btn_photoroom_api_key_lock.setFixedSize(40, 32)
         self.btn_photoroom_api_key_lock.setToolTip("Ключ заблокирован")
         self.btn_photoroom_api_key_lock.clicked.connect(self.toggle_photoroom_api_key_lock)
+        self.btn_photoroom_check_balance = QPushButton("Проверить баланс")
+        self.btn_photoroom_check_balance.setFixedSize(130, 32)
+        self.btn_photoroom_check_balance.setStyleSheet(self.compact_button_style)
+        self.btn_photoroom_check_balance.clicked.connect(self.check_photoroom_balance)
         photoroom_price_label = QLabel("Standard · $0.02 / изображение")
         photoroom_price_label.setStyleSheet("color:#14b8a6; font-weight:700;")
         photoroom_access_widget = QWidget()
@@ -4287,6 +4297,7 @@ class MainWindow(QMainWindow):
         photoroom_access_layout.setSpacing(6)
         photoroom_access_layout.addWidget(self.photoroom_api_key_input)
         photoroom_access_layout.addWidget(self.btn_photoroom_api_key_lock)
+        photoroom_access_layout.addWidget(self.btn_photoroom_check_balance)
         photoroom_access_layout.addWidget(photoroom_price_label)
         photoroom_access_layout.addStretch()
         lbl_photoroom_api_key = QLabel("PhotoRoom API Key:")
@@ -6260,6 +6271,25 @@ class MainWindow(QMainWindow):
         finally:
             self.btn_check_balance.setEnabled(True)
             self.btn_check_balance.setText("Проверить баланс")
+
+    def check_photoroom_balance(self):
+        api_key = self.photoroom_api_key_input.text().strip()
+        if not api_key:
+            QMessageBox.warning(self, "PhotoRoom", "Сначала укажите PhotoRoom API Key")
+            return
+        self.btn_photoroom_check_balance.setEnabled(False)
+        try:
+            req = request.Request("https://image-api.photoroom.com/v2/account", headers={"x-api-key": api_key, "Accept": "application/json"}, method="GET")
+            with open_url_secure(req, timeout=max(10, int(self.config.get("timeout", 60))), context=build_ssl_context()) as resp:
+                result = json.loads(read_response_limited(resp, MAX_API_JSON_RESPONSE_BYTES).decode("utf-8"))
+            images = result.get("images", {}) if isinstance(result, dict) else {}
+            available = images.get("available", "?") if isinstance(images, dict) else "?"
+            subscription = images.get("subscription", "?") if isinstance(images, dict) else "?"
+            QMessageBox.information(self, "Баланс PhotoRoom", f"Доступно: {available} из {subscription} изображений")
+        except Exception as error:
+            QMessageBox.warning(self, "Баланс PhotoRoom", f"Проверка не пройдена: {safe_error_text(error, (api_key,))}")
+        finally:
+            self.btn_photoroom_check_balance.setEnabled(True)
 
     def check_license_key(self):
         license_key = self.license_key_input.text().strip()
