@@ -432,6 +432,13 @@ class ProcessingPipelineEditor(QScrollArea):
                 "Может потребоваться NVIDIA CUDA или подключённая облачная видеокарта; "
                 "обычная очистка метаданных работает без этого режима."
             )
+            if not gpu_ready:
+                unavailable_label = QLabel(
+                    "Недоступно на этом компьютере: требуется CUDA или подключённый облачный GPU RunPod."
+                )
+                unavailable_label.setStyleSheet("color:#d97706; font-weight:600;")
+                unavailable_label.setWordWrap(True)
+                cleanup_form.addRow(unavailable_label)
             cleanup_hint = QLabel(
                 "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
                 "generator fields и embedded C2PA. ICC и DPI всегда сохраняются."
