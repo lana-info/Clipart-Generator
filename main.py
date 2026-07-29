@@ -685,6 +685,7 @@ class WorkerThread(QThread):
         self.generation_wait_timeout = max(120, int(settings.get("generation_wait_timeout", 300)))
         self.status_poll_interval = max(5.0, min(60.0, float(settings.get("status_poll_interval", 20))))
         self.output_dir = settings.get("output_dir") or os.path.join(self.work_dir, "output")
+        self.overwrite_existing = bool(settings.get("overwrite_existing", False))
 
         # Legacy `upscale` remains the before-background pass for old configs.
         self.visible_mark_cleanup_enabled = bool(settings.get("visible_mark_cleanup_enabled", False))
@@ -995,7 +996,8 @@ class WorkerThread(QThread):
                 self._emit_file_progress(idx, total, 80)
                 self._ensure_running()
                 base = os.path.splitext(os.path.basename(file_path))[0]
-                out_path = os.path.join(output_dir, f"{base}_processed_{self.run_stamp}.png")
+                filename = f"{base}_processed.png" if self.overwrite_existing else f"{base}_processed_{self.run_stamp}.png"
+                out_path = os.path.join(output_dir, filename)
 
                 self._save_final_output(
                     final_url,
@@ -3995,8 +3997,13 @@ class MainWindow(QMainWindow):
         self.btn_select_files.setStyleSheet(self.primary_button_style)
         self.btn_select_files.clicked.connect(self.select_files)
         self.lbl_files_count = QLabel("Файлов не выбрано")
+        self.chk_overwrite_existing = QCheckBox("Перезаписывать существующие файлы результата")
+        self.chk_overwrite_existing.setChecked(bool(self.config.get("overwrite_existing", False)))
+        self.chk_overwrite_existing.setStyleSheet("QCheckBox { color:#b45309; font-weight:700; }")
+        self.chk_overwrite_existing.setToolTip("Если в папке результата уже есть файл с таким именем, он будет заменён.")
         files_layout.addWidget(self.btn_select_files)
         files_layout.addWidget(self.lbl_files_count)
+        files_layout.addWidget(self.chk_overwrite_existing)
         files_group.setLayout(files_layout)
         process_tab_layout.addWidget(files_group)
 
@@ -6654,6 +6661,7 @@ class MainWindow(QMainWindow):
         }.get(ratio, "1024x1024")
 
     def persist_ui_settings(self):
+        self.config["overwrite_existing"] = self.chk_overwrite_existing.isChecked()
         self.secret_settings["kie_api_key"] = self.config["kie_api_key"] = self.kie_api_key_input.text().strip()
         self.secret_settings["photoroom_api_key"] = self.config["photoroom_api_key"] = self.photoroom_api_key_input.text().strip()
         if hasattr(self, "license_key_input"):
