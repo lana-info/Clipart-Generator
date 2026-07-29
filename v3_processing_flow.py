@@ -785,7 +785,7 @@ class ProcessingPipelinePage(_ScrollableStepPage):
         self.project_state = state
         self.changed = changed
         self.operation_widgets: dict[str, QCheckBox] = {}
-        operations_group = QGroupBox("Порядок операций")
+        operations_group = QGroupBox("Обработка изображений")
         operations_layout = QVBoxLayout(operations_group)
         for name, label in self._BOOL_LABELS.items():
             checkbox = QCheckBox(label)
@@ -847,7 +847,7 @@ class ProcessingPipelinePage(_ScrollableStepPage):
         self.add_widget(settings_group)
 
         self.allow_full_image_changes = QCheckBox(
-            "Разрешаю экспериментальную операцию, меняющую всё изображение"
+            "Разрешить глубокую обработку скрытых водяных знаков (SynthID)"
         )
         self.allow_full_image_changes.toggled.connect(changed)
         self.add_widget(self.allow_full_image_changes)
@@ -983,7 +983,7 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
         )
         self.project_state = state
         self.allow_full_image_changes = QCheckBox(
-            "Разрешаю экспериментальную операцию, меняющую всё изображение"
+            "Разрешить глубокую обработку скрытых водяных знаков (SynthID)"
         )
         self.allow_full_image_changes.toggled.connect(changed)
         self.add_widget(self.allow_full_image_changes)

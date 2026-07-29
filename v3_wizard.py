@@ -43,7 +43,7 @@ STEP_TITLES: dict[StepId, str] = {
     StepId.PIN_FORMAT_MODEL: "Формат и модель",
     StepId.FILES: "Файлы",
     StepId.GOAL: "Цель обработки",
-    StepId.PIPELINE: "Порядок операций",
+    StepId.PIPELINE: "Обработка изображений",
     StepId.EVIDENCE: "Проверка файла",
     StepId.REVIEW_RUN: "Проверка и запуск",
     StepId.RESULTS: "Результаты",
