@@ -4666,14 +4666,19 @@ class MainWindow(QMainWindow):
         combo_box.clear()
         extra_ids = set(include_model_ids or set())
         seen_model_ids = set()
-        for entry in GENERATION_MODELS:
+        entries = list(GENERATION_MODELS)
+        if extra_ids and not allowed_types:
+            entries.sort(key=lambda item: 0 if item.get("type") in {"image_to_image", "edit"} else 1)
+        for entry in entries:
             model_id = entry.get("id")
             model_type = entry.get("type")
-            if model_id in seen_model_ids:
-                continue
             if model_id not in VISIBLE_GENERATION_MODEL_IDS and model_id not in extra_ids:
                 continue
             if model_type not in allowed_types and model_id not in extra_ids:
+                continue
+            # For the reference combo prefer the image/edit declaration, not
+            # the same model's text-to-image label shown earlier in the list.
+            if model_id in seen_model_ids:
                 continue
             label = entry.get("label", model_id or "")
             combo_box.addItem(label, model_id)
