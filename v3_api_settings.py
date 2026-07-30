@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
 
 from v3_components import ButtonVariant, V3Button
 from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS
+from provider_clients import check_photoroom_balance
 
 
 def user_env_path() -> Path:
@@ -85,27 +86,6 @@ def check_kie_balance(api_key: str, timeout: float = 15.0) -> str:
                 if name in data:
                     return f"Баланс KIE: {data[name]}"
     return "Баланс KIE получен, формат ответа требует уточнения."
-
-
-def check_photoroom_balance(api_key: str, timeout: float = 15.0) -> str:
-    key = str(api_key or "").strip()
-    if not key:
-        raise ValueError("Введите PhotoRoom API Key")
-    request = urllib.request.Request("https://image-api.photoroom.com/v2/account", headers={"x-api-key": key, "Accept": "application/json"}, method="GET")
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read(256 * 1024).decode("utf-8", "replace")
-    except (urllib.error.URLError, OSError) as error:
-        raise RuntimeError("Не удалось проверить баланс PhotoRoom") from error
-    try:
-        import json
-        payload: Any = json.loads(raw)
-    except ValueError as error:
-        raise RuntimeError("PhotoRoom вернул неподдерживаемый ответ") from error
-    images = payload.get("images", {}) if isinstance(payload, dict) else {}
-    if isinstance(images, dict) and "available" in images:
-        return f"Баланс PhotoRoom: {images['available']} из {images.get('subscription', '?')} изображений"
-    return "Баланс PhotoRoom получен, формат ответа требует уточнения."
 
 
 class ApiSettingsDialog(QDialog):
