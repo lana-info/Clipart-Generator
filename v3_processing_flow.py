@@ -751,7 +751,7 @@ class _ProcessingStateAdapter:
         self.clipart = self._ClipartProxy(state)
 
 
-class ProcessingPipelinePage(_ScrollableStepPage):
+class _LegacyProcessingPipelinePage(_ScrollableStepPage):
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить видимую метку — локальная реконструкция пикселей",
         "upscale_before": "Апскейл до удаления фона — увеличит изображение",
