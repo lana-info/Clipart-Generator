@@ -37,7 +37,7 @@ from visible_mark_cleanup import (
 )
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
 from output_naming import processed_output_path
-from api_credentials import SECRET_CONFIG_KEYS
+from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 
 try:
     import certifi
@@ -487,7 +487,7 @@ LICENSE_CACHE_FILE = os.path.join(USER_DATA_DIR, "license_cache.json")
 
 
 
-class EnvCredentialStore:
+class _LegacyEnvCredentialStore:
     def __init__(self, path):
         self.path = path
 
