@@ -38,6 +38,7 @@ from visible_mark_cleanup import (
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
 from output_naming import processed_output_path
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
+from runtime_settings import build_runtime_settings
 
 try:
     import certifi
@@ -5781,12 +5782,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        runtime_settings = dict(self.config)
-        runtime_settings["kie_api_key"] = current_api_key
-        runtime_settings["photoroom_api_key"] = current_photoroom_api_key
-        runtime_settings["license_key"] = self.secret_settings.get(
-            "license_key", self.config.get("license_key", "")
-        )
+        runtime_settings = build_runtime_settings(self.config, self.secret_settings)
         self.has_generated_output_in_run = False
         active_prompts = []
         visible_mark_confirmed_regions = {}
@@ -5865,13 +5861,11 @@ class MainWindow(QMainWindow):
         if not self._ensure_models_available_before_run(run_mode, self.generated_prompts, runtime_settings):
             return
         self.persist_ui_settings()
-        runtime_settings = dict(self.config)
-        runtime_settings["kie_api_key"] = current_api_key
-        runtime_settings["photoroom_api_key"] = current_photoroom_api_key
-        runtime_settings["license_key"] = self.secret_settings.get(
-            "license_key", self.config.get("license_key", "")
+        runtime_settings = build_runtime_settings(
+            self.config,
+            self.secret_settings,
+            visible_mark_confirmed_regions=visible_mark_confirmed_regions,
         )
-        runtime_settings["visible_mark_confirmed_regions"] = visible_mark_confirmed_regions
 
         self.stop_pending = False
         self.worker = WorkerThread(
