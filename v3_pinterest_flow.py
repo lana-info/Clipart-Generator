@@ -336,9 +336,9 @@ class PinterestFormatModelPage(ClipartGenerationPage):
 
 
 class PinterestProcessingPage(ProcessingPipelineEditor):
-    def __init__(self, state: _PinterestDataAdapter, changed: Callable[[], None], *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
+    def __init__(self, state: ProjectState, changed: Callable[[], None], *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
         super().__init__(
-            state,
+            state.clipart,
             changed,
             title="Обработка изображений",
             description="Единые настройки обработки изображений для Pinterest.",
