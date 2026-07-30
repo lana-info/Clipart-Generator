@@ -41,6 +41,7 @@ from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
 from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
+from run_validation import validate_inputs
 
 try:
     import certifi
@@ -3828,6 +3829,14 @@ class MainWindow(QMainWindow):
         self.radio_run_both = QRadioButton("Все вместе")
 
         run_mode = self.config.get("run_mode", "generate_only")
+        initial_issues = validate_inputs(
+            run_mode,
+            files=self.selected_files,
+            prompts=self.generated_prompts,
+        )
+        if initial_issues and run_mode == "process_only" and "files_required" in initial_issues:
+            QMessageBox.warning(self, "Ошибка", "Для режима обработки выберите файлы")
+            return
         if run_mode == "process_only":
             self.radio_run_process.setChecked(True)
         elif run_mode == "both":
