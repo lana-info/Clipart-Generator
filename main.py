@@ -39,6 +39,7 @@ from v3_api_settings import check_photoroom_balance as check_photoroom_balance_a
 from output_naming import processed_output_path
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
+from worker_runtime import wire_worker_signals
 
 try:
     import certifi
@@ -5875,10 +5876,13 @@ class MainWindow(QMainWindow):
             selected_files=self.selected_files,
             generated_prompts=self.generated_prompts,
         )
-        self.worker.progress.connect(self.log)
-        self.worker.progress_value.connect(self.progress_bar.setValue)
-        self.worker.finished.connect(self.on_finished)
-        self.worker.error.connect(self.on_error)
+        wire_worker_signals(
+            self.worker,
+            on_progress=self.log,
+            on_progress_value=self.progress_bar.setValue,
+            on_finished=self.on_finished,
+            on_error=self.on_error,
+        )
 
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
