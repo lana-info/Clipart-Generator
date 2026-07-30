@@ -62,6 +62,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
         StepId.PROJECT,
         StepId.PROMPTS,
         StepId.PIN_FORMAT_MODEL,
+        StepId.PROCESSING_OPTIONS,
         StepId.REVIEW_RUN,
         StepId.RESULTS,
     ),

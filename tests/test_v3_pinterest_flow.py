@@ -96,11 +96,15 @@ class V3PinterestFlowTests(unittest.TestCase):
                 StepId.PROJECT,
                 StepId.PROMPTS,
                 StepId.PIN_FORMAT_MODEL,
+                StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
             ),
         )
-        self.assertNotIn(StepId.PROCESSING_OPTIONS, controller.pages)
+        self.assertIsInstance(
+            controller.pages[StepId.PROCESSING_OPTIONS],
+            v3_pinterest_flow.PinterestProcessingPage,
+        )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
             PromptWorkspacePage,

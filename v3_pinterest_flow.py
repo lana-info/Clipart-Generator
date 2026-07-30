@@ -211,7 +211,8 @@ class PinterestFormatModelPage(ClipartGenerationPage):
             include_cleanup=True,
             tokens=tokens,
         )
-        self.add_widget(self.processing_editor)
+        # Processing is a separate wizard step shared with the other modes.
+        self.processing_editor.setParent(None)
         self._format_syncing = False
         self._format_issue = ""
         self.model_combo.currentIndexChanged.connect(self._enforce_single_format)
@@ -230,7 +231,6 @@ class PinterestFormatModelPage(ClipartGenerationPage):
 
     def refresh_from_state(self) -> None:
         super().refresh_from_state()
-        self.processing_editor.refresh_from_state()
         has_references = any(
             entry.references for entry in getattr(self.state.clipart, "prompts", [])
         )
@@ -335,6 +335,18 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         self.ratio_preview.setAccessibleName(text)
 
 
+class PinterestProcessingPage(ProcessingPipelineEditor):
+    def __init__(self, state: _PinterestDataAdapter, changed: Callable[[], None], *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
+        super().__init__(
+            state,
+            changed,
+            title="Обработка изображений",
+            description="Единые настройки обработки изображений для Pinterest.",
+            include_cleanup=True,
+            tokens=tokens,
+        )
+
+
 class PinterestReviewRunPage(ClipartReviewRunPage):
     def __init__(
         self,
@@ -407,6 +419,11 @@ class PinterestFlowController(QObject):
                 input_page_cls=PinterestPromptInputPage,
             ),
             StepId.PIN_FORMAT_MODEL: PinterestFormatModelPage(
+                self.adapter_state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+            StepId.PROCESSING_OPTIONS: PinterestProcessingPage(
                 self.adapter_state,
                 changed,
                 tokens=self.shell.tokens,

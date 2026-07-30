@@ -44,6 +44,7 @@ class ProjectRoutesTests(unittest.TestCase):
                 StepId.PROJECT,
                 StepId.PROMPTS,
                 StepId.PIN_FORMAT_MODEL,
+                StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
             ),
