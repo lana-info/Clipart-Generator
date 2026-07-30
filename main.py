@@ -39,7 +39,7 @@ from v3_api_settings import check_photoroom_balance as check_photoroom_balance_a
 from output_naming import processed_output_path
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
-from worker_runtime import wire_worker_signals
+from worker_runtime import launch_worker
 
 try:
     import certifi
@@ -5869,15 +5869,13 @@ class MainWindow(QMainWindow):
         )
 
         self.stop_pending = False
-        self.worker = WorkerThread(
+        self.worker = launch_worker(
+            WorkerThread,
             mode=mode,
             work_dir=self.work_dir,
             settings=runtime_settings,
             selected_files=self.selected_files,
             generated_prompts=self.generated_prompts,
-        )
-        wire_worker_signals(
-            self.worker,
             on_progress=self.log,
             on_progress_value=self.progress_bar.setValue,
             on_finished=self.on_finished,
@@ -5886,7 +5884,6 @@ class MainWindow(QMainWindow):
 
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
-        self.worker.start()
 
     def validate_generation_selection(self):
         text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)

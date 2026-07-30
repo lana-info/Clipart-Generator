@@ -1,4 +1,4 @@
-from worker_runtime import wire_worker_signals
+from worker_runtime import launch_worker, wire_worker_signals
 
 
 class Signal:
@@ -16,6 +16,9 @@ class Worker:
         self.finished = Signal()
         self.error = Signal()
 
+    def start(self):
+        self.started = True
+
 
 def test_wire_worker_signals_connects_all_signals():
     worker = Worker()
@@ -31,3 +34,25 @@ def test_wire_worker_signals_connects_all_signals():
     assert worker.progress_value.callbacks == [callbacks[1]]
     assert worker.finished.callbacks == [callbacks[2]]
     assert worker.error.callbacks == [callbacks[3]]
+
+
+def test_launch_worker_constructs_wires_and_starts():
+    created = {}
+    def factory(**kwargs):
+        created.update(kwargs)
+        return Worker()
+    callbacks = [lambda *_: None for _ in range(4)]
+    worker = launch_worker(
+        factory,
+        mode="mode2_process",
+        work_dir="work",
+        settings={},
+        selected_files=[],
+        generated_prompts=[],
+        on_progress=callbacks[0],
+        on_progress_value=callbacks[1],
+        on_finished=callbacks[2],
+        on_error=callbacks[3],
+    )
+    assert created["mode"] == "mode2_process"
+    assert worker.started is True
