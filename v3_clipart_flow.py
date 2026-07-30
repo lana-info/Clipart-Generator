@@ -53,6 +53,7 @@ from v3_processing_editor import (
     ProcessingPipelineEditor,
     RunPlanBuilder,
 )
+from processing_cleanup import METADATA_CLEANUP_FIELDS
 from v3_prompt_csv_import import PromptCsvImportDialog
 from v3_project_state import (
     MAX_PROMPT_ENTRIES,
@@ -2200,17 +2201,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self.cleanup_all_checkbox.setChecked(any(bool(getattr(operations, name)) for name in ("remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text", "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa")))
         self.cleanup_all_checkbox.toggled.connect(self._set_cleanup_all)
         cleanup_form.addRow(self.cleanup_all_checkbox)
-        for name in (
-            "remove_exif",
-            "remove_xmp",
-            "remove_iptc",
-            "remove_comments_text",
-            "remove_embedded_thumbnail",
-            "remove_generator_fields",
-            "remove_embedded_c2pa",
-            "preserve_icc",
-            "preserve_dpi",
-        ):
+        for name in (*METADATA_CLEANUP_FIELDS, "preserve_icc", "preserve_dpi"):
             self._add_bool(cleanup_form, name, operations)
             self.operation_widgets[name].setVisible(False)
         self.add_widget(cleanup_group)
@@ -2224,7 +2215,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self._refresh_pipeline()
 
     def _set_cleanup_all(self, checked: bool) -> None:
-        for name in ("remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text", "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa"):
+        for name in METADATA_CLEANUP_FIELDS:
             control = self.operation_widgets.get(name)
             if control is not None:
                 control.blockSignals(True)
