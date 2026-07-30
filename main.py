@@ -36,6 +36,7 @@ from visible_mark_cleanup import (
     visible_mark_region_key,
 )
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
+from output_naming import processed_output_path
 
 try:
     import certifi
@@ -996,9 +997,14 @@ class WorkerThread(QThread):
 
                 self._emit_file_progress(idx, total, 80)
                 self._ensure_running()
-                base = os.path.splitext(os.path.basename(file_path))[0]
-                filename = f"{base}_processed.png" if self.overwrite_existing else f"{base}_processed_{self.run_stamp}.png"
-                out_path = os.path.join(output_dir, filename)
+                out_path = str(
+                    processed_output_path(
+                        output_dir,
+                        file_path,
+                        self.run_stamp,
+                        overwrite=self.overwrite_existing,
+                    )
+                )
 
                 self._save_final_output(
                     final_url,
