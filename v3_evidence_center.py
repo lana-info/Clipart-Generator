@@ -555,6 +555,27 @@ class EvidenceCenterPage(QScrollArea):
         self.content_layout.addWidget(self.openai_handoff_group)
         self.openai_handoff_group.setVisible(False)
 
+        # Keep the evidence data model and report export, but present a simple
+        # user-facing handoff: the input files are already selected earlier.
+        self.file_combo.setVisible(False)
+        self.file_card.setVisible(False)
+        self.c2pa_card.setVisible(False)
+        self.pixel_card.setVisible(False)
+        checks_group = QGroupBox("Проверки изображения")
+        checks_layout = QVBoxLayout(checks_group)
+        checks_hint = QLabel("Откройте нужный сервис и загрузите выбранное изображение вручную:")
+        checks_hint.setWordWrap(True)
+        checks_layout.addWidget(checks_hint)
+        for label, url in (
+            ("Официальная проверка Google Gemini / SynthID", GEMINI_VERIFY_URL),
+            ("Официальная проверка OpenAI", OPENAI_VERIFY_URL),
+            ("ZeroGPT — AI Image Detector", ZEROGPT_IMAGE_DETECTOR_URL),
+        ):
+            link = QLabel(f'<a href="{url}">{label}</a>')
+            link.setOpenExternalLinks(True)
+            checks_layout.addWidget(link)
+        self.content_layout.addWidget(checks_group)
+
         export_row = QWidget()
         export_layout = QHBoxLayout(export_row)
         export_layout.setContentsMargins(0, 0, 0, 0)

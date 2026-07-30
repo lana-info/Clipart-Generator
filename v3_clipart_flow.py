@@ -2010,6 +2010,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self.changed = changed
         self.operation_widgets: dict[str, QWidget] = {}
         operations = state.clipart.operations
+        self.operations = operations
         upscale_models = KIE_MODEL_OPTIONS
         remove_bg_models = KIE_MODEL_OPTIONS
 
@@ -2194,6 +2195,11 @@ class ClipartProcessingPage(_ScrollableStepPage):
 
         cleanup_group = QGroupBox("Центр проверки и очистки файла")
         cleanup_form = QFormLayout(cleanup_group)
+        self.cleanup_all_checkbox = QCheckBox("Очистить служебные метаданные")
+        self.cleanup_all_checkbox.setToolTip("Удаляет EXIF, XMP, IPTC, комментарии, миниатюры, данные генератора и C2PA; ICC и DPI сохраняются.")
+        self.cleanup_all_checkbox.setChecked(any(bool(getattr(operations, name)) for name in ("remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text", "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa")))
+        self.cleanup_all_checkbox.toggled.connect(self._set_cleanup_all)
+        cleanup_form.addRow(self.cleanup_all_checkbox)
         for name in (
             "remove_exif",
             "remove_xmp",
@@ -2206,6 +2212,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
             "preserve_dpi",
         ):
             self._add_bool(cleanup_form, name, operations)
+            self.operation_widgets[name].setVisible(False)
         self.add_widget(cleanup_group)
 
         self.pipeline_label = QLabel()
@@ -2215,6 +2222,16 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self._connect_controls()
         self._refresh_control_visibility()
         self._refresh_pipeline()
+
+    def _set_cleanup_all(self, checked: bool) -> None:
+        for name in ("remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text", "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa"):
+            control = self.operation_widgets.get(name)
+            if control is not None:
+                control.blockSignals(True)
+                control.setChecked(checked)
+                control.blockSignals(False)
+            setattr(self.state_owner.operations if hasattr(self, "state_owner") else self.operations, name, checked)
+        self._sync()
 
     def _add_bool(
         self,
