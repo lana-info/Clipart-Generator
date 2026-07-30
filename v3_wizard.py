@@ -44,7 +44,7 @@ STEP_TITLES: dict[StepId, str] = {
     StepId.FILES: "Файлы",
     StepId.GOAL: "Цель обработки",
     StepId.PIPELINE: "Обработка изображений",
-    StepId.EVIDENCE: "Проверка файла",
+    StepId.EVIDENCE: "Ссылки на проверки",
     StepId.REVIEW_RUN: "Проверка и запуск",
     StepId.RESULTS: "Результаты",
 }
@@ -59,7 +59,7 @@ STEP_DESCRIPTIONS: dict[StepId, str] = {
     StepId.FILES: "Добавьте изображения, которые нужно обработать.",
     StepId.GOAL: "Определите ожидаемый результат обработки.",
     StepId.PIPELINE: "Проверьте точный порядок включённых операций.",
-    StepId.EVIDENCE: "Выберите доступные проверки и способ интерпретации результата.",
+    StepId.EVIDENCE: "Откройте официальные проверки Gemini, OpenAI или ZeroGPT.",
     StepId.REVIEW_RUN: "Проверьте настройки, стоимость и ожидаемый результат.",
     StepId.RESULTS: "Просмотрите результаты и журнал выполненных операций.",
 }

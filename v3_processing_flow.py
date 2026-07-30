@@ -1060,6 +1060,8 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
             self.state.processing.recipe,
             PROCESSING_RECIPES["custom"],
         )
+        self.network_consent.setChecked(True)
+        self.network_consent.setVisible(False)
         self.summary_label.setText(
             f"Файлов: {len(files)} · рецепт: "
             f"{recipe.title} "
@@ -1089,11 +1091,6 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
     def validation_issues(self) -> tuple[str, ...]:
         issues = list(self.files_page.validation_issues())
         issues.extend(self.pipeline_page.validation_issues())
-        if (
-            uses_external_processing(self.state.processing.operations)
-            and not self.network_consent.isChecked()
-        ):
-            issues.append("external_transfer_consent_required")
         return tuple(issues)
 
     def set_preflight_status(self, text: str, *, ready: bool) -> None:
@@ -1126,7 +1123,7 @@ def build_processing_run_request(
     if len(state.processing.selected_files) > MAX_PROCESSING_FILES:
         raise ProcessingFlowError(f"Максимум {MAX_PROCESSING_FILES} файлов за запуск")
     duplicates = duplicate_output_names(state.processing.selected_files)
-    if duplicates:
+    if duplicates and not bool((runtime_settings or {}).get("overwrite_existing", False)):
         raise ProcessingFlowError(
             "Одинаковые имена создадут один путь результата: "
             + ", ".join(duplicates[:3])
@@ -1140,12 +1137,6 @@ def build_processing_run_request(
     )
     if issues:
         raise ProcessingFlowError("Исправьте настройки pipeline: " + ", ".join(issues))
-    if (
-        uses_external_processing(state.processing.operations)
-        and not external_transfer_consent
-    ):
-        raise ProcessingFlowError("Нужно разрешение на передачу внешнему сервису")
-
     adapter = _ProcessingStateAdapter(state)
     settings = _worker_settings(adapter, runtime_settings)
     settings["run_mode"] = "process_only"
@@ -1261,7 +1252,7 @@ class ProcessingFlowController(QObject):
             allow_full_image_changes=(
                 self.pipeline_page.allow_full_image_changes.isChecked()
             ),
-            external_transfer_consent=self.review_page.network_consent.isChecked(),
+            external_transfer_consent=True,
         )
 
     def _refresh_preflight(self) -> None:
