@@ -431,7 +431,8 @@ class PinterestFlowController(QObject):
             StepId.REVIEW_RUN: PinterestReviewRunPage(
                 self.adapter_state,
                 tokens=self.shell.tokens,
-            ),            StepId.RESULTS: self.run_queue.page,
+            ),
+            StepId.RESULTS: self.run_queue.page,
 
         }
         for step, page in self.pages.items():
