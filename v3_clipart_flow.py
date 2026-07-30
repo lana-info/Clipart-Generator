@@ -1464,17 +1464,20 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         references_actions_label = QLabel("Референсы:")
         references_actions_label.setProperty("v3Small", True)
         action_layout.addWidget(references_actions_label)
-        self.add_refs_button = V3Button("Добавить референсы", ButtonVariant.SECONDARY)
-        self.replace_refs_button = V3Button("Заменить референсы", ButtonVariant.SECONDARY)
-        self.delete_refs_button = V3Button("Удалить референсы", ButtonVariant.SECONDARY)
+        self.add_refs_button = V3Button("🖼 +", ButtonVariant.SECONDARY)
+        self.replace_refs_button = V3Button("🖼 ↻", ButtonVariant.SECONDARY)
+        self.delete_refs_button = V3Button("🖼 −", ButtonVariant.SECONDARY)
+        self.add_refs_button.setToolTip("Добавить референсы")
+        self.replace_refs_button.setToolTip("Заменить референсы")
+        self.delete_refs_button.setToolTip("Удалить референсы")
         self.up_button = V3Button("Выше", ButtonVariant.GHOST)
         self.down_button = V3Button("Ниже", ButtonVariant.GHOST)
+        self.up_button.hide()
+        self.down_button.hide()
         for button in (
             self.add_refs_button,
             self.replace_refs_button,
             self.delete_refs_button,
-            self.up_button,
-            self.down_button,
         ):
             action_layout.addWidget(button)
         self.add_widget(actions)
@@ -1489,8 +1492,6 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.add_refs_button.clicked.connect(self._add_references)
         self.replace_refs_button.clicked.connect(self._replace_references)
         self.delete_refs_button.clicked.connect(self._delete_references)
-        self.up_button.clicked.connect(lambda: self._move(-1))
-        self.down_button.clicked.connect(lambda: self._move(1))
         self.refresh_from_state()
 
     def _rows_moved(self, *_: Any) -> None:
@@ -1747,8 +1748,10 @@ class PromptWorkspacePage(_ScrollableStepPage):
             self._on_section_changed,
             tokens=tokens,
         )
-        self.review_section.up_button.hide()
-        self.review_section.down_button.hide()
+        if hasattr(self.review_section, "up_button"):
+            self.review_section.up_button.hide()
+        if hasattr(self.review_section, "down_button"):
+            self.review_section.down_button.hide()
         self.add_widget(self.input_section)
         self.add_widget(self.review_section)
 
