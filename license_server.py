@@ -1,4 +1,4 @@
-import random
+import secrets
 import sqlite3
 import string
 from datetime import datetime, timedelta, timezone
@@ -133,7 +133,8 @@ def success_payload(key, state, message):
 
 
 def random_key(prefix):
-    chunks = ["".join(random.choices(string.ascii_uppercase + string.digits, k=4)) for _ in range(3)]
+    alphabet = string.ascii_uppercase + string.digits
+    chunks = ["".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3)]
     return f"{prefix}-{'-'.join(chunks)}"
 
 
@@ -141,12 +142,12 @@ def serial_key(prefix, index):
     return f"{prefix}-{index:06d}"
 
 
-def verify_admin_token(x_admin_token: str | None = None, admin_token: str | None = None):
+def verify_admin_token(x_admin_token: str | None = None):
     expected_token = ADMIN_TOKEN
     if not expected_token:
         raise HTTPException(status_code=503, detail="Админ-токен не настроен на сервере")
 
-    provided_token = (x_admin_token or admin_token or "").strip()
+    provided_token = (x_admin_token or "").strip()
     if provided_token != expected_token:
         raise HTTPException(status_code=401, detail="Неверный админ-токен")
 
@@ -268,9 +269,8 @@ def deactivate(payload: LicensePayload):
 def admin_generate(
     payload: GeneratePayload,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-    admin_token: str | None = Query(default=None),
 ):
-    verify_admin_token(x_admin_token, admin_token)
+    verify_admin_token(x_admin_token)
     init_db()
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -315,9 +315,8 @@ def admin_generate(
 def admin_list(
     limit: int = 50,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
-    admin_token: str | None = Query(default=None),
 ):
-    verify_admin_token(x_admin_token, admin_token)
+    verify_admin_token(x_admin_token)
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute(
