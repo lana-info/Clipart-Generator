@@ -573,6 +573,8 @@ class EvidenceCenterPage(QScrollArea):
         ):
             link = QLabel(f'<a href="{url}">{label}</a>')
             link.setOpenExternalLinks(True)
+            link.setProperty("v3ExternalLink", True)
+            link.setAccessibleName(label)
             checks_layout.addWidget(link)
         self.content_layout.addWidget(checks_group)
 

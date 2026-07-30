@@ -157,6 +157,15 @@ QLabel[v3Selection="true"] {{
     background: transparent;
     border: none;
 }}
+QLabel[v3ExternalLink="true"] {{
+    color: {tokens.accent_hover};
+    background: transparent;
+    padding: {tokens.space_1}px;
+}}
+QLabel[v3ExternalLink="true"]:focus {{
+    border: 2px solid {tokens.accent};
+    border-radius: {tokens.radius_control}px;
+}}
 QLabel {{
     color: {tokens.text};
     background: transparent;
