@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import urllib.error
 import urllib.request
@@ -15,8 +16,11 @@ from provider_clients import check_kie_balance, check_photoroom_balance
 
 
 def user_env_path() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    directory = Path(base) / "Clipart Generator"
+    if sys.platform == "darwin":
+        directory = Path.home() / "Library" / "Application Support" / "Clipart Generator"
+    else:
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        directory = Path(base) / "Clipart Generator"
     directory.mkdir(parents=True, exist_ok=True)
     return directory / ".env"
 
@@ -50,6 +54,8 @@ def save_credentials(values: Mapping[str, str], path: Path | None = None) -> Pat
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
+        if os.name != "nt":
+            os.chmod(destination, 0o600)
     except Exception:
         try:
             os.unlink(temporary)
