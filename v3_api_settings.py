@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
 
 from v3_components import ButtonVariant, V3Button
 from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS
-from provider_clients import check_photoroom_balance
+from provider_clients import check_kie_balance, check_photoroom_balance
 
 
 def user_env_path() -> Path:
@@ -59,7 +59,7 @@ def save_credentials(values: Mapping[str, str], path: Path | None = None) -> Pat
     return destination
 
 
-def check_kie_balance(api_key: str, timeout: float = 15.0) -> str:
+def _legacy_check_kie_balance(api_key: str, timeout: float = 15.0) -> str:
     key = str(api_key or "").strip()
     if not key:
         raise ValueError("Введите KIE API Key")
