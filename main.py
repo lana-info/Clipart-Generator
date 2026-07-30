@@ -35,6 +35,7 @@ from visible_mark_cleanup import (
     normalize_confirmed_region,
     visible_mark_region_key,
 )
+from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
 
 try:
     import certifi
@@ -6321,13 +6322,8 @@ class MainWindow(QMainWindow):
             return
         self.btn_photoroom_check_balance.setEnabled(False)
         try:
-            req = request.Request("https://image-api.photoroom.com/v2/account", headers={"x-api-key": api_key, "Accept": "application/json"}, method="GET")
-            with open_url_secure(req, timeout=max(10, int(self.config.get("timeout", 60))), context=build_ssl_context()) as resp:
-                result = json.loads(read_response_limited(resp, MAX_API_JSON_RESPONSE_BYTES).decode("utf-8"))
-            images = result.get("images", {}) if isinstance(result, dict) else {}
-            available = images.get("available", "?") if isinstance(images, dict) else "?"
-            subscription = images.get("subscription", "?") if isinstance(images, dict) else "?"
-            QMessageBox.information(self, "Баланс PhotoRoom", f"Доступно: {available} из {subscription} изображений")
+            balance = check_photoroom_balance_api(api_key, timeout=max(10, int(self.config.get("timeout", 60))))
+            QMessageBox.information(self, "Баланс PhotoRoom", balance)
         except Exception as error:
             QMessageBox.warning(self, "Баланс PhotoRoom", f"Проверка не пройдена: {safe_error_text(error, (api_key,))}")
         finally:
