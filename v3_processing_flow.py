@@ -778,7 +778,7 @@ class ProcessingPipelinePage(_ScrollableStepPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__(
-            "Pipeline",
+            "Обработка изображений",
             "Операции выполняются сверху вниз; рецепт можно полностью изменить.",
             tokens=tokens,
         )
@@ -976,7 +976,7 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
         super().__init__(
             state.processing,
             changed,
-            title="Pipeline",
+            title="Обработка изображений",
             description="Операции выполняются сверху вниз; рецепт можно полностью изменить.",
             include_cleanup=False,
             tokens=tokens,

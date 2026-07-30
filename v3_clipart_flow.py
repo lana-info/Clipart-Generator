@@ -2411,8 +2411,8 @@ class _SharedClipartProcessingPage(ProcessingPipelineEditor):
         super().__init__(
             state.clipart,
             changed,
-            title="Обработка",
-            description="Рецепт «Готовый клипарт» использует существующий pipeline 2.0.",
+            title="Обработка изображений",
+            description="Единые настройки обработки изображений для всех режимов.",
             include_cleanup=True,
             tokens=tokens,
         )
