@@ -40,6 +40,7 @@ from output_naming import processed_output_path
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
 from worker_runtime import launch_worker
+from run_modes import label_for as run_mode_label, worker_mode_for
 
 try:
     import certifi
@@ -5790,7 +5791,7 @@ class MainWindow(QMainWindow):
 
         run_mode = self.config.get("run_mode", "generate_only")
         if run_mode == "process_only":
-            mode = "mode2_process"
+            mode = worker_mode_for(run_mode)
             if not self.selected_files:
                 QMessageBox.warning(self, "Ошибка", "Для режима обработки выберите файлы")
                 return
@@ -5836,7 +5837,7 @@ class MainWindow(QMainWindow):
                 return
             self.generated_prompts = active_prompts
             self.refresh_prompts_table()
-            mode = "mode_both"
+            mode = worker_mode_for(run_mode)
         else:
             active_prompts = self.get_list_mode_prompts()
             if not active_prompts:
@@ -5845,7 +5846,7 @@ class MainWindow(QMainWindow):
 
             self.generated_prompts = active_prompts
             self.refresh_prompts_table()
-            mode = "mode1_generate_only"
+            mode = worker_mode_for(run_mode)
 
         local_realesrgan_error = self.validate_local_realesrgan_selection(run_mode)
         if local_realesrgan_error:
