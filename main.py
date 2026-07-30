@@ -487,62 +487,6 @@ LICENSE_CACHE_FILE = os.path.join(USER_DATA_DIR, "license_cache.json")
 
 
 
-class _LegacyEnvCredentialStore:
-    def __init__(self, path):
-        self.path = path
-
-    def load(self):
-        if not os.path.exists(self.path):
-            return {}
-        values = {}
-        try:
-            with open(self.path, "r", encoding="utf-8") as handle:
-                for raw_line in handle:
-                    line = raw_line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    key, raw_value = line.split("=", 1)
-                    key = key.strip()
-                    if not key:
-                        continue
-                    value = raw_value.strip()
-                    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-                        try:
-                            value = ast.literal_eval(value)
-                        except Exception:
-                            value = value[1:-1]
-                    values[key] = value
-        except Exception:
-            return {}
-        return values
-
-    def save(self, values):
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        lines = []
-        for key in SECRET_CONFIG_KEYS:
-            value = str(values.get(key, "")).strip()
-            if value:
-                lines.append(f"{key}={value}")
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            dir=os.path.dirname(self.path),
-            prefix=".env.",
-            suffix=".tmp",
-            text=True,
-        )
-        try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8", newline="\n") as handle:
-                handle.write("\n".join(lines))
-                if lines:
-                    handle.write("\n")
-            os.replace(tmp_path, self.path)
-        except Exception:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                pass
-            raise
-
-
 def build_ssl_context():
     """Создаёт SSL-контекст с системными сертификатами и fallback на certifi."""
     if certifi is not None:
