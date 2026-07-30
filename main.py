@@ -37,6 +37,7 @@ from visible_mark_cleanup import (
 )
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
 from output_naming import processed_output_path
+from api_credentials import SECRET_CONFIG_KEYS
 
 try:
     import certifi
@@ -484,7 +485,6 @@ ENV_FILE = os.path.join(USER_DATA_DIR, ".env")
 PROMPTS_STORAGE_FILE = os.path.join(USER_DATA_DIR, "prompts.json")
 LICENSE_CACHE_FILE = os.path.join(USER_DATA_DIR, "license_cache.json")
 
-SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key", "license_key")
 
 
 class EnvCredentialStore:

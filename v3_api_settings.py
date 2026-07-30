@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout
 
 from v3_components import ButtonVariant, V3Button
+from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS
 
 
 def user_env_path() -> Path:
@@ -35,7 +36,7 @@ def load_credentials(path: Path | None = None) -> dict[str, str]:
 def save_credentials(values: Mapping[str, str], path: Path | None = None) -> Path:
     destination = path or user_env_path()
     destination.parent.mkdir(parents=True, exist_ok=True)
-    allowed = {"kie_api_key", "photoroom_api_key", "license_key", "runpod_api_key", "runpod_endpoint_id"}
+    allowed = set(ALL_PROVIDER_CREDENTIAL_KEYS)
     content = "".join(
         f"{key}={str(values.get(key) or '').strip()}\n"
         for key in sorted(allowed)
