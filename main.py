@@ -43,11 +43,6 @@ try:
 except Exception:
     certifi = None
 
-try:
-    import onnxruntime  # noqa: F401
-except Exception:
-    pass
-
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize, QPoint, QRect
 from PyQt6.QtGui import QKeySequence, QIcon, QPixmap, QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
