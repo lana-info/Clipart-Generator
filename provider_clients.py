@@ -54,3 +54,6 @@ def check_kie_balance(api_key: str, timeout: float = 15.0) -> str:
             if name in data:
                 return f"Баланс KIE: {data[name]}"
     return "Баланс KIE получен, формат ответа требует уточнения."
+
+
+__all__ = ["check_kie_balance", "check_photoroom_balance"]

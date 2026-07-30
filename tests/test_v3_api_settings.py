@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from v3_api_settings import check_kie_balance, check_photoroom_balance, load_credentials, save_credentials
+from provider_clients import check_kie_balance
+from v3_api_settings import check_photoroom_balance, load_credentials, save_credentials
 
 
 def test_credentials_round_trip(tmp_path: Path):
