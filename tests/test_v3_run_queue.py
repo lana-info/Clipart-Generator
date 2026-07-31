@@ -517,12 +517,37 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertTrue(page.isVisible())
             self.assertEqual(page.progress_bar.value(), 0)
             self.assertEqual(page.queue.count(), 2)
-            self.assertIn("processing:", page.processing_label.text())
+            self.assertIn("Ожидает запуска", page.processing_label.text())
+            self.assertEqual(
+                page.processing_label.property("state"),
+                "",
+            )
             self.assertIn(
-                "pixel_evidence:",
+                "Проверка пикселей:",
                 page.pixel_evidence_label.text(),
             )
             self.assertTrue(page.stop_button.isEnabled())
+            page.close()
+            page.deleteLater()
+
+    def test_results_page_marks_failed_item_with_error_state_and_user_text(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-error-ui-") as temp:
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            session = RunQueueSession(
+                generation_request(temp, count=1),
+                ProjectMode.PROCESSING,
+            )
+            item = session.items[0]
+            item.status = RunItemStatus.FAILED
+            item.short_message = "Изображение повреждено или имеет неподдерживаемый формат."
+            page = RunResultsPage(state)
+            page.set_session(session)
+            page.queue.setCurrentRow(0)
+            page._selection_changed(0)
+
+            self.assertIn("⚠ Файл не обработан", page.processing_label.text())
+            self.assertIn("неподдерживаемый формат", page.processing_label.text())
+            self.assertEqual(page.processing_label.property("state"), "error")
             page.close()
             page.deleteLater()
 

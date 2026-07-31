@@ -662,6 +662,10 @@ def export_safe_run_report(
 
 
 class RunQueue(QListWidget):
+    def __init__(self, *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
+        super().__init__()
+        self.tokens = tokens
+
     def refresh_items(self, items: list[RunItem]) -> None:
         selected = self.currentRow()
         self.clear()
@@ -673,8 +677,15 @@ class RunQueue(QListWidget):
             row = QListWidgetItem(label)
             row.setData(Qt.ItemDataRole.UserRole, item.index - 1)
             row.setToolTip(item.short_message)
-            if item.status is RunItemStatus.RUNNING:
-                row.setBackground(QColor("#14532d"))
+            status_colors = {
+                RunItemStatus.RUNNING: self.tokens.accent_soft,
+                RunItemStatus.SUCCEEDED: self.tokens.accent_soft,
+                RunItemStatus.FAILED: self.tokens.error_soft,
+                RunItemStatus.CANCELLED: self.tokens.warning_soft,
+            }
+            color = status_colors.get(item.status)
+            if color:
+                row.setBackground(QColor(color))
             self.addItem(row)
         if items:
             self.setCurrentRow(
@@ -772,7 +783,7 @@ class RunResultsPage(QScrollArea):
         self.progress_bar.setMaximumWidth(520)
         self.current_label = QLabel("Текущий файл: —")
         self.current_label.setWordWrap(True)
-        self.queue = RunQueue()
+        self.queue = RunQueue(tokens=tokens)
         self.queue.setAccessibleName("Очередь выполнения")
         self.queue.setMinimumHeight(160)
         self.queue.currentRowChanged.connect(self._selection_changed)
@@ -912,23 +923,36 @@ class RunResultsPage(QScrollArea):
         item = self._selected_item(row)
         if item is None:
             self.viewer.set_paths("", "")
-            self.processing_label.setText("processing: not_started")
-            self.stages_label.setText("stages: not_started")
-            self.file_hints_label.setText("file_hints: not_inferred")
-            self.pixel_evidence_label.setText("pixel_evidence: not_inferred")
-            self.handoff_label.setText(
-                "verification_handoff: not_inferred"
+            self._set_status_label(
+                self.processing_label,
+                "Ожидание запуска",
+                RunItemStatus.PENDING,
             )
+            self.stages_label.setText("Этапы: ещё не начаты")
+            self.file_hints_label.setText("Дополнительные сведения доступны в центре проверки")
+            self.pixel_evidence_label.setText("Проверка пикселей: не выполнялась")
+            self.handoff_label.setText("Передача на проверку: не выполнялась")
             return
         self.viewer.set_paths(item.source_path, item.output_path)
-        self.processing_label.setText(
-            f"processing: {item.status.value} — {item.short_message}"
+        status_titles = {
+            RunItemStatus.PENDING: ("Ожидает запуска", "•"),
+            RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
+            RunItemStatus.SUCCEEDED: ("Файл обработан", "✓"),
+            RunItemStatus.FAILED: ("Файл не обработан", "⚠"),
+            RunItemStatus.CANCELLED: ("Файл пропущен", "—"),
+        }
+        title, icon = status_titles[item.status]
+        detail = item.short_message
+        self._set_status_label(
+            self.processing_label,
+            f"{icon} {title}\n{detail}",
+            item.status,
         )
         stage_text = ", ".join(
             f"{name}={status}"
             for name, status in sorted(item.stage_statuses.items())
         ) or "not_started"
-        self.stages_label.setText(f"stages: {stage_text}")
+        self.stages_label.setText(f"Этапы обработки: {stage_text}")
         record = next(
             (
                 candidate
@@ -937,18 +961,31 @@ class RunResultsPage(QScrollArea):
             ),
             None,
         )
-        self.file_hints_label.setText(
-            "file_hints: доступны в центре проверки; "
-            "не выводятся из processing status"
-        )
+        self.file_hints_label.setText("Дополнительные сведения доступны в центре проверки")
         self.pixel_evidence_label.setText(
-            "pixel_evidence: "
-            + (record.synthid_status if record is not None else "not_verified")
+            "Проверка пикселей: "
+            + (record.synthid_status if record is not None else "не выполнялась")
         )
         self.handoff_label.setText(
-            "verification_handoff: "
-            + (record.openai_status if record is not None else "not_verified")
+            "Передача на проверку: "
+            + (record.openai_status if record is not None else "не выполнялась")
         )
+
+    @staticmethod
+    def _set_status_label(
+        label: QLabel,
+        text: str,
+        status: RunItemStatus,
+    ) -> None:
+        state = {
+            RunItemStatus.FAILED: "error",
+            RunItemStatus.CANCELLED: "warning",
+            RunItemStatus.RUNNING: "warning",
+        }.get(status, "")
+        label.setText(text)
+        label.setProperty("state", state)
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _open_folder(self) -> None:
         if self.session is None or not self.session.output_dir.is_dir():
