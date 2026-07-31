@@ -1,6 +1,6 @@
 # CLIENT SMOKE TEST 3.0
 
-Статус: **WINDOWS APPLICATION START VERIFIED / MACOS MANUAL PENDING**. Установка Windows 3.0 поверх 2.0 выполнена вручную после постоянного backup; после более длительного запуска появилось окно `Clipart Generator v3.0`.
+Статус: **WINDOWS GUI FAIL / MACOS MANUAL PENDING**. Установка Windows 3.0 поверх 2.0 выполнена вручную после постоянного backup; окно `Clipart Generator v3.0` появилось, но ожидаемые режимы отсутствуют.
 
 ## Артефакты
 
@@ -31,7 +31,7 @@
 
 ## Windows upgrade from 2.0
 
-Статус: **PASS до этапа GUI-функций** — registry и окно показывают 3.0, `config.json` обновился до `app_version=3.0`. Uninstall и rollback не выполнялись.
+Статус: **FAIL** — registry и окно показывают 3.0, но Clipart/Pinterest/Processing не представлены в интерфейсе. Uninstall и rollback не выполнялись.
 
 Статический анализ:
 
@@ -43,7 +43,7 @@
 - Перед upgrade нужен backup user-data и проектов.
 - Не подтверждено, что uninstall 2.0 не удалит user-data после upgrade.
 
-Фактический результат: registry показывает 3.0 и путь не изменился; `.env`, `config.json`, `prompts.json` сохранились; окно `Clipart Generator v3.0` появилось после более длительного запуска. Режимы, повторный запуск и Processing ещё не проверялись.
+Фактический результат: registry показывает 3.0 и путь не изменился; `.env`, `config.json`, `prompts.json` сохранились; окно `Clipart Generator v3.0` появилось после более длительного запуска. Пользователь сообщил, что режимы Clipart/Pinterest/Processing отсутствуют. Processing не запускался.
 
 Безопасный сценарий для повторной проверки: отдельная VM/Sandbox или тестовый компьютер → установить 2.0 → создать тестовые настройки/проект → сделать backup → установить 3.0 поверх → проверить данные → проверить uninstall только после копии.
 
