@@ -112,6 +112,30 @@ class V3ProcessingFlowTests(unittest.TestCase):
         self.assertIsInstance(pages[StepId.PIPELINE], ProcessingPipelinePage)
         self.assertIsInstance(pages[StepId.REVIEW_RUN], ProcessingReviewRunPage)
 
+    def test_process_more_clears_inputs_and_returns_to_files_step(self):
+        with tempfile.TemporaryDirectory(prefix="processing-more-") as temp:
+            state, source = self.make_state(temp)
+            shell = AppShell(state)
+            controller = install_processing_flow(shell, worker_factory=WorkerFactory())
+            request = build_processing_run_request(
+                state,
+                {},
+                allow_full_image_changes=True,
+                external_transfer_consent=False,
+            )
+            session = controller.run_queue.start_new(request)
+            session.running = False
+            controller.run_queue.page.refresh_from_state()
+
+            controller.run_queue.page.process_more_button.click()
+            self.app.processEvents()
+
+            self.assertEqual(state.current_step, StepId.FILES)
+            self.assertEqual(state.processing.selected_files, [])
+            self.assertEqual(state.processing.verification_records, [])
+            self.assertIs(shell.current_page, controller.files_page)
+
+
     def test_file_card_validates_content_and_reports_safe_metadata(self):
         with tempfile.TemporaryDirectory(prefix="processing-files-") as temp:
             state = ProjectState(mode=ProjectMode.PROCESSING)

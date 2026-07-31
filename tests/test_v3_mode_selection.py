@@ -189,6 +189,24 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.close()
         view.deleteLater()
 
+    def test_done_returns_to_mode_selection_without_reusing_completed_shell(self):
+        view = V3ApplicationView()
+        view.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
+        completed_shell = view.shell
+        completed_shell.state.set_step(StepId.RESULTS)
+        completed_shell.refresh()
+
+        completed_shell.next_button.click()
+        self.app.processEvents()
+
+        self.assertIs(view.stack.currentWidget(), view.mode_selection)
+        self.assertIs(view.shell, completed_shell)
+        view.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
+        self.assertIsNot(view.shell, completed_shell)
+        self.assertEqual(view.shell.state.processing.selected_files, [])
+        view.close()
+        view.deleteLater()
+
     def test_offscreen_selection_layout_and_keyboard_flow_at_980_by_700(self):
         screen = ModeSelectionScreen()
         screen.resize(980, 700)
