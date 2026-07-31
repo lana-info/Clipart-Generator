@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PyQt6.QtCore import QObject, QSize, Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QImageReader, QPixmap
+from PyQt6.QtGui import QColor, QDesktopServices, QImageReader, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -356,12 +356,18 @@ class RunQueueSession(QObject):
                 self._event("worker_progress_rejected", reason="index_mismatch")
                 return
             self.current_index = item.index - 1
-            self.current_stage = "generation"
+            # A legacy worker emits a generic item-start message for every
+            # mode. Processing must never be presented as image generation.
+            self.current_stage = (
+                "processing"
+                if self.mode is ProjectMode.PROCESSING
+                else "generation"
+            )
             self.activity_indeterminate = True
             item.status = RunItemStatus.RUNNING
             item.short_message = "Выполняется."
             if isinstance(item.payload, dict):
-                item.stage_statuses["generation"] = "running"
+                item.stage_statuses[self.current_stage] = "running"
             self._event(
                 "item_started",
                 item=item.index,
@@ -667,6 +673,8 @@ class RunQueue(QListWidget):
             row = QListWidgetItem(label)
             row.setData(Qt.ItemDataRole.UserRole, item.index - 1)
             row.setToolTip(item.short_message)
+            if item.status is RunItemStatus.RUNNING:
+                row.setBackground(QColor("#14532d"))
             self.addItem(row)
         if items:
             self.setCurrentRow(
@@ -761,6 +769,7 @@ class RunResultsPage(QScrollArea):
         self.summary_label.setProperty("v3Status", True)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
+        self.progress_bar.setMaximumWidth(520)
         self.current_label = QLabel("Текущий файл: —")
         self.current_label.setWordWrap(True)
         self.queue = RunQueue()

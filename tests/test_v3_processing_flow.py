@@ -255,6 +255,20 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertNotIn(str(source), repr(request))
             self.assertEqual(missing_processing_runtime_requirements(request), ())
 
+    def test_processing_request_preserves_selected_output_directory(self):
+        with tempfile.TemporaryDirectory(prefix="processing-output-") as temp:
+            state, _ = self.make_state(temp)
+            selected_output = Path(temp) / "output_trim"
+            state.common.output_dir = str(selected_output)
+            request = build_processing_run_request(
+                state,
+                {},
+                allow_full_image_changes=True,
+                external_transfer_consent=False,
+            )
+            self.assertEqual(request.settings["run_mode"], "process_only")
+            self.assertEqual(request.settings["output_dir"], str(selected_output))
+
     def test_external_action_requires_consent_and_matching_key(self):
         with tempfile.TemporaryDirectory(prefix="processing-external-") as temp:
             state, _ = self.make_state(temp)

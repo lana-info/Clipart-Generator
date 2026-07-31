@@ -515,11 +515,13 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.files_layout = QVBoxLayout(self.files_container)
         self.files_layout.setContentsMargins(0, 0, 0, 0)
         self.thumbnail_labels: list[QLabel] = []
-        self.add_widget(self.files_container)
+        self.file_count_label = QLabel()
+        self.file_count_label.setProperty("v3Status", True)
+        self.add_widget(self.file_count_label)
         self.error_label = QLabel()
         self.error_label.setWordWrap(True)
-        self.error_label.setProperty("state", "error")
         self.add_widget(self.error_label)
+        self.add_widget(self.files_container)
         self.refresh_from_state()
 
     def _changed(self) -> None:
@@ -658,10 +660,6 @@ class ProcessingFilesPage(_ScrollableStepPage):
                     thumbnail.setAccessibleName(f"Миниатюра {info.name}")
                 else:
                     thumbnail.setText("Нет preview")
-                row.addWidget(thumbnail)
-                metadata = QLabel(info.summary)
-                metadata.setWordWrap(True)
-                row.addWidget(metadata, 1)
                 remove_button = QToolButton()
                 remove_button.setIcon(
                     self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
@@ -671,15 +669,27 @@ class ProcessingFilesPage(_ScrollableStepPage):
                     lambda _checked=False, target=info.path: self.remove_file(target)
                 )
                 row.addWidget(remove_button)
+                row.addWidget(thumbnail)
+                metadata = QLabel(info.summary)
+                metadata.setWordWrap(True)
+                row.addWidget(metadata, 1)
                 self.files_layout.addWidget(card)
                 self.thumbnail_labels.append(thumbnail)
         else:
             placeholder = QLabel("Файлы пока не выбраны")
             self.files_layout.addWidget(placeholder)
+        self.file_count_label.setText(
+            f"Выбрано изображений: {len(self.state.processing.selected_files)}"
+        )
         if errors:
             self.error_label.setText(
                 "Недоступны или недопустимы: " + ", ".join(errors[:3])
             )
+            self.error_label.setProperty("state", "warning")
+        else:
+            self.error_label.setProperty("state", "default")
+        self.error_label.style().unpolish(self.error_label)
+        self.error_label.style().polish(self.error_label)
 
     def validation_issues(self) -> tuple[str, ...]:
         issues: list[str] = []
@@ -1008,7 +1018,7 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__(
-            "Сравнение и запуск",
+            "Проверка и запуск",
             "Проверьте порядок, место сохранения и сетевую передачу.",
             tokens=tokens,
         )
@@ -1131,6 +1141,10 @@ def build_processing_run_request(
     for path in state.processing.selected_files:
         inspect_local_image(path)
     validate_processing_providers(state.processing.operations)
+    if uses_external_processing(state.processing.operations) and not external_transfer_consent:
+        raise ProcessingFlowError(
+            "Подтвердите разрешение на передачу файлов внешнему провайдеру"
+        )
     issues = operation_validation_issues(
         state.processing.operations,
         allow_full_image_changes=allow_full_image_changes,

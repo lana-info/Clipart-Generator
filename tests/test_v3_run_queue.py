@@ -110,6 +110,27 @@ class V3RunQueueTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 self.assertIs(route_for_mode(mode)[-1], StepId.RESULTS)
 
+    def test_processing_item_start_is_not_reported_as_generation(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-processing-stage-") as temp:
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "input.png"]),
+                ProjectMode.PROCESSING,
+            )
+            session.handle_progress("[1/1] Обработка файла: input.png")
+            self.assertEqual(session.current_stage, "processing")
+            self.assertNotIn("generation", session.items[0].stage_statuses)
+
+    def test_missing_processing_file_is_marked_failed(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-missing-file-") as temp:
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "README.jpg"]),
+                ProjectMode.PROCESSING,
+            )
+            session.handle_progress("[1/1] Обработка файла: README.jpg")
+            session.handle_progress(f"Файл не найден: {Path(temp) / 'README.jpg'}")
+            self.assertEqual(session.items[0].status, RunItemStatus.FAILED)
+            self.assertEqual(session.items[0].short_message, "Исходный файл недоступен.")
+
     def test_failure_does_not_hide_completed_items(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-partial-") as temp:
             root = Path(temp)

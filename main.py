@@ -915,7 +915,9 @@ class WorkerThread(QThread):
             self._emit_file_progress(idx, total, 4)
             try:
                 if not os.path.isfile(file_path):
-                    self.progress.emit(f"  Файл не найден: {file_path}")
+                    # Keep the marker at the start so the V3 queue can classify
+                    # the item as unavailable instead of leaving it running.
+                    self.progress.emit(f"Файл не найден: {file_path}")
                     if self._stop_after_current_if_requested():
                         return
                     continue
