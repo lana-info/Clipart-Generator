@@ -1,5 +1,12 @@
 # Quality Gate issues 3.0
 
+## Current release state
+
+Manual smoke for Clipart, Pinterest and Processing was completed successfully.
+User-facing issues found during that smoke are closed and covered by targeted
+regression. Only the native Qt teardown blocker and explicitly deferred release
+items remain below.
+
 | ID | Criticality | Reproduction | Status |
 |---|---|---|---|
 | QG-001 | High | Запустить полный Qt smoke с созданием V3ApplicationView и дождаться завершения процесса | Open: native Qt/offscreen teardown зависает/завершается с кодом 1; точка после создания и перехода режима, до lifecycle teardown |

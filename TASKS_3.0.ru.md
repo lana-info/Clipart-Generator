@@ -6,6 +6,24 @@ Task Set Key: `CG3-TASKSET-001`
 Экраны: `UI_WIZARD_3.0.ru.md`
 Исследование: `SYNTHID_3_METHOD_BENCHMARK.ru.md`
 
+## Актуальный статус после ручного smoke-теста (2026-07-30)
+
+Статусы ниже являются фактическим release-источником истины и имеют приоритет
+над историческими отметками `Done` в отдельных задачах. Реализованные
+пользовательские сценарии подтверждены ручным smoke-тестом и targeted
+регрессией. Полный Qt teardown остаётся BLOCKED. WorkerThread, installer,
+RunPod UX и SynthID research остаются DEFERRED/BLOCKED и не входят в закрытый
+обязательный scope 3.0.
+
+| Scope | Актуальный статус | Evidence |
+|---|---|---|
+| State, wizard, три режима, prompts, references, CSV, models, processing, API, persistence, dark UI | VERIFIED | ручной smoke + targeted regression |
+| Qt GUI teardown при завершении offscreen-процесса | BLOCKED | `QUALITY_GATE_ISSUES_3.0.md` QG-001/QG-002 |
+| Legacy WorkerThread extraction | DEFERRED | не менять до отдельного архитектурного решения |
+| Windows/macOS installer | DEFERRED | release artifact не собирался |
+| RunPod UX | DEFERRED | endpoint/billing integration не подтверждены реальным аккаунтом |
+| SynthID M1/M2/M3 | BLOCKED/DEFERRED | отсутствуют official evidence/CUDA/cloud run |
+
 ## Task 1: Зафиксировать контракты состояния проекта и маршрутов
 
 Key: `CG3-TASK-001`

@@ -2,6 +2,16 @@
 
 PRD Key: `CG3-PRD-001`
 
+## Release scope clarification (manual smoke verified)
+
+The mandatory 3.0 scope is the three user modes, wizard navigation, prompt and
+reference editing, CSV mapping, model selection, processing, persistence,
+credential settings, error handling and safe export. Manual smoke confirmed
+these user-facing scenarios. Installer packaging, legacy WorkerThread
+extraction, RunPod UX and production SynthID removal remain explicitly deferred
+or blocked research work and are not release promises for the source-only 3.0
+quality gate.
+
 Статус: Revised after user testing
 Целевая ветка: `develop/3.0`
 Источник требований: комментарии ручного тестирования интерфейса 3.0
