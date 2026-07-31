@@ -687,6 +687,7 @@ def build_clipart_run_request(
             )
 
     settings = _worker_settings(state, runtime_settings)
+    settings["output_dir"] = state.output_dir_for_mode(ProjectMode.CLIPART)
     mode = "mode_both" if _processing_requested(operations) else "mode1_generate_only"
     return ClipartRunRequest(
         mode=mode,
@@ -1086,10 +1087,11 @@ class ClipartProjectPage(_ScrollableStepPage):
 
     def _sync(self) -> None:
         self.state.common.work_dir = self.work_dir_edit.text().strip()
-        self.state.common.output_dir = (
+        self.state.set_output_dir_for_mode(
             str(Path(self.state.common.work_dir) / "output")
             if self.state.common.work_dir
-            else ""
+            else "",
+            ProjectMode.CLIPART,
         )
         self._refresh_status()
         self.changed()
@@ -2489,14 +2491,12 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.refresh_from_state()
 
     def refresh_from_state(self) -> None:
-        output_dir = (
-            str(Path(self.state.common.work_dir) / "output")
-            if self.state.common.work_dir
-            else "не выбрана"
-        )
-        self.state.common.output_dir = (
-            "" if output_dir == "не выбрана" else output_dir
-        )
+        output_dir = self.state.output_dir_for_mode(ProjectMode.CLIPART)
+        if not output_dir and self.state.common.work_dir:
+            output_dir = str(Path(self.state.common.work_dir) / "output")
+            self.state.set_output_dir_for_mode(output_dir, ProjectMode.CLIPART)
+        if not output_dir:
+            output_dir = "не выбрана"
         estimate = estimate_clipart_cost(self.state)
         generation = self.state.clipart.generation
         self.output_label.setText(f"Папка результата: {output_dir}")

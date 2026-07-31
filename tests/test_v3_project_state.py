@@ -168,6 +168,24 @@ class ProjectSerializationTests(unittest.TestCase):
             save_project_draft(source, path)
             restored = load_project_draft(path)
             self.assertEqual(restored.to_dict(), source.to_dict())
+
+    def test_mode_specific_output_and_processing_consent_survive_restart(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-preferences-") as temp_dir:
+            source = ProjectState()
+            source.set_output_dir_for_mode("D:/clipart", ProjectMode.CLIPART)
+            source.set_output_dir_for_mode("D:/pinterest", ProjectMode.PINTEREST)
+            source.set_output_dir_for_mode("D:/processing", ProjectMode.PROCESSING)
+            source.processing.recipe = "metadata_cleanup"
+            source.processing.deep_watermark_consent = True
+            path = Path(temp_dir) / "project_state.json"
+            save_project_draft(source, path)
+
+            restored = load_project_draft(path)
+            self.assertEqual(restored.output_dir_for_mode(ProjectMode.CLIPART), "D:/clipart")
+            self.assertEqual(restored.output_dir_for_mode(ProjectMode.PINTEREST), "D:/pinterest")
+            self.assertEqual(restored.output_dir_for_mode(ProjectMode.PROCESSING), "D:/processing")
+            self.assertEqual(restored.processing.recipe, "metadata_cleanup")
+            self.assertTrue(restored.processing.deep_watermark_consent)
             self.assertEqual(list(Path(temp_dir).glob("*.tmp")), [])
 
     def test_invalid_or_oversized_drafts_fail_closed(self):

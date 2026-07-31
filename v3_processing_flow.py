@@ -545,7 +545,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
 
     def _sync_output_dir(self, *_: Any) -> None:
         value = self.output_selector.path()
-        self.state.common.output_dir = value
+        self.state.set_output_dir_for_mode(value, ProjectMode.PROCESSING)
         self.changed()
 
     def _set_collision_policy(self, keep_both: bool) -> None:
@@ -641,10 +641,12 @@ class ProcessingFilesPage(_ScrollableStepPage):
 
     def refresh_from_state(self) -> None:
         default_output = self._default_output_dir()
-        if not self.state.common.output_dir and default_output:
-            self.state.common.output_dir = default_output
+        selected_output = self.state.output_dir_for_mode(ProjectMode.PROCESSING)
+        if not selected_output and default_output:
+            self.state.set_output_dir_for_mode(default_output, ProjectMode.PROCESSING)
+            selected_output = default_output
         if not self.output_selector.path():
-            self.output_selector.set_path(self.state.common.output_dir or default_output)
+            self.output_selector.set_path(selected_output or default_output)
         self.keep_both_radio.blockSignals(True)
         self.overwrite_radio.blockSignals(True)
         self.keep_both_radio.setChecked(not self.state.processing.overwrite_existing)
@@ -1020,8 +1022,13 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
         self.allow_full_image_changes = QCheckBox(
             "Разрешить глубокую обработку скрытых водяных знаков (SynthID)"
         )
-        self.allow_full_image_changes.toggled.connect(changed)
+        self.allow_full_image_changes.toggled.connect(self._sync_consent)
+        self.allow_full_image_changes.setChecked(state.processing.deep_watermark_consent)
         self.add_widget(self.allow_full_image_changes)
+
+    def _sync_consent(self, value: bool) -> None:
+        self.project_state.processing.deep_watermark_consent = bool(value)
+        self.changed()
 
     def validation_issues(self) -> tuple[str, ...]:
         return operation_validation_issues(
@@ -1082,10 +1089,10 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         operations = self.state.processing.operations
         files = self.state.processing.selected_files
         work_dir = self.state.common.work_dir
-        output_dir = self.state.common.output_dir.strip()
+        output_dir = self.state.output_dir_for_mode(ProjectMode.PROCESSING).strip()
         if not output_dir and work_dir:
             output_dir = str(Path(work_dir) / "output")
-            self.state.common.output_dir = output_dir
+            self.state.set_output_dir_for_mode(output_dir, ProjectMode.PROCESSING)
         if not output_dir:
             output_dir = "не выбрана"
         steps = processing_pipeline_steps(operations)
@@ -1188,7 +1195,7 @@ def build_processing_run_request(
     adapter = _ProcessingStateAdapter(state)
     settings = _worker_settings(adapter, runtime_settings)
     settings["run_mode"] = "process_only"
-    settings["output_dir"] = state.common.output_dir or str(work_dir / "output")
+    settings["output_dir"] = state.output_dir_for_mode(ProjectMode.PROCESSING) or str(work_dir / "output")
     settings["overwrite_existing"] = state.processing.overwrite_existing
     return ClipartRunRequest(
         mode="mode2_process",

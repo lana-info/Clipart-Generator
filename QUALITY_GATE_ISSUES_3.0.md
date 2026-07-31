@@ -81,3 +81,6 @@ the 980×700 rendered review. Medium/Low items are tracked in `ROADMAP_3.1.md`.
 - Исправлен Critical defect: промежуточные файлы Processing больше не строятся из устаревшего workspace-пути `\\raw`.
 - Для каждого запуска создаётся изолированный временный каталог; итоговый файл по-прежнему сохраняется только в выбранную output-папку.
 - Добавлены regression-тесты для корневого/устаревшего workspace, custom output и сохранения исходника.
+- Output-пути теперь хранятся отдельно для Clipart, Pinterest и Processing в project draft.
+- Processing consent сохраняется как пользовательская настройка и восстанавливается при загрузке draft.
+- Старые draft-файлы без новых полей продолжают загружаться с безопасными defaults.

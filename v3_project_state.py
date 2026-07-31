@@ -348,17 +348,24 @@ class CommonProjectData:
     project_name: str = ""
     work_dir: str = ""
     output_dir: str = ""
+    output_dirs: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.project_name = _text(self.project_name, limit=200)
         self.work_dir = _text(self.work_dir)
         self.output_dir = _text(self.output_dir)
+        self.output_dirs = {
+            str(key): _text(value)
+            for key, value in (self.output_dirs or {}).items()
+            if str(key) in {mode.value for mode in ProjectMode}
+        }
 
     def to_dict(self) -> dict[str, str]:
         return {
             "project_name": self.project_name,
             "work_dir": self.work_dir,
             "output_dir": self.output_dir,
+            "output_dirs": dict(self.output_dirs),
         }
 
     @classmethod
@@ -368,6 +375,7 @@ class CommonProjectData:
             project_name=data.get("project_name", ""),
             work_dir=data.get("work_dir", ""),
             output_dir=data.get("output_dir", ""),
+            output_dirs=data.get("output_dirs", {}),
         )
 
 
@@ -863,6 +871,7 @@ class ProcessingModeData:
     selected_files: list[str] = field(default_factory=list)
     recipe: str = "custom"
     overwrite_existing: bool = False
+    deep_watermark_consent: bool = False
     operations: ImageOperationData = field(default_factory=ImageOperationData)
     verification_records: list[VerificationRecordData] = field(default_factory=list)
 
@@ -879,6 +888,7 @@ class ProcessingModeData:
             "selected_files": list(self.selected_files),
             "recipe": self.recipe,
             "overwrite_existing": self.overwrite_existing,
+            "deep_watermark_consent": self.deep_watermark_consent,
             "operations": self.operations.to_dict(),
             "verification_records": [
                 record.to_dict() for record in self.verification_records
@@ -895,6 +905,7 @@ class ProcessingModeData:
             ),
             recipe=data.get("recipe", "custom"),
             overwrite_existing=bool(data.get("overwrite_existing", False)),
+            deep_watermark_consent=bool(data.get("deep_watermark_consent", False)),
             operations=ImageOperationData.from_dict(data.get("operations", {})),
             verification_records=_verification_records(
                 data.get("verification_records", [])
@@ -1099,12 +1110,17 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     common = _draft_object(value, "common")
     _reject_unknown_fields(
         common,
-        ("project_name", "work_dir", "output_dir"),
+        ("project_name", "work_dir", "output_dir", "output_dirs"),
         "common",
     )
     for key in ("project_name", "work_dir", "output_dir"):
         if not isinstance(common.get(key), str):
             raise ProjectStateError(f"Project draft field common.{key} must be a string")
+    if not isinstance(common.get("output_dirs", {}), Mapping):
+        raise ProjectStateError("Project draft field common.output_dirs must be an object")
+    for key, output_value in common.get("output_dirs", {}).items():
+        if key not in {mode.value for mode in ProjectMode} or not isinstance(output_value, str):
+            raise ProjectStateError("Project draft field common.output_dirs is invalid")
 
     runtime = _draft_object(value, "runtime")
     _validate_scalar_fields(runtime, RuntimeData, "runtime")
@@ -1162,6 +1178,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
             "selected_files",
             "recipe",
             "overwrite_existing",
+            "deep_watermark_consent",
             "operations",
             "verification_records",
         ),
@@ -1176,6 +1193,8 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         )
     if not isinstance(processing.get("recipe"), str):
         raise ProjectStateError("Project draft field processing.recipe must be a string")
+    if not isinstance(processing.get("deep_watermark_consent", False), bool):
+        raise ProjectStateError("Project draft field processing.deep_watermark_consent must be boolean")
     _validate_verification_records(processing)
     _validate_scalar_fields(
         _draft_object(processing, "operations"),
@@ -1260,6 +1279,16 @@ class ProjectState:
         normalized = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
         self.mode = normalized
         return self.current_step
+
+    def output_dir_for_mode(self, mode: ProjectMode | str | None = None) -> str:
+        selected = mode if isinstance(mode, ProjectMode) else ProjectMode(mode or self.mode)
+        return self.common.output_dirs.get(selected.value, self.common.output_dir)
+
+    def set_output_dir_for_mode(self, value: str, mode: ProjectMode | str | None = None) -> None:
+        selected = mode if isinstance(mode, ProjectMode) else ProjectMode(mode or self.mode)
+        normalized = _text(value)
+        self.common.output_dirs[selected.value] = normalized
+        self.common.output_dir = normalized
 
     def set_step(self, step: StepId | str) -> StepId:
         try:

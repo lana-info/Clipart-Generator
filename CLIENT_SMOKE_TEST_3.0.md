@@ -84,3 +84,4 @@ GUI smoke нельзя объявлять VERIFIED без реального App
 - Предыдущий ручной smoke выявил `[WinError 5] Access is denied: '\\raw'`.
 - Root cause: промежуточный каталог формировался из некорректного сохранённого workspace-пути.
 - Исправление покрыто targeted regression; новый installer требует отдельного ручного smoke.
+- Проверка сохранения output-путей и consent после загрузки project draft добавлена в regression suite.

@@ -87,6 +87,10 @@ def _pinterest_project_adapter(state: ProjectState) -> ProjectState:
         raise TypeError("state must be a ProjectState")
     adapter = ProjectState(mode=ProjectMode.CLIPART)
     adapter.common = state.common
+    adapter.common.output_dir = state.output_dir_for_mode(ProjectMode.PINTEREST)
+    if not adapter.common.output_dir and adapter.common.work_dir:
+        adapter.common.output_dir = str(Path(adapter.common.work_dir) / "output")
+        state.set_output_dir_for_mode(adapter.common.output_dir, ProjectMode.PINTEREST)
     adapter.runtime = state.runtime
     adapter.clipart = _PinterestDataAdapter(state.pinterest)
     return adapter
