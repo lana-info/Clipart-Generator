@@ -90,4 +90,5 @@
 | Processing trim, metadata preservation and 300 DPI export | VERIFIED | Focused local regressions cover trim ordering, alpha preservation, metadata/DPI carry-over, and 300 DPI final export (`5 passed`) |
 | Local alpha-safe background/upscale paths | VERIFIED | Local Real-ESRGAN size/alpha checks, deterministic edge controls, missing-tool diagnostics, and paid-provider fail-closed checks (`5 passed`, `2 subtests`) |
 | Clipart/Pinterest local routes, prompts and request boundaries | VERIFIED | Focused route, prompt/CSV, pipeline summary, secret-redaction and no-network module checks (`10 passed`); no provider-backed generation started |
+| Credentials, secret redaction and provider-contract mocks | VERIFIED | Isolated security regression covers env credential round-trip, KIE routing, no-network local generation, redirect/header protection, top-level error redaction, and PhotoRoom diagnostics (`8 passed`, `5 subtests`) |
 | Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |

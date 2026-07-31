@@ -25,3 +25,4 @@ scenario is now VERIFIED using test copies and a separate output directory.
 | `README.jpg` is processed together with neighboring JPEGs | VERIFIED | `tests/test_v3_processing_flow.py::test_real_local_pipeline_processes_readme_jpg_in_batch` |
 | Local worker creates a new output and preserves the source | VERIFIED | `tests/test_v3_processing_flow.py::test_real_local_pipeline_creates_new_file_without_touching_source` |
 | Real GUI selection → run → output verification | VERIFIED | Manual native-file-picker smoke: files added, Processing stage shown, separate output used, results saved there, README.jpg handled or explicitly failed, remaining files continued, sources unchanged, no paid API started |
+| Credential storage, secret redaction and provider contracts | VERIFIED | Focused mock/security regression: `8 passed`, `5 subtests`; no real provider request or key exposure |
