@@ -75,6 +75,7 @@ jobs:
       - name: Verify V3 release entrypoint
         shell: powershell
         run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
           python -c "from PyQt6.QtWidgets import QApplication; from main import create_v3_application_window; app=QApplication([]); window=create_v3_application_window(); assert len(window.mode_selection.mode_cards) == 3; window.close(); app.quit()"
           $exe = "dist\Clipart Generator\Clipart Generator.exe"
           if (-not (Test-Path -LiteralPath $exe)) {
