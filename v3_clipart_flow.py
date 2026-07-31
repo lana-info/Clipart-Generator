@@ -1498,13 +1498,30 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.refresh_from_state()
 
     def _rows_moved(self, *_: Any) -> None:
-        self._table_changed(None)
+        if self._updating:
+            return
+        # The references column is a display summary, not the source data.
+        # Rebuilding entries from its text during drag/drop loses references
+        # and can blank prompts while Qt is moving rows. Keep the original
+        # entry index on the prompt item and only reorder existing entries.
+        reordered: list[PromptEntry] = []
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            source_row = item.data(Qt.ItemDataRole.UserRole) if item else None
+            if isinstance(source_row, int) and 0 <= source_row < len(self.state.clipart.prompts):
+                reordered.append(self.state.clipart.prompts[source_row])
+        if len(reordered) == len(self.state.clipart.prompts):
+            self.state.clipart.prompts = reordered
+            self._refresh_issues()
+            self.changed()
 
     def refresh_from_state(self) -> None:
         self._updating = True
         self.table.setRowCount(len(self.state.clipart.prompts))
         for row, entry in enumerate(self.state.clipart.prompts):
-            self.table.setItem(row, 0, QTableWidgetItem(entry.prompt))
+            prompt_item = QTableWidgetItem(entry.prompt)
+            prompt_item.setData(Qt.ItemDataRole.UserRole, row)
+            self.table.setItem(row, 0, prompt_item)
             refs_item = QTableWidgetItem(_reference_summary(entry.references))
             refs_item.setToolTip("\n".join(entry.references) or "Нет референсов")
             self.table.setItem(row, 1, refs_item)
