@@ -82,3 +82,6 @@
 | Local processing preserves source and writes a new output | VERIFIED | Real local pipeline regression with SHA-256 source check |
 | Paid external API calls | NOT RUN | No KIE, PhotoRoom, RunPod, or other paid operation was started |
 | Source safety | VERIFIED | Tests use temporary copies; repository worktree remained clean after GUI attempt |
+| Mode switching preserves project data | VERIFIED | Isolated wizard/mode regression: `test_mode_switcher_reuses_project_and_switches_immediately`, `test_mode_switch_applies_immediately_and_preserves_data` |
+| Pinterest navigation preserves prompts and format | VERIFIED | Isolated regression: `test_navigation_preserves_project_prompts_and_format` |
+| Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |
