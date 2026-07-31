@@ -88,4 +88,5 @@
 | Paid-provider preflight and explicit run boundary | VERIFIED | Isolated Clipart/Pinterest regressions block missing keys, invalid references, unknown models and partial prices before worker (`5 passed`); no provider call made |
 | Processing cancel, isolated failure and collision safety | VERIFIED | Queue regressions cover cancellation boundaries, preserving completed items, retrying only failed items, rejecting untrusted/missing outputs, and preserving sources (`8 passed`, `2 subtests`) |
 | Processing trim, metadata preservation and 300 DPI export | VERIFIED | Focused local regressions cover trim ordering, alpha preservation, metadata/DPI carry-over, and 300 DPI final export (`5 passed`) |
+| Local alpha-safe background/upscale paths | VERIFIED | Local Real-ESRGAN size/alpha checks, deterministic edge controls, missing-tool diagnostics, and paid-provider fail-closed checks (`5 passed`, `2 subtests`) |
 | Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |
