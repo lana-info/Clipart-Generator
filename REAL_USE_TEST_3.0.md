@@ -93,4 +93,5 @@
 | Credentials, secret redaction and provider-contract mocks | VERIFIED | Isolated security regression covers env credential round-trip, KIE routing, no-network local generation, redirect/header protection, top-level error redaction, and PhotoRoom diagnostics (`8 passed`, `5 subtests`) |
 | Qt lifecycle smoke and grouped-suite stability | MANUAL PENDING | Extended V3 route suite passes (`32 passed`, `8 subtests`, 51.76 s); full `pytest -q` did not finish within 180 s, so legacy Qt lifecycle remains unconfirmed |
 | Processing Results UX block | MANUAL PENDING | Error/status tokens, collision policy, fixed action bar, Done and Process-more contracts have targeted regression coverage; offscreen 980×700 render confirms fixed geometry but native rendered/manual verification remains pending |
+| Processing UX targeted regression after implementation | VERIFIED | Shared Processing/wizard/Clipart/Pinterest suite: `95 passed`, `13 subtests`; `py_compile` and `git diff --check` pass |
 | Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |
