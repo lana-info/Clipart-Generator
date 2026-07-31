@@ -78,6 +78,7 @@
 | Processing wizard opens in the GUI | VERIFIED | Computer Use reached `Режим: Обработка изображений`; no crash during entry |
 | Processing GUI full run with test copies | MANUAL PENDING | Native file picker did not accept automated selection of the two test images |
 | Processing output directory, stage label, missing-file reason | VERIFIED | Targeted regression tests cover `output_dir`, `processing`, and explicit unavailable-file status |
+| `README.jpg` in a multi-file local batch | VERIFIED | Regression confirms both `README.jpg` and a neighboring JPEG produce outputs |
 | Local processing preserves source and writes a new output | VERIFIED | Real local pipeline regression with SHA-256 source check |
 | Paid external API calls | NOT RUN | No KIE, PhotoRoom, RunPod, or other paid operation was started |
 | Source safety | VERIFIED | Tests use temporary copies; repository worktree remained clean after GUI attempt |

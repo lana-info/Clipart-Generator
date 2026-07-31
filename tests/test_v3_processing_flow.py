@@ -435,6 +435,41 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertEqual(len(outputs), 1)
             self.assertNotEqual(outputs[0].resolve(), source.resolve())
 
+    def test_real_local_pipeline_processes_readme_jpg_in_batch(self):
+        from main import WorkerThread
+
+        with tempfile.TemporaryDirectory(prefix="processing-readme- batch-") as temp:
+            root = Path(temp)
+            readme = root / "README.jpg"
+            sibling = root / "sibling.jpg"
+            Image.new("RGB", (12, 8), (90, 40, 20)).save(readme, format="JPEG")
+            Image.new("RGB", (10, 6), (20, 40, 90)).save(sibling, format="JPEG")
+            state, _ = self.make_state(temp)
+            state.processing.selected_files = [str(readme), str(sibling)]
+            before = {
+                path: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in (readme, sibling)
+            }
+            request = build_processing_run_request(
+                state,
+                {},
+                allow_full_image_changes=True,
+                external_transfer_consent=False,
+            )
+            worker = WorkerThread(**request.worker_kwargs())
+            worker._mode2_process_files()
+
+            outputs = list((root / "output").glob("*_processed_*.png"))
+            after = {
+                path: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in (readme, sibling)
+            }
+            self.assertEqual(before, after)
+            self.assertEqual(
+                {path.name.split("_processed_", 1)[0] for path in outputs},
+                {"README", "sibling"},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
