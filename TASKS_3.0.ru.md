@@ -6,7 +6,7 @@ Task Set Key: `CG3-TASKSET-001`
 Экраны: `UI_WIZARD_3.0.ru.md`
 Исследование: `SYNTHID_3_METHOD_BENCHMARK.ru.md`
 
-## Актуальный статус после ручного smoke-теста (2026-07-30)
+## Актуальный статус после ручного smoke-теста (2026-07-31)
 
 Статусы ниже являются фактическим release-источником истины и имеют приоритет
 над историческими отметками `Done` в отдельных задачах. Реализованные
@@ -909,7 +909,7 @@ Verification:
 ## Task 30: Провести полную регрессию и release gate 3.0
 
 Key: `CG3-TASK-030`
-Status: Done
+Status: In progress — targeted evidence is green; full release gate remains open
 Requirements: `CG3-AC-001`–`CG3-AC-020`
 
 Goal:
@@ -924,15 +924,15 @@ Steps:
 - Составить traceability table PRD Key → Task Key → Test/Evidence.
 
 Acceptance:
-- [x] Все критерии `CG3-PRD-001` имеют test/evidence или явный research status.
+- [ ] Все критерии `CG3-PRD-001` имеют complete test/evidence: provider-backed run и full Qt/repository gate остаются незавершёнными.
 - [x] Существующий pipeline не потерял поддерживаемые возможности.
 - [x] В release нет секретов, пользовательских файлов и benchmark inputs.
 - [x] Release/tag/publish выполняются только отдельной явно разрешённой задачей.
 
 Verification:
-- [x] `python -m unittest discover -s tests -p 'test_*.py'` — 387/387.
+- [ ] `python -m unittest discover -s tests -p 'test_*.py'` — исторический результат 387/387 не подтверждён текущим состоянием; текущий полный `pytest -q` не завершился за 180 s.
 - [x] `python -m py_compile main.py v3_*.py`.
-- [x] Offscreen smoke маршрутов, компонентов, очереди и fake-provider run.
+- [x] Targeted offscreen smoke маршрутов, компонентов, очереди и fake-provider run; grouped V3 route suite: 32 passed, 8 subtests.
 - [x] Source release gate проверен; installer intentionally deferred to a separate
   explicitly authorized packaging task (PyInstaller scan was stopped to avoid
   bundling 720+ MB ML dependencies during development).
