@@ -751,9 +751,10 @@ class BeforeAfterViewer(QFrame):
             label.setText("" if pixmap is not None else empty)
 
 
-class RunResultsPage(QScrollArea):
+class RunResultsPage(QWidget):
     stop_requested = pyqtSignal()
     retry_requested = pyqtSignal()
+    process_more_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -765,14 +766,18 @@ class RunResultsPage(QScrollArea):
         self.state = state
         self.session: RunQueueSession | None = None
         self._log_dialog: QDialog | None = None
-        self.setWidgetResizable(True)
-        self.setFrameShape(QScrollArea.Shape.NoFrame)
+        page_layout = QVBoxLayout(self)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        page_layout.addWidget(self.scroll_area, 1)
         self.card = FormCard(
             "Выполнение и результаты",
             "Очередь, общий прогресс и результаты каждого файла.",
             tokens=tokens,
         )
-        self.setWidget(self.card)
+        self.scroll_area.setWidget(self.card)
         self.setAccessibleName("Выполнение и результаты")
 
         self.summary_label = QLabel("Запуск ещё не начат.")
@@ -817,8 +822,13 @@ class RunResultsPage(QScrollArea):
             ButtonVariant.SECONDARY,
         )
         self.retry_button.clicked.connect(self.retry_requested.emit)
+        self.process_more_button = V3Button(
+            "Обработать ещё файлы",
+            ButtonVariant.SECONDARY,
+        )
+        self.process_more_button.clicked.connect(self.process_more_requested.emit)
         self.open_folder_button = V3Button(
-            "Открыть папку",
+            "Открыть папку с результатами",
             ButtonVariant.GHOST,
         )
         self.open_folder_button.clicked.connect(self._open_folder)
@@ -835,6 +845,7 @@ class RunResultsPage(QScrollArea):
         for button in (
             self.stop_button,
             self.retry_button,
+            self.process_more_button,
             self.open_folder_button,
             self.log_button,
             self.export_button,
@@ -853,9 +864,10 @@ class RunResultsPage(QScrollArea):
             self.file_hints_label,
             self.pixel_evidence_label,
             self.handoff_label,
-            actions,
         ):
             self.card.add_widget(widget)
+        self.action_bar = actions
+        page_layout.addWidget(self.action_bar, 0)
         self.refresh_from_state()
 
     def set_session(self, session: RunQueueSession) -> None:
@@ -868,8 +880,9 @@ class RunResultsPage(QScrollArea):
     def refresh_from_state(self) -> None:
         session = self.session
         if session is None:
-            self.stop_button.setEnabled(False)
-            self.retry_button.setEnabled(False)
+            self.stop_button.hide()
+            self.retry_button.hide()
+            self.process_more_button.hide()
             self.open_folder_button.setEnabled(False)
             self.log_button.setEnabled(False)
             self.export_button.setEnabled(False)
@@ -899,12 +912,14 @@ class RunResultsPage(QScrollArea):
         self.queue.refresh_items(session.items)
         if row >= 0:
             self.queue.setCurrentRow(min(row, len(session.items) - 1))
-        self.stop_button.setEnabled(
-            session.running and not session.stop_after_current_requested
-        )
-        self.retry_button.setEnabled(
-            not session.running and bool(session.failed_indices)
-        )
+        stop_visible = session.running and not session.stop_after_current_requested
+        retry_visible = not session.running and bool(session.failed_indices)
+        process_more_visible = not session.running
+        self.stop_button.setVisible(stop_visible)
+        self.retry_button.setVisible(retry_visible)
+        self.process_more_button.setVisible(process_more_visible)
+        self.stop_button.setEnabled(stop_visible)
+        self.retry_button.setEnabled(retry_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
         self.log_button.setEnabled(True)
         self.export_button.setEnabled(True)
@@ -1067,6 +1082,15 @@ class RunQueueSupport:
         )
         self.page.stop_requested.connect(self.stop_after_current)
         self.page.retry_requested.connect(self.retry_failed)
+        self.page.process_more_requested.connect(self.process_more)
+
+    def process_more(self) -> None:
+        if self.session is not None and self.session.running:
+            return
+        self.session = None
+        self.page.session = None
+        self.page.refresh_from_state()
+        self.controller.start_processing_again()
 
     def start_new(self, request: Any) -> RunQueueSession:
         session = RunQueueSession(request, self.mode)

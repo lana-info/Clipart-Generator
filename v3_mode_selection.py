@@ -379,8 +379,13 @@ class V3ApplicationView(QWidget):
         shell.state_changed.connect(self._save_draft)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         shell.api_settings_requested.connect(self._show_api_settings)
+        shell.finish_requested.connect(self._finish_workflow)
         self.shell = shell
         self.stack.addWidget(shell)
         self.stack.setCurrentWidget(shell)
         self.screen_changed.emit("wizard")
         self._save_draft()
+
+    def _finish_workflow(self, _mode: str) -> None:
+        """Return to mode selection without reusing the completed shell."""
+        self.show_new_project()

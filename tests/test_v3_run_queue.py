@@ -515,6 +515,8 @@ class V3RunQueueTests(unittest.TestCase):
             self.app.processEvents()
 
             self.assertTrue(page.isVisible())
+            self.assertIs(page.action_bar.parentWidget(), page)
+            self.assertIs(page.scroll_area.widget(), page.card)
             self.assertEqual(page.progress_bar.value(), 0)
             self.assertEqual(page.queue.count(), 2)
             self.assertIn("Ожидает запуска", page.processing_label.text())

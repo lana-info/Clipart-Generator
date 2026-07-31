@@ -1218,6 +1218,12 @@ class ProcessingFlowController(QObject):
         shell.step_changed.connect(self._step_changed)
         shell.run_requested.connect(self._run_requested)
 
+    def start_processing_again(self) -> None:
+        self.shell.state.processing.selected_files.clear()
+        self.shell.state.processing.verification_records.clear()
+        self.shell.state.set_step(StepId.FILES)
+        self.shell.mark_dirty()
+
     def _install_pages(self) -> None:
         from v3_evidence_center import EvidenceCenterPage
 
