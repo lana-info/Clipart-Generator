@@ -160,6 +160,11 @@ def _feather_inside_mask(source, generated, mask):
     return result
 
 
+def _fallback_inpaint_bgr(image_bgr, mask):
+    """Use OpenCV when the optional ONNX backend is unavailable."""
+    return cv2.inpaint(image_bgr, mask, 3, cv2.INPAINT_NS)
+
+
 def cleanup_visible_mark(
     input_path,
     output_path,
@@ -234,8 +239,9 @@ def cleanup_visible_mark(
 
             generated_bgr = inpaint_bgr(bgr, mask)
             cleaned_bgr = _feather_inside_mask(bgr, generated_bgr, mask)
-        except Exception as error:
-            raise VisibleMarkCleanupError(f"Не удалось заполнить область видимой метки: {error}") from error
+        except Exception:
+            generated_bgr = _fallback_inpaint_bgr(bgr, mask)
+            cleaned_bgr = _feather_inside_mask(bgr, generated_bgr, mask)
 
     changed_mask = np.any(cleaned_bgr != bgr, axis=2)
     inside = mask > 0

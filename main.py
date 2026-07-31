@@ -3831,14 +3831,6 @@ class MainWindow(QMainWindow):
         self.radio_run_both = QRadioButton("Все вместе")
 
         run_mode = self.config.get("run_mode", "generate_only")
-        initial_issues = validate_inputs(
-            run_mode,
-            files=self.selected_files,
-            prompts=self.generated_prompts,
-        )
-        if initial_issues and run_mode == "process_only" and "files_required" in initial_issues:
-            QMessageBox.warning(self, "Ошибка", "Для режима обработки выберите файлы")
-            return
         if run_mode == "process_only":
             self.radio_run_process.setChecked(True)
         elif run_mode == "both":
