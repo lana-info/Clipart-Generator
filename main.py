@@ -6769,7 +6769,10 @@ def run_release_entrypoint_smoke(app) -> int:
 
 if __name__ == "__main__":
     # Защита от случайного запуска в offscreen-режиме в рабочем терминале.
-    if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
+    if (
+        os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen"
+        and "--release-entrypoint-smoke" not in sys.argv
+    ):
         os.environ["QT_QPA_PLATFORM"] = "windows"
     app = QApplication(sys.argv)
     if "--release-entrypoint-smoke" in sys.argv:

@@ -75,6 +75,7 @@ jobs:
       - name: Verify V3 release entrypoint
         shell: powershell
         run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
           $exe = "dist\Clipart Generator\Clipart Generator.exe"
           if (-not (Test-Path -LiteralPath $exe)) {
             throw "Fresh PyInstaller executable was not found: $exe"
