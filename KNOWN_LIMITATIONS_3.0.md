@@ -6,9 +6,10 @@
 
 ## Релизные blockers
 
-- Source-ветка называется 3.0, но `APP_VERSION`, `installer.iss`, `build.ps1`,
-  `version.json`, `release/VERSION.txt` и существующие установочные артефакты
-  всё ещё имеют `2.0`. Публичный 3.0 installer/release не подтверждён.
+- Публичный 3.0 installer/release не подтверждён: Inno Setup отсутствует в локальном окружении,
+  а локальная PyInstaller-сборка не завершилась за контрольные 120 секунд.
+- `version.json` намеренно остаётся манифестом опубликованного 2.0 update-канала до появления
+  реального 3.0 installer и проверенного SHA-256; подмена URL на несуществующий пакет запрещена.
 - Полный provider-backed smoke Clipart/Pinterest не выполнен: он требует
   реальных ключей и платных запросов.
 - Windows/macOS installer для 3.0 не собран и не подписан.
