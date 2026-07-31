@@ -8,8 +8,8 @@ scenario is now VERIFIED using test copies and a separate output directory.
 
 | ID | Criticality | Reproduction | Status |
 |---|---|---|---|
-| QG-001 | High | Запустить полный Qt smoke с созданием V3ApplicationView и дождаться завершения процесса | Open: отдельный `V3WizardNavigationTests::test_offscreen_shell_smoke_at_980_by_700` проходит (`1 passed`), но grouped Qt lifecycle зависает; маршрут открывается, блокировка возникает на завершении процесса |
-| QG-002 | Medium | Запустить полный набор pytest | Open: `test_v3_mode_selection.py` и объединённый V3 набор не завершаются стабильно; non-Qt/targeted suites проходят |
+| QG-001 | High | Запустить полный Qt smoke с созданием V3ApplicationView и дождаться завершения процесса | Open: отдельный smoke проходит; расширенный V3 набор также завершился (`32 passed`, `8 subtests`, 51.76 s), но legacy MainWindow/offscreen lifecycle still needs separate closure |
+| QG-002 | Medium | Запустить полный набор pytest | Open: targeted V3 suite passes with an extended timeout; full repository pytest remains unconfirmed because legacy Qt lifecycle tests can exceed the standard timeout |
 | QG-003 | Medium | Проверить сборку release artifact Windows/macOS | Open: installer/build не подтверждены |
 | QG-004 | Medium | Проверить production path запуска V3 | Open: V3 controllers используют legacy WorkerThread из main.py |
 | QG-005 | Medium | Сверить TASKS/PRD с фактическими проверками | Open: есть преждевременные Done и deferred release checks |
