@@ -1,0 +1,60 @@
+# Clipart Generator 3.0
+
+Desktop-приложение для трёх рабочих сценариев:
+
+- Clipart — подготовка и запуск генерации изображений;
+- Pinterest — подготовка вариантов и запуск Pinterest-изображений;
+- Processing — локальная обработка готовых изображений.
+
+## Статус релиза
+
+Ветка `develop/3.0` содержит source-версию 3.0 и контрольную точку
+`v3.0.0-rc1`. Публичные упаковочные metadata и артефакты пока имеют версию
+`2.0`; это обязательный release blocker, а не завершённый шаг публикации.
+См. [KNOWN_LIMITATIONS_3.0.md](KNOWN_LIMITATIONS_3.0.md) и
+[RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md).
+
+## Для пользователя
+
+- [USER_INSTALL_GUIDE.md](USER_INSTALL_GUIDE.md) — установка и первый запуск;
+- [MANUAL_SMOKE_TEST_3.0.md](MANUAL_SMOKE_TEST_3.0.md) — пользовательская проверка;
+- [KNOWN_LIMITATIONS_3.0.md](KNOWN_LIMITATIONS_3.0.md) — ограничения и ручные проверки;
+- [RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md) — изменения версии 3.0.
+
+## Быстрый старт из исходников
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python run_clipart_gui_v3.py
+```
+
+Для локального тестирования используйте копии изображений и отдельную папку
+результатов. Реальные платные запросы к KIE, PhotoRoom, RunPod и другим
+провайдерам без явного разрешения не выполняются.
+
+## Проверки
+
+```powershell
+python -m pytest -q --disable-warnings --maxfail=1
+python -m py_compile main.py v3_run_queue.py
+git diff --check
+```
+
+## Документы проекта
+
+- [PRD_3.0.ru.md](PRD_3.0.ru.md) — требования;
+- [TASKS_3.0.ru.md](TASKS_3.0.ru.md) — задачи и evidence;
+- [UI_WIZARD_3.0.ru.md](UI_WIZARD_3.0.ru.md) — UX-контракт wizard;
+- [QUALITY_GATE_ISSUES_3.0.md](QUALITY_GATE_ISSUES_3.0.md) — quality gate;
+- [REAL_USE_TEST_3.0.md](REAL_USE_TEST_3.0.md) — эксплуатационная проверка;
+- [PRODUCT_BACKLOG.md](PRODUCT_BACKLOG.md) — будущие идеи, не roadmap;
+- [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) — внутренний технический долг;
+- [DOCUMENTATION_AUDIT_3.0.md](DOCUMENTATION_AUDIT_3.0.md) — аудит структуры документов.
+
+## Ветки и контрольные точки
+
+- `develop/3.0` — текущая подготовка source-релиза;
+- `release/3.x` — стабильная контрольная ветка;
+- `v3.0.0-rc1` — неизменяемая контрольная точка.

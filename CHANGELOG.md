@@ -1,5 +1,15 @@
 ﻿# CHANGELOG
 
+## [3.0.0-rc1] - 2026-07-31
+
+- Source release candidate for the Clipart, Pinterest, and Processing V3
+  workflows; see [RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md).
+- Processing acceptance, Results UX, source preservation, output-folder
+  routing, collision handling, and provider-boundary regression evidence are
+  recorded in the 3.0 documents.
+- Public packaging is not claimed: `APP_VERSION`, `version.json`, installer
+  defaults, and existing artifacts still identify `2.0`.
+
 ## Unreleased
 
 - Added a shared persistent processing editor to Pinterest, structured progress
