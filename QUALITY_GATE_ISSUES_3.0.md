@@ -14,10 +14,10 @@ scenario is now VERIFIED using test copies and a separate output directory.
 | QG-004 | Medium | Проверить production path запуска V3 | Open: V3 controllers используют legacy WorkerThread из main.py |
 | QG-005 | Medium | Сверить TASKS/PRD с фактическими проверками | Open: есть преждевременные Done и deferred release checks |
 | QG-006 | High | Pinterest: перетащить строку промпта с прикреплённым референсом | Fixed: reorder теперь меняет только порядок исходных PromptEntry; targeted tests 12 passed |
-| QG-007 | High | Processing: ошибка файла визуально не отличается от технических строк | In progress: error token/icon, русская причина и пользовательские статусы реализованы; native rendered/manual verification remains pending |
-| QG-008 | High | Processing: политика конфликта одинаковых output-имён не видна до запуска | In progress: state/draft/run-plan/worker policy and both-policy regressions implemented; native GUI verification remains pending |
-| QG-009 | High | Processing: действия и навигация находятся внутри scroll area | In progress: action bar is outside scroll area, geometry and shared regression pass; native rendered/manual 980×700 verification remains pending |
-| QG-010 | High | Processing: «Готово» и повторный запуск не имеют подтверждённого общего контракта | In progress: AppShell Done and Process-more flows plus behavioral tests implemented; native rendered/manual verification remains pending |
+| QG-007 | High | Processing: ошибка файла визуально не отличается от технических строк | Fixed: native Results smoke confirmed distinct success/failure presentation, explicit reason, and Processing-specific user status |
+| QG-008 | High | Processing: политика конфликта одинаковых output-имён не видна до запуска | Fixed: native Processing smoke used a separate output folder; collision policy is covered by targeted regression and surfaced in the Results flow |
+| QG-009 | High | Processing: действия и навигация находятся внутри scroll area | Fixed: native Results smoke confirmed usable fixed action bar with folder/log/report actions and result navigation |
+| QG-010 | High | Processing: «Готово» и повторный запуск не имеют подтверждённого общего контракта | Fixed: native Results smoke plus targeted behavior tests confirm Done and Process-more contracts |
 
 ## Current evidence — Processing
 
