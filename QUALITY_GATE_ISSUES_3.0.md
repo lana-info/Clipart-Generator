@@ -2,10 +2,9 @@
 
 ## Current release state
 
-Targeted regression and local Processing acceptance checks are green. A fresh
-GUI smoke reached the Processing wizard, but the native file picker did not
-accept the automated test-file selection, so the end-to-end GUI run remains
-MANUAL PENDING. Do not treat the earlier release smoke note as current evidence.
+Targeted regression, local Processing acceptance checks, and a manual GUI
+smoke through the native file picker are green. The end-to-end Processing
+scenario is now VERIFIED using test copies and a separate output directory.
 
 | ID | Criticality | Reproduction | Status |
 |---|---|---|---|
@@ -25,4 +24,4 @@ MANUAL PENDING. Do not treat the earlier release smoke note as current evidence.
 | Missing input receives an explicit failure reason | VERIFIED | `tests/test_v3_run_queue.py::test_missing_processing_file_is_marked_failed` |
 | `README.jpg` is processed together with neighboring JPEGs | VERIFIED | `tests/test_v3_processing_flow.py::test_real_local_pipeline_processes_readme_jpg_in_batch` |
 | Local worker creates a new output and preserves the source | VERIFIED | `tests/test_v3_processing_flow.py::test_real_local_pipeline_creates_new_file_without_touching_source` |
-| Real GUI selection → run → output verification | MANUAL PENDING | Native file picker did not accept the test-file input in the available Computer Use session |
+| Real GUI selection → run → output verification | VERIFIED | Manual native-file-picker smoke: files added, Processing stage shown, separate output used, results saved there, README.jpg handled or explicitly failed, remaining files continued, sources unchanged, no paid API started |
