@@ -429,7 +429,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             worker = WorkerThread(**request.worker_kwargs())
             worker._mode2_process_files()
             after = hashlib.sha256(source.read_bytes()).hexdigest()
-            outputs = list((Path(temp) / "output").glob("source_processed_*.png"))
+            outputs = list((Path(temp) / "output").glob("source_processed*.png"))
 
             self.assertEqual(before, after)
             self.assertEqual(len(outputs), 1)
@@ -459,14 +459,14 @@ class V3ProcessingFlowTests(unittest.TestCase):
             worker = WorkerThread(**request.worker_kwargs())
             worker._mode2_process_files()
 
-            outputs = list((root / "output").glob("*_processed_*.png"))
+            outputs = list((root / "output").glob("*_processed*.png"))
             after = {
                 path: hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in (readme, sibling)
             }
             self.assertEqual(before, after)
             self.assertEqual(
-                {path.name.split("_processed_", 1)[0] for path in outputs},
+                {path.name.split("_processed", 1)[0] for path in outputs},
                 {"README", "sibling"},
             )
 

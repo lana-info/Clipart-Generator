@@ -505,6 +505,17 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.output_selector.edit.textChanged.connect(self._sync_output_dir)
         self.add_widget(self.output_selector)
 
+        self.collision_group = QGroupBox("Если файл с таким именем уже существует")
+        collision_layout = QVBoxLayout(self.collision_group)
+        self.keep_both_radio = QRadioButton(
+            "Не перезаписывать, сохранить новый файл с номером"
+        )
+        self.overwrite_radio = QRadioButton("Перезаписывать существующий файл")
+        self.keep_both_radio.toggled.connect(self._set_collision_policy)
+        collision_layout.addWidget(self.keep_both_radio)
+        collision_layout.addWidget(self.overwrite_radio)
+        self.add_widget(self.collision_group)
+
         self.drop_label = QLabel(
             "Перетащите изображения сюда. URL и папки не принимаются."
         )
@@ -534,6 +545,13 @@ class ProcessingFilesPage(_ScrollableStepPage):
     def _sync_output_dir(self, *_: Any) -> None:
         value = self.output_selector.path()
         self.state.common.output_dir = value
+        self.changed()
+
+    def _set_collision_policy(self, keep_both: bool) -> None:
+        if keep_both:
+            self.state.processing.overwrite_existing = False
+        elif self.overwrite_radio.isChecked():
+            self.state.processing.overwrite_existing = True
         self.changed()
 
     def _choose_files(self) -> None:
@@ -626,6 +644,12 @@ class ProcessingFilesPage(_ScrollableStepPage):
             self.state.common.output_dir = default_output
         if not self.output_selector.path():
             self.output_selector.set_path(self.state.common.output_dir or default_output)
+        self.keep_both_radio.blockSignals(True)
+        self.overwrite_radio.blockSignals(True)
+        self.keep_both_radio.setChecked(not self.state.processing.overwrite_existing)
+        self.overwrite_radio.setChecked(self.state.processing.overwrite_existing)
+        self.keep_both_radio.blockSignals(False)
+        self.overwrite_radio.blockSignals(False)
         infos: list[LocalImageInfo] = []
         errors: list[str] = []
         for path in self.state.processing.selected_files:
@@ -1133,7 +1157,7 @@ def build_processing_run_request(
     if len(state.processing.selected_files) > MAX_PROCESSING_FILES:
         raise ProcessingFlowError(f"Максимум {MAX_PROCESSING_FILES} файлов за запуск")
     duplicates = duplicate_output_names(state.processing.selected_files)
-    if duplicates and not bool((runtime_settings or {}).get("overwrite_existing", False)):
+    if duplicates and not state.processing.overwrite_existing:
         raise ProcessingFlowError(
             "Одинаковые имена создадут один путь результата: "
             + ", ".join(duplicates[:3])
@@ -1155,6 +1179,7 @@ def build_processing_run_request(
     settings = _worker_settings(adapter, runtime_settings)
     settings["run_mode"] = "process_only"
     settings["output_dir"] = state.common.output_dir or str(work_dir / "output")
+    settings["overwrite_existing"] = state.processing.overwrite_existing
     return ClipartRunRequest(
         mode="mode2_process",
         work_dir=str(work_dir),

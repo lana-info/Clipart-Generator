@@ -26,6 +26,14 @@ from v3_project_state import (
 
 
 class ProjectRoutesTests(unittest.TestCase):
+    def test_processing_collision_policy_round_trips_through_state(self):
+        state = ProjectState(
+            mode=ProjectMode.PROCESSING,
+            processing=ProcessingModeData(overwrite_existing=True),
+        )
+        restored = ProjectState.from_dict(state.to_dict())
+        self.assertTrue(restored.processing.overwrite_existing)
+
     def test_each_mode_has_a_stable_ordered_route(self):
         self.assertEqual(
             route_for_mode(ProjectMode.CLIPART),

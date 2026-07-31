@@ -91,7 +91,7 @@ class V3OutputPathsTests(unittest.TestCase):
             source_bytes = source.read_bytes()
             worker._mode2_process_files(emit_final=False)
 
-            produced = list(output_dir.glob("source_processed_*.png"))
+            produced = list(output_dir.glob("source_processed*.png"))
             self.assertTrue(produced)
             self.assertEqual(source.read_bytes(), source_bytes)
 

@@ -6,7 +6,14 @@ from pathlib import Path
 
 
 def processed_output_path(output_dir: str | Path, source_path: str | Path, run_stamp: str, *, overwrite: bool) -> Path:
-    """Return the destination for a processed source without touching the filesystem."""
+    """Return a destination, preserving existing files unless overwrite is enabled."""
     base = Path(source_path).stem
-    filename = f"{base}_processed.png" if overwrite else f"{base}_processed_{run_stamp}.png"
-    return Path(output_dir) / filename
+    destination = Path(output_dir) / f"{base}_processed.png"
+    if overwrite or not destination.exists():
+        return destination
+    suffix = 2
+    while True:
+        candidate = destination.with_name(f"{base}_processed_{suffix}.png")
+        if not candidate.exists():
+            return candidate
+        suffix += 1

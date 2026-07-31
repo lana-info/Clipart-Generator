@@ -863,6 +863,7 @@ def _verification_records(value: Any) -> list[VerificationRecordData]:
 class ProcessingModeData:
     selected_files: list[str] = field(default_factory=list)
     recipe: str = "custom"
+    overwrite_existing: bool = False
     operations: ImageOperationData = field(default_factory=ImageOperationData)
     verification_records: list[VerificationRecordData] = field(default_factory=list)
 
@@ -878,6 +879,7 @@ class ProcessingModeData:
         return {
             "selected_files": list(self.selected_files),
             "recipe": self.recipe,
+            "overwrite_existing": self.overwrite_existing,
             "operations": self.operations.to_dict(),
             "verification_records": [
                 record.to_dict() for record in self.verification_records
@@ -893,6 +895,7 @@ class ProcessingModeData:
                 limit=MAX_SELECTED_FILES,
             ),
             recipe=data.get("recipe", "custom"),
+            overwrite_existing=bool(data.get("overwrite_existing", False)),
             operations=ImageOperationData.from_dict(data.get("operations", {})),
             verification_records=_verification_records(
                 data.get("verification_records", [])
@@ -1156,7 +1159,13 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     processing = _draft_object(value, "processing")
     _reject_unknown_fields(
         processing,
-        ("selected_files", "recipe", "operations", "verification_records"),
+        (
+            "selected_files",
+            "recipe",
+            "overwrite_existing",
+            "operations",
+            "verification_records",
+        ),
         "processing",
     )
     selected_files = processing.get("selected_files")

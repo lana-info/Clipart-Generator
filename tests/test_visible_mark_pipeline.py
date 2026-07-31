@@ -387,7 +387,7 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                 worker._mode2_process_files(emit_final=False)
 
             raw_outputs = list((temp_path / "raw").glob("file_visible_mark_*.png"))
-            final_outputs = list((temp_path / "output").glob("source_processed_*.png"))
+            final_outputs = list((temp_path / "output").glob("source_processed*.png"))
             self.assertEqual(len(raw_outputs), 1)
             self.assertEqual(len(final_outputs), 1)
             self.assertFalse(worker.kie_api_key)
