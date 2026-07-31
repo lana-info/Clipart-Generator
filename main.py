@@ -48,7 +48,17 @@ try:
 except Exception:
     certifi = None
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer, QEvent, QSize, QPoint, QRect
+from PyQt6.QtCore import (
+    Qt,
+    QThread,
+    pyqtSignal,
+    QTimer,
+    QEvent,
+    QSize,
+    QPoint,
+    QRect,
+    QStandardPaths,
+)
 from PyQt6.QtGui import QKeySequence, QIcon, QPixmap, QColor, QPainter, QPen
 from PyQt6.QtWidgets import (
     QApplication,
@@ -6705,11 +6715,46 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+def create_v3_application_window():
+    from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
+
+    app_data = QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.AppDataLocation
+    )
+    window = V3ApplicationView(
+        draft_path=os.path.join(app_data, "project_state.json")
+    )
+    window.setWindowTitle("Clipart Generator 3.0")
+    window.resize(1120, 780)
+    if len(window.mode_selection.mode_cards) != len(MODE_CARD_SPECS):
+        raise RuntimeError("V3 mode selection does not contain all mode cards")
+    return window
+
+
+def run_release_entrypoint_smoke(app) -> int:
+    from v3_components import ModeCard
+    from v3_mode_selection import MODE_CARD_SPECS
+
+    window = create_v3_application_window()
+    app.processEvents()
+    cards = list(window.mode_selection.mode_cards.values())
+    valid = (
+        len(cards) == 3
+        and all(isinstance(card, ModeCard) for card in cards)
+        and all(card.accessibleName() for card in cards)
+        and set(window.mode_selection.mode_cards) == set(MODE_CARD_SPECS)
+    )
+    window.close()
+    return 0 if valid else 1
+
+
 if __name__ == "__main__":
     # Защита от случайного запуска в offscreen-режиме в рабочем терминале.
     if os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen":
         os.environ["QT_QPA_PLATFORM"] = "windows"
     app = QApplication(sys.argv)
-    window = MainWindow()
+    if "--release-entrypoint-smoke" in sys.argv:
+        sys.exit(run_release_entrypoint_smoke(app))
+    window = create_v3_application_window()
     window.show()
     sys.exit(app.exec())

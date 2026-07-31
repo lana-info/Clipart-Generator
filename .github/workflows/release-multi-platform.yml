@@ -72,6 +72,18 @@ jobs:
         shell: powershell
         run: powershell -ExecutionPolicy Bypass -File .\build.ps1 -AppVersion ${{ steps.version.outputs.app_version }}
 
+      - name: Verify V3 release entrypoint
+        shell: powershell
+        run: |
+          $exe = "dist\Clipart Generator\Clipart Generator.exe"
+          if (-not (Test-Path -LiteralPath $exe)) {
+            throw "Fresh PyInstaller executable was not found: $exe"
+          }
+          & $exe --release-entrypoint-smoke
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged executable did not expose the V3 mode-selection entrypoint."
+          }
+
       - name: Build Windows setup (Inno Setup)
         shell: powershell
         run: |
