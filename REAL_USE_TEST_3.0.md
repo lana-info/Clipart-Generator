@@ -84,4 +84,5 @@
 | Source safety | VERIFIED | Tests use temporary copies; repository worktree remained clean after GUI attempt |
 | Mode switching preserves project data | VERIFIED | Isolated wizard/mode regression: `test_mode_switcher_reuses_project_and_switches_immediately`, `test_mode_switch_applies_immediately_and_preserves_data` |
 | Pinterest navigation preserves prompts and format | VERIFIED | Isolated regression: `test_navigation_preserves_project_prompts_and_format` |
+| Draft snapshot and restore across project/shell recreation | VERIFIED | Isolated regressions cover snapshot/continue, disk draft restore, shell recreation, and prompt data after navigation (`4 passed`) |
 | Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |
