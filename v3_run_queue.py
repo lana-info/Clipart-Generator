@@ -799,6 +799,9 @@ class RunResultsPage(QWidget):
         self.file_hints_label = QLabel()
         self.pixel_evidence_label = QLabel()
         self.handoff_label = QLabel()
+        self.technical_note = QLabel("Подробности этапов и проверки доступны в «Техническом логе».")
+        self.technical_note.setWordWrap(True)
+        self.technical_note.setProperty("v3Small", True)
         for label in (
             self.processing_label,
             self.stages_label,
@@ -809,6 +812,8 @@ class RunResultsPage(QWidget):
             label.setWordWrap(True)
             label.setProperty("v3Small", True)
 
+        for label in (self.stages_label, self.file_hints_label, self.pixel_evidence_label, self.handoff_label):
+            label.hide()
         actions = QWidget()
         actions_layout = QHBoxLayout(actions)
         actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -864,6 +869,7 @@ class RunResultsPage(QWidget):
             self.file_hints_label,
             self.pixel_evidence_label,
             self.handoff_label,
+            self.technical_note,
         ):
             self.card.add_widget(widget)
         self.action_bar = actions
@@ -892,7 +898,8 @@ class RunResultsPage(QWidget):
         self.summary_label.setText(
             "Готово: "
             f"{counts['succeeded']} · Ошибки: {counts['failed']} · "
-            f"Отменено: {counts['cancelled']} · Всего: {len(session.items)}"
+            f"Пропущено: {counts['cancelled']} · Всего: {len(session.items)}\n"
+            f"Папка сохранения: {session.output_dir}"
         )
         self.progress_bar.setRange(0, 0 if session.running and session.activity_indeterminate else 100)
         if not (session.running and session.activity_indeterminate):
