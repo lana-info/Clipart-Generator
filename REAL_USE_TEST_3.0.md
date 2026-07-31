@@ -86,4 +86,5 @@
 | Pinterest navigation preserves prompts and format | VERIFIED | Isolated regression: `test_navigation_preserves_project_prompts_and_format` |
 | Draft snapshot and restore across project/shell recreation | VERIFIED | Isolated regressions cover snapshot/continue, disk draft restore, shell recreation, and prompt data after navigation (`4 passed`) |
 | Paid-provider preflight and explicit run boundary | VERIFIED | Isolated Clipart/Pinterest regressions block missing keys, invalid references, unknown models and partial prices before worker (`5 passed`); no provider call made |
+| Processing cancel, isolated failure and collision safety | VERIFIED | Queue regressions cover cancellation boundaries, preserving completed items, retrying only failed items, rejecting untrusted/missing outputs, and preserving sources (`8 passed`, `2 subtests`) |
 | Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |
