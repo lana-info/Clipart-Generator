@@ -6767,6 +6767,12 @@ def run_release_entrypoint_smoke(app) -> int:
     return 0 if valid else 1
 
 
+def run_packaged_entrypoint_check() -> int:
+    from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
+
+    return 0 if len(MODE_CARD_SPECS) == 3 and V3ApplicationView else 1
+
+
 if __name__ == "__main__":
     # Защита от случайного запуска в offscreen-режиме в рабочем терминале.
     if (
@@ -6774,9 +6780,9 @@ if __name__ == "__main__":
         and "--release-entrypoint-smoke" not in sys.argv
     ):
         os.environ["QT_QPA_PLATFORM"] = "windows"
-    app = QApplication(sys.argv)
     if "--release-entrypoint-smoke" in sys.argv:
-        sys.exit(run_release_entrypoint_smoke(app))
+        sys.exit(run_packaged_entrypoint_check())
+    app = QApplication(sys.argv)
     window = create_v3_application_window()
     window.show()
     sys.exit(app.exec())
