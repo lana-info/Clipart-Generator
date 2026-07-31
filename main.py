@@ -6744,6 +6744,21 @@ def run_release_entrypoint_smoke(app) -> int:
         and all(card.accessibleName() for card in cards)
         and set(window.mode_selection.mode_cards) == set(MODE_CARD_SPECS)
     )
+    diagnostic = (
+        f"window={type(window).__name__}\n"
+        f"cards={len(cards)}\n"
+        f"card_types={[type(card).__name__ for card in cards]}\n"
+        f"accessible_names={[bool(card.accessibleName()) for card in cards]}\n"
+        f"mode_keys={[str(mode) for mode in window.mode_selection.mode_cards]}\n"
+        f"expected_keys={[str(mode) for mode in MODE_CARD_SPECS]}\n"
+        f"valid={valid}\n"
+    )
+    with open(
+        os.path.join(tempfile.gettempdir(), "clipart-release-entrypoint-smoke.txt"),
+        "w",
+        encoding="utf-8",
+    ) as report:
+        report.write(diagnostic)
     window.close()
     return 0 if valid else 1
 

@@ -81,6 +81,10 @@ jobs:
           }
           & $exe --release-entrypoint-smoke
           if ($LASTEXITCODE -ne 0) {
+            $diagnostic = Join-Path $env:TEMP "clipart-release-entrypoint-smoke.txt"
+            if (Test-Path -LiteralPath $diagnostic) {
+              Get-Content -LiteralPath $diagnostic
+            }
             throw "Packaged executable did not expose the V3 mode-selection entrypoint."
           }
 
