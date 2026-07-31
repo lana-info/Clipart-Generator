@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -258,6 +259,8 @@ class RunQueueSession(QObject):
         self._item_progress: dict[int, int] = {}
         self._last_progress = 0
         self.running = True
+        self.started_at = time.monotonic()
+        self.finished_at: float | None = None
         self.stop_after_current_requested = False
         self._deferred_stop: Callable[[], None] | None = None
         self._technical_events: list[str] = []
@@ -313,6 +316,11 @@ class RunQueueSession(QObject):
             status.value: sum(item.status is status for item in self.items)
             for status in RunItemStatus
         }
+
+    @property
+    def elapsed_seconds(self) -> int:
+        end = self.finished_at if self.finished_at is not None else time.monotonic()
+        return max(0, round(end - self.started_at))
 
     @staticmethod
     def _close_running_stages(item: RunItem, status: str) -> None:
@@ -464,6 +472,7 @@ class RunQueueSession(QObject):
                 self._event("item_cancelled", item=item.index)
             self._cancel_pending()
             self.running = False
+            self.finished_at = time.monotonic()
             self._event("run_cancelled")
             self.changed.emit()
 
@@ -487,6 +496,7 @@ class RunQueueSession(QObject):
             callback()
             self._cancel_pending()
             self.running = False
+            self.finished_at = time.monotonic()
             self._event("run_cancelled")
 
     def _cancel_pending(self) -> None:
@@ -520,6 +530,7 @@ class RunQueueSession(QObject):
             immediate_stop()
             self._cancel_pending()
             self.running = False
+            self.finished_at = time.monotonic()
             self._event("run_cancelled")
         self.changed.emit()
         return True
@@ -537,6 +548,7 @@ class RunQueueSession(QObject):
                 )
         self.current_index = None
         self.running = False
+        self.finished_at = time.monotonic()
         self._event("run_finished")
         self.changed.emit()
 
@@ -550,6 +562,7 @@ class RunQueueSession(QObject):
                 self._event("item_failed", item=item.index, reason=code)
         self.current_index = None
         self.running = False
+        self.finished_at = time.monotonic()
         self._event("run_failed", reason=code)
         self.changed.emit()
 
@@ -711,6 +724,7 @@ class BeforeAfterViewer(QFrame):
         preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview.setMinimumSize(220, 180)
         preview.setWordWrap(True)
+        preview.setAccessibleName(f"{title} изображение")
         column.addWidget(label)
         column.addWidget(preview, 1)
         layout.addWidget(frame, 1)
@@ -815,8 +829,21 @@ class RunResultsPage(QWidget):
         for label in (self.stages_label, self.file_hints_label, self.pixel_evidence_label, self.handoff_label):
             label.hide()
         actions = QWidget()
-        actions_layout = QHBoxLayout(actions)
+        actions_layout = QVBoxLayout(actions)
         actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(6)
+        workflow_actions = QWidget()
+        workflow_layout = QHBoxLayout(workflow_actions)
+        workflow_layout.setContentsMargins(0, 0, 0, 0)
+        utility_actions = QWidget()
+        utility_layout = QVBoxLayout(utility_actions)
+        utility_layout.setContentsMargins(0, 0, 0, 0)
+        utility_primary = QWidget()
+        utility_primary_layout = QHBoxLayout(utility_primary)
+        utility_primary_layout.setContentsMargins(0, 0, 0, 0)
+        utility_secondary = QWidget()
+        utility_secondary_layout = QHBoxLayout(utility_secondary)
+        utility_secondary_layout.setContentsMargins(0, 0, 0, 0)
         self.stop_button = V3Button(
             "Остановить после текущего файла",
             ButtonVariant.SECONDARY,
@@ -834,7 +861,7 @@ class RunResultsPage(QWidget):
         self.process_more_button.clicked.connect(self.process_more_requested.emit)
         self.open_folder_button = V3Button(
             "Открыть папку с результатами",
-            ButtonVariant.GHOST,
+            ButtonVariant.PRIMARY,
         )
         self.open_folder_button.clicked.connect(self._open_folder)
         self.log_button = V3Button(
@@ -851,12 +878,20 @@ class RunResultsPage(QWidget):
             self.stop_button,
             self.retry_button,
             self.process_more_button,
-            self.open_folder_button,
-            self.log_button,
-            self.export_button,
         ):
-            actions_layout.addWidget(button)
-        actions_layout.addStretch()
+            workflow_layout.addWidget(button)
+        workflow_layout.addStretch()
+        utility_primary_layout.addWidget(self.open_folder_button)
+        utility_primary_layout.addStretch()
+        for button in (self.log_button, self.export_button):
+            utility_secondary_layout.addWidget(button)
+        utility_secondary_layout.addStretch()
+        utility_layout.addWidget(utility_primary)
+        utility_layout.addWidget(utility_secondary)
+        actions_layout.addWidget(workflow_actions)
+        actions_layout.addWidget(utility_actions)
+        self.workflow_actions = workflow_actions
+        self.utility_actions = utility_actions
 
         for widget in (
             self.summary_label,
@@ -895,12 +930,11 @@ class RunResultsPage(QWidget):
             self._selection_changed(-1)
             return
         counts = session.counts()
-        self.summary_label.setText(
-            "Готово: "
-            f"{counts['succeeded']} · Ошибки: {counts['failed']} · "
-            f"Пропущено: {counts['cancelled']} · Всего: {len(session.items)}\n"
-            f"Папка сохранения: {session.output_dir}"
-        )
+        self.summary_label.setText(self._summary_text(session, counts))
+        summary_state = "error" if counts["failed"] else "warning" if counts["cancelled"] else ""
+        self.summary_label.setProperty("state", summary_state)
+        self.summary_label.style().unpolish(self.summary_label)
+        self.summary_label.style().polish(self.summary_label)
         self.progress_bar.setRange(0, 0 if session.running and session.activity_indeterminate else 100)
         if not (session.running and session.activity_indeterminate):
             self.progress_bar.setValue(session.progress_percent)
@@ -911,7 +945,7 @@ class RunResultsPage(QWidget):
             else None
         )
         self.current_label.setText(
-            f"Текущий файл: {current.display_name} · этап: {session.current_stage or 'подготовка'}"
+            f"Текущий файл: {current.display_name} · {self._stage_label(session.current_stage)}"
             if current is not None and session.running
             else "Текущий файл: —"
         )
@@ -925,12 +959,45 @@ class RunResultsPage(QWidget):
         self.stop_button.setVisible(stop_visible)
         self.retry_button.setVisible(retry_visible)
         self.process_more_button.setVisible(process_more_visible)
+        self.workflow_actions.setVisible(
+            stop_visible or retry_visible or process_more_visible
+        )
+        self.utility_actions.setVisible(True)
         self.stop_button.setEnabled(stop_visible)
         self.retry_button.setEnabled(retry_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
         self.log_button.setEnabled(True)
         self.export_button.setEnabled(True)
         self._selection_changed(self.queue.currentRow())
+
+    @staticmethod
+    def _stage_label(stage: str) -> str:
+        return {
+            "processing": "идёт обработка",
+            "generation": "создаётся изображение",
+            "export": "сохраняется результат",
+            "trim": "подготавливается изображение",
+        }.get(stage, "подготовка")
+
+    @staticmethod
+    def _summary_text(session: RunQueueSession, counts: dict[str, int]) -> str:
+        if session.running:
+            heading = "Обработка выполняется"
+        elif counts["failed"]:
+            heading = "Обработка завершена с ошибками"
+        elif counts["cancelled"]:
+            heading = "Обработка завершена не полностью"
+        else:
+            heading = "Обработка завершена успешно"
+        return (
+            f"{heading}\n"
+            f"✓ Обработано: {counts['succeeded']}   "
+            f"⚠ Ошибки: {counts['failed']}   "
+            f"⏭ Пропущено: {counts['cancelled']}   "
+            f"Всего: {len(session.items)}\n"
+            f"📁 Папка результата: {session.output_dir}\n"
+            f"⏱ Время: {session.elapsed_seconds} с"
+        )
 
     def _selected_item(self, row: int) -> RunItem | None:
         if (

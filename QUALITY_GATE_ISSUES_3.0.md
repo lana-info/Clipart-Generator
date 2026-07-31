@@ -9,7 +9,7 @@ scenario is now VERIFIED using test copies and a separate output directory.
 | ID | Criticality | Reproduction | Status |
 |---|---|---|---|
 | QG-001 | High | Запустить полный Qt smoke с созданием V3ApplicationView и дождаться завершения процесса | Open: отдельный smoke проходит; расширенный V3 набор также завершился (`32 passed`, `8 subtests`, 51.76 s), но legacy MainWindow/offscreen lifecycle still needs separate closure |
-| QG-002 | Medium | Запустить полный набор pytest | Open: full suite now passes (`417 passed`, `61 subtests`, 105.67 s); Windows still prints a non-fatal `onnxruntime` access-violation diagnostic while the optional MI-GAN backend falls back to OpenCV |
+| QG-002 | Medium | Запустить полный набор pytest | Open: full suite now passes (`418 passed`, `61 subtests`, 245.87 s); Windows still prints a non-fatal `onnxruntime` access-violation diagnostic while the optional MI-GAN backend falls back to OpenCV |
 | QG-003 | Medium | Проверить сборку release artifact Windows/macOS | Open: installer/build не подтверждены |
 | QG-004 | Medium | Проверить production path запуска V3 | Open: V3 controllers используют legacy WorkerThread из main.py |
 | QG-005 | Medium | Сверить TASKS/PRD с фактическими проверками | Open: есть преждевременные Done и deferred release checks |
@@ -18,6 +18,35 @@ scenario is now VERIFIED using test copies and a separate output directory.
 | QG-008 | High | Processing: политика конфликта одинаковых output-имён не видна до запуска | Fixed: native Processing smoke used a separate output folder; collision policy is covered by targeted regression and surfaced in the Results flow |
 | QG-009 | High | Processing: действия и навигация находятся внутри scroll area | Fixed: native Results smoke confirmed usable fixed action bar with folder/log/report actions and result navigation |
 | QG-010 | High | Processing: «Готово» и повторный запуск не имеют подтверждённого общего контракта | Fixed: native Results smoke plus targeted behavior tests confirm Done and Process-more contracts |
+
+## Results UX audit — 2026-07-31
+
+First-time-user review at 980×700 identified the following issues, ordered by
+impact:
+
+1. **High — action bar overflow.** Six actions in one row forced the Results
+   page wider than the supported window and clipped actions for large queues.
+   Fixed by separating workflow and utility actions into two keyboard-ordered
+   rows.
+2. **High — weak completion hierarchy.** The top message did not clearly
+   distinguish running, successful, partial, and failed runs. Fixed with a
+   plain-language heading and compact counts for processed, errors, skipped,
+   total, output folder, and elapsed time.
+3. **High — technical stage language.** Internal stage names could appear next
+   to the current file. Fixed with user-facing Russian stage descriptions.
+4. **High — insufficient keyboard/screen-reader context.** Before/after
+   previews lacked accessible names. Fixed with explicit names; action buttons
+   retain their visible labels as accessible names.
+5. **Medium — preview inspection.** No zoom, comparison slider, or enlarged
+   preview mode for detailed visual inspection.
+6. **Medium — large-batch navigation.** The list-plus-single-selection model
+   scales to 20–100 files, but filtering, grouping, and a stronger selected-row
+   summary would reduce navigation cost.
+7. **Low — richer timing.** Only total elapsed time is shown; per-file timing
+   and throughput are not exposed.
+
+Critical/High items are implemented and covered by targeted UI regression plus
+the 980×700 rendered review. Medium/Low items are tracked in `ROADMAP_3.1.md`.
 
 ## Current evidence — Processing
 

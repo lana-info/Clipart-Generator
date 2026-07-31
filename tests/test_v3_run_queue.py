@@ -515,6 +515,7 @@ class V3RunQueueTests(unittest.TestCase):
             self.app.processEvents()
 
             self.assertTrue(page.isVisible())
+            self.assertLessEqual(page.width(), 740)
             self.assertIs(page.action_bar.parentWidget(), page)
             self.assertIs(page.scroll_area.widget(), page.card)
             self.assertEqual(page.progress_bar.value(), 0)
@@ -550,6 +551,29 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertIn("⚠ Файл не обработан", page.processing_label.text())
             self.assertIn("неподдерживаемый формат", page.processing_label.text())
             self.assertEqual(page.processing_label.property("state"), "error")
+            page.close()
+            page.deleteLater()
+
+    def test_results_page_prioritizes_plain_language_summary_and_accessible_previews(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-summary-ui-") as temp:
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            session = RunQueueSession(
+                generation_request(temp, count=2),
+                ProjectMode.PROCESSING,
+            )
+            page = RunResultsPage(state)
+            page.set_session(session)
+            page.show()
+            self.app.processEvents()
+
+            self.assertIn("Обработка выполняется", page.summary_label.text())
+            self.assertIn("✓ Обработано: 0", page.summary_label.text())
+            self.assertIn("📁 Папка результата:", page.summary_label.text())
+            self.assertIn("⏱ Время:", page.summary_label.text())
+            self.assertIn("идёт обработка", page._stage_label("processing"))
+            self.assertEqual(page.viewer.before.accessibleName(), "До изображение")
+            self.assertEqual(page.viewer.after.accessibleName(), "После изображение")
+            self.assertEqual(page.open_folder_button.accessibleName(), "Открыть папку с результатами")
             page.close()
             page.deleteLater()
 

@@ -116,3 +116,14 @@ SynthID — невидимый сигнал происхождения, кото
 - `release/3.x` — стабильная 3.0, только исправления ошибок.
 - `develop/3.0` — дальнейшая разработка и подготовка 3.1.
 - `v3.0.0-rc1` — зафиксированная точка, к которой всегда можно вернуться.
+
+## Results UX backlog
+
+- **R31-08 — Preview inspection:** add zoom-to-fit/zoom-in, a before/after
+  comparison slider, and a focused preview mode without changing the single
+  selected-item model.
+- **R31-09 — Large-batch navigation:** add filtering by status, compact
+  grouping, and an optional thumbnail strip for 20–100 item runs while keeping
+  the main preview singular.
+- **R31-10 — Run performance details:** expose per-file duration and throughput
+  in the details/log view, not in the primary completion summary.
