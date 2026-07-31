@@ -95,6 +95,42 @@ class V3OutputPathsTests(unittest.TestCase):
             self.assertTrue(produced)
             self.assertEqual(source.read_bytes(), source_bytes)
 
+    def test_processing_intermediates_do_not_use_stale_root_workspace(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="processing-root-workspace-") as temp:
+            source = Path(temp) / "source.png"
+            output_dir = Path(temp) / "exports"
+            output_dir.mkdir()
+            Image.new("RGB", (12, 12), "green").save(source)
+
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = os.path.abspath(os.sep)
+            state.common.output_dir = str(output_dir)
+            state.processing.selected_files = [str(source)]
+            state.processing.operations.trim = True
+            state.processing.operations.upscale_before = False
+            state.processing.operations.upscale_after = False
+            state.processing.operations.unsharp = False
+            state.processing.operations.remove_background = False
+            state.processing.operations.edge_shrink = False
+
+            request = build_processing_run_request(
+                state,
+                allow_full_image_changes=True,
+                external_transfer_consent=True,
+            )
+            worker = WorkerThread(**request.worker_kwargs())
+            raw_dirs: list[str] = []
+            original_create = worker._create_run_raw_dir
+            worker._create_run_raw_dir = lambda: (
+                raw_dirs.append(original_create()) or raw_dirs[-1]
+            )
+
+            worker._mode2_process_files(emit_final=False)
+
+            self.assertTrue(list(output_dir.glob("source_processed*.png")))
+            self.assertEqual(len(raw_dirs), 1)
+            self.assertNotEqual(Path(raw_dirs[0]).parent, Path(state.common.work_dir))
+
 
 if __name__ == "__main__":
     unittest.main()

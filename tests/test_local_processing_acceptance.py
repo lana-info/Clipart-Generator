@@ -158,6 +158,7 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                 selected_files=[str(source_path)],
             )
             order = []
+            raw_dirs = []
             original_unsharp = main.WorkerThread._unsharp_mask_pipeline_step
             original_edge = main.WorkerThread._edge_shrink_pipeline_step
             original_trim = main.WorkerThread._trim_image_file
@@ -195,12 +196,16 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             worker._run_local_ben2 = types.MethodType(fake_ben2, worker)
             worker._edge_shrink_pipeline_step = types.MethodType(tracked_edge, worker)
             worker._trim_image_file = types.MethodType(tracked_trim, worker)
+            original_create_raw_dir = worker._create_run_raw_dir
+            worker._create_run_raw_dir = lambda: (
+                raw_dirs.append(original_create_raw_dir()) or raw_dirs[-1]
+            )
 
             worker._mode2_process_files(emit_final=False)
 
             self.assertEqual(order, ["upscale", "unsharp", "remove_bg", "edge_shrink", "trim", "save"])
             outputs = list((temp_path / "output").glob("*.png"))
-            raw_outputs = list((temp_path / "raw").glob("*.png"))
+            raw_outputs = list(Path(raw_dirs[0]).glob("*.png"))
             self.assertEqual(len(outputs), 1)
             self.assertGreaterEqual(len(raw_outputs), 4)
             with Image.open(outputs[0]) as result:

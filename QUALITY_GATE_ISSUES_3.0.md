@@ -76,3 +76,8 @@ the 980×700 rendered review. Medium/Low items are tracked in `ROADMAP_3.1.md`.
 | Bundle version | VERIFIED | `Info.plist` contains version `3.0` |
 | Apple Silicon architecture | VERIFIED | Audited artifact contains 378 Mach-O binaries, all `arm64` |
 | Intel Mac compatibility | DEFERRED | Intel Mac and Universal 2 are outside the 3.0 product decision |
+## Stabilization update — Processing intermediate paths
+
+- Исправлен Critical defect: промежуточные файлы Processing больше не строятся из устаревшего workspace-пути `\\raw`.
+- Для каждого запуска создаётся изолированный временный каталог; итоговый файл по-прежнему сохраняется только в выбранную output-папку.
+- Добавлены regression-тесты для корневого/устаревшего workspace, custom output и сохранения исходника.

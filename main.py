@@ -767,7 +767,7 @@ class WorkerThread(QThread):
         if process_generated:
             self._log_upscale_plan()
 
-        raw_dir = os.path.join(self.work_dir, "raw")
+        raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
         os.makedirs(raw_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
@@ -909,7 +909,7 @@ class WorkerThread(QThread):
                 self.finished.emit("Mode 2: Файлы не выбраны")
             return
 
-        raw_dir = os.path.join(self.work_dir, "raw")
+        raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
         os.makedirs(raw_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
@@ -988,6 +988,15 @@ class WorkerThread(QThread):
                 self.finished.emit(f"Mode 2: Готово (0/{total}). Изображения не созданы.")
             else:
                 self.finished.emit(f"Mode 2: Готово ({done}/{total})")
+
+    def _create_run_raw_dir(self):
+        """Create an isolated intermediate directory for this run.
+
+        Intermediate files must never be derived from a possibly stale or
+        invalid persisted workspace path. Final exports remain controlled by
+        ``self.output_dir``.
+        """
+        return tempfile.mkdtemp(prefix="clipart-generator-raw-")
 
     def _uses_local_upscale(self):
         return self.upscale and self.upscale_provider == "local_realesrgan"

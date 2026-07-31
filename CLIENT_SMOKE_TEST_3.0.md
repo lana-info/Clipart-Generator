@@ -79,3 +79,8 @@ GUI smoke нельзя объявлять VERIFIED без реального App
 ## Data safety
 
 Не устанавливать поверх рабочей 2.0, не удалять user data/projects и не менять публичный update channel без отдельного подтверждения.
+## Последняя стабилизация Processing
+
+- Предыдущий ручной smoke выявил `[WinError 5] Access is denied: '\\raw'`.
+- Root cause: промежуточный каталог формировался из некорректного сохранённого workspace-пути.
+- Исправление покрыто targeted regression; новый installer требует отдельного ручного smoke.
