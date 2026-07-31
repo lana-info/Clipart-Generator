@@ -13,7 +13,8 @@
 
 - [ ] PyInstaller завершился успешно и создал полный пакет.
 - [ ] Inno Setup создал `ClipartGenerator-Setup-3.0.exe`.
-- [ ] macOS workflow создал ZIP с `.app` в фактической поддерживаемой архитектуре.
+- [ ] macOS workflow создал единственный ZIP с Universal 2 `.app`.
+- [ ] Главный executable и все обязательные native dependencies содержат `arm64` и `x86_64` slices.
 - [ ] SHA-256 installer рассчитан и перепроверен.
 - [ ] SHA-256 macOS-пакета рассчитан и перепроверен.
 - [ ] Пакет запущен из чистого временного каталога.
