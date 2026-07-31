@@ -60,11 +60,11 @@ the 980×700 rendered review. Medium/Low items are tracked in `ROADMAP_3.1.md`.
 | Real GUI selection → run → output verification | VERIFIED | Manual native-file-picker smoke: files added, Processing stage shown, separate output used, results saved there, README.jpg handled or explicitly failed, remaining files continued, sources unchanged, no paid API started |
 | Credential storage, secret redaction and provider contracts | VERIFIED | Focused mock/security regression: `8 passed`, `5 subtests`; no real provider request or key exposure |
 
-## Current evidence — macOS Universal 2
+## Current evidence — macOS Apple Silicon
 
 | Check | Status | Evidence |
 |---|---|---|
 | Single macOS client artifact | VERIFIED | Workflow produces one `ClipartGenerator-macOS-3.0.zip` |
 | Bundle version | VERIFIED | `Info.plist` contains version `3.0` |
-| Universal 2 architecture | BLOCKED | Audited artifact contains 378 Mach-O binaries, all `arm64`; no `x86_64` slices |
-| Intel Mac compatibility | MANUAL PENDING | Requires an x86_64 build of mandatory native dependencies and real Intel Mac smoke |
+| Apple Silicon architecture | VERIFIED | Audited artifact contains 378 Mach-O binaries, all `arm64` |
+| Intel Mac compatibility | DEFERRED | Intel Mac and Universal 2 are outside the 3.0 product decision |

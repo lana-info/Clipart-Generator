@@ -34,6 +34,7 @@
 
 - Релизные источники версии приложения и сборки переведены на `3.0`.
 - 3.0 installer и публичный update-канал пока не подтверждены; см. `CLIENT_DELIVERY.md`.
+- macOS-клиент 3.0 выпускается одним ZIP только для Apple Silicon (arm64); Intel Mac и Universal 2 отложены.
 - Реальные provider-backed запросы не выполнялись и требуют отдельного
   одобрения стоимости.
 - Installer, подписи, macOS notarization и clean-machine smoke не подтверждены.

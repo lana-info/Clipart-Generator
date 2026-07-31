@@ -127,6 +127,16 @@
 
 ### INST-01 — Повторяемый signed release pipeline
 - Описание: единый version source, Windows/macOS artifacts, checksum и signing.
+
+### macOS Intel / Universal 2
+
+- Тип: Feature Request / Research
+- Описание: поддержка Intel Mac и единый Universal 2 artifact.
+- Причина: текущая версия поставляется только для Apple Silicon.
+- Ценность: расширение совместимости macOS.
+- Пример пользователя: владелец Intel Mac хочет установить Clipart Generator без отдельной машины.
+- Предполагаемая версия: Future
+- Статус: DEFERRED; не входит в 3.0.
 - Причина: текущие packaging metadata требуют ручной синхронизации.
 - Ценность: предсказуемый выпуск и обновление.
 - Пример пользователя: «Установить новую версию без ручных исправлений».
