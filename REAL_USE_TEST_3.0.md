@@ -87,4 +87,5 @@
 | Draft snapshot and restore across project/shell recreation | VERIFIED | Isolated regressions cover snapshot/continue, disk draft restore, shell recreation, and prompt data after navigation (`4 passed`) |
 | Paid-provider preflight and explicit run boundary | VERIFIED | Isolated Clipart/Pinterest regressions block missing keys, invalid references, unknown models and partial prices before worker (`5 passed`); no provider call made |
 | Processing cancel, isolated failure and collision safety | VERIFIED | Queue regressions cover cancellation boundaries, preserving completed items, retrying only failed items, rejecting untrusted/missing outputs, and preserving sources (`8 passed`, `2 subtests`) |
+| Processing trim, metadata preservation and 300 DPI export | VERIFIED | Focused local regressions cover trim ordering, alpha preservation, metadata/DPI carry-over, and 300 DPI final export (`5 passed`) |
 | Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |
