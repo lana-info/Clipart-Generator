@@ -47,3 +47,5 @@ realesrgan-ncnn-vulkan-20211212-windows/
 .scratch/
 ai-metla-test-20260719/
 
+# Local launcher diagnostic log
+start_clipart_gui_launch.log
