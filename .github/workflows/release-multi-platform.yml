@@ -156,6 +156,11 @@ jobs:
             --add-data "third_party/migan/NOTICE.md:third_party/migan" \
             main.py
 
+      - name: Set macOS bundle version
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.app_version }}" "dist/Clipart Generator.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.app_version }}" "dist/Clipart Generator.app/Contents/Info.plist"
+
       - name: Import Apple certificate and sign app
         if: ${{ env.APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64 != '' && env.APPLE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD != '' && env.APPLE_KEYCHAIN_PASSWORD != '' && env.APPLE_CODESIGN_IDENTITY != '' }}
         env:
