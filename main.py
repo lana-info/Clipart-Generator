@@ -996,6 +996,14 @@ class WorkerThread(QThread):
         invalid persisted workspace path. Final exports remain controlled by
         ``self.output_dir``.
         """
+        workspace = os.path.abspath(os.path.expanduser(str(self.work_dir or "")))
+        if workspace and os.path.dirname(workspace) != workspace:
+            candidate = os.path.join(workspace, "raw")
+            try:
+                os.makedirs(candidate, exist_ok=True)
+                return candidate
+            except OSError:
+                pass
         return tempfile.mkdtemp(prefix="clipart-generator-raw-")
 
     def _uses_local_upscale(self):
