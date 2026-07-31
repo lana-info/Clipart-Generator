@@ -91,4 +91,5 @@
 | Local alpha-safe background/upscale paths | VERIFIED | Local Real-ESRGAN size/alpha checks, deterministic edge controls, missing-tool diagnostics, and paid-provider fail-closed checks (`5 passed`, `2 subtests`) |
 | Clipart/Pinterest local routes, prompts and request boundaries | VERIFIED | Focused route, prompt/CSV, pipeline summary, secret-redaction and no-network module checks (`10 passed`); no provider-backed generation started |
 | Credentials, secret redaction and provider-contract mocks | VERIFIED | Isolated security regression covers env credential round-trip, KIE routing, no-network local generation, redirect/header protection, top-level error redaction, and PhotoRoom diagnostics (`8 passed`, `5 subtests`) |
+| Qt lifecycle smoke and grouped-suite stability | MANUAL PENDING | Isolated V3 shell smoke passes (`1 passed`), but grouped offscreen Qt suites hang during process teardown; no production change made without a reproducible ownership/root cause |
 | Full Clipart/Pinterest real provider run | MANUAL PENDING | No paid generation was started; provider-backed output still requires a separate approved manual smoke |

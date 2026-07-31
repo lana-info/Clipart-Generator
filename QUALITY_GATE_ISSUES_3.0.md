@@ -8,8 +8,8 @@ scenario is now VERIFIED using test copies and a separate output directory.
 
 | ID | Criticality | Reproduction | Status |
 |---|---|---|---|
-| QG-001 | High | Запустить полный Qt smoke с созданием V3ApplicationView и дождаться завершения процесса | Open: native Qt/offscreen teardown зависает/завершается с кодом 1; точка после создания и перехода режима, до lifecycle teardown |
-| QG-002 | Medium | Запустить полный набор pytest | Open: часть Qt-наборов не завершается стабильно; non-Qt/targeted suites проходят |
+| QG-001 | High | Запустить полный Qt smoke с созданием V3ApplicationView и дождаться завершения процесса | Open: отдельный `V3WizardNavigationTests::test_offscreen_shell_smoke_at_980_by_700` проходит (`1 passed`), но grouped Qt lifecycle зависает; маршрут открывается, блокировка возникает на завершении процесса |
+| QG-002 | Medium | Запустить полный набор pytest | Open: `test_v3_mode_selection.py` и объединённый V3 набор не завершаются стабильно; non-Qt/targeted suites проходят |
 | QG-003 | Medium | Проверить сборку release artifact Windows/macOS | Open: installer/build не подтверждены |
 | QG-004 | Medium | Проверить production path запуска V3 | Open: V3 controllers используют legacy WorkerThread из main.py |
 | QG-005 | Medium | Сверить TASKS/PRD с фактическими проверками | Open: есть преждевременные Done и deferred release checks |
