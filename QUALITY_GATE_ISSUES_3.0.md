@@ -14,6 +14,10 @@ scenario is now VERIFIED using test copies and a separate output directory.
 | QG-004 | Medium | Проверить production path запуска V3 | Open: V3 controllers используют legacy WorkerThread из main.py |
 | QG-005 | Medium | Сверить TASKS/PRD с фактическими проверками | Open: есть преждевременные Done и deferred release checks |
 | QG-006 | High | Pinterest: перетащить строку промпта с прикреплённым референсом | Fixed: reorder теперь меняет только порядок исходных PromptEntry; targeted tests 12 passed |
+| QG-007 | High | Processing: ошибка файла визуально не отличается от технических строк | Open: result card показывает внутренние `processing/stages/pixel_evidence` строки; нужен error token, icon и понятная причина |
+| QG-008 | High | Processing: политика конфликта одинаковых output-имён не видна до запуска | Open: требуется явный безопасный default, сохранение в state/draft и regression обеих политик |
+| QG-009 | High | Processing: действия и навигация находятся внутри scroll area | Open: нужна фиксированная action bar и проверка 980×700 |
+| QG-010 | High | Processing: «Готово» и повторный запуск не имеют подтверждённого общего контракта | Open: определить AppShell-level Done и безопасный «Обработать ещё файлы» без смешивания результатов |
 
 ## Current evidence — Processing
 
