@@ -1,6 +1,6 @@
 # CLIENT SMOKE TEST 3.0
 
-Статус: **WINDOWS GUI FAIL / MACOS MANUAL PENDING**. Установка Windows 3.0 поверх 2.0 выполнена вручную после постоянного backup; запустился legacy `MainWindow`, а ожидаемый V3 экран выбора режимов отсутствует.
+Статус: **WINDOWS V3 ENTRYPOINT VERIFIED / FUNCTIONAL SMOKE PENDING / MACOS MANUAL PENDING**. Исправленный installer вручную установлен поверх 3.0; V3 entrypoint и стартовый экран с тремя режимами подтверждены пользователем.
 
 ## Артефакты
 
@@ -31,7 +31,7 @@
 
 ## Windows upgrade from 2.0
 
-Статус: **FAIL — Critical release blocker** — registry и окно показывают 3.0, но запускается legacy `MainWindow`, а V3 карточки Clipart/Pinterest/Processing недоступны. Uninstall и rollback не выполнялись.
+Статус: **V3 ENTRYPOINT PASS / FUNCTIONAL SMOKE PENDING** — исправленный installer запускает V3 экран выбора Clipart, Pinterest и Processing. Uninstall и rollback не выполнялись.
 
 Статический анализ:
 

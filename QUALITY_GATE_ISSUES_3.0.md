@@ -6,6 +6,14 @@ Targeted regression, local Processing acceptance checks, and a manual GUI
 smoke through the native file picker are green. The end-to-end Processing
 scenario is now VERIFIED using test copies and a separate output directory.
 
+## Stabilization update after Windows V3 upgrade
+
+- KIE balance responses now use a typed parser and reject unknown schemas.
+- V3 production runtime merges persisted `.env` credentials into its runtime snapshot.
+- SynthID/deep-watermark consent is required only for that optional operation.
+- The mandatory Processing evidence step was removed from the blocking route.
+- Access-denied failures now use a visible error state and a user-facing recovery message.
+
 | ID | Criticality | Reproduction | Status |
 |---|---|---|---|
 | QG-001 | High | Запустить полный Qt smoke с созданием V3ApplicationView и дождаться завершения процесса | Open: отдельный smoke проходит; расширенный V3 набор также завершился (`32 passed`, `8 subtests`, 51.76 s), но legacy MainWindow/offscreen lifecycle still needs separate closure |

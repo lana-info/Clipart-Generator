@@ -6,7 +6,11 @@ Task Set Key: `CG3-TASKSET-001`
 Экраны: `UI_WIZARD_3.0.ru.md`
 Исследование: `SYNTHID_3_METHOD_BENCHMARK.ru.md`
 
-## Актуальный статус после ручного smoke-теста (2026-07-31)
+## Актуальный статус после ручного smoke-теста и V3 stabilization (2026-07-31)
+
+Последняя стабилизация закрыла production V3 entrypoint, KIE credential
+snapshot, typed balance parsing, optional SynthID consent и обязательный шаг
+Evidence в Processing route. Публичная публикация не выполнялась.
 
 Статусы ниже являются фактическим release-источником истины и имеют приоритет
 над историческими отметками `Done` в отдельных задачах. Реализованные

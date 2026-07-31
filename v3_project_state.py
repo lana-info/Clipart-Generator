@@ -70,7 +70,6 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
         StepId.FILES,
         StepId.GOAL,
         StepId.PIPELINE,
-        StepId.EVIDENCE,
         StepId.REVIEW_RUN,
         StepId.RESULTS,
     ),

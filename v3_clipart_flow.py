@@ -2556,6 +2556,11 @@ def _safe_runtime_error(
 ) -> str:
     import main
 
+    if isinstance(error, PermissionError) or getattr(error, "winerror", None) == 5:
+        return (
+            "Нет доступа к файлу или папке. Выберите другую папку результата "
+            "или проверьте права доступа."
+        )
     source = runtime_settings or {}
     secrets = tuple(
         source.get(name)

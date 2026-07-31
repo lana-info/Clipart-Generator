@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from provider_clients import check_kie_balance
+from provider_clients import check_kie_balance, parse_kie_balance_response
 from v3_api_settings import check_photoroom_balance, load_credentials, save_credentials
 
 
@@ -17,6 +17,13 @@ def test_balance_parser(monkeypatch):
         def read(self, _limit): return b'{"data":{"credits":12.5}}'
     monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: Response())
     assert "12.5" in check_kie_balance("secret")
+
+
+def test_balance_parser_rejects_unknown_schema():
+    import pytest
+
+    with pytest.raises(ValueError):
+        parse_kie_balance_response({"data": {"unexpected": 12}})
 
 
 def test_photoroom_balance_parser(monkeypatch):

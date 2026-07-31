@@ -44,7 +44,6 @@ STEP_TITLES: dict[StepId, str] = {
     StepId.FILES: "Файлы",
     StepId.GOAL: "Цель обработки",
     StepId.PIPELINE: "Обработка изображений",
-    StepId.EVIDENCE: "Ссылки на проверки",
     StepId.REVIEW_RUN: "Проверка и запуск",
     StepId.RESULTS: "Результаты",
 }
@@ -59,7 +58,6 @@ STEP_DESCRIPTIONS: dict[StepId, str] = {
     StepId.FILES: "Добавьте изображения, которые нужно обработать.",
     StepId.GOAL: "Определите ожидаемый результат обработки.",
     StepId.PIPELINE: "Проверьте точный порядок включённых операций.",
-    StepId.EVIDENCE: "Откройте официальные проверки Gemini, OpenAI или ZeroGPT.",
     StepId.REVIEW_RUN: "Проверьте настройки, стоимость и ожидаемый результат.",
     StepId.RESULTS: "Просмотрите результаты и журнал выполненных операций.",
 }
@@ -77,6 +75,7 @@ VALIDATION_MESSAGES: dict[str, str] = {
     "processing_file_limit_exceeded": "Уменьшите пакет до 200 файлов.",
     "duplicate_output_names": "Файлы с одинаковыми именами создадут один путь результата. Переименуйте их.",
     "processing_operation_required": "Включите хотя бы одну операцию обработки.",
+    "deep_watermark_consent_required": "Разрешите обработку скрытых водяных знаков только для этой операции.",
     "confirmed_area_unavailable": "Ручная область метки пока недоступна в этом интерфейсе.",
     "full_image_change_consent_required": "Подтвердите операцию, меняющую всё изображение.",
     "external_transfer_consent_required": "Подтвердите передачу файлов выбранному внешнему сервису.",

@@ -26,7 +26,13 @@ from v3_processing_flow import (
     processing_pipeline_steps,
     uses_external_processing,
 )
-from v3_project_state import ImageOperationData, ProjectMode, ProjectState, StepId
+from v3_project_state import (
+    ImageOperationData,
+    ProjectMode,
+    ProjectState,
+    StepId,
+    route_for_mode,
+)
 from v3_wizard import AppShell
 
 
@@ -97,15 +103,8 @@ class V3ProcessingFlowTests(unittest.TestCase):
 
         pages = view.shell.processing_flow_controller.pages
         self.assertEqual(
-            tuple(pages),
-            (
-                StepId.FILES,
-                StepId.GOAL,
-                StepId.PIPELINE,
-                StepId.EVIDENCE,
-                StepId.REVIEW_RUN,
-                StepId.RESULTS,
-            ),
+            tuple(step for step in pages if step in route_for_mode(ProjectMode.PROCESSING)),
+            route_for_mode(ProjectMode.PROCESSING),
         )
         self.assertIsInstance(pages[StepId.FILES], ProcessingFilesPage)
         self.assertIsInstance(pages[StepId.GOAL], ProcessingRecipePage)
@@ -194,7 +193,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 inspect_local_image(source)
 
-    def test_unsharp_and_upscale_each_require_full_image_opt_in(self):
+    def test_unsharp_and_upscale_do_not_require_deep_watermark_consent(self):
         for operations in (
             ImageOperationData(
                 upscale_before=False,
@@ -207,12 +206,9 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 unsharp=False,
             ),
         ):
-            self.assertIn(
-                "full_image_change_consent_required",
-                operation_validation_issues(
-                    operations,
-                    allow_full_image_changes=False,
-                ),
+            self.assertEqual(
+                operation_validation_issues(operations, allow_full_image_changes=False),
+                (),
             )
     def test_recipes_are_editable_presets_on_one_operation_model(self):
         state = ProjectState(mode=ProjectMode.PROCESSING)
@@ -246,12 +242,9 @@ class V3ProcessingFlowTests(unittest.TestCase):
         steps = processing_pipeline_steps(operations)
         self.assertLess(steps.index("Апскейл до удаления фона"), steps.index("Удаление фона"))
         self.assertLess(steps.index("Удаление фона"), steps.index("Апскейл после удаления фона"))
-        self.assertIn(
-            "full_image_change_consent_required",
-            operation_validation_issues(
-                operations,
-                allow_full_image_changes=False,
-            ),
+        self.assertEqual(
+            operation_validation_issues(operations, allow_full_image_changes=False),
+            (),
         )
 
         operations.visible_mark_cleanup_mode = "confirmed_area"
@@ -427,13 +420,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 runtime_settings_provider=lambda: {},
                 worker_factory=factory,
             )
-            self.assertEqual(factory.workers, [])
             shell.go_next()
-            self.assertEqual(factory.workers, [])
-            controller.pipeline_page.allow_full_image_changes.setChecked(True)
-
-            shell.go_next()
-
             self.assertEqual(len(factory.workers), 1)
             self.assertTrue(factory.workers[0].started)
             self.assertEqual(factory.workers[0].kwargs["mode"], "mode2_process")

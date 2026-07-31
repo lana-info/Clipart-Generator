@@ -58,6 +58,7 @@ from v3_project_state import (
     ProjectMode,
     ProjectState,
     StepId,
+    route_for_mode,
 )
 from v3_wizard import AppShell
 
@@ -275,8 +276,8 @@ def operation_validation_issues(
         and operations.visible_mark_cleanup_mode == "confirmed_area"
     ):
         issues.append("confirmed_area_unavailable")
-    if uses_full_image_changes(operations) and not allow_full_image_changes:
-        issues.append("full_image_change_consent_required")
+    if operations.invisible_watermark_cleanup and not allow_full_image_changes:
+        issues.append("deep_watermark_consent_required")
     return tuple(issues)
 
 
@@ -1133,9 +1134,18 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         self.requirements_label.setProperty(
             "state", "default" if ready else "error"
         )
+        self.requirements_label.setAccessibleName(prefix + text[:500])
+        self.requirements_label.style().unpolish(self.requirements_label)
+        self.requirements_label.style().polish(self.requirements_label)
 
     def set_run_status(self, text: str, *, error: bool = False) -> None:
-        self.run_status_label.setText(("✕ " if error else "✓ ") + text[:500])
+        prefix = "ОШИБКА: " if error else "Готово: "
+        message = prefix + text[:500]
+        self.run_status_label.setText(message)
+        self.run_status_label.setProperty("state", "error" if error else "default")
+        self.run_status_label.setAccessibleName(message)
+        self.run_status_label.style().unpolish(self.run_status_label)
+        self.run_status_label.style().polish(self.run_status_label)
 
 
 def build_processing_run_request(
@@ -1250,7 +1260,8 @@ class ProcessingFlowController(QObject):
             StepId.RESULTS: self.run_queue.page,
         }
         for step, page in self.pages.items():
-            self.shell.set_step_page(ProjectMode.PROCESSING, step, page)
+            if step in route_for_mode(ProjectMode.PROCESSING):
+                self.shell.set_step_page(ProjectMode.PROCESSING, step, page)
         self.shell.refresh()
 
     @property

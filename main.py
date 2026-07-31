@@ -6718,10 +6718,22 @@ class MainWindow(QMainWindow):
 def create_v3_application_window():
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
 
+    config = {}
+    try:
+        if os.path.isfile(CONFIG_FILE) and os.path.getsize(CONFIG_FILE) <= 2 * 1024 * 1024:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                config = loaded
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        config = {}
+    secrets = EnvCredentialStore(ENV_FILE).load()
+
     app_data = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.AppDataLocation
     )
     window = V3ApplicationView(
+        runtime_settings_provider=lambda: build_runtime_settings(config, secrets),
         draft_path=os.path.join(app_data, "project_state.json")
     )
     window.setWindowTitle("Clipart Generator 3.0")

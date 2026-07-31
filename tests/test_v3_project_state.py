@@ -63,7 +63,6 @@ class ProjectRoutesTests(unittest.TestCase):
                 StepId.FILES,
                 StepId.GOAL,
                 StepId.PIPELINE,
-                StepId.EVIDENCE,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
             ),
