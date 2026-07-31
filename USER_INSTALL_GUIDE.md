@@ -7,8 +7,8 @@
 
 ## 2) Установка на macOS (без подписи Apple Developer)
 1. Скачайте нужный архив из Release:
-   - `ClipartGenerator-macOS-apple-silicon-...zip` для Mac с M1/M2/M3/...
-   - `ClipartGenerator-macOS-intel-...zip` для Intel Mac
+   - `ClipartGenerator-macOS-3.0.zip` для Mac с Apple Silicon (M1/M2/M3/M4 и новее)
+   - Intel Mac в версии 3.0 не поддерживается.
 2. Распакуйте архив (двойной клик по `.zip`).
 3. Перетащите **Clipart Generator.app** в папку **Applications (Программы)**.
 4. Первый запуск:

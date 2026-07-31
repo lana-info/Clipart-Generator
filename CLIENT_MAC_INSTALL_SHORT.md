@@ -1,8 +1,8 @@
 # Короткая инструкция для клиента (macOS)
 
 1. Скачайте нужный файл из раздела Release:
-   - `ClipartGenerator-macOS-apple-silicon-...zip` для Mac с M1/M2/M3/...
-   - `ClipartGenerator-macOS-intel-...zip` для Intel Mac
+   - `ClipartGenerator-macOS-3.0.zip` для Mac с Apple Silicon (M1/M2/M3/M4 и новее)
+   - Intel Mac в версии 3.0 не поддерживается.
 2. Распакуйте архив и перетащите `Clipart Generator.app` в папку **Applications (Программы)**.
 3. Для первого запуска: зажмите `Control` → клик по приложению → **Открыть**.
 4. В предупреждении macOS нажмите **Открыть** ещё раз.
