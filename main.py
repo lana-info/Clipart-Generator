@@ -6735,7 +6735,15 @@ def run_release_entrypoint_smoke(app) -> int:
     from v3_components import ModeCard
     from v3_mode_selection import MODE_CARD_SPECS
 
-    window = create_v3_application_window()
+    report_path = os.path.join(
+        tempfile.gettempdir(), "clipart-release-entrypoint-smoke.txt"
+    )
+    try:
+        window = create_v3_application_window()
+    except Exception as error:
+        with open(report_path, "w", encoding="utf-8") as report:
+            report.write(f"startup_exception={type(error).__name__}: {error}\n")
+        return 1
     app.processEvents()
     cards = list(window.mode_selection.mode_cards.values())
     valid = (
@@ -6753,11 +6761,7 @@ def run_release_entrypoint_smoke(app) -> int:
         f"expected_keys={[str(mode) for mode in MODE_CARD_SPECS]}\n"
         f"valid={valid}\n"
     )
-    with open(
-        os.path.join(tempfile.gettempdir(), "clipart-release-entrypoint-smoke.txt"),
-        "w",
-        encoding="utf-8",
-    ) as report:
+    with open(report_path, "w", encoding="utf-8") as report:
         report.write(diagnostic)
     window.close()
     return 0 if valid else 1
