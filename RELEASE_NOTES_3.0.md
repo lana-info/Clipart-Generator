@@ -48,3 +48,11 @@
 - Раздельное сохранение output-папок и пользовательских processing preferences по режимам.
 - SynthID/RunPod обозначен как Deferred и не блокирует обычный Processing workflow.
 - Убрано лишнее Pinterest-предупреждение.
+## Final client verification
+
+Windows x64 was manually installed over the previous version and verified:
+V3 startup, all three modes, Processing, output preservation, source safety,
+preferences, recipe restoration, metadata cleanup and restart behavior pass.
+
+macOS Apple Silicon packaging is verified. Real-device GUI smoke is pending;
+the build is unsigned/not notarized and Intel Mac is unsupported.

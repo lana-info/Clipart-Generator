@@ -15,3 +15,10 @@ macOS-поставка поддерживает только Apple Silicon (M1, 
 GitHub Actions должен использоваться только как build-only pipeline в приватном основном репозитории. Автоматическое создание GitHub Release отключено; публикация требует отдельного подтверждения.
 
 Публичный репозиторий `Clipart-Generator-Updates` и GitHub Release в рамках этой работы не изменяются.
+## Verified delivery scope
+
+- Windows x64 installer: manually verified, including upgrade and Processing.
+- macOS Apple Silicon arm64 ZIP: build and packaging verified; real Mac GUI smoke pending.
+- Intel Mac is unsupported.
+- macOS package is unsigned and not notarized.
+- RunPod SynthID and automatic updates are deferred.

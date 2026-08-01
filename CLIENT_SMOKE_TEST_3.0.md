@@ -1,5 +1,17 @@
 # CLIENT SMOKE TEST 3.0
 
+## Final confirmed Windows smoke
+
+Windows x64: **VERIFIED**.
+
+Installation/upgrade, V3 startup, Clipart, Pinterest, Processing, API settings,
+KIE key detection, output restoration, custom recipe restoration, Processing
+preferences, metadata cleanup, restart, data preservation, and ordinary-window
+UX: **PASS**. Processing completed without `\\raw`; sources were unchanged.
+
+macOS Apple Silicon: build and packaging **VERIFIED**, real-device GUI smoke
+**MANUAL PENDING**. Intel Mac is unsupported; signing/notarization are absent.
+
 ## Final Windows smoke — 2026-07-31
 
 Status: **PASS — installed Windows 3.0 upgrade smoke**.

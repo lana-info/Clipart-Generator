@@ -371,3 +371,9 @@
 - Verified Local Real-ESRGAN model selection maps `Clipart 2x` to the x2 model and `Clipart 4x` to the x4 model.
 - Verified Local Real-ESRGAN preserves alpha on the affected trimmed bird PNG during a real `2x` run.
 
+## 3.0 final stabilization
+
+- Verified Windows x64 installation, V3 startup and all three client modes.
+- Fixed Processing intermediate path handling; selected output folders and source files are safe.
+- Verified persistence of API settings, output folders, recipes and Processing preferences.
+- Deferred RunPod SynthID and automatic updates; documented macOS arm64 limitations.

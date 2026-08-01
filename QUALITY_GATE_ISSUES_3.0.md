@@ -1,5 +1,16 @@
 # Quality Gate issues 3.0
 
+## Final confirmed client smoke
+
+- Windows x64: **VERIFIED** — installation/upgrade, V3 entrypoint, all three
+  modes, Processing, data preservation, preferences and ordinary-window UX pass.
+- macOS Apple Silicon: artifact/packaging **VERIFIED**; real-device GUI smoke
+  remains **MANUAL PENDING**.
+- Closed Windows release blockers: legacy entrypoint, `\\raw` export path,
+  missing saved KIE runtime, recipe/output/consent persistence gaps.
+- Deferred limitations: RunPod SynthID, automatic updates, signing/notarization,
+  Intel Mac/Universal 2, and Qt/ONNX test teardown limitation.
+
 ## Current release state
 
 Final Windows upgrade smoke is **VERIFIED/PASS**: installed 3.0 launches V3,

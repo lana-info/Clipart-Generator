@@ -1,5 +1,18 @@
 # Release checklist 3.0
 
+## Final client status
+
+- [x] Windows x64 installation and 2.0 → 3.0 upgrade verified.
+- [x] Windows V3, Clipart, Pinterest and Processing verified.
+- [x] Windows data preservation, output folders, recipes and preferences verified.
+- [x] Windows Processing verified without `\\raw` and without source changes.
+- [x] SynthID Deferred does not block ordinary Processing.
+- [x] No paid API calls during smoke.
+- [x] macOS arm64 artifact and packaging verified.
+- [ ] macOS Apple Silicon real-device GUI smoke.
+
+Release readiness: **READY FOR WINDOWS CLIENT RELEASE**; **READY FOR MACOS APPLE SILICON RELEASE WITH MACOS MANUAL-PENDING DISCLOSURE**.
+
 ## Final Windows client smoke
 
 - [x] Installer установлен поверх существующей 3.0 без uninstall.

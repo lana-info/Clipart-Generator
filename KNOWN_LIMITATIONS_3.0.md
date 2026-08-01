@@ -54,3 +54,11 @@
 
 - Глубокая обработка скрытых водяных знаков SynthID через RunPod отключена до подтверждения payload/output contract.
 - Для обычной обработки не требуется CUDA, RunPod или облачный провайдер.
+## Final verified scope
+
+- Windows x64 client smoke: VERIFIED.
+- macOS Apple Silicon: build and packaging verified; real-device GUI smoke pending.
+- Intel Mac and Universal 2 are not supported in 3.0.
+- macOS signing/notarization are not included.
+- RunPod SynthID and automatic updates are deferred.
+- Qt/ONNX teardown diagnostic remains a test-environment limitation.
