@@ -1,7 +1,7 @@
 # Clipart Generator 3.0 — Release Notes
 
-Статус: source release candidate `v3.0.0-rc1`; публичная упаковка 3.0 ещё не
-подтверждена. Для точного статуса см. [KNOWN_LIMITATIONS_3.0.md](KNOWN_LIMITATIONS_3.0.md).
+Статус: стабильный клиентский релиз 3.0. Windows x64 прошёл ручную клиентскую
+проверку; macOS arm64 доступен как неподписанный preview с ручным GUI smoke pending.
 
 ## Что нового
 
@@ -33,12 +33,12 @@
 ## Известные ограничения
 
 - Релизные источники версии приложения и сборки переведены на `3.0`.
-- 3.0 installer и публичный update-канал пока не подтверждены; см. `CLIENT_DELIVERY.md`.
+- Автоматический update-канал не включён; клиентам предоставляются прямые ссылки на assets Release.
 - macOS-клиент 3.0 выпускается одним ZIP только для Apple Silicon (arm64); Intel Mac и Universal 2 отложены.
 - Реальные provider-backed запросы не выполнялись и требуют отдельного
   одобрения стоимости.
-- Installer, подписи, macOS notarization и clean-machine smoke не подтверждены.
-- SynthID removal и RunPod/cloud pipeline не входят в подтверждённый scope.
+- Windows installer подтверждён ручным upgrade smoke; macOS signing, notarization и clean-machine smoke не подтверждены.
+- SynthID removal и RunPod/cloud pipeline отложены и не блокируют обычный Processing.
 - WorkerThread/legacy и Qt teardown остаются техническим долгом.
 
 См. [CHANGELOG.md](CHANGELOG.md) для исторических изменений и
