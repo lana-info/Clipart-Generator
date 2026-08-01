@@ -33,11 +33,12 @@
 ## Известные ограничения
 
 - Релизные источники версии приложения и сборки переведены на `3.0`.
-- Автоматический update-канал не включён; клиентам предоставляются прямые ссылки на assets Release.
+- Версия 3.0 распространяется вручную через закрытый клиентский чат; автоматическое обновление отключено.
+- Приватный Release `v3.0.0` в `lana-info/Clipart-Generator` используется как официальный внутренний архив релиза.
 - macOS-клиент 3.0 выпускается одним ZIP только для Apple Silicon (arm64); Intel Mac и Universal 2 отложены.
 - Реальные provider-backed запросы не выполнялись и требуют отдельного
   одобрения стоимости.
-- Windows installer подтверждён ручным upgrade smoke; macOS signing, notarization и clean-machine smoke не подтверждены.
+- Windows installer устанавливается поверх 2.0; ручной upgrade smoke подтверждён, пользовательские настройки сохраняются. macOS signing, notarization и clean-machine smoke не подтверждены.
 - SynthID removal и RunPod/cloud pipeline отложены и не блокируют обычный Processing.
 - WorkerThread/legacy и Qt teardown остаются техническим долгом.
 
