@@ -100,6 +100,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ steps.version.outputs.app_version }}
+          retention-days: 3
           path: |
             release/ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.exe
             release/ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.sha256
@@ -221,6 +222,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ steps.version.outputs.app_version }}
+          retention-days: 3
           path: |
             release/ClipartGenerator-macOS-${{ steps.version.outputs.app_version }}.zip
             release/ClipartGenerator-macOS-${{ steps.version.outputs.app_version }}.sha256
