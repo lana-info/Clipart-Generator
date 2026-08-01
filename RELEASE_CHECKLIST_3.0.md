@@ -1,5 +1,27 @@
 # Release checklist 3.0
 
+## Final Windows client smoke
+
+- [x] Installer установлен поверх существующей 3.0 без uninstall.
+- [x] Приложение запускается в V3.
+- [x] Clipart, Pinterest и Processing доступны.
+- [x] Processing обработал два файла без ошибки `\\raw`.
+- [x] Результаты сохранены в выбранную output-папку.
+- [x] Исходные файлы не изменились.
+- [x] Output-папки, custom recipe и consent восстановились после перезапуска.
+- [x] SynthID Deferred не блокирует обычную обработку.
+- [x] Платные API не запускались.
+
+Windows upgrade smoke: **PASS**. Windows clean-install smoke и macOS GUI smoke остаются отдельными ограничениями среды.
+
+## Release readiness review
+
+Verdict: **READY WITH MINOR RISKS**.
+
+The Windows client path is verified. macOS Apple Silicon GUI smoke remains
+manual pending; Intel Mac/Universal 2, signing/notarization, public updates
+repository, and GitHub Release publication are outside this preparation step.
+
 Статус текущей проверки: **NOT READY**. Публичная публикация в `Clipart-Generator-Updates` не выполняется.
 
 ## Версия и метаданные

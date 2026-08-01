@@ -1,5 +1,23 @@
 # CLIENT SMOKE TEST 3.0
 
+## Final Windows smoke — 2026-07-31
+
+Status: **PASS — installed Windows 3.0 upgrade smoke**.
+
+- Установка и запуск: PASS.
+- Сохранность API-настроек, prompts и license data: PASS.
+- Clipart, Pinterest и Processing: PASS.
+- Processing двух файлов без ошибки `\\raw`: PASS.
+- Результаты в выбранной папке: PASS.
+- Исходники не изменены: PASS.
+- Output-папки режимов восстанавливаются: PASS.
+- Custom recipe восстанавливается: PASS.
+- Consent восстанавливается и не запускает обработку автоматически: PASS.
+- SynthID Deferred и не блокирует обычную обработку: PASS.
+- Обычный размер окна и действия интерфейса: PASS.
+
+Платные API не запускались. Uninstall и rollback не выполнялись.
+
 Статус: **WINDOWS V3 ENTRYPOINT VERIFIED / FUNCTIONAL SMOKE PENDING / MACOS MANUAL PENDING**. Исправленный installer вручную установлен поверх 3.0; V3 entrypoint и стартовый экран с тремя режимами подтверждены пользователем.
 
 ## Артефакты

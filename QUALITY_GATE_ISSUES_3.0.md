@@ -2,6 +2,12 @@
 
 ## Current release state
 
+Final Windows upgrade smoke is **VERIFIED/PASS**: installed 3.0 launches V3,
+all three modes work, two-file Processing completes without `\\raw`, selected
+output is respected, sources remain unchanged, preferences restore after
+restart, and SynthID Deferred does not block ordinary work. No paid API calls
+were made.
+
 Targeted regression, local Processing acceptance checks, and a manual GUI
 smoke through the native file picker are green. The end-to-end Processing
 scenario is now VERIFIED using test copies and a separate output directory.
