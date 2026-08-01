@@ -434,19 +434,12 @@ class ProcessingPipelineEditor(QScrollArea):
                 gpu_ready = False
             if not gpu_ready and operations.invisible_watermark_cleanup:
                 operations.invisible_watermark_cleanup = False
-            invisible_control.setEnabled(gpu_ready)
+            invisible_control.setEnabled(False)
+            invisible_control.setChecked(False)
+            invisible_control.setText("Глубокая обработка скрытых водяных знаков (SynthID) — недоступно в версии 3.0")
             invisible_control.setToolTip(
-                "Экспериментальная обработка скрытых водяных знаков (SynthID). "
-                "Может потребоваться NVIDIA CUDA или подключённая облачная видеокарта; "
-                "обычная очистка метаданных работает без этого режима."
+                "Экспериментальная облачная операция отложена до подтверждения backend-контракта."
             )
-            if not gpu_ready:
-                unavailable_label = QLabel(
-                    "Недоступно на этом компьютере: требуется CUDA или подключённый облачный GPU RunPod."
-                )
-                unavailable_label.setStyleSheet("color:#d97706; font-weight:600;")
-                unavailable_label.setWordWrap(True)
-                cleanup_form.addRow(unavailable_label)
             cleanup_hint = QLabel(
                 "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
                 "generator fields и embedded C2PA. ICC и DPI всегда сохраняются."

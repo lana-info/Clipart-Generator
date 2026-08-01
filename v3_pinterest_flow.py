@@ -362,11 +362,8 @@ class PinterestReviewRunPage(ClipartReviewRunPage):
         self.card.description_label.setText(
             "Проверьте пакет изображений и стоимость перед явным запуском."
         )
-        self.warning_label.setText(
-            "Будут созданы только цельные изображения. "
-            "Для Pinterest чаще всего дополнительная обработка изображений не требуется. "
-            "Редактора текста, шаблонов и публикации в Pinterest нет."
-        )
+        self.warning_label.clear()
+        self.warning_label.setVisible(False)
 
     def refresh_from_state(self) -> None:
         super().refresh_from_state()

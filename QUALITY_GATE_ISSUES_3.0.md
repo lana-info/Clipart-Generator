@@ -84,3 +84,5 @@ the 980×700 rendered review. Medium/Low items are tracked in `ROADMAP_3.1.md`.
 - Output-пути теперь хранятся отдельно для Clipart, Pinterest и Processing в project draft.
 - Processing consent сохраняется как пользовательская настройка и восстанавливается при загрузке draft.
 - Старые draft-файлы без новых полей продолжают загружаться с безопасными defaults.
+- RunPod SynthID принят как Deferred/Research и не является блокером релиза 3.0.
+- SynthID в клиентском UI отключён с коротким объяснением; обычная обработка не требует CUDA или RunPod.

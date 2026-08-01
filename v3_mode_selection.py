@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -227,6 +228,11 @@ class V3ApplicationView(QWidget):
         self._v3_runtime_settings: dict[str, str] = {}
         self._worker_factory = worker_factory
         self._draft_path = Path(draft_path) if draft_path is not None else None
+        self._preferences_path = (
+            self._draft_path.with_name("preferences.json")
+            if self._draft_path is not None else None
+        )
+        self._preferences = self._load_preferences()
         self.shell: AppShell | None = None
 
         self.setMinimumSize(980, 700)
@@ -322,6 +328,7 @@ class V3ApplicationView(QWidget):
             return
 
         state = ProjectState(mode=mode)
+        self._apply_preferences(state, mode)
         self._replace_shell(state)
         self.new_project_started.emit(mode.value)
 
@@ -342,6 +349,59 @@ class V3ApplicationView(QWidget):
         except ProjectStateError:
             return None
 
+    def _load_preferences(self) -> dict[str, Any]:
+        path = self._preferences_path
+        if path is None or not path.is_file():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError, UnicodeError):
+            return {}
+
+    def _apply_preferences(self, state: ProjectState, mode: ProjectMode) -> None:
+        data = self._preferences.get(mode.value, {})
+        if not isinstance(data, dict):
+            return
+        if mode is ProjectMode.PROCESSING:
+            state.processing.recipe = str(data.get("recipe", "custom"))
+            state.processing.overwrite_existing = bool(data.get("overwrite_existing", False))
+            state.processing.deep_watermark_consent = bool(data.get("deep_watermark_consent", False))
+            operations = data.get("operations")
+            if isinstance(operations, dict):
+                state.processing.operations = state.processing.operations.from_dict(operations)
+        elif isinstance(data.get("operations"), dict):
+            target = state.clipart.operations if mode is ProjectMode.CLIPART else state.pinterest.operations
+            restored = target.__class__.from_dict(data["operations"])
+            if mode is ProjectMode.CLIPART:
+                state.clipart.operations = restored
+            else:
+                state.pinterest.operations = restored
+        state.set_output_dir_for_mode(str(data.get("output_dir", "")), mode)
+
+    def _save_preferences(self) -> None:
+        path = self._preferences_path
+        if path is None or self.shell is None:
+            return
+        state = self.shell.state
+        if state.mode is ProjectMode.PROCESSING:
+            payload = {
+                "output_dir": state.output_dir_for_mode(state.mode),
+                "recipe": state.processing.recipe,
+                "overwrite_existing": state.processing.overwrite_existing,
+                "deep_watermark_consent": state.processing.deep_watermark_consent,
+                "operations": state.processing.operations.to_dict(),
+            }
+        elif state.mode is ProjectMode.CLIPART:
+            payload = {"output_dir": state.output_dir_for_mode(state.mode), "operations": state.clipart.operations.to_dict()}
+        else:
+            payload = {"output_dir": state.output_dir_for_mode(state.mode), "operations": state.pinterest.operations.to_dict()}
+        self._preferences[state.mode.value] = payload
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(self._preferences, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            return
     def _save_draft(self) -> None:
         path = self._draft_path
         if path is None or self.shell is None:
@@ -349,6 +409,7 @@ class V3ApplicationView(QWidget):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             save_project_draft(self.shell.state, path)
+            self._save_preferences()
         except ProjectStateError:
             return
 

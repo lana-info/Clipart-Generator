@@ -50,3 +50,7 @@
 
 См. [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) для внутренних причин и
 [RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md) для краткого описания релиза.
+## Deferred в версии 3.0
+
+- Глубокая обработка скрытых водяных знаков SynthID через RunPod отключена до подтверждения payload/output contract.
+- Для обычной обработки не требуется CUDA, RunPod или облачный провайдер.

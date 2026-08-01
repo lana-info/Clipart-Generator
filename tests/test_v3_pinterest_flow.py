@@ -379,10 +379,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 "Пакетный экспорт PNG",
                 controller.review_page.pipeline_label.text(),
             )
-            self.assertIn(
-                "Редактора текста",
-                controller.review_page.warning_label.text(),
-            )
+            self.assertNotIn("Редактора текста", controller.review_page.warning_label.text())
             shell.go_next()
 
         self.assertEqual(len(factory.workers), 1)

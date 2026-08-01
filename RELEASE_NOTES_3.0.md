@@ -43,3 +43,8 @@
 
 См. [CHANGELOG.md](CHANGELOG.md) для исторических изменений и
 [RELEASE_PROCESS.md](RELEASE_PROCESS.md) для операционного процесса публикации.
+## Стабилизация
+
+- Раздельное сохранение output-папок и пользовательских processing preferences по режимам.
+- SynthID/RunPod обозначен как Deferred и не блокирует обычный Processing workflow.
+- Убрано лишнее Pinterest-предупреждение.
