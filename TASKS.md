@@ -1328,7 +1328,7 @@ Verification:
 
 ## Task 55 - Silent Auto-Update to 2.0
 
-Status: In Progress
+Status: Superseded - legacy public update channel is inactive
 
 Goal:
 Enable legacy 1.x installs to auto-upgrade to `2.0` during startup without requiring
@@ -1344,7 +1344,155 @@ Acceptance:
 - [x] Update manifest check uses `latest_version` from public `version.json` and respects `APP_VERSION` comparison.
 - [x] Auto-apply path skips the interactive confirmation on startup update checks.
 - [x] Installer download is bounded, streamed, and cleaned up on checksum/failure errors.
-- [ ] Manual and offline validation on `1.3` -> `2.0` flow is run on real clients.
+- [ ] Historical acceptance not pursued: manual/offline validation of the old
+  `1.3` -> `2.0` public-channel flow on real clients.
 
 Notes:
+- The private GitHub updates repository is no longer an active delivery channel.
+- Do not continue this flow or modify its public Release/manifest without a
+  separate migration decision.
 - No release/build workflow is started by this task.
+
+## Phase 24 - Shared License And Update Service
+
+Reference: `LICENSE_UPDATE_SERVICE_PRD.md`
+
+### Task 56 - Approve License And Update Service Architecture
+
+Status: In Review
+
+Goal:
+Approve the business rules, security boundaries, API surface, database model,
+and free VDS-first infrastructure before implementation.
+
+Acceptance:
+- [x] One license is limited to one active device.
+- [x] Device reset is administrator-only; there is no customer self-service reset.
+- [x] The administrator can generate keys in a protected panel.
+- [x] Offline use is prohibited and cannot be authorized by a local cache.
+- [x] Multiple products and separate update entitlements are represented.
+- [x] The first stage requires no new paid service.
+- [ ] Exact subdomain is approved.
+- [ ] License duration policy is approved.
+- [ ] Update entitlement policy is approved.
+- [x] Independent architecture/security review findings are reflected in the PRD.
+
+### Task 57 - Create Separate Private Server Repository
+
+Status: Planned - requires approval
+
+Scope:
+- Create the server repository only after architecture approval.
+- Add server-specific instructions, secret exclusions, migrations, tests, and
+  deployment boundaries.
+- Do not copy `licenses.db`, desktop secrets, or release artifacts.
+
+### Task 58 - Implement Core License API And Database
+
+Status: Planned - requires architecture approval
+
+Scope:
+- Implement products, high-entropy keys, HMAC lookup and protected key
+  verification, one-device activation, per-install asymmetric device proof,
+  nonce-based validation, signed responses, administrative release,
+  revocation, audit events, and transactional concurrency protection.
+- Use isolated PostgreSQL roles and migrations.
+- Enforce one active device with a PostgreSQL partial unique index and a
+  transaction; enforce unique product/version/channel/platform releases.
+- Use separate license/update signing keys with `kid`, rollover, backup,
+  rotation, and revocation procedures.
+- Use the approved v1 Ed25519/RFC 8785 signed envelope with explicit schema and
+  algorithm versions.
+- Do not implement offline authorization.
+
+Verification:
+- Unit and integration tests for all license states and product isolation.
+- Concurrent activation test proves that two devices cannot both activate.
+- Signature, secret-redaction, response-bound, rate-limit, and migration tests.
+
+### Task 59 - Implement Protected Administrative Panel
+
+Status: Planned - requires architecture approval
+
+Scope:
+- Create the first administrator locally; expose no public registration.
+- Administrator login with secure sessions, free TOTP two-factor
+  authentication, recovery codes, and rate limiting.
+- Generate one or multiple keys and show full values only on creation/export.
+- Search, suspend, revoke, extend, and manually reset a device binding.
+- Display safe device/license identifiers and an immutable audit history.
+- Require recent re-authentication for exports, resets, revocation, release
+  publication, and signing-key operations.
+- No public customer reset route or UI.
+
+### Task 60 - Prepare Free Staging Deployment On VDS
+
+Status: Planned - deployment requires separate approval
+
+Scope:
+- Configure the approved subdomain, free TLS, reverse proxy, isolated service,
+  isolated PostgreSQL database, private artifact directory, health checks,
+  logging, rate limits, and backup/restore procedure.
+- Select an existing no-new-cost off-VDS backup target controlled by the owner;
+  complete a restore test before production.
+- Do not alter existing VDS projects or reuse their database credentials.
+- Do not start production service or publish releases in this task.
+
+### Task 61 - Integrate Mandatory Online License Gate
+
+Status: Planned - separate desktop task
+
+Branch: `codex/license-server`
+
+Scope:
+- Replace the prototype client contract with the approved signed API.
+- Generate a per-install Ed25519 device key and protect its serialized private
+  key for the current Windows user with DPAPI; use challenge/response proof and
+  fresh nonces without claiming hardware-backed non-exportability.
+- Require a fresh server round-trip at startup and immediately before every
+  protected operation; periodic checks are additional only.
+- Preserve completed outputs and avoid destructive shutdown.
+- Remove prototype authorization: the three-day/offline cache and
+  `use_offline=True`, client/public `/deactivate`, plaintext license-key
+  response/storage, repeated license-key validation, and static admin token.
+
+Verification:
+- Offline and invalid-license states fail closed without starting providers.
+- Disconnect immediately after validation; the next protected operation is
+  blocked.
+- Every generation, processing, batch, and mixed-workflow entry point is gated.
+- No desktop or public route can reset/release a device binding.
+- Valid license permits existing generation and processing unchanged.
+- Administrator reset invalidates the old device and permits one replacement.
+- Windows packaged-client behavior is checked in an isolated environment.
+
+### Task 62 - Design And Implement Private Update Delivery
+
+Status: Planned - blocked on update policy and stable licensing
+
+Branch: `codex/update-delivery`
+
+Scope:
+- Add product/platform release records, signed manifests, short-lived download
+  tokens, local VDS artifact retention, and explicit installer confirmation.
+- Keep free Ed25519 service/artifact signatures separate from optional Windows
+  Authenticode, which is not required by the free first stage.
+- Replace the old client channel only through a separately approved migration.
+- Do not modify existing public releases or publish a new build automatically.
+
+Verification:
+- License and update entitlement gates are independent and fail closed.
+- Manifest signature, HTTPS, size, SHA-256, artifact signature, expiry, and
+  interrupted-download cleanup are tested.
+- Windows upgrade and rollback safety receive manual isolated checks.
+
+### Task 63 - Security Review And Production Readiness
+
+Status: Planned
+
+Scope:
+- Review authentication, key storage, signing, database access, rate limiting,
+  audit privacy, backup restore, incident response, and dependency risk.
+- Resolve all high-severity findings before production deployment.
+- Production deployment, credential creation, and DNS changes require explicit
+  owner approval.

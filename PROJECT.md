@@ -34,4 +34,9 @@ API keys, credentials, `.env` files, user configs, generated images, build outpu
 
 ## Current product state
 
-The ordered MVP and cleanup acceptance work is complete. Task 55 (silent auto-update to 2.0) remains in progress because manual/offline validation on real 1.3 clients is still outstanding. Do not start unrelated feature development during the VDS handoff.
+The ordered MVP and cleanup acceptance work is complete. The legacy GitHub
+updates flow is superseded because its repository is private and is not an active
+delivery channel. The next approved design direction is a shared, self-hosted
+license and future update service described in `LICENSE_UPDATE_SERVICE_PRD.md`.
+No server implementation, deployment, or release workflow starts until that
+architecture and its remaining business rules are approved.

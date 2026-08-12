@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-11
+Updated: 2026-08-12
 
 ## Operating model
 
@@ -14,19 +14,28 @@ Updated: 2026-08-11
 
 ## Current branch and handoff
 
-- Working branch: `develop/3.0`
-- Handoff commit at preparation start: `98338d8cf3ffbeaf883e5c22d85373e4ace46885`
+- Base branch: `develop/3.0`
+- Current documentation branch: `codex/license-server`
+- Handoff commit at preparation start: `b4648042e3d0ed41416c6055216bbe73de128825`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-Complete the manual/offline validation of the 1.3 to 2.0 silent auto-update flow on real client fixtures or machines, without starting a release workflow. Record evidence in `TASKS.md` and the relevant acceptance documentation.
+Review and approve `LICENSE_UPDATE_SERVICE_PRD.md`. Confirm the exact subdomain,
+license duration policy, and update entitlement policy. Do not implement or
+deploy the service before approval.
 
 ## Blockers and risks
 
-- Real-client validation for Task 55 is not available in this repository-only setup.
+- The existing license server/client are prototypes and are not production-safe.
+- The tracked `licenses.db` is potentially sensitive and requires a separately
+  approved migration out of source control without exposing its contents.
+- Mandatory online validation makes VDS, DNS, TLS, and database availability a
+  direct application-availability dependency.
+- Exact production hostname, license duration, and update entitlement rules are
+  not decided. Recommended hostname: `licenses.<your-domain>`.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 
