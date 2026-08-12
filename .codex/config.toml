@@ -1,0 +1,4 @@
+# Project-portable Codex settings. Authentication and personal settings stay outside the repository.
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 3

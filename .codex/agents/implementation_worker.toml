@@ -1,0 +1,10 @@
+name = "implementation_worker"
+description = "Primary implementation and test worker for scoped project changes."
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"
+sandbox_mode = "workspace-write"
+
+developer_instructions = """
+Implement only the assigned scope. Inspect the repository first, preserve unrelated changes, and do not edit files assigned to another agent.
+Run targeted tests and report changed files, commands, results, and remaining risks. Never add secrets or user data.
+"""

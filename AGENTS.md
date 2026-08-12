@@ -26,3 +26,12 @@
 - Do not expose secrets or read `.env` contents.
 - Preserve releases, tags, version files, workflow files, and user data unless the task explicitly includes them.
 - The updates repository is private and is not the active update delivery channel until a new delivery design is approved.
+
+## VDS-first workflow
+
+- Ubuntu VDS is the primary development environment; Windows is reserved for Windows-specific and visual verification.
+- GitHub is the handoff point. Only one machine may edit the active branch at a time.
+- Before handing work to the other machine, run the relevant checks, commit, and push. The receiving machine must use `git fetch` and `git pull --ff-only`.
+- Never copy working files directly between machines and never run two independent editing sessions on the same branch.
+- Use `scripts/bootstrap_vds.sh` only for environment setup and safe baseline checks. It must not install secrets, alter SSH/firewall settings, start production workers, or deploy.
+- The main agent owns planning, integration, final tests, review, commit, and push. Subagents must not edit the same files in parallel.
