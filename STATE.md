@@ -36,6 +36,8 @@ deploy the service before approval.
   direct application-availability dependency.
 - Exact production hostname, license duration, and update entitlement rules are
   not decided. Recommended hostname: `licenses.<your-domain>`.
+- A separate local server foundation was prepared outside the desktop clone;
+  its private GitHub remote still needs to be created before push.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 

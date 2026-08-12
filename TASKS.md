@@ -1379,10 +1379,14 @@ Acceptance:
 
 ### Task 57 - Create Separate Private Server Repository
 
-Status: Planned - requires approval
+Status: Local foundation prepared - private remote still required
 
 Scope:
 - Create the server repository only after architecture approval.
+- A local repository foundation now exists at
+  `/root/projects/Clipart Generator/license-service`, with environment-only
+  staging configuration and tests. It has no API, database, secrets, or
+  deployment behavior.
 - Add server-specific instructions, secret exclusions, migrations, tests, and
   deployment boundaries.
 - Do not copy `licenses.db`, desktop secrets, or release artifacts.
