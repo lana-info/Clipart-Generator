@@ -2,12 +2,16 @@ import json
 import os
 import uuid
 import hashlib
+import base64
+import stat
 from datetime import datetime, timedelta, timezone
 from urllib import request, error
 from urllib.parse import urlparse
 
 
 MAX_LICENSE_RESPONSE_BYTES = 2 * 1024 * 1024
+LICENSE_SIGNING_KID = "license-v1"
+LICENSE_SIGNING_PUBLIC_KEY_B64 = "2J5W6NVq8-zE5g0MocublzW5aER1hzRqwFLGuzKuwMw"
 
 
 class LicenseHTTPError(RuntimeError):
@@ -23,12 +27,89 @@ class NoRedirectHandler(request.HTTPRedirectHandler):
 
 
 class LicenseClient:
-    def __init__(self, server_url, cache_path, app_version, timeout=10, backup_server_url=""):
+    def __init__(self, server_url, cache_path, app_version, timeout=10, backup_server_url="", device_key_path=""):
         self.server_url = (server_url or "").rstrip("/")
         self.backup_server_url = (backup_server_url or "").rstrip("/")
         self.cache_path = cache_path
         self.app_version = app_version
         self.timeout = timeout
+        self.device_key_path = device_key_path or (cache_path + ".device")
+
+    def _device_private_key(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, NoEncryption
+        try:
+            with open(self.device_key_path, "rb") as handle:
+                raw = handle.read()
+            if len(raw) != 32:
+                raise ValueError("invalid device key")
+            return Ed25519PrivateKey.from_private_bytes(raw)
+        except FileNotFoundError:
+            key = Ed25519PrivateKey.generate()
+            raw = key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
+            os.makedirs(os.path.dirname(self.device_key_path) or ".", exist_ok=True)
+            fd = os.open(self.device_key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                os.write(fd, raw)
+            finally:
+                os.close(fd)
+            try:
+                os.chmod(self.device_key_path, stat.S_IRUSR | stat.S_IWUSR)
+            except OSError:
+                pass
+            return key
+
+    def _device_identity(self):
+        from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+        key = self._device_private_key()
+        public = key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+        return key, base64.urlsafe_b64encode(public).rstrip(b"=").decode("ascii")
+
+    def activate_v1(self, license_key, product_id="clipart-generator"):
+        key, device_key = self._device_identity()
+        nonce = base64.urlsafe_b64encode(os.urandom(24)).rstrip(b"=").decode("ascii")
+        proof = base64.urlsafe_b64encode(key.sign(nonce.encode("utf-8"))).rstrip(b"=").decode("ascii")
+        response = self._post_any("/api/v1/licenses/activate", {
+            "license_key": (license_key or "").strip(), "product_id": product_id,
+            "device_key": device_key, "nonce": nonce, "proof": proof,
+            "app_version": self.app_version,
+        })
+        result = self._unwrap_v1(response)
+        result["license_key"] = (license_key or "").strip()
+        self._save_cache(result)
+        return result
+
+    def validate_v1(self, license_id, product_id="clipart-generator"):
+        key, device_key = self._device_identity()
+        nonce = base64.urlsafe_b64encode(os.urandom(24)).rstrip(b"=").decode("ascii")
+        proof = base64.urlsafe_b64encode(key.sign(nonce.encode("utf-8"))).rstrip(b"=").decode("ascii")
+        response = self._post_any("/api/v1/licenses/validate", {
+            "license_id": license_id, "product_id": product_id,
+            "device_key": device_key, "nonce": nonce, "proof": proof,
+            "app_version": self.app_version,
+        })
+        result = self._unwrap_v1(response)
+        self._save_cache(result)
+        return result
+
+    @staticmethod
+    def _unwrap_v1(response):
+        if not isinstance(response, dict) or response.get("schema_version") != 1:
+            raise RuntimeError("Сервер лицензий вернул неподписанный ответ")
+        if response.get("algorithm") != "Ed25519" or response.get("kid") != LICENSE_SIGNING_KID:
+            raise RuntimeError("Неизвестный ключ подписи сервера лицензий")
+        payload = response.get("payload")
+        signature = response.get("signature")
+        if not isinstance(payload, dict) or not isinstance(signature, str):
+            raise RuntimeError("Некорректный подписанный ответ сервера лицензий")
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        import rfc8785
+        public = Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(LICENSE_SIGNING_PUBLIC_KEY_B64 + "=" * ((-len(LICENSE_SIGNING_PUBLIC_KEY_B64)) % 4)))
+        try:
+            public.verify(base64.urlsafe_b64decode(signature + "=" * ((-len(signature)) % 4)), rfc8785.dumps(payload))
+        except Exception as exc:
+            raise RuntimeError("Не удалось проверить подпись сервера лицензий") from exc
+        return {"ok": True, **payload}
 
     def device_fingerprint(self):
         node = str(uuid.getnode())
@@ -176,6 +257,7 @@ class LicenseClient:
         expires_at = datetime.now(timezone.utc) + timedelta(days=3)
         cache = {
             "license_key": response_payload.get("license_key", ""),
+            "license_id": response_payload.get("license_id", ""),
             "device_fingerprint": self.device_fingerprint(),
             "cached_until": expires_at.isoformat(),
             "token": response_payload.get("token", ""),

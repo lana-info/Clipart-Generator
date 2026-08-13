@@ -94,7 +94,9 @@ from PyQt6.QtWidgets import (
 )
 
 APP_VERSION = "3.0"
-UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
+# The former public GitHub updates repository is retired. The VDS portal will
+# supply a signed release manifest once its entitlement endpoint is enabled.
+UPDATE_MANIFEST_URL = ""
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
 MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
@@ -498,6 +500,7 @@ CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
 ENV_FILE = os.path.join(USER_DATA_DIR, ".env")
 PROMPTS_STORAGE_FILE = os.path.join(USER_DATA_DIR, "prompts.json")
 LICENSE_CACHE_FILE = os.path.join(USER_DATA_DIR, "license_cache.json")
+LICENSE_DEVICE_KEY_FILE = os.path.join(USER_DATA_DIR, "license_device.key")
 
 
 
@@ -3682,7 +3685,7 @@ class MainWindow(QMainWindow):
             "run_mode": "generate_only",
             "prompt_input_mode": "list",
             "last_work_dir": "",
-            "license_server_url": "",
+            "license_server_url": "https://services.etsyneuroclub.com/licenses",
             "license_backup_server_url": "",
             "last_updates_expired_notice_at": "",
         }
@@ -3699,6 +3702,8 @@ class MainWindow(QMainWindow):
         self.config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
         # URL обновлений всегда фиксированный и не редактируется в UI.
         self.config["update_manifest_url"] = UPDATE_MANIFEST_URL
+        if not str(self.config.get("license_server_url", "")).strip():
+            self.config["license_server_url"] = "https://services.etsyneuroclub.com/licenses"
 
         legacy_generation_model = self._normalize_generation_model_id(self.config.get("generation_model", "gpt-image/1.5-text-to-image"))
         legacy_meta = GENERATION_MODEL_META.get(legacy_generation_model, {})
@@ -5772,6 +5777,30 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Выберите рабочую папку")
             return
 
+        license_key = self.secret_settings.get("license_key", "").strip()
+        license_server_url = str(self.config.get("license_server_url", "")).strip()
+        if not license_key or not license_server_url:
+            QMessageBox.warning(self, "Лицензия", "Перед генерацией необходимо настроить и проверить лицензию онлайн.")
+            return
+        try:
+            client = self._build_license_client()
+            cached = {}
+            if os.path.exists(LICENSE_CACHE_FILE):
+                with open(LICENSE_CACHE_FILE, "r", encoding="utf-8") as handle:
+                    cached = json.load(handle)
+            license_id = str(cached.get("license_id", "")).strip()
+            if not license_id:
+                QMessageBox.warning(self, "Лицензия", "Сначала выполните онлайн-проверку лицензионного ключа.")
+                return
+            checked = client.validate_v1(license_id)
+            if not checked.get("ok"):
+                raise RuntimeError("Лицензия не подтверждена сервером")
+        except Exception as error:
+            message = safe_error_text(error, (license_key,))
+            self.log(f"Генерация остановлена: онлайн-проверка лицензии не пройдена: {message}")
+            QMessageBox.warning(self, "Лицензия", f"Генерация запрещена без успешной онлайн-проверки.\n{message}")
+            return
+
         validation_error = self.validate_generation_selection()
         if validation_error:
             QMessageBox.warning(self, "Ошибка", validation_error)
@@ -6316,13 +6345,8 @@ class MainWindow(QMainWindow):
                 )
                 return
 
-            result = license_client.status(license_key, use_offline=True)
-            activated_now = False
-            if not result.get("ok"):
-                activation_result = license_client.activate(license_key)
-                if activation_result.get("ok"):
-                    result = activation_result
-                    activated_now = True
+            result = license_client.activate_v1(license_key)
+            activated_now = True
 
             if not result.get("ok"):
                 message = safe_error_text(
@@ -6501,6 +6525,7 @@ class MainWindow(QMainWindow):
             cache_path=LICENSE_CACHE_FILE,
             app_version=APP_VERSION,
             timeout=max(5, int(self.config.get("timeout", 60))),
+            device_key_path=LICENSE_DEVICE_KEY_FILE,
         )
 
     def _should_show_updates_expired_notice(self):
