@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 MAX_LICENSE_RESPONSE_BYTES = 2 * 1024 * 1024
 LICENSE_SIGNING_KID = "license-v1"
 LICENSE_SIGNING_PUBLIC_KEY_B64 = "2J5W6NVq8-zE5g0MocublzW5aER1hzRqwFLGuzKuwMw"
+UPDATE_SIGNING_KID = "updates-v1"
+UPDATE_SIGNING_PUBLIC_KEY_B64 = "oHpwI9paNnCh5lxDWvXLf9zQlolP2klbfZsmFN3FEf4"
 
 
 class LicenseHTTPError(RuntimeError):
@@ -92,11 +94,26 @@ class LicenseClient:
         self._save_cache(result)
         return result
 
+    def update_manifest_v1(self, license_id, platform="windows-x64", product_id="clipart-generator"):
+        key, device_key = self._device_identity()
+        nonce = base64.urlsafe_b64encode(os.urandom(24)).rstrip(b"=").decode("ascii")
+        proof = base64.urlsafe_b64encode(key.sign(nonce.encode("utf-8"))).rstrip(b"=").decode("ascii")
+        response = self._post_any("/api/v1/releases/manifest", {
+            "license_id": license_id, "product_id": product_id,
+            "device_key": device_key, "nonce": nonce, "proof": proof,
+            "platform": platform,
+        })
+        return self._unwrap_signed(response, UPDATE_SIGNING_KID, UPDATE_SIGNING_PUBLIC_KEY_B64)
+
     @staticmethod
     def _unwrap_v1(response):
+        return LicenseClient._unwrap_signed(response, LICENSE_SIGNING_KID, LICENSE_SIGNING_PUBLIC_KEY_B64)
+
+    @staticmethod
+    def _unwrap_signed(response, expected_kid, public_key_b64):
         if not isinstance(response, dict) or response.get("schema_version") != 1:
             raise RuntimeError("Сервер лицензий вернул неподписанный ответ")
-        if response.get("algorithm") != "Ed25519" or response.get("kid") != LICENSE_SIGNING_KID:
+        if response.get("algorithm") != "Ed25519" or response.get("kid") != expected_kid:
             raise RuntimeError("Неизвестный ключ подписи сервера лицензий")
         payload = response.get("payload")
         signature = response.get("signature")
@@ -104,7 +121,7 @@ class LicenseClient:
             raise RuntimeError("Некорректный подписанный ответ сервера лицензий")
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         import rfc8785
-        public = Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(LICENSE_SIGNING_PUBLIC_KEY_B64 + "=" * ((-len(LICENSE_SIGNING_PUBLIC_KEY_B64)) % 4)))
+        public = Ed25519PublicKey.from_public_bytes(base64.urlsafe_b64decode(public_key_b64 + "=" * ((-len(public_key_b64)) % 4)))
         try:
             public.verify(base64.urlsafe_b64decode(signature + "=" * ((-len(signature)) % 4)), rfc8785.dumps(payload))
         except Exception as exc:

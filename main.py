@@ -6560,30 +6560,32 @@ class MainWindow(QMainWindow):
             raise RuntimeError(f"Некорректный JSON в version.json: {e}") from e
 
     def check_for_updates(self, silent=False, auto_apply=False):
-        manifest_url = UPDATE_MANIFEST_URL
-        if not manifest_url:
-            if not silent:
-                QMessageBox.warning(self, "Обновления", "Не задан URL version.json")
-            return
-
         try:
-            req = request.Request(
-                manifest_url,
-                headers={
-                    "User-Agent": "ClipartGenerator-Updater/1.0",
-                    "Accept": "application/json",
-                },
-                method="GET",
-            )
-            with open_url_secure(req, timeout=20, context=build_ssl_context()) as resp:
-                manifest = self._parse_update_manifest(read_response_limited(resp, MAX_UPDATE_MANIFEST_BYTES))
-
-            latest_version = str(manifest.get("latest_version", "")).strip()
-            download_url = str(manifest.get("download_url", "")).strip()
-            checksum = self._validate_update_checksum(manifest.get("sha256"))
+            license_key = self.secret_settings.get("license_key", "").strip()
+            if not license_key:
+                if not silent:
+                    QMessageBox.information(self, "Обновления", "Сначала активируйте лицензию.")
+                return
+            with open(LICENSE_CACHE_FILE, "r", encoding="utf-8") as handle:
+                license_id = str(json.load(handle).get("license_id", "")).strip()
+            if not license_id:
+                if not silent:
+                    QMessageBox.information(self, "Обновления", "Сначала выполните онлайн-проверку лицензии.")
+                return
+            manifest = self._build_license_client().update_manifest_v1(license_id, platform="windows-x64")
+            releases = manifest.get("releases") or []
+            if not isinstance(releases, list):
+                raise RuntimeError("Сервер обновлений вернул некорректный список ревизий")
+            eligible = [item for item in releases if str(item.get("artifact_url", "")).strip() and str(item.get("channel", "stable")) == "stable"]
+            selected = max(eligible, key=lambda item: self._parse_version_tuple(item.get("version")), default=None)
+            latest_version = str((selected or {}).get("version", "")).strip()
+            download_url = str((selected or {}).get("artifact_url", "")).strip()
+            checksum = self._validate_update_checksum((selected or {}).get("artifact_sha256"))
 
             if not latest_version or not download_url:
-                raise RuntimeError("version.json не содержит latest_version/download_url")
+                if not silent:
+                    QMessageBox.information(self, "Обновления", "Опубликованных обновлений пока нет.")
+                return
 
             validate_https_url(download_url, "Update download URL")
 
