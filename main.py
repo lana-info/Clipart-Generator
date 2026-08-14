@@ -3575,7 +3575,7 @@ class MainWindow(QMainWindow):
         self.setup_settings_autosave_connections()
         # Проверяем обновления при старте: без лишних сообщений,
         # но если есть новая версия — спросим, скачивать или нет.
-        QTimer.singleShot(1200, lambda: self.check_for_updates(silent=True, auto_apply=True))
+        QTimer.singleShot(1200, lambda: self.check_for_updates(silent=True, auto_apply=False))
 
     def load_saved_prompts(self):
         try:
@@ -6614,18 +6614,17 @@ class MainWindow(QMainWindow):
             if auto_apply:
                 self.log(f"Авто-обновление: новая версия {latest_version}, текущая {current_version}")
             else:
-                answer = QMessageBox.question(
-                    self,
-                    "Доступно обновление",
-                    (
-                        f"Доступна новая версия: {latest_version}\n"
-                        f"Текущая версия: {current_version}\n\n"
-                        "Установить обновление сейчас?"
-                    ),
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes,
+                dialog = QMessageBox(self)
+                dialog.setWindowTitle("Доступно обновление")
+                dialog.setText(
+                    f"Доступна новая версия: {latest_version}\n"
+                    f"Текущая версия: {current_version}"
                 )
-                if answer != QMessageBox.StandardButton.Yes:
+                install_button = dialog.addButton("Установить обновление", QMessageBox.ButtonRole.AcceptRole)
+                later_button = dialog.addButton("Позже", QMessageBox.ButtonRole.RejectRole)
+                dialog.setDefaultButton(install_button)
+                dialog.exec()
+                if dialog.clickedButton() != install_button:
                     self.log("Обновление отклонено пользователем")
                     return
 
