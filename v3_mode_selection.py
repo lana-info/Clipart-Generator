@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
@@ -31,6 +32,7 @@ from v3_project_state import ProjectStateError, load_project_draft, save_project
 from v3_clipart_flow import install_clipart_flow
 from v3_pinterest_flow import install_pinterest_flow
 from v3_processing_flow import install_processing_flow
+from v3_license import LicenseDialog, OnlineLicenseGate
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
 
 
@@ -219,6 +221,7 @@ class V3ApplicationView(QWidget):
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
         draft_path: str | Path | None = None,
+        license_gate: OnlineLicenseGate | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
@@ -227,6 +230,7 @@ class V3ApplicationView(QWidget):
         self._runtime_settings_provider = runtime_settings_provider
         self._v3_runtime_settings: dict[str, str] = {}
         self._worker_factory = worker_factory
+        self._license_gate = license_gate
         self._draft_path = Path(draft_path) if draft_path is not None else None
         self._preferences_path = (
             self._draft_path.with_name("preferences.json")
@@ -269,6 +273,19 @@ class V3ApplicationView(QWidget):
             self._v3_runtime_settings.update(dialog.settings)
             if self.shell is not None:
                 self.shell.state_changed.emit()
+
+    def _show_license(self) -> None:
+        if self._license_gate is None:
+            QMessageBox.warning(
+                self.shell or self,
+                "Лицензия",
+                "Лицензионный сервис не настроен",
+            )
+            return
+        dialog = LicenseDialog(self._license_gate, parent=self.shell or self)
+        dialog.exec()
+        if self.shell is not None:
+            self.shell.set_license_status(self._license_gate.status_text)
 
     @property
     def project_state(self) -> ProjectState | None:
@@ -426,21 +443,33 @@ class V3ApplicationView(QWidget):
             shell,
             runtime_settings_provider=self._runtime_settings,
             worker_factory=self._worker_factory,
+            authorization_provider=(
+                self._license_gate.authorize_run if self._license_gate is not None else None
+            ),
         )
         install_pinterest_flow(
             shell,
             runtime_settings_provider=self._runtime_settings,
             worker_factory=self._worker_factory,
+            authorization_provider=(
+                self._license_gate.authorize_run if self._license_gate is not None else None
+            ),
         )
         install_processing_flow(
             shell,
             runtime_settings_provider=self._runtime_settings,
             worker_factory=self._worker_factory,
+            authorization_provider=(
+                self._license_gate.authorize_run if self._license_gate is not None else None
+            ),
         )
         shell.state_changed.connect(self._save_draft)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         shell.api_settings_requested.connect(self._show_api_settings)
+        shell.license_requested.connect(self._show_license)
         shell.finish_requested.connect(self._finish_workflow)
+        if self._license_gate is not None:
+            shell.set_license_status(self._license_gate.status_text)
         self.shell = shell
         self.stack.addWidget(shell)
         self.stack.setCurrentWidget(shell)

@@ -53,6 +53,12 @@ jobs:
         shell: powershell
         run: python -m py_compile main.py
 
+      - name: Verify online license contract and V3 run gates
+        shell: powershell
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          python -m unittest tests.test_license_client_security tests.test_v3_license_gate tests.test_v3_license_flow_gate tests.test_v3_run_queue tests.test_release_entrypoint tests.test_license_service_contract -v
+
       - name: Download bundled Local Real-ESRGAN
         shell: powershell
         run: |
@@ -96,11 +102,11 @@ jobs:
           "$hash  $(Split-Path -Leaf $setupPath)" | Out-File -FilePath "release\ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.sha256" -Encoding ascii
 
       - name: Upload Windows artifacts
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: windows-${{ steps.version.outputs.app_version }}
           retention-days: 3
+          if-no-files-found: error
           path: |
             release/ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.exe
             release/ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.sha256
@@ -150,6 +156,11 @@ jobs:
 
       - name: Syntax check
         run: python -m py_compile main.py
+
+      - name: Verify online license contract and V3 run gates
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest tests.test_license_client_security tests.test_v3_license_gate tests.test_v3_license_flow_gate tests.test_v3_run_queue tests.test_release_entrypoint tests.test_license_service_contract -v
 
       - name: Build macOS app (PyInstaller)
         run: |

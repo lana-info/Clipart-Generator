@@ -20,7 +20,7 @@ from urllib import error as urlerror
 from urllib import request, parse
 from datetime import datetime, timedelta, timezone
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
-from license_client import LicenseClient
+from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from ai_watermark_backend import (
     WatermarkBackendError,
@@ -95,6 +95,11 @@ from PyQt6.QtWidgets import (
 
 APP_VERSION = "3.0"
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
+LICENSE_SERVICE_BASE_URL = "https://services.etsyneuroclub.com/licenses"
+LICENSE_PRODUCT_ID = "clipart-generator"
+LICENSE_PUBLIC_KEYS = {
+    "license-v1": "2J5W6NVq8-zE5g0MocublzW5aER1hzRqwFLGuzKuwMw",
+}
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
 MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
@@ -498,6 +503,7 @@ CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
 ENV_FILE = os.path.join(USER_DATA_DIR, ".env")
 PROMPTS_STORAGE_FILE = os.path.join(USER_DATA_DIR, "prompts.json")
 LICENSE_CACHE_FILE = os.path.join(USER_DATA_DIR, "license_cache.json")
+LICENSE_STATE_FILE = os.path.join(USER_DATA_DIR, "license_state.json")
 
 
 
@@ -3682,8 +3688,6 @@ class MainWindow(QMainWindow):
             "run_mode": "generate_only",
             "prompt_input_mode": "list",
             "last_work_dir": "",
-            "license_server_url": "",
-            "license_backup_server_url": "",
             "last_updates_expired_notice_at": "",
         }
         self._migrate_legacy_local_files()
@@ -3759,9 +3763,10 @@ class MainWindow(QMainWindow):
             json.dump(sanitized, f, indent=2, ensure_ascii=False)
 
     def _sync_credential_settings(self):
+        loaded_credentials = self.credential_store.load()
         existing_file_values = {
             key: str(value).strip()
-            for key, value in self.credential_store.load().items()
+            for key, value in loaded_credentials.items()
             if key in SECRET_CONFIG_KEYS and str(value).strip()
         }
         legacy_values = {
@@ -3789,6 +3794,14 @@ class MainWindow(QMainWindow):
             if key in self.config:
                 self.config.pop(key, None)
                 changed = True
+        if "license_key" in self.config:
+            self.config.pop("license_key", None)
+            changed = True
+        if any(key not in SECRET_CONFIG_KEYS for key in loaded_credentials):
+            try:
+                self.credential_store.save(existing_file_values)
+            except Exception as error:
+                self.credential_store_error = safe_error_text(error)
         if changed:
             self.save_config()
 
@@ -4865,12 +4878,6 @@ class MainWindow(QMainWindow):
         self.kie_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.kie_api_key_input.textChanged.connect(self.on_api_key_changed)
         self.photoroom_api_key_input.textChanged.connect(self.schedule_settings_save)
-        if hasattr(self, "license_key_input"):
-            self.license_key_input.textChanged.connect(self.schedule_settings_save)
-        if hasattr(self, "license_server_url_input"):
-            self.license_server_url_input.textChanged.connect(self.schedule_settings_save)
-        if hasattr(self, "license_backup_server_url_input"):
-            self.license_backup_server_url_input.textChanged.connect(self.schedule_settings_save)
         self.text_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.reference_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.text_generation_model_combo.currentTextChanged.connect(self.refresh_generation_controls)
@@ -5609,7 +5616,6 @@ class MainWindow(QMainWindow):
         probe_settings = dict(runtime_settings or self.config)
         probe_settings["kie_api_key"] = self.secret_settings.get("kie_api_key", "").strip()
         probe_settings["photoroom_api_key"] = self.secret_settings.get("photoroom_api_key", "").strip()
-        probe_settings["license_key"] = self.secret_settings.get("license_key", "").strip()
         probe_worker = WorkerThread(
             "mode1_generate_only",
             self.work_dir or os.getcwd(),
@@ -6308,56 +6314,13 @@ class MainWindow(QMainWindow):
 
         try:
             license_client = self._build_license_client()
-            if not (license_client.server_url or license_client.backup_server_url):
-                QMessageBox.warning(
-                    self,
-                    "Лицензия",
-                    "Не задан URL сервера лицензий в config.json",
-                )
-                return
-
-            result = license_client.status(license_key, use_offline=True)
-            activated_now = False
-            if not result.get("ok"):
-                activation_result = license_client.activate(license_key)
-                if activation_result.get("ok"):
-                    result = activation_result
-                    activated_now = True
-
-            if not result.get("ok"):
-                message = safe_error_text(
-                    result.get("message") or "Ключ не прошёл проверку",
-                    (license_key,),
-                )
-                self.log(f"Лицензия не прошла проверку: {message}")
-                QMessageBox.warning(self, "Лицензия", message)
-                return
-
-            self.secret_settings["license_key"] = license_key
-            try:
-                self.credential_store.save(self.secret_settings)
-                self.credential_store_error = ""
-            except Exception as error:
-                self.credential_store_error = safe_error_text(error)
-                self.log(
-                    f"Не удалось сохранить секреты в user-data .env: {self.credential_store_error}"
-                )
-                QMessageBox.warning(
-                    self,
-                    "Лицензия",
-                    "Не удалось сохранить лицензионный ключ в user-data .env",
-                )
-                return
-
-            expires_at = str(result.get("expires_at") or "-")
-            updates_until = str(result.get("updates_until") or "-")
-            updates_allowed = "Да" if result.get("updates_allowed", True) else "Нет"
-            state_text = "Лицензия активирована" if activated_now else "Лицензия подтверждена"
+            result = license_client.activate(license_key)
+            self.license_key_input.clear()
+            expires_at = result.expires_at.astimezone().strftime("%d.%m.%Y %H:%M")
+            state_text = "Лицензия активирована"
             message = (
                 f"{state_text}\n"
-                f"Срок лицензии: {expires_at}\n"
-                f"Обновления до: {updates_until}\n"
-                f"Обновления доступны: {updates_allowed}"
+                f"Текущая онлайн-проверка действует до: {expires_at}"
             )
             self.log(f"Проверка лицензии успешна: {state_text}")
             QMessageBox.information(self, "Лицензия", message)
@@ -6370,7 +6333,6 @@ class MainWindow(QMainWindow):
         probe_settings = dict(self.config)
         probe_settings["kie_api_key"] = self.secret_settings.get("kie_api_key", "").strip()
         probe_settings["photoroom_api_key"] = self.secret_settings.get("photoroom_api_key", "").strip()
-        probe_settings["license_key"] = self.secret_settings.get("license_key", "").strip()
         probe_worker = WorkerThread(
             "mode1_generate_only",
             self.work_dir or os.getcwd(),
@@ -6493,14 +6455,12 @@ class MainWindow(QMainWindow):
         os.startfile(installer_path)
 
     def _build_license_client(self):
-        license_server_url = str(self.config.get("license_server_url", "")).strip()
-        license_backup_server_url = str(self.config.get("license_backup_server_url", "")).strip()
         return LicenseClient(
-            server_url=license_server_url,
-            backup_server_url=license_backup_server_url,
-            cache_path=LICENSE_CACHE_FILE,
-            app_version=APP_VERSION,
-            timeout=max(5, int(self.config.get("timeout", 60))),
+            base_url=LICENSE_SERVICE_BASE_URL,
+            state_path=LICENSE_STATE_FILE,
+            public_keys=LICENSE_PUBLIC_KEYS,
+            product_id=LICENSE_PRODUCT_ID,
+            timeout=10,
         )
 
     def _should_show_updates_expired_notice(self):
@@ -6630,12 +6590,6 @@ class MainWindow(QMainWindow):
         self.config["overwrite_existing"] = self.chk_overwrite_existing.isChecked()
         self.secret_settings["kie_api_key"] = self.config["kie_api_key"] = self.kie_api_key_input.text().strip()
         self.secret_settings["photoroom_api_key"] = self.config["photoroom_api_key"] = self.photoroom_api_key_input.text().strip()
-        if hasattr(self, "license_key_input"):
-            self.secret_settings["license_key"] = self.config["license_key"] = self.license_key_input.text().strip()
-        if hasattr(self, "license_server_url_input"):
-            self.config["license_server_url"] = self.license_server_url_input.text().strip()
-        if hasattr(self, "license_backup_server_url_input"):
-            self.config["license_backup_server_url"] = self.license_backup_server_url_input.text().strip()
         self.config["text_generation_model"] = self.get_selected_generation_model_id(self.text_generation_model_combo)
         self.config["reference_generation_model"] = self.get_selected_generation_model_id(
             self.reference_generation_model_combo
@@ -6734,6 +6688,7 @@ class MainWindow(QMainWindow):
 
 def create_v3_application_window():
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
+    from v3_license import OnlineLicenseGate
 
     config = {}
     try:
@@ -6749,9 +6704,17 @@ def create_v3_application_window():
     app_data = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.AppDataLocation
     )
+    license_client = LicenseClient(
+        base_url=LICENSE_SERVICE_BASE_URL,
+        state_path=os.path.join(app_data, "license_state.json"),
+        public_keys=LICENSE_PUBLIC_KEYS,
+        product_id=LICENSE_PRODUCT_ID,
+        timeout=10,
+    )
     window = V3ApplicationView(
         runtime_settings_provider=lambda: build_runtime_settings(config, secrets),
-        draft_path=os.path.join(app_data, "project_state.json")
+        draft_path=os.path.join(app_data, "project_state.json"),
+        license_gate=OnlineLicenseGate(license_client),
     )
     window.setWindowTitle("Clipart Generator 3.0")
     window.resize(1120, 780)

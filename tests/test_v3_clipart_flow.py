@@ -364,6 +364,7 @@ class V3ClipartFlowTests(unittest.TestCase):
                 shell,
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=factory,
+                authorization_provider=lambda: None,
             )
             started = []
             controller.started.connect(started.append)
@@ -499,6 +500,7 @@ class V3ClipartFlowTests(unittest.TestCase):
                 shell,
                 runtime_settings_provider=lambda: {"kie_api_key": secret},
                 worker_factory=failing_factory,
+                authorization_provider=lambda: None,
             )
             controller.start()
             self.assertNotIn(secret, controller.review_page.run_status_label.text())

@@ -7,6 +7,8 @@ from typing import Any
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
+from license_client import LicenseError
+
 from v3_clipart_flow import (
     DEFAULT_TOKENS,
     ClipartFlowError,
@@ -385,6 +387,7 @@ class PinterestFlowController(QObject):
         *,
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
+        authorization_provider: Callable[[], Any] | None = None,
     ) -> None:
         super().__init__(shell)
         self.shell = shell
@@ -392,6 +395,7 @@ class PinterestFlowController(QObject):
             runtime_settings_provider or _read_legacy_runtime_settings
         )
         self.worker_factory = worker_factory or _legacy_worker_factory
+        self.authorization_provider = authorization_provider or self._missing_authorization
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
@@ -404,6 +408,10 @@ class PinterestFlowController(QObject):
         shell.run_requested.connect(self._run_requested)
         if shell.state.current_step is StepId.REVIEW_RUN:
             self._refresh_preflight()
+
+    @staticmethod
+    def _missing_authorization() -> None:
+        raise LicenseError("Лицензионный сервис не настроен")
 
     def _install_pages(self) -> None:
         changed = self.shell.mark_dirty
@@ -505,8 +513,9 @@ class PinterestFlowController(QObject):
                 raise ClipartFlowError(
                     "Укажите в настройках: " + ", ".join(missing)
                 )
+            self.authorization_provider()
             worker = self.worker_factory(**request.worker_kwargs())
-        except (ClipartFlowError, OSError, TypeError, ValueError) as error:
+        except (ClipartFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             message = _safe_runtime_error(
                 error,
                 locals().get("runtime_settings"),
@@ -548,6 +557,7 @@ def install_pinterest_flow(
     *,
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
+    authorization_provider: Callable[[], Any] | None = None,
 ) -> PinterestFlowController:
     if not isinstance(shell, AppShell):
         raise TypeError("shell must be an AppShell")
@@ -558,6 +568,7 @@ def install_pinterest_flow(
         shell,
         runtime_settings_provider=runtime_settings_provider,
         worker_factory=worker_factory,
+        authorization_provider=authorization_provider,
     )
     shell.pinterest_flow_controller = controller
     return controller

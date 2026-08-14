@@ -28,6 +28,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from license_client import LicenseError
+
 from v3_clipart_flow import (
     ClipartFlowError,
     ClipartRunRequest,
@@ -1218,6 +1220,7 @@ class ProcessingFlowController(QObject):
         *,
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
+        authorization_provider: Callable[[], Any] | None = None,
     ) -> None:
         super().__init__(shell)
         self.shell = shell
@@ -1225,6 +1228,7 @@ class ProcessingFlowController(QObject):
             runtime_settings_provider or _read_legacy_runtime_settings
         )
         self.worker_factory = worker_factory or _legacy_worker_factory
+        self.authorization_provider = authorization_provider or self._missing_authorization
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
@@ -1234,6 +1238,10 @@ class ProcessingFlowController(QObject):
         self._install_pages()
         shell.step_changed.connect(self._step_changed)
         shell.run_requested.connect(self._run_requested)
+
+    @staticmethod
+    def _missing_authorization() -> None:
+        raise LicenseError("Лицензионный сервис не настроен")
 
     def start_processing_again(self) -> None:
         self.shell.state.processing.selected_files.clear()
@@ -1346,6 +1354,7 @@ class ProcessingFlowController(QObject):
                 raise ProcessingFlowError(
                     "Укажите в настройках: " + ", ".join(missing)
                 )
+            self.authorization_provider()
             worker = self.worker_factory(**request.worker_kwargs())
         except Exception as error:
             message = _safe_runtime_error(error, self._runtime_settings)
@@ -1383,6 +1392,7 @@ def install_processing_flow(
     *,
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
+    authorization_provider: Callable[[], Any] | None = None,
 ) -> ProcessingFlowController:
     if not isinstance(shell, AppShell):
         raise TypeError("shell must be an AppShell")
@@ -1393,6 +1403,7 @@ def install_processing_flow(
         shell,
         runtime_settings_provider=runtime_settings_provider,
         worker_factory=worker_factory,
+        authorization_provider=authorization_provider,
     )
     shell.processing_flow_controller = controller
     return controller

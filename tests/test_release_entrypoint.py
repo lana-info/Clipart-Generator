@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QApplication
 from main import create_v3_application_window
 from v3_components import ModeCard
 from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
+from v3_project_state import ProjectMode
 
 
 class ReleaseEntrypointTests(unittest.TestCase):
@@ -24,6 +25,21 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertEqual(len(cards), 3)
         self.assertTrue(all(isinstance(card, ModeCard) for card in cards))
         self.assertTrue(all(card.accessibleName() for card in cards))
+        window.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        self.app.processEvents()
+        gate = window._license_gate
+        self.assertIsNotNone(gate)
+        controllers = (
+            window.shell.clipart_flow_controller,
+            window.shell.pinterest_flow_controller,
+            window.shell.processing_flow_controller,
+        )
+        self.assertTrue(
+            all(
+                getattr(controller.authorization_provider, "__self__", None) is gate
+                for controller in controllers
+            )
+        )
         window.close()
 
 

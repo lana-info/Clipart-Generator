@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -12,6 +12,7 @@ from PIL import Image
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
+from license_client import LicenseError
 from v3_clipart_flow import ClipartRunRequest, install_clipart_flow
 from v3_project_state import (
     CommonProjectData,
@@ -451,12 +452,14 @@ class V3RunQueueTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
             factory = WorkerFactory()
+            authorization = Mock(return_value=None)
             controller = install_clipart_flow(
                 shell,
                 runtime_settings_provider=lambda: {
                     "kie_api_key": SECRET_KEY
                 },
                 worker_factory=factory,
+                authorization_provider=authorization,
             )
 
             shell.go_next()
@@ -473,6 +476,7 @@ class V3RunQueueTests(unittest.TestCase):
             self.app.processEvents()
             controller.run_queue.page.retry_button.click()
             self.app.processEvents()
+            self.assertEqual(authorization.call_count, 2)
 
             self.assertEqual(len(factory.workers), 2)
             self.assertEqual(
@@ -498,6 +502,44 @@ class V3RunQueueTests(unittest.TestCase):
             log = controller.run_queue.session.technical_log
             self.assertNotIn(SECRET_PROMPT, log)
             self.assertNotIn(SECRET_KEY, log)
+            shell.close()
+            shell.deleteLater()
+
+    def test_retry_does_not_start_worker_when_online_authorization_fails(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-license-retry-") as temp:
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            state.clipart.prompts = [PromptEntry(SECRET_PROMPT)]
+            state.clipart.operations.upscale_before = False
+            state.clipart.operations.remove_background = False
+            state.set_step(StepId.REVIEW_RUN)
+            shell = AppShell(state)
+            factory = WorkerFactory()
+            authorization = Mock(
+                side_effect=[None, LicenseError("Сервер лицензий недоступен")]
+            )
+            controller = install_clipart_flow(
+                shell,
+                runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
+                worker_factory=factory,
+                authorization_provider=authorization,
+            )
+
+            shell.go_next()
+            worker = factory.workers[0]
+            worker.progress.emit("[1/1] Генерация")
+            worker.progress.emit("Ошибка: provider failed")
+            worker.started = False
+            worker.finished.emit("Готово (0/1)")
+            self.app.processEvents()
+            controller.run_queue.page.retry_button.click()
+            self.app.processEvents()
+
+            self.assertEqual(authorization.call_count, 2)
+            self.assertEqual(len(factory.workers), 1)
+            self.assertFalse(controller.run_queue.session.running)
             shell.close()
             shell.deleteLater()
 

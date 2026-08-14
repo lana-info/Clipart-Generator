@@ -1316,6 +1316,20 @@ class RunQueueSupport:
         worker = getattr(self.controller, "worker", None)
         if worker is not None and bool(worker.isRunning()):
             return None
+        if not self.session.failed_indices:
+            return None
+        try:
+            authorization_provider = getattr(
+                self.controller,
+                "authorization_provider",
+                None,
+            )
+            if not callable(authorization_provider):
+                raise RunQueueError("Лицензионный сервис не настроен")
+            authorization_provider()
+        except Exception as error:
+            self.controller._error(str(error))
+            return None
         request = self.session.prepare_retry()
         if request is None:
             return None

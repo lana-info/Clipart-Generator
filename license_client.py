@@ -1,20 +1,32 @@
+"""Online-only desktop client for Clipart License Service."""
+
+from __future__ import annotations
+
+import base64
 import json
 import os
-import uuid
-import hashlib
+import secrets
+import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from urllib import request, error
+from pathlib import Path
+from typing import Mapping
+from urllib import error, request
 from urllib.parse import urlparse
+
+import rfc8785
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 
 
 MAX_LICENSE_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_LICENSE_STATE_BYTES = 64 * 1024
 
 
-class LicenseHTTPError(RuntimeError):
-    def __init__(self, status_code, reason):
-        del reason
-        self.status_code = int(status_code)
-        super().__init__(f"HTTP {self.status_code}")
+class LicenseError(RuntimeError):
+    """A bounded, user-safe licensing failure."""
 
 
 class NoRedirectHandler(request.HTTPRedirectHandler):
@@ -22,193 +34,303 @@ class NoRedirectHandler(request.HTTPRedirectHandler):
         return None
 
 
+@dataclass(frozen=True)
+class LicenseAuthorization:
+    license_id: str
+    product_id: str
+    device_key: str
+    issued_at: datetime
+    expires_at: datetime
+
+
+def _b64encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def _b64decode(value: str, *, label: str, expected_length: int | None = None) -> bytes:
+    if not isinstance(value, str) or not value or len(value) > 4096:
+        raise LicenseError(f"Некорректный {label}")
+    try:
+        decoded = base64.b64decode(
+            value + "=" * (-len(value) % 4),
+            altchars=b"-_",
+            validate=True,
+        )
+    except (ValueError, TypeError) as exc:
+        raise LicenseError(f"Некорректный {label}") from exc
+    if expected_length is not None and len(decoded) != expected_length:
+        raise LicenseError(f"Некорректный {label}")
+    return decoded
+
+
+def _parse_datetime(value: object, *, label: str) -> datetime:
+    if not isinstance(value, str) or len(value) > 128:
+        raise LicenseError(f"Некорректный срок лицензии: {label}")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LicenseError(f"Некорректный срок лицензии: {label}") from exc
+    if parsed.tzinfo is None:
+        raise LicenseError(f"Некорректный срок лицензии: {label}")
+    return parsed.astimezone(timezone.utc)
+
+
+class LicenseStateStore:
+    """Atomic, per-user device identity and activation state."""
+
+    def __init__(self, path: str) -> None:
+        self.path = Path(path)
+
+    def load(self) -> dict[str, object]:
+        if not self.path.is_file():
+            return {}
+        try:
+            if self.path.stat().st_size > MAX_LICENSE_STATE_BYTES:
+                raise LicenseError("Файл состояния лицензии слишком большой")
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except LicenseError:
+            raise
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise LicenseError("Не удалось прочитать состояние лицензии") from exc
+        if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+            raise LicenseError("Формат состояния лицензии не поддерживается")
+        private_key = _b64decode(
+            payload.get("device_private_key"),
+            label="закрытый ключ устройства",
+            expected_length=32,
+        )
+        license_id = payload.get("license_id")
+        if license_id is not None and (
+            not isinstance(license_id, str) or not license_id.strip() or len(license_id) > 128
+        ):
+            raise LicenseError("Некорректный идентификатор лицензии")
+        return {
+            "schema_version": 1,
+            "device_private_key": private_key,
+            "license_id": license_id.strip() if isinstance(license_id, str) else None,
+        }
+
+    def load_or_create_private_key(self) -> Ed25519PrivateKey:
+        state = self.load()
+        raw = state.get("device_private_key")
+        if isinstance(raw, bytes):
+            return Ed25519PrivateKey.from_private_bytes(raw)
+        private_key = Ed25519PrivateKey.generate()
+        self._write(private_key.private_bytes_raw(), None)
+        return private_key
+
+    def save_activation(self, private_key: Ed25519PrivateKey, license_id: str) -> None:
+        self._write(private_key.private_bytes_raw(), license_id)
+
+    def _write(self, private_key: bytes, license_id: str | None) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": 1,
+            "device_private_key": _b64encode(private_key),
+        }
+        if license_id:
+            payload["license_id"] = license_id
+        fd, temporary = tempfile.mkstemp(
+            dir=str(self.path.parent),
+            prefix=".license-state.",
+            suffix=".tmp",
+            text=True,
+        )
+        try:
+            try:
+                os.chmod(temporary, 0o600)
+            except OSError:
+                pass
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+                json.dump(payload, handle, ensure_ascii=True, separators=(",", ":"))
+                handle.write("\n")
+            os.replace(temporary, self.path)
+            try:
+                os.chmod(self.path, 0o600)
+            except OSError:
+                pass
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+
+
 class LicenseClient:
-    def __init__(self, server_url, cache_path, app_version, timeout=10, backup_server_url=""):
-        self.server_url = (server_url or "").rstrip("/")
-        self.backup_server_url = (backup_server_url or "").rstrip("/")
-        self.cache_path = cache_path
-        self.app_version = app_version
-        self.timeout = timeout
+    def __init__(
+        self,
+        base_url: str,
+        state_path: str,
+        public_keys: Mapping[str, str],
+        product_id: str,
+        timeout: int = 10,
+    ) -> None:
+        self.base_url = (base_url or "").strip().rstrip("/")
+        self.product_id = (product_id or "").strip()
+        self.timeout = max(1, min(int(timeout), 30))
+        if not self.product_id or len(self.product_id) > 128:
+            raise LicenseError("Некорректный идентификатор продукта")
+        self._public_keys: dict[str, Ed25519PublicKey] = {}
+        for key_id, encoded in public_keys.items():
+            if not isinstance(key_id, str) or not key_id or len(key_id) > 128:
+                raise LicenseError("Некорректный ключ подписи сервера")
+            raw = _b64decode(
+                encoded,
+                label="публичный ключ подписи сервера",
+                expected_length=32,
+            )
+            self._public_keys[key_id] = Ed25519PublicKey.from_public_bytes(raw)
+        if not self._public_keys:
+            raise LicenseError("Не настроен ключ подписи сервера")
+        self._state = LicenseStateStore(state_path)
 
-    def device_fingerprint(self):
-        node = str(uuid.getnode())
-        uname = "|".join(os.uname()) if hasattr(os, "uname") else os.environ.get("COMPUTERNAME", "")
-        raw = f"{node}|{uname}|clipart-generator"
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    def has_activation(self) -> bool:
+        return bool(self._state.load().get("license_id"))
 
-    def activate(self, license_key):
-        payload = {
-            "license_key": (license_key or "").strip(),
-            "device_fingerprint": self.device_fingerprint(),
-            "app_version": self.app_version,
-        }
-        result = self._post_any("/activate", payload)
-        if result.get("ok"):
-            self._save_cache(result)
-        return result
+    def activate(self, license_key: str) -> LicenseAuthorization:
+        normalized_key = (license_key or "").strip()
+        if not normalized_key or len(normalized_key) > 128:
+            raise LicenseError("Введите корректный лицензионный ключ")
+        private_key = self._state.load_or_create_private_key()
+        device_key, nonce, proof = self._device_proof(private_key)
+        envelope = self._post_json(
+            "/api/v1/licenses/activate",
+            {
+                "product_id": self.product_id,
+                "license_key": normalized_key,
+                "device_key": device_key,
+                "nonce": nonce,
+                "proof": proof,
+            },
+        )
+        authorization = self._verify_authorization(envelope, device_key, nonce)
+        self._state.save_activation(private_key, authorization.license_id)
+        return authorization
 
-    def validate(self, license_key, use_offline=True):
-        payload = {
-            "license_key": (license_key or "").strip(),
-            "device_fingerprint": self.device_fingerprint(),
-            "app_version": self.app_version,
-        }
-        try:
-            result = self._post_any("/validate", payload)
-            if result.get("ok"):
-                self._save_cache(result)
-            return result
-        except Exception as e:
-            if use_offline:
-                offline = self._validate_offline_cache(payload["license_key"], payload["device_fingerprint"])
-                if offline.get("ok"):
-                    return offline
-            return {"ok": False, "message": f"Ошибка проверки лицензии: {e}"}
+    def validate(self) -> LicenseAuthorization:
+        state = self._state.load()
+        license_id = state.get("license_id")
+        raw_private = state.get("device_private_key")
+        if not isinstance(license_id, str) or not isinstance(raw_private, bytes):
+            raise LicenseError("Активируйте лицензию перед запуском")
+        private_key = Ed25519PrivateKey.from_private_bytes(raw_private)
+        device_key, nonce, proof = self._device_proof(private_key)
+        envelope = self._post_json(
+            "/api/v1/licenses/validate",
+            {
+                "license_id": license_id,
+                "product_id": self.product_id,
+                "device_key": device_key,
+                "nonce": nonce,
+                "proof": proof,
+            },
+        )
+        return self._verify_authorization(envelope, device_key, nonce)
 
-    def status(self, license_key, use_offline=True):
-        payload = {
-            "license_key": (license_key or "").strip(),
-            "device_fingerprint": self.device_fingerprint(),
-            "app_version": self.app_version,
-        }
-        try:
-            result = self._post_any("/status", payload, fallback_paths=["/validate"])
-            if result.get("ok"):
-                self._save_cache(result)
-            return result
-        except Exception as e:
-            if use_offline:
-                offline = self._validate_offline_cache(payload["license_key"], payload["device_fingerprint"])
-                if offline.get("ok"):
-                    return offline
-            return {"ok": False, "message": f"Ошибка проверки статуса лицензии: {e}"}
+    @staticmethod
+    def _device_proof(private_key: Ed25519PrivateKey) -> tuple[str, str, str]:
+        device_key = _b64encode(private_key.public_key().public_bytes_raw())
+        nonce = secrets.token_urlsafe(32)
+        proof = _b64encode(private_key.sign(nonce.encode("utf-8")))
+        return device_key, nonce, proof
 
-    def deactivate(self, license_key):
-        payload = {
-            "license_key": (license_key or "").strip(),
-            "device_fingerprint": self.device_fingerprint(),
-        }
-        result = self._post_any("/deactivate", payload)
-        if result.get("ok") and os.path.exists(self.cache_path):
-            try:
-                os.remove(self.cache_path)
-            except Exception:
-                pass
-        return result
-
-    def _server_urls(self):
-        urls = []
-        for url in [self.server_url, self.backup_server_url]:
-            normalized = (url or "").strip().rstrip("/")
-            if normalized and normalized not in urls:
-                urls.append(normalized)
-        return urls
-
-    def _post_any(self, path, payload, fallback_paths=None):
-        urls = self._server_urls()
-        if not urls:
-            raise RuntimeError("Не указан URL сервера лицензий")
-
-        path_variants = [path]
-        for item in fallback_paths or []:
-            if item and item not in path_variants:
-                path_variants.append(item)
-
-        base_url = urls[0]
-        for index, route in enumerate(path_variants):
-            try:
-                return self._post(base_url, route, payload)
-            except LicenseHTTPError as exc:
-                has_fallback_route = index + 1 < len(path_variants)
-                if exc.status_code in {404, 405} and has_fallback_route:
-                    continue
-                raise
-        raise RuntimeError("Не удалось выполнить запрос к серверу лицензий")
-
-    def _validate_server_url(self, base_url):
-        parsed = urlparse(base_url)
+    def _validated_base_url(self) -> str:
+        parsed = urlparse(self.base_url)
         host = (parsed.hostname or "").lower().rstrip(".")
-        is_loopback = host in {"localhost", "127.0.0.1", "::1"}
-        if parsed.username or parsed.password:
-            raise RuntimeError("URL сервера лицензий не должен содержать credentials")
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise LicenseError("Некорректный адрес сервера лицензий")
         if parsed.scheme == "https" and host:
-            return base_url
-        if parsed.scheme == "http" and is_loopback:
-            return base_url
-        raise RuntimeError("Удалённый сервер лицензий должен использовать HTTPS")
+            return self.base_url
+        if parsed.scheme == "http" and host in {"localhost", "127.0.0.1", "::1"}:
+            return self.base_url
+        raise LicenseError("Сервер лицензий должен использовать HTTPS")
 
-    def _read_response_limited(self, response):
-        headers = getattr(response, "headers", None)
-        content_length = headers.get("Content-Length") if headers is not None else None
-        if content_length:
-            try:
-                if int(content_length) > MAX_LICENSE_RESPONSE_BYTES:
-                    raise RuntimeError("License response exceeds size limit")
-            except (TypeError, ValueError):
-                pass
-        payload = response.read(MAX_LICENSE_RESPONSE_BYTES + 1)
-        if len(payload) > MAX_LICENSE_RESPONSE_BYTES:
-            raise RuntimeError("License response exceeds size limit")
-        return payload
-
-    def _post(self, base_url, path, payload):
-        url = f"{self._validate_server_url(base_url)}{path}"
+    def _post_json(self, path: str, payload: dict[str, str]) -> dict[str, object]:
+        url = f"{self._validated_base_url()}{path}"
+        body = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
         req = request.Request(
             url,
-            data=json.dumps(payload).encode("utf-8"),
+            data=body,
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
         opener = request.build_opener(NoRedirectHandler())
         try:
-            with opener.open(req, timeout=self.timeout) as resp:
-                raw = self._read_response_limited(resp)
-            result = json.loads(raw.decode("utf-8"))
-            if not isinstance(result, dict):
-                raise RuntimeError("Сервер лицензий вернул некорректный JSON")
-            return result
+            with opener.open(req, timeout=self.timeout) as response:
+                raw = self._read_response_limited(response)
         except error.HTTPError as exc:
-            raise LicenseHTTPError(exc.code, exc.reason) from exc
-        except (error.URLError, TimeoutError, OSError) as exc:
-            raise RuntimeError("Не удалось безопасно связаться с сервером лицензий") from exc
-
-    def _save_cache(self, response_payload):
-        expires_at = datetime.now(timezone.utc) + timedelta(days=3)
-        cache = {
-            "license_key": response_payload.get("license_key", ""),
-            "device_fingerprint": self.device_fingerprint(),
-            "cached_until": expires_at.isoformat(),
-            "token": response_payload.get("token", ""),
-            "expires_at": response_payload.get("expires_at"),
-            "updates_until": response_payload.get("updates_until"),
-            "updates_allowed": bool(response_payload.get("updates_allowed", True)),
-        }
-        os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
-        with open(self.cache_path, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False, indent=2)
-
-    def _validate_offline_cache(self, license_key, fingerprint):
-        if not os.path.exists(self.cache_path):
-            return {"ok": False, "message": "Нет офлайн-кеша лицензии"}
+            if exc.code in {400, 401, 403, 409, 422}:
+                raise LicenseError("Лицензия отклонена сервером") from None
+            raise LicenseError("Сервер лицензий временно недоступен") from None
+        except (error.URLError, TimeoutError, OSError):
+            raise LicenseError("Не удалось связаться с сервером лицензий") from None
         try:
-            with open(self.cache_path, "r", encoding="utf-8") as f:
-                cache = json.load(f)
-            if cache.get("license_key") != license_key:
-                return {"ok": False, "message": "Ключ не совпадает с офлайн-кешем"}
-            if cache.get("device_fingerprint") != fingerprint:
-                return {"ok": False, "message": "Устройство не совпадает с офлайн-кешем"}
-            until = datetime.fromisoformat(cache.get("cached_until"))
-            if datetime.now(timezone.utc) > until:
-                return {"ok": False, "message": "Офлайн-кеш лицензии истёк"}
-            return {
-                "ok": True,
-                "message": "Офлайн-проверка лицензии успешна",
-                "offline": True,
-                "license_key": cache.get("license_key", ""),
-                "token": cache.get("token", ""),
-                "expires_at": cache.get("expires_at"),
-                "updates_until": cache.get("updates_until"),
-                "updates_allowed": bool(cache.get("updates_allowed", True)),
-            }
-        except Exception as e:
-            return {"ok": False, "message": f"Ошибка офлайн-кеша: {e}"}
+            decoded = json.loads(raw.decode("utf-8"))
+        except (UnicodeError, ValueError):
+            raise LicenseError("Сервер лицензий вернул некорректный ответ") from None
+        if not isinstance(decoded, dict):
+            raise LicenseError("Сервер лицензий вернул некорректный ответ")
+        return decoded
+
+    @staticmethod
+    def _read_response_limited(response) -> bytes:
+        headers = getattr(response, "headers", None)
+        content_length = headers.get("Content-Length") if headers is not None else None
+        if content_length is not None:
+            try:
+                if int(content_length) > MAX_LICENSE_RESPONSE_BYTES:
+                    raise LicenseError("Ответ сервера лицензий превышает допустимый размер")
+            except (TypeError, ValueError):
+                raise LicenseError("Сервер лицензий вернул некорректный размер ответа")
+        payload = response.read(MAX_LICENSE_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_LICENSE_RESPONSE_BYTES:
+            raise LicenseError("Ответ сервера лицензий превышает допустимый размер")
+        return payload
+
+    def _verify_authorization(
+        self,
+        envelope: dict[str, object],
+        expected_device_key: str,
+        expected_nonce: str,
+    ) -> LicenseAuthorization:
+        if envelope.get("schema_version") != 1 or envelope.get("algorithm") != "Ed25519":
+            raise LicenseError("Формат подписи лицензии не поддерживается")
+        key_id = envelope.get("kid")
+        payload = envelope.get("payload")
+        signature_text = envelope.get("signature")
+        if not isinstance(key_id, str) or not isinstance(payload, dict):
+            raise LicenseError("Сервер вернул повреждённую лицензию")
+        public_key = self._public_keys.get(key_id)
+        if public_key is None:
+            raise LicenseError("Неизвестный ключ подписи сервера")
+        signature = _b64decode(signature_text, label="подпись лицензии", expected_length=64)
+        try:
+            public_key.verify(signature, rfc8785.dumps(payload))
+        except Exception as exc:
+            raise LicenseError("Не удалось проверить подпись лицензии") from exc
+        if payload.get("product_id") != self.product_id:
+            raise LicenseError("Лицензия выдана другому продукту")
+        if payload.get("device_key") != expected_device_key:
+            raise LicenseError("Лицензия выдана другому устройству")
+        if payload.get("nonce") != expected_nonce:
+            raise LicenseError("Ответ лицензии содержит неверный nonce")
+        license_id = payload.get("license_id")
+        if not isinstance(license_id, str) or not license_id.strip() or len(license_id) > 128:
+            raise LicenseError("Сервер вернул некорректный идентификатор лицензии")
+        issued_at = _parse_datetime(payload.get("issued_at"), label="issued_at")
+        expires_at = _parse_datetime(payload.get("expires_at"), label="expires_at")
+        now = datetime.now(timezone.utc)
+        if issued_at > now + timedelta(minutes=5):
+            raise LicenseError("Время выдачи лицензии некорректно")
+        if expires_at <= now:
+            raise LicenseError("Разрешение лицензии истекло")
+        if expires_at <= issued_at:
+            raise LicenseError("Срок разрешения лицензии некорректен")
+        return LicenseAuthorization(
+            license_id=license_id.strip(),
+            product_id=self.product_id,
+            device_key=expected_device_key,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )

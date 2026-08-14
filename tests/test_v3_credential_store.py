@@ -16,18 +16,18 @@ class V3CredentialStoreTests(unittest.TestCase):
                 {
                     "kie_api_key": "kie-secret",
                     "photoroom_api_key": "",
-                    "license_key": "license-secret",
+                    "license_key": "legacy-license-must-not-persist",
                 }
             )
 
             content = path.read_text(encoding="utf-8")
             self.assertIn("kie_api_key=kie-secret", content)
-            self.assertIn("license_key=license-secret", content)
+            self.assertNotIn("license_key=", content)
             self.assertNotIn("photoroom_api_key=", content)
 
             loaded = store.load()
             self.assertEqual(loaded["kie_api_key"], "kie-secret")
-            self.assertEqual(loaded["license_key"], "license-secret")
+            self.assertNotIn("license_key", loaded)
             self.assertNotIn("photoroom_api_key", loaded)
 
 

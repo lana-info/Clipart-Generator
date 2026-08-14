@@ -419,6 +419,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 shell,
                 runtime_settings_provider=lambda: {},
                 worker_factory=factory,
+                authorization_provider=lambda: None,
             )
             shell.go_next()
             self.assertEqual(len(factory.workers), 1)

@@ -115,6 +115,7 @@ class AppShell(QWidget):
     unsaved_mode_switch_requested = pyqtSignal(str, str)
     mode_picker_requested = pyqtSignal()
     api_settings_requested = pyqtSignal()
+    license_requested = pyqtSignal()
     run_requested = pyqtSignal(str)
     finish_requested = pyqtSignal(str)
 
@@ -218,6 +219,16 @@ class AppShell(QWidget):
         self.dirty_label.setProperty("v3Small", True)
         layout.addWidget(self.dirty_label)
 
+        self.license_status_label = QLabel("Лицензия не активирована")
+        self.license_status_label.setProperty("v3Small", True)
+        self.license_status_label.setAccessibleName("Статус лицензии")
+        layout.addWidget(self.license_status_label)
+
+        self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
+        self.license_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.license_button.clicked.connect(self.license_requested.emit)
+        layout.addWidget(self.license_button)
+
         self.change_mode_button = V3Button(
             "Сменить режим",
             ButtonVariant.GHOST,
@@ -229,6 +240,11 @@ class AppShell(QWidget):
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         layout.addWidget(self.api_settings_button)
         return frame
+
+    def set_license_status(self, status: str) -> None:
+        normalized = str(status or "Лицензия не активирована")[:160]
+        self.license_status_label.setText(normalized)
+        self.license_status_label.setAccessibleDescription(normalized)
 
     def _build_sidebar(self) -> QFrame:
         frame = self._card_frame()

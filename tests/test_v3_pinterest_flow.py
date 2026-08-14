@@ -372,6 +372,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 shell,
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=factory,
+                authorization_provider=lambda: None,
             )
 
             self.assertEqual(factory.workers, [])

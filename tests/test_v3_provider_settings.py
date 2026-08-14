@@ -53,7 +53,7 @@ class V3ProviderSettingsTests(unittest.TestCase):
                 self.assertNotIn("license_key", sanitized)
                 self.assertIn("kie_api_key=kie-secret", env_text)
                 self.assertIn("photoroom_api_key=photoroom-secret", env_text)
-                self.assertIn("license_key=license-secret", env_text)
+                self.assertNotIn("license_key=", env_text)
                 self.assertEqual(window.kie_api_key_input.text(), "kie-secret")
                 self.assertEqual(window.photoroom_api_key_input.text(), "photoroom-secret")
 
