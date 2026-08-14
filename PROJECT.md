@@ -34,4 +34,10 @@ API keys, credentials, `.env` files, user configs, generated images, build outpu
 
 ## Current product state
 
-The ordered MVP and cleanup acceptance work is complete. Task 55 (silent auto-update to 2.0) remains in progress because manual/offline validation on real 1.3 clients is still outstanding. Do not start unrelated feature development during the VDS handoff.
+The legacy GitHub updates flow is retired and is not an active delivery channel.
+The shared self-hosted service is implemented in the separate private
+`Clipart-License-Service` repository. The desktop integration is on branch
+`codex/license-server-client-integration`; it uses the VDS license endpoint,
+signed update manifests, and Google Drive share-link normalization. A new
+bootstrap installer containing this integration still must be built and tested
+on Windows before the first real release is published.
