@@ -84,6 +84,19 @@ class SecurityBoundaryTests(unittest.TestCase):
             checksum.lower(),
         )
 
+    def test_google_drive_share_url_becomes_download_url(self):
+        result = main.normalize_update_download_url(
+            "https://drive.google.com/file/d/1AbC_def-123/view?usp=sharing"
+        )
+        self.assertEqual(
+            result,
+            "https://drive.usercontent.google.com/download?id=1AbC_def-123&export=download",
+        )
+
+    def test_google_drive_share_url_requires_file_id(self):
+        with self.assertRaisesRegex(RuntimeError, "installer"):
+            main.normalize_update_download_url("https://drive.google.com/drive/my-drive")
+
     def test_update_installer_response_is_size_limited(self):
         response = _ResponseContext(b"0123456789", content_length=10)
         with patch.object(main, "open_url_secure", return_value=response):

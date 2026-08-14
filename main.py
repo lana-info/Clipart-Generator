@@ -556,6 +556,21 @@ def validate_https_url(url, label):
     return parsed_url
 
 
+def normalize_update_download_url(url):
+    """Turn a Google Drive share URL into its HTTPS download endpoint."""
+    parsed = validate_https_url(url, "Update download URL")
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if host in {"drive.google.com", "docs.google.com"}:
+        match = re.search(r"/file/d/([A-Za-z0-9_-]+)", parsed.path)
+        if match:
+            return f"https://drive.usercontent.google.com/download?id={parse.quote(match.group(1))}&export=download"
+        file_id = parse.parse_qs(parsed.query).get("id", [""])[0]
+        if file_id and re.fullmatch(r"[A-Za-z0-9_-]+", file_id):
+            return f"https://drive.usercontent.google.com/download?id={file_id}&export=download"
+        raise RuntimeError("Update installer Google Drive URL does not contain a file id")
+    return str(url).strip()
+
+
 def validate_local_image_input(image_path):
     try:
         with Image.open(image_path) as image:
@@ -6446,7 +6461,7 @@ class MainWindow(QMainWindow):
         return normalized
 
     def _download_update_installer(self, download_url, expected_sha256=None):
-        validate_https_url(download_url, "Update download URL")
+        download_url = normalize_update_download_url(download_url)
         last_error = None
         for attempt in range(1, MAX_UPDATE_DOWNLOAD_RETRIES + 1):
             temp_dir = tempfile.gettempdir()
@@ -6579,7 +6594,7 @@ class MainWindow(QMainWindow):
             eligible = [item for item in releases if str(item.get("artifact_url", "")).strip() and str(item.get("channel", "stable")) == "stable"]
             selected = max(eligible, key=lambda item: self._parse_version_tuple(item.get("version")), default=None)
             latest_version = str((selected or {}).get("version", "")).strip()
-            download_url = str((selected or {}).get("artifact_url", "")).strip()
+            download_url = normalize_update_download_url(str((selected or {}).get("artifact_url", "")).strip())
             checksum = self._validate_update_checksum((selected or {}).get("artifact_sha256"))
 
             if not latest_version or not download_url:
