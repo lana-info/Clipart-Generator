@@ -1,4 +1,4 @@
-name: Release Multi Platform
+name: Release Windows Installer
 
 permissions:
   contents: read
@@ -113,6 +113,7 @@ jobs:
             release/VERSION.txt
 
   build-macos:
+    if: ${{ false }} # Windows-only release workflow.
     runs-on: macos-15
     env:
       APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_CERT_BASE64 }}
