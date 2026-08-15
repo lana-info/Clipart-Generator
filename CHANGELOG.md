@@ -12,6 +12,15 @@
 
 ## Unreleased
 
+- Fixed the Windows release entrypoint so the main interface opens only after
+  fresh online license validation or successful key activation; cancellation,
+  offline validation, and missing license configuration now fail closed.
+- Added a license/API control card to the first mode-selection screen, including
+  safe online-verification status and direct license replacement without ever
+  displaying or persisting the reusable key.
+- New projects now default to the user's `Pictures/Clipart Generator` folder,
+  remember the last selected work and processing-result folders, and no longer
+  derive the folder-dialog default from the installed process directory.
 - Added a shared persistent processing editor to Pinterest, structured progress
   events with indeterminate long-stage activity, and a global high-contrast dark
   palette independent of the Windows system theme.

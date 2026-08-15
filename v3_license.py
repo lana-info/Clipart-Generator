@@ -31,6 +31,7 @@ class OnlineLicenseGate:
 
     def __init__(self, client: LicenseClientProtocol) -> None:
         self.client = client
+        self.current_authorization: LicenseAuthorization | None = None
         self.status_text = "Лицензия не активирована"
         try:
             if client.has_activation():
@@ -44,30 +45,45 @@ class OnlineLicenseGate:
         except LicenseError:
             return False
 
+    @property
+    def verification_text(self) -> str:
+        authorization = self.current_authorization
+        if authorization is None:
+            return "Онлайн-проверка не выполнена"
+        checked_at = authorization.issued_at.astimezone().strftime("%d.%m.%Y %H:%M")
+        return f"Проверено онлайн: {checked_at}"
+
     def activate(self, license_key: str) -> LicenseAuthorization:
         try:
             authorization = self.client.activate(license_key)
         except LicenseError:
+            self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
             raise
         except Exception:
+            self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
             raise LicenseError("Не удалось проверить лицензию") from None
+        self.current_authorization = authorization
         self.status_text = "Лицензия активна"
         return authorization
 
     def authorize_run(self) -> LicenseAuthorization:
         if not self.has_activation():
+            self.current_authorization = None
             self.status_text = "Лицензия не активирована"
             raise LicenseError("Активируйте лицензию перед запуском")
         try:
             authorization = self.client.validate()
         except LicenseError:
+            self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
             raise
         except Exception:
+            self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
             raise LicenseError("Не удалось проверить лицензию") from None
+        self.current_authorization = authorization
         self.status_text = "Лицензия активна"
         return authorization
 
@@ -132,6 +148,6 @@ class LicenseDialog(QDialog):
         QMessageBox.information(
             self,
             "Лицензия",
-            f"Лицензия активирована до {authorization.expires_at.astimezone().strftime('%d.%m.%Y %H:%M')}",
+            "Лицензия активирована и проверена онлайн",
         )
         self.accept()

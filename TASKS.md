@@ -1470,6 +1470,37 @@ Verification:
 - Administrator reset invalidates the old device and permits one replacement.
 - Windows packaged-client behavior is checked in an isolated environment.
 
+### Task 61A - Mandatory Startup License Gate Hotfix
+
+Status: Code complete - Windows rebuild pending approval
+
+Root cause:
+- The signed license gate protected worker starts and retries, but the release
+  entrypoint opened the main V3 interface before invoking it.
+
+Implemented:
+- Require a fresh online validation before the main window can open.
+- If no valid saved activation exists, show the license-key dialog immediately.
+- Close startup on cancellation, offline validation, server rejection, or a
+  missing license gate.
+- Revalidate online after a newly entered key is activated.
+- Show license status, the fresh online-check time, `Сменить лицензию`, and
+  `Настройки API` before a work mode is selected; never display the full key.
+- Default new work to `Pictures/Clipart Generator` and persist the last selected
+  work and processing-result folders outside the install directory.
+
+Verification:
+- [x] `python -m unittest tests.test_release_entrypoint -v`
+- [x] Critical license suite: 41 tests passed.
+- [x] Current full desktop suite: 420 tests passed, 1 expected skip.
+- [x] Source packaged-entrypoint smoke verifies the masked key field and
+  fail-closed startup behavior.
+- [x] First-screen license/API controls pass offscreen layout and action tests.
+- [x] Pictures default and last-folder restoration pass restart regressions.
+- [ ] Rebuild the Windows installer after explicit approval.
+- [ ] Verify the packaged Windows `.exe` passes `--release-entrypoint-smoke`.
+- [ ] Manually confirm on Windows that the key dialog appears before the main UI.
+
 ### Task 62 - Design And Implement Private Update Delivery
 
 Status: Planned - blocked on update policy and stable licensing

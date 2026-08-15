@@ -43,6 +43,28 @@ class FakeClient:
 
 
 class OnlineLicenseGateTests(unittest.TestCase):
+    def test_successful_online_check_is_available_as_safe_in_memory_status(self):
+        gate = OnlineLicenseGate(FakeClient())
+
+        result = gate.activate("CG-TEST")
+
+        self.assertIs(gate.current_authorization, result)
+        self.assertIn("Проверено онлайн:", gate.verification_text)
+        self.assertNotIn(result.license_id, gate.verification_text)
+        self.assertNotIn("CG-TEST", gate.verification_text)
+
+    def test_failed_online_check_clears_previous_verified_status(self):
+        client = FakeClient()
+        gate = OnlineLicenseGate(client)
+        gate.activate("CG-TEST")
+        client.failure = LicenseError("Сервер отклонил лицензию")
+
+        with self.assertRaises(LicenseError):
+            gate.authorize_run()
+
+        self.assertIsNone(gate.current_authorization)
+        self.assertEqual(gate.verification_text, "Онлайн-проверка не выполнена")
+
     def test_run_requires_prior_activation(self):
         gate = OnlineLicenseGate(FakeClient())
         with self.assertRaisesRegex(LicenseError, "Активируйте лицензию"):

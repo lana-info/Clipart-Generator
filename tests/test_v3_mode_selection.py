@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -53,6 +54,98 @@ class V3ModeSelectionTests(unittest.TestCase):
                 self.assertIs(view.stack.currentWidget(), view.shell)
                 view.close()
                 view.deleteLater()
+
+    def test_first_screen_shows_license_and_api_controls_before_mode_selection(self):
+        screen = ModeSelectionScreen()
+        license_requests = []
+        api_requests = []
+        screen.license_requested.connect(lambda: license_requests.append(True))
+        screen.api_settings_requested.connect(lambda: api_requests.append(True))
+
+        screen.set_license_status(
+            "Лицензия активна",
+            "Проверено онлайн: 15.08.2026 10:30",
+        )
+        screen.license_button.click()
+        screen.api_settings_button.click()
+
+        self.assertFalse(screen.account_card.isHidden())
+        self.assertEqual(screen.license_status_label.text(), "Лицензия активна")
+        self.assertEqual(
+            screen.license_verification_label.text(),
+            "Проверено онлайн: 15.08.2026 10:30",
+        )
+        self.assertEqual(screen.license_button.text(), "Сменить лицензию")
+        self.assertEqual(screen.api_settings_button.text(), "Настройки API")
+        self.assertEqual(license_requests, [True])
+        self.assertEqual(api_requests, [True])
+        screen.close()
+        screen.deleteLater()
+
+    def test_new_project_defaults_to_pictures_instead_of_process_directory(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-default-folder-") as temp:
+            default_folder = Path(temp) / "Pictures" / "Clipart Generator"
+            draft_path = Path(temp) / "app-data" / "project_state.json"
+            with patch(
+                "v3_mode_selection.default_work_directory",
+                return_value=default_folder,
+            ):
+                view = V3ApplicationView(draft_path=draft_path)
+                view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+
+            self.assertEqual(view.project_state.common.work_dir, str(default_folder))
+            self.assertTrue(default_folder.is_dir())
+            self.assertNotEqual(view.project_state.common.work_dir, os.getcwd())
+            view.close()
+            view.deleteLater()
+
+    def test_last_selected_work_and_output_folders_are_reused(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-last-folder-") as temp:
+            root = Path(temp)
+            default_folder = root / "Pictures" / "Clipart Generator"
+            selected_work = root / "selected-work"
+            selected_output = root / "selected-output"
+            selected_work.mkdir()
+            selected_output.mkdir()
+            draft_path = root / "app-data" / "project_state.json"
+
+            with patch(
+                "v3_mode_selection.default_work_directory",
+                return_value=default_folder,
+            ):
+                clipart = V3ApplicationView(draft_path=draft_path)
+                clipart.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+                clipart.shell.current_page.work_dir_edit.setText(str(selected_work))
+                self.app.processEvents()
+                clipart.close()
+                clipart.deleteLater()
+
+                processing = V3ApplicationView(draft_path=draft_path)
+                processing.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
+                processing.shell.current_page.output_selector.edit.setText(
+                    str(selected_output)
+                )
+                self.app.processEvents()
+                processing.close()
+                processing.deleteLater()
+
+                intervening_clipart = V3ApplicationView(draft_path=draft_path)
+                intervening_clipart.mode_selection.mode_cards[
+                    ProjectMode.CLIPART
+                ].start_button.click()
+                intervening_clipart.close()
+                intervening_clipart.deleteLater()
+
+                restored = V3ApplicationView(draft_path=draft_path)
+                restored.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
+
+            self.assertEqual(restored.project_state.common.work_dir, str(selected_work))
+            self.assertEqual(
+                restored.project_state.output_dir_for_mode(ProjectMode.PROCESSING),
+                str(selected_output),
+            )
+            restored.close()
+            restored.deleteLater()
 
     def test_pinterest_card_promises_only_images_from_prompts(self):
         screen = ModeSelectionScreen()

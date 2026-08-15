@@ -17,7 +17,12 @@
 - Keep unrelated tasks in separate branches.
 - Do not modify `release/3.x` during routine development.
 - Before commit, show the diff and test results.
-- Commit, push, merge, branch deletion, tag deletion, and worktree removal require explicit user approval.
+- After showing the completed diff and verification results, the main agent may
+  commit and push the current task branch without requesting separate approval.
+- Merge, branch deletion, tag deletion, and worktree removal still require
+  explicit user approval.
+- Never dispatch GitHub Actions or start local/GitHub builds without a separate
+  explicit user command. An ordinary push must not trigger a build workflow.
 - Merge completed task branches into `develop/3.0` one at a time and verify after each merge.
 - Update `release/3.x` only after the candidate is stable and explicitly approved.
 

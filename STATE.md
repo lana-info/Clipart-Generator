@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-12
+Updated: 2026-08-15
 
 ## Operating model
 
@@ -16,28 +16,28 @@ Updated: 2026-08-12
 
 - Base branch: `develop/3.0`
 - Current documentation branch: `codex/license-server`
-- Handoff commit at preparation start: `b4648042e3d0ed41416c6055216bbe73de128825`
+- Current remote commit: `453ef4e35683fecc85a549ea1f8fffbb73482fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-Review and approve `LICENSE_UPDATE_SERVICE_PRD.md`. Confirm the exact subdomain,
-license duration policy, and update entitlement policy. Do not implement or
-deploy the service before approval.
+Review the completed startup-license hotfix, first-screen license/API controls,
+remembered output folders, and test evidence; then obtain explicit approval to
+commit and push. After that, build a new Windows installer and verify the
+packaged client displays the license dialog before the main UI. Do not distribute
+the 2026-08-14 installer because it predates these fixes.
 
 ## Blockers and risks
 
-- The existing license server/client are prototypes and are not production-safe.
+- The deployed license service and signed online desktop contract are active;
+  availability of VDS, DNS, TLS, and PostgreSQL is therefore a direct
+  application-availability dependency.
 - The tracked `licenses.db` is potentially sensitive and requires a separately
   approved migration out of source control without exposing its contents.
-- Mandatory online validation makes VDS, DNS, TLS, and database availability a
-  direct application-availability dependency.
-- Exact production hostname, license duration, and update entitlement rules are
-  not decided. Recommended hostname: `licenses.<your-domain>`.
-- A separate local server foundation was prepared outside the desktop clone;
-  its private GitHub remote still needs to be created before push.
+- The existing Windows installer does not contain the startup-license hotfix and
+  first-screen/folder improvements and must be replaced before distribution.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 

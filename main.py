@@ -6723,6 +6723,46 @@ def create_v3_application_window():
     return window
 
 
+def create_authorized_v3_application_window(
+    *,
+    window_factory=None,
+    dialog_factory=None,
+):
+    """Create the release window only after fresh online authorization."""
+    from v3_license import LicenseDialog
+
+    factory = window_factory or create_v3_application_window
+    dialog_type = dialog_factory or LicenseDialog
+    window = factory()
+    gate = getattr(window, "_license_gate", None)
+    if gate is None:
+        window.close()
+        return None
+    try:
+        gate.authorize_run()
+        refresh = getattr(window, "refresh_license_status", None)
+        if callable(refresh):
+            refresh()
+        return window
+    except LicenseError:
+        pass
+
+    dialog = dialog_type(gate, parent=window)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        window.close()
+        return None
+    try:
+        gate.authorize_run()
+    except LicenseError as error:
+        QMessageBox.warning(window, "Лицензия", str(error))
+        window.close()
+        return None
+    refresh = getattr(window, "refresh_license_status", None)
+    if callable(refresh):
+        refresh()
+    return window
+
+
 def run_release_entrypoint_smoke(app) -> int:
     from v3_components import ModeCard
     from v3_mode_selection import MODE_CARD_SPECS
@@ -6760,9 +6800,54 @@ def run_release_entrypoint_smoke(app) -> int:
 
 
 def run_packaged_entrypoint_check() -> int:
+    from v3_license import LicenseDialog, OnlineLicenseGate
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
 
-    return 0 if len(MODE_CARD_SPECS) == 3 and V3ApplicationView else 1
+    class SmokeClient:
+        @staticmethod
+        def has_activation():
+            return False
+
+        @staticmethod
+        def activate(_license_key):
+            raise LicenseError("smoke activation must not run")
+
+        @staticmethod
+        def validate():
+            raise LicenseError("smoke validation must not run")
+
+    class RejectedDialog:
+        def __init__(self, _gate, parent=None):
+            self.parent = parent
+
+        @staticmethod
+        def exec():
+            return QDialog.DialogCode.Rejected
+
+    gate = OnlineLicenseGate(SmokeClient())
+    dialog = LicenseDialog(gate)
+    license_input_is_safe = (
+        dialog.license_key_input.echoMode() == QLineEdit.EchoMode.Password
+        and dialog.license_key_input.accessibleName() == "Лицензионный ключ"
+    )
+    dialog.close()
+
+    smoke_window = QWidget()
+    smoke_window._license_gate = gate
+    startup_is_blocked = (
+        create_authorized_v3_application_window(
+            window_factory=lambda: smoke_window,
+            dialog_factory=RejectedDialog,
+        )
+        is None
+    )
+    smoke_window.deleteLater()
+    return 0 if (
+        len(MODE_CARD_SPECS) == 3
+        and V3ApplicationView
+        and license_input_is_safe
+        and startup_is_blocked
+    ) else 1
 
 
 if __name__ == "__main__":
@@ -6772,9 +6857,11 @@ if __name__ == "__main__":
         and "--release-entrypoint-smoke" not in sys.argv
     ):
         os.environ["QT_QPA_PLATFORM"] = "windows"
+    app = QApplication(sys.argv)
     if "--release-entrypoint-smoke" in sys.argv:
         sys.exit(run_packaged_entrypoint_check())
-    app = QApplication(sys.argv)
-    window = create_v3_application_window()
+    window = create_authorized_v3_application_window()
+    if window is None:
+        sys.exit(0)
     window.show()
     sys.exit(app.exec())

@@ -87,7 +87,11 @@ jobs:
           if (-not (Test-Path -LiteralPath $exe)) {
             throw "Fresh PyInstaller executable was not found: $exe"
           }
-          Write-Host "Fresh PyInstaller executable exists and source V3 startup smoke passed."
+          & $exe --release-entrypoint-smoke
+          if ($LASTEXITCODE -ne 0) {
+            throw "Packaged license startup smoke failed with exit code $LASTEXITCODE"
+          }
+          Write-Host "Fresh executable passed source and packaged license startup smoke checks."
 
       - name: Build Windows setup (Inno Setup)
         shell: powershell

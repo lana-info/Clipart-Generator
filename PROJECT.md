@@ -34,9 +34,16 @@ API keys, credentials, `.env` files, user configs, generated images, build outpu
 
 ## Current product state
 
-The ordered MVP and cleanup acceptance work is complete. The legacy GitHub
-updates flow is superseded because its repository is private and is not an active
-delivery channel. The next approved design direction is a shared, self-hosted
-license and future update service described in `LICENSE_UPDATE_SERVICE_PRD.md`.
-No server implementation, deployment, or release workflow starts until that
-architecture and its remaining business rules are approved.
+The ordered MVP and cleanup acceptance work is complete. The self-hosted license
+service is deployed, and the desktop client uses its signed online-only license
+contract. Protected operations and retries require fresh authorization. A
+startup-gate hotfix is implemented so the main interface also remains closed
+until a saved license is validated online or a new key is activated.
+The first screen exposes safe license status, license replacement, and API
+settings. New projects use a Pictures-based default and retain the last selected
+work and result folders in user-data preferences.
+
+The Windows installer built on 2026-08-14 predates that startup hotfix and must
+not be distributed. A fresh Windows build and packaged-client check are required
+after the hotfix is approved, committed, and pushed. The legacy GitHub updates
+flow remains superseded and is not an active delivery channel.

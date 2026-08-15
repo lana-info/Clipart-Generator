@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QStandardPaths, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -71,6 +72,20 @@ MODE_CARD_SPECS: dict[ProjectMode, ModeCardSpec] = {
 }
 
 
+def default_work_directory() -> Path:
+    """Return a user-owned default that never depends on the process directory."""
+    pictures = QStandardPaths.writableLocation(
+        QStandardPaths.StandardLocation.PicturesLocation
+    ).strip()
+    if not pictures:
+        pictures = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.DocumentsLocation
+        ).strip()
+    if not pictures:
+        pictures = str(Path.home() / "Pictures")
+    return Path(pictures).expanduser() / "Clipart Generator"
+
+
 class SelectionIntent(str, Enum):
     NEW_PROJECT = "new_project"
     SWITCH_MODE = "switch_mode"
@@ -80,6 +95,8 @@ class ModeSelectionScreen(QWidget):
     mode_selected = pyqtSignal(str)
     continue_last_project_requested = pyqtSignal()
     cancel_requested = pyqtSignal()
+    license_requested = pyqtSignal()
+    api_settings_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -103,6 +120,37 @@ class ModeSelectionScreen(QWidget):
             tokens.space_6,
         )
         layout.setSpacing(tokens.space_4)
+
+        self.account_card = QFrame()
+        self.account_card.setProperty("v3Card", True)
+        account_layout = QHBoxLayout(self.account_card)
+        account_layout.setContentsMargins(
+            tokens.space_4,
+            tokens.space_3,
+            tokens.space_4,
+            tokens.space_3,
+        )
+        account_layout.setSpacing(tokens.space_3)
+
+        status_layout = QVBoxLayout()
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(tokens.space_1)
+        self.license_status_label = QLabel("Лицензия не активирована")
+        self.license_status_label.setAccessibleName("Статус лицензии")
+        status_layout.addWidget(self.license_status_label)
+        self.license_verification_label = QLabel("Онлайн-проверка не выполнена")
+        self.license_verification_label.setProperty("v3Small", True)
+        self.license_verification_label.setAccessibleName("Онлайн-проверка лицензии")
+        status_layout.addWidget(self.license_verification_label)
+        account_layout.addLayout(status_layout, 1)
+
+        self.license_button = V3Button("Сменить лицензию", ButtonVariant.GHOST)
+        self.license_button.clicked.connect(self.license_requested.emit)
+        account_layout.addWidget(self.license_button)
+        self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
+        self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
+        account_layout.addWidget(self.api_settings_button)
+        layout.addWidget(self.account_card)
 
         title = QLabel("Что вы хотите сделать?")
         title.setProperty("v3Title", True)
@@ -183,6 +231,16 @@ class ModeSelectionScreen(QWidget):
         for card in self.mode_cards.values():
             card.set_selected(False)
 
+    def set_license_status(self, status: str, verification: str) -> None:
+        safe_status = str(status or "Лицензия не активирована")[:160]
+        safe_verification = str(
+            verification or "Онлайн-проверка не выполнена"
+        )[:160]
+        self.license_status_label.setText(safe_status)
+        self.license_status_label.setAccessibleDescription(safe_status)
+        self.license_verification_label.setText(safe_verification)
+        self.license_verification_label.setAccessibleDescription(safe_verification)
+
     def set_recent_project_summary(self, state: ProjectState | None) -> None:
         if state is None:
             self.recent_project_label.clear()
@@ -253,6 +311,8 @@ class V3ApplicationView(QWidget):
             self.continue_last_project
         )
         self.mode_selection.cancel_requested.connect(self.cancel_mode_switch)
+        self.mode_selection.license_requested.connect(self._show_license)
+        self.mode_selection.api_settings_requested.connect(self._show_api_settings)
         self.stack.addWidget(self.mode_selection)
 
         if recent_project is None and self._draft_path is not None:
@@ -284,8 +344,17 @@ class V3ApplicationView(QWidget):
             return
         dialog = LicenseDialog(self._license_gate, parent=self.shell or self)
         dialog.exec()
+        self.refresh_license_status()
+
+    def refresh_license_status(self) -> None:
+        status = "Лицензия не активирована"
+        verification = "Онлайн-проверка не выполнена"
+        if self._license_gate is not None:
+            status = self._license_gate.status_text
+            verification = self._license_gate.verification_text
+        self.mode_selection.set_license_status(status, verification)
         if self.shell is not None:
-            self.shell.set_license_status(self._license_gate.status_text)
+            self.shell.set_license_status(status)
 
     @property
     def project_state(self) -> ProjectState | None:
@@ -311,6 +380,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.reset_selection()
         self.mode_selection.set_mode_switch_context(False)
         self.mode_selection.set_recent_project_summary(self._recent_project)
+        self.refresh_license_status()
         self.stack.setCurrentWidget(self.mode_selection)
         self.screen_changed.emit("mode_selection")
 
@@ -379,7 +449,16 @@ class V3ApplicationView(QWidget):
     def _apply_preferences(self, state: ProjectState, mode: ProjectMode) -> None:
         data = self._preferences.get(mode.value, {})
         if not isinstance(data, dict):
-            return
+            data = {}
+        work_dir = str(self._preferences.get("last_work_dir", "")).strip()
+        work_path = Path(work_dir).expanduser() if work_dir else default_work_directory()
+        if not work_path.is_dir() or not os.access(work_path, os.W_OK):
+            work_path = default_work_directory()
+            try:
+                work_path.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+        state.common.work_dir = str(work_path)
         if mode is ProjectMode.PROCESSING:
             state.processing.recipe = str(data.get("recipe", "custom"))
             state.processing.overwrite_existing = bool(data.get("overwrite_existing", False))
@@ -394,13 +473,27 @@ class V3ApplicationView(QWidget):
                 state.clipart.operations = restored
             else:
                 state.pinterest.operations = restored
-        state.set_output_dir_for_mode(str(data.get("output_dir", "")), mode)
+        if mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}:
+            output_dir = str(work_path / "output")
+        else:
+            output_dir = str(
+                data.get("output_dir")
+                or self._preferences.get("last_output_dir")
+                or work_path / "output"
+            )
+        state.set_output_dir_for_mode(output_dir, mode)
 
     def _save_preferences(self) -> None:
         path = self._preferences_path
         if path is None or self.shell is None:
             return
         state = self.shell.state
+        work_dir = state.common.work_dir.strip()
+        if work_dir and Path(work_dir).expanduser().is_dir():
+            self._preferences["last_work_dir"] = work_dir
+        output_dir = state.output_dir_for_mode(state.mode).strip()
+        if state.mode is ProjectMode.PROCESSING and output_dir:
+            self._preferences["last_output_dir"] = output_dir
         if state.mode is ProjectMode.PROCESSING:
             payload = {
                 "output_dir": state.output_dir_for_mode(state.mode),
