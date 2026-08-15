@@ -16,18 +16,18 @@ Updated: 2026-08-15
 
 - Base branch: `develop/3.0`
 - Current documentation branch: `codex/license-server`
-- Current remote commit: `453ef4e35683fecc85a549ea1f8fffbb73482fbe`
+- Latest implementation commit: `66394d6d3ccbba7702f09b021b836d14674f74b9`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-Review the completed startup-license hotfix, first-screen license/API controls,
-remembered output folders, and test evidence; then obtain explicit approval to
-commit and push. After that, build a new Windows installer and verify the
-packaged client displays the license dialog before the main UI. Do not distribute
-the 2026-08-14 installer because it predates these fixes.
+The verified startup-license hotfix, first-screen license/API controls, and
+remembered output folders are committed and pushed. The next release step is a
+new Windows installer and packaged-client verification, but Actions and builds
+must wait for a separate explicit user command. Do not distribute the 2026-08-14
+installer because it predates these fixes.
 
 ## Blockers and risks
 
