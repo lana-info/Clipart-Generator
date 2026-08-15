@@ -146,7 +146,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertIsNone(result)
         window.deleteLater()
 
-    def test_packaged_smoke_checks_masked_key_input_and_startup_barrier(self):
+    def test_packaged_smoke_checks_user_controls_paths_and_startup_barrier(self):
         self.assertEqual(run_packaged_entrypoint_check(), 0)
 
 

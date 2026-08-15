@@ -6801,7 +6801,11 @@ def run_release_entrypoint_smoke(app) -> int:
 
 def run_packaged_entrypoint_check() -> int:
     from v3_license import LicenseDialog, OnlineLicenseGate
-    from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
+    from v3_mode_selection import (
+        MODE_CARD_SPECS,
+        V3ApplicationView,
+        default_work_directory,
+    )
 
     class SmokeClient:
         @staticmethod
@@ -6832,6 +6836,34 @@ def run_packaged_entrypoint_check() -> int:
     )
     dialog.close()
 
+    packaged_view = V3ApplicationView(license_gate=gate)
+    controls_are_present = (
+        packaged_view.mode_selection.license_status_label.text()
+        == "Лицензия не активирована"
+        and packaged_view.mode_selection.license_verification_label.text()
+        == "Онлайн-проверка не выполнена"
+        and packaged_view.mode_selection.license_button.text()
+        == "Сменить лицензию"
+        and packaged_view.mode_selection.api_settings_button.text()
+        == "Настройки API"
+    )
+    controls_are_connected = (
+        packaged_view.mode_selection.receivers(
+            packaged_view.mode_selection.license_requested
+        )
+        == 1
+        and packaged_view.mode_selection.receivers(
+            packaged_view.mode_selection.api_settings_requested
+        )
+        == 1
+    )
+    default_path = default_work_directory()
+    pictures_default_is_safe = (
+        default_path.name == "Clipart Generator"
+        and os.path.abspath(str(default_path)) != os.path.abspath(os.getcwd())
+    )
+    packaged_view.close()
+
     smoke_window = QWidget()
     smoke_window._license_gate = gate
     startup_is_blocked = (
@@ -6846,6 +6878,9 @@ def run_packaged_entrypoint_check() -> int:
         len(MODE_CARD_SPECS) == 3
         and V3ApplicationView
         and license_input_is_safe
+        and controls_are_present
+        and controls_are_connected
+        and pictures_default_is_safe
         and startup_is_blocked
     ) else 1
 
