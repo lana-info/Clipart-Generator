@@ -43,7 +43,11 @@ The first screen exposes safe license status, license replacement, and API
 settings. New projects use a Pictures-based default and retain the last selected
 work and result folders in user-data preferences.
 
-The Windows installer built on 2026-08-14 predates that startup hotfix and must
-not be distributed. A fresh Windows build and packaged-client check are required
-after the hotfix is approved, committed, and pushed. The legacy GitHub updates
-flow remains superseded and is not an active delivery channel.
+A replacement Windows installer was built successfully on 2026-08-15 from
+implementation commit `43682ac` in GitHub Actions run `31909510317`. The packaged
+executable passed startup-license, first-screen license/API control, signal
+connection, and Pictures-default smoke checks before Inno Setup created the
+installer. Its SHA-256 is
+`b228999e36029bf91f3a5cbf307422f557cfb28ed2b4c86b6b3848c7a0d1ea6d`.
+The legacy GitHub updates flow remains superseded and is not an active delivery
+channel.

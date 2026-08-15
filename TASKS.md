@@ -1472,7 +1472,7 @@ Verification:
 
 ### Task 61A - Mandatory Startup License Gate Hotfix
 
-Status: Code complete - Windows rebuild pending approval
+Status: Windows installer built - manual Windows acceptance pending
 
 Root cause:
 - The signed license gate protected worker starts and retries, but the release
@@ -1497,8 +1497,11 @@ Verification:
   fail-closed startup behavior.
 - [x] First-screen license/API controls pass offscreen layout and action tests.
 - [x] Pictures default and last-folder restoration pass restart regressions.
-- [ ] Rebuild the Windows installer after explicit approval.
-- [ ] Verify the packaged Windows `.exe` passes `--release-entrypoint-smoke`.
+- [x] Rebuild the Windows installer from implementation commit `43682ac` in run
+  `31909510317` (Windows success; macOS skipped).
+- [x] Verify the packaged Windows `.exe` passes `--release-entrypoint-smoke`,
+  including startup licensing, visible license/API controls, their signal
+  connections, and the Pictures-based default.
 - [ ] Manually confirm on Windows that the key dialog appears before the main UI.
 
 ### Task 62 - Design And Implement Private Update Delivery

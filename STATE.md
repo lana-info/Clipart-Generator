@@ -16,18 +16,18 @@ Updated: 2026-08-15
 
 - Base branch: `develop/3.0`
 - Current documentation branch: `codex/license-server`
-- Latest implementation commit: `66394d6d3ccbba7702f09b021b836d14674f74b9`
+- Latest implementation commit: `43682acfc174484525a0809df9536a061b0c69f6`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-The verified startup-license hotfix, first-screen license/API controls, and
-remembered output folders are committed and pushed. The next release step is a
-new Windows installer and packaged-client verification, but Actions and builds
-must wait for a separate explicit user command. Do not distribute the 2026-08-14
-installer because it predates these fixes.
+The replacement Windows installer is built and verified by GitHub Actions run
+`31909510317`; the repository is private again. The next step is manual Windows
+acceptance: install this exact artifact, confirm that the license dialog appears
+before the main UI, activate an administrator-issued key, and check the visible
+license/API controls plus remembered result folders.
 
 ## Blockers and risks
 
@@ -36,8 +36,9 @@ installer because it predates these fixes.
   application-availability dependency.
 - The tracked `licenses.db` is potentially sensitive and requires a separately
   approved migration out of source control without exposing its contents.
-- The existing Windows installer does not contain the startup-license hotfix and
-  first-screen/folder improvements and must be replaced before distribution.
+- Automated packaged checks passed, but final installation, production-license
+  activation, Windows visual behavior, and SmartScreen behavior still require a
+  manual check on the target Windows computer.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 

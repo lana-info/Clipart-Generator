@@ -21,6 +21,9 @@
 - New projects now default to the user's `Pictures/Clipart Generator` folder,
   remember the last selected work and processing-result folders, and no longer
   derive the folder-dialog default from the installed process directory.
+- Built the replacement Windows 3.0 installer from commit `43682ac`; the packaged
+  executable passed mandatory startup-license, first-screen license/API control,
+  connected-action, and Pictures-default checks before installer creation.
 - Added a shared persistent processing editor to Pinterest, structured progress
   events with indeterminate long-stage activity, and a global high-contrast dark
   palette independent of the Windows system theme.
