@@ -25,12 +25,12 @@ Updated: 2026-08-16
 ## Next task
 
 The licensed V3 updater and diagnostic journal are implemented and covered by
-the desktop tests. The matching private-artifact manifest/download flow is on
-the license-service branch `codex/feature-secure-updates`. Next, integrate both
-task branches, apply migration `006_secure_update_artifacts.sql` in staging,
-deploy the server change under explicit authorization, and validate it with a
-non-customer license and draft revision. A new Windows installer must then be
-built under a separate explicit build command and checked manually on Windows.
+the desktop tests. Migration 006 and the matching license-service branch were
+deployed on 2026-08-16 after a fresh database backup; the public health endpoint,
+artifact-upload UI, and signed update-key delegation passed live checks. The
+next step is the authorized Windows `3.0.1` build from
+`codex/feature-updates-diagnostics`, followed by artifact verification and
+manual Windows acceptance.
 
 ## Blockers and risks
 
@@ -46,9 +46,9 @@ built under a separate explicit build command and checked manually on Windows.
 - Linux cannot replace Windows visual and packaged-client verification.
 - The installer from run `31909510317` predates the new updater and diagnostic
   journal. It must not be presented as containing these changes.
-- Secure update delivery is not operational until the server branch is merged,
-  migration 006 is applied, the service is deployed, and a revision artifact is
-  uploaded and published.
+- Secure update delivery is deployed but has no published `3.0.1` revision yet;
+  update download cannot be exercised end to end until the new Windows artifact
+  exists and a controlled test revision is created.
 
 ## Prohibited without explicit approval
 

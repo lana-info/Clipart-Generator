@@ -30,6 +30,10 @@ jobs:
             $version = $inputVersion
           }
 
+          if ($version -notmatch '^\d+\.\d+(\.\d+)?$') {
+            throw "app_version must be a semantic version such as 3.0 or 3.0.1"
+          }
+
           "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "app_version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
@@ -87,7 +91,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $exe)) {
             throw "Fresh PyInstaller executable was not found: $exe"
           }
-          & $exe --release-entrypoint-smoke
+          & $exe --release-entrypoint-smoke "--expected-app-version=${{ steps.version.outputs.app_version }}"
           if ($LASTEXITCODE -ne 0) {
             throw "Packaged license startup smoke failed with exit code $LASTEXITCODE"
           }

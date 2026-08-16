@@ -55,6 +55,8 @@ journal are implemented on `codex/feature-updates-diagnostics`. The client asks
 before downloading, downloads only after consent, verifies the signed manifest,
 size, and SHA-256, and then launches the Windows installer. The corresponding
 private-artifact delivery is implemented in the license-service repository on
-`codex/feature-secure-updates`. These task branches still require controlled
-integration, server migration/deployment, and a separately authorized Windows
-build before the feature exists in an installer delivered to users.
+`codex/feature-secure-updates`. Migration 006 and that server branch were
+deployed to the existing public staging-like service on 2026-08-16; its health,
+artifact-upload UI, and license-signed update-key delegation were verified.
+The desktop branch still requires a new Windows build before the feature exists
+in an installer delivered to users.

@@ -93,7 +93,28 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-APP_VERSION = "3.0"
+DEFAULT_APP_VERSION = "3.0"
+
+
+def resolve_app_version(resource_root=None):
+    """Read the version bundled by the release build, with a safe source fallback."""
+    root = resource_root or getattr(
+        sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))
+    )
+    version_path = os.path.join(root, "release", "VERSION.txt")
+    try:
+        if os.path.getsize(version_path) > 64:
+            return DEFAULT_APP_VERSION
+        with open(version_path, "r", encoding="utf-8-sig") as version_file:
+            version = version_file.read().strip()
+    except OSError:
+        return DEFAULT_APP_VERSION
+    if not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", version):
+        return DEFAULT_APP_VERSION
+    return version
+
+
+APP_VERSION = resolve_app_version()
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
 LICENSE_SERVICE_BASE_URL = "https://services.etsyneuroclub.com/licenses"
 LICENSE_PRODUCT_ID = "clipart-generator"
@@ -6735,7 +6756,7 @@ def create_v3_application_window():
         screen="mode_selection",
         outcome="success",
     )
-    window.setWindowTitle("Clipart Generator 3.0")
+    window.setWindowTitle(f"Clipart Generator {APP_VERSION}")
     window.resize(1120, 780)
     if len(window.mode_selection.mode_cards) != len(MODE_CARD_SPECS):
         raise RuntimeError("V3 mode selection does not contain all mode cards")
@@ -6882,7 +6903,7 @@ def run_release_entrypoint_smoke(app) -> int:
     return 0 if valid else 1
 
 
-def run_packaged_entrypoint_check() -> int:
+def run_packaged_entrypoint_check(expected_app_version=None) -> int:
     from v3_license import LicenseDialog, OnlineLicenseGate
     from v3_mode_selection import (
         MODE_CARD_SPECS,
@@ -6979,6 +7000,7 @@ def run_packaged_entrypoint_check() -> int:
         and pictures_default_is_safe
         and update_channel_is_connected
         and startup_is_blocked
+        and (expected_app_version is None or APP_VERSION == expected_app_version)
     ) else 1
 
 
@@ -6991,7 +7013,12 @@ if __name__ == "__main__":
         os.environ["QT_QPA_PLATFORM"] = "windows"
     app = QApplication(sys.argv)
     if "--release-entrypoint-smoke" in sys.argv:
-        sys.exit(run_packaged_entrypoint_check())
+        expected_version = None
+        for argument in sys.argv:
+            if argument.startswith("--expected-app-version="):
+                expected_version = argument.split("=", 1)[1]
+                break
+        sys.exit(run_packaged_entrypoint_check(expected_version))
     window = create_authorized_v3_application_window()
     if window is None:
         sys.exit(0)

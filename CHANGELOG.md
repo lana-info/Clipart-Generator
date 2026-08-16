@@ -23,6 +23,9 @@
 - Replaced the V3 entrypoint's legacy GitHub update scheduling with the licensed
   server channel; no Windows build, GitHub Action, deployment, or revision
   publication was performed as part of this implementation.
+- Made the bundled `release/VERSION.txt` authoritative for the packaged
+  application as well as the installer, and made the Windows smoke test reject
+  a build whose internal version differs from its installer version.
 - Fixed the Windows release entrypoint so the main interface opens only after
   fresh online license validation or successful key activation; cancellation,
   offline validation, and missing license configuration now fail closed.

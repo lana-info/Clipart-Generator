@@ -1,5 +1,7 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -8,8 +10,10 @@ from PyQt6.QtWidgets import QApplication, QDialog, QWidget
 
 from license_client import LicenseError
 from main import (
+    APP_VERSION,
     create_authorized_v3_application_window,
     create_v3_application_window,
+    resolve_app_version,
     run_packaged_entrypoint_check,
 )
 from v3_components import ModeCard
@@ -25,7 +29,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
     def test_production_entrypoint_is_v3(self):
         window = create_v3_application_window()
         self.assertIsInstance(window, V3ApplicationView)
-        self.assertEqual(window.windowTitle(), "Clipart Generator 3.0")
+        self.assertEqual(window.windowTitle(), f"Clipart Generator {APP_VERSION}")
         cards = list(window.mode_selection.mode_cards.values())
         self.assertEqual(set(window.mode_selection.mode_cards), set(MODE_CARD_SPECS))
         self.assertEqual(len(cards), 3)
@@ -147,7 +151,18 @@ class ReleaseEntrypointTests(unittest.TestCase):
         window.deleteLater()
 
     def test_packaged_smoke_checks_user_controls_paths_and_startup_barrier(self):
-        self.assertEqual(run_packaged_entrypoint_check(), 0)
+        self.assertEqual(run_packaged_entrypoint_check(APP_VERSION), 0)
+        self.assertEqual(run_packaged_entrypoint_check("999.0"), 1)
+
+    def test_packaged_version_file_is_the_application_version_authority(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            release_dir = Path(temporary, "release")
+            release_dir.mkdir()
+            Path(release_dir, "VERSION.txt").write_text("3.0.1\n", encoding="utf-8")
+            self.assertEqual(resolve_app_version(temporary), "3.0.1")
+
+            Path(release_dir, "VERSION.txt").write_text("unsafe-version\n", encoding="utf-8")
+            self.assertEqual(resolve_app_version(temporary), "3.0")
 
 
 if __name__ == "__main__":

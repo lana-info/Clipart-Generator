@@ -6,9 +6,8 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Integrate and stage the completed secure update/diagnostic
-implementation. Production deployment and the Windows build each wait for an
-explicit user command.**
+Current next task: **Build and verify the Windows `3.0.1` installer, then run
+manual Windows acceptance before publishing it as an update revision.**
 
 ## Phase 1 - Preparation
 
@@ -1508,7 +1507,7 @@ Verification:
 
 ### Task 62 - Design And Implement Private Update Delivery
 
-Status: Implementation complete - integration, staging, and Windows acceptance pending
+Status: Server deployed - Windows build and acceptance pending
 
 Branches: desktop `codex/feature-updates-diagnostics`; server
 `codex/feature-secure-updates`
@@ -1528,7 +1527,11 @@ Verification:
 - [x] Manifest delegation/signature, request binding, HTTPS, size, SHA-256,
   token expiry/use bounds, and interrupted-download cleanup are tested.
 - [x] The V3 entrypoint no longer invokes the legacy updater.
-- [ ] Apply the server migration and validate a draft revision in staging.
+- [x] Apply server migration 006 after a fresh backup, deploy with a prepared
+  rollback image, and verify public health, artifact upload, and signed update
+  key delegation.
+- [ ] Validate the manifest/download path with a draft revision after the new
+  Windows artifact exists.
 - [ ] Windows upgrade, cancellation, UAC, and rollback safety receive manual
   isolated checks after the separately authorized build.
 
