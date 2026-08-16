@@ -4,6 +4,7 @@ import unittest
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from diagnostics import DiagnosticJournal
 
@@ -71,6 +72,17 @@ class DiagnosticJournalTests(unittest.TestCase):
                 sum(path.stat().st_size for path in journal.directory.glob("*.jsonl")),
                 2200,
             )
+            for line in journal.session_path.read_text(encoding="utf-8").splitlines():
+                self.assertIsInstance(json.loads(line), dict)
+
+    def test_unwritable_journal_falls_back_to_memory_without_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.object(
+            Path, "mkdir", side_effect=PermissionError("denied")
+        ):
+            journal = DiagnosticJournal(Path(temp), app_version="3.0")
+            journal.record("application_started", "Приложение запущено")
+        self.assertIsNone(journal.session_path)
+        self.assertEqual(journal.read_events()[0]["event"], "application_started")
 
     def test_copy_text_and_zip_export_are_readable_and_safe(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

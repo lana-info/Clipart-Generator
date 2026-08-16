@@ -57,8 +57,8 @@ _SECRET_PATTERNS = (
     re.compile(r"\bCG-[A-Z2-7]{8,}\b", re.IGNORECASE),
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._~-]{8,}"),
 )
-_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\(?:[^\\\s]+\\)*([^\\\s]+)")
-_POSIX_PATH = re.compile(r"/(?:home|Users|root)/[^\s/]+(?:/[^\s]+)*/([^/\s]+)")
+_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^\r\n,;]+")
+_POSIX_PATH = re.compile(r"(?<![:/])/(?:[^/\s]+/)+([^/\s]+)")
 
 
 def _utc_now() -> datetime:
@@ -69,7 +69,10 @@ def _safe_text(value: Any, limit: int = 512) -> str:
     text = str(value or "").replace("\x00", "").strip()
     for pattern in _SECRET_PATTERNS:
         text = pattern.sub("[СКРЫТО]", text)
-    text = _WINDOWS_PATH.sub(lambda match: f"<путь>\\{match.group(1)}", text)
+    home = str(Path.home())
+    if home and home not in {"/", "."}:
+        text = text.replace(home, "<путь>")
+    text = _WINDOWS_PATH.sub("<путь>", text)
     text = _POSIX_PATH.sub(lambda match: f"<путь>/{match.group(1)}", text)
     return text[:limit]
 
@@ -97,20 +100,23 @@ class DiagnosticJournal:
     ) -> None:
         self.app_version = _safe_text(app_version, 64)
         self.directory = Path(app_data_root) / "diagnostics"
-        self.directory.mkdir(parents=True, exist_ok=True)
         self._now = now or _utc_now
         self.session_id = _safe_text(session_id or uuid.uuid4().hex, 64)
         self.session_max_bytes = max(512, int(session_max_bytes))
         self.total_max_bytes = max(self.session_max_bytes, int(total_max_bytes))
-        self.event_max_bytes = max(256, min(int(event_max_bytes), self.session_max_bytes))
+        self.event_max_bytes = max(512, min(int(event_max_bytes), self.session_max_bytes))
         timestamp = self._now().astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-        self.session_path = self.directory / f"{timestamp}-{self.session_id}.jsonl"
+        self.session_path: Path | None = self.directory / f"{timestamp}-{self.session_id}.jsonl"
         self._lock = threading.RLock()
         self._truncated = False
         self._dropped_events = 0
         self._memory_fallback: list[dict[str, Any]] = []
-        self.session_path.touch(exist_ok=False)
-        self._prune()
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+            self.session_path.touch(exist_ok=False)
+            self._prune()
+        except OSError:
+            self.session_path = None
 
     def record(
         self,
@@ -147,6 +153,10 @@ class DiagnosticJournal:
             item["details"] = safe_details
         encoded = self._encode_bounded(item)
         with self._lock:
+            if self.session_path is None:
+                self._memory_fallback.append(item)
+                self._memory_fallback = self._memory_fallback[-200:]
+                return item
             try:
                 current_size = self.session_path.stat().st_size
                 if current_size + len(encoded) > self.session_max_bytes:
@@ -196,7 +206,17 @@ class DiagnosticJournal:
         compact["summary"] = _safe_text(item.get("summary"), 120)
         compact["details"] = {"status": "truncated"}
         encoded = (json.dumps(compact, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
-        return encoded[: self.event_max_bytes - 1] + b"\n"
+        if len(encoded) <= self.event_max_bytes:
+            return encoded
+        minimal = {
+            "schema_version": 1,
+            "timestamp": item.get("timestamp"),
+            "severity": item.get("severity"),
+            "event": _safe_text(item.get("event"), 48),
+            "summary": _safe_text(item.get("summary"), 60),
+            "session_id": self.session_id,
+        }
+        return (json.dumps(minimal, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
 
     def _write_truncated_marker(self, current_size: int) -> None:
         if self._truncated:
@@ -218,6 +238,8 @@ class DiagnosticJournal:
                 handle.write(encoded)
 
     def _prune(self) -> None:
+        if self.session_path is None or not self.directory.is_dir():
+            return
         files = sorted(
             self.directory.glob("*.jsonl"),
             key=lambda path: (path.stat().st_mtime_ns, path.name),
@@ -242,7 +264,7 @@ class DiagnosticJournal:
 
     def read_events(self) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
-        paths = sorted(self.directory.glob("*.jsonl"), reverse=True)
+        paths = sorted(self.directory.glob("*.jsonl"), reverse=True) if self.directory.is_dir() else []
         for path in paths[:MAX_SESSIONS]:
             try:
                 with path.open("r", encoding="utf-8") as handle:
@@ -281,7 +303,7 @@ class DiagnosticJournal:
             "platform": platform.system(),
             "platform_release": platform.release(),
             "python": platform.python_version(),
-            "session_count": len(list(self.directory.glob("*.jsonl"))),
+            "session_count": len(list(self.directory.glob("*.jsonl"))) if self.directory.is_dir() else 0,
             "event_count": len(events),
         }
         fd, temporary = tempfile.mkstemp(dir=str(target.parent), prefix=".diagnostics-", suffix=".zip")
