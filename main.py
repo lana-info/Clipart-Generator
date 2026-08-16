@@ -6687,6 +6687,7 @@ class MainWindow(QMainWindow):
 
 
 def create_v3_application_window():
+    from diagnostics import DiagnosticJournal
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
     from v3_license import OnlineLicenseGate
 
@@ -6704,6 +6705,12 @@ def create_v3_application_window():
     app_data = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.AppDataLocation
     )
+    diagnostic_journal = DiagnosticJournal(app_data, app_version=APP_VERSION)
+    diagnostic_journal.record(
+        "application_started",
+        "Clipart Generator запущен.",
+        details={"current_version": APP_VERSION},
+    )
     license_client = LicenseClient(
         base_url=LICENSE_SERVICE_BASE_URL,
         state_path=os.path.join(app_data, "license_state.json"),
@@ -6715,6 +6722,13 @@ def create_v3_application_window():
         runtime_settings_provider=lambda: build_runtime_settings(config, secrets),
         draft_path=os.path.join(app_data, "project_state.json"),
         license_gate=OnlineLicenseGate(license_client),
+        diagnostic_journal=diagnostic_journal,
+    )
+    diagnostic_journal.record(
+        "application_ui_ready",
+        "Основной интерфейс подготовлен.",
+        screen="mode_selection",
+        outcome="success",
     )
     window.setWindowTitle("Clipart Generator 3.0")
     window.resize(1120, 780)
@@ -6735,25 +6749,60 @@ def create_authorized_v3_application_window(
     dialog_type = dialog_factory or LicenseDialog
     window = factory()
     gate = getattr(window, "_license_gate", None)
+    journal = getattr(window, "_diagnostic_journal", None)
     if gate is None:
         window.close()
         return None
     try:
         gate.authorize_run()
+        if journal is not None:
+            journal.record(
+                "license_validation_succeeded",
+                "Лицензия проверена при запуске.",
+                outcome="success",
+            )
         refresh = getattr(window, "refresh_license_status", None)
         if callable(refresh):
             refresh()
         return window
-    except LicenseError:
-        pass
+    except LicenseError as error:
+        if journal is not None:
+            journal.record(
+                "license_validation_failed",
+                "Проверка лицензии при запуске не выполнена.",
+                severity="warning",
+                outcome="failed",
+                details={"error_message": str(error)},
+            )
 
     dialog = dialog_type(gate, parent=window)
     if dialog.exec() != QDialog.DialogCode.Accepted:
+        if journal is not None:
+            journal.record(
+                "license_activation_cancelled",
+                "Ввод лицензии отменён пользователем.",
+                severity="warning",
+                outcome="cancelled",
+            )
         window.close()
         return None
     try:
         gate.authorize_run()
+        if journal is not None:
+            journal.record(
+                "license_activation_succeeded",
+                "Лицензия активирована и проверена.",
+                outcome="success",
+            )
     except LicenseError as error:
+        if journal is not None:
+            journal.record(
+                "license_activation_failed",
+                "Лицензию не удалось активировать или проверить.",
+                severity="error",
+                outcome="failed",
+                details={"error_message": str(error)},
+            )
         QMessageBox.warning(window, "Лицензия", str(error))
         window.close()
         return None

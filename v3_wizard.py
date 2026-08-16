@@ -116,6 +116,7 @@ class AppShell(QWidget):
     mode_picker_requested = pyqtSignal()
     api_settings_requested = pyqtSignal()
     license_requested = pyqtSignal()
+    diagnostics_requested = pyqtSignal()
     run_requested = pyqtSignal(str)
     finish_requested = pyqtSignal(str)
 
@@ -239,6 +240,10 @@ class AppShell(QWidget):
         self.api_settings_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         layout.addWidget(self.api_settings_button)
+        self.diagnostics_button = V3Button("Диагностика", ButtonVariant.GHOST)
+        self.diagnostics_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.diagnostics_button.clicked.connect(self.diagnostics_requested.emit)
+        layout.addWidget(self.diagnostics_button)
         return frame
 
     def set_license_status(self, status: str) -> None:

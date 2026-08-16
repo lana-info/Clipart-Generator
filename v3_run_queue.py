@@ -5,6 +5,7 @@ import os
 import re
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
@@ -236,6 +237,7 @@ class RunQueueSession(QObject):
         request: Any,
         mode: ProjectMode,
         parent: QObject | None = None,
+        diagnostic_journal: Any | None = None,
     ) -> None:
         super().__init__(parent)
         self.request = request
@@ -264,6 +266,8 @@ class RunQueueSession(QObject):
         self.stop_after_current_requested = False
         self._deferred_stop: Callable[[], None] | None = None
         self._technical_events: list[str] = []
+        self._diagnostic_journal = diagnostic_journal
+        self.operation_id = uuid.uuid4().hex
         self._event("run_started", count=len(self.items))
 
     def _event(self, name: str, **fields: Any) -> None:
@@ -277,6 +281,44 @@ class RunQueueSession(QObject):
             ):
                 parts.append(f"{key}={str(value).lower() if isinstance(value, bool) else value}")
         self._technical_events.append(" ".join(parts))
+        if self._diagnostic_journal is not None:
+            summaries = {
+                "run_started": "Запущена обработка пакета.",
+                "item_started": "Начата обработка файла.",
+                "item_succeeded": "Файл обработан успешно.",
+                "item_failed": "Файл завершён с ошибкой.",
+                "item_cancelled": "Обработка файла отменена.",
+                "run_finished": "Обработка пакета завершена.",
+                "run_failed": "Обработка пакета завершена с ошибкой.",
+                "run_cancelled": "Обработка пакета отменена.",
+                "retry_started": "Запущен повтор ошибочных файлов.",
+                "stop_after_current_requested": "Запрошена остановка после текущего файла.",
+            }
+            details = {"mode": self.mode.value}
+            for source, target in (
+                ("item", "item_index"),
+                ("count", "item_total"),
+                ("attempt", "attempt"),
+                ("reason", "reason"),
+                ("stage", "stage"),
+            ):
+                if source in fields:
+                    details[target] = fields[source]
+            severity = "error" if "failed" in name else "warning" if "cancel" in name or "stop" in name else "info"
+            self._diagnostic_journal.record(
+                name,
+                summaries.get(name, "Изменилось состояние обработки."),
+                severity=severity,
+                operation_id=self.operation_id,
+                screen="results",
+                outcome=(
+                    "failed" if "failed" in name else
+                    "cancelled" if "cancel" in name else
+                    "success" if "succeeded" in name or name == "run_finished" else None
+                ),
+                retry="started" if name == "retry_started" else None,
+                details=details,
+            )
 
     @property
     def technical_log(self) -> str:
@@ -1167,7 +1209,15 @@ class RunQueueSupport:
         self.controller.start_processing_again()
 
     def start_new(self, request: Any) -> RunQueueSession:
-        session = RunQueueSession(request, self.mode)
+        session = RunQueueSession(
+            request,
+            self.mode,
+            diagnostic_journal=getattr(
+                self.controller.shell,
+                "diagnostic_journal",
+                None,
+            ),
+        )
         self.session = session
         self.page.set_session(session)
         return session

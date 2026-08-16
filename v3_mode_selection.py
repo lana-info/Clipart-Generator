@@ -97,6 +97,7 @@ class ModeSelectionScreen(QWidget):
     cancel_requested = pyqtSignal()
     license_requested = pyqtSignal()
     api_settings_requested = pyqtSignal()
+    diagnostics_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -150,6 +151,9 @@ class ModeSelectionScreen(QWidget):
         self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         account_layout.addWidget(self.api_settings_button)
+        self.diagnostics_button = V3Button("Журнал диагностики", ButtonVariant.GHOST)
+        self.diagnostics_button.clicked.connect(self.diagnostics_requested.emit)
+        account_layout.addWidget(self.diagnostics_button)
         layout.addWidget(self.account_card)
 
         title = QLabel("Что вы хотите сделать?")
@@ -280,6 +284,7 @@ class V3ApplicationView(QWidget):
         worker_factory: Callable[..., Any] | None = None,
         draft_path: str | Path | None = None,
         license_gate: OnlineLicenseGate | None = None,
+        diagnostic_journal: Any | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
@@ -289,6 +294,7 @@ class V3ApplicationView(QWidget):
         self._v3_runtime_settings: dict[str, str] = {}
         self._worker_factory = worker_factory
         self._license_gate = license_gate
+        self._diagnostic_journal = diagnostic_journal
         self._draft_path = Path(draft_path) if draft_path is not None else None
         self._preferences_path = (
             self._draft_path.with_name("preferences.json")
@@ -313,6 +319,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.cancel_requested.connect(self.cancel_mode_switch)
         self.mode_selection.license_requested.connect(self._show_license)
         self.mode_selection.api_settings_requested.connect(self._show_api_settings)
+        self.mode_selection.diagnostics_requested.connect(self._show_diagnostics)
         self.stack.addWidget(self.mode_selection)
 
         if recent_project is None and self._draft_path is not None:
@@ -331,8 +338,40 @@ class V3ApplicationView(QWidget):
         dialog = ApiSettingsDialog(initial=self._runtime_settings(), parent=self.shell or self)
         if dialog.exec():
             self._v3_runtime_settings.update(dialog.settings)
+            self._diagnostic_event(
+                "api_settings_saved",
+                "Настройки API сохранены.",
+                details={
+                    "configured": {
+                        "kie": bool(dialog.settings.get("kie_api_key")),
+                        "photoroom": bool(dialog.settings.get("photoroom_api_key")),
+                    }
+                },
+            )
             if self.shell is not None:
                 self.shell.state_changed.emit()
+
+    def _show_diagnostics(self) -> None:
+        if self._diagnostic_journal is None:
+            QMessageBox.warning(
+                self.shell or self,
+                "Журнал диагностики",
+                "Журнал диагностики недоступен.",
+            )
+            return
+        from v3_diagnostics import DiagnosticJournalDialog
+
+        dialog = DiagnosticJournalDialog(
+            self._diagnostic_journal,
+            parent=self.shell or self,
+        )
+        self._diagnostics_dialog = dialog
+        dialog.show()
+
+    def _diagnostic_event(self, event: str, summary: str, **fields: Any) -> None:
+        if self._diagnostic_journal is None:
+            return
+        self._diagnostic_journal.record(event, summary, **fields)
 
     def _show_license(self) -> None:
         if self._license_gate is None:
@@ -343,7 +382,12 @@ class V3ApplicationView(QWidget):
             )
             return
         dialog = LicenseDialog(self._license_gate, parent=self.shell or self)
-        dialog.exec()
+        result = dialog.exec()
+        self._diagnostic_event(
+            "license_dialog_closed",
+            "Окно лицензии закрыто.",
+            outcome="accepted" if result else "cancelled",
+        )
         self.refresh_license_status()
 
     def refresh_license_status(self) -> None:
@@ -405,6 +449,12 @@ class V3ApplicationView(QWidget):
 
     def _handle_mode_selected(self, mode_value: str) -> None:
         mode = ProjectMode(mode_value)
+        self._diagnostic_event(
+            "mode_selected",
+            "Выбран режим работы.",
+            screen="mode_selection",
+            details={"mode": mode.value},
+        )
         if (
             self._selection_intent is SelectionIntent.SWITCH_MODE
             and self.shell is not None
@@ -424,6 +474,11 @@ class V3ApplicationView(QWidget):
             return False
         state = ProjectState.from_dict(self._recent_project.to_dict())
         self._replace_shell(state)
+        self._diagnostic_event(
+            "project_continued",
+            "Продолжен последний черновик.",
+            details={"mode": state.mode.value},
+        )
         self.project_continued.emit(state.mode.value)
         return True
 
@@ -531,6 +586,7 @@ class V3ApplicationView(QWidget):
             previous.deleteLater()
 
         shell = AppShell(state, tokens=self.tokens)
+        shell.diagnostic_journal = self._diagnostic_journal
 
         install_clipart_flow(
             shell,
@@ -560,6 +616,7 @@ class V3ApplicationView(QWidget):
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         shell.api_settings_requested.connect(self._show_api_settings)
         shell.license_requested.connect(self._show_license)
+        shell.diagnostics_requested.connect(self._show_diagnostics)
         shell.finish_requested.connect(self._finish_workflow)
         if self._license_gate is not None:
             shell.set_license_status(self._license_gate.status_text)
@@ -568,6 +625,16 @@ class V3ApplicationView(QWidget):
         self.stack.setCurrentWidget(shell)
         self.screen_changed.emit("wizard")
         self._save_draft()
+
+    def closeEvent(self, event) -> None:
+        self._diagnostic_event(
+            "application_exit",
+            "Приложение закрыто штатно.",
+            outcome="success",
+        )
+        if self._diagnostic_journal is not None:
+            self._diagnostic_journal.close()
+        super().closeEvent(event)
 
     def _finish_workflow(self, _mode: str) -> None:
         """Return to mode selection without reusing the completed shell."""
