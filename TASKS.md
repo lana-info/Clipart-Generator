@@ -6,7 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **None. All ordered implementation tasks are complete; release-only checks wait for an explicit user command.**
+Current next task: **Integrate and stage the completed secure update/diagnostic
+implementation. Production deployment and the Windows build each wait for an
+explicit user command.**
 
 ## Phase 1 - Preparation
 
@@ -1506,23 +1508,50 @@ Verification:
 
 ### Task 62 - Design And Implement Private Update Delivery
 
-Status: Planned - blocked on update policy and stable licensing
+Status: Implementation complete - integration, staging, and Windows acceptance pending
 
-Branch: `codex/update-delivery`
+Branches: desktop `codex/feature-updates-diagnostics`; server
+`codex/feature-secure-updates`
 
 Scope:
-- Add product/platform release records, signed manifests, short-lived download
-  tokens, local VDS artifact retention, and explicit installer confirmation.
+- Add product/platform release records, signed manifests bound to the licensed
+  device request, short-lived download tokens, local VDS artifact retention,
+  and explicit installer confirmation.
 - Keep free Ed25519 service/artifact signatures separate from optional Windows
   Authenticode, which is not required by the free first stage.
-- Replace the old client channel only through a separately approved migration.
+- Replace the old client channel with one asynchronous licensed V3 check after
+  startup. `Не сейчас` downloads nothing and asks again on the next launch.
 - Do not modify existing public releases or publish a new build automatically.
 
 Verification:
-- License and update entitlement gates are independent and fail closed.
-- Manifest signature, HTTPS, size, SHA-256, artifact signature, expiry, and
-  interrupted-download cleanup are tested.
-- Windows upgrade and rollback safety receive manual isolated checks.
+- [x] License and update entitlement gates are independent and fail closed.
+- [x] Manifest delegation/signature, request binding, HTTPS, size, SHA-256,
+  token expiry/use bounds, and interrupted-download cleanup are tested.
+- [x] The V3 entrypoint no longer invokes the legacy updater.
+- [ ] Apply the server migration and validate a draft revision in staging.
+- [ ] Windows upgrade, cancellation, UAC, and rollback safety receive manual
+  isolated checks after the separately authorized build.
+
+### Task 62A - Add User-Facing Diagnostic Journal
+
+Status: Implementation complete - packaged Windows visual acceptance pending
+
+Implemented:
+- Keep at most three launch sessions and 10 MiB total, with bounded events and
+  a non-blocking in-memory fallback if application-data storage is unavailable.
+- Show `Журнал диагностики` before mode selection and in the shared wizard.
+- Record startup, license, update, configuration, project, processing, retry,
+  cancellation, and terminal outcomes without keys, prompts, images, raw
+  provider responses, environment values, or full personal paths.
+- Allow copying one sanitized record and exporting a ZIP with readable TXT,
+  structured JSON, safe system/application information, and a README.
+
+Verification:
+- [x] Retention, corruption recovery, event bounds, redaction, copy, export,
+  first-screen/wizard visibility, processing events, and packaged-entrypoint
+  wiring have automated coverage.
+- [ ] Confirm the journal layout and exported ZIP manually in the packaged
+  Windows application.
 
 ### Task 63 - Security Review And Production Readiness
 

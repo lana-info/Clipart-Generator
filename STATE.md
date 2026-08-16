@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-15
+Updated: 2026-08-16
 
 ## Operating model
 
@@ -15,19 +15,22 @@ Updated: 2026-08-15
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current documentation branch: `codex/license-server`
-- Latest implementation commit: `43682acfc174484525a0809df9536a061b0c69f6`
+- Current task branch: `codex/feature-updates-diagnostics`
+- Latest feature commits: `1426e0c` (diagnostic journal), `ef52a9f`
+  (licensed updater), and `4a70fe7` (bounded/non-blocking hardening)
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-The replacement Windows installer is built and verified by GitHub Actions run
-`31909510317`; the repository is private again. The next step is manual Windows
-acceptance: install this exact artifact, confirm that the license dialog appears
-before the main UI, activate an administrator-issued key, and check the visible
-license/API controls plus remembered result folders.
+The licensed V3 updater and diagnostic journal are implemented and covered by
+the desktop tests. The matching private-artifact manifest/download flow is on
+the license-service branch `codex/feature-secure-updates`. Next, integrate both
+task branches, apply migration `006_secure_update_artifacts.sql` in staging,
+deploy the server change under explicit authorization, and validate it with a
+non-customer license and draft revision. A new Windows installer must then be
+built under a separate explicit build command and checked manually on Windows.
 
 ## Blockers and risks
 
@@ -41,6 +44,11 @@ license/API controls plus remembered result folders.
   manual check on the target Windows computer.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
+- The installer from run `31909510317` predates the new updater and diagnostic
+  journal. It must not be presented as containing these changes.
+- Secure update delivery is not operational until the server branch is merged,
+  migration 006 is applied, the service is deployed, and a revision artifact is
+  uploaded and published.
 
 ## Prohibited without explicit approval
 

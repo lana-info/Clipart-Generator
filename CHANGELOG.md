@@ -12,6 +12,17 @@
 
 ## Unreleased
 
+- Added the licensed V3 Windows update flow backed by the self-hosted license
+  service. It checks once after successful startup licensing, asks before any
+  download, treats `Не сейчас` as no download, verifies the signed manifest,
+  exact size, and SHA-256, and launches the installer only after verification.
+- Added `Журнал диагностики` before mode selection and in the shared wizard.
+  It retains three bounded launch sessions, records safe operational/license/
+  update events, lets support copy one sanitized record, and exports a ZIP with
+  TXT, JSON, safe system details, and a README.
+- Replaced the V3 entrypoint's legacy GitHub update scheduling with the licensed
+  server channel; no Windows build, GitHub Action, deployment, or revision
+  publication was performed as part of this implementation.
 - Fixed the Windows release entrypoint so the main interface opens only after
   fresh online license validation or successful key activation; cancellation,
   offline validation, and missing license configuration now fail closed.
@@ -28,7 +39,8 @@
   events with indeterminate long-stage activity, and a global high-contrast dark
   palette independent of the Windows system theme.
 
-- Enabled startup auto-application of newer manifested releases on next run, with update installer download retried in bounded chunks before checksum verification for legacy versions to reach `2.0` without manual approval.
+- The former startup auto-application behavior remains legacy-only and is not
+  connected to the V3 release entrypoint.
 - Simplified the cleanup workflow into one safe preset, removed the ordinary processing rights gate, preserved ICC/DPI automatically, and added cleanup-only pixel-parity coverage for PNG and JPEG inputs.
 - Locked clipart defaults to upscale-before, remove-background, trim, and 300 DPI export; added an alpha-safe guard so post-background upscale must preserve transparency.
 - Added per-file deletion, a visible processing output-folder selector, and safe output-path routing so processed files keep their source intact.

@@ -36,9 +36,13 @@ the desktop client a permanent installer URL: withdrawing a release or denying
 an update entitlement continues to have effect, and a copied URL is not a
 durable public download link.
 
-The desktop client contains only the update-signing public key. Server signing
-keys, artifact storage paths, administrator credentials, and download-token
-state remain server-side and outside Git.
+The desktop client pins the license-signing public key already used by the
+online license contract. The server delegates a separate update-signing public
+key through a license-key-signed response, so update-key rotation does not
+require embedding its private material or manually replacing an unverified
+client setting. All private signing keys, artifact storage paths,
+administrator credentials, and download-token state remain server-side and
+outside Git.
 
 ## Server components
 
@@ -92,8 +96,9 @@ server storage path or permanent origin URL.
 - After the saved license has been validated online and the V3 main window is
   visible, a background worker performs one update check per application
   launch. It never blocks the UI thread.
-- The request uses the same device proof mechanism as licensing but verifies
-  the response with the separate pinned update public key and expected key ID.
+- The request uses the same device proof mechanism as licensing and verifies
+  the manifest with the separately delegated update key and expected key ID.
+  The delegation itself must verify under the pinned license-signing key.
 - The client validates the envelope, product, platform, stable channel,
   semantic versions, HTTPS download URL, filename, size, SHA-256, and response
   bounds. It selects the greatest eligible semantic version rather than
@@ -126,7 +131,8 @@ Before launch, the client verifies:
 
 - the final byte count equals the signed manifest size;
 - SHA-256 equals the signed manifest digest;
-- the manifest's Ed25519 signature is valid under the pinned update key;
+- the manifest's Ed25519 signature is valid under the license-key-delegated
+  update key;
 - the file remains the same verified file when it is launched.
 
 Any mismatch deletes the file, records a bounded error, and leaves the current

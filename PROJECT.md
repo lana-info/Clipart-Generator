@@ -50,4 +50,11 @@ connection, and Pictures-default smoke checks before Inno Setup created the
 installer. Its SHA-256 is
 `b228999e36029bf91f3a5cbf307422f557cfb28ed2b4c86b6b3848c7a0d1ea6d`.
 The legacy GitHub updates flow remains superseded and is not an active delivery
-channel.
+channel. A licensed V3 update client and a bounded user-facing diagnostic
+journal are implemented on `codex/feature-updates-diagnostics`. The client asks
+before downloading, downloads only after consent, verifies the signed manifest,
+size, and SHA-256, and then launches the Windows installer. The corresponding
+private-artifact delivery is implemented in the license-service repository on
+`codex/feature-secure-updates`. These task branches still require controlled
+integration, server migration/deployment, and a separately authorized Windows
+build before the feature exists in an installer delivered to users.
