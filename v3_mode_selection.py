@@ -285,6 +285,7 @@ class V3ApplicationView(QWidget):
         draft_path: str | Path | None = None,
         license_gate: OnlineLicenseGate | None = None,
         diagnostic_journal: Any | None = None,
+        update_client: Any | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
@@ -295,6 +296,8 @@ class V3ApplicationView(QWidget):
         self._worker_factory = worker_factory
         self._license_gate = license_gate
         self._diagnostic_journal = diagnostic_journal
+        self._update_client = update_client
+        self._update_controller = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
         self._preferences_path = (
             self._draft_path.with_name("preferences.json")
@@ -327,6 +330,19 @@ class V3ApplicationView(QWidget):
         if recent_project is not None:
             self.set_recent_project(recent_project)
         self.show_new_project()
+        if self._update_client is not None:
+            from v3_updater import UpdateController
+
+            self._update_controller = UpdateController(
+                self,
+                self._update_client,
+                self._diagnostic_journal,
+            )
+
+    def start_update_check(self) -> bool:
+        if self._update_controller is None:
+            return False
+        return self._update_controller.start_check()
 
     def _runtime_settings(self) -> Mapping[str, Any]:
         base = dict(self._runtime_settings_provider() or {}) if self._runtime_settings_provider else {}

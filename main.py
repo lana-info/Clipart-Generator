@@ -3561,10 +3561,6 @@ class MainWindow(QMainWindow):
         self.restore_last_work_dir()
         self.load_saved_prompts()
         self.setup_settings_autosave_connections()
-        # Проверяем обновления при старте: без лишних сообщений,
-        # но если есть новая версия — спросим, скачивать или нет.
-        QTimer.singleShot(1200, lambda: self.check_for_updates(silent=True, auto_apply=True))
-
     def load_saved_prompts(self):
         try:
             if not os.path.exists(PROMPTS_STORAGE_FILE):
@@ -6688,6 +6684,7 @@ class MainWindow(QMainWindow):
 
 def create_v3_application_window():
     from diagnostics import DiagnosticJournal
+    from update_client import UpdateClient
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
     from v3_license import OnlineLicenseGate
 
@@ -6718,11 +6715,19 @@ def create_v3_application_window():
         product_id=LICENSE_PRODUCT_ID,
         timeout=10,
     )
+    update_client = UpdateClient(
+        license_client,
+        current_version=APP_VERSION,
+        download_directory=os.path.join(app_data, "updates"),
+        platform_id="windows-x64",
+        timeout=20,
+    )
     window = V3ApplicationView(
         runtime_settings_provider=lambda: build_runtime_settings(config, secrets),
         draft_path=os.path.join(app_data, "project_state.json"),
         license_gate=OnlineLicenseGate(license_client),
         diagnostic_journal=diagnostic_journal,
+        update_client=update_client,
     )
     diagnostic_journal.record(
         "application_ui_ready",
@@ -6812,6 +6817,35 @@ def create_authorized_v3_application_window(
     return window
 
 
+def install_diagnostic_exception_hook(journal) -> None:
+    """Record bounded traceback locations, then preserve the normal Qt/Python hook."""
+    if journal is None:
+        return
+    import traceback
+
+    previous_hook = sys.excepthook
+
+    def diagnostic_hook(error_type, error, trace) -> None:
+        frames = traceback.extract_tb(trace)[-8:]
+        locations = "; ".join(
+            f"{os.path.basename(frame.filename)}:{frame.lineno}:{frame.name}"
+            for frame in frames
+        )
+        journal.record(
+            "unhandled_exception",
+            "В приложении возникла необработанная ошибка.",
+            severity="error",
+            outcome="failed",
+            details={
+                "error_code": getattr(error_type, "__name__", "Exception"),
+                "error_message": f"{error}; {locations}",
+            },
+        )
+        previous_hook(error_type, error, trace)
+
+    sys.excepthook = diagnostic_hook
+
+
 def run_release_entrypoint_smoke(app) -> int:
     from v3_components import ModeCard
     from v3_mode_selection import MODE_CARD_SPECS
@@ -6895,6 +6929,8 @@ def run_packaged_entrypoint_check() -> int:
         == "Сменить лицензию"
         and packaged_view.mode_selection.api_settings_button.text()
         == "Настройки API"
+        and packaged_view.mode_selection.diagnostics_button.text()
+        == "Журнал диагностики"
     )
     controls_are_connected = (
         packaged_view.mode_selection.receivers(
@@ -6905,6 +6941,10 @@ def run_packaged_entrypoint_check() -> int:
             packaged_view.mode_selection.api_settings_requested
         )
         == 1
+        and packaged_view.mode_selection.receivers(
+            packaged_view.mode_selection.diagnostics_requested
+        )
+        == 1
     )
     default_path = default_work_directory()
     pictures_default_is_safe = (
@@ -6912,6 +6952,13 @@ def run_packaged_entrypoint_check() -> int:
         and os.path.abspath(str(default_path)) != os.path.abspath(os.getcwd())
     )
     packaged_view.close()
+
+    configured_view = create_v3_application_window()
+    update_channel_is_connected = (
+        configured_view._update_controller is not None
+        and configured_view._diagnostic_journal is not None
+    )
+    configured_view.close()
 
     smoke_window = QWidget()
     smoke_window._license_gate = gate
@@ -6930,6 +6977,7 @@ def run_packaged_entrypoint_check() -> int:
         and controls_are_present
         and controls_are_connected
         and pictures_default_is_safe
+        and update_channel_is_connected
         and startup_is_blocked
     ) else 1
 
@@ -6947,5 +6995,7 @@ if __name__ == "__main__":
     window = create_authorized_v3_application_window()
     if window is None:
         sys.exit(0)
+    install_diagnostic_exception_hook(getattr(window, "_diagnostic_journal", None))
     window.show()
+    QTimer.singleShot(1200, window.start_update_check)
     sys.exit(app.exec())

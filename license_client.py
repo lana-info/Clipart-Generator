@@ -209,6 +209,19 @@ class LicenseClient:
         return authorization
 
     def validate(self) -> LicenseAuthorization:
+        envelope, device_key, nonce = self.authenticated_request(
+            "/api/v1/licenses/validate"
+        )
+        return self._verify_authorization(envelope, device_key, nonce)
+
+    def authenticated_request(
+        self,
+        path: str,
+        extra: Mapping[str, str] | None = None,
+    ) -> tuple[dict[str, object], str, str]:
+        """Post a fresh activated-device proof for a protected client API."""
+        if not path.startswith("/api/v1/") or len(path) > 200:
+            raise LicenseError("Некорректный путь лицензионного сервиса")
         state = self._state.load()
         license_id = state.get("license_id")
         raw_private = state.get("device_private_key")
@@ -216,17 +229,20 @@ class LicenseClient:
             raise LicenseError("Активируйте лицензию перед запуском")
         private_key = Ed25519PrivateKey.from_private_bytes(raw_private)
         device_key, nonce, proof = self._device_proof(private_key)
-        envelope = self._post_json(
-            "/api/v1/licenses/validate",
-            {
-                "license_id": license_id,
-                "product_id": self.product_id,
-                "device_key": device_key,
-                "nonce": nonce,
-                "proof": proof,
-            },
-        )
-        return self._verify_authorization(envelope, device_key, nonce)
+        payload = {
+            "license_id": license_id,
+            "product_id": self.product_id,
+            "device_key": device_key,
+            "nonce": nonce,
+            "proof": proof,
+        }
+        for name, value in (extra or {}).items():
+            if not isinstance(name, str) or not isinstance(value, str) or len(name) > 64 or len(value) > 256:
+                raise LicenseError("Некорректные параметры защищённого запроса")
+            if name in payload:
+                raise LicenseError("Нельзя заменить параметры устройства")
+            payload[name] = value
+        return self._post_json(path, payload), device_key, nonce
 
     @staticmethod
     def _device_proof(private_key: Ed25519PrivateKey) -> tuple[str, str, str]:
@@ -272,6 +288,46 @@ class LicenseClient:
         if not isinstance(decoded, dict):
             raise LicenseError("Сервер лицензий вернул некорректный ответ")
         return decoded
+
+    def get_signed_json(self, path: str) -> dict[str, object]:
+        if not path.startswith("/api/v1/") or len(path) > 200:
+            raise LicenseError("Некорректный путь лицензионного сервиса")
+        req = request.Request(
+            f"{self._validated_base_url()}{path}",
+            headers={"Accept": "application/json"},
+            method="GET",
+        )
+        opener = request.build_opener(NoRedirectHandler())
+        try:
+            with opener.open(req, timeout=self.timeout) as response:
+                raw = self._read_response_limited(response)
+            envelope = json.loads(raw.decode("utf-8"))
+        except (error.HTTPError, error.URLError, TimeoutError, OSError, UnicodeError, ValueError):
+            raise LicenseError("Не удалось получить подписанные данные сервера") from None
+        if not isinstance(envelope, dict):
+            raise LicenseError("Сервер вернул некорректный подписанный ответ")
+        return envelope
+
+    def verify_server_payload(self, envelope: Mapping[str, object]) -> dict[str, object]:
+        if envelope.get("schema_version") != 1 or envelope.get("algorithm") != "Ed25519":
+            raise LicenseError("Формат подписи сервера не поддерживается")
+        key_id = envelope.get("kid")
+        payload = envelope.get("payload")
+        if not isinstance(key_id, str) or not isinstance(payload, dict):
+            raise LicenseError("Сервер вернул повреждённый подписанный ответ")
+        public_key = self._public_keys.get(key_id)
+        if public_key is None:
+            raise LicenseError("Неизвестный ключ подписи сервера")
+        signature = _b64decode(
+            envelope.get("signature"),
+            label="подпись сервера",
+            expected_length=64,
+        )
+        try:
+            public_key.verify(signature, rfc8785.dumps(payload))
+        except Exception as exc:
+            raise LicenseError("Не удалось проверить подпись сервера") from exc
+        return payload
 
     @staticmethod
     def _read_response_limited(response) -> bytes:
