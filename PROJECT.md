@@ -58,5 +58,8 @@ private-artifact delivery is implemented in the license-service repository on
 `codex/feature-secure-updates`. Migration 006 and that server branch were
 deployed to the existing public staging-like service on 2026-08-16; its health,
 artifact-upload UI, and license-signed update-key delegation were verified.
-The desktop branch still requires a new Windows build before the feature exists
-in an installer delivered to users.
+The Windows-only `3.0.1` build completed successfully in GitHub Actions run
+`31924194111` on 2026-08-16. The packaged entrypoint verified the internal
+`3.0.1` version plus the license, diagnostic, and update wiring before Inno
+Setup created the installer. The downloaded installer SHA-256 is
+`e095a018a0dd44d7f9d99c7d4bba7e35a7519974894f0428d957c51c40beb973`.

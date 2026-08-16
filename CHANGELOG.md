@@ -21,11 +21,14 @@
   update events, lets support copy one sanitized record, and exports a ZIP with
   TXT, JSON, safe system details, and a README.
 - Replaced the V3 entrypoint's legacy GitHub update scheduling with the licensed
-  server channel; no Windows build, GitHub Action, deployment, or revision
-  publication was performed as part of this implementation.
+  server channel; revision publication remains a separate post-acceptance step.
 - Made the bundled `release/VERSION.txt` authoritative for the packaged
   application as well as the installer, and made the Windows smoke test reject
   a build whose internal version differs from its installer version.
+- Built and verified the Windows-only `3.0.1` installer in Actions run
+  `31924194111`. The packaged V3 smoke passed before Inno Setup, and the
+  downloaded installer matched SHA-256
+  `e095a018a0dd44d7f9d99c7d4bba7e35a7519974894f0428d957c51c40beb973`.
 - Fixed the Windows release entrypoint so the main interface opens only after
   fresh online license validation or successful key activation; cancellation,
   offline validation, and missing license configuration now fail closed.

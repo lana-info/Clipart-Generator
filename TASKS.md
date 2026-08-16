@@ -6,8 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Build and verify the Windows `3.0.1` installer, then run
-manual Windows acceptance before publishing it as an update revision.**
+Current next task: **Run manual Windows acceptance for the verified `3.0.1`
+installer, then upload it as a draft revision and test licensed update delivery
+before publication.**
 
 ## Phase 1 - Preparation
 
@@ -1532,6 +1533,8 @@ Verification:
   key delegation.
 - [ ] Validate the manifest/download path with a draft revision after the new
   Windows artifact exists.
+- [x] Build Windows `3.0.1` in run `31924194111`; verify the packaged V3
+  entrypoint, exact internal version, installer creation, and downloaded SHA-256.
 - [ ] Windows upgrade, cancellation, UAC, and rollback safety receive manual
   isolated checks after the separately authorized build.
 
@@ -1553,6 +1556,8 @@ Verification:
 - [x] Retention, corruption recovery, event bounds, redaction, copy, export,
   first-screen/wizard visibility, processing events, and packaged-entrypoint
   wiring have automated coverage.
+- [x] Package the journal and its connected initial-screen/wizard actions in the
+  verified Windows `3.0.1` build.
 - [ ] Confirm the journal layout and exported ZIP manually in the packaged
   Windows application.
 

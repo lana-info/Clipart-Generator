@@ -28,9 +28,10 @@ The licensed V3 updater and diagnostic journal are implemented and covered by
 the desktop tests. Migration 006 and the matching license-service branch were
 deployed on 2026-08-16 after a fresh database backup; the public health endpoint,
 artifact-upload UI, and signed update-key delegation passed live checks. The
-next step is the authorized Windows `3.0.1` build from
-`codex/feature-updates-diagnostics`, followed by artifact verification and
-manual Windows acceptance.
+Windows `3.0.1` build completed in run `31924194111`, and its downloaded
+installer passed the generated SHA-256 check. The next step is manual
+installation and UI/update acceptance on Windows; only after that should this
+exact artifact be uploaded and published as a licensed update revision.
 
 ## Blockers and risks
 
@@ -45,10 +46,11 @@ manual Windows acceptance.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 - The installer from run `31909510317` predates the new updater and diagnostic
-  journal. It must not be presented as containing these changes.
-- Secure update delivery is deployed but has no published `3.0.1` revision yet;
-  update download cannot be exercised end to end until the new Windows artifact
-  exists and a controlled test revision is created.
+  journal. Use the verified `3.0.1` installer from run `31924194111` for current
+  acceptance.
+- Secure update delivery is deployed and the Windows artifact exists, but no
+  `3.0.1` revision is published yet. Manual Windows installation should precede
+  a controlled draft upload and end-to-end update test.
 
 ## Prohibited without explicit approval
 
