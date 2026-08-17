@@ -43,7 +43,6 @@ from v3_processing_editor import (
     ProcessingPipelineEditor,
     RunPlanBuilder,
     apply_processing_recipe as _shared_apply_processing_recipe,
-    processing_pipeline_steps as _shared_processing_pipeline_steps,
 )
 from v3_provider_registry import (
     KIE_MODEL_OPTIONS,
@@ -61,6 +60,8 @@ from v3_project_state import (
     route_for_mode,
 )
 from v3_wizard import AppShell
+from config_schema import resolve_output_directory
+from processing_contract import pipeline_steps as _pure_pipeline_steps
 
 
 MAX_LOCAL_FILE_BYTES = 100 * 1024 * 1024
@@ -213,7 +214,7 @@ def apply_processing_recipe(state: ProjectState, recipe: str) -> None:
         setattr(current, name, getattr(preset, name))
 
 
-def processing_pipeline_steps(
+def _legacy_processing_pipeline_steps(
     operations: ImageOperationData,
 ) -> tuple[str, ...]:
     steps: list[str] = []
@@ -252,7 +253,7 @@ def processing_pipeline_steps(
 
 PROCESSING_RECIPES = _SHARED_PROCESSING_RECIPES
 apply_processing_recipe = _shared_apply_processing_recipe
-processing_pipeline_steps = _shared_processing_pipeline_steps
+processing_pipeline_steps = _pure_pipeline_steps
 
 
 def uses_full_image_changes(operations: ImageOperationData) -> bool:
@@ -1178,6 +1179,7 @@ def build_processing_run_request(
             raise ProcessingFlowError(
                 "Рабочая папка не существует или недоступна для записи"
             )
+    configured_output = resolve_output_directory(work_dir, configured_output)
     if not state.processing.selected_files:
         raise ProcessingFlowError("Добавьте хотя бы один файл")
     if len(state.processing.selected_files) > MAX_PROCESSING_FILES:

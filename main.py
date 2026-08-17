@@ -46,6 +46,7 @@ from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
 from security_redaction import redact_text
+from processing_contract import publish_atomic, run_workspace
 from model_catalog import (
     GENERATION_MODEL_META as CATALOG_GENERATION_MODEL_META,
     GENERATION_MODELS as CATALOG_GENERATION_MODELS,
@@ -1058,14 +1059,12 @@ class WorkerThread(QThread):
         invalid persisted workspace path. Final exports remain controlled by
         ``self.output_dir``.
         """
-        workspace = os.path.abspath(os.path.expanduser(str(self.work_dir or "")))
-        if workspace and os.path.dirname(workspace) != workspace:
-            candidate = os.path.join(workspace, "raw")
-            try:
-                os.makedirs(candidate, exist_ok=True)
-                return candidate
-            except OSError:
-                pass
+        candidate = str(run_workspace(self.output_dir or self.work_dir))
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            return candidate
+        except OSError:
+            pass
         return tempfile.mkdtemp(prefix="clipart-generator-raw-")
 
     def _uses_local_upscale(self):
@@ -1797,7 +1796,7 @@ class WorkerThread(QThread):
         with self._publish_lock:
             if not self.is_running:
                 raise ProcessingCancelled("Остановлено пользователем")
-            os.replace(stage_path, output_path)
+            publish_atomic(stage_path, output_path)
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
         self._ensure_running()

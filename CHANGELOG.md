@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Добавлен pure processing contract: immutable context/step plan, provider и
+  cancellation/event seams, secret-safe failure classification, output-adjacent
+  run workspace и единая atomic publication primitive.
+
 - Добавлен pure schema boundary для V3 preferences: version/migration table,
   safe defaults, nested secret stripping, atomic save и проверка валидного
   `output_dir` с fallback из `work_dir`.
