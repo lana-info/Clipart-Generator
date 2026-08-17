@@ -16,7 +16,7 @@ Updated: 2026-08-17
 
 - Base branch: `develop/3.0`
 - Current task branch: `codex/tech-debt-11`
-- Latest task commit: `ffd407a` (cross-component audit, lifecycle fixes, and
+- Latest completed audit commit: `e64ee12` (cross-component audit, lifecycle fixes, and
   sensitive-artifact cleanup)
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -25,9 +25,10 @@ Updated: 2026-08-17
 ## Next task
 
 The cross-component audit and local sensitive-artifact cleanup are implemented
-and covered by the desktop tests. The next step is manual installation and
-UI/update acceptance on Windows; only after that should the verified artifact
-be uploaded and published as a licensed update revision.
+and covered by the desktop tests. The Azure build-only pipeline is configured;
+the next step is to run it manually and then perform installation and UI/update
+acceptance on Windows. Only after that should the verified artifact be uploaded
+and published as a licensed update revision.
 
 ## Blockers and risks
 
@@ -58,8 +59,8 @@ be uploaded and published as a licensed update revision.
   in `docs/superpowers/specs/2026-08-17-vibix-shared-mark-design.md`.
 - Branding is integrated into the application runtime, Windows icon set, and
   Inno Setup configuration. The current Windows installer naming convention is
-  `VibixImages-Setup-<version>.exe`; a new Windows build is still pending an
-  explicit build request.
+  `VibixImages-Setup-<version>.exe`; a new Windows build is pending the manual
+  Azure pipeline run.
 - Previous license keys did not exist, so no license-key migration is required;
   the first Vibix Images installation activates a new key through the existing
   online license flow.

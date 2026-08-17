@@ -1,0 +1,101 @@
+trigger: none
+pr: none
+
+parameters:
+  - name: appVersion
+    displayName: App version
+    type: string
+    default: '3.0.1'
+
+pool:
+  vmImage: windows-latest
+
+steps:
+  - checkout: self
+    clean: true
+
+  - task: UsePythonVersion@0
+    displayName: Use Python 3.12
+    inputs:
+      versionSpec: '3.12'
+      addToPath: true
+
+  - powershell: |
+      python -m pip install --upgrade pip
+      python -m pip install -c constraints-build.txt -r requirements.txt
+      python -m pip install -c constraints-build.txt -r requirements-dev.txt
+    displayName: Install build dependencies
+
+  - powershell: |
+      python -m py_compile main.py
+      $env:QT_QPA_PLATFORM = 'offscreen'
+      python -m unittest tests.test_license_client_security tests.test_v3_license_gate tests.test_v3_license_flow_gate tests.test_v3_run_queue tests.test_release_entrypoint tests.test_license_service_contract -v
+      if ($LASTEXITCODE -ne 0) { throw "Release gate tests failed with exit code $LASTEXITCODE" }
+      python scripts/check_sensitive_artifacts.py --git-tracked
+    displayName: Run offline release gates
+
+  - powershell: |
+      $archiveUrl = 'https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases/download/v0.2.0/realesrgan-ncnn-vulkan-v0.2.0-windows.zip'
+      $archivePath = Join-Path $env:AGENT_TEMPDIRECTORY 'realesrgan-ncnn-vulkan-v0.2.0-windows.zip'
+      $expectedSha256 = '1BBBDB12D470AF80B035C773682E144C6C2F6ECE9210832A289AF0A48CE3FA9A'
+      $extractPath = Join-Path $env:AGENT_TEMPDIRECTORY 'realesrgan'
+      $targetPath = '.\realesrgan-ncnn-vulkan-20211212-windows'
+
+      Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+      $actualSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+      if ($actualSha256 -ne $expectedSha256) {
+        throw "Real-ESRGAN archive SHA-256 mismatch: $actualSha256"
+      }
+      Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
+      $exe = Get-ChildItem -LiteralPath $extractPath -Recurse -Filter 'realesrgan-ncnn-vulkan.exe' | Select-Object -First 1
+      if (-not $exe) { throw 'Bundled Local Real-ESRGAN executable was not found after extraction.' }
+      Copy-Item -LiteralPath $exe.Directory.FullName -Destination $targetPath -Recurse -Force
+    displayName: Download verified Real-ESRGAN runtime
+
+  - powershell: |
+      powershell -ExecutionPolicy Bypass -File .\build.ps1 -AppVersion '${{ parameters.appVersion }}'
+      if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed with exit code $LASTEXITCODE" }
+    displayName: Build Windows application
+
+  - powershell: |
+      $env:QT_QPA_PLATFORM = 'offscreen'
+      python -c "from PyQt6.QtWidgets import QApplication; from main import create_v3_application_window; app=QApplication([]); window=create_v3_application_window(); assert len(window.mode_selection.mode_cards) == 3; window.close(); app.quit()"
+      $exe = 'dist\Vibix Images\Vibix Images.exe'
+      if (-not (Test-Path -LiteralPath $exe)) { throw "Packaged executable is missing: $exe" }
+      & $exe --release-entrypoint-smoke "--expected-app-version=${{ parameters.appVersion }}"
+      if ($LASTEXITCODE -ne 0) { throw "Packaged release smoke failed with exit code $LASTEXITCODE" }
+    displayName: Verify packaged release entrypoint
+
+  - powershell: |
+      choco install innosetup -y --no-progress
+      $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+      if (-not (Test-Path -LiteralPath $iscc)) { throw "Inno Setup compiler is missing: $iscc" }
+      & $iscc '/DAppVersion=${{ parameters.appVersion }}' '.\installer.iss'
+      if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+    displayName: Build Windows installer
+
+  - powershell: |
+      $setupPath = 'release\VibixImages-Setup-${{ parameters.appVersion }}.exe'
+      if (-not (Test-Path -LiteralPath $setupPath)) { throw "Installer is missing: $setupPath" }
+      $checksumPath = 'release\VibixImages-Setup-${{ parameters.appVersion }}.sha256'
+      $hash = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA256).Hash
+      "$hash  $(Split-Path -Leaf $setupPath)" | Out-File -FilePath $checksumPath -Encoding ascii
+
+      python -m build_provenance
+      python release_contract.py `
+        --version-file release/VERSION.txt `
+        --installer-name 'VibixImages-Setup-${{ parameters.appVersion }}.exe' `
+        --executable 'dist\Vibix Images\Vibix Images.exe' `
+        --checksum $checksumPath
+
+      $staging = '$(Build.ArtifactStagingDirectory)'
+      New-Item -ItemType Directory -Force -Path $staging | Out-Null
+      Copy-Item -LiteralPath $setupPath, $checksumPath -Destination $staging
+    displayName: Validate and stage installer artifact
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish Windows installer
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)'
+      artifact: windows-installer
+      publishLocation: pipeline
