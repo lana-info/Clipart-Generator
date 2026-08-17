@@ -12,6 +12,9 @@
 
 ## Unreleased
 
+- Закрыт release contract: `release/VERSION.txt` стал строгим source of truth,
+  packaging и workflow используют имя `Vibix Images.exe`, а stale/invalid
+  version manifest отклоняется тестами и release-contract валидатором.
 - Added the licensed V3 Windows update flow backed by the self-hosted license
   service. It checks once after successful startup licensing, asks before any
   download, treats `Не сейчас` as no download, verifies the signed manifest,

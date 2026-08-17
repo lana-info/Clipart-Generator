@@ -1,4 +1,4 @@
-# Clipart Generator 3.0
+# Vibix Images 3.0
 
 Desktop-приложение для трёх рабочих сценариев:
 
@@ -8,11 +8,9 @@ Desktop-приложение для трёх рабочих сценариев:
 
 ## Статус релиза
 
-Ветка `develop/3.0` содержит source-версию 3.0 и контрольную точку
-`v3.0.0-rc1`. Публичные упаковочные metadata и артефакты пока имеют версию
-`2.0`; это обязательный release blocker, а не завершённый шаг публикации.
-См. [KNOWN_LIMITATIONS_3.0.md](KNOWN_LIMITATIONS_3.0.md) и
-[RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md).
+Source-build и Windows packaging используют `release/VERSION.txt` как
+единственный source of truth. Публикация обновлений остаётся отдельным
+согласованным шагом; draft-артефакты не считаются опубликованным релизом.
 
 ## Для пользователя
 
@@ -27,7 +25,7 @@ Desktop-приложение для трёх рабочих сценариев:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python run_clipart_gui_v3.py
+python main.py
 ```
 
 Для локального тестирования используйте копии изображений и отдельную папку
@@ -50,7 +48,7 @@ git diff --check
 - [QUALITY_GATE_ISSUES_3.0.md](QUALITY_GATE_ISSUES_3.0.md) — quality gate;
 - [REAL_USE_TEST_3.0.md](REAL_USE_TEST_3.0.md) — эксплуатационная проверка;
 - [PRODUCT_BACKLOG.md](PRODUCT_BACKLOG.md) — будущие идеи, не roadmap;
-- [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) — внутренний технический долг;
+- [TECHNICAL_DEBT.md](TECHNICAL_DEBT.md) — указатель технического долга;
 - [DOCUMENTATION_AUDIT_3.0.md](DOCUMENTATION_AUDIT_3.0.md) — аудит структуры документов.
 
 ## Ветки и контрольные точки

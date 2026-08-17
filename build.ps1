@@ -1,18 +1,27 @@
 param(
-    [string]$AppVersion = "3.0"
+    [string]$AppVersion = ""
 )
 
 $ErrorActionPreference = "Stop"
-
-if ($AppVersion -notmatch '^\d+\.\d+(\.\d+)?$') {
-    throw "AppVersion must be a semantic version such as 3.0 or 3.0.1"
-}
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $projectRoot
 $pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $pythonExe)) {
     $pythonExe = "python"
+}
+
+Write-Host "==> Validate release version"
+$releaseDir = Join-Path $projectRoot "release"
+$versionFile = Join-Path $releaseDir "VERSION.txt"
+if ([string]::IsNullOrWhiteSpace($AppVersion)) {
+    if (-not (Test-Path -LiteralPath $versionFile)) {
+        throw "Release version source is missing: $versionFile"
+    }
+    $AppVersion = (Get-Content -Raw $versionFile).Trim()
+}
+if ($AppVersion -notmatch '^\d+\.\d+(\.\d+)?$') {
+    throw "AppVersion must be a semantic version such as 3.0 or 3.0.1"
 }
 
 Write-Host "==> Install build dependencies"
@@ -24,11 +33,9 @@ if (Test-Path "build") { Remove-Item "build" -Recurse -Force }
 if (Test-Path "dist") { Remove-Item "dist" -Recurse -Force }
 
 Write-Host "==> Prepare release version"
-$releaseDir = Join-Path $projectRoot "release"
 if (-not (Test-Path $releaseDir)) {
     New-Item -ItemType Directory -Path $releaseDir | Out-Null
 }
-$versionFile = Join-Path $releaseDir "VERSION.txt"
 [System.IO.File]::WriteAllText($versionFile, "$AppVersion`r`n", [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "==> Build app with PyInstaller"
@@ -55,8 +62,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $distAppDir = Join-Path $projectRoot "dist\Vibix Images"
+$AppExeName = "Vibix Images.exe"
 if (-not (Test-Path -LiteralPath $distAppDir)) {
     throw "PyInstaller output is missing: $distAppDir"
 }
+if (-not (Test-Path -LiteralPath (Join-Path $distAppDir $AppExeName))) {
+    throw "Packaged executable is missing: $(Join-Path $distAppDir $AppExeName)"
+}
 
-Write-Host "Done: dist\\Vibix Images"
+Write-Host "Done: dist\\Vibix Images\\$AppExeName"

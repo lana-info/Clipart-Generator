@@ -43,6 +43,7 @@ from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
+from release_contract import resolve_release_version
 
 try:
     import certifi
@@ -94,25 +95,12 @@ from PyQt6.QtWidgets import (
     QSizePolicy,
 )
 
-DEFAULT_APP_VERSION = "3.0"
-
-
 def resolve_app_version(resource_root=None):
-    """Read the version bundled by the release build, with a safe source fallback."""
+    """Read the version bundled by the release build and fail closed if absent."""
     root = resource_root or getattr(
         sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))
     )
-    version_path = os.path.join(root, "release", "VERSION.txt")
-    try:
-        if os.path.getsize(version_path) > 64:
-            return DEFAULT_APP_VERSION
-        with open(version_path, "r", encoding="utf-8-sig") as version_file:
-            version = version_file.read().strip()
-    except OSError:
-        return DEFAULT_APP_VERSION
-    if not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", version):
-        return DEFAULT_APP_VERSION
-    return version
+    return resolve_release_version(os.path.join(root, "release"))
 
 
 APP_VERSION = resolve_app_version()

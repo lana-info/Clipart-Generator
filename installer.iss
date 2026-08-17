@@ -1,6 +1,6 @@
 #define AppName "Vibix Images"
 #ifndef AppVersion
-  #define AppVersion "3.0"
+  #error "AppVersion must be supplied from release/VERSION.txt by the release build"
 #endif
 #define AppPublisher "Vibix"
 #define AppExeName "Vibix Images.exe"

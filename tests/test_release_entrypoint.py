@@ -162,7 +162,8 @@ class ReleaseEntrypointTests(unittest.TestCase):
             self.assertEqual(resolve_app_version(temporary), "3.0.1")
 
             Path(release_dir, "VERSION.txt").write_text("unsafe-version\n", encoding="utf-8")
-            self.assertEqual(resolve_app_version(temporary), "3.0")
+            with self.assertRaises(ValueError):
+                resolve_app_version(temporary)
 
 
 if __name__ == "__main__":

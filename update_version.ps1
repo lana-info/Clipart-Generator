@@ -19,7 +19,7 @@ if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($SetupFileName)) {
-    $SetupFileName = "ClipartGenerator-Setup-$AppVersion.exe"
+    $SetupFileName = "VibixImages-Setup-$AppVersion.exe"
 }
 
 if ([string]::IsNullOrWhiteSpace($SetupPath)) {

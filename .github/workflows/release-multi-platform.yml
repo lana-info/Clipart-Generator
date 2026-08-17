@@ -8,8 +8,8 @@ on:
     inputs:
       app_version:
         description: "Версия релиза (пример: 0.1.1)"
-        required: true
-        default: "3.0"
+        required: false
+        default: ""
 
 jobs:
   build-windows:
@@ -23,12 +23,8 @@ jobs:
         shell: powershell
         run: |
           $inputVersion = "${{ github.event.inputs.app_version }}"
-          if ([string]::IsNullOrWhiteSpace($inputVersion)) {
-            $version = (Get-Content -Raw "release/VERSION.txt").Trim()
-          }
-          else {
-            $version = $inputVersion
-          }
+          $sourceVersion = (Get-Content -Raw "release/VERSION.txt").Trim()
+          $version = if ([string]::IsNullOrWhiteSpace($inputVersion)) { $sourceVersion } else { $inputVersion }
 
           if ($version -notmatch '^\d+\.\d+(\.\d+)?$') {
             throw "app_version must be a semantic version such as 3.0 or 3.0.1"
@@ -87,7 +83,7 @@ jobs:
         run: |
           $env:QT_QPA_PLATFORM = "offscreen"
           python -c "from PyQt6.QtWidgets import QApplication; from main import create_v3_application_window; app=QApplication([]); window=create_v3_application_window(); assert len(window.mode_selection.mode_cards) == 3; window.close(); app.quit()"
-          $exe = "dist\Clipart Generator\Clipart Generator.exe"
+          $exe = "dist\Vibix Images\Vibix Images.exe"
           if (-not (Test-Path -LiteralPath $exe)) {
             throw "Fresh PyInstaller executable was not found: $exe"
           }
@@ -105,9 +101,18 @@ jobs:
       - name: Calculate setup hash
         shell: powershell
         run: |
-          $setupPath = "release\ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.exe"
+          $setupPath = "release\VibixImages-Setup-${{ steps.version.outputs.app_version }}.exe"
           $hash = (Get-FileHash $setupPath -Algorithm SHA256).Hash
-          "$hash  $(Split-Path -Leaf $setupPath)" | Out-File -FilePath "release\ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.sha256" -Encoding ascii
+          "$hash  $(Split-Path -Leaf $setupPath)" | Out-File -FilePath "release\VibixImages-Setup-${{ steps.version.outputs.app_version }}.sha256" -Encoding ascii
+
+      - name: Validate release contract
+        shell: powershell
+        run: |
+          python release_contract.py `
+            --version-file release/VERSION.txt `
+            --installer-name "VibixImages-Setup-${{ steps.version.outputs.app_version }}.exe" `
+            --executable "dist\Vibix Images\Vibix Images.exe" `
+            --checksum "release\VibixImages-Setup-${{ steps.version.outputs.app_version }}.sha256"
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -116,8 +121,8 @@ jobs:
           retention-days: 3
           if-no-files-found: error
           path: |
-            release/ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.exe
-            release/ClipartGenerator-Setup-${{ steps.version.outputs.app_version }}.sha256
+            release/VibixImages-Setup-${{ steps.version.outputs.app_version }}.exe
+            release/VibixImages-Setup-${{ steps.version.outputs.app_version }}.sha256
             release/VERSION.txt
 
   build-macos:
