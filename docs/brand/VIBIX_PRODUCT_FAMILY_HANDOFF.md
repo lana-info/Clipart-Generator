@@ -1,8 +1,7 @@
 # Vibix Product Family — handoff
 
-Status: product naming and color system approved on 2026-08-17. The shared
-`V` mark shown in the visual sample is a placeholder until its geometry is
-approved separately.
+Status: product naming, color system, and shared `V` application mark approved
+on 2026-08-17.
 
 ## Brand architecture
 
@@ -35,24 +34,45 @@ navigation `#14213D`, and supporting blue `#60A5FA`.
 - Product name format: `Vibix Images`, `Vibix Video`, `Vibix Boards`,
   `Vibix Poly`, and `Vibix Studio`.
 
+## Approved shared mark
+
+The application mark is a solid white `V` with one separate dark product-color
+pixel to its lower right. The pixel does not touch the letter. Its lower edge
+shares the same baseline as the lowest edge of the `V`, so it reads as a final
+digital point rather than a detached decoration.
+
+Canonical geometry uses a `112 × 112` view box:
+
+- rounded product-color tile: `x=4`, `y=4`, `width=104`, `height=104`,
+  `rx=27`;
+- white `V` path: `M21 28H40L54 69L68 28H86L62 82H46Z`;
+- dark pixel: `x=83`, `y=69`, `width=13`, `height=13`, `rx=2.5`;
+- shared lower baseline: `y=82`;
+- the open space between the `V` and pixel must remain visible at every size.
+
+The reusable SVG master is `vibix-shared-mark.svg`. It contains the Vibix
+Images colors by default. For another product, keep all geometry unchanged and
+replace only the tile and pixel colors according to the product table above.
+
 ## Usage rules
 
 1. Do not change the shared icon silhouette between products; change only its
    product color treatment.
-2. Keep product colors out of long body text. Use them for primary actions,
+2. Do not attach the dark pixel to the `V`, move it above the shared baseline,
+   or introduce additional pixels.
+3. Keep product colors out of long body text. Use them for primary actions,
    selection, small status accents, illustration details, and the app icon.
-3. Preserve accessible text contrast. White text is used on the strong primary
+4. Preserve accessible text contrast. White text is used on the strong primary
    colors; dark text is used on soft product backgrounds.
-4. Use the multicolor treatment only for Vibix Studio or a family-level asset.
-5. Do not use `Pinterest`, `Pin`, or a variation as a Vibix product name.
+5. Use the multicolor treatment only for Vibix Studio or a family-level asset.
+6. Do not use `Pinterest`, `Pin`, or a variation as a Vibix product name.
    Platform compatibility can be described inside the product interface.
-6. The application subtitle for Vibix Images is
+7. The application subtitle for Vibix Images is
    `AI Image Generation & Processing`.
 
 ## Deliverables still pending
 
-- Final shared `V` mark geometry.
-- Master SVG wordmark and product lockups.
+- Master wordmark and product lockups.
 - Windows multi-resolution ICO and transparent PNG exports.
 - Installer artwork and final application integration.
 

@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 ## Operating model
 
@@ -51,6 +51,17 @@ exact artifact be uploaded and published as a licensed update revision.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.
+
+## Approved brand direction
+
+- Product name: `Vibix Images`.
+- Subtitle: `AI Image Generation & Processing`.
+- Shared family mark: a solid white `V` plus one separate dark pixel at the
+  lower right, aligned to the same lower baseline.
+- The canonical geometry and portable SVG are recorded under `docs/brand/` and
+  in `docs/superpowers/specs/2026-08-17-vibix-shared-mark-design.md`.
+- Branding is documented but not yet integrated into the application,
+  Windows icon set, or installer.
 
 ## Prohibited without explicit approval
 
