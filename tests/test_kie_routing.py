@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, PngImagePlugin
 
 import main
 from metadata_inspector import inspect_image_metadata
+from network_security import NetworkSecurityError
 
 
 DUMMY_KIE_KEY = "test-kie-secret-must-not-appear-in-logs"
@@ -261,7 +262,7 @@ class KieRoutingTests(unittest.TestCase):
 
             worker._mode1_generate(process_generated=False)
 
-            raw_outputs = list((Path(temp_dir) / "raw").glob("*.png"))
+            raw_outputs = list((Path(temp_dir) / "output" / ".run").glob("*.png"))
             final_outputs = list((Path(temp_dir) / "output").glob("*.png"))
             self.assertEqual([call[0] for call in calls], ["generate", "download", "download"])
             self.assertEqual(len(raw_outputs), 1)
@@ -345,7 +346,7 @@ class KieRoutingTests(unittest.TestCase):
                     "download_removed",
                 ],
             )
-            raw_outputs = list((temp_path / "raw").glob("*.png"))
+            raw_outputs = list((temp_path / "output" / ".run").glob("*.png"))
             final_outputs = list((temp_path / "output").glob("*.png"))
             self.assertGreaterEqual(len(raw_outputs), 2)
             self.assertEqual(len(final_outputs), 1)
@@ -458,41 +459,20 @@ class KieRoutingTests(unittest.TestCase):
         )
 
         worker._protect_secret_headers_from_redirects(req)
-        redirected = main.HttpsOnlyRedirectHandler().redirect_request(
-            req,
-            None,
-            302,
-            "Found",
-            {},
+        for destination in (
             "https://attacker.example/output.png",
-        )
-        redirected_headers = {
-            key.lower(): value for key, value in redirected.header_items()
-        }
-
-        self.assertNotIn("authorization", redirected_headers)
-        self.assertNotIn("x-api-key", redirected_headers)
-        self.assertEqual(redirected_headers["accept"], "application/json")
-        self.assertIsNone(
-            main.HttpsOnlyRedirectHandler().redirect_request(
-                req,
-                None,
-                302,
-                "Found",
-                {},
-                "http://attacker.example/output.png",
-            )
-        )
-        self.assertIsNone(
-            main.HttpsOnlyRedirectHandler().redirect_request(
-                req,
-                None,
-                302,
-                "Found",
-                {},
-                "https://user:password@attacker.example/output.png",
-            )
-        )
+            "http://attacker.example/output.png",
+            "https://user:password@attacker.example/output.png",
+        ):
+            with self.assertRaises(NetworkSecurityError):
+                main.HttpsOnlyRedirectHandler().redirect_request(
+                    req,
+                    None,
+                    302,
+                    "Found",
+                    {},
+                    destination,
+                )
 
     def test_worker_probe_uses_redirect_safe_secret_headers(self):
         worker = main.WorkerThread(

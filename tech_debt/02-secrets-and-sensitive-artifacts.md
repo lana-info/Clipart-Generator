@@ -5,14 +5,13 @@ Status: Done (2026-08-17)
 Evidence: `security_redaction.py`, `tests/test_security_redaction.py`,
 `docs/security/secret-storage-policy.md`, POSIX mode enforcement in
 `api_credentials.py`, `scripts/check_sensitive_artifacts.py` and the CI syntax
-step. Tracked `licenses.db` remains intentionally unchanged; its migration
-requires a separate backup/ownership decision and the scanner has an explicit
-temporary allowlist for it.
+step. The legacy local `licenses.db` is no longer tracked; the scanner remains
+fail-closed for any local copy.
 
 ## Проблема и evidence
 
-- `licenses.db` отслеживается Git и потенциально содержит чувствительное
-  состояние лицензий; это прямо отмечено в `STATE.md` как риск.
+- Локальный `licenses.db` может содержать чувствительное состояние лицензий,
+  поэтому он остаётся ignored и не отслеживается Git.
 - Legacy `main.py`, `api_credentials.py`, `runtime_settings.py`, `license_client.py`
   и V3 settings имеют разные пути и правила хранения credentials.
 - В проекте есть `.env.example`, но нет единого проверяемого inventory полей,
@@ -36,8 +35,8 @@ temporary allowlist for it.
    license и provider errors.
 4. Добавить CI test/scan, который ловит имена ключей, PEM/private material,
    database dumps и credential-like values в новых tracked files.
-5. Миграцию `licenses.db` из Git делать отдельно, с backup и явным решением;
-   задача не должна молча удалять или переписывать базу.
+5. Не добавлять `licenses.db` обратно в Git; резервные копии и server-side
+   состояние хранить вне source repository.
 6. Добавить threat-model decision для plaintext user state: либо явная policy
    ACL с ограничением scope, либо OS-backed protection; не выбирать механизм
    молча в рамках extraction.

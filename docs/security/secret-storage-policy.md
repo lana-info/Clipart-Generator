@@ -16,9 +16,8 @@ ordinary logs, diagnostics exports, prompts, or exception text.
   Windows security change adds migration and recovery rules.
 - License device state, including its private device key, is stored separately in
   the per-user `license_state.json` with the same atomic/`0600` baseline.
-- `licenses.db` is server-side state. It remains in the repository temporarily
-  pending a separately approved backup and migration; this task does not read,
-  rewrite, or delete it.
+- `licenses.db` is server-side state. It is ignored and no longer tracked in the
+  desktop source repository; backups belong outside Git.
 
 ## Redaction
 
@@ -27,6 +26,6 @@ structured data. It redacts secret-like key names, bearer/query credentials,
 private-key blocks, and explicitly supplied secret values. Callers must pass
 untrusted nested data through `redact_value` before serialization.
 
-`scripts/check_sensitive_artifacts.py` is the source guard. Historical
-`licenses.db` is an explicit temporary baseline allowlist only; its backup and
-migration are a separate change and must remove that allowlist entry.
+`scripts/check_sensitive_artifacts.py` is the source guard. Any local
+`licenses.db` path remains blocked and must never be added to source control or
+release artifacts.

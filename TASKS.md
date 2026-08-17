@@ -1571,3 +1571,25 @@ Scope:
 - Resolve all high-severity findings before production deployment.
 - Production deployment, credential creation, and DNS changes require explicit
   owner approval.
+
+### Task 64 - Proactive Cross-Component Contract Audit
+
+Status: Local audit complete - Windows and live-account acceptance pending
+
+Implemented:
+- Align V3 generated-path validation with the worker's `output/.run` run workspace.
+- Make native stop-after-current terminal even when the stop marker follows a
+  successful output event; pending items are cancelled instead of left running.
+- Keep incomplete evidence fields as `unknown`/`None` instead of converting them
+  to clean/zero results.
+- Remove the legacy sensitive `licenses.db` from Git tracking while preserving
+  the ignored local copy for the configured local/server workflow.
+- Synchronize offline fixtures with the protected opener and run-workspace
+  contracts without making real provider requests.
+
+Verification:
+- [x] Focused regressions cover output-path trust, stop-after-current, incomplete
+  evidence, provider routing, and metadata-preserving outputs.
+- [x] Full local pytest and full `compileall .` checks.
+- [ ] Windows packaged, DPI, installer/UAC, real-account, live provider, and
+  native teardown checks; these remain `WINDOWS_REQUIRED` or `BLOCKED`.

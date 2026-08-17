@@ -395,6 +395,25 @@ class RunQueueSession(QObject):
             and 0 <= self.current_index < len(self.items)
             else None
         )
+        # A native stop-after-current request can emit the worker's stop
+        # marker after the current item has already reported its output.  The
+        # marker must therefore be handled before the terminal-item guard;
+        # otherwise the session remains running with pending items.
+        if any(marker in text for marker in _STOP_MARKERS):
+            if self.finished_at is not None:
+                return
+            if item is not None and item.status is RunItemStatus.RUNNING:
+                self._close_running_stages(item, "cancelled")
+                item.status = RunItemStatus.CANCELLED
+                item.short_message = "Операция отменена безопасно."
+                self._event("item_cancelled", item=item.index)
+            self._cancel_pending()
+            self.running = False
+            self.finished_at = time.monotonic()
+            self._event("run_cancelled")
+            self.changed.emit()
+            return
+
         if item is not None and item.status in {
             RunItemStatus.SUCCEEDED, RunItemStatus.FAILED, RunItemStatus.CANCELLED
         }:
@@ -414,7 +433,10 @@ class RunQueueSession(QObject):
 
         if text.startswith(_GENERATED_PREFIX) and item is not None:
             raw = text[len(_GENERATED_PREFIX) :].strip()
-            trusted = _trusted_worker_path(raw, self.work_dir / "raw")
+            # The worker's current intermediate-file contract is
+            # ``<output_dir>/.run``.  Trusting the legacy ``work_dir/raw``
+            # location makes valid generated paths look missing to the UI.
+            trusted = _trusted_worker_path(raw, self.output_dir / ".run")
             if trusted:
                 item.source_path = trusted
                 item.stage_statuses["generation"] = "complete"
@@ -472,20 +494,6 @@ class RunQueueSession(QObject):
             self._after_terminal_item()
             self.changed.emit()
             return
-
-        if any(marker in text for marker in _STOP_MARKERS):
-            if self.finished_at is not None:
-                return
-            if item is not None and item.status is RunItemStatus.RUNNING:
-                self._close_running_stages(item, "cancelled")
-                item.status = RunItemStatus.CANCELLED
-                item.short_message = "Операция отменена безопасно."
-                self._event("item_cancelled", item=item.index)
-            self._cancel_pending()
-            self.running = False
-            self.finished_at = time.monotonic()
-            self._event("run_cancelled")
-            self.changed.emit()
 
     def handle_progress_value(self, value: Any) -> None:
         if self.current_index is None:

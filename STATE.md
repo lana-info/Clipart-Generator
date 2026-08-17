@@ -15,31 +15,27 @@ Updated: 2026-08-17
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/feature-updates-diagnostics`
-- Latest feature commits: `1426e0c` (diagnostic journal), `ef52a9f`
-  (licensed updater), and `4a70fe7` (bounded/non-blocking hardening)
+- Current task branch: `codex/tech-debt-11`
+- Latest task commit: `ffd407a` (cross-component audit, lifecycle fixes, and
+  sensitive-artifact cleanup)
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-The licensed V3 updater and diagnostic journal are implemented and covered by
-the desktop tests. Migration 006 and the matching license-service branch were
-deployed on 2026-08-16 after a fresh database backup; the public health endpoint,
-artifact-upload UI, and signed update-key delegation passed live checks. The
-Windows `3.0.1` build completed in run `31924194111`, and its downloaded
-installer passed the generated SHA-256 check. The next step is manual
-installation and UI/update acceptance on Windows; only after that should this
-exact artifact be uploaded and published as a licensed update revision.
+The cross-component audit and local sensitive-artifact cleanup are implemented
+and covered by the desktop tests. The next step is manual installation and
+UI/update acceptance on Windows; only after that should the verified artifact
+be uploaded and published as a licensed update revision.
 
 ## Blockers and risks
 
 - The deployed license service and signed online desktop contract are active;
   availability of VDS, DNS, TLS, and PostgreSQL is therefore a direct
   application-availability dependency.
-- The tracked `licenses.db` is potentially sensitive and requires a separately
-  approved migration out of source control without exposing its contents.
+- The local legacy `licenses.db` is ignored and no longer tracked in source
+  control; server-side license state must use the configured external database.
 - Automated packaged checks passed, but final installation, production-license
   activation, Windows visual behavior, and SmartScreen behavior still require a
   manual check on the target Windows computer.

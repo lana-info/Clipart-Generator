@@ -5,13 +5,14 @@ Status: Done (2026-08-17)
 Evidence: `docs/maintenance/artifact-inventory.md`, the short-pointer update in
 `TECHNICAL_DEBT.md`, explicit Windows/macOS delivery scope in
 `CLIENT_DELIVERY.md`, and `tests/test_documentation_hygiene.py`. No historical
-or generated artifacts were deleted.
+or generated artifacts were deleted; the compile-blocking `main_restored.py`
+backup was later removed after an explicit owner decision.
 
 ## Проблема и evidence
 
-- В корне есть `main_restored.py` с invalid/non-text bytes, исторические
-  benchmark JSON/HTML и release artifacts; часть может быть нужна, часть только
-  увеличивает ambiguity.
+- Исторический `main_restored.py` с invalid/non-text bytes удалён из рабочего
+  дерева; benchmark JSON/HTML и release artifacts остаются классифицированными
+  отдельно.
 - Документы `TECHNICAL_DEBT.md`, `PROJECT_CLEANUP_REPORT.md`, `README.md`,
   `STATE.md`, `TASKS*.md` описывают пересекающиеся статусы и иногда разные
   версии/ветки.
@@ -31,8 +32,8 @@ or generated artifacts were deleted.
 
 1. Составить inventory tracked/ignored/generated files с KEEP/ARCHIVE/DELETE
    decision; не удалять автоматически.
-2. Пометить `main_restored.py`, старые benchmarks и release copies как
-   historical/experimental или вынести в утверждённый archive.
+2. Помечать старые benchmarks и release copies как historical/experimental или
+   выносить в утверждённый archive; backup-файлы не хранить в source tree.
 3. Свести технический долг в `tech_debt/`, а `TECHNICAL_DEBT.md` оставить коротким
    указателем.
 4. Удалить только доказанные дубликаты после явного решения и проверить ссылки.

@@ -209,6 +209,28 @@ class V3EvidenceCenterTests(unittest.TestCase):
                 )
                 self.assertGreaterEqual(inspector.call_count, 1)
 
+    def test_incomplete_inspection_does_not_become_clean_or_zero(self):
+        with tempfile.TemporaryDirectory(prefix="evidence-incomplete-") as temp:
+            state, source = self.make_state(temp)
+            incomplete = {
+                "status": "ok",
+                "categories": {"comments_text": {"present": False}},
+                "c2pa": {},
+            }
+            with patch(
+                "v3_evidence_center.inspect_image_metadata",
+                return_value=incomplete,
+            ):
+                report = build_evidence_report(state, str(source))
+
+            self.assertEqual(report["file_hints"]["metadata"], "unknown")
+            self.assertIsNone(
+                report["file_hints"]["categories"]["comments_text"]["item_count"]
+            )
+            self.assertIsNone(
+                report["file_hints"]["categories"]["comments_text"]["size_bytes"]
+            )
+
     def test_openai_generic_result_is_not_rendered_as_pixel_evidence(self):
         with tempfile.TemporaryDirectory(prefix="evidence-openai-ui-") as temp:
             state, source = self.make_state(temp)

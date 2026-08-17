@@ -5,7 +5,7 @@ This is a classification policy, not an automatic deletion list.
 | Scope | Decision | Owner / lifecycle |
 |---|---|---|
 | `main.py`, V3 modules, `tests/`, `third_party/` | KEEP | Runtime and regression source |
-| `main_restored.py` | HISTORICAL | Preserve for forensic comparison; never package or import |
+| `main_restored.py` | REMOVED FROM WORKTREE | Historical copy remains available in Git history; do not restore into the source tree |
 | `benchmark_*.json`, `TASK*_BENCHMARK.md`, `*_BENCHMARK.*` | HISTORICAL | Research evidence; retain with date/context |
 | `release/*.exe`, `release/*.zip`, `*.sha256` | RELEASE ARTIFACT | Keep only when referenced by release evidence; do not treat as source |
 | `release/ClipartGenerator-Setup-3.0.exe` and matching `.sha256` | HISTORICAL LOCAL ARTIFACT | Legacy filename; current workflow artifact is `VibixImages-Setup-<version>.exe`; do not publish the legacy pair |
@@ -14,8 +14,9 @@ This is a classification policy, not an automatic deletion list.
 | `.superpowers/` | LOCAL AGENT STATE | Never package or commit; ownership belongs to the local workspace |
 | `PROJECT_CLEANUP_REPORT.md`, `STATE.md`, `TASKS*.md` | PROJECT HISTORY / CONTROL DOCS | Keep; `tech_debt/README.md` is the current debt index |
 | `run_error.log`, generated PNGs, caches, `.pytest_cache/`, `__pycache__/` | GENERATED / LOCAL | Do not commit or include in release artifacts |
-| `licenses.db` | SENSITIVE LEGACY STATE | Keep unchanged until ownership/backup migration is approved |
+| `licenses.db` | LOCAL SENSITIVE STATE | Ignored and not tracked; keep backups and server data outside Git |
 | `TECHNICAL_DEBT.md` | POINTER | Canonical task status lives in `tech_debt/` |
 
-Historical files are not deleted by this task because provenance and rollback
-ownership are not established.
+Historical files are not deleted automatically. `main_restored.py` is the
+explicit exception: it was removed from the worktree after confirming that it
+is not imported or packaged; Git history remains the rollback source.

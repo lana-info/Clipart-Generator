@@ -121,6 +121,23 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(session.current_stage, "processing")
             self.assertNotIn("generation", session.items[0].stage_statuses)
 
+    def test_generated_output_run_workspace_is_trusted(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-generated-path-") as temp:
+            root = Path(temp)
+            run_dir = root / "output" / ".run"
+            run_dir.mkdir(parents=True)
+            generated = run_dir / "gen_001.png"
+            Image.new("RGB", (4, 4), "purple").save(generated)
+            session = RunQueueSession(
+                generation_request(root, count=1),
+                ProjectMode.CLIPART,
+            )
+            session.handle_progress("[1/1] Генерация")
+            session.handle_progress(f"Сгенерировано: {generated}")
+
+            self.assertEqual(session.items[0].source_path, str(generated.resolve()))
+            self.assertEqual(session.items[0].stage_statuses["generation"], "complete")
+
     def test_missing_processing_file_is_marked_failed(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-missing-file-") as temp:
             session = RunQueueSession(

@@ -222,9 +222,8 @@ nonce/challenge, and proof of possession of the device private key.
 - Responses are bounded and errors do not disclose keys, credentials, internal
   paths, SQL, or provider bodies.
 - Database, signing keys, backups, artifacts, and logs are excluded from Git.
-- The tracked legacy `licenses.db` must be investigated and removed from future
-  source tracking through an approved migration; its contents must not be
-  printed or copied into documentation.
+- The legacy local `licenses.db` is removed from future source tracking; its
+  contents must not be printed or copied into documentation.
 - Desktop controls make bypass harder but cannot make a Python desktop client
   impossible to patch. Server-side state, per-operation validation, device-key
   proof, rate limits, and audit evidence are the authoritative controls.

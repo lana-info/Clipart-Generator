@@ -165,6 +165,16 @@ def _file_hint_status(
     if inspection.get("status") != "ok":
         return FileHintStatus.UNKNOWN, FileHintStatus.UNKNOWN
     categories = inspection.get("categories", {})
+    expected_categories = {
+        "exif",
+        "xmp",
+        "iptc",
+        "comments_text",
+        "embedded_thumbnail",
+        "generator_fields",
+    }
+    if not isinstance(categories, dict) or not expected_categories.issubset(categories):
+        return FileHintStatus.UNKNOWN, FileHintStatus.UNKNOWN
     metadata_present = any(
         bool(categories.get(name, {}).get("present"))
         for name in (
@@ -217,18 +227,28 @@ def _safe_category_summary(
     inspection: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     categories = inspection.get("categories", {})
-    return {
-        name: {
-            "present": bool(categories.get(name, {}).get("present")),
-            "item_count": max(
-                0,
-                int(categories.get(name, {}).get("item_count", 0)),
-            ),
-            "size_bytes": max(
-                0,
-                int(categories.get(name, {}).get("size_bytes", 0)),
-            ),
+
+    def safe_nonnegative(value: Any) -> int | None:
+        if isinstance(value, bool) or value is None:
+            return None
+        try:
+            numeric = int(value)
+        except (TypeError, ValueError):
+            return None
+        return max(0, numeric)
+
+    def category_summary(name: str) -> dict[str, Any]:
+        category = categories.get(name) if isinstance(categories, dict) else None
+        if not isinstance(category, dict):
+            category = {}
+        return {
+            "present": category.get("present") if isinstance(category.get("present"), bool) else None,
+            "item_count": safe_nonnegative(category.get("item_count")),
+            "size_bytes": safe_nonnegative(category.get("size_bytes")),
         }
+
+    return {
+        name: category_summary(name)
         for name in (
             "exif",
             "xmp",
