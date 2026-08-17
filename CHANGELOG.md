@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Зафиксирован license/update lifecycle contract: versioned endpoints,
+  bounded timeout, explicit outage/revoke/tamper states, clock skew и
+  overlapping trust-root rotation без изменения live service.
+
 - Добавлен общий network security guard для credential-bearing provider и
   legacy calls: HTTPS-only redirects, same-host/port policy, protected auth
   headers, bounded JSON responses и typed safe transport errors.

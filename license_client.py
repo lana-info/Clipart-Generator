@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
+from license_update_contract import LicenseUpdatePolicy
 
 
 MAX_LICENSE_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -168,7 +169,8 @@ class LicenseClient:
     ) -> None:
         self.base_url = (base_url or "").strip().rstrip("/")
         self.product_id = (product_id or "").strip()
-        self.timeout = max(1, min(int(timeout), 30))
+        self.lifecycle_policy = LicenseUpdatePolicy()
+        self.timeout = max(1, min(int(timeout), self.lifecycle_policy.timeout_seconds))
         if not self.product_id or len(self.product_id) > 128:
             raise LicenseError("Некорректный идентификатор продукта")
         self._public_keys: dict[str, Ed25519PublicKey] = {}
@@ -377,7 +379,7 @@ class LicenseClient:
         issued_at = _parse_datetime(payload.get("issued_at"), label="issued_at")
         expires_at = _parse_datetime(payload.get("expires_at"), label="expires_at")
         now = datetime.now(timezone.utc)
-        if issued_at > now + timedelta(minutes=5):
+        if issued_at > now + timedelta(seconds=self.lifecycle_policy.clock_skew_seconds):
             raise LicenseError("Время выдачи лицензии некорректно")
         if expires_at <= now:
             raise LicenseError("Разрешение лицензии истекло")

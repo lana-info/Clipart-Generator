@@ -19,6 +19,7 @@ import rfc8785
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from license_client import LicenseClient, LicenseError, NoRedirectHandler
+from license_update_contract import LicenseUpdatePolicy
 
 
 MAX_UPDATE_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -94,10 +95,11 @@ class UpdateClient:
         timeout: int = 20,
     ) -> None:
         self.license_client = license_client
+        self.lifecycle_policy = LicenseUpdatePolicy()
         self.current_version = current_version
         self.platform_id = platform_id
         self.download_directory = Path(download_directory)
-        self.timeout = max(1, min(int(timeout), 60))
+        self.timeout = max(1, min(int(timeout), self.lifecycle_policy.timeout_seconds))
         self._public_keys = {
             name: _decode_public_key(value) for name, value in (public_keys or {}).items()
         }
@@ -133,7 +135,7 @@ class UpdateClient:
         return max(newer, key=lambda item: _version(item.version), default=None)
 
     def _ensure_update_key(self) -> None:
-        if "updates-v1" in self._public_keys:
+        if any(key_id in self._public_keys for key_id in ("updates-v1", "updates-v2")):
             return
         try:
             envelope = self.license_client.get_signed_json("/api/v1/releases/key")
@@ -143,7 +145,7 @@ class UpdateClient:
         if (
             payload.get("purpose") != "clipart-update-manifest"
             or payload.get("algorithm") != "Ed25519"
-            or payload.get("kid") != "updates-v1"
+            or payload.get("kid") not in {"updates-v1", "updates-v2"}
             or not isinstance(payload.get("public_key"), str)
         ):
             raise UpdateError("Сервер вернул некорректный ключ обновлений")
