@@ -47,6 +47,7 @@ from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
 from security_redaction import redact_text
 from processing_contract import publish_atomic, run_workspace
+from network_security import HttpsOnlyRedirectHandler as SharedHttpsOnlyRedirectHandler
 from legacy_visible_mark_widget import VisibleMarkSettingsWidget
 from model_catalog import (
     GENERATION_MODEL_META as CATALOG_GENERATION_MODEL_META,
@@ -157,6 +158,10 @@ class HttpsOnlyRedirectHandler(request.HTTPRedirectHandler):
         if target.username or target.password:
             return None
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# Compatibility name: legacy transport now uses the shared security policy.
+HttpsOnlyRedirectHandler = SharedHttpsOnlyRedirectHandler
 
 
 REFERENCE_MODEL_SHORTLIST = {

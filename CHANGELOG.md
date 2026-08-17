@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Добавлен общий network security guard для credential-bearing provider и
+  legacy calls: HTTPS-only redirects, same-host/port policy, protected auth
+  headers, bounded JSON responses и typed safe transport errors.
+
 - Windows release теперь фиксирует production dependency constraints, проверяет
   SHA-256 официального Real-ESRGAN archive до распаковки и публикует
   machine-readable secret-free build provenance.
