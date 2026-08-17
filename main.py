@@ -14,6 +14,7 @@ import math
 import subprocess
 import shutil
 import threading
+from types import MappingProxyType
 from io import BytesIO, StringIO
 from urllib.parse import urlparse
 from urllib import error as urlerror
@@ -45,6 +46,16 @@ from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
 from security_redaction import redact_text
+from model_catalog import (
+    GENERATION_MODEL_META as CATALOG_GENERATION_MODEL_META,
+    GENERATION_MODELS as CATALOG_GENERATION_MODELS,
+    PROCESSING_PRICING as CATALOG_PROCESSING_PRICING,
+    REFERENCE_MODEL_SHORTLIST as CATALOG_REFERENCE_MODEL_SHORTLIST,
+    SUPPORTED_GENERATION_MODEL_IDS as CATALOG_SUPPORTED_GENERATION_MODEL_IDS,
+    VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
+    MODEL_SPECS,
+    resolve_generation_endpoint,
+)
 
 try:
     import certifi
@@ -243,6 +254,24 @@ PROCESSING_PRICING = {
     "recraft/remove-background": "1 credit / $0.005",
 }
 
+# Compatibility names: all consumers use the immutable catalog above.
+REFERENCE_MODEL_SHORTLIST = CATALOG_REFERENCE_MODEL_SHORTLIST
+VISIBLE_GENERATION_MODEL_IDS = CATALOG_VISIBLE_GENERATION_MODEL_IDS
+SUPPORTED_GENERATION_MODEL_IDS = CATALOG_SUPPORTED_GENERATION_MODEL_IDS
+GENERATION_MODELS = CATALOG_GENERATION_MODELS
+GENERATION_MODEL_META = CATALOG_GENERATION_MODEL_META
+PROCESSING_PRICING = CATALOG_PROCESSING_PRICING
+MODEL_CAPABILITIES = MappingProxyType({
+    model_id: {
+        "ratios": frozenset(spec.ratios),
+        "resolutions": frozenset(spec.resolutions),
+        "qualities": frozenset(spec.qualities),
+        "pricing": spec.pricing,
+        "reference_compatible_text": spec.reference_compatible_text,
+    }
+    for model_id, spec in MODEL_SPECS.items()
+})
+
 REALESRGAN_EXE_NAME = "realesrgan-ncnn-vulkan.exe"
 REALESRGAN_PROFILE_MODELS = {
     "photo": "realesrgan-x4plus",
@@ -415,22 +444,18 @@ def normalize_ben2_corner_radius(pixels):
 
 
 def get_model_capabilities(model_id):
-    limits = MODEL_CAPABILITIES.get(model_id) or {}
+    spec = MODEL_SPECS[model_id]
     return {
-        "ratios": set(limits.get("ratios") or set()),
-        "resolutions": set(limits.get("resolutions") or set()),
-        "qualities": set(limits.get("qualities") or set()),
-        "pricing": limits.get("pricing"),
-        "reference_compatible_text": bool(limits.get("reference_compatible_text", False)),
+        "ratios": set(spec.ratios),
+        "resolutions": set(spec.resolutions),
+        "qualities": set(spec.qualities),
+        "pricing": spec.pricing,
+        "reference_compatible_text": spec.reference_compatible_text,
     }
 
 
 def resolve_kie_generation_model(model_id, has_references=False):
-    if model_id == "gpt-image-2":
-        if has_references:
-            return "gpt-image-2-image-to-image"
-        return "gpt-image-2-text-to-image"
-    return model_id
+    return resolve_generation_endpoint(model_id, has_references)
 
 
 SUPPORTED_GENERATION_MODEL_IDS = {
@@ -498,6 +523,14 @@ for _entry in GENERATION_MODELS:
     _model_id = _entry.get("id")
     if _model_id and _model_id not in GENERATION_MODEL_META:
         GENERATION_MODEL_META[_model_id] = _entry
+
+# Re-apply compatibility exports after the legacy declarations above.  The
+# catalog is the runtime source of truth; the names remain for older callers.
+REFERENCE_MODEL_SHORTLIST = CATALOG_REFERENCE_MODEL_SHORTLIST
+VISIBLE_GENERATION_MODEL_IDS = CATALOG_VISIBLE_GENERATION_MODEL_IDS
+SUPPORTED_GENERATION_MODEL_IDS = CATALOG_SUPPORTED_GENERATION_MODEL_IDS
+GENERATION_MODELS = CATALOG_GENERATION_MODELS
+GENERATION_MODEL_META = CATALOG_GENERATION_MODEL_META
 MAX_REFERENCES_PER_PROMPT = 5
 PROMPT_RATIO_PATTERN = re.compile(r"(?<!\d)(\d{1,2})\s*(?:[:xÑ…])\s*(\d{1,2})(?!\d)", re.IGNORECASE)
 

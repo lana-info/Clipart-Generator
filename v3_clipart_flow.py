@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
@@ -86,6 +87,13 @@ from v3_provider_registry import (
     provider_visible_controls,
 )
 from v3_wizard import AppShell
+from model_catalog import (
+    GENERATION_MODELS as CATALOG_GENERATION_MODELS,
+    PROCESSING_PRICING as CATALOG_PROCESSING_PRICING,
+    VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
+    MODEL_SPECS,
+    model_spec,
+)
 
 
 MAX_CSV_BYTES = 2 * 1024 * 1024
@@ -264,15 +272,31 @@ _LEGACY_PROCESSING_PRICING = {
     "recraft/remove-background": "1 credit / $0.005",
 }
 
+# Keep the old private names for callers/tests while sourcing every option
+# from the shared immutable catalog.
+_LEGACY_VISIBLE_GENERATION_MODEL_IDS = CATALOG_VISIBLE_GENERATION_MODEL_IDS
+_LEGACY_GENERATION_MODELS = CATALOG_GENERATION_MODELS
+_LEGACY_PROCESSING_PRICING = CATALOG_PROCESSING_PRICING
+_LEGACY_MODEL_CAPABILITIES = MappingProxyType({
+    model_id: {
+        "ratios": frozenset(spec.ratios),
+        "resolutions": frozenset(spec.resolutions),
+        "qualities": frozenset(spec.qualities),
+        "pricing": spec.pricing,
+        "reference_compatible_text": spec.reference_compatible_text,
+    }
+    for model_id, spec in MODEL_SPECS.items()
+})
+
 
 def _legacy_model_capabilities(model_id: str) -> dict[str, Any]:
-    limits = _LEGACY_MODEL_CAPABILITIES.get(model_id) or {}
+    spec = model_spec(model_id)
     return {
-        "ratios": set(limits.get("ratios") or set()),
-        "resolutions": set(limits.get("resolutions") or set()),
-        "qualities": set(limits.get("qualities") or set()),
-        "pricing": limits.get("pricing"),
-        "reference_compatible_text": bool(limits.get("reference_compatible_text", False)),
+        "ratios": set(spec.ratios),
+        "resolutions": set(spec.resolutions),
+        "qualities": set(spec.qualities),
+        "pricing": spec.pricing,
+        "reference_compatible_text": spec.reference_compatible_text,
     }
 
 

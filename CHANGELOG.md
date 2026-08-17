@@ -12,6 +12,11 @@
 
 ## Unreleased
 
+- Вынесен единый immutable-каталог generation-моделей: capabilities, visible
+  options, estimates, reference compatibility и GPT Image 2 endpoint routing;
+  legacy `main`/V3 имена сохранены как compatibility exports, неизвестные
+  модели отклоняются явно.
+
 - Закрыт release contract: `release/VERSION.txt` стал строгим source of truth,
   packaging и workflow используют имя `Vibix Images.exe`, а stale/invalid
   version manifest отклоняется тестами и release-contract валидатором.
