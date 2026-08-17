@@ -1,4 +1,4 @@
-# Release automation helper for Clipart Generator.
+# Release automation helper for Vibix Images.
 # Modes:
 #   full       - update version.json, run workflow, download artifacts, copy to _updates_repo_tmp
 #   copy       - download artifacts from an existing release, then copy to _updates_repo_tmp
@@ -90,7 +90,7 @@ function Download-Artifacts {
     param([string]$Version)
 
     Write-Host "Downloading release artifacts for v$Version into release/..."
-    & gh release download "v$Version" --pattern "ClipartGenerator-Setup-$Version.exe" -D "$projectRoot\release"
+    & gh release download "v$Version" --pattern "VibixImages-Setup-$Version.exe" -D "$projectRoot\release"
     $macPatterns = @(
         "ClipartGenerator-macOS-$Version.zip",
         "ClipartGenerator-macOS-apple-silicon-$Version.zip",
@@ -147,7 +147,7 @@ switch ($Mode) {
 }
 
 $versionJsonSrc = Join-Path -Path $projectRoot -ChildPath 'version.json'
-$exeSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-Setup-$AppVersion.exe"
+$exeSrc = Join-Path -Path $projectRoot -ChildPath "release\VibixImages-Setup-$AppVersion.exe"
 $macUnifiedSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-macOS-$AppVersion.zip"
 $macArmSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-macOS-apple-silicon-$AppVersion.zip"
 $macIntelSrc = Join-Path -Path $projectRoot -ChildPath "release\ClipartGenerator-macOS-intel-$AppVersion.zip"
@@ -160,7 +160,7 @@ foreach ($path in @($versionJsonSrc, $exeSrc)) {
 
 Write-Host 'Copying files into _updates_repo_tmp...'
 Copy-Item -LiteralPath $versionJsonSrc -Destination (Join-Path -Path $updatesRoot -ChildPath 'version.json') -Force
-Copy-Item -LiteralPath $exeSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-Setup-$AppVersion.exe") -Force
+Copy-Item -LiteralPath $exeSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "VibixImages-Setup-$AppVersion.exe") -Force
 
 if (Test-Path -LiteralPath $macUnifiedSrc) {
     Copy-Item -LiteralPath $macUnifiedSrc -Destination (Join-Path -Path $updatesRoot -ChildPath "ClipartGenerator-macOS-$AppVersion.zip") -Force
@@ -177,6 +177,6 @@ Write-Host 'Done.'
 Write-Host 'Next steps:'
 Write-Host "1. cd \"$updatesRoot\""
 Write-Host '2. git status'
-Write-Host "3. git add version.json ClipartGenerator-Setup-$AppVersion.exe ClipartGenerator-macOS-$AppVersion.zip"
+Write-Host "3. git add version.json VibixImages-Setup-$AppVersion.exe ClipartGenerator-macOS-$AppVersion.zip"
 Write-Host '4. git commit and git push in _updates_repo_tmp'
 Write-Host '5. Update the public GitHub Release in Clipart-Generator-Updates if needed'

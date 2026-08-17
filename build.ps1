@@ -36,8 +36,10 @@ Write-Host "==> Build app with PyInstaller"
     --noconfirm `
     --clean `
     --windowed `
-    --name "Clipart Generator" `
+    --name "Vibix Images" `
+    --icon "assets/vibix-images.ico" `
     --add-data ".env.example;." `
+    --add-data "assets/vibix-images.ico;assets" `
     --add-data "release/VERSION.txt;release" `
     --add-data "third_party/remove_ai_watermarks_gemini/assets;third_party/remove_ai_watermarks_gemini/assets" `
     --add-data "third_party/remove_ai_watermarks_gemini/LICENSE;third_party/remove_ai_watermarks_gemini" `
@@ -52,9 +54,9 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE"
 }
 
-$distAppDir = Join-Path $projectRoot "dist\Clipart Generator"
+$distAppDir = Join-Path $projectRoot "dist\Vibix Images"
 if (-not (Test-Path -LiteralPath $distAppDir)) {
     throw "PyInstaller output is missing: $distAppDir"
 }
 
-Write-Host "Done: dist\\Clipart Generator"
+Write-Host "Done: dist\\Vibix Images"

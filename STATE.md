@@ -60,8 +60,13 @@ exact artifact be uploaded and published as a licensed update revision.
   lower right, aligned to the same lower baseline.
 - The canonical geometry and portable SVG are recorded under `docs/brand/` and
   in `docs/superpowers/specs/2026-08-17-vibix-shared-mark-design.md`.
-- Branding is documented but not yet integrated into the application,
-  Windows icon set, or installer.
+- Branding is integrated into the application runtime, Windows icon set, and
+  Inno Setup configuration. The current Windows installer naming convention is
+  `VibixImages-Setup-<version>.exe`; a new Windows build is still pending an
+  explicit build request.
+- Previous license keys did not exist, so no license-key migration is required;
+  the first Vibix Images installation activates a new key through the existing
+  online license flow.
 
 ## Prohibited without explicit approval
 

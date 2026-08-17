@@ -19,6 +19,7 @@ from v3_components import (
     V3DesignTokens,
     apply_v3_theme,
 )
+from app_identity import APP_NAME, APP_SUBTITLE
 from v3_project_state import (
     ProjectMode,
     ProjectState,
@@ -139,7 +140,7 @@ class AppShell(QWidget):
 
         self.setMinimumSize(980, 700)
         self.setObjectName("v3AppShell")
-        self.setAccessibleName("Clipart Generator 3.0")
+        self.setAccessibleName(f"{APP_NAME} 3.0")
         apply_v3_theme(self, tokens)
 
         root_layout = QVBoxLayout(self)
@@ -207,9 +208,15 @@ class AppShell(QWidget):
         )
         layout.setSpacing(self.tokens.space_3)
 
-        title = QLabel("Clipart Generator 3.0")
+        title = QLabel(f"{APP_NAME} 3.0")
         title.setProperty("v3Title", True)
+        title.setAccessibleName(APP_NAME)
         layout.addWidget(title)
+
+        subtitle = QLabel(APP_SUBTITLE)
+        subtitle.setProperty("v3Small", True)
+        subtitle.setAccessibleName(APP_SUBTITLE)
+        layout.addWidget(subtitle)
 
         self.mode_label = QLabel()
         self.mode_label.setProperty("v3Description", True)

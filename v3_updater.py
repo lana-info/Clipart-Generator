@@ -10,6 +10,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMessageBox, QProgressDialog, QWidget
 
 from update_client import UpdateClient, UpdateError, UpdateRelease
+from app_identity import APP_NAME
 
 
 class UpdateCheckWorker(QThread):
@@ -147,7 +148,7 @@ class UpdateController(QObject):
 
     def _prompt_user(self, release: UpdateRelease) -> bool:
         box = QMessageBox(self.parent_widget)
-        box.setWindowTitle("Обновление Clipart Generator")
+        box.setWindowTitle(f"Обновление {APP_NAME}")
         box.setIcon(QMessageBox.Icon.Question)
         box.setText(f"Доступна версия {release.version}. Обновить программу сейчас?")
         box.setInformativeText(

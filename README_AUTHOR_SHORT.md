@@ -37,7 +37,7 @@ Workflow запускается только вручную после реше�
 2. Нажать **Run workflow**.
 3. Указать `app_version` (например `0.1.1`).
 4. После завершения скачать artifacts:
-   - `windows-x.y.z` → `ClipartGenerator-Setup-x.y.z.exe`
+   - `windows-x.y.z` → `VibixImages-Setup-x.y.z.exe`
    - `macos-x.y.z` → `ClipartGenerator-macOS-x.y.z.zip`
 
 Важно:
@@ -109,7 +109,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -AppVersion 0.1.0
 ```
 
 Ожидаемый setup:
-`release\ClipartGenerator-Setup-0.1.0.exe`
+`release\VibixImages-Setup-0.1.0.exe`
 
 ## 3) Обновить version.json автоматически
 ```powershell

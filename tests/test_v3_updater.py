@@ -63,7 +63,7 @@ class V3UpdaterTests(unittest.TestCase):
     def release(self):
         return UpdateRelease(
             version="3.1.0",
-            filename="ClipartGenerator-Setup-3.1.exe",
+            filename="VibixImages-Setup-3.1.exe",
             size=20,
             sha256="a" * 64,
             download_url="https://license.example/downloads/token",
@@ -73,7 +73,7 @@ class V3UpdaterTests(unittest.TestCase):
     def test_not_now_never_starts_download_and_check_runs_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            installer = root / "ClipartGenerator-Setup-3.1.exe"
+            installer = root / "VibixImages-Setup-3.1.exe"
             installer.write_bytes(b"x")
             journal = DiagnosticJournal(root, app_version="3.0")
             controller = UpdateController(
@@ -93,7 +93,7 @@ class V3UpdaterTests(unittest.TestCase):
     def test_accept_downloads_launches_and_records_verified_installer(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            installer = root / "ClipartGenerator-Setup-3.1.exe"
+            installer = root / "VibixImages-Setup-3.1.exe"
             installer.write_bytes(b"verified")
             journal = DiagnosticJournal(root, app_version="3.0")
             launched = []

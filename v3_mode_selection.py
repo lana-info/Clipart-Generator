@@ -35,6 +35,7 @@ from v3_pinterest_flow import install_pinterest_flow
 from v3_processing_flow import install_processing_flow
 from v3_license import LicenseDialog, OnlineLicenseGate
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
+from app_identity import APP_NAME
 
 
 @dataclass(frozen=True)
@@ -83,7 +84,7 @@ def default_work_directory() -> Path:
         ).strip()
     if not pictures:
         pictures = str(Path.home() / "Pictures")
-    return Path(pictures).expanduser() / "Clipart Generator"
+    return Path(pictures).expanduser() / APP_NAME
 
 
 class SelectionIntent(str, Enum):
@@ -307,7 +308,7 @@ class V3ApplicationView(QWidget):
         self.shell: AppShell | None = None
 
         self.setMinimumSize(980, 700)
-        self.setAccessibleName("Clipart Generator 3.0")
+        self.setAccessibleName(f"{APP_NAME} 3.0")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

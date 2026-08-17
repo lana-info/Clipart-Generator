@@ -84,7 +84,7 @@ class V3ModeSelectionTests(unittest.TestCase):
 
     def test_new_project_defaults_to_pictures_instead_of_process_directory(self):
         with tempfile.TemporaryDirectory(prefix="clipart-default-folder-") as temp:
-            default_folder = Path(temp) / "Pictures" / "Clipart Generator"
+            default_folder = Path(temp) / "Pictures" / "Vibix Images"
             draft_path = Path(temp) / "app-data" / "project_state.json"
             with patch(
                 "v3_mode_selection.default_work_directory",
@@ -102,7 +102,7 @@ class V3ModeSelectionTests(unittest.TestCase):
     def test_last_selected_work_and_output_folders_are_reused(self):
         with tempfile.TemporaryDirectory(prefix="clipart-last-folder-") as temp:
             root = Path(temp)
-            default_folder = root / "Pictures" / "Clipart Generator"
+            default_folder = root / "Pictures" / "Vibix Images"
             selected_work = root / "selected-work"
             selected_output = root / "selected-output"
             selected_work.mkdir()

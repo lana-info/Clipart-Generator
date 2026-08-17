@@ -1,4 +1,4 @@
-# Clipart Generator
+# Vibix Images
 
 ## Purpose
 
@@ -34,7 +34,10 @@ API keys, credentials, `.env` files, user configs, generated images, build outpu
 
 ## Current product state
 
-The ordered MVP and cleanup acceptance work is complete. The self-hosted license
+The ordered MVP and cleanup acceptance work is complete. The product is branded
+as `Vibix Images` with the subtitle `AI Image Generation & Processing`; the
+approved shared mark is integrated into the runtime and Windows packaging
+configuration. The self-hosted license
 service is deployed, and the desktop client uses its signed online-only license
 contract. Protected operations and retries require fresh authorization. A
 startup-gate hotfix is implemented so the main interface also remains closed
@@ -63,3 +66,6 @@ The Windows-only `3.0.1` build completed successfully in GitHub Actions run
 `3.0.1` version plus the license, diagnostic, and update wiring before Inno
 Setup created the installer. The downloaded installer SHA-256 is
 `e095a018a0dd44d7f9d99c7d4bba7e35a7519974894f0428d957c51c40beb973`.
+The current Windows installer naming convention is
+`VibixImages-Setup-<version>.exe`. A new Windows build has not been run for
+the branding change yet; source and packaging checks are complete.

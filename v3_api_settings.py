@@ -13,14 +13,15 @@ from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
 from v3_components import ButtonVariant, V3Button
 from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS
 from provider_clients import check_kie_balance, check_photoroom_balance
+from app_identity import APP_NAME
 
 
 def user_env_path() -> Path:
     if sys.platform == "darwin":
-        directory = Path.home() / "Library" / "Application Support" / "Clipart Generator"
+        directory = Path.home() / "Library" / "Application Support" / APP_NAME
     else:
         base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-        directory = Path(base) / "Clipart Generator"
+        directory = Path(base) / APP_NAME
     directory.mkdir(parents=True, exist_ok=True)
     return directory / ".env"
 

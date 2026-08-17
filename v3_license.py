@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from license_client import LicenseAuthorization, LicenseError
+from app_identity import APP_NAME
 
 
 class LicenseClientProtocol(Protocol):
@@ -98,7 +99,7 @@ class LicenseDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.gate = gate
-        self.setWindowTitle("Лицензия Clipart Generator")
+        self.setWindowTitle(f"Лицензия {APP_NAME}")
         self.setMinimumWidth(460)
 
         layout = QVBoxLayout(self)

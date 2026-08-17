@@ -129,7 +129,7 @@ class SecurityBoundaryTests(unittest.TestCase):
                         expected_sha256="0" * 64,
                     )
 
-            self.assertFalse((Path(temp_dir) / "ClipartGenerator-Update-123.exe").exists())
+            self.assertFalse((Path(temp_dir) / "VibixImages-Update-123.exe").exists())
 
     def test_local_image_preflight_rejects_corrupt_input(self):
         with tempfile.TemporaryDirectory(prefix="clipart-local-preflight-corrupt-") as temp_dir:

@@ -318,7 +318,7 @@ class DiagnosticJournal:
                 archive.writestr("system.json", json.dumps(system, ensure_ascii=False, indent=2))
                 archive.writestr(
                     "README.txt",
-                    "Пакет диагностики Clipart Generator. Ключи, промпты, изображения и полные личные пути не включены.\n",
+                    "Пакет диагностики Vibix Images. Ключи, промпты, изображения и полные личные пути не включены.\n",
                 )
             os.replace(temporary, target)
         except Exception:

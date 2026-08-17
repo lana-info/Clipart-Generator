@@ -29,7 +29,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
     def test_production_entrypoint_is_v3(self):
         window = create_v3_application_window()
         self.assertIsInstance(window, V3ApplicationView)
-        self.assertEqual(window.windowTitle(), f"Clipart Generator {APP_VERSION}")
+        self.assertEqual(window.windowTitle(), f"Vibix Images {APP_VERSION}")
         cards = list(window.mode_selection.mode_cards.values())
         self.assertEqual(set(window.mode_selection.mode_cards), set(MODE_CARD_SPECS))
         self.assertEqual(len(cards), 3)

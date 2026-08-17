@@ -85,7 +85,7 @@ class UpdateClientTests(unittest.TestCase):
                     "version": "3.1.0",
                     "channel": "stable",
                     "platform": "windows-x64",
-                    "filename": "ClipartGenerator-Setup-3.1.exe",
+                    "filename": "VibixImages-Setup-3.1.exe",
                     "size": len(self.installer),
                     "sha256": hashlib.sha256(self.installer).hexdigest(),
                     "notes": "Исправления",

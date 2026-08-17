@@ -7,6 +7,7 @@ from PyQt6.QtCore import QStandardPaths
 from PyQt6.QtWidgets import QApplication
 
 from v3_mode_selection import V3ApplicationView
+from app_identity import APP_NAME
 
 
 def _draft_path() -> Path:
@@ -18,11 +19,11 @@ def _draft_path() -> Path:
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("Clipart Generator")
-    app.setApplicationDisplayName("Clipart Generator 3.0")
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(f"{APP_NAME} 3.0")
 
     window = V3ApplicationView(draft_path=_draft_path())
-    window.setWindowTitle("Clipart Generator 3.0")
+    window.setWindowTitle(f"{APP_NAME} 3.0")
     window.resize(1120, 780)
     window.show()
 

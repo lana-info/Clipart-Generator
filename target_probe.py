@@ -3,6 +3,7 @@ import ssl
 import os
 import urllib.request
 from pathlib import Path
+from app_identity import APP_NAME
 
 
 GENERATION_MODELS = [
@@ -30,7 +31,7 @@ GENERATION_MODELS = [
 
 def get_user_data_dir():
     base_dir = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    user_data_dir = Path(base_dir) / "Clipart Generator"
+    user_data_dir = Path(base_dir) / APP_NAME
     user_data_dir.mkdir(parents=True, exist_ok=True)
     return user_data_dir
 

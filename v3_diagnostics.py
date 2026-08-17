@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 
 from diagnostics import DiagnosticJournal
 from v3_components import ButtonVariant, V3Button
+from app_identity import APP_NAME
 
 
 class DiagnosticJournalDialog(QDialog):
@@ -30,7 +31,7 @@ class DiagnosticJournalDialog(QDialog):
         self.events = journal.read_events()
         self.setWindowTitle("Журнал диагностики")
         self.setMinimumSize(820, 560)
-        self.setAccessibleName("Журнал диагностики Clipart Generator")
+        self.setAccessibleName(f"Журнал диагностики {APP_NAME}")
 
         layout = QVBoxLayout(self)
         heading = QLabel("Последние три запуска")
@@ -121,7 +122,7 @@ class DiagnosticJournalDialog(QDialog):
         destination, _filter = QFileDialog.getSaveFileName(
             self,
             "Экспортировать диагностику",
-            "ClipartGenerator-diagnostics.zip",
+            "VibixImages-diagnostics.zip",
             "ZIP (*.zip)",
         )
         if not destination:

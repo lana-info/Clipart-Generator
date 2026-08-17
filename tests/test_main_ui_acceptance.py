@@ -38,7 +38,7 @@ class MainUiAcceptanceTests(unittest.TestCase):
             )
             with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
                 window = main.MainWindow()
-                self.assertTrue(window.windowTitle().startswith("Clipart Generator v"))
+                self.assertTrue(window.windowTitle().startswith("Vibix Images v"))
                 self.assertTrue(window.api_key_locked)
                 self.assertTrue(window.kie_api_key_input.isReadOnly())
                 self.assertEqual(window.kie_api_key_input.echoMode(), main.QLineEdit.EchoMode.Password)

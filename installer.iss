@@ -1,9 +1,9 @@
-#define AppName "Clipart Generator"
+#define AppName "Vibix Images"
 #ifndef AppVersion
   #define AppVersion "3.0"
 #endif
-#define AppPublisher "Clipart Generator"
-#define AppExeName "Clipart Generator.exe"
+#define AppPublisher "Vibix"
+#define AppExeName "Vibix Images.exe"
 
 [Setup]
 AppId={{B8D6B3F4-4E5F-4B6E-9D13-9A8E3B2F3C7A}
@@ -12,12 +12,13 @@ AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
+SetupIconFile=assets\vibix-images.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 OutputDir=release
-OutputBaseFilename=ClipartGenerator-Setup-{#AppVersion}
+OutputBaseFilename=VibixImages-Setup-{#AppVersion}
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 
@@ -28,7 +29,7 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные задачи:"; Flags: unchecked
 
 [Files]
-Source: "dist\Clipart Generator\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
+Source: "dist\Vibix Images\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

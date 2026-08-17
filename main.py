@@ -42,6 +42,7 @@ from runtime_settings import build_runtime_settings
 from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
+from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 
 try:
     import certifi
@@ -269,6 +270,22 @@ def application_base_dir():
     if getattr(sys, "frozen", False):
         return os.path.dirname(os.path.abspath(sys.executable))
     return os.path.dirname(os.path.abspath(__file__))
+
+
+def bundled_brand_icon_path():
+    """Return the packaged or source path for the Vibix Images application icon."""
+    resource_root = getattr(sys, "_MEIPASS", application_base_dir())
+    return os.path.join(resource_root, "assets", "vibix-images.ico")
+
+
+def configure_application_identity(app):
+    """Apply the visible Windows identity before creating application windows."""
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
+    app.setOrganizationName("Vibix")
+    icon_path = bundled_brand_icon_path()
+    if os.path.isfile(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
 
 def bundled_local_realesrgan_dir():
@@ -514,7 +531,7 @@ def join_references(references):
 
 def get_user_data_dir():
     base_dir = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    user_data_dir = os.path.join(base_dir, "Clipart Generator")
+    user_data_dir = os.path.join(base_dir, APP_NAME)
     os.makedirs(user_data_dir, exist_ok=True)
     return user_data_dir
 
@@ -2271,7 +2288,7 @@ class WorkerThread(QThread):
         return {
             "Authorization": f"Bearer {self.kie_api_key}",
             "Accept": "application/json",
-            "User-Agent": "ClipartGenerator/1.0 (+PyQt6)",
+            "User-Agent": APP_USER_AGENT,
         }
 
     def _request_with_retries(self, req, timeout=None):
@@ -3553,7 +3570,7 @@ class VisibleMarkRegionDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"Clipart Generator v{APP_VERSION}")
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(980, 700)
 
         self.work_dir = ""
@@ -6267,7 +6284,7 @@ class MainWindow(QMainWindow):
             "Authorization": f"Bearer {api_key}",
             "x-api-key": api_key,
             "Accept": "application/json",
-            "User-Agent": "ClipartGenerator/1.0 (+PyQt6)",
+            "User-Agent": APP_USER_AGENT,
         }
 
         self.btn_check_balance.setEnabled(False)
@@ -6406,14 +6423,14 @@ class MainWindow(QMainWindow):
         for attempt in range(1, MAX_UPDATE_DOWNLOAD_RETRIES + 1):
             temp_dir = tempfile.gettempdir()
             retry_suffix = "" if attempt == 1 else f"_{attempt}"
-            filename = f"ClipartGenerator-Update-{int(time.time())}{retry_suffix}.exe"
+            filename = f"VibixImages-Update-{int(time.time())}{retry_suffix}.exe"
             installer_path = os.path.join(temp_dir, filename)
 
             try:
                 req = request.Request(
                     download_url,
                     headers={
-                        "User-Agent": "ClipartGenerator-Updater/1.0",
+                        "User-Agent": APP_UPDATE_USER_AGENT,
                         "Accept": "application/octet-stream,*/*",
                     },
                     method="GET",
@@ -6522,7 +6539,7 @@ class MainWindow(QMainWindow):
             req = request.Request(
                 manifest_url,
                 headers={
-                    "User-Agent": "ClipartGenerator-Updater/1.0",
+                    "User-Agent": APP_UPDATE_USER_AGENT,
                     "Accept": "application/json",
                 },
                 method="GET",
@@ -6726,7 +6743,7 @@ def create_v3_application_window():
     diagnostic_journal = DiagnosticJournal(app_data, app_version=APP_VERSION)
     diagnostic_journal.record(
         "application_started",
-        "Clipart Generator запущен.",
+        f"{APP_NAME} запущен.",
         details={"current_version": APP_VERSION},
     )
     license_client = LicenseClient(
@@ -6756,7 +6773,7 @@ def create_v3_application_window():
         screen="mode_selection",
         outcome="success",
     )
-    window.setWindowTitle(f"Clipart Generator {APP_VERSION}")
+    window.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
     window.resize(1120, 780)
     if len(window.mode_selection.mode_cards) != len(MODE_CARD_SPECS):
         raise RuntimeError("V3 mode selection does not contain all mode cards")
@@ -6969,7 +6986,7 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
     )
     default_path = default_work_directory()
     pictures_default_is_safe = (
-        default_path.name == "Clipart Generator"
+        default_path.name == APP_NAME
         and os.path.abspath(str(default_path)) != os.path.abspath(os.getcwd())
     )
     packaged_view.close()
@@ -7012,6 +7029,7 @@ if __name__ == "__main__":
     ):
         os.environ["QT_QPA_PLATFORM"] = "windows"
     app = QApplication(sys.argv)
+    configure_application_identity(app)
     if "--release-entrypoint-smoke" in sys.argv:
         expected_version = None
         for argument in sys.argv:
