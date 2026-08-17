@@ -46,8 +46,8 @@ jobs:
         shell: powershell
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install -r requirements-dev.txt
+          python -m pip install -c constraints-build.txt -r requirements.txt
+          python -m pip install -c constraints-build.txt -r requirements-dev.txt
 
       - name: Syntax check
         shell: powershell
@@ -66,15 +66,22 @@ jobs:
         run: |
           $archiveUrl = "https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases/download/v0.2.0/realesrgan-ncnn-vulkan-v0.2.0-windows.zip"
           $archivePath = Join-Path $env:RUNNER_TEMP "realesrgan-ncnn-vulkan-v0.2.0-windows.zip"
+          $expectedSha256 = "1BBBDB12D470AF80B035C773682E144C6C2F6ECE9210832A289AF0A48CE3FA9A"
           $extractPath = Join-Path $env:RUNNER_TEMP "realesrgan"
           $targetPath = ".\realesrgan-ncnn-vulkan-20211212-windows"
           Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
+          $actualSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "Real-ESRGAN archive SHA-256 mismatch: $actualSha256"
+          }
           Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
           $exe = Get-ChildItem -LiteralPath $extractPath -Recurse -Filter "realesrgan-ncnn-vulkan.exe" | Select-Object -First 1
           if (-not $exe) {
             throw "Bundled Local Real-ESRGAN executable was not found after extraction."
           }
           Copy-Item -LiteralPath $exe.Directory.FullName -Destination $targetPath -Recurse -Force
+          "REAL_ESRGAN_ARCHIVE_URL=$archiveUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "REAL_ESRGAN_ARCHIVE_SHA256=$expectedSha256" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build app (PyInstaller)
         shell: powershell
@@ -106,6 +113,11 @@ jobs:
           $setupPath = "release\VibixImages-Setup-${{ steps.version.outputs.app_version }}.exe"
           $hash = (Get-FileHash $setupPath -Algorithm SHA256).Hash
           "$hash  $(Split-Path -Leaf $setupPath)" | Out-File -FilePath "release\VibixImages-Setup-${{ steps.version.outputs.app_version }}.sha256" -Encoding ascii
+          "INSTALLER_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Write build provenance
+        shell: powershell
+        run: python -m build_provenance
 
       - name: Validate release contract
         shell: powershell
@@ -125,7 +137,8 @@ jobs:
           path: |
             release/VibixImages-Setup-${{ steps.version.outputs.app_version }}.exe
             release/VibixImages-Setup-${{ steps.version.outputs.app_version }}.sha256
-            release/VERSION.txt
+          release/VERSION.txt
+          release/build-provenance.json
 
   build-macos:
     if: ${{ false }} # Windows-only release workflow.

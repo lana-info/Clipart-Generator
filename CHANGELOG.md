@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Windows release теперь фиксирует production dependency constraints, проверяет
+  SHA-256 официального Real-ESRGAN archive до распаковки и публикует
+  machine-readable secret-free build provenance.
+
 - Из legacy `MainWindow` вынесен автономный `VisibleMarkSettingsWidget` с
   сохранёнными alias-ами, object names, UX-размером и offscreen contract test.
 
