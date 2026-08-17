@@ -47,6 +47,7 @@ from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
 from security_redaction import redact_text
 from processing_contract import publish_atomic, run_workspace
+from legacy_visible_mark_widget import VisibleMarkSettingsWidget
 from model_catalog import (
     GENERATION_MODEL_META as CATALOG_GENERATION_MODEL_META,
     GENERATION_MODELS as CATALOG_GENERATION_MODELS,
@@ -4061,21 +4062,12 @@ class MainWindow(QMainWindow):
             "Удаляет видимый текстовый или логотипный водяной знак. "
             "Только для собственных или лицензированных изображений."
         )
-        self.visible_mark_mode_combo = QComboBox()
-        self.visible_mark_mode_combo.addItem("Автоматически (Gemini)", "gemini_auto")
-        self.visible_mark_mode_combo.addItem("Выделенная область (с подтверждением)", "confirmed_area")
         visible_mark_mode = normalize_visible_mark_cleanup_mode(
             self.config.get("visible_mark_cleanup_mode", "gemini_auto")
         )
-        visible_mark_mode_index = self.visible_mark_mode_combo.findData(visible_mark_mode)
-        self.visible_mark_mode_combo.setCurrentIndex(
-            visible_mark_mode_index if visible_mark_mode_index >= 0 else 0
-        )
-        self.visible_mark_mode_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.visible_mark_mode_combo.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
-        self.visible_mark_mode_combo.setFixedHeight(32)
-        self.visible_mark_confirmation_label = QLabel("Нужно подтверждение")
-        self.visible_mark_confirmation_label.setStyleSheet("color:#14b8a6; font-weight:600;")
+        self.visible_mark_settings = VisibleMarkSettingsWidget(visible_mark_mode)
+        self.visible_mark_mode_combo = self.visible_mark_settings.mode_combo
+        self.visible_mark_confirmation_label = self.visible_mark_settings.confirmation_label
         self.chk_upscale = QCheckBox("Апскейл до удаления фона")
         self.chk_upscale.setChecked(self.config.get("upscale", True))
         self.chk_upscale_after = QCheckBox("Апскейл после удаления фона")
@@ -4138,13 +4130,7 @@ class MainWindow(QMainWindow):
         trim_params_layout.addWidget(self.trim_mode_combo)
         trim_params_layout.addStretch()
 
-        visible_mark_params_widget = QWidget()
-        visible_mark_params_layout = QHBoxLayout(visible_mark_params_widget)
-        visible_mark_params_layout.setContentsMargins(0, 0, 0, 0)
-        visible_mark_params_layout.setSpacing(8)
-        visible_mark_params_layout.addWidget(self.visible_mark_mode_combo)
-        visible_mark_params_layout.addWidget(self.visible_mark_confirmation_label)
-        visible_mark_params_layout.addStretch()
+        visible_mark_params_widget = self.visible_mark_settings
 
         process_flags_layout.addWidget(self.chk_visible_mark_cleanup, 0, 0)
         process_flags_layout.addWidget(visible_mark_params_widget, 0, 1)
@@ -4985,11 +4971,7 @@ class MainWindow(QMainWindow):
 
     def update_visible_mark_controls_state(self, *_):
         enabled = self.chk_visible_mark_cleanup.isChecked()
-        self.visible_mark_mode_combo.setEnabled(enabled)
-        confirmation_required = (
-            enabled and self.visible_mark_mode_combo.currentData() == "confirmed_area"
-        )
-        self.visible_mark_confirmation_label.setVisible(confirmation_required)
+        self.visible_mark_settings.set_enabled_state(enabled)
 
     def update_trim_controls_state(self, *_):
         trim_enabled = self.chk_trim.isChecked()

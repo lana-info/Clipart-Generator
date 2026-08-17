@@ -12,6 +12,9 @@
 
 ## Unreleased
 
+- Из legacy `MainWindow` вынесен автономный `VisibleMarkSettingsWidget` с
+  сохранёнными alias-ами, object names, UX-размером и offscreen contract test.
+
 - Добавлен pure processing contract: immutable context/step plan, provider и
   cancellation/event seams, secret-safe failure classification, output-adjacent
   run workspace и единая atomic publication primitive.
