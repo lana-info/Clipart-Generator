@@ -50,6 +50,9 @@ class EnvCredentialStore:
         try:
             with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
                 handle.write("\n".join(lines) + ("\n" if lines else ""))
+                handle.flush()
+                if os.name != "nt":
+                    os.fchmod(handle.fileno(), 0o600)
             os.replace(temporary, self.path)
         except Exception:
             try:

@@ -20,6 +20,8 @@ output/
 # Локальные секреты и конфиг пользователя
 config.json
 .env
+*.env
+licenses.db
 
 # Артефакты сборки
 build/

@@ -44,6 +44,7 @@ from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
+from security_redaction import redact_text
 
 try:
     import certifi
@@ -602,11 +603,7 @@ def validate_local_image_input(image_path):
 
 def safe_error_text(error, secrets=(), limit=500):
     message = str(error).strip() or error.__class__.__name__
-    for secret in secrets:
-        if secret:
-            message = message.replace(str(secret), "[hidden]")
-    message = re.sub(r"(?i)(bearer\s+)[^\s,;]+", r"\1[hidden]", message)
-    return message[:limit]
+    return redact_text(message, tuple(secrets), limit=limit)
 
 
 def is_schema_required_error_message(message):
@@ -6467,9 +6464,15 @@ class MainWindow(QMainWindow):
                 time.sleep(min(2, attempt))
                 logger = getattr(self, "log", None)
                 if callable(logger):
-                    logger(f"Ошибка скачивания апдейта (попытка {attempt}): {e}")
+                    logger(
+                        "Ошибка скачивания апдейта "
+                        f"(попытка {attempt}): {safe_error_text(e, self._secret_values)}"
+                    )
 
-        raise RuntimeError(f"Не удалось скачать установщик: {last_error}")
+        raise RuntimeError(
+            "Не удалось скачать установщик: "
+            f"{safe_error_text(last_error, self._secret_values)}"
+        )
 
     def _run_downloaded_installer(self, installer_path):
         if not os.path.isfile(installer_path):

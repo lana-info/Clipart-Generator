@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Mapping
 
+from security_redaction import redact_text
+
 
 DEFAULT_SESSION_MAX_BYTES = 4 * 1024 * 1024
 DEFAULT_TOTAL_MAX_BYTES = 10 * 1024 * 1024
@@ -66,7 +68,7 @@ def _utc_now() -> datetime:
 
 
 def _safe_text(value: Any, limit: int = 512) -> str:
-    text = str(value or "").replace("\x00", "").strip()
+    text = redact_text(value, limit=limit)
     for pattern in _SECRET_PATTERNS:
         text = pattern.sub("[СКРЫТО]", text)
     home = str(Path.home())

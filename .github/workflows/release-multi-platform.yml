@@ -51,7 +51,9 @@ jobs:
 
       - name: Syntax check
         shell: powershell
-        run: python -m py_compile main.py
+        run: |
+          python -m py_compile main.py
+          python scripts/check_sensitive_artifacts.py --git-tracked --allow-path licenses.db
 
       - name: Verify online license contract and V3 run gates
         shell: powershell
