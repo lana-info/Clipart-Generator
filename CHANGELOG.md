@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Проведена безопасная консолидация rudiments: добавлен artifact inventory без
+  автоматического удаления, исправлены повреждённые runtime-сообщения и явно
+  отделена экспериментальная macOS package от поддержанной Windows поставки.
+
 - Добавлен pure run lifecycle contract с idempotent start/cancel/finish/fail
   semantics и Windows-specific teardown checklist для packaged smoke.
 

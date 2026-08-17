@@ -103,6 +103,8 @@ def resolve_output_directory(work_dir: str | Path, configured: str | Path | None
     candidate = Path(configured).expanduser() if str(configured or "").strip() else work / "output"
     if candidate.is_dir() and os.access(candidate, os.W_OK):
         return candidate
+    if not candidate.exists() and candidate.parent.is_dir() and os.access(candidate.parent, os.W_OK):
+        return candidate
     fallback = work / "output"
     if fallback.is_dir() and os.access(fallback, os.W_OK):
         return fallback
