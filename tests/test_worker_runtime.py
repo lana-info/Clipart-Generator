@@ -1,4 +1,5 @@
 from worker_runtime import launch_worker, wire_worker_signals
+from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, LegacyWorkerRuntimeAdapter, legacy_progress_stage
 
 
 class Signal:
@@ -56,3 +57,14 @@ def test_launch_worker_constructs_wires_and_starts():
     )
     assert created["mode"] == "mode2_process"
     assert worker.started is True
+
+
+def test_legacy_runtime_adapter_translates_stage_and_keeps_fake_runtime_injected():
+    for prefix, stage in LEGACY_STAGE_PREFIXES:
+        assert legacy_progress_stage(prefix + "...") == (stage, "running")
+        assert legacy_progress_stage(prefix + " готово") == (stage, "complete")
+    assert legacy_progress_stage("Удаление фона: пропущено") == ("background_removal", "skipped")
+    assert legacy_progress_stage("Удаление фона: ошибка") == ("background_removal", "failed")
+    assert legacy_progress_stage("неизвестное сообщение") is None
+    adapter = LegacyWorkerRuntimeAdapter()
+    assert adapter.name == "legacy_worker"

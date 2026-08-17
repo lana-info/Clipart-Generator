@@ -2573,9 +2573,9 @@ def _safe_runtime_error(
 
 
 def _legacy_worker_factory(**kwargs: Any) -> Any:
-    from main import WorkerThread
+    from v3_runtime_adapter import DEFAULT_LEGACY_RUNTIME_ADAPTER
 
-    return WorkerThread(**kwargs)
+    return DEFAULT_LEGACY_RUNTIME_ADAPTER.create_worker(**kwargs)
 
 
 class ClipartFlowController(QObject):
@@ -2595,10 +2595,15 @@ class ClipartFlowController(QObject):
     ) -> None:
         super().__init__(shell)
         self.shell = shell
-        self.runtime_settings_provider = (
-            runtime_settings_provider or _read_legacy_runtime_settings
+        from v3_runtime_adapter import runtime_adapter_for
+
+        self.runtime_adapter = runtime_adapter_for(
+            runtime_settings_provider, worker_factory
         )
-        self.worker_factory = worker_factory or _legacy_worker_factory
+        self.runtime_settings_provider = (
+            runtime_settings_provider or self.runtime_adapter.read_settings
+        )
+        self.worker_factory = worker_factory or self.runtime_adapter.create_worker
         self.authorization_provider = authorization_provider or self._missing_authorization
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
@@ -2698,7 +2703,7 @@ class ClipartFlowController(QObject):
             self.start()
 
     def start(self) -> ClipartRunRequest | None:
-        if self.worker is not None and bool(self.worker.isRunning()):
+        if self.worker is not None and self.runtime_adapter.is_running(self.worker):
             message = "Запуск уже выполняется"
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
@@ -2728,15 +2733,15 @@ class ClipartFlowController(QObject):
         self.worker = worker
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
-        worker.start()
+        self.runtime_adapter.start(worker)
         self.shell.show_results()
         self.review_page.set_run_status("Запуск передан существующему pipeline 2.0")
         self.started.emit(request)
         return request
 
     def stop(self) -> None:
-        if self.worker is not None and hasattr(self.worker, "stop"):
-            self.worker.stop()
+        if self.worker is not None:
+            self.runtime_adapter.stop(self.worker)
 
     def _finished(self, message: str) -> None:
         self.run_queue.finished()

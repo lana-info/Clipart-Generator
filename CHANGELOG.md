@@ -18,6 +18,9 @@
 - Добавлен единый offline pytest baseline с отдельными `network`/`paid`
   markers, offscreen smoke и обычным push/PR CI; Windows packaged smoke остаётся
   manual release-проверкой.
+- V3 controllers теперь используют явный runtime adapter protocol; legacy
+  `WorkerThread` и перевод его progress-сообщений остаются одной заменяемой
+  реализацией без изменения пользовательского потока.
 - Added the licensed V3 Windows update flow backed by the self-hosted license
   service. It checks once after successful startup licensing, asks before any
   download, treats `Не сейчас` as no download, verifies the signed manifest,

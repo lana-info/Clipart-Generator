@@ -36,6 +36,7 @@ from v3_components import (
     V3DesignTokens,
 )
 from v3_project_state import ProjectMode, ProjectState
+from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 
 
 MAX_RUN_ITEMS = 10_000
@@ -55,25 +56,6 @@ _MISSING_PREFIX = "Файл не найден:"
 _STOP_MARKERS = (
     "Остановлено пользователем",
     "Остановлено после текущего файла",
-)
-_STAGE_PREFIXES: tuple[tuple[str, str], ...] = (
-    ("Экспериментальная очистка невидимого watermark", "invisible_watermark_cleanup"),
-    ("Видимая метка:", "visible_mark_cleanup"),
-    ("Локальный апскейл", "upscale"),
-    ("Апскейл через", "upscale"),
-    ("Кратность апскейла:", "upscale"),
-    ("Удаление фона", "background_removal"),
-    ("Промежуточный локальный без фона:", "background_removal"),
-    ("Промежуточный BEN2 без фона:", "background_removal"),
-    ("Промежуточный PhotoRoom без фона:", "background_removal"),
-    ("Промежуточный без фона:", "background_removal"),
-    ("Промежуточный локальный апскейл:", "upscale"),
-    ("Промежуточный апскейл:", "upscale"),
-    ("Промежуточная резкость:", "unsharp"),
-    ("Удаление контура:", "edge_cleanup"),
-    ("Промежуточный без контура:", "edge_cleanup"),
-    ("Trim ", "trim"),
-    ("Очистка файла:", "metadata_cleanup"),
 )
 
 
@@ -157,29 +139,7 @@ def _trusted_worker_path(value: str, root: Path) -> str:
 
 
 def _stage_update(message: str) -> tuple[str, str] | None:
-    text = str(message or "").strip()
-    for prefix, stage in _STAGE_PREFIXES:
-        if not text.startswith(prefix):
-            continue
-        lowered = text.casefold()
-        if "ошибка" in lowered:
-            status = "failed"
-        elif any(
-            marker in lowered
-            for marker in (
-                "пропущ",
-                "не потребовал",
-                "не найден",
-                "не требуется",
-            )
-        ):
-            status = "skipped"
-        elif text.endswith("..."):
-            status = "running"
-        else:
-            status = "complete"
-        return stage, status
-    return None
+    return legacy_progress_stage(message)
 
 
 def _failure_reason(message: str) -> tuple[str, str]:
@@ -578,6 +538,8 @@ class RunQueueSession(QObject):
         return True
 
     def handle_finished(self) -> None:
+        if not self.running and self.finished_at is not None:
+            return
         for item in self.items:
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
                 self._close_running_stages(item, "failed")
@@ -595,6 +557,8 @@ class RunQueueSession(QObject):
         self.changed.emit()
 
     def handle_fatal_error(self, message: Any) -> None:
+        if not self.running and self.finished_at is not None:
+            return
         code, user_message = _failure_reason(str(message or ""))
         for item in self.items:
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:

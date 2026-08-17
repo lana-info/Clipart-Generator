@@ -34,8 +34,6 @@ from v3_clipart_flow import (
     ClipartFlowError,
     ClipartRunRequest,
     _ScrollableStepPage,
-    _legacy_worker_factory,
-    _read_legacy_runtime_settings,
     _safe_runtime_error,
     _worker_settings,
 )
@@ -1233,10 +1231,15 @@ class ProcessingFlowController(QObject):
     ) -> None:
         super().__init__(shell)
         self.shell = shell
-        self.runtime_settings_provider = (
-            runtime_settings_provider or _read_legacy_runtime_settings
+        from v3_runtime_adapter import runtime_adapter_for
+
+        self.runtime_adapter = runtime_adapter_for(
+            runtime_settings_provider, worker_factory
         )
-        self.worker_factory = worker_factory or _legacy_worker_factory
+        self.runtime_settings_provider = (
+            runtime_settings_provider or self.runtime_adapter.read_settings
+        )
+        self.worker_factory = worker_factory or self.runtime_adapter.create_worker
         self.authorization_provider = authorization_provider or self._missing_authorization
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
@@ -1353,7 +1356,7 @@ class ProcessingFlowController(QObject):
             self.start()
 
     def start(self) -> ClipartRunRequest | None:
-        if self.worker is not None and bool(self.worker.isRunning()):
+        if self.worker is not None and self.runtime_adapter.is_running(self.worker):
             self.review_page.set_run_status("Запуск уже выполняется", error=True)
             return None
         try:
@@ -1373,7 +1376,7 @@ class ProcessingFlowController(QObject):
         self.worker = worker
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
-        worker.start()
+        self.runtime_adapter.start(worker)
         self.shell.show_results()
         self.review_page.set_run_status("Запуск передан pipeline 2.0")
         self.started.emit(request)
@@ -1392,8 +1395,8 @@ class ProcessingFlowController(QObject):
         self.error.emit(safe)
 
     def stop(self) -> None:
-        if self.worker is not None and hasattr(self.worker, "stop"):
-            self.worker.stop()
+        if self.worker is not None:
+            self.runtime_adapter.stop(self.worker)
 
 
 def install_processing_flow(
