@@ -6466,12 +6466,13 @@ class MainWindow(QMainWindow):
                 if callable(logger):
                     logger(
                         "Ошибка скачивания апдейта "
-                        f"(попытка {attempt}): {safe_error_text(e, self._secret_values)}"
+                        f"(попытка {attempt}): "
+                        f"{safe_error_text(e, getattr(self, '_secret_values', ())) }"
                     )
 
         raise RuntimeError(
             "Не удалось скачать установщик: "
-            f"{safe_error_text(last_error, self._secret_values)}"
+            f"{safe_error_text(last_error, getattr(self, '_secret_values', ())) }"
         )
 
     def _run_downloaded_installer(self, installer_path):

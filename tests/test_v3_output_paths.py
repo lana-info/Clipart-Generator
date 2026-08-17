@@ -131,6 +131,24 @@ class V3OutputPathsTests(unittest.TestCase):
             self.assertEqual(len(raw_dirs), 1)
             self.assertNotEqual(Path(raw_dirs[0]).parent, Path(state.common.work_dir))
 
+    def test_invalid_work_dir_falls_back_to_writable_output_dir(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="processing-invalid-workspace-") as temp:
+            output_dir = Path(temp) / "exports"
+            output_dir.mkdir()
+            source = Path(temp) / "source.png"
+            Image.new("RGB", (4, 4), "green").save(source)
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = str(Path(temp) / "missing-workspace")
+            state.common.output_dir = str(output_dir)
+            state.processing.selected_files = [str(source)]
+            request = build_processing_run_request(
+                state,
+                allow_full_image_changes=True,
+                external_transfer_consent=True,
+            )
+            self.assertEqual(Path(request.work_dir), output_dir)
+            self.assertEqual(Path(request.settings["output_dir"]), output_dir)
+
 
 if __name__ == "__main__":
     unittest.main()

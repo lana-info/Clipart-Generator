@@ -1167,10 +1167,19 @@ def build_processing_run_request(
     if state.mode is not ProjectMode.PROCESSING:
         raise ProcessingFlowError("Запуск доступен только в режиме обработки")
     work_dir = Path(state.common.work_dir).expanduser()
+    configured_output_value = state.output_dir_for_mode(ProjectMode.PROCESSING).strip()
+    configured_output = (
+        Path(configured_output_value).expanduser()
+        if configured_output_value
+        else work_dir / "output"
+    )
     if not work_dir.is_dir() or not os.access(work_dir, os.W_OK):
-        raise ProcessingFlowError(
-            "Рабочая папка не существует или недоступна для записи"
-        )
+        if configured_output.is_dir() and os.access(configured_output, os.W_OK):
+            work_dir = configured_output
+        else:
+            raise ProcessingFlowError(
+                "Рабочая папка не существует или недоступна для записи"
+            )
     if not state.processing.selected_files:
         raise ProcessingFlowError("Добавьте хотя бы один файл")
     if len(state.processing.selected_files) > MAX_PROCESSING_FILES:
@@ -1197,7 +1206,7 @@ def build_processing_run_request(
     adapter = _ProcessingStateAdapter(state)
     settings = _worker_settings(adapter, runtime_settings)
     settings["run_mode"] = "process_only"
-    settings["output_dir"] = state.output_dir_for_mode(ProjectMode.PROCESSING) or str(work_dir / "output")
+    settings["output_dir"] = str(configured_output)
     settings["overwrite_existing"] = state.processing.overwrite_existing
     return ClipartRunRequest(
         mode="mode2_process",

@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import pytest
 from pathlib import Path
 from unittest import mock
 
@@ -67,6 +68,7 @@ class ReverseSynthIdPilotTests(unittest.TestCase):
                 with self.assertRaisesRegex(pilot.PilotError, "revision"):
                     pilot.audit_upstream(Path(temp))
 
+    @pytest.mark.network
     def test_offline_guard_blocks_connections_and_restores_socket(self):
         original_connect = pilot.socket.socket.connect
 

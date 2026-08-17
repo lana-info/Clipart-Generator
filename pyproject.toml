@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -m 'not network and not paid'"
+markers = [
+    "network: requires a real network socket or service",
+    "paid: may consume provider credits or money",
+]

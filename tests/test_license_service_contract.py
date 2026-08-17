@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import pytest
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,6 +25,8 @@ try:
     from license_service.licensing import InMemoryLicenseService
 except ImportError:
     LicenseApi = None
+
+pytestmark = pytest.mark.network
 
 
 def encode(value: bytes) -> str:

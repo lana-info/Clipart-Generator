@@ -35,7 +35,7 @@ python main.py
 ## Проверки
 
 ```powershell
-python -m pytest -q --disable-warnings --maxfail=1
+python -m pytest -q
 python -m py_compile main.py v3_run_queue.py
 git diff --check
 ```
