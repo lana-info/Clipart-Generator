@@ -12,6 +12,9 @@
 
 ## Unreleased
 
+- Добавлен pure run lifecycle contract с idempotent start/cancel/finish/fail
+  semantics и Windows-specific teardown checklist для packaged smoke.
+
 - Зафиксирован license/update lifecycle contract: versioned endpoints,
   bounded timeout, explicit outage/revoke/tamper states, clock skew и
   overlapping trust-root rotation без изменения live service.

@@ -37,6 +37,7 @@ from v3_components import (
 )
 from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
+from run_lifecycle import RunLifecycle
 
 
 MAX_RUN_ITEMS = 10_000
@@ -221,6 +222,8 @@ class RunQueueSession(QObject):
         self._item_progress: dict[int, int] = {}
         self._last_progress = 0
         self.running = True
+        self.lifecycle = RunLifecycle()
+        self.lifecycle.start()
         self.started_at = time.monotonic()
         self.finished_at: float | None = None
         self.stop_after_current_requested = False
@@ -392,6 +395,10 @@ class RunQueueSession(QObject):
             and 0 <= self.current_index < len(self.items)
             else None
         )
+        if item is not None and item.status in {
+            RunItemStatus.SUCCEEDED, RunItemStatus.FAILED, RunItemStatus.CANCELLED
+        }:
+            return
         stage_update = _stage_update(text)
         if stage_update is not None and item is not None:
             stage, status = stage_update
@@ -467,6 +474,8 @@ class RunQueueSession(QObject):
             return
 
         if any(marker in text for marker in _STOP_MARKERS):
+            if self.finished_at is not None:
+                return
             if item is not None and item.status is RunItemStatus.RUNNING:
                 self._close_running_stages(item, "cancelled")
                 item.status = RunItemStatus.CANCELLED
@@ -550,10 +559,12 @@ class RunQueueSession(QObject):
                     item=item.index,
                     reason="missing_completion",
                 )
+        incomplete = any(item.status is RunItemStatus.FAILED for item in self.items)
+        self.lifecycle.finish(error_code="missing_completion" if incomplete else "")
         self.current_index = None
         self.running = False
         self.finished_at = time.monotonic()
-        self._event("run_finished")
+        self._event("run_failed" if incomplete else "run_finished", reason="missing_completion" if incomplete else "")
         self.changed.emit()
 
     def handle_fatal_error(self, message: Any) -> None:
@@ -566,6 +577,7 @@ class RunQueueSession(QObject):
                 item.status = RunItemStatus.FAILED
                 item.short_message = user_message
                 self._event("item_failed", item=item.index, reason=code)
+        self.lifecycle.finish(error_code=code)
         self.current_index = None
         self.running = False
         self.finished_at = time.monotonic()
