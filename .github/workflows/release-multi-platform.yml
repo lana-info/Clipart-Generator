@@ -53,7 +53,9 @@ jobs:
         shell: powershell
         run: |
           python -m py_compile main.py
-          python scripts/check_sensitive_artifacts.py --git-tracked --allow-path licenses.db
+          python scripts/check_sensitive_artifacts.py --git-tracked `
+            --allow-path scripts/check_sensitive_artifacts.py `
+            --allow-path tests/test_security_redaction.py
 
       - name: Verify online license contract and V3 run gates
         shell: powershell

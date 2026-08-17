@@ -42,6 +42,14 @@ class SecurityRedactionTests(unittest.TestCase):
         self.assertEqual(scan_paths([Path("licenses.db")]), ["blocked sensitive path: licenses.db"])
         self.assertEqual(scan_paths([Path("licenses.db")], allowed={"licenses.db"}), [])
 
+    def test_sensitive_artifact_scanner_allows_known_detection_fixtures(self):
+        from scripts.check_sensitive_artifacts import scan_paths
+
+        paths = [Path("scripts/check_sensitive_artifacts.py"), Path(__file__)]
+        findings = scan_paths(paths)
+        self.assertEqual(len(findings), 2)
+        self.assertEqual(scan_paths(paths, allowed={path.as_posix() for path in paths}), [])
+
     def test_legacy_env_store_uses_private_file_mode_on_posix(self):
         if os.name == "nt":
             self.skipTest("POSIX file mode is not applicable on Windows")

@@ -31,7 +31,9 @@ steps:
       $env:QT_QPA_PLATFORM = 'offscreen'
       python -m unittest tests.test_license_client_security tests.test_v3_license_gate tests.test_v3_license_flow_gate tests.test_v3_run_queue tests.test_release_entrypoint tests.test_license_service_contract -v
       if ($LASTEXITCODE -ne 0) { throw "Release gate tests failed with exit code $LASTEXITCODE" }
-      python scripts/check_sensitive_artifacts.py --git-tracked
+      python scripts/check_sensitive_artifacts.py --git-tracked `
+        --allow-path scripts/check_sensitive_artifacts.py `
+        --allow-path tests/test_security_redaction.py
     displayName: Run offline release gates
 
   - powershell: |

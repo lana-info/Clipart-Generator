@@ -29,7 +29,10 @@ jobs:
       - name: Syntax and artifact guard
         run: |
           python -m py_compile main.py v3_run_queue.py v3_processing_flow.py
-          python scripts/check_sensitive_artifacts.py --git-tracked --allow-path licenses.db
+          python scripts/check_sensitive_artifacts.py --git-tracked \
+            --allow-path licenses.db \
+            --allow-path scripts/check_sensitive_artifacts.py \
+            --allow-path tests/test_security_redaction.py
 
       - name: Test discovery
         run: python -m pytest --collect-only -q
