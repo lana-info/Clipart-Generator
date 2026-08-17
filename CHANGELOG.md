@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Добавлен pure schema boundary для V3 preferences: version/migration table,
+  safe defaults, nested secret stripping, atomic save и проверка валидного
+  `output_dir` с fallback из `work_dir`.
+
 - Вынесен единый immutable-каталог generation-моделей: capabilities, visible
   options, estimates, reference compatibility и GPT Image 2 endpoint routing;
   legacy `main`/V3 имена сохранены как compatibility exports, неизвестные

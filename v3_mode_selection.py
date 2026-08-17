@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -36,6 +35,7 @@ from v3_processing_flow import install_processing_flow
 from v3_license import LicenseDialog, OnlineLicenseGate
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
 from app_identity import APP_NAME
+from config_schema import load_preferences, resolve_output_directory, save_preferences_atomic
 
 
 @dataclass(frozen=True)
@@ -509,14 +509,7 @@ class V3ApplicationView(QWidget):
             return None
 
     def _load_preferences(self) -> dict[str, Any]:
-        path = self._preferences_path
-        if path is None or not path.is_file():
-            return {}
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
-        except (OSError, ValueError, UnicodeError):
-            return {}
+        return load_preferences(self._preferences_path)
 
     def _apply_preferences(self, state: ProjectState, mode: ProjectMode) -> None:
         data = self._preferences.get(mode.value, {})
@@ -548,11 +541,10 @@ class V3ApplicationView(QWidget):
         if mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}:
             output_dir = str(work_path / "output")
         else:
-            output_dir = str(
-                data.get("output_dir")
-                or self._preferences.get("last_output_dir")
-                or work_path / "output"
-            )
+            output_dir = str(resolve_output_directory(
+                work_path,
+                data.get("output_dir") or self._preferences.get("last_output_dir"),
+            ))
         state.set_output_dir_for_mode(output_dir, mode)
 
     def _save_preferences(self) -> None:
@@ -580,8 +572,7 @@ class V3ApplicationView(QWidget):
             payload = {"output_dir": state.output_dir_for_mode(state.mode), "operations": state.pinterest.operations.to_dict()}
         self._preferences[state.mode.value] = payload
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(self._preferences, ensure_ascii=False, indent=2), encoding="utf-8")
+            save_preferences_atomic(path, self._preferences)
         except OSError:
             return
     def _save_draft(self) -> None:
