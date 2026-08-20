@@ -14,8 +14,8 @@ paid providers, change accounts, or use project secrets.
 1. In Azure DevOps, connect the repository and choose **Pipelines → New pipeline**.
 2. Select the repository's existing YAML file: `/azure-pipelines.yml`.
 3. Run the pipeline manually from the branch containing this file.
-4. Keep the version as `3.0.1` for the current acceptance build unless a new
-   version is intentionally requested.
+4. Keep the version as `3.0.2` for the current acceptance fix build unless a
+   newer version is intentionally requested.
 5. When the run succeeds, download the `windows-installer` pipeline artifact.
 
 Azure verifies the Windows build, packaged startup smoke test, installer creation,

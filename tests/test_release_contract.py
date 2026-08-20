@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,20 @@ from release_contract import (
 
 
 class ReleaseContractTests(unittest.TestCase):
+    def test_azure_default_matches_release_version(self):
+        project_root = Path(__file__).resolve().parents[1]
+        version = resolve_release_version(project_root / "release")
+        pipeline = (project_root / "azure-pipelines.yml").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(
+            r"displayName:\s*App version.*?default:\s*['\"]([^'\"]+)['\"]",
+            pipeline,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1), version)
+
     def test_accepts_supported_versions_and_bom(self):
         self.assertEqual(parse_version(" 3.0\n"), "3.0")
         self.assertEqual(parse_version("\ufeff3.0.1"), "3.0.1")
@@ -27,18 +42,25 @@ class ReleaseContractTests(unittest.TestCase):
 
     def test_validates_packaging_matrix(self):
         version = resolve_release_version(Path("release"))
-        self.assertEqual(expected_installer_name(version), "VibixImages-Setup-3.0.exe")
+        self.assertEqual(
+            expected_installer_name(version),
+            "VibixImages-Setup-3.0.2.exe",
+        )
         with tempfile.TemporaryDirectory() as root:
-            checksum = Path(root) / "VibixImages-Setup-3.0.sha256"
-            checksum.write_text("a" * 64 + "  VibixImages-Setup-3.0.exe\n", encoding="ascii")
+            installer_name = expected_installer_name(version)
+            checksum = Path(root) / installer_name.replace(".exe", ".sha256")
+            checksum.write_text(
+                "a" * 64 + f"  {installer_name}\n",
+                encoding="ascii",
+            )
             validate_release_contract(
                 version,
-                installer_name="VibixImages-Setup-3.0.exe",
+                installer_name=installer_name,
                 executable_path="dist/Vibix Images/Vibix Images.exe",
                 checksum_path=checksum,
                 manifest={
-                    "latest_version": "3.0",
-                    "download_url": "https://updates.example/VibixImages-Setup-3.0.exe",
+                    "latest_version": version,
+                    "download_url": f"https://updates.example/{installer_name}",
                     "sha256": "a" * 64,
                 },
             )
