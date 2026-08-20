@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QLabel
 
 from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_mode_selection import V3ApplicationView
 from v3_project_state import ProjectMode, StepId
+from v3_wizard import AppShell
 
 
 class V3LazyLoadingTests(unittest.TestCase):
@@ -88,6 +90,69 @@ class V3LazyLoadingTests(unittest.TestCase):
         self.assertEqual(overlay.labelText(), "Режим готов")
         overlay.close()
         overlay.deleteLater()
+
+    def test_slow_factory_sees_visible_progress_without_processing_input(self) -> None:
+        view = V3ApplicationView()
+        shell = AppShell()
+        view.shell = shell
+        shell.initialization_stage.connect(view._show_initialization_stage)
+        target = StepId.PROMPTS
+        observed = []
+
+        shell.set_step_factory(
+            ProjectMode.CLIPART,
+            target,
+            lambda: (
+                observed.append(bool(view._initialization_overlay.isVisible())),
+                QLabel("Готово"),
+            )[1],
+        )
+
+        shell.ensure_step_page(ProjectMode.CLIPART, target)
+
+        self.assertEqual(observed, [True])
+        shell.close()
+        shell.deleteLater()
+        view.close()
+        view.deleteLater()
+
+    def test_failed_factory_is_retained_and_can_be_retried(self) -> None:
+        shell = AppShell()
+        target = StepId.PROMPTS
+        calls = []
+
+        def factory():
+            calls.append(len(calls) + 1)
+            if len(calls) == 1:
+                raise RuntimeError("private detail")
+            return QLabel("Готово")
+
+        shell.set_step_factory(ProjectMode.CLIPART, target, factory)
+        placeholder = shell.ensure_step_page(ProjectMode.CLIPART, target)
+
+        self.assertEqual(calls, [1])
+        self.assertFalse(shell.retry_page_button.isHidden())
+        self.assertNotIn("private detail", shell.validation_label.text())
+
+        recovered = shell.ensure_step_page(ProjectMode.CLIPART, target)
+
+        self.assertEqual(calls, [1, 2])
+        self.assertIsNot(recovered, placeholder)
+        self.assertFalse(shell.retry_page_button.isVisible())
+        shell.close()
+        shell.deleteLater()
+
+    def test_processing_page_does_not_probe_synthid_hardware(self) -> None:
+        with patch("ai_watermark_backend.gpu_backend_available") as probe:
+            view = V3ApplicationView()
+            view.mode_selection.mode_cards[
+                ProjectMode.PROCESSING
+            ].start_button.click()
+            view.shell.processing_flow_controller.pages[StepId.PIPELINE]
+
+        probe.assert_not_called()
+        view.close()
+        view.deleteLater()
 
 
 if __name__ == "__main__":

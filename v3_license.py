@@ -15,7 +15,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from license_client import LicenseAuthorization, LicenseError
+from license_client import (
+    LicenseAuthorization,
+    LicenseError,
+    LicenseUnavailableError,
+)
 from app_identity import APP_NAME
 
 
@@ -64,7 +68,7 @@ class OnlineLicenseGate:
         except Exception:
             self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
-            raise LicenseError("Не удалось проверить лицензию") from None
+            raise LicenseUnavailableError("Не удалось проверить лицензию") from None
         self.current_authorization = authorization
         self.status_text = "Лицензия активна"
         return authorization
@@ -83,7 +87,7 @@ class OnlineLicenseGate:
         except Exception:
             self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
-            raise LicenseError("Не удалось проверить лицензию") from None
+            raise LicenseUnavailableError("Не удалось проверить лицензию") from None
         self.current_authorization = authorization
         self.status_text = "Лицензия активна"
         return authorization

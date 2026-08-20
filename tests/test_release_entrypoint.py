@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QDialog, QWidget
 
-from license_client import LicenseError
+from license_client import LicenseError, LicenseUnavailableError
 from main import (
     APP_VERSION,
     create_authorized_v3_application_window,
@@ -83,7 +83,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
         window = QWidget()
         gate = Mock()
         gate.has_activation.return_value = True
-        gate.authorize_run.side_effect = LicenseError(
+        gate.authorize_run.side_effect = LicenseUnavailableError(
             "Сервер лицензий временно недоступен"
         )
         window._license_gate = gate
@@ -112,7 +112,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
         gate = Mock()
         gate.has_activation.return_value = True
         gate.authorize_run.side_effect = [
-            LicenseError("Сервер лицензий временно недоступен"),
+            LicenseUnavailableError("Сервер лицензий временно недоступен"),
             object(),
         ]
         window._license_gate = gate
@@ -182,7 +182,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
         gate.has_activation.side_effect = [False, True]
         gate.authorize_run.side_effect = [
             LicenseError("Активируйте лицензию перед запуском"),
-            LicenseError("Не удалось связаться с сервером лицензий"),
+            LicenseUnavailableError("Не удалось связаться с сервером лицензий"),
         ]
         window._license_gate = gate
         dialog = Mock()
@@ -199,6 +199,30 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertIsNone(result)
         self.assertEqual(gate.authorize_run.call_count, 2)
         warning.assert_not_called()
+        window.deleteLater()
+
+    def test_saved_rejected_license_opens_replacement_key_flow(self):
+        window = QWidget()
+        gate = Mock()
+        gate.has_activation.return_value = True
+        gate.authorize_run.side_effect = LicenseError(
+            "Лицензия отклонена сервером"
+        )
+        window._license_gate = gate
+        key_dialog = Mock()
+        key_dialog.exec.return_value = QDialog.DialogCode.Rejected
+        key_dialog_factory = Mock(return_value=key_dialog)
+        outage_dialog_factory = Mock()
+
+        result = create_authorized_v3_application_window(
+            window_factory=lambda: window,
+            dialog_factory=key_dialog_factory,
+            unavailable_dialog_factory=outage_dialog_factory,
+        )
+
+        self.assertIsNone(result)
+        key_dialog_factory.assert_called_once_with(gate, parent=window)
+        outage_dialog_factory.assert_not_called()
         window.deleteLater()
 
     def test_startup_fails_closed_when_license_gate_is_missing(self):

@@ -30,6 +30,10 @@ class LicenseError(RuntimeError):
     """A bounded, user-safe licensing failure."""
 
 
+class LicenseUnavailableError(LicenseError):
+    """A temporary transport/server failure that may be retried safely."""
+
+
 class NoRedirectHandler(request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -280,9 +284,11 @@ class LicenseClient:
         except error.HTTPError as exc:
             if exc.code in {400, 401, 403, 409, 422}:
                 raise LicenseError("Лицензия отклонена сервером") from None
-            raise LicenseError("Сервер лицензий временно недоступен") from None
+            raise LicenseUnavailableError("Сервер лицензий временно недоступен") from None
         except (error.URLError, TimeoutError, OSError):
-            raise LicenseError("Не удалось связаться с сервером лицензий") from None
+            raise LicenseUnavailableError(
+                "Не удалось связаться с сервером лицензий"
+            ) from None
         try:
             decoded = json.loads(raw.decode("utf-8"))
         except (UnicodeError, ValueError):

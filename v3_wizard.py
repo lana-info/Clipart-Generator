@@ -294,6 +294,14 @@ class AppShell(QWidget):
         self.back_button.clicked.connect(self.go_back)
         layout.addWidget(self.back_button)
 
+        self.retry_page_button = V3Button(
+            "Повторить открытие",
+            ButtonVariant.SECONDARY,
+        )
+        self.retry_page_button.clicked.connect(self._retry_current_page)
+        self.retry_page_button.hide()
+        layout.addWidget(self.retry_page_button)
+
         self.next_button = V3Button("Далее", ButtonVariant.PRIMARY)
         self.next_button.clicked.connect(self.go_next)
         layout.addWidget(self.next_button)
@@ -391,17 +399,41 @@ class AppShell(QWidget):
         normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
         normalized_step = step if isinstance(step, StepId) else StepId(step)
         key = (normalized_mode, normalized_step)
-        factory = self._page_factories.pop(key, None)
+        factory = self._page_factories.get(key)
         if factory is not None:
             self.initialization_stage.emit(
                 f"Открываем: {STEP_TITLES[normalized_step]}", 0, 1
             )
-            page = factory()
+            try:
+                page = factory()
+            except Exception:
+                self.initialization_stage.emit(
+                    f"Не открыто: {STEP_TITLES[normalized_step]}", 1, 1
+                )
+                self.validation_label.setText(
+                    "✕ Не удалось открыть страницу. Попробуйте ещё раз."
+                )
+                self.validation_label.setAccessibleName(
+                    "Ошибка открытия страницы. Доступна повторная попытка."
+                )
+                self.validation_label.show()
+                self.retry_page_button.show()
+                return self._pages[key]
             self.set_step_page(normalized_mode, normalized_step, page)
+            self._page_factories.pop(key, None)
+            self.retry_page_button.hide()
             self.initialization_stage.emit(
                 f"Открыто: {STEP_TITLES[normalized_step]}", 1, 1
             )
         return self._pages[key]
+
+    def _retry_current_page(self) -> None:
+        key = (self.state.mode, self.state.current_step)
+        self.ensure_step_page(*key)
+        if key not in self._page_factories:
+            self._clear_validation()
+            self.retry_page_button.hide()
+            self.refresh()
 
     def refresh(self) -> None:
         self.mode_label.setText(MODE_TITLES[self.state.mode])

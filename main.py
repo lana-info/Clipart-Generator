@@ -6798,6 +6798,7 @@ def create_authorized_v3_application_window(
     unavailable_dialog_factory=None,
 ):
     """Create the release window only after fresh online authorization."""
+    from license_client import LicenseUnavailableError
     from v3_license import LicenseDialog, SavedLicenseUnavailableDialog
 
     factory = window_factory or create_v3_application_window
@@ -6824,7 +6825,7 @@ def create_authorized_v3_application_window(
                     details={"error_message": str(error)},
                 )
 
-            if gate.has_activation():
+            if gate.has_activation() and isinstance(error, LicenseUnavailableError):
                 retry_dialog = unavailable_dialog_type(str(error), parent=window)
                 if retry_dialog.exec() == QDialog.DialogCode.Accepted:
                     continue

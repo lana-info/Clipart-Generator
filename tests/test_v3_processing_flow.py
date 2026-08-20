@@ -23,6 +23,7 @@ from v3_processing_flow import (
     install_processing_flow,
     missing_processing_runtime_requirements,
     operation_validation_issues,
+    processing_change_summary,
     processing_pipeline_steps,
     uses_external_processing,
 )
@@ -50,6 +51,24 @@ class FakeDropEvent:
 
     def ignore(self):
         self.accepted = False
+
+
+class ProcessingCopyTests(unittest.TestCase):
+    def test_cleanup_summary_is_fully_localized(self):
+        operations = ImageOperationData(
+            remove_comments_text=True,
+            remove_embedded_thumbnail=True,
+            remove_generator_fields=True,
+        )
+
+        removed, _preserved = processing_change_summary(operations)
+
+        self.assertIn("текстовые комментарии", removed)
+        self.assertIn("встроенную миниатюру", removed)
+        self.assertIn("поля программы-создателя", removed)
+        self.assertNotIn("comments/text", removed)
+        self.assertNotIn("embedded thumbnail", removed)
+        self.assertNotIn("generator fields", removed)
 
 class FakeWorker(QObject):
     progress = pyqtSignal(str)

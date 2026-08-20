@@ -35,6 +35,15 @@ SYNTHID_UNAVAILABLE_TOOLTIP = (
     "Функция не включена: нет подтверждённого production-контракта "
     "обнаружения и удаления SynthID."
 )
+CLEANUP_OPERATION_LABELS = {
+    "remove_exif": "Удалить EXIF",
+    "remove_xmp": "Удалить XMP",
+    "remove_iptc": "Удалить IPTC",
+    "remove_comments_text": "Удалить текстовые комментарии",
+    "remove_embedded_thumbnail": "Удалить встроенную миниатюру",
+    "remove_generator_fields": "Удалить поля программы-создателя",
+    "remove_embedded_c2pa": "Удалить встроенные данные C2PA",
+}
 
 
 def configure_unavailable_synthid(control: QCheckBox) -> None:
@@ -211,13 +220,7 @@ class ProcessingPipelineEditor(QScrollArea):
         "edge_shrink": "Очистить край alpha",
         "trim": "Trim",
         "export_300_dpi": "Экспорт 300 DPI",
-        "remove_exif": "Удалить EXIF",
-        "remove_xmp": "Удалить XMP",
-        "remove_iptc": "Удалить IPTC",
-        "remove_comments_text": "Удалить comments/text",
-        "remove_embedded_thumbnail": "Удалить embedded thumbnail",
-        "remove_generator_fields": "Удалить generator fields",
-        "remove_embedded_c2pa": "Удалить embedded C2PA",
+        **CLEANUP_OPERATION_LABELS,
         "preserve_icc": "Сохранить ICC",
         "preserve_dpi": "Сохранить DPI",
     }

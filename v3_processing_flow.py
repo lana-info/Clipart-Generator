@@ -39,6 +39,7 @@ from v3_clipart_flow import (
 )
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_processing_editor import (
+    CLEANUP_OPERATION_LABELS,
     PROCESSING_RECIPES as _SHARED_PROCESSING_RECIPES,
     ProcessingPipelineEditor,
     RunPlanBuilder,
@@ -368,16 +369,28 @@ def estimate_processing_cost(
 def processing_change_summary(operations: ImageOperationData) -> tuple[str, str]:
     removed: list[str] = []
     for enabled, label in (
-        (operations.remove_exif, "EXIF"),
-        (operations.remove_xmp, "XMP"),
-        (operations.remove_iptc, "IPTC"),
-        (operations.remove_comments_text, "comments/text"),
-        (operations.remove_embedded_thumbnail, "embedded thumbnail"),
-        (operations.remove_generator_fields, "generator fields"),
-        (operations.remove_embedded_c2pa, "embedded C2PA"),
+        (operations.remove_exif, CLEANUP_OPERATION_LABELS["remove_exif"]),
+        (operations.remove_xmp, CLEANUP_OPERATION_LABELS["remove_xmp"]),
+        (operations.remove_iptc, CLEANUP_OPERATION_LABELS["remove_iptc"]),
+        (
+            operations.remove_comments_text,
+            CLEANUP_OPERATION_LABELS["remove_comments_text"],
+        ),
+        (
+            operations.remove_embedded_thumbnail,
+            CLEANUP_OPERATION_LABELS["remove_embedded_thumbnail"],
+        ),
+        (
+            operations.remove_generator_fields,
+            CLEANUP_OPERATION_LABELS["remove_generator_fields"],
+        ),
+        (
+            operations.remove_embedded_c2pa,
+            CLEANUP_OPERATION_LABELS["remove_embedded_c2pa"],
+        ),
     ):
         if enabled:
-            removed.append(label)
+            removed.append(label.removeprefix("Удалить "))
     preserved = []
     if operations.preserve_icc:
         preserved.append("ICC")
@@ -801,13 +814,7 @@ class _LegacyProcessingPipelinePage(_ScrollableStepPage):
         "edge_shrink": "Очистить край alpha — уменьшит цветную кайму",
         "trim": "Trim — обрежет пустые поля",
         "export_300_dpi": "Экспорт 300 DPI — запишет разрешение печати",
-        "remove_exif": "Удалить EXIF",
-        "remove_xmp": "Удалить XMP",
-        "remove_iptc": "Удалить IPTC",
-        "remove_comments_text": "Удалить comments/text",
-        "remove_embedded_thumbnail": "Удалить embedded thumbnail",
-        "remove_generator_fields": "Удалить generator fields",
-        "remove_embedded_c2pa": "Удалить embedded C2PA",
+        **CLEANUP_OPERATION_LABELS,
     }
 
     def __init__(

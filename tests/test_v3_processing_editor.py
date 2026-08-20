@@ -5,8 +5,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QApplication, QLabel
 
 from v3_processing_editor import (
     PROCESSING_RECIPES,

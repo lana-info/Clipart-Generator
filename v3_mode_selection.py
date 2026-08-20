@@ -7,8 +7,9 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QStandardPaths, pyqtSignal
+from PyQt6.QtCore import QEventLoop, QStandardPaths, pyqtSignal
 from PyQt6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -656,6 +657,12 @@ class V3ApplicationView(QWidget):
         stage = InitializationStage(label, completed, total)
         overlay = self._initialization_overlay
         overlay.update_stage(stage)
+        if completed < total:
+            overlay.show()
+            QApplication.processEvents(
+                QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents
+                | QEventLoop.ProcessEventsFlag.ExcludeSocketNotifiers
+            )
         if completed == total:
             overlay.close()
             overlay.deleteLater()
