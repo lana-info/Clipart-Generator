@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Run manual Windows acceptance for the verified `3.0.1`
-installer, then upload it as a draft revision and test licensed update delivery
-before publication.**
+Current next task: **Build `VibixImages-Setup-3.0.2.exe` only through the
+manual Azure pipeline, record its run and SHA-256, then repeat focused Windows
+acceptance. Do not upload a revision before that artifact is approved.**
 
 ## Phase 1 - Preparation
 
@@ -1596,7 +1596,7 @@ Verification:
 
 ### Task 65 - Windows 3.0.1 Acceptance Fix Pack
 
-Status: Manual smoke test complete; fixes approved, implementation pending
+Status: Local 3.0.2 fix candidate complete; Azure build and Windows acceptance pending
 
 Source of truth:
 - `docs/testing/windows-3.0.1-acceptance-checklist.ru.md`
@@ -1630,3 +1630,27 @@ Required regressions:
 - Initial mode selection creates only required pages and hardware probes cannot
   block the GUI thread.
 - Shared processing labels and capability states match across all three modes.
+
+Implemented for candidate `3.0.2`:
+- Route only typed temporary license-service failures to Retry/Close; rejected,
+  expired, revoked, or otherwise invalid saved activations can open the safe
+  replacement-key flow without granting access.
+- Keep selected processing inputs synchronized for `process more`; disable and
+  label SynthID consistently; localize shared cleanup copy.
+- Simplify the work header and show only real autosave failures.
+- Construct only the selected mode and requested pages, cache successful pages,
+  show determinate initialization progress, and retain failed factories for a
+  bounded user-visible retry.
+- Synchronize `release/VERSION.txt` and the manual Azure pipeline default at
+  `3.0.2`; the pipeline remains build-only with `trigger: none` and `pr: none`.
+
+Verification:
+- [x] Focused acceptance regressions: 81 passed, 14 subtests passed.
+- [x] Azure offline release-gate command: 49 tests passed, 1 expected skip.
+- [x] Supported source tree passes `compileall`, sensitive-artifact scan, and
+  `git diff --check`.
+- [x] Full suite excluding two documented pre-existing baseline inconsistencies:
+  516 passed, 1 expected skip, 4 deselected, 73 subtests passed.
+- [ ] Build `VibixImages-Setup-3.0.2.exe` using the manual Azure pipeline.
+- [ ] Repeat focused Windows installation, licensing, DPI, retry, and update
+  acceptance against the exact Azure artifact and its SHA-256.

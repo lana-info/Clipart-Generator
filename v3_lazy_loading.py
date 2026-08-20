@@ -79,7 +79,9 @@ class LazyPageRegistry(MutableMapping[StepId, QWidget]):
     def __getitem__(self, step: StepId) -> QWidget:
         if step not in self._materialized:
             if step in route_for_mode(self.mode):
-                self.shell.ensure_step_page(self.mode, step)
+                page = self.shell.ensure_step_page(self.mode, step)
+                if step not in self._materialized:
+                    return page
             else:
                 self._factories[step]()
         return self._materialized[step]

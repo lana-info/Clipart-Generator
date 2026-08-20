@@ -15,21 +15,20 @@ Updated: 2026-08-20
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/tech-debt-11`
-- Latest completed audit commit: `e64ee12` (cross-component audit, lifecycle fixes, and
-  sensitive-artifact cleanup)
+- Current task branch: `codex/fix-windows-acceptance-3-0-2`
+- Current local implementation head: `2604e57` (review findings fixed; final
+  documentation and verification still in progress)
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-The Windows 3.0.1 smoke test covered installation, startup licensing, folder
-persistence, diagnostics, local processing, cancellation, and basic lifecycle.
-The owner stopped the remaining manual checks; unchecked acceptance items are
-`SKIP / NOT TESTED`, not proven passes. Implement Task 65 as a new fix pack,
-run local regressions and a new Windows build, then repeat focused acceptance.
-Do not upload or publish an update revision until that build is approved.
+The Windows 3.0.1 smoke test findings are implemented locally as the 3.0.2 fix
+candidate. Finish verification, push the dedicated branch without triggering a
+GitHub installer workflow, and build `VibixImages-Setup-3.0.2.exe` only through
+the manual Azure pipeline. Repeat focused Windows acceptance against that exact
+artifact. Do not upload or publish an update revision until the build is approved.
 
 ## Blockers and risks
 
@@ -43,13 +42,15 @@ Do not upload or publish an update revision until that build is approved.
   manual check on the target Windows computer.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
-- The Windows smoke test found a misleading offline saved-license key prompt,
-  an enabled SynthID consent control for an unavailable capability, stale file
-  UI after `process more`, a clipped/incorrect wizard header, and slow eager
-  first-mode initialization. These are tracked in Task 65.
-- The installer from run `31909510317` predates the new updater and diagnostic
-  journal. Use the verified `3.0.1` installer from run `31924194111` for current
-  acceptance.
+- The Windows smoke-test findings are fixed in source and covered by local
+  regressions, but the resulting behavior is still `WINDOWS_REQUIRED` until a
+  packaged Azure 3.0.2 build is tested at real Windows DPI values.
+- Full pytest has two pre-existing baseline inconsistencies outside Task 65: the
+  configured-output-path expectation differs from the current implementation,
+  and `TECHNICAL_DEBT.md` links to an untracked local `tech_debt/README.md`.
+  The 3.0.2 change set passes when those two baseline tests are deselected.
+- The verified 3.0.1 installer remains historical evidence only. Do not use it
+  to accept the 3.0.2 fixes; wait for the new Azure artifact and checksum.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.

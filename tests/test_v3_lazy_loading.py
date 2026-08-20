@@ -9,7 +9,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QLabel
 
-from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
+from v3_lazy_loading import (
+    InitializationProgressOverlay,
+    InitializationStage,
+    LazyPageRegistry,
+)
 from v3_mode_selection import V3ApplicationView
 from v3_project_state import ProjectMode, StepId
 from v3_wizard import AppShell
@@ -139,6 +143,30 @@ class V3LazyLoadingTests(unittest.TestCase):
         self.assertEqual(calls, [1, 2])
         self.assertIsNot(recovered, placeholder)
         self.assertFalse(shell.retry_page_button.isVisible())
+        shell.close()
+        shell.deleteLater()
+
+    def test_registry_returns_placeholder_then_recovers_after_factory_failure(
+        self,
+    ) -> None:
+        shell = AppShell()
+        registry = LazyPageRegistry(shell, ProjectMode.CLIPART)
+        calls = []
+
+        def factory():
+            calls.append(len(calls) + 1)
+            if len(calls) == 1:
+                raise RuntimeError("private detail")
+            return QLabel("Готово")
+
+        registry.register(StepId.PROMPTS, factory)
+
+        placeholder = registry[StepId.PROMPTS]
+        recovered = registry[StepId.PROMPTS]
+
+        self.assertEqual(calls, [1, 2])
+        self.assertIsNot(recovered, placeholder)
+        self.assertEqual(recovered.text(), "Готово")
         shell.close()
         shell.deleteLater()
 
