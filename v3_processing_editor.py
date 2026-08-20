@@ -450,8 +450,9 @@ class ProcessingPipelineEditor(QScrollArea):
             operations.invisible_watermark_cleanup = False
             configure_unavailable_synthid(invisible_control)
             cleanup_hint = QLabel(
-                "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
-                "generator fields и embedded C2PA. ICC и DPI всегда сохраняются."
+                "Удаляет EXIF, XMP, IPTC, текстовые комментарии, встроенную "
+                "миниатюру, поля программы-создателя и встроенные данные C2PA. "
+                "ICC и DPI всегда сохраняются."
             )
             cleanup_hint.setWordWrap(True)
             cleanup_form.addRow(cleanup_hint)

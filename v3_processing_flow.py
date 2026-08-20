@@ -1018,18 +1018,15 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
             changed,
             title="Обработка изображений",
             description="Операции выполняются сверху вниз; рецепт можно полностью изменить.",
-            include_cleanup=False,
+            include_cleanup=True,
             tokens=tokens,
         )
         self.project_state = state
         state.processing.operations.invisible_watermark_cleanup = False
         state.processing.deep_watermark_consent = False
-        self.allow_full_image_changes = QCheckBox(
-            "Разрешить глубокую обработку скрытых водяных знаков (SynthID)"
-        )
-        self.allow_full_image_changes.toggled.connect(self._sync_consent)
-        configure_unavailable_synthid(self.allow_full_image_changes)
-        self.add_widget(self.allow_full_image_changes)
+        self.allow_full_image_changes = self.operation_widgets[
+            "invisible_watermark_cleanup"
+        ]
 
     def _sync_consent(self, value: bool) -> None:
         self.project_state.processing.deep_watermark_consent = bool(value)

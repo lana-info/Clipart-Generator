@@ -6,6 +6,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QLabel
 
 from v3_processing_editor import (
     PROCESSING_RECIPES,
@@ -58,6 +59,13 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertFalse(synthid.isEnabled())
         self.assertFalse(synthid.isChecked())
         self.assertIn("недоступно", synthid.text().lower())
+
+        copy = " ".join(label.text() for label in editor.findChildren(QLabel))
+        self.assertIn("текстовые комментарии", copy)
+        self.assertIn("встроенную миниатюру", copy)
+        self.assertNotIn("comments/text", copy)
+        self.assertNotIn("embedded thumbnail", copy)
+        self.assertNotIn("generator fields", copy)
 
     def test_shared_steps_match_current_pipeline_contract(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)

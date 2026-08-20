@@ -141,6 +141,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         state = ProjectState(mode=ProjectMode.PROCESSING)
         page = ProcessingPipelinePage(state, lambda: None)
 
+        self.assertIsNotNone(page.cleanup_checkbox)
         self.assertFalse(page.allow_full_image_changes.isEnabled())
         self.assertFalse(page.allow_full_image_changes.isChecked())
         self.assertIn("недоступно", page.allow_full_image_changes.text().lower())
