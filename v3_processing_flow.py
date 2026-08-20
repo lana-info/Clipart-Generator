@@ -43,6 +43,7 @@ from v3_processing_editor import (
     ProcessingPipelineEditor,
     RunPlanBuilder,
     apply_processing_recipe as _shared_apply_processing_recipe,
+    configure_unavailable_synthid,
 )
 from v3_provider_registry import (
     KIE_MODEL_OPTIONS,
@@ -887,6 +888,7 @@ class _LegacyProcessingPipelinePage(_ScrollableStepPage):
         self.allow_full_image_changes = QCheckBox(
             "Разрешить глубокую обработку скрытых водяных знаков (SynthID)"
         )
+        configure_unavailable_synthid(self.allow_full_image_changes)
         self.allow_full_image_changes.toggled.connect(changed)
         self.add_widget(self.allow_full_image_changes)
         self.order_label = QLabel()
@@ -1020,11 +1022,13 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
             tokens=tokens,
         )
         self.project_state = state
+        state.processing.operations.invisible_watermark_cleanup = False
+        state.processing.deep_watermark_consent = False
         self.allow_full_image_changes = QCheckBox(
             "Разрешить глубокую обработку скрытых водяных знаков (SynthID)"
         )
         self.allow_full_image_changes.toggled.connect(self._sync_consent)
-        self.allow_full_image_changes.setChecked(state.processing.deep_watermark_consent)
+        configure_unavailable_synthid(self.allow_full_image_changes)
         self.add_widget(self.allow_full_image_changes)
 
     def _sync_consent(self, value: bool) -> None:
@@ -1258,9 +1262,9 @@ class ProcessingFlowController(QObject):
         raise LicenseError("Лицензионный сервис не настроен")
 
     def start_processing_again(self) -> None:
-        self.shell.state.processing.selected_files.clear()
         self.shell.state.processing.verification_records.clear()
         self.shell.state.set_step(StepId.FILES)
+        self.files_page.refresh_from_state()
         self.shell.mark_dirty()
 
     def _install_pages(self) -> None:

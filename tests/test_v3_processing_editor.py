@@ -54,6 +54,11 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertTrue(state.processing.operations.preserve_icc)
         self.assertTrue(state.processing.operations.preserve_dpi)
 
+        synthid = editor.operation_widgets["invisible_watermark_cleanup"]
+        self.assertFalse(synthid.isEnabled())
+        self.assertFalse(synthid.isChecked())
+        self.assertIn("недоступно", synthid.text().lower())
+
     def test_shared_steps_match_current_pipeline_contract(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         state.processing.operations.upscale_before = True

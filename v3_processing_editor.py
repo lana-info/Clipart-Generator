@@ -28,6 +28,26 @@ from v3_provider_registry import (
 from v3_project_state import ImageOperationData, ProjectState
 
 
+SYNTHID_UNAVAILABLE_LABEL = (
+    "Глубокая обработка скрытых водяных знаков (SynthID) — недоступно"
+)
+SYNTHID_UNAVAILABLE_TOOLTIP = (
+    "Функция не включена: нет подтверждённого production-контракта "
+    "обнаружения и удаления SynthID."
+)
+
+
+def configure_unavailable_synthid(control: QCheckBox) -> None:
+    """Present SynthID consistently without exposing a non-production action."""
+    previous = control.blockSignals(True)
+    control.setChecked(False)
+    control.setEnabled(False)
+    control.setText(SYNTHID_UNAVAILABLE_LABEL)
+    control.setAccessibleName(SYNTHID_UNAVAILABLE_LABEL)
+    control.setToolTip(SYNTHID_UNAVAILABLE_TOOLTIP)
+    control.blockSignals(previous)
+
+
 @dataclass(frozen=True, slots=True)
 class ProcessingRecipe:
     key: str
@@ -427,19 +447,8 @@ class ProcessingPipelineEditor(QScrollArea):
             self._add_bool(cleanup_form, "visible_mark_cleanup", operations)
             self._add_bool(cleanup_form, "invisible_watermark_cleanup", operations)
             invisible_control = self.operation_widgets["invisible_watermark_cleanup"]
-            try:
-                from ai_watermark_backend import gpu_backend_available
-                gpu_ready = gpu_backend_available()
-            except Exception:
-                gpu_ready = False
-            if not gpu_ready and operations.invisible_watermark_cleanup:
-                operations.invisible_watermark_cleanup = False
-            invisible_control.setEnabled(False)
-            invisible_control.setChecked(False)
-            invisible_control.setText("Глубокая обработка скрытых водяных знаков (SynthID) — недоступно в версии 3.0")
-            invisible_control.setToolTip(
-                "Экспериментальная облачная операция отложена до подтверждения backend-контракта."
-            )
+            operations.invisible_watermark_cleanup = False
+            configure_unavailable_synthid(invisible_control)
             cleanup_hint = QLabel(
                 "Удаляет EXIF, XMP, IPTC, comments/text, embedded thumbnail, "
                 "generator fields и embedded C2PA. ICC и DPI всегда сохраняются."
