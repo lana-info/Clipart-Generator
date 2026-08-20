@@ -231,6 +231,20 @@ class V3WizardNavigationTests(unittest.TestCase):
         self.assertTrue(shell.styleSheet())
         self.assertLess(shell.back_button.width(), 200)
         self.assertLess(shell.next_button.width(), 200)
+        header_text = " ".join(
+            label.text() for label in shell.top_bar.findChildren(QLabel)
+        )
+        self.assertEqual(shell.mode_label.text(), "Обработка изображений")
+        self.assertNotIn("AI Image Generation", header_text)
+        self.assertNotIn("Не сохранено", header_text)
+        self.assertNotIn("Лицензия активна", header_text)
+        self.assertFalse(hasattr(shell, "license_button"))
+        for button in (
+            shell.change_mode_button,
+            shell.api_settings_button,
+            shell.diagnostics_button,
+        ):
+            self.assertGreaterEqual(button.width(), button.sizeHint().width())
 
         shell.mark_dirty()
         self.assertTrue(shell.request_mode_switch(ProjectMode.CLIPART))

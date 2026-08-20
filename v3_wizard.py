@@ -19,7 +19,7 @@ from v3_components import (
     V3DesignTokens,
     apply_v3_theme,
 )
-from app_identity import APP_NAME, APP_SUBTITLE
+from app_identity import APP_NAME
 from v3_project_state import (
     ProjectMode,
     ProjectState,
@@ -116,7 +116,6 @@ class AppShell(QWidget):
     unsaved_mode_switch_requested = pyqtSignal(str, str)
     mode_picker_requested = pyqtSignal()
     api_settings_requested = pyqtSignal()
-    license_requested = pyqtSignal()
     diagnostics_requested = pyqtSignal()
     run_requested = pyqtSignal(str)
     finish_requested = pyqtSignal(str)
@@ -154,6 +153,13 @@ class AppShell(QWidget):
 
         self.top_bar = self._build_top_bar()
         root_layout.addWidget(self.top_bar)
+
+        self.save_error_label = QLabel()
+        self.save_error_label.setWordWrap(True)
+        self.save_error_label.setProperty("v3Status", True)
+        self.save_error_label.setProperty("state", "error")
+        self.save_error_label.hide()
+        root_layout.addWidget(self.save_error_label)
 
         body = QWidget()
         body_layout = QHBoxLayout(body)
@@ -208,34 +214,10 @@ class AppShell(QWidget):
         )
         layout.setSpacing(self.tokens.space_3)
 
-        title = QLabel(f"{APP_NAME} 3.0")
-        title.setProperty("v3Title", True)
-        title.setAccessibleName(APP_NAME)
-        layout.addWidget(title)
-
-        subtitle = QLabel(APP_SUBTITLE)
-        subtitle.setProperty("v3Small", True)
-        subtitle.setAccessibleName(APP_SUBTITLE)
-        layout.addWidget(subtitle)
-
         self.mode_label = QLabel()
-        self.mode_label.setProperty("v3Description", True)
+        self.mode_label.setProperty("v3Title", True)
         layout.addWidget(self.mode_label)
         layout.addStretch()
-
-        self.dirty_label = QLabel()
-        self.dirty_label.setProperty("v3Small", True)
-        layout.addWidget(self.dirty_label)
-
-        self.license_status_label = QLabel("Лицензия не активирована")
-        self.license_status_label.setProperty("v3Small", True)
-        self.license_status_label.setAccessibleName("Статус лицензии")
-        layout.addWidget(self.license_status_label)
-
-        self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
-        self.license_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.license_button.clicked.connect(self.license_requested.emit)
-        layout.addWidget(self.license_button)
 
         self.change_mode_button = V3Button(
             "Сменить режим",
@@ -253,10 +235,11 @@ class AppShell(QWidget):
         layout.addWidget(self.diagnostics_button)
         return frame
 
-    def set_license_status(self, status: str) -> None:
-        normalized = str(status or "Лицензия не активирована")[:160]
-        self.license_status_label.setText(normalized)
-        self.license_status_label.setAccessibleDescription(normalized)
+    def set_save_error(self, message: str | None) -> None:
+        normalized = str(message or "")[:200]
+        self.save_error_label.setText(normalized)
+        self.save_error_label.setAccessibleName(normalized)
+        self.save_error_label.setVisible(bool(normalized))
 
     def _build_sidebar(self) -> QFrame:
         frame = self._card_frame()
@@ -380,12 +363,8 @@ class AppShell(QWidget):
             self.page_stack.setCurrentWidget(page)
 
     def refresh(self) -> None:
-        self.mode_label.setText(f"Режим: {MODE_TITLES[self.state.mode]}")
+        self.mode_label.setText(MODE_TITLES[self.state.mode])
         self.mode_label.setAccessibleName(self.mode_label.text())
-        self.dirty_label.setText(
-            "● Не сохранено" if self._dirty else "✓ Сохранено"
-        )
-        self.dirty_label.setAccessibleName(self.dirty_label.text())
         self._refresh_stepper()
         self.page_stack.setCurrentWidget(self.current_page)
         self._refresh_footer()

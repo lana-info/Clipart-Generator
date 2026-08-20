@@ -414,8 +414,6 @@ class V3ApplicationView(QWidget):
             status = self._license_gate.status_text
             verification = self._license_gate.verification_text
         self.mode_selection.set_license_status(status, verification)
-        if self.shell is not None:
-            self.shell.set_license_status(status)
 
     @property
     def project_state(self) -> ProjectState | None:
@@ -547,10 +545,10 @@ class V3ApplicationView(QWidget):
             ))
         state.set_output_dir_for_mode(output_dir, mode)
 
-    def _save_preferences(self) -> None:
+    def _save_preferences(self) -> bool:
         path = self._preferences_path
         if path is None or self.shell is None:
-            return
+            return True
         state = self.shell.state
         work_dir = state.common.work_dir.strip()
         if work_dir and Path(work_dir).expanduser().is_dir():
@@ -574,7 +572,9 @@ class V3ApplicationView(QWidget):
         try:
             save_preferences_atomic(path, self._preferences)
         except OSError:
-            return
+            return False
+        return True
+
     def _save_draft(self) -> None:
         path = self._draft_path
         if path is None or self.shell is None:
@@ -582,9 +582,13 @@ class V3ApplicationView(QWidget):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             save_project_draft(self.shell.state, path)
-            self._save_preferences()
-        except ProjectStateError:
+            preferences_saved = self._save_preferences()
+        except (OSError, ProjectStateError):
+            self.shell.set_save_error("Не удалось сохранить изменения")
             return
+        self.shell.set_save_error(
+            None if preferences_saved else "Не удалось сохранить изменения"
+        )
 
     def _replace_shell(self, state: ProjectState) -> None:
         previous = self.shell
@@ -623,11 +627,8 @@ class V3ApplicationView(QWidget):
         shell.state_changed.connect(self._save_draft)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         shell.api_settings_requested.connect(self._show_api_settings)
-        shell.license_requested.connect(self._show_license)
         shell.diagnostics_requested.connect(self._show_diagnostics)
         shell.finish_requested.connect(self._finish_workflow)
-        if self._license_gate is not None:
-            shell.set_license_status(self._license_gate.status_text)
         self.shell = shell
         self.stack.addWidget(shell)
         self.stack.setCurrentWidget(shell)

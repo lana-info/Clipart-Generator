@@ -25,6 +25,7 @@ from v3_project_state import (
     PromptEntry,
     StepId,
     route_for_mode,
+    ProjectStateError,
 )
 
 
@@ -249,6 +250,30 @@ class V3ModeSelectionTests(unittest.TestCase):
             )
             restored.close()
             restored.deleteLater()
+
+    def test_autosave_failure_is_visible_and_success_clears_warning(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-autosave-") as temp:
+            draft_path = Path(temp) / "app-data" / "project_state.json"
+            view = V3ApplicationView(draft_path=draft_path)
+            view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+
+            with patch(
+                "v3_mode_selection.save_project_draft",
+                side_effect=ProjectStateError("private path must not be shown"),
+            ):
+                view.shell.mark_dirty()
+
+            self.assertFalse(view.shell.save_error_label.isHidden())
+            self.assertEqual(
+                view.shell.save_error_label.text(),
+                "Не удалось сохранить изменения",
+            )
+            self.assertNotIn("private", view.shell.save_error_label.text())
+
+            view._save_draft()
+            self.assertTrue(view.shell.save_error_label.isHidden())
+            view.close()
+            view.deleteLater()
 
     def test_continue_is_unavailable_without_a_recent_project(self):
         view = V3ApplicationView()
