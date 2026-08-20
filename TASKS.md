@@ -1650,7 +1650,7 @@ Verification:
 - [x] Supported source tree passes `compileall`, sensitive-artifact scan, and
   `git diff --check`.
 - [x] Full suite excluding two documented pre-existing baseline inconsistencies:
-  516 passed, 1 expected skip, 4 deselected, 73 subtests passed.
+  517 passed, 1 expected skip, 4 deselected, 73 subtests passed.
 - [ ] Build `VibixImages-Setup-3.0.2.exe` using the manual Azure pipeline.
 - [ ] Repeat focused Windows installation, licensing, DPI, retry, and update
   acceptance against the exact Azure artifact and its SHA-256.
