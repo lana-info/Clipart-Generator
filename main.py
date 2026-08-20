@@ -6795,20 +6795,55 @@ def create_authorized_v3_application_window(
     *,
     window_factory=None,
     dialog_factory=None,
+    unavailable_dialog_factory=None,
 ):
     """Create the release window only after fresh online authorization."""
-    from v3_license import LicenseDialog
+    from v3_license import LicenseDialog, SavedLicenseUnavailableDialog
 
     factory = window_factory or create_v3_application_window
     dialog_type = dialog_factory or LicenseDialog
+    unavailable_dialog_type = (
+        unavailable_dialog_factory or SavedLicenseUnavailableDialog
+    )
     window = factory()
     gate = getattr(window, "_license_gate", None)
     journal = getattr(window, "_diagnostic_journal", None)
     if gate is None:
         window.close()
         return None
-    try:
-        gate.authorize_run()
+    while True:
+        try:
+            gate.authorize_run()
+        except LicenseError as error:
+            if journal is not None:
+                journal.record(
+                    "license_validation_failed",
+                    "Проверка лицензии при запуске не выполнена.",
+                    severity="warning",
+                    outcome="failed",
+                    details={"error_message": str(error)},
+                )
+
+            if gate.has_activation():
+                retry_dialog = unavailable_dialog_type(str(error), parent=window)
+                if retry_dialog.exec() == QDialog.DialogCode.Accepted:
+                    continue
+                window.close()
+                return None
+
+            dialog = dialog_type(gate, parent=window)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                continue
+            if journal is not None:
+                journal.record(
+                    "license_activation_cancelled",
+                    "Ввод лицензии отменён пользователем.",
+                    severity="warning",
+                    outcome="cancelled",
+                )
+            window.close()
+            return None
+
         if journal is not None:
             journal.record(
                 "license_validation_succeeded",
@@ -6819,51 +6854,6 @@ def create_authorized_v3_application_window(
         if callable(refresh):
             refresh()
         return window
-    except LicenseError as error:
-        if journal is not None:
-            journal.record(
-                "license_validation_failed",
-                "Проверка лицензии при запуске не выполнена.",
-                severity="warning",
-                outcome="failed",
-                details={"error_message": str(error)},
-            )
-
-    dialog = dialog_type(gate, parent=window)
-    if dialog.exec() != QDialog.DialogCode.Accepted:
-        if journal is not None:
-            journal.record(
-                "license_activation_cancelled",
-                "Ввод лицензии отменён пользователем.",
-                severity="warning",
-                outcome="cancelled",
-            )
-        window.close()
-        return None
-    try:
-        gate.authorize_run()
-        if journal is not None:
-            journal.record(
-                "license_activation_succeeded",
-                "Лицензия активирована и проверена.",
-                outcome="success",
-            )
-    except LicenseError as error:
-        if journal is not None:
-            journal.record(
-                "license_activation_failed",
-                "Лицензию не удалось активировать или проверить.",
-                severity="error",
-                outcome="failed",
-                details={"error_message": str(error)},
-            )
-        QMessageBox.warning(window, "Лицензия", str(error))
-        window.close()
-        return None
-    refresh = getattr(window, "refresh_license_status", None)
-    if callable(refresh):
-        refresh()
-    return window
 
 
 def install_diagnostic_exception_hook(journal) -> None:

@@ -55,6 +55,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
     def test_startup_does_not_open_application_when_license_is_rejected(self):
         window = QWidget()
         gate = Mock()
+        gate.has_activation.return_value = False
         gate.authorize_run.side_effect = LicenseError(
             "Активируйте лицензию перед запуском"
         )
@@ -71,6 +72,57 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertIsNone(result)
         gate.authorize_run.assert_called_once_with()
         dialog_factory.assert_called_once_with(gate, parent=window)
+        window.deleteLater()
+
+    def test_saved_license_outage_never_reopens_key_entry(self):
+        window = QWidget()
+        gate = Mock()
+        gate.has_activation.return_value = True
+        gate.authorize_run.side_effect = LicenseError(
+            "Сервер лицензий временно недоступен"
+        )
+        window._license_gate = gate
+        key_dialog_factory = Mock()
+        outage_dialog = Mock()
+        outage_dialog.exec.return_value = QDialog.DialogCode.Rejected
+        outage_dialog_factory = Mock(return_value=outage_dialog)
+
+        result = create_authorized_v3_application_window(
+            window_factory=lambda: window,
+            dialog_factory=key_dialog_factory,
+            unavailable_dialog_factory=outage_dialog_factory,
+        )
+
+        self.assertIsNone(result)
+        key_dialog_factory.assert_not_called()
+        outage_dialog_factory.assert_called_once_with(
+            "Сервер лицензий временно недоступен",
+            parent=window,
+        )
+        window.deleteLater()
+
+    def test_saved_license_outage_retry_requires_fresh_success(self):
+        window = QWidget()
+        window.refresh_license_status = Mock()
+        gate = Mock()
+        gate.has_activation.return_value = True
+        gate.authorize_run.side_effect = [
+            LicenseError("Сервер лицензий временно недоступен"),
+            object(),
+        ]
+        window._license_gate = gate
+        outage_dialog = Mock()
+        outage_dialog.exec.return_value = QDialog.DialogCode.Accepted
+
+        result = create_authorized_v3_application_window(
+            window_factory=lambda: window,
+            dialog_factory=Mock(),
+            unavailable_dialog_factory=Mock(return_value=outage_dialog),
+        )
+
+        self.assertIs(result, window)
+        self.assertEqual(gate.authorize_run.call_count, 2)
+        window.refresh_license_status.assert_called_once_with()
         window.deleteLater()
 
     def test_startup_uses_saved_license_only_after_online_validation(self):
@@ -96,6 +148,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
         window = QWidget()
         window.refresh_license_status = Mock()
         gate = Mock()
+        gate.has_activation.return_value = False
         gate.authorize_run.side_effect = [
             LicenseError("Активируйте лицензию перед запуском"),
             object(),
@@ -121,6 +174,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
     ):
         window = QWidget()
         gate = Mock()
+        gate.has_activation.side_effect = [False, True]
         gate.authorize_run.side_effect = [
             LicenseError("Активируйте лицензию перед запуском"),
             LicenseError("Не удалось связаться с сервером лицензий"),
@@ -128,15 +182,18 @@ class ReleaseEntrypointTests(unittest.TestCase):
         window._license_gate = gate
         dialog = Mock()
         dialog.exec.return_value = QDialog.DialogCode.Accepted
+        outage_dialog = Mock()
+        outage_dialog.exec.return_value = QDialog.DialogCode.Rejected
 
         result = create_authorized_v3_application_window(
             window_factory=lambda: window,
             dialog_factory=Mock(return_value=dialog),
+            unavailable_dialog_factory=Mock(return_value=outage_dialog),
         )
 
         self.assertIsNone(result)
         self.assertEqual(gate.authorize_run.call_count, 2)
-        warning.assert_called_once()
+        warning.assert_not_called()
         window.deleteLater()
 
     def test_startup_fails_closed_when_license_gate_is_missing(self):

@@ -152,3 +152,37 @@ class LicenseDialog(QDialog):
             "Лицензия активирована и проверена онлайн",
         )
         self.accept()
+
+
+class SavedLicenseUnavailableDialog(QDialog):
+    """Fail-closed retry UI for a saved activation whose server check failed."""
+
+    def __init__(self, message: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Лицензия {APP_NAME}")
+        self.setMinimumWidth(460)
+
+        layout = QVBoxLayout(self)
+        description = QLabel(
+            "Сохранённая лицензия не может быть проверена онлайн. "
+            "Работа приложения не будет разрешена до ответа сервера."
+        )
+        description.setWordWrap(True)
+        layout.addWidget(description)
+
+        self.status_label = QLabel(str(message or "Сервер лицензий временно недоступен")[:300])
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        self.buttons = QDialogButtonBox()
+        retry_button = self.buttons.addButton(
+            "Повторить",
+            QDialogButtonBox.ButtonRole.ActionRole,
+        )
+        close_button = self.buttons.addButton(
+            "Закрыть",
+            QDialogButtonBox.ButtonRole.RejectRole,
+        )
+        retry_button.clicked.connect(self.accept)
+        close_button.clicked.connect(self.reject)
+        layout.addWidget(self.buttons)
