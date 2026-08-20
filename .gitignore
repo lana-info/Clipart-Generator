@@ -47,6 +47,7 @@ _updates_repo_tmp/
 realesrgan-ncnn-vulkan-20211212-windows/
 
 .scratch/
+.worktrees/
 ai-metla-test-20260719/
 
 # Local launcher diagnostic log
