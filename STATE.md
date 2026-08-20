@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-17
+Updated: 2026-08-20
 
 ## Operating model
 
@@ -24,11 +24,12 @@ Updated: 2026-08-17
 
 ## Next task
 
-The cross-component audit and local sensitive-artifact cleanup are implemented
-and covered by the desktop tests. The Azure build-only pipeline is configured;
-the next step is to run it manually and then perform installation and UI/update
-acceptance on Windows. Only after that should the verified artifact be uploaded
-and published as a licensed update revision.
+The Windows 3.0.1 smoke test covered installation, startup licensing, folder
+persistence, diagnostics, local processing, cancellation, and basic lifecycle.
+The owner stopped the remaining manual checks; unchecked acceptance items are
+`SKIP / NOT TESTED`, not proven passes. Implement Task 65 as a new fix pack,
+run local regressions and a new Windows build, then repeat focused acceptance.
+Do not upload or publish an update revision until that build is approved.
 
 ## Blockers and risks
 
@@ -42,6 +43,10 @@ and published as a licensed update revision.
   manual check on the target Windows computer.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
+- The Windows smoke test found a misleading offline saved-license key prompt,
+  an enabled SynthID consent control for an unavailable capability, stale file
+  UI after `process more`, a clipped/incorrect wizard header, and slow eager
+  first-mode initialization. These are tracked in Task 65.
 - The installer from run `31909510317` predates the new updater and diagnostic
   journal. Use the verified `3.0.1` installer from run `31924194111` for current
   acceptance.

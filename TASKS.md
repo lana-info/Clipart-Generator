@@ -1593,3 +1593,40 @@ Verification:
 - [x] Full local pytest and full `compileall .` checks.
 - [ ] Windows packaged, DPI, installer/UAC, real-account, live provider, and
   native teardown checks; these remain `WINDOWS_REQUIRED` or `BLOCKED`.
+
+### Task 65 - Windows 3.0.1 Acceptance Fix Pack
+
+Status: Manual smoke test complete; fixes approved, implementation pending
+
+Source of truth:
+- `docs/testing/windows-3.0.1-acceptance-checklist.ru.md`
+
+Required for the next Windows build:
+- Replace the misleading offline saved-license key prompt with a fail-closed
+  server-unavailable state and retry action.
+- Disable and explicitly mark the remaining SynthID consent control as
+  unavailable.
+- Keep the processing file list and model synchronized after `process more`;
+  preserve selected inputs until the user removes them.
+- Simplify and make the wizard header responsive; remove the false dirty label
+  and surface only real autosave failures.
+- Lazy-load and cache wizard pages, keep hardware probes off the UI path, and
+  show determinate progress for initialization that is visibly slow.
+- Use one consistent processing editor presentation across modes and replace
+  avoidable user-facing technical English.
+
+Deferred follow-up:
+- Simplify the prompt-generation workflow without changing it in the 3.0.1 fix
+  pack.
+
+Required regressions:
+- Saved activation plus network/server outage never reopens key entry and never
+  grants access.
+- SynthID remains disabled and labelled unavailable in every mode.
+- `process more` has matching visible/model file state and supports reprocessing
+  the same input.
+- Header actions fit the minimum window at supported Windows DPI values.
+- Autosave failure is visible; successful autosave has no false dirty status.
+- Initial mode selection creates only required pages and hardware probes cannot
+  block the GUI thread.
+- Shared processing labels and capability states match across all three modes.
