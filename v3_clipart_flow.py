@@ -87,6 +87,7 @@ from v3_provider_registry import (
     provider_visible_controls,
 )
 from v3_wizard import AppShell
+from v3_lazy_loading import LazyPageRegistry
 from model_catalog import (
     GENERATION_MODELS as CATALOG_GENERATION_MODELS,
     PROCESSING_PRICING as CATALOG_PROCESSING_PRICING,
@@ -2634,7 +2635,7 @@ class ClipartFlowController(QObject):
         from v3_run_queue import RunQueueSupport
 
         self.run_queue = RunQueueSupport(self, ProjectMode.CLIPART)
-        self.pages: dict[StepId, Any] = {}
+        self.pages = LazyPageRegistry(shell, ProjectMode.CLIPART)
         self._install_pages()
         shell.step_changed.connect(self._step_changed)
         shell.run_requested.connect(self._run_requested)
@@ -2650,35 +2651,48 @@ class ClipartFlowController(QObject):
 
     def _install_pages(self) -> None:
         changed = self.shell.mark_dirty
-        self.pages = {
-            StepId.PROJECT: ClipartProjectPage(
+        self.pages.register(
+            StepId.PROJECT,
+            lambda: ClipartProjectPage(
                 self.shell.state,
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.PROMPTS: PromptWorkspacePage(
+        )
+        self.pages.register(
+            StepId.PROMPTS,
+            lambda: PromptWorkspacePage(
                 self.shell.state,
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.GENERATION: ClipartGenerationPage(
+        )
+        self.pages.register(
+            StepId.GENERATION,
+            lambda: ClipartGenerationPage(
                 self.shell.state,
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.PROCESSING_OPTIONS: ClipartProcessingPage(
+        )
+        self.pages.register(
+            StepId.PROCESSING_OPTIONS,
+            lambda: ClipartProcessingPage(
                 self.shell.state,
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.REVIEW_RUN: ClipartReviewRunPage(
+        )
+        self.pages.register(
+            StepId.REVIEW_RUN,
+            lambda: ClipartReviewRunPage(
                 self.shell.state,
                 tokens=self.shell.tokens,
-            ),            StepId.RESULTS: self.run_queue.page,
-
-        }
-        for step, page in self.pages.items():
-            self.shell.set_step_page(ProjectMode.CLIPART, step, page)
+            ),
+        )
+        self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
+        if self.shell.state.mode is ProjectMode.CLIPART:
+            self.pages[self.shell.state.current_step]
         self.shell.refresh()
 
     @property

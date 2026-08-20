@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
@@ -119,6 +121,7 @@ class AppShell(QWidget):
     diagnostics_requested = pyqtSignal()
     run_requested = pyqtSignal(str)
     finish_requested = pyqtSignal(str)
+    initialization_stage = pyqtSignal(str, int, int)
 
     def __init__(
         self,
@@ -135,6 +138,9 @@ class AppShell(QWidget):
         self._invalid_key: tuple[ProjectMode, StepId] | None = None
         self._run_request_key: tuple[ProjectMode, StepId] | None = None
         self._pages: dict[tuple[ProjectMode, StepId], QWidget] = {}
+        self._page_factories: dict[
+            tuple[ProjectMode, StepId], Callable[[], QWidget]
+        ] = {}
         self.step_labels: list[QLabel] = []
 
         self.setMinimumSize(980, 700)
@@ -196,7 +202,7 @@ class AppShell(QWidget):
 
     @property
     def current_page(self) -> QWidget:
-        return self._pages[(self.state.mode, self.state.current_step)]
+        return self.ensure_step_page(self.state.mode, self.state.current_step)
 
     def _card_frame(self) -> QFrame:
         frame = QFrame()
@@ -361,6 +367,41 @@ class AppShell(QWidget):
         self.page_stack.addWidget(page)
         if key == (self.state.mode, self.state.current_step):
             self.page_stack.setCurrentWidget(page)
+
+    def set_step_factory(
+        self,
+        mode: ProjectMode | str,
+        step: StepId | str,
+        factory: Callable[[], QWidget],
+    ) -> None:
+        normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
+        normalized_step = step if isinstance(step, StepId) else StepId(step)
+        key = (normalized_mode, normalized_step)
+        if normalized_step not in route_for_mode(normalized_mode):
+            raise ValueError("Page factory step is outside the mode route")
+        if key in self._page_factories:
+            raise ValueError("Page factory is already registered")
+        self._page_factories[key] = factory
+
+    def ensure_step_page(
+        self,
+        mode: ProjectMode | str,
+        step: StepId | str,
+    ) -> QWidget:
+        normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
+        normalized_step = step if isinstance(step, StepId) else StepId(step)
+        key = (normalized_mode, normalized_step)
+        factory = self._page_factories.pop(key, None)
+        if factory is not None:
+            self.initialization_stage.emit(
+                f"Открываем: {STEP_TITLES[normalized_step]}", 0, 1
+            )
+            page = factory()
+            self.set_step_page(normalized_mode, normalized_step, page)
+            self.initialization_stage.emit(
+                f"Открыто: {STEP_TITLES[normalized_step]}", 1, 1
+            )
+        return self._pages[key]
 
     def refresh(self) -> None:
         self.mode_label.setText(MODE_TITLES[self.state.mode])

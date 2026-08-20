@@ -39,6 +39,7 @@ from v3_project_state import (
 from v3_prompt_generator import PromptGeneratorError
 from v3_processing_editor import ProcessingPipelineEditor
 from v3_wizard import AppShell
+from v3_lazy_loading import LazyPageRegistry
 
 
 _PINTEREST_REFERENCE_MODEL_BY_TEXT = {
@@ -405,7 +406,7 @@ class PinterestFlowController(QObject):
 
         self.run_queue = RunQueueSupport(self, ProjectMode.PINTEREST)
         self.adapter_state = _pinterest_project_adapter(shell.state)
-        self.pages: dict[StepId, Any] = {}
+        self.pages = LazyPageRegistry(shell, ProjectMode.PINTEREST)
         self._install_pages()
         shell.step_changed.connect(self._step_changed)
         shell.run_requested.connect(self._run_requested)
@@ -418,37 +419,49 @@ class PinterestFlowController(QObject):
 
     def _install_pages(self) -> None:
         changed = self.shell.mark_dirty
-        self.pages = {
-            StepId.PROJECT: ClipartProjectPage(
+        self.pages.register(
+            StepId.PROJECT,
+            lambda: ClipartProjectPage(
                 self.adapter_state,
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.PROMPTS: PromptWorkspacePage(
+        )
+        self.pages.register(
+            StepId.PROMPTS,
+            lambda: PromptWorkspacePage(
                 self.adapter_state,
                 changed,
                 tokens=self.shell.tokens,
                 input_page_cls=PinterestPromptInputPage,
             ),
-            StepId.PIN_FORMAT_MODEL: PinterestFormatModelPage(
+        )
+        self.pages.register(
+            StepId.PIN_FORMAT_MODEL,
+            lambda: PinterestFormatModelPage(
                 self.adapter_state,
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.PROCESSING_OPTIONS: PinterestProcessingPage(
+        )
+        self.pages.register(
+            StepId.PROCESSING_OPTIONS,
+            lambda: PinterestProcessingPage(
                 self.adapter_state,
                 changed,
                 tokens=self.shell.tokens,
             ),
-            StepId.REVIEW_RUN: PinterestReviewRunPage(
+        )
+        self.pages.register(
+            StepId.REVIEW_RUN,
+            lambda: PinterestReviewRunPage(
                 self.adapter_state,
                 tokens=self.shell.tokens,
             ),
-            StepId.RESULTS: self.run_queue.page,
-
-        }
-        for step, page in self.pages.items():
-            self.shell.set_step_page(ProjectMode.PINTEREST, step, page)
+        )
+        self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
+        if self.shell.state.mode is ProjectMode.PINTEREST:
+            self.pages[self.shell.state.current_step]
         self.shell.refresh()
 
     @property

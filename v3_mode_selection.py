@@ -32,6 +32,7 @@ from v3_project_state import ProjectStateError, load_project_draft, save_project
 from v3_clipart_flow import install_clipart_flow
 from v3_pinterest_flow import install_pinterest_flow
 from v3_processing_flow import install_processing_flow
+from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
 from app_identity import APP_NAME
@@ -299,6 +300,7 @@ class V3ApplicationView(QWidget):
         self._diagnostic_journal = diagnostic_journal
         self._update_client = update_client
         self._update_controller = None
+        self._initialization_overlay: InitializationProgressOverlay | None = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
         self._preferences_path = (
             self._draft_path.with_name("preferences.json")
@@ -474,6 +476,7 @@ class V3ApplicationView(QWidget):
             self._selection_intent is SelectionIntent.SWITCH_MODE
             and self.shell is not None
         ):
+            self._ensure_mode_controller(self.shell, mode)
             self.shell.request_mode_switch(mode)
             self.stack.setCurrentWidget(self.shell)
             self.screen_changed.emit("wizard")
@@ -599,31 +602,8 @@ class V3ApplicationView(QWidget):
 
         shell = AppShell(state, tokens=self.tokens)
         shell.diagnostic_journal = self._diagnostic_journal
-
-        install_clipart_flow(
-            shell,
-            runtime_settings_provider=self._runtime_settings,
-            worker_factory=self._worker_factory,
-            authorization_provider=(
-                self._license_gate.authorize_run if self._license_gate is not None else None
-            ),
-        )
-        install_pinterest_flow(
-            shell,
-            runtime_settings_provider=self._runtime_settings,
-            worker_factory=self._worker_factory,
-            authorization_provider=(
-                self._license_gate.authorize_run if self._license_gate is not None else None
-            ),
-        )
-        install_processing_flow(
-            shell,
-            runtime_settings_provider=self._runtime_settings,
-            worker_factory=self._worker_factory,
-            authorization_provider=(
-                self._license_gate.authorize_run if self._license_gate is not None else None
-            ),
-        )
+        shell.initialization_stage.connect(self._show_initialization_stage)
+        self._ensure_mode_controller(shell, state.mode)
         shell.state_changed.connect(self._save_draft)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         shell.api_settings_requested.connect(self._show_api_settings)
@@ -634,6 +614,53 @@ class V3ApplicationView(QWidget):
         self.stack.setCurrentWidget(shell)
         self.screen_changed.emit("wizard")
         self._save_draft()
+
+    def _ensure_mode_controller(self, shell: AppShell, mode: ProjectMode) -> Any:
+        attribute_by_mode = {
+            ProjectMode.CLIPART: "clipart_flow_controller",
+            ProjectMode.PINTEREST: "pinterest_flow_controller",
+            ProjectMode.PROCESSING: "processing_flow_controller",
+        }
+        attribute = attribute_by_mode[mode]
+        existing = getattr(shell, attribute, None)
+        if existing is not None:
+            return existing
+
+        installer_by_mode = {
+            ProjectMode.CLIPART: install_clipart_flow,
+            ProjectMode.PINTEREST: install_pinterest_flow,
+            ProjectMode.PROCESSING: install_processing_flow,
+        }
+        controller = installer_by_mode[mode](
+            shell,
+            runtime_settings_provider=self._runtime_settings,
+            worker_factory=self._worker_factory,
+            authorization_provider=(
+                self._license_gate.authorize_run
+                if self._license_gate is not None
+                else None
+            ),
+        )
+        return controller
+
+    def _show_initialization_stage(
+        self,
+        label: str,
+        completed: int,
+        total: int,
+    ) -> None:
+        if self._initialization_overlay is None:
+            self._initialization_overlay = InitializationProgressOverlay(
+                self.shell or self
+            )
+        stage = InitializationStage(label, completed, total)
+        overlay = self._initialization_overlay
+        overlay.update_stage(stage)
+        if completed == total:
+            overlay.close()
+            overlay.deleteLater()
+            self._initialization_overlay = None
+
 
     def closeEvent(self, event) -> None:
         self._diagnostic_event(

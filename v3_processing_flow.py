@@ -61,6 +61,7 @@ from v3_project_state import (
     route_for_mode,
 )
 from v3_wizard import AppShell
+from v3_lazy_loading import LazyPageRegistry
 from config_schema import resolve_output_directory
 from processing_contract import pipeline_steps as _pure_pipeline_steps
 
@@ -1249,7 +1250,7 @@ class ProcessingFlowController(QObject):
         from v3_run_queue import RunQueueSupport
 
         self.run_queue = RunQueueSupport(self, ProjectMode.PROCESSING)
-        self.pages: dict[StepId, QWidget] = {}
+        self.pages = LazyPageRegistry(shell, ProjectMode.PROCESSING)
         self._install_pages()
         shell.step_changed.connect(self._step_changed)
         shell.run_requested.connect(self._run_requested)
@@ -1265,34 +1266,48 @@ class ProcessingFlowController(QObject):
         self.shell.mark_dirty()
 
     def _install_pages(self) -> None:
+        changed = self.shell.mark_dirty
+        self.pages.register(
+            StepId.FILES,
+            lambda: ProcessingFilesPage(
+                self.shell.state, changed, tokens=self.shell.tokens
+            ),
+        )
+        self.pages.register(
+            StepId.GOAL,
+            lambda: ProcessingRecipePage(
+                self.shell.state, changed, tokens=self.shell.tokens
+            ),
+        )
+        self.pages.register(
+            StepId.PIPELINE,
+            lambda: ProcessingPipelinePage(
+                self.shell.state, changed, tokens=self.shell.tokens
+            ),
+        )
+        self.pages.register(StepId.EVIDENCE, self._create_evidence_page)
+        self.pages.register(
+            StepId.REVIEW_RUN,
+            lambda: ProcessingReviewRunPage(
+                self.shell.state,
+                self.files_page,
+                self.pipeline_page,
+                tokens=self.shell.tokens,
+            ),
+        )
+        self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
+        if self.shell.state.mode is ProjectMode.PROCESSING:
+            self.pages[self.shell.state.current_step]
+        self.shell.refresh()
+
+    def _create_evidence_page(self) -> QWidget:
         from v3_evidence_center import EvidenceCenterPage
 
-        changed = self.shell.mark_dirty
-        files_page = ProcessingFilesPage(self.shell.state, changed, tokens=self.shell.tokens)
-        recipe_page = ProcessingRecipePage(self.shell.state, changed, tokens=self.shell.tokens)
-        pipeline_page = ProcessingPipelinePage(
-            self.shell.state, changed, tokens=self.shell.tokens
-        )
-        evidence_page = EvidenceCenterPage(
+        return EvidenceCenterPage(
             self.shell.state,
-            changed,
+            self.shell.mark_dirty,
             tokens=self.shell.tokens,
         )
-        review_page = ProcessingReviewRunPage(
-            self.shell.state, files_page, pipeline_page, tokens=self.shell.tokens
-        )
-        self.pages = {
-            StepId.FILES: files_page,
-            StepId.GOAL: recipe_page,
-            StepId.PIPELINE: pipeline_page,
-            StepId.EVIDENCE: evidence_page,
-            StepId.REVIEW_RUN: review_page,
-            StepId.RESULTS: self.run_queue.page,
-        }
-        for step, page in self.pages.items():
-            if step in route_for_mode(ProjectMode.PROCESSING):
-                self.shell.set_step_page(ProjectMode.PROCESSING, step, page)
-        self.shell.refresh()
 
     @property
     def review_page(self) -> ProcessingReviewRunPage:
