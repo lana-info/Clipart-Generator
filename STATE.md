@@ -47,6 +47,9 @@ Do not upload or publish an update revision until that build is approved.
   an enabled SynthID consent control for an unavailable capability, stale file
   UI after `process more`, a clipped/incorrect wizard header, and slow eager
   first-mode initialization. These are tracked in Task 65.
+- Do not start Azure/GitHub Actions Windows packaging for the current version
+  until all known source issues are resolved and the owner explicitly approves
+  the final build run.
 - The installer from run `31909510317` predates the new updater and diagnostic
   journal. Use the verified `3.0.1` installer from run `31924194111` for current
   acceptance.
