@@ -104,8 +104,18 @@ steps:
       test -d "$app"
       test -x "$executable"
       file "$executable" | grep -q 'x86_64'
+      echo 'Running packaged release entrypoint smoke'
       "$executable" --release-entrypoint-smoke "--expected-app-version=${{ parameters.appVersion }}"
-      "$executable" --local-processing-smoke
+      echo 'Running packaged local processing smoke'
+      smoke_report="$(Agent.TempDirectory)/macos-local-processing-smoke.txt"
+      set +e
+      "$executable" --local-processing-smoke "--local-processing-smoke-report=$smoke_report"
+      smoke_status=$?
+      set -e
+      if test "$smoke_status" -ne 0; then
+        test -f "$smoke_report" && cat "$smoke_report"
+        exit "$smoke_status"
+      fi
 
       archive="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.zip"
       checksum="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.sha256"

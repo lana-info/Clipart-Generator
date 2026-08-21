@@ -7214,23 +7214,46 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
     ) else 1
 
 
-def run_local_processing_entrypoint_check() -> int:
+def run_local_processing_entrypoint_check(report_path=None) -> int:
     """Exercise the packaged local runtimes with a tiny rembg inference."""
+    def write_report(stage, message):
+        if not report_path:
+            return
+        try:
+            Path(report_path).write_text(
+                f"stage={stage}\nmessage={safe_error_text(message, limit=300)}\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
     _, realesrgan_error = validate_local_realesrgan_exe(bundled_local_realesrgan_dir())
     if realesrgan_error:
+        write_report("realesrgan_validation", realesrgan_error)
         return 1
     try:
         new_session, remove = import_rembg_tools()
+    except Exception as error:
+        write_report("rembg_import", error)
+        return 1
+    try:
         source = BytesIO()
         Image.new("RGB", (8, 8), "white").save(source, format="PNG")
         session = new_session("u2netp")
+    except Exception as error:
+        write_report("rembg_session", error)
+        return 1
+    try:
         result_data = remove(source.getvalue(), session=session)
         with Image.open(BytesIO(result_data)) as result:
             result.load()
             if result.size != (8, 8) or "A" not in result.getbands():
+                write_report("rembg_output", "invalid RGBA output")
                 return 1
-    except Exception:
+    except Exception as error:
+        write_report("rembg_inference", error)
         return 1
+    write_report("complete", "ok")
     return 0
 
 
@@ -7252,7 +7275,12 @@ if __name__ == "__main__":
                 break
         sys.exit(run_packaged_entrypoint_check(expected_version))
     if "--local-processing-smoke" in sys.argv:
-        sys.exit(run_local_processing_entrypoint_check())
+        report_path = None
+        for argument in sys.argv:
+            if argument.startswith("--local-processing-smoke-report="):
+                report_path = argument.split("=", 1)[1]
+                break
+        sys.exit(run_local_processing_entrypoint_check(report_path))
     window = create_authorized_v3_application_window()
     if window is None:
         sys.exit(0)

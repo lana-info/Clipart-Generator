@@ -318,6 +318,28 @@ class ReleaseEntrypointTests(unittest.TestCase):
         validate_realesrgan.return_value = ("", "models missing")
         self.assertEqual(main.run_local_processing_entrypoint_check(), 1)
 
+    @patch("main.import_rembg_tools")
+    @patch("main.validate_local_realesrgan_exe")
+    def test_local_processing_smoke_writes_safe_failure_report(
+        self,
+        validate_realesrgan,
+        import_rembg,
+    ):
+        validate_realesrgan.return_value = ("runtime/realesrgan", "")
+        import_rembg.return_value = (
+            Mock(side_effect=RuntimeError("session provider unavailable")),
+            Mock(),
+        )
+        with tempfile.TemporaryDirectory(prefix="vibix-smoke-report-") as temp:
+            report = Path(temp) / "smoke.txt"
+
+            result = main.run_local_processing_entrypoint_check(report)
+
+            self.assertEqual(result, 1)
+            text = report.read_text(encoding="utf-8")
+            self.assertIn("rembg_session", text)
+            self.assertIn("session provider unavailable", text)
+
     def test_packaged_version_file_is_the_application_version_authority(self):
         with tempfile.TemporaryDirectory() as temporary:
             release_dir = Path(temporary, "release")
