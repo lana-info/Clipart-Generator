@@ -50,6 +50,14 @@ class ProcessingEditorTests(unittest.TestCase):
             editor.operation_widgets["kie_remove_bg_model"].itemData(0),
             "recraft/remove-background",
         )
+        self.assertEqual(
+            editor.operation_widgets["local_rembg_profile"].itemData(0),
+            "clipart",
+        )
+        self.assertEqual(
+            editor.operation_widgets["local_rembg_model"].itemData(0),
+            "birefnet-general",
+        )
         self.assertTrue(hasattr(editor, "cleanup_checkbox"))
         self.assertFalse(editor.cleanup_checkbox.isChecked())
         editor.cleanup_checkbox.setChecked(True)
