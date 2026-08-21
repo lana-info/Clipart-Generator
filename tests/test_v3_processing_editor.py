@@ -58,6 +58,18 @@ class ProcessingEditorTests(unittest.TestCase):
             editor.operation_widgets["local_rembg_model"].itemData(0),
             "birefnet-general",
         )
+        state.processing.operations.upscale_after = True
+        state.processing.operations.upscale_after_provider = "kie"
+        state.processing.operations.kie_upscale_after_model = "recraft/crisp-upscale"
+        editor.refresh_from_state()
+        recraft_index = editor.operation_widgets["kie_upscale_after_model"].findData(
+            "recraft/crisp-upscale"
+        )
+        self.assertFalse(
+            editor.operation_widgets["kie_upscale_after_model"].model()
+            .item(recraft_index)
+            .isEnabled()
+        )
         self.assertTrue(hasattr(editor, "cleanup_checkbox"))
         self.assertFalse(editor.cleanup_checkbox.isChecked())
         editor.cleanup_checkbox.setChecked(True)

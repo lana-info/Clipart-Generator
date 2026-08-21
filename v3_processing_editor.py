@@ -26,6 +26,7 @@ from v3_provider_registry import (
     LOCAL_REMBG_MODEL_OPTIONS,
     LOCAL_REMBG_PROFILE_OPTIONS,
     processing_provider_options,
+    upscale_model_preserves_alpha,
     provider_visible_controls,
 )
 from v3_project_state import ImageOperationData, ProjectState
@@ -650,6 +651,31 @@ class ProcessingPipelineEditor(QScrollArea):
         }
         for name, visible in visibility.items():
             self._set_control_visible(name, visible)
+        self._refresh_model_compatibility()
+
+    def _refresh_model_compatibility(self) -> None:
+        operations = self.state_owner.operations
+        model_combo = self.operation_widgets.get("kie_upscale_after_model")
+        if not isinstance(model_combo, QComboBox):
+            return
+        recraft_index = model_combo.findData("recraft/crisp-upscale")
+        if recraft_index < 0:
+            return
+        blocked = bool(
+            operations.remove_background
+            and operations.upscale_after
+            and operations.upscale_after_provider == "kie"
+        )
+        item = model_combo.model().item(recraft_index)
+        item.setEnabled(not blocked)
+        if blocked:
+            item.setToolTip(
+                "Недоступно после удаления фона: Recraft Crisp не поддерживает "
+                "прозрачный вход. Используйте Local Real-ESRGAN или Recraft Crisp "
+                "до удаления фона."
+            )
+        else:
+            item.setToolTip("")
 
     def _refresh_pipeline(self) -> None:
         steps = RunPlanBuilder.processing_steps(

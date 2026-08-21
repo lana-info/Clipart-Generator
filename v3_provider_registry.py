@@ -161,6 +161,13 @@ def provider_preserves_alpha(provider_id: str) -> bool:
     return provider_spec(provider_id).preserves_alpha
 
 
+def upscale_model_preserves_alpha(provider_id: str, model_id: str) -> bool:
+    """Return whether a selected upscale model can receive transparent input."""
+    if provider_id == "kie" and model_id == "recraft/crisp-upscale":
+        return False
+    return provider_preserves_alpha(provider_id)
+
+
 def provider_visible_controls(provider_id: str) -> tuple[str, ...]:
     return provider_spec(provider_id).visible_controls
 
