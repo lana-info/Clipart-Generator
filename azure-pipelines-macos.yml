@@ -94,6 +94,9 @@ steps:
         --add-data 'third_party/migan/LICENSE:third_party/migan' \
         --add-data 'third_party/migan/NOTICE.md:third_party/migan' \
         --add-data 'realesrgan-ncnn-vulkan-20220424-macos:realesrgan-ncnn-vulkan-20220424-macos' \
+        --collect-submodules 'scipy._external.array_api_compat' \
+        --collect-submodules 'rembg.sessions' \
+        --copy-metadata 'rembg' \
         main.py
     displayName: Build unsigned macOS application
 
