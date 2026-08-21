@@ -24,11 +24,11 @@ Updated: 2026-08-20
 
 ## Next task
 
-The Windows 3.0.1 smoke-test findings are implemented in the 3.0.2 candidate.
-Manual Azure run `77` succeeded from commit `92046e0` and published the
-`windows-installer` artifact. Download and verify the exact installer SHA-256,
-then repeat focused Windows acceptance. Do not upload or publish an update
-revision until the build is approved.
+The Windows 3.0.1 smoke-test findings and the current KIE/Recraft fix pack are
+implemented in the 3.0.2 release candidate branch
+`codex/release-3.0.2-fix-pack`. The next step is a new manual Azure build from
+that branch, followed by focused Windows acceptance. Do not upload or publish
+an update revision until the build is approved.
 
 ## Blockers and risks
 
@@ -48,13 +48,11 @@ revision until the build is approved.
 - Do not start Azure/GitHub Actions Windows packaging for the current version
   until all known source issues are resolved and the owner explicitly approves
   the final build run.
-- Full pytest has two pre-existing baseline inconsistencies outside Task 65: the
-  configured-output-path expectation differs from the current implementation,
-  and `TECHNICAL_DEBT.md` links to an untracked local `tech_debt/README.md`.
-  The 3.0.2 change set passes when those two baseline tests are deselected.
-- The verified 3.0.1 installer remains historical evidence only. The 3.0.2
-  acceptance artifact is Azure run `77`, size `164809973` bytes, SHA-256
-  `46366a1a655e3f272e7bff54674e14c66036d468bdd93e46f2cceaa9fd21fc14`.
+- The verified 3.0.1 installer and Azure run `77` artifact are historical
+  evidence only; neither contains the current fix pack.
+- The clean release candidate passes `528` tests with one Linux skip because
+  the Windows Real-ESRGAN binary is unavailable on Linux. Windows packaging
+  and manual installation remain the final platform-specific checks.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.
