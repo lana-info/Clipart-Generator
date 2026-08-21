@@ -22,6 +22,10 @@ class KieBalance:
 
 def parse_kie_balance_response(payload: Any) -> KieBalance:
     data = payload.get("data", payload) if isinstance(payload, dict) else None
+    if isinstance(data, (int, float)) and not isinstance(data, bool):
+        return KieBalance(value=str(data))
+    if isinstance(data, str) and data.strip():
+        return KieBalance(value=data.strip())
     if not isinstance(data, dict):
         raise ValueError("KIE вернул неизвестный формат баланса")
     for name in ("credit", "credits", "balance", "amount", "available"):

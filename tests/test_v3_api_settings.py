@@ -16,6 +16,15 @@ def test_balance_parser(monkeypatch):
     assert "12.5" in check_kie_balance("secret")
 
 
+def test_balance_parser_accepts_official_scalar_data_response(monkeypatch):
+    monkeypatch.setattr(
+        provider_clients,
+        "secure_json_request",
+        lambda *args, **kwargs: {"code": 200, "msg": "success", "data": 100},
+    )
+    assert check_kie_balance("secret") == "Баланс KIE: 100"
+
+
 def test_balance_parser_rejects_unknown_schema():
     import pytest
 
