@@ -378,6 +378,10 @@ class Version2MigrationTests(unittest.TestCase):
         self.assertEqual(state.clipart.operations.upscale_after_provider, "kie")
         self.assertEqual(state.clipart.operations.local_realesrgan_scale, 2)
         self.assertEqual(state.clipart.operations.remove_background_provider, "local_ben2")
+        self.assertEqual(
+            state.clipart.operations.kie_remove_bg_model,
+            "recraft/remove-background",
+        )
         self.assertEqual(state.clipart.operations.local_ben2_alpha_threshold, 31)
         self.assertEqual(state.clipart.operations.unsharp_radius, 75.0)
         self.assertEqual(state.clipart.operations.edge_shrink_pixels, 2)

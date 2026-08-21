@@ -521,6 +521,8 @@ class ImageOperationData:
             self.kie_remove_bg_model,
             limit=200,
         ) or "recraft/remove-background"
+        if self.kie_remove_bg_model != "recraft/remove-background":
+            self.kie_remove_bg_model = "recraft/remove-background"
         self.local_rembg_profile = _text(self.local_rembg_profile, limit=100) or "clipart"
         self.local_rembg_model = _text(
             self.local_rembg_model,
