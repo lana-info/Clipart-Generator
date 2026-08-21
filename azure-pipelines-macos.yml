@@ -97,6 +97,7 @@ steps:
         --collect-submodules 'scipy._external.array_api_compat' \
         --collect-submodules 'rembg.sessions' \
         --copy-metadata 'rembg' \
+        --copy-metadata 'pymatting' \
         main.py
     displayName: Build unsigned macOS application
 
