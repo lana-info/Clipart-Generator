@@ -1,0 +1,4 @@
+# Last releases with prebuilt CPython 3.12 Intel macOS wheels.
+# Newer source distributions require an LLVM development toolchain.
+numba==0.61.2
+llvmlite==0.44.0
