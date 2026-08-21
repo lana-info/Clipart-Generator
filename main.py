@@ -132,6 +132,10 @@ MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_API_UPLOAD_BYTES = 128 * 1024 * 1024
 MAX_PROVIDER_IMAGE_DIMENSION = 32_768
 MAX_PROVIDER_IMAGE_PIXELS = 70_000_000
+RECRAFT_CRISP_MAX_BYTES = 5 * 1024 * 1024
+RECRAFT_CRISP_MAX_DIMENSION = 4096
+RECRAFT_CRISP_MAX_PIXELS = 4 * 1024 * 1024
+RECRAFT_CRISP_MIN_DIMENSION = 32
 MAX_UPDATE_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
 MAX_UPDATE_DOWNLOAD_RETRIES = 3
@@ -639,6 +643,29 @@ def validate_local_image_input(image_path):
         raise
     except (OSError, UnidentifiedImageError) as exc:
         raise ValueError("Local input image is invalid") from exc
+
+
+def validate_recraft_crisp_upscale_input(image_path):
+    """Validate the local file against Recraft Crisp Upscale limits."""
+    try:
+        file_size = os.path.getsize(image_path)
+        if file_size > RECRAFT_CRISP_MAX_BYTES:
+            raise RuntimeError("Recraft Crisp input file size exceeds 5 MB")
+        with Image.open(image_path) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise RuntimeError("Recraft Crisp input must be PNG, JPG, or WEBP")
+            if getattr(image, "n_frames", 1) != 1:
+                raise RuntimeError("Recraft Crisp input must be single-frame")
+            if min(image.size) < RECRAFT_CRISP_MIN_DIMENSION:
+                raise RuntimeError("Recraft Crisp input dimension is below 32 pixels")
+            if max(image.size) > RECRAFT_CRISP_MAX_DIMENSION:
+                raise RuntimeError("Recraft Crisp input dimension exceeds 4096 pixels")
+            if image.width * image.height > RECRAFT_CRISP_MAX_PIXELS:
+                raise RuntimeError("Recraft Crisp input exceeds 4 MP")
+    except RuntimeError:
+        raise
+    except (OSError, UnidentifiedImageError) as exc:
+        raise RuntimeError("Recraft Crisp input image is invalid") from exc
 
 
 def safe_error_text(error, secrets=(), limit=500):
@@ -1158,6 +1185,8 @@ class WorkerThread(QThread):
         self._ensure_running()
         self._metadata_cleaned_for_current_item = False
         if self._can_use_legacy_kie_processing_pipeline():
+            if self.kie_upscale_model == "recraft/crisp-upscale" and not source_url:
+                validate_recraft_crisp_upscale_input(source_path)
             uploaded_url = source_url or self._kie_upload_file(source_path)
             self._ensure_running()
             if not source_url:
@@ -1412,6 +1441,8 @@ class WorkerThread(QThread):
                     self._active_local_realesrgan_scale = previous_scale
             return current_path, None, True
 
+        if kie_model == "recraft/crisp-upscale" and current_path and os.path.isfile(current_path):
+            validate_recraft_crisp_upscale_input(current_path)
         current_url = self._ensure_kie_url(current_url, current_path)
         current_url = self._upscale_pipeline_step(
             current_url,

@@ -142,7 +142,7 @@ class UpscalePositionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="clipart-upscale-after-kie-") as temp_dir:
             temp_path = Path(temp_dir)
             source_path = temp_path / "source.png"
-            create_rgb_source(source_path)
+            create_rgb_source(source_path, size=(64, 48))
             settings = processing_settings(
                 kie_api_key="test-kie-key",
                 upscale=False,

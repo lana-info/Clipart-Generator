@@ -694,6 +694,26 @@ class KieRoutingTests(unittest.TestCase):
 
             request_mock.assert_not_called()
 
+    def test_recraft_crisp_input_limits_are_checked_before_upload(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-limits-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            create_rgb_source(source_path, size=(64, 64))
+
+            with patch.object(main, "RECRAFT_CRISP_MAX_PIXELS", 100):
+                with self.assertRaisesRegex(RuntimeError, "4 MP|pixel"):
+                    main.validate_recraft_crisp_upscale_input(str(source_path))
+
+            with patch.object(main, "RECRAFT_CRISP_MAX_BYTES", 8):
+                with self.assertRaisesRegex(RuntimeError, "5 MB|file size"):
+                    main.validate_recraft_crisp_upscale_input(str(source_path))
+
+    def test_recraft_crisp_input_accepts_opaque_chatgpt_style_png(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-valid-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            create_rgb_source(source_path, size=(1024, 1024))
+
+            self.assertIsNone(main.validate_recraft_crisp_upscale_input(str(source_path)))
+
     def test_top_level_worker_error_redacts_all_configured_secrets(self):
         extra_secret = "test-license-secret-must-not-appear"
         worker = main.WorkerThread(
