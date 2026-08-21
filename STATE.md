@@ -12,6 +12,9 @@ Updated: 2026-08-21
 - Before changing sides, the active side runs relevant checks, commits, and pushes.
 - The receiving side uses `git fetch` and `git pull --ff-only`.
 - Windows-only tasks do not block independent Linux-safe work.
+- Azure release pipelines are manual. Start a build only after a separate,
+  explicit owner request and only for the platform named in that request;
+  ordinary fixes, commits, and pushes must not start Windows or macOS builds.
 
 ## Current branch and handoff
 
@@ -44,9 +47,8 @@ licensing checks.
 - The Windows smoke-test findings are fixed in source and covered by local
   regressions; Azure packaging is `CLOUD_OK`, but installation and visible
   behavior remain `WINDOWS_REQUIRED` at real Windows DPI values.
-- Do not start Azure/GitHub Actions Windows packaging for the current version
-  until all known source issues are resolved and the owner explicitly approves
-  the final build run.
+- Do not start an Azure Windows or macOS release build unless the owner
+  explicitly requests that platform's build after the desired fixes are ready.
 - The verified 3.0.1 installer and Azure run `77` artifact are historical
   evidence only; neither contains the current fix pack.
 - The clean release candidate passes `528` tests with one Linux skip because
