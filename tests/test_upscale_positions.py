@@ -194,6 +194,25 @@ class UpscalePositionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "KIE API Key"):
                 missing_key_worker._mode2_process_files(emit_final=False)
 
+    def test_recraft_after_background_removal_is_rejected(self):
+        message = main.validate_upscale_after_background_order(
+            remove_bg=True,
+            upscale_after=True,
+            provider="kie",
+            model="recraft/crisp-upscale",
+        )
+        self.assertIn("прозрач", message.lower())
+
+        self.assertEqual(
+            main.validate_upscale_after_background_order(
+                remove_bg=True,
+                upscale_after=True,
+                provider="local_realesrgan",
+                model="recraft/crisp-upscale",
+            ),
+            "",
+        )
+
     def test_ui_saves_independent_passes_and_combined_multiplier(self):
         with tempfile.TemporaryDirectory(prefix="clipart-upscale-ui-") as temp_dir:
             temp_path = Path(temp_dir)
