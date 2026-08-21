@@ -7283,7 +7283,11 @@ if __name__ == "__main__":
             if argument.startswith("--local-processing-smoke-report="):
                 report_path = argument.split("=", 1)[1]
                 break
-        sys.exit(run_local_processing_entrypoint_check(report_path))
+        smoke_result = run_local_processing_entrypoint_check(report_path)
+        # ONNX Runtime can keep native worker threads alive after a successful
+        # cold-start inference on macOS. This CLI-only smoke has already written
+        # its result, so do not let GUI/native teardown hold the Azure agent.
+        os._exit(smoke_result)
     window = create_authorized_v3_application_window()
     if window is None:
         sys.exit(0)
