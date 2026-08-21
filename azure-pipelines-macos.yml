@@ -113,14 +113,35 @@ steps:
       echo 'Running packaged local processing smoke'
       smoke_report="$(Agent.TempDirectory)/macos-local-processing-smoke.txt"
       set +e
-      "$executable" --local-processing-smoke "--local-processing-smoke-report=$smoke_report"
+      python - "$executable" "$smoke_report" <<'PY'
+      import subprocess
+      import sys
+
+      try:
+          completed = subprocess.run(
+              [
+                  sys.argv[1],
+                  "--local-processing-smoke",
+                  f"--local-processing-smoke-report={sys.argv[2]}",
+              ],
+              timeout=300,
+              check=False,
+          )
+      except subprocess.TimeoutExpired:
+          raise SystemExit(124)
+      raise SystemExit(completed.returncode)
+      PY
       smoke_status=$?
       set -e
       if test "$smoke_status" -ne 0; then
         test -f "$smoke_report" && cat "$smoke_report"
         exit "$smoke_status"
       fi
+    displayName: Verify packaged macOS application
 
+  - bash: |
+      set -euo pipefail
+      app='dist/Vibix Images.app'
       archive="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.zip"
       checksum="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.sha256"
       rm -f "$archive" "$checksum"
@@ -131,7 +152,7 @@ steps:
       staging='$(Build.ArtifactStagingDirectory)'
       mkdir -p "$staging"
       cp "$archive" "$checksum" "$staging/"
-    displayName: Verify and stage macOS ZIP
+    displayName: Stage macOS ZIP
 
   - task: PublishPipelineArtifact@1
     displayName: Publish macOS application

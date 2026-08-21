@@ -7231,11 +7231,13 @@ def run_local_processing_entrypoint_check(report_path=None) -> int:
     if realesrgan_error:
         write_report("realesrgan_validation", realesrgan_error)
         return 1
+    write_report("rembg_import", "started")
     try:
         new_session, remove = import_rembg_tools()
     except Exception as error:
         write_report("rembg_import", error)
         return 1
+    write_report("rembg_session", "started")
     try:
         source = BytesIO()
         Image.new("RGB", (8, 8), "white").save(source, format="PNG")
@@ -7243,6 +7245,7 @@ def run_local_processing_entrypoint_check(report_path=None) -> int:
     except Exception as error:
         write_report("rembg_session", error)
         return 1
+    write_report("rembg_inference", "started")
     try:
         result_data = remove(source.getvalue(), session=session)
         with Image.open(BytesIO(result_data)) as result:
