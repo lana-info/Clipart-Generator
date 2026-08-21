@@ -1,13 +1,15 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from diagnostics import DiagnosticJournal
 from update_client import UpdateRelease
-from v3_updater import UpdateController
+import v3_updater
+from v3_updater import UpdateController, launch_update_artifact
 
 
 class ImmediateCheckWorker(QObject):
@@ -113,6 +115,16 @@ class V3UpdaterTests(unittest.TestCase):
             self.assertIn("update_accepted", events)
             self.assertIn("update_download_verified", events)
             self.assertIn("update_installer_launched", events)
+
+    def test_macos_update_reveals_verified_zip_in_finder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / "VibixImages-macOS-3.1.0-arm64.zip"
+            archive.write_bytes(b"PK\x03\x04archive")
+            with patch.object(v3_updater.sys, "platform", "darwin"), patch.object(
+                v3_updater.subprocess, "Popen"
+            ) as popen:
+                launch_update_artifact(archive)
+        popen.assert_called_once_with(["open", "-R", str(archive)], close_fds=True)
 
 
 if __name__ == "__main__":

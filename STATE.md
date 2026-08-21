@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-20
+Updated: 2026-08-21
 
 ## Operating model
 
@@ -15,20 +15,19 @@ Updated: 2026-08-20
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/fix-windows-acceptance-3-0-2`
-- Current local implementation head: `2604e57` (review findings fixed; final
-  documentation and verification still in progress)
+- Current task branch: `codex/feature-macos-release`
+- Branch base: `codex/release-3.0.2-fix-pack` at `425dc06`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-The Windows 3.0.1 smoke-test findings and the current KIE/Recraft fix pack are
-implemented in the 3.0.2 release candidate branch
-`codex/release-3.0.2-fix-pack`. The next step is a new manual Azure build from
-that branch, followed by focused Windows acceptance. Do not upload or publish
-an update revision until the build is approved.
+Build the unsigned Apple Silicon application through the manual
+`azure-pipelines-macos.yml` pipeline, verify the ZIP and SHA-256 artifact, then
+perform focused acceptance on a real Mac. The server supports a separate
+`macos-arm64` revision; do not publish that revision until the downloaded Azure
+artifact has passed the Mac launch and licensing checks.
 
 ## Blockers and risks
 
@@ -56,6 +55,8 @@ an update revision until the build is approved.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.
+- The macOS build is intentionally unsigned and not notarized. Gatekeeper will
+  warn on first launch; the application must not automate bypassing that warning.
 
 ## Approved brand direction
 

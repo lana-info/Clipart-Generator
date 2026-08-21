@@ -1657,3 +1657,25 @@ Verification:
   `46366a1a655e3f272e7bff54674e14c66036d468bdd93e46f2cceaa9fd21fc14`.
 - [ ] Repeat focused Windows installation, licensing, DPI, retry, and update
   acceptance against the exact Azure artifact and its SHA-256.
+
+### Task 66 - macOS Apple Silicon Release
+
+Status: Implementation verified locally; Azure packaging and Mac acceptance pending
+
+Implemented:
+- Add a separate manual Azure pipeline for an unsigned `macos-arm64` `.app`
+  distributed as a ZIP archive with a SHA-256 sidecar.
+- Bundle the verified universal Real-ESRGAN macOS runtime and select its native
+  executable name at runtime.
+- Request platform-specific update manifests; accept only ZIP updates on macOS,
+  verify their signed metadata and SHA-256, and reveal the archive in Finder for
+  manual replacement.
+- Use `~/Library/Application Support/Vibix Images` consistently for macOS config,
+  API credentials, license state, diagnostics, and update downloads.
+
+Verification:
+- [x] Full Linux-safe suite: 532 passed, 1 expected platform skip, 2 deselected.
+- [x] Real-ESRGAN macOS archive SHA-256 and universal arm64 slice verified.
+- [ ] Azure `macos-arm64` artifact build.
+- [ ] Manual Gatekeeper acknowledgement, launch, licensing, provider, and update
+  acceptance on Apple Silicon hardware.

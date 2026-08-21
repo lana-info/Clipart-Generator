@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Callable
@@ -60,12 +61,16 @@ class UpdateDownloadWorker(QThread):
             self.failed.emit(str(error))
 
 
-def launch_windows_installer(path: Path) -> None:
-    if os.name != "nt":
-        raise UpdateError("Запуск установщика поддерживается только в Windows")
-    if not path.is_file() or path.suffix.lower() != ".exe":
-        raise UpdateError("Проверенный установщик обновления не найден")
-    subprocess.Popen([str(path)], close_fds=True)
+def launch_update_artifact(path: Path) -> None:
+    if not path.is_file():
+        raise UpdateError("Проверенный файл обновления не найден")
+    if os.name == "nt" and path.suffix.lower() == ".exe":
+        subprocess.Popen([str(path)], close_fds=True)
+        return
+    if sys.platform == "darwin" and path.suffix.lower() == ".zip":
+        subprocess.Popen(["open", "-R", str(path)], close_fds=True)
+        return
+    raise UpdateError("Формат обновления не поддерживается на этой платформе")
 
 
 class UpdateController(QObject):
@@ -78,7 +83,7 @@ class UpdateController(QObject):
         prompt: Callable[[UpdateRelease], bool] | None = None,
         check_worker_factory=UpdateCheckWorker,
         download_worker_factory=UpdateDownloadWorker,
-        installer_launcher: Callable[[Path], None] = launch_windows_installer,
+        installer_launcher: Callable[[Path], None] = launch_update_artifact,
     ) -> None:
         super().__init__(parent)
         self.parent_widget = parent
@@ -151,9 +156,15 @@ class UpdateController(QObject):
         box.setWindowTitle(f"Обновление {APP_NAME}")
         box.setIcon(QMessageBox.Icon.Question)
         box.setText(f"Доступна версия {release.version}. Обновить программу сейчас?")
-        box.setInformativeText(
-            "Программа скачает обновление, закроется и запустит установщик."
-        )
+        if self.client.platform_id == "macos-arm64":
+            box.setInformativeText(
+                "Программа скачает и проверит ZIP-архив, затем покажет его в Finder. "
+                "Приложение закроется; распакуйте архив и перенесите новую версию в папку «Программы»."
+            )
+        else:
+            box.setInformativeText(
+                "Программа скачает обновление, закроется и запустит установщик."
+            )
         update_button = box.addButton("Обновить", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Не сейчас", QMessageBox.ButtonRole.RejectRole)
         box.exec()
@@ -212,7 +223,7 @@ class UpdateController(QObject):
             QMessageBox.warning(
                 self.parent_widget,
                 "Обновление",
-                "Обновление скачано, но установщик не удалось запустить.",
+                "Обновление скачано, но файл не удалось открыть.",
             )
             return
         self._record(

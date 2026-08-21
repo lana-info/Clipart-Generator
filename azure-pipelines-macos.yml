@@ -1,0 +1,118 @@
+trigger: none
+pr: none
+
+parameters:
+  - name: appVersion
+    displayName: App version
+    type: string
+    default: '3.0.2'
+
+pool:
+  vmImage: macOS-15
+
+steps:
+  - checkout: self
+    clean: true
+
+  - bash: |
+      set -euo pipefail
+      test "$(uname -m)" = "arm64"
+      python3 --version
+    displayName: Verify Apple Silicon agent
+
+  - task: UsePythonVersion@0
+    displayName: Use Python 3.12 arm64
+    inputs:
+      versionSpec: '3.12'
+      architecture: arm64
+      addToPath: true
+
+  - bash: |
+      set -euo pipefail
+      python -m pip install --upgrade pip
+      python -m pip install -c constraints-build.txt -r requirements.txt
+      python -m pip install -c constraints-build.txt -r requirements-dev.txt
+    displayName: Install build dependencies
+
+  - bash: |
+      set -euo pipefail
+      python -m py_compile main.py
+      export QT_QPA_PLATFORM=offscreen
+      python -m unittest tests.test_update_client tests.test_v3_updater tests.test_local_processing_acceptance.LocalProcessingAcceptanceTests.test_bundled_realesrgan_uses_macos_runtime_and_binary_name -v
+      python scripts/check_sensitive_artifacts.py --git-tracked \
+        --allow-path scripts/check_sensitive_artifacts.py \
+        --allow-path tests/test_security_redaction.py
+    displayName: Run macOS release gates
+
+  - bash: |
+      set -euo pipefail
+      archive_url='https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-macos.zip'
+      archive_path="$(Agent.TempDirectory)/realesrgan-macos.zip"
+      expected_sha256='e0ad05580abfeb25f8d8fb55aaf7bedf552c375b5b4d9bd3c8d59764d2cc333a'
+      target_path='realesrgan-ncnn-vulkan-20220424-macos'
+      curl --fail --location --retry 3 --output "$archive_path" "$archive_url"
+      actual_sha256="$(shasum -a 256 "$archive_path" | awk '{print $1}')"
+      test "$actual_sha256" = "$expected_sha256"
+      mkdir -p "$target_path"
+      ditto -x -k "$archive_path" "$target_path"
+      chmod 755 "$target_path/realesrgan-ncnn-vulkan"
+      file "$target_path/realesrgan-ncnn-vulkan" | grep -q 'arm64'
+    displayName: Download verified macOS Real-ESRGAN runtime
+
+  - bash: |
+      set -euo pipefail
+      version='${{ parameters.appVersion }}'
+      if ! [[ "$version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        echo 'Invalid application version' >&2
+        exit 1
+      fi
+      printf '%s\n' "$version" > release/VERSION.txt
+      rm -rf build dist
+      python -m PyInstaller \
+        --noconfirm \
+        --clean \
+        --windowed \
+        --target-arch arm64 \
+        --name 'Vibix Images' \
+        --osx-bundle-identifier com.vibix.images \
+        --icon assets/vibix-images.ico \
+        --add-data '.env.example:.' \
+        --add-data 'assets/vibix-images.ico:assets' \
+        --add-data 'release/VERSION.txt:release' \
+        --add-data 'third_party/remove_ai_watermarks_gemini/assets:third_party/remove_ai_watermarks_gemini/assets' \
+        --add-data 'third_party/remove_ai_watermarks_gemini/LICENSE:third_party/remove_ai_watermarks_gemini' \
+        --add-data 'third_party/remove_ai_watermarks_gemini/NOTICE.md:third_party/remove_ai_watermarks_gemini' \
+        --add-data 'third_party/migan/migan.onnx:third_party/migan' \
+        --add-data 'third_party/migan/LICENSE:third_party/migan' \
+        --add-data 'third_party/migan/NOTICE.md:third_party/migan' \
+        --add-data 'realesrgan-ncnn-vulkan-20220424-macos:realesrgan-ncnn-vulkan-20220424-macos' \
+        main.py
+    displayName: Build unsigned macOS application
+
+  - bash: |
+      set -euo pipefail
+      app='dist/Vibix Images.app'
+      executable="$app/Contents/MacOS/Vibix Images"
+      test -d "$app"
+      test -x "$executable"
+      file "$executable" | grep -q 'arm64'
+      "$executable" --release-entrypoint-smoke "--expected-app-version=${{ parameters.appVersion }}"
+
+      archive="release/VibixImages-macOS-${{ parameters.appVersion }}-arm64.zip"
+      checksum="release/VibixImages-macOS-${{ parameters.appVersion }}-arm64.sha256"
+      rm -f "$archive" "$checksum"
+      ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
+      hash="$(shasum -a 256 "$archive" | awk '{print $1}')"
+      printf '%s  %s\n' "$hash" "$(basename "$archive")" > "$checksum"
+
+      staging='$(Build.ArtifactStagingDirectory)'
+      mkdir -p "$staging"
+      cp "$archive" "$checksum" "$staging/"
+    displayName: Verify and stage macOS ZIP
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish macOS application
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)'
+      artifact: macos-arm64
+      publishLocation: pipeline

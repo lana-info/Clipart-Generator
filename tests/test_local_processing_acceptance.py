@@ -3,6 +3,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
@@ -79,6 +80,25 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                 main.bundled_local_realesrgan_dir(),
                 str(ROOT_DIR / "_internal" / "realesrgan-ncnn-vulkan-20211212-windows"),
             )
+        finally:
+            if had_meipass:
+                main.sys._MEIPASS = previous_meipass
+            else:
+                delattr(main.sys, "_MEIPASS")
+
+    def test_bundled_realesrgan_uses_macos_runtime_and_binary_name(self):
+        previous_meipass = getattr(main.sys, "_MEIPASS", None)
+        had_meipass = hasattr(main.sys, "_MEIPASS")
+        try:
+            main.sys._MEIPASS = str(ROOT_DIR / "_internal")
+            with patch.object(main.sys, "platform", "darwin"):
+                directory = main.bundled_local_realesrgan_dir()
+                executable = main.resolve_local_realesrgan_exe_path(directory)
+            self.assertEqual(
+                directory,
+                str(ROOT_DIR / "_internal" / "realesrgan-ncnn-vulkan-20220424-macos"),
+            )
+            self.assertEqual(Path(executable).name, "realesrgan-ncnn-vulkan")
         finally:
             if had_meipass:
                 main.sys._MEIPASS = previous_meipass

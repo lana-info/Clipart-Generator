@@ -7,7 +7,9 @@ import hashlib
 import hmac
 import json
 import os
+import platform
 import re
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,7 +27,11 @@ from license_update_contract import LicenseUpdatePolicy
 MAX_UPDATE_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
-_FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.exe\Z", re.IGNORECASE)
+_FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}\Z")
+_PLATFORM_ARTIFACT = {
+    "windows-x64": (".exe", "application/vnd.microsoft.portable-executable"),
+    "macos-arm64": (".zip", "application/zip"),
+}
 
 
 class UpdateError(RuntimeError):
@@ -41,6 +47,13 @@ class UpdateRelease:
     download_url: str
     notes: str = ""
     correlation_id: str = ""
+
+
+def current_platform_id() -> str:
+    """Return the update platform used by the current packaged application."""
+    if sys.platform == "darwin" and platform.machine().lower() in {"arm64", "aarch64"}:
+        return "macos-arm64"
+    return "windows-x64"
 
 
 def _decode_public_key(value: str) -> Ed25519PublicKey:
@@ -97,6 +110,8 @@ class UpdateClient:
         self.license_client = license_client
         self.lifecycle_policy = LicenseUpdatePolicy()
         self.current_version = current_version
+        if platform_id not in _PLATFORM_ARTIFACT:
+            raise UpdateError("Эта платформа обновлений не поддерживается")
         self.platform_id = platform_id
         self.download_directory = Path(download_directory)
         self.timeout = max(1, min(int(timeout), self.lifecycle_policy.timeout_seconds))
@@ -179,7 +194,12 @@ class UpdateClient:
         sha256 = item.get("sha256")
         download_url = item.get("download_url")
         notes = item.get("notes") or ""
-        if not isinstance(filename, str) or not _FILENAME.fullmatch(filename):
+        expected_suffix = _PLATFORM_ARTIFACT[self.platform_id][0]
+        if (
+            not isinstance(filename, str)
+            or not _FILENAME.fullmatch(filename)
+            or not filename.lower().endswith(expected_suffix)
+        ):
             raise UpdateError("Некорректное имя файла обновления")
         if not isinstance(size, int) or isinstance(size, bool) or size <= 0 or size > MAX_UPDATE_INSTALLER_BYTES:
             raise UpdateError("Некорректный размер обновления")
@@ -211,7 +231,7 @@ class UpdateClient:
         if not self.download_directory.is_dir():
             return
         for path in self.download_directory.iterdir():
-            if path.is_file() and (path.suffix.lower() in {".part", ".exe"}):
+            if path.is_file() and (path.suffix.lower() in {".part", ".exe", ".zip"}):
                 try:
                     path.unlink()
                 except OSError:
@@ -236,7 +256,7 @@ class UpdateClient:
         received = 0
         req = request.Request(
             release.download_url,
-            headers={"Accept": "application/vnd.microsoft.portable-executable"},
+            headers={"Accept": _PLATFORM_ARTIFACT[self.platform_id][1]},
             method="GET",
         )
         try:

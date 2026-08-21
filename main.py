@@ -319,7 +319,16 @@ def configure_application_identity(app):
 
 def bundled_local_realesrgan_dir():
     resource_root = getattr(sys, "_MEIPASS", application_base_dir())
-    return os.path.join(resource_root, "realesrgan-ncnn-vulkan-20211212-windows")
+    runtime_dir = (
+        "realesrgan-ncnn-vulkan-20220424-macos"
+        if sys.platform == "darwin"
+        else "realesrgan-ncnn-vulkan-20211212-windows"
+    )
+    return os.path.join(resource_root, runtime_dir)
+
+
+def realesrgan_executable_name():
+    return "realesrgan-ncnn-vulkan" if sys.platform == "darwin" else REALESRGAN_EXE_NAME
 
 
 def resolve_local_realesrgan_exe_path(local_realesrgan_dir):
@@ -328,9 +337,10 @@ def resolve_local_realesrgan_exe_path(local_realesrgan_dir):
         return ""
 
     resolved_path = os.path.abspath(os.path.expanduser(os.path.expandvars(raw_path)))
-    if os.path.basename(resolved_path).lower() == REALESRGAN_EXE_NAME.lower():
+    executable_name = realesrgan_executable_name()
+    if os.path.basename(resolved_path).lower() == executable_name.lower():
         return resolved_path
-    return os.path.join(resolved_path, REALESRGAN_EXE_NAME)
+    return os.path.join(resolved_path, executable_name)
 
 
 def validate_local_realesrgan_exe(local_realesrgan_dir):
@@ -339,13 +349,14 @@ def validate_local_realesrgan_exe(local_realesrgan_dir):
         return "", "Укажите папку Local Real-ESRGAN в настройках обработки"
 
     resolved_path = os.path.abspath(os.path.expanduser(os.path.expandvars(raw_path)))
-    base_dir = os.path.dirname(resolved_path) if os.path.basename(resolved_path).lower() == REALESRGAN_EXE_NAME.lower() else resolved_path
+    executable_name = realesrgan_executable_name()
+    base_dir = os.path.dirname(resolved_path) if os.path.basename(resolved_path).lower() == executable_name.lower() else resolved_path
     exe_path = resolve_local_realesrgan_exe_path(resolved_path)
 
     if not os.path.isdir(base_dir):
         return "", f"Папка Real-ESRGAN не найдена: {base_dir}"
     if not os.path.isfile(exe_path):
-        return "", f"Не найден {REALESRGAN_EXE_NAME}: {exe_path}"
+        return "", f"Не найден {executable_name}: {exe_path}"
     models_dir = os.path.join(base_dir, "models")
     if not os.path.isdir(models_dir):
         return "", f"Папка models Real-ESRGAN не найдена: {models_dir}"
@@ -563,7 +574,10 @@ def join_references(references):
 
 
 def get_user_data_dir():
-    base_dir = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    if sys.platform == "darwin":
+        base_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
+    else:
+        base_dir = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
     user_data_dir = os.path.join(base_dir, APP_NAME)
     os.makedirs(user_data_dir, exist_ok=True)
     return user_data_dir
@@ -6830,7 +6844,7 @@ class MainWindow(QMainWindow):
 
 def create_v3_application_window():
     from diagnostics import DiagnosticJournal
-    from update_client import UpdateClient
+    from update_client import UpdateClient, current_platform_id
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
     from v3_license import OnlineLicenseGate
 
@@ -6868,7 +6882,7 @@ def create_v3_application_window():
         license_client,
         current_version=APP_VERSION,
         download_directory=os.path.join(app_data, "updates"),
-        platform_id="windows-x64",
+        platform_id=current_platform_id(),
         timeout=20,
     )
     window = V3ApplicationView(
