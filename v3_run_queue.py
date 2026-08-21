@@ -171,10 +171,17 @@ def _provider_error_details(message: Any) -> dict[str, str]:
         match = re.search(pattern, text, flags=re.IGNORECASE)
         if match:
             details[field] = match.group(1)
-    message_match = re.search(r"(?:message|failMsg|error_message)=([^]]+)", text, flags=re.IGNORECASE)
+    message_match = re.search(r"(?:message|failMsg|error_message)=([^;\]]+)", text, flags=re.IGNORECASE)
     if message_match:
         details["error_message"] = redact_text(message_match.group(1).strip(" ;"), limit=300)
     return details
+
+
+def _safe_technical_error_details(message: Any) -> tuple[str, dict[str, str]]:
+    technical_message = redact_text(message, limit=500)
+    details = _provider_error_details(technical_message)
+    details.setdefault("error_message", technical_message)
+    return technical_message, details
 
 
 def _request_items(request: Any, mode: ProjectMode) -> list[RunItem]:
@@ -496,11 +503,19 @@ class RunQueueSession(QObject):
             return
 
         if text.startswith(_ERROR_PREFIX) and item is not None:
-            code, user_message = _failure_reason(text[len(_ERROR_PREFIX) :])
+            technical_message, technical_details = _safe_technical_error_details(
+                text[len(_ERROR_PREFIX) :].strip()
+            )
+            code, user_message = _failure_reason(technical_message)
             self._close_running_stages(item, "failed")
             item.status = RunItemStatus.FAILED
             item.short_message = user_message
-            self._event("item_failed", item=item.index, reason=code)
+            self._event(
+                "item_failed",
+                item=item.index,
+                reason=code,
+                **technical_details,
+            )
             self._after_terminal_item()
             self.changed.emit()
             return
@@ -601,8 +616,8 @@ class RunQueueSession(QObject):
     def handle_fatal_error(self, message: Any) -> None:
         if not self.running and self.finished_at is not None:
             return
-        code, user_message = _failure_reason(str(message or ""))
-        provider_details = _provider_error_details(message)
+        technical_message, provider_details = _safe_technical_error_details(message)
+        code, user_message = _failure_reason(technical_message)
         for item in self.items:
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
                 self._close_running_stages(item, "failed")

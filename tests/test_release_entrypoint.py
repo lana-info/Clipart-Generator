@@ -253,6 +253,23 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertEqual(run_packaged_entrypoint_check(APP_VERSION), 0)
         self.assertEqual(run_packaged_entrypoint_check("999.0"), 1)
 
+    @patch("main.import_rembg_tools")
+    @patch("main.validate_local_realesrgan_exe")
+    def test_local_processing_smoke_checks_bundled_runtime_and_rembg_import(
+        self,
+        validate_realesrgan,
+        import_rembg,
+    ):
+        validate_realesrgan.return_value = ("runtime/realesrgan-ncnn-vulkan.exe", "")
+        import_rembg.return_value = (lambda *_args, **_kwargs: object(), lambda *_args, **_kwargs: b"")
+
+        self.assertEqual(main.run_local_processing_entrypoint_check(), 0)
+        validate_realesrgan.assert_called_once_with(main.bundled_local_realesrgan_dir())
+        import_rembg.assert_called_once_with()
+
+        validate_realesrgan.return_value = ("", "models missing")
+        self.assertEqual(main.run_local_processing_entrypoint_check(), 1)
+
     def test_packaged_version_file_is_the_application_version_authority(self):
         with tempfile.TemporaryDirectory() as temporary:
             release_dir = Path(temporary, "release")

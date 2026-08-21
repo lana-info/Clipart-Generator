@@ -469,9 +469,10 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         self.assertTrue(widgets["local_ben2_alpha_threshold"].isHidden())
         widgets["remove_background_provider"].setCurrentIndex(
-            widgets["remove_background_provider"].findData("local_ben2")
+            widgets["remove_background_provider"].findData("local_rembg")
         )
-        self.assertFalse(widgets["local_ben2_alpha_threshold"].isHidden())
+        self.assertTrue(widgets["local_ben2_alpha_threshold"].isHidden())
+        self.assertFalse(widgets["local_rembg_model"].isHidden())
         self.assertTrue(widgets["kie_remove_bg_model"].isHidden())
         widgets["unsharp"].setChecked(True)
         self.assertFalse(widgets["unsharp_amount"].isHidden())

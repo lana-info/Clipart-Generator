@@ -71,6 +71,12 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             self.skipTest(error)
         return Path(exe_path)
 
+    def test_clipart_2x_uses_model_present_in_bundled_runtime(self):
+        self.assertEqual(
+            main.get_local_realesrgan_model_name("clipart", 2),
+            "realesr-animevideov3-x2",
+        )
+
     def test_bundled_realesrgan_uses_pyinstaller_resource_root(self):
         previous_meipass = getattr(main.sys, "_MEIPASS", None)
         had_meipass = hasattr(main.sys, "_MEIPASS")

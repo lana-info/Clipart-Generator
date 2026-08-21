@@ -98,7 +98,6 @@ PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
         ("KIE", "kie"),
         ("PhotoRoom", "photoroom"),
         ("Local rembg", "local_rembg"),
-        ("Local BEN2", "local_ben2"),
     ),
 }
 

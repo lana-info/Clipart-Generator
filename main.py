@@ -289,7 +289,7 @@ REALESRGAN_PROFILE_MODELS = {
     "clipart": "realesrgan-x4plus-anime",
 }
 REALESRGAN_PROFILE_SCALE_MODELS = {
-    ("clipart", 2): "RealESRGANv2-animevideo-xsx2",
+    ("clipart", 2): "realesr-animevideov3-x2",
     ("clipart", 4): "realesrgan-x4plus-anime",
 }
 
@@ -4514,8 +4514,9 @@ class MainWindow(QMainWindow):
         self.remove_bg_provider_combo.addItem("KIE", "kie")
         self.remove_bg_provider_combo.addItem("PhotoRoom Standard", "photoroom")
         self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
-        self.remove_bg_provider_combo.addItem("BEN2 (локальный, экспериментальный)", "local_ben2")
         remove_bg_provider = str(self.config.get("remove_bg_provider", "kie") or "kie")
+        if remove_bg_provider == "local_ben2":
+            remove_bg_provider = "local_rembg"
         remove_bg_provider_index = self.remove_bg_provider_combo.findData(remove_bg_provider)
         self.remove_bg_provider_combo.setCurrentIndex(remove_bg_provider_index if remove_bg_provider_index >= 0 else 0)
 
@@ -7137,11 +7138,24 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
     ) else 1
 
 
+def run_local_processing_entrypoint_check() -> int:
+    """Check packaged local runtimes without downloading a model or processing a file."""
+    _, realesrgan_error = validate_local_realesrgan_exe(bundled_local_realesrgan_dir())
+    if realesrgan_error:
+        return 1
+    try:
+        new_session, remove = import_rembg_tools()
+    except Exception:
+        return 1
+    return 0 if callable(new_session) and callable(remove) else 1
+
+
 if __name__ == "__main__":
     # Защита от случайного запуска в offscreen-режиме в рабочем терминале.
     if (
         os.environ.get("QT_QPA_PLATFORM", "").lower() == "offscreen"
         and "--release-entrypoint-smoke" not in sys.argv
+        and "--local-processing-smoke" not in sys.argv
     ):
         os.environ["QT_QPA_PLATFORM"] = "windows"
     app = QApplication(sys.argv)
@@ -7153,6 +7167,8 @@ if __name__ == "__main__":
                 expected_version = argument.split("=", 1)[1]
                 break
         sys.exit(run_packaged_entrypoint_check(expected_version))
+    if "--local-processing-smoke" in sys.argv:
+        sys.exit(run_local_processing_entrypoint_check())
     window = create_authorized_v3_application_window()
     if window is None:
         sys.exit(0)

@@ -517,6 +517,8 @@ class ImageOperationData:
             self.remove_background_provider,
             limit=100,
         ) or "kie"
+        if self.remove_background_provider == "local_ben2":
+            self.remove_background_provider = "local_rembg"
         self.kie_remove_bg_model = _text(
             self.kie_remove_bg_model,
             limit=200,

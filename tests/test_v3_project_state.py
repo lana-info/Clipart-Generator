@@ -377,7 +377,7 @@ class Version2MigrationTests(unittest.TestCase):
         self.assertTrue(state.clipart.operations.upscale_after)
         self.assertEqual(state.clipart.operations.upscale_after_provider, "kie")
         self.assertEqual(state.clipart.operations.local_realesrgan_scale, 2)
-        self.assertEqual(state.clipart.operations.remove_background_provider, "local_ben2")
+        self.assertEqual(state.clipart.operations.remove_background_provider, "local_rembg")
         self.assertEqual(
             state.clipart.operations.kie_remove_bg_model,
             "recraft/remove-background",

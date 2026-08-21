@@ -19,18 +19,19 @@ Updated: 2026-08-21
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/feature-macos-release`
-- Branch base: `codex/release-3.0.2-fix-pack` at `425dc06`
+- Current task branch: `codex/fix-windows-local-processing-3-0-2`
+- Branch base: `codex/feature-macos-release` at `ac76deb`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-Perform focused acceptance of the verified Azure run `91` artifact on a real
-Mac. The server supports a separate `macos-x64` revision; do not publish that
-revision until the downloaded Azure artifact has passed the Mac launch and
-licensing checks.
+Wait for explicit owner approval of the next platform-specific Azure build.
+The current Windows installer must not be treated as the local-processing
+candidate: its Real-ESRGAN archive lacks `models`. After a separately requested
+Windows build, repeat Local Real-ESRGAN and Local rembg acceptance. macOS run
+`91` remains available for focused acceptance on a real Mac.
 
 ## Blockers and risks
 
@@ -44,14 +45,16 @@ licensing checks.
   manual check on the target Windows computer.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
-- The Windows smoke-test findings are fixed in source and covered by local
-  regressions; Azure packaging is `CLOUD_OK`, but installation and visible
-  behavior remain `WINDOWS_REQUIRED` at real Windows DPI values.
+- Azure Windows run `81` proved KIE balance and KIE processing on the owner's
+  Windows machine, but its bundled Real-ESRGAN runtime is incomplete and Local
+  rembg packaging was not covered by the packaged smoke gate. Source fixes are
+  verified locally; a new Windows build remains `WINDOWS_REQUIRED` and may run
+  only after explicit owner approval.
 - Do not start an Azure Windows or macOS release build unless the owner
   explicitly requests that platform's build after the desired fixes are ready.
 - The verified 3.0.1 installer and Azure run `77` artifact are historical
   evidence only; neither contains the current fix pack.
-- The clean release candidate passes `528` tests with one Linux skip because
+- The clean release candidate passes `545` tests with one Linux skip because
   the Windows Real-ESRGAN binary is unavailable on Linux. Windows packaging
   and manual installation remain the final platform-specific checks.
 - Secure update delivery is deployed and the Windows artifact exists, but no

@@ -60,6 +60,98 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             self.assertIn("timeout", raw)
             self.assertNotIn(str(root), raw)
 
+    def test_local_processing_failure_keeps_safe_technical_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            request = SimpleNamespace(
+                work_dir=str(root),
+                settings={"output_dir": str(root / "output")},
+                generated_prompts=[],
+                selected_files=[str(root / "private-source.png")],
+            )
+            session = RunQueueSession(
+                request,
+                ProjectMode.PROCESSING,
+                diagnostic_journal=journal,
+            )
+            session.handle_progress("[1/1] Обработка файла: private-source.png")
+            session.handle_progress(
+                "Ошибка: Local rembg is not available: No module named 'onnxruntime'"
+            )
+
+            payload = next(
+                event for event in journal.read_events()
+                if event["event"] == "item_failed"
+            )
+            self.assertEqual(payload["event"], "item_failed")
+            self.assertEqual(payload["details"]["reason"], "processing_error")
+            self.assertEqual(
+                payload["details"]["error_message"],
+                "Local rembg is not available: No module named 'onnxruntime'",
+            )
+            self.assertNotIn(str(root), journal.session_path.read_text(encoding="utf-8"))
+
+    def test_item_failure_keeps_safe_provider_task_and_error_code(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            request = SimpleNamespace(
+                work_dir=str(root),
+                settings={"output_dir": str(root / "output")},
+                generated_prompts=[],
+                selected_files=[str(root / "source.png")],
+            )
+            session = RunQueueSession(
+                request,
+                ProjectMode.PROCESSING,
+                diagnostic_journal=journal,
+            )
+            session.handle_progress("[1/1] Обработка файла: source.png")
+            session.handle_progress(
+                "Ошибка: KIE task failed [taskId=task_safe_123; errorCode=500; "
+                "message=provider failed; api_key=sk-secret-value]"
+            )
+
+            failed = next(
+                event for event in journal.read_events()
+                if event["event"] == "item_failed"
+            )
+            self.assertEqual(failed["details"]["task"], "task_safe_123")
+            self.assertEqual(failed["details"]["error_code"], "500")
+            self.assertEqual(failed["details"]["error_message"], "provider failed")
+            self.assertNotIn("sk-secret-value", journal.session_path.read_text(encoding="utf-8"))
+
+    def test_fatal_local_processing_failure_keeps_safe_technical_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            request = SimpleNamespace(
+                work_dir=str(root),
+                settings={"output_dir": str(root / "output")},
+                generated_prompts=[],
+                selected_files=[str(root / "source.png")],
+            )
+            session = RunQueueSession(
+                request,
+                ProjectMode.PROCESSING,
+                diagnostic_journal=journal,
+            )
+            session.handle_progress("[1/1] Обработка файла: source.png")
+            session.handle_fatal_error(
+                "Local rembg is not available: DLL load failed; api_key=sk-secret-value"
+            )
+
+            failed = next(
+                event for event in journal.read_events()
+                if event["event"] == "item_failed"
+            )
+            self.assertEqual(
+                failed["details"]["error_message"],
+                "Local rembg is not available: DLL load failed; api_key=[hidden]",
+            )
+            self.assertNotIn("sk-secret-value", journal.session_path.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

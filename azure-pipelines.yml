@@ -29,7 +29,7 @@ steps:
   - powershell: |
       python -m py_compile main.py
       $env:QT_QPA_PLATFORM = 'offscreen'
-      python -m unittest tests.test_license_client_security tests.test_v3_license_gate tests.test_v3_license_flow_gate tests.test_v3_run_queue tests.test_release_entrypoint tests.test_license_service_contract -v
+      python -m unittest tests.test_license_client_security tests.test_v3_license_gate tests.test_v3_license_flow_gate tests.test_v3_run_queue tests.test_v3_diagnostics tests.test_v3_project_state tests.test_v3_provider_registry tests.test_local_processing_acceptance tests.test_windows_realesrgan_bundle tests.test_release_entrypoint tests.test_license_service_contract -v
       if ($LASTEXITCODE -ne 0) { throw "Release gate tests failed with exit code $LASTEXITCODE" }
       python scripts/check_sensitive_artifacts.py --git-tracked `
         --allow-path scripts/check_sensitive_artifacts.py `
@@ -37,21 +37,17 @@ steps:
     displayName: Run offline release gates
 
   - powershell: |
-      $archiveUrl = 'https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases/download/v0.2.0/realesrgan-ncnn-vulkan-v0.2.0-windows.zip'
-      $archivePath = Join-Path $env:AGENT_TEMPDIRECTORY 'realesrgan-ncnn-vulkan-v0.2.0-windows.zip'
-      $expectedSha256 = '1BBBDB12D470AF80B035C773682E144C6C2F6ECE9210832A289AF0A48CE3FA9A'
-      $extractPath = Join-Path $env:AGENT_TEMPDIRECTORY 'realesrgan'
+      $archiveUrl = 'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip'
+      $archivePath = Join-Path $env:AGENT_TEMPDIRECTORY 'realesrgan-ncnn-vulkan-20220424-windows.zip'
+      $expectedSha256 = 'ABC02804E17982A3BE33675E4D471E91EA374E65B70167ABC09E31ACB412802D'
       $targetPath = '.\realesrgan-ncnn-vulkan-20211212-windows'
 
       Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
-      $actualSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
-      if ($actualSha256 -ne $expectedSha256) {
-        throw "Real-ESRGAN archive SHA-256 mismatch: $actualSha256"
-      }
-      Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
-      $exe = Get-ChildItem -LiteralPath $extractPath -Recurse -Filter 'realesrgan-ncnn-vulkan.exe' | Select-Object -First 1
-      if (-not $exe) { throw 'Bundled Local Real-ESRGAN executable was not found after extraction.' }
-      Copy-Item -LiteralPath $exe.Directory.FullName -Destination $targetPath -Recurse -Force
+      python scripts/prepare_realesrgan_runtime.py `
+        --archive $archivePath `
+        --target $targetPath `
+        --sha256 $expectedSha256
+      if ($LASTEXITCODE -ne 0) { throw "Real-ESRGAN runtime preparation failed with exit code $LASTEXITCODE" }
     displayName: Download verified Real-ESRGAN runtime
 
   - powershell: |
@@ -66,6 +62,8 @@ steps:
       if (-not (Test-Path -LiteralPath $exe)) { throw "Packaged executable is missing: $exe" }
       & $exe --release-entrypoint-smoke "--expected-app-version=${{ parameters.appVersion }}"
       if ($LASTEXITCODE -ne 0) { throw "Packaged release smoke failed with exit code $LASTEXITCODE" }
+      & $exe --local-processing-smoke
+      if ($LASTEXITCODE -ne 0) { throw "Packaged local-processing smoke failed with exit code $LASTEXITCODE" }
     displayName: Verify packaged release entrypoint
 
   - powershell: |

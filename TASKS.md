@@ -1687,3 +1687,39 @@ Verification:
   Real-ESRGAN executable are Mach-O x86_64 binaries with executable permissions.
 - [ ] Manual Gatekeeper acknowledgement, launch, licensing, provider, and update
   acceptance on Apple Silicon hardware.
+
+### Task 67 - Windows Local Processing Repair
+
+Status: Source fix verified; Windows Azure rebuild requires explicit owner approval
+
+Implemented:
+- Replace the incomplete Windows Real-ESRGAN `v0.2.0` archive with the official
+  pinned `20220424` archive containing the executable, DLLs, and model files.
+- Validate the archive SHA-256 and required 2x/4x model files before packaging;
+  reject incomplete or unsafe ZIP content.
+- Correct the 2x clipart model name to the model actually included in the
+  runtime: `realesr-animevideov3-x2`.
+- Collect rembg sessions and metadata in PyInstaller and add a packaged local
+  runtime smoke gate that checks both Real-ESRGAN resources and rembg imports.
+- Keep safe local/provider failure details in diagnostics, including bounded
+  task ID, provider error code, and sanitized error message.
+- Remove the non-functional BEN2 choice from release UI. Existing BEN2 settings
+  migrate to Local rembg rather than KIE; the standalone BEN2 research script
+  remains available for a separately managed test environment.
+
+Verification:
+- [x] TDD regressions observed failing before each implementation and passing
+  afterward.
+- [x] Official Windows Real-ESRGAN archive SHA-256 verified as
+  `abc02804e17982a3be33675e4d471e91ea374e65b70167abc09e31acb412802d`;
+  the preparation script staged all required runtime files.
+- [x] Real Local rembg IS-Net inference produced a valid RGBA output with an
+  alpha range of `(0, 255)` using a temporary model cache.
+- [x] Full Linux-safe suite: 545 passed, 1 expected platform skip, 2 deselected,
+  plus 73 unittest subtests.
+- [x] Expanded manual Azure release-gate equivalent: 94 tests passed, with the
+  expected Linux Real-ESRGAN and absent sibling-service skips.
+- [x] `compileall`, sensitive-artifact scan, PowerShell syntax, and
+  `git diff --check` passed.
+- [ ] Run a new manual Windows Azure build only after explicit owner approval,
+  then retest Local Real-ESRGAN and Local rembg in the packaged application.

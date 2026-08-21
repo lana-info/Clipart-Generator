@@ -28,6 +28,25 @@ class MainUiAcceptanceTests(unittest.TestCase):
             patch.object(main.QTimer, "singleShot"),
         )
 
+    def test_unbundled_ben2_is_not_selectable_and_legacy_setting_uses_rembg(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-ui-ben2-") as temp_dir:
+            temp_path = Path(temp_dir)
+            (temp_path / "config.json").write_text(
+                json.dumps({"remove_bg_provider": "local_ben2"}),
+                encoding="utf-8",
+            )
+            patches = self.isolated_paths(temp_path)
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+                window = main.MainWindow()
+                try:
+                    self.assertEqual(window.remove_bg_provider_combo.findData("local_ben2"), -1)
+                    self.assertEqual(window.remove_bg_provider_combo.currentData(), "local_rembg")
+                finally:
+                    window.settings_save_timer.stop()
+                    window.api_key_mask_timer.stop()
+                    window.deleteLater()
+                    self.app.processEvents()
+
     def test_work_folder_key_lock_and_processing_settings_persist(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-settings-") as temp_dir:
             temp_path = Path(temp_dir)
@@ -69,9 +88,8 @@ class MainUiAcceptanceTests(unittest.TestCase):
                 window.unsharp_threshold_spin.setValue(3)
                 window.chk_remove_bg.setChecked(True)
                 window.remove_bg_provider_combo.setCurrentIndex(
-                    window.remove_bg_provider_combo.findData("local_ben2")
+                    window.remove_bg_provider_combo.findData("local_rembg")
                 )
-                window.local_ben2_alpha_threshold_spin.setValue(31)
                 window.chk_edge_shrink.setChecked(True)
                 window.edge_shrink_pixels_combo.setCurrentIndex(
                     window.edge_shrink_pixels_combo.findData(2)
@@ -95,8 +113,7 @@ class MainUiAcceptanceTests(unittest.TestCase):
                 self.assertEqual(restored.unsharp_radius_spin.value(), 75)
                 self.assertEqual(restored.unsharp_threshold_spin.value(), 3)
                 self.assertTrue(restored.chk_remove_bg.isChecked())
-                self.assertEqual(restored.remove_bg_provider_combo.currentData(), "local_ben2")
-                self.assertEqual(restored.local_ben2_alpha_threshold_spin.value(), 31)
+                self.assertEqual(restored.remove_bg_provider_combo.currentData(), "local_rembg")
                 self.assertTrue(restored.chk_edge_shrink.isChecked())
                 self.assertEqual(restored.edge_shrink_pixels_combo.currentData(), 2)
                 self.assertTrue(restored.chk_trim.isChecked())
@@ -122,7 +139,7 @@ class MainUiAcceptanceTests(unittest.TestCase):
                 window.chk_unsharp.setChecked(False)
                 window.chk_remove_bg.setChecked(True)
                 window.remove_bg_provider_combo.setCurrentIndex(
-                    window.remove_bg_provider_combo.findData("local_ben2")
+                    window.remove_bg_provider_combo.findData("local_rembg")
                 )
                 window.chk_edge_shrink.setChecked(False)
                 window.chk_trim.setChecked(False)
