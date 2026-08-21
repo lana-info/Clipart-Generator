@@ -156,7 +156,7 @@ class UpdateController(QObject):
         box.setWindowTitle(f"Обновление {APP_NAME}")
         box.setIcon(QMessageBox.Icon.Question)
         box.setText(f"Доступна версия {release.version}. Обновить программу сейчас?")
-        if self.client.platform_id == "macos-arm64":
+        if self.client.platform_id.startswith("macos-"):
             box.setInformativeText(
                 "Программа скачает и проверит ZIP-архив, затем покажет его в Finder. "
                 "Приложение закроется; распакуйте архив и перенесите новую версию в папку «Программы»."

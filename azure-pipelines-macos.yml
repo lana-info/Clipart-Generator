@@ -16,15 +16,15 @@ steps:
 
   - bash: |
       set -euo pipefail
-      test "$(uname -m)" = "arm64"
+      test "$(uname -m)" = "x86_64"
       python3 --version
-    displayName: Verify Apple Silicon agent
+    displayName: Verify Intel macOS agent
 
   - task: UsePythonVersion@0
-    displayName: Use Python 3.12 arm64
+    displayName: Use Python 3.12 x64
     inputs:
       versionSpec: '3.12'
-      architecture: arm64
+      architecture: x64
       addToPath: true
 
   - bash: |
@@ -72,7 +72,7 @@ steps:
         --noconfirm \
         --clean \
         --windowed \
-        --target-arch arm64 \
+        --target-arch x86_64 \
         --name 'Vibix Images' \
         --osx-bundle-identifier com.vibix.images \
         --icon assets/vibix-images.ico \
@@ -95,11 +95,11 @@ steps:
       executable="$app/Contents/MacOS/Vibix Images"
       test -d "$app"
       test -x "$executable"
-      file "$executable" | grep -q 'arm64'
+      file "$executable" | grep -q 'x86_64'
       "$executable" --release-entrypoint-smoke "--expected-app-version=${{ parameters.appVersion }}"
 
-      archive="release/VibixImages-macOS-${{ parameters.appVersion }}-arm64.zip"
-      checksum="release/VibixImages-macOS-${{ parameters.appVersion }}-arm64.sha256"
+      archive="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.zip"
+      checksum="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.sha256"
       rm -f "$archive" "$checksum"
       ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
       hash="$(shasum -a 256 "$archive" | awk '{print $1}')"
@@ -114,5 +114,5 @@ steps:
     displayName: Publish macOS application
     inputs:
       targetPath: '$(Build.ArtifactStagingDirectory)'
-      artifact: macos-arm64
+      artifact: macos-x64
       publishLocation: pipeline

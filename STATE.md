@@ -23,10 +23,10 @@ Updated: 2026-08-21
 
 ## Next task
 
-Build the unsigned Apple Silicon application through the manual
+Build the unsigned Intel/Rosetta application through the manual
 `azure-pipelines-macos.yml` pipeline, verify the ZIP and SHA-256 artifact, then
 perform focused acceptance on a real Mac. The server supports a separate
-`macos-arm64` revision; do not publish that revision until the downloaded Azure
+`macos-x64` revision; do not publish that revision until the downloaded Azure
 artifact has passed the Mac launch and licensing checks.
 
 ## Blockers and risks
@@ -57,6 +57,9 @@ artifact has passed the Mac launch and licensing checks.
   a controlled draft upload and end-to-end update test.
 - The macOS build is intentionally unsigned and not notarized. Gatekeeper will
   warn on first launch; the application must not automate bypassing that warning.
+- Azure's hosted macOS ARM64 preview is paused. The Azure artifact is x86_64 and
+  requires Apple's free Rosetta 2 on Apple Silicon; a native ARM64 build would
+  require a self-hosted Apple Silicon agent or a different CI provider.
 
 ## Approved brand direction
 

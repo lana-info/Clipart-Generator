@@ -1658,13 +1658,15 @@ Verification:
 - [ ] Repeat focused Windows installation, licensing, DPI, retry, and update
   acceptance against the exact Azure artifact and its SHA-256.
 
-### Task 66 - macOS Apple Silicon Release
+### Task 66 - macOS Azure Release
 
 Status: Implementation verified locally; Azure packaging and Mac acceptance pending
 
 Implemented:
-- Add a separate manual Azure pipeline for an unsigned `macos-arm64` `.app`
-  distributed as a ZIP archive with a SHA-256 sidecar.
+- Add a separate manual Azure pipeline for an unsigned `macos-x64` `.app`
+  distributed as a ZIP archive with a SHA-256 sidecar. It runs natively on
+  Intel Mac and through Rosetta 2 on Apple Silicon because Azure's hosted
+  ARM64 preview is currently paused.
 - Bundle the verified universal Real-ESRGAN macOS runtime and select its native
   executable name at runtime.
 - Request platform-specific update manifests; accept only ZIP updates on macOS,
@@ -1676,6 +1678,6 @@ Implemented:
 Verification:
 - [x] Full Linux-safe suite: 532 passed, 1 expected platform skip, 2 deselected.
 - [x] Real-ESRGAN macOS archive SHA-256 and universal arm64 slice verified.
-- [ ] Azure `macos-arm64` artifact build.
+- [ ] Azure `macos-x64` artifact build.
 - [ ] Manual Gatekeeper acknowledgement, launch, licensing, provider, and update
   acceptance on Apple Silicon hardware.

@@ -31,6 +31,7 @@ _FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,199}\Z")
 _PLATFORM_ARTIFACT = {
     "windows-x64": (".exe", "application/vnd.microsoft.portable-executable"),
     "macos-arm64": (".zip", "application/zip"),
+    "macos-x64": (".zip", "application/zip"),
 }
 
 
@@ -53,6 +54,8 @@ def current_platform_id() -> str:
     """Return the update platform used by the current packaged application."""
     if sys.platform == "darwin" and platform.machine().lower() in {"arm64", "aarch64"}:
         return "macos-arm64"
+    if sys.platform == "darwin":
+        return "macos-x64"
     return "windows-x64"
 
 

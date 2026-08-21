@@ -73,8 +73,8 @@ class UpdateClientTests(unittest.TestCase):
 
     def manifest_response(self, req, *, mutate=None):
         requested = json.loads(req.data.decode("utf-8"))
-        is_macos = requested["platform"] == "macos-arm64"
-        filename = "VibixImages-macOS-3.1.0-arm64.zip" if is_macos else "VibixImages-Setup-3.1.exe"
+        is_macos = requested["platform"].startswith("macos-")
+        filename = "VibixImages-macOS-3.1.0-x64.zip" if is_macos else "VibixImages-Setup-3.1.exe"
         payload = {
             "license_id": requested["license_id"],
             "product_id": requested["product_id"],
@@ -130,13 +130,13 @@ class UpdateClientTests(unittest.TestCase):
         self.assertEqual(len(opener.requests), 1)
         self.assertFalse((self.root / "updates").exists())
 
-    def test_apple_silicon_uses_macos_arm64_release_and_downloads_zip(self) -> None:
+    def test_macos_uses_platform_release_and_downloads_zip(self) -> None:
         client = UpdateClient(
             self.license,
             {"updates-v1": encode(self.update_key.public_key().public_bytes_raw())},
             current_version="3.0",
             download_directory=self.root / "mac-updates",
-            platform_id="macos-arm64",
+            platform_id="macos-x64",
         )
         manifest_opener = Opener(self.manifest_response)
         with patch.object(license_client.request, "build_opener", return_value=manifest_opener):
@@ -145,7 +145,7 @@ class UpdateClientTests(unittest.TestCase):
         with patch.object(update_client.request, "build_opener", return_value=download_opener):
             path = client.download(release)
 
-        self.assertEqual(path.name, "VibixImages-macOS-3.1.0-arm64.zip")
+        self.assertEqual(path.name, "VibixImages-macOS-3.1.0-x64.zip")
         self.assertEqual(path.read_bytes(), self.installer)
         self.assertEqual(download_opener.requests[0][0].headers["Accept"], "application/zip")
 
@@ -154,6 +154,12 @@ class UpdateClientTests(unittest.TestCase):
             update_client.platform, "machine", return_value="arm64"
         ):
             self.assertEqual(current_platform_id(), "macos-arm64")
+
+    def test_current_platform_identifies_intel_macos(self) -> None:
+        with patch.object(update_client.sys, "platform", "darwin"), patch.object(
+            update_client.platform, "machine", return_value="x86_64"
+        ):
+            self.assertEqual(current_platform_id(), "macos-x64")
 
     def test_update_key_is_accepted_only_through_license_signed_delegation(self) -> None:
         client = UpdateClient(
