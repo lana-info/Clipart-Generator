@@ -94,6 +94,13 @@ def _safe_filename(value: Any) -> str:
     return _safe_text(text, 200)
 
 
+def _event_sequence(item: Mapping[str, Any]) -> int:
+    try:
+        return max(0, int(item.get("sequence", 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
 class DiagnosticJournal:
     def __init__(
         self,
@@ -118,6 +125,7 @@ class DiagnosticJournal:
         self._lock = threading.RLock()
         self._truncated = False
         self._dropped_events = 0
+        self._sequence = 0
         self._memory_fallback: list[dict[str, Any]] = []
         try:
             self.directory.mkdir(parents=True, exist_ok=True)
@@ -138,9 +146,13 @@ class DiagnosticJournal:
         retry: str | None = None,
         details: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        with self._lock:
+            self._sequence += 1
+            sequence = self._sequence
         item = {
             "schema_version": 1,
             "timestamp": self._now().astimezone(timezone.utc).isoformat(),
+            "sequence": sequence,
             "severity": severity if severity in {"debug", "info", "warning", "error"} else "info",
             "event": _safe_text(event, 96),
             "summary": _safe_text(summary),
@@ -290,7 +302,15 @@ class DiagnosticJournal:
             except OSError:
                 continue
         events.extend(self._memory_fallback)
-        return sorted(events, key=lambda item: str(item.get("timestamp", "")), reverse=True)
+        return sorted(
+            events,
+            key=lambda item: (
+                str(item.get("timestamp", "")),
+                str(item.get("session_id", "")),
+                _event_sequence(item),
+            ),
+            reverse=True,
+        )
 
     @staticmethod
     def format_event(event: Mapping[str, Any]) -> str:

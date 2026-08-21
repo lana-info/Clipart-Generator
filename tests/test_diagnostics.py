@@ -10,6 +10,22 @@ from diagnostics import DiagnosticJournal
 
 
 class DiagnosticJournalTests(unittest.TestCase):
+    def test_equal_timestamps_keep_exact_recording_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixed = datetime(2030, 1, 1, tzinfo=timezone.utc)
+            journal = DiagnosticJournal(
+                Path(temp), app_version="3.0", now=lambda: fixed
+            )
+            for event in ("first", "second", "third"):
+                journal.record(event, event)
+
+            events = journal.read_events()
+
+            self.assertEqual(
+                [item["event"] for item in events],
+                ["third", "second", "first"],
+            )
+
     def test_keeps_three_launches_and_recovers_corrupt_tail(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
