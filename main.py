@@ -668,6 +668,22 @@ def validate_recraft_crisp_upscale_input(image_path):
         raise RuntimeError("Recraft Crisp input image is invalid") from exc
 
 
+def validate_upscale_after_background_order(remove_bg, upscale_after, provider, model):
+    if (
+        remove_bg
+        and upscale_after
+        and str(provider or "").strip() == "kie"
+        and str(model or "").strip() == "recraft/crisp-upscale"
+    ):
+        return (
+            "Recraft Crisp нельзя использовать после удаления фона: "
+            "удаление фона создаёт прозрачное изображение, а модель не поддерживает "
+            "прозрачный вход. Используйте Local Real-ESRGAN после удаления фона "
+            "или перенесите Recraft Crisp до удаления фона."
+        )
+    return ""
+
+
 def safe_error_text(error, secrets=(), limit=500):
     message = str(error).strip() or error.__class__.__name__
     return redact_text(message, tuple(secrets), limit=limit)
@@ -1184,6 +1200,14 @@ class WorkerThread(QThread):
     def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
         self._ensure_running()
         self._metadata_cleaned_for_current_item = False
+        order_error = validate_upscale_after_background_order(
+            self.remove_bg,
+            self.upscale_after,
+            self.upscale_after_provider,
+            self.kie_upscale_after_model,
+        )
+        if order_error:
+            raise ValueError(order_error)
         if self._can_use_legacy_kie_processing_pipeline():
             if self.kie_upscale_model == "recraft/crisp-upscale" and not source_url:
                 validate_recraft_crisp_upscale_input(source_path)
@@ -4468,6 +4492,9 @@ class MainWindow(QMainWindow):
         self.kie_upscale_after_model_combo.setCurrentIndex(
             upscale_after_model_index if upscale_after_model_index >= 0 else 0
         )
+        self.upscale_after_note = QLabel()
+        self.upscale_after_note.setWordWrap(True)
+        self.upscale_after_note.setStyleSheet("color:#f0b44d; max-width:720px;")
 
         self.remove_bg_provider_combo = QComboBox()
         self.remove_bg_provider_combo.addItem("KIE", "kie")
@@ -4625,6 +4652,7 @@ class MainWindow(QMainWindow):
                 ("Провайдер:", self.upscale_after_provider_combo),
                 ("Модель KIE:", kie_upscale_after_model_widget),
                 ("Масштаб Local Real-ESRGAN:", self.local_realesrgan_after_scale_combo),
+                ("Важно:", self.upscale_after_note),
             ],
         )
         remove_background_group = make_processing_subgroup(
@@ -4717,6 +4745,8 @@ class MainWindow(QMainWindow):
         self.trim_mode_combo.currentIndexChanged.connect(self.update_trim_controls_state)
         self.upscale_provider_combo.currentIndexChanged.connect(self.update_upscale_provider_controls_state)
         self.upscale_after_provider_combo.currentIndexChanged.connect(self.update_upscale_provider_controls_state)
+        self.chk_remove_bg.toggled.connect(self.update_upscale_provider_controls_state)
+        self.chk_upscale_after.toggled.connect(self.update_upscale_provider_controls_state)
         self.chk_upscale.toggled.connect(self.update_upscale_total_label)
         self.chk_upscale_after.toggled.connect(self.update_upscale_total_label)
         self.local_realesrgan_scale_combo.currentIndexChanged.connect(self.update_upscale_total_label)
@@ -5033,6 +5063,26 @@ class MainWindow(QMainWindow):
     def update_upscale_provider_controls_state(self, *_):
         before_is_local = self.upscale_provider_combo.currentData() == "local_realesrgan"
         after_is_local = self.upscale_after_provider_combo.currentData() == "local_realesrgan"
+        after_recraft_blocked = bool(
+            self.chk_remove_bg.isChecked()
+            and self.chk_upscale_after.isChecked()
+            and not after_is_local
+        )
+        recraft_index = self.kie_upscale_after_model_combo.findText("recraft/crisp-upscale")
+        if recraft_index >= 0:
+            recraft_item = self.kie_upscale_after_model_combo.model().item(recraft_index)
+            recraft_item.setEnabled(not after_recraft_blocked)
+        if after_recraft_blocked:
+            self.upscale_after_note.setText(
+                "Recraft Crisp недоступен после удаления фона: модель не поддерживает "
+                "прозрачный вход. Используйте Local Real-ESRGAN или включите Recraft Crisp "
+                "до удаления фона."
+            )
+        else:
+            self.upscale_after_note.setText(
+                "После удаления фона рекомендуется Local Real-ESRGAN, потому что "
+                "Recraft Crisp не поддерживает прозрачные входные изображения."
+            )
         self.local_realesrgan_dir_input.setEnabled(before_is_local or after_is_local)
         self.local_realesrgan_profile_combo.setEnabled(before_is_local or after_is_local)
         self.local_realesrgan_scale_combo.setEnabled(before_is_local)
@@ -6018,6 +6068,14 @@ class MainWindow(QMainWindow):
             return f"Размер {text_resolution} недоступен для модели {text_model}"
         if reference_caps["resolutions"] and reference_resolution not in reference_caps["resolutions"]:
             return f"Размер {reference_resolution} недоступен для модели {reference_model}"
+        order_error = validate_upscale_after_background_order(
+            self.chk_remove_bg.isChecked(),
+            self.chk_upscale_after.isChecked(),
+            self.upscale_after_provider_combo.currentData(),
+            self.kie_upscale_after_model_combo.currentText(),
+        )
+        if order_error:
+            return order_error
         return ""
 
     def stop_work(self):
