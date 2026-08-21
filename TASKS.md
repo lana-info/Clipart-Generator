@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Build `VibixImages-Setup-3.0.2.exe` only through the
-manual Azure pipeline, record its run and SHA-256, then repeat focused Windows
-acceptance. Do not upload a revision before that artifact is approved.**
+Current next task: **Download the installer from Azure run `77`, verify its
+SHA-256, then repeat focused Windows acceptance. Do not upload a revision before
+that exact artifact is approved.**
 
 ## Phase 1 - Preparation
 
@@ -1596,7 +1596,7 @@ Verification:
 
 ### Task 65 - Windows 3.0.1 Acceptance Fix Pack
 
-Status: Local 3.0.2 fix candidate complete; Azure build and Windows acceptance pending
+Status: Azure 3.0.2 installer built; Windows acceptance pending
 
 Source of truth:
 - `docs/testing/windows-3.0.1-acceptance-checklist.ru.md`
@@ -1651,6 +1651,9 @@ Verification:
   `git diff --check`.
 - [x] Full suite excluding two documented pre-existing baseline inconsistencies:
   517 passed, 1 expected skip, 4 deselected, 73 subtests passed.
-- [ ] Build `VibixImages-Setup-3.0.2.exe` using the manual Azure pipeline.
+- [x] Manual Azure run `77` (`20260820.1`) succeeded from source commit
+  `92046e0`; artifact `windows-installer` contains
+  `VibixImages-Setup-3.0.2.exe` (`164809973` bytes) and matching SHA-256
+  `46366a1a655e3f272e7bff54674e14c66036d468bdd93e46f2cceaa9fd21fc14`.
 - [ ] Repeat focused Windows installation, licensing, DPI, retry, and update
   acceptance against the exact Azure artifact and its SHA-256.

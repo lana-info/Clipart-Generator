@@ -24,11 +24,11 @@ Updated: 2026-08-20
 
 ## Next task
 
-The Windows 3.0.1 smoke test findings are implemented locally as the 3.0.2 fix
-candidate. Finish verification, push the dedicated branch without triggering a
-GitHub installer workflow, and build `VibixImages-Setup-3.0.2.exe` only through
-the manual Azure pipeline. Repeat focused Windows acceptance against that exact
-artifact. Do not upload or publish an update revision until the build is approved.
+The Windows 3.0.1 smoke-test findings are implemented in the 3.0.2 candidate.
+Manual Azure run `77` succeeded from commit `92046e0` and published the
+`windows-installer` artifact. Download and verify the exact installer SHA-256,
+then repeat focused Windows acceptance. Do not upload or publish an update
+revision until the build is approved.
 
 ## Blockers and risks
 
@@ -43,14 +43,15 @@ artifact. Do not upload or publish an update revision until the build is approve
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 - The Windows smoke-test findings are fixed in source and covered by local
-  regressions, but the resulting behavior is still `WINDOWS_REQUIRED` until a
-  packaged Azure 3.0.2 build is tested at real Windows DPI values.
+  regressions; Azure packaging is `CLOUD_OK`, but installation and visible
+  behavior remain `WINDOWS_REQUIRED` at real Windows DPI values.
 - Full pytest has two pre-existing baseline inconsistencies outside Task 65: the
   configured-output-path expectation differs from the current implementation,
   and `TECHNICAL_DEBT.md` links to an untracked local `tech_debt/README.md`.
   The 3.0.2 change set passes when those two baseline tests are deselected.
-- The verified 3.0.1 installer remains historical evidence only. Do not use it
-  to accept the 3.0.2 fixes; wait for the new Azure artifact and checksum.
+- The verified 3.0.1 installer remains historical evidence only. The 3.0.2
+  acceptance artifact is Azure run `77`, size `164809973` bytes, SHA-256
+  `46366a1a655e3f272e7bff54674e14c66036d468bdd93e46f2cceaa9fd21fc14`.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.
