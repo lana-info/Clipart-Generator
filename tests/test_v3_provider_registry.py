@@ -5,6 +5,8 @@ import unittest
 from v3_provider_registry import (
     KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
+    LOCAL_REMBG_MODEL_OPTIONS,
+    LOCAL_REMBG_PROFILE_OPTIONS,
     known_provider_ids,
     processing_provider_options,
     provider_label,
@@ -62,6 +64,19 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertEqual(
             KIE_REMOVE_BG_MODEL_OPTIONS,
             (("Recraft Remove Background", "recraft/remove-background"),),
+        )
+        self.assertEqual(
+            LOCAL_REMBG_PROFILE_OPTIONS,
+            (("Клипарт", "clipart"), ("Люди", "people"), ("Аниме", "anime"), ("Запасной", "fallback")),
+        )
+        self.assertEqual(
+            LOCAL_REMBG_MODEL_OPTIONS,
+            (
+                ("BiRefNet — общий", "birefnet-general"),
+                ("BiRefNet — портрет", "birefnet-portrait"),
+                ("IS-Net — аниме", "isnet-anime"),
+                ("IS-Net — общий", "isnet-general-use"),
+            ),
         )
 
     def test_provider_visible_controls_cover_expected_widgets(self) -> None:

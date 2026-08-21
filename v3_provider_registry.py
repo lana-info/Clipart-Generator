@@ -109,6 +109,18 @@ KIE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
 KIE_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Recraft Remove Background", "recraft/remove-background"),
 )
+LOCAL_REMBG_PROFILE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("Клипарт", "clipart"),
+    ("Люди", "people"),
+    ("Аниме", "anime"),
+    ("Запасной", "fallback"),
+)
+LOCAL_REMBG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("BiRefNet — общий", "birefnet-general"),
+    ("BiRefNet — портрет", "birefnet-portrait"),
+    ("IS-Net — аниме", "isnet-anime"),
+    ("IS-Net — общий", "isnet-general-use"),
+)
 
 
 def provider_spec(provider_id: str) -> ProviderSpec:

@@ -23,6 +23,8 @@ from v3_components import DEFAULT_TOKENS, V3DesignTokens
 from v3_provider_registry import (
     KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
+    LOCAL_REMBG_MODEL_OPTIONS,
+    LOCAL_REMBG_PROFILE_OPTIONS,
     processing_provider_options,
     provider_visible_controls,
 )
@@ -345,16 +347,18 @@ class ProcessingPipelineEditor(QScrollArea):
             (("2x", 2), ("4x", 4)),
             operations,
         )
-        self._add_text(
+        self._add_combo(
             advanced_form,
             "local_rembg_profile",
             "rembg профиль",
+            LOCAL_REMBG_PROFILE_OPTIONS,
             operations,
         )
-        self._add_text(
+        self._add_combo(
             advanced_form,
             "local_rembg_model",
             "rembg модель",
+            LOCAL_REMBG_MODEL_OPTIONS,
             operations,
         )
         self._add_combo(
