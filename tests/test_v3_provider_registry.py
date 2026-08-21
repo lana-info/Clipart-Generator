@@ -17,6 +17,7 @@ from v3_provider_registry import (
     provider_spec,
     provider_supports_operation,
     provider_visible_controls,
+    upscale_model_preserves_alpha,
 )
 
 
@@ -45,6 +46,9 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertFalse(provider_requires_network("local_realesrgan"))
         self.assertFalse(provider_requires_cost("local_ben2"))
         self.assertTrue(provider_preserves_alpha("local_ben2"))
+        self.assertFalse(upscale_model_preserves_alpha("kie", "recraft/crisp-upscale"))
+        self.assertTrue(upscale_model_preserves_alpha("kie", "topaz/upscale"))
+        self.assertTrue(upscale_model_preserves_alpha("local_realesrgan", ""))
 
     def test_field_options_are_shared_and_deterministic(self) -> None:
         self.assertEqual(

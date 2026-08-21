@@ -81,10 +81,10 @@ from v3_prompt_generator import (
 from v3_provider_registry import (
     KIE_MODEL_OPTIONS,
     processing_provider_options,
-    provider_preserves_alpha,
     provider_requires_api_key,
     provider_supports_operation,
     provider_visible_controls,
+    upscale_model_preserves_alpha,
 )
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
@@ -637,8 +637,19 @@ def _validate_processing_providers(operations: ImageOperationData) -> None:
 def _validate_alpha_safe_upscale(operations: ImageOperationData) -> None:
     if not (operations.remove_background and operations.upscale_after):
         return
-    if provider_preserves_alpha(operations.upscale_after_provider):
+    if upscale_model_preserves_alpha(
+        operations.upscale_after_provider,
+        operations.kie_upscale_after_model,
+    ):
         return
+    if (
+        operations.upscale_after_provider == "kie"
+        and operations.kie_upscale_after_model == "recraft/crisp-upscale"
+    ):
+        raise ClipartFlowError(
+            "Recraft Crisp нельзя использовать после удаления фона: "
+            "модель не поддерживает прозрачный вход"
+        )
     raise ClipartFlowError("Апскейл после удаления фона должен сохранять прозрачность")
 
 
