@@ -106,6 +106,9 @@ KIE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Topaz", "topaz/upscale"),
     ("Recraft Crisp", "recraft/crisp-upscale"),
 )
+KIE_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("Recraft Remove Background", "recraft/remove-background"),
+)
 
 
 def provider_spec(provider_id: str) -> ProviderSpec:

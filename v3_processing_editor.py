@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 
 from v3_components import DEFAULT_TOKENS, V3DesignTokens
 from v3_provider_registry import (
+    KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
     processing_provider_options,
     provider_visible_controls,
@@ -343,7 +344,7 @@ class ProcessingPipelineEditor(QScrollArea):
             advanced_form,
             "kie_remove_bg_model",
             "KIE модель удаления фона",
-            KIE_MODEL_OPTIONS,
+            KIE_REMOVE_BG_MODEL_OPTIONS,
             operations,
         )
         self._add_combo(

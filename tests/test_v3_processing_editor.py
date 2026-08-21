@@ -46,6 +46,10 @@ class ProcessingEditorTests(unittest.TestCase):
 
         self.assertIn("Удаление фона", editor.pipeline_label.text())
         self.assertFalse(editor.operation_widgets["kie_remove_bg_model"].isHidden())
+        self.assertEqual(
+            editor.operation_widgets["kie_remove_bg_model"].itemData(0),
+            "recraft/remove-background",
+        )
         self.assertTrue(hasattr(editor, "cleanup_checkbox"))
         self.assertFalse(editor.cleanup_checkbox.isChecked())
         editor.cleanup_checkbox.setChecked(True)
