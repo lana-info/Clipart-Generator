@@ -59,7 +59,12 @@ steps:
       architecture="$(file "$target_path/realesrgan-ncnn-vulkan")"
       echo "$architecture" | grep -q 'x86_64'
       echo "$architecture" | grep -q 'arm64'
-      "$target_path/realesrgan-ncnn-vulkan" -h >/dev/null
+      set +e
+      help_output="$("$target_path/realesrgan-ncnn-vulkan" -h 2>&1)"
+      help_status=$?
+      set -e
+      test "$help_status" -eq 0 -o "$help_status" -eq 255
+      echo "$help_output" | grep -q 'Usage: realesrgan-ncnn-vulkan'
     displayName: Download verified macOS Real-ESRGAN runtime
 
   - bash: |
