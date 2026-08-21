@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Push the verified local-processing release candidate, run
-the explicitly approved Windows and macOS Azure pipelines, and inspect both
-artifacts. Do not upload a server revision before target-machine acceptance.**
+Current next task: **Test Azure Windows run `102` and macOS run `103` on target
+hardware. Do not upload a server revision before that platform's focused
+acceptance passes.**
 
 ## Phase 1 - Preparation
 
@@ -1754,7 +1754,7 @@ Verification:
 
 ### Task 69 - Local Processing Release Readiness
 
-Status: Source verified; Windows and macOS Azure builds explicitly approved and pending
+Status: Azure artifacts verified; target-machine acceptance pending
 
 Implemented:
 - Preserve straight RGB under soft alpha in Local Real-ESRGAN, validate projected
@@ -1771,8 +1771,11 @@ Implemented:
 - Exercise a tiny rembg inference in packaged Windows and macOS smoke checks.
 
 Verification:
-- [x] Full unittest suite: 541 passed, 2 expected environment/platform skips.
-- [x] Full pytest suite: 568 passed, 1 expected platform skip, 2 deselected,
+- [x] Full unittest suite: 543 passed, 2 expected environment/platform skips.
+- [x] Full pytest suite: 570 passed, 1 expected platform skip, 2 deselected,
   and 73 subtests passed.
 - [x] `compileall`, sensitive-artifact scan, and `git diff --check` passed.
-- [ ] Run and inspect the approved Windows and macOS Azure builds.
+- [x] Azure Windows run `102` and macOS run `103` succeeded from source commit
+  `a085167`; both downloaded artifacts match their SHA-256 sidecars.
+- [ ] Perform focused local-processing and Results/diagnostics acceptance on
+  target Windows and Mac hardware before publishing server revisions.

@@ -27,11 +27,11 @@ Updated: 2026-08-21
 
 ## Next task
 
-Push the source-verified candidate and run the explicitly approved Windows and
-macOS Azure pipelines. Inspect both artifacts and checksums. Then repeat Local
-Real-ESRGAN, Local rembg, Trim + 300 DPI Results, and diagnostic-ZIP acceptance
-on Windows; perform launch and local-processing acceptance on a real Mac before
-uploading either artifact as a server revision.
+Download Azure Windows run `102` and macOS run `103` for target-machine
+acceptance. Repeat Local Real-ESRGAN, Local rembg, Trim + 300 DPI Results, and
+diagnostic-ZIP acceptance on Windows; perform launch and local-processing
+acceptance on a real Mac. Do not upload either artifact as a server revision
+until that platform's focused acceptance passes.
 
 ## Blockers and risks
 
@@ -57,10 +57,17 @@ uploading either artifact as a server revision.
   layout, and exported-ZIP behavior still require the next approved build.
 - The verified 3.0.1 installer and Azure run `77` artifact are historical
   evidence only; neither contains the current fix pack.
-- The current source candidate passes 541 unittest tests and 568 pytest tests
+- The current source candidate passes 543 unittest tests and 570 pytest tests
   plus 73 subtests. The expected Linux skip remains because the Windows
   Real-ESRGAN binary is unavailable there. Windows/macOS packaging and manual
   target-machine acceptance remain the final platform-specific checks.
+- Final Azure Windows run `102` and macOS run `103` both succeeded from commit
+  `a085167e0e311856a4cacedf0c85a6b7147bdc47`. The downloaded Windows installer
+  is `204556261` bytes with SHA-256
+  `66b011747948f57065ce5a2b3004a74e3a7df55702694f08060d18d195f49db7`.
+  The downloaded macOS ZIP is `245668325` bytes with SHA-256
+  `ba8d0cc134f0ad8b75dfd419889d942cf5e202ef4db307320a8a771c4b3c6887`;
+  its sidecar matches and `unzip -t` reports no errors.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.
