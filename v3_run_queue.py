@@ -35,6 +35,7 @@ from v3_components import (
     V3Button,
     V3DesignTokens,
 )
+from security_redaction import redact_text
 from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
@@ -158,6 +159,24 @@ def _failure_reason(message: str) -> tuple[str, str]:
     return "processing_error", "Не удалось завершить обработку файла."
 
 
+def _provider_error_details(message: Any) -> dict[str, str]:
+    """Extract bounded, non-secret provider diagnostics from a worker error."""
+    text = redact_text(message, limit=800)
+    details: dict[str, str] = {}
+    for field, pattern in (
+        ("task", r"(?:taskId|task_id)=([A-Za-z0-9_.:-]{1,128})"),
+        ("error_code", r"(?:errorCode|error_code|code)=([A-Za-z0-9_.:-]{1,64})"),
+        ("http_status", r"(?:http_status|HTTP status)=([0-9]{3})"),
+    ):
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            details[field] = match.group(1)
+    message_match = re.search(r"(?:message|failMsg|error_message)=([^]]+)", text, flags=re.IGNORECASE)
+    if message_match:
+        details["error_message"] = redact_text(message_match.group(1).strip(" ;"), limit=300)
+    return details
+
+
 def _request_items(request: Any, mode: ProjectMode) -> list[RunItem]:
     generated = list(getattr(request, "generated_prompts", []) or [])
     selected = list(getattr(request, "selected_files", []) or [])
@@ -264,6 +283,10 @@ class RunQueueSession(QObject):
                 ("attempt", "attempt"),
                 ("reason", "reason"),
                 ("stage", "stage"),
+                ("task", "task"),
+                ("error_code", "error_code"),
+                ("error_message", "error_message"),
+                ("http_status", "http_status"),
             ):
                 if source in fields:
                     details[target] = fields[source]
@@ -579,12 +602,18 @@ class RunQueueSession(QObject):
         if not self.running and self.finished_at is not None:
             return
         code, user_message = _failure_reason(str(message or ""))
+        provider_details = _provider_error_details(message)
         for item in self.items:
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
                 self._close_running_stages(item, "failed")
                 item.status = RunItemStatus.FAILED
                 item.short_message = user_message
-                self._event("item_failed", item=item.index, reason=code)
+                self._event(
+                    "item_failed",
+                    item=item.index,
+                    reason=code,
+                    **provider_details,
+                )
         self.lifecycle.finish(error_code=code)
         self.current_index = None
         self.running = False

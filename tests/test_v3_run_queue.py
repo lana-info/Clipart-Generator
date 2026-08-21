@@ -353,6 +353,32 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(session.items[1].attempts, 2)
             self.assertEqual(session.items[1].stage_statuses, {})
 
+    def test_fatal_kie_error_keeps_safe_task_diagnostics(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-kie-error-") as temp:
+            journal = Mock()
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "input.png"]),
+                ProjectMode.PROCESSING,
+                diagnostic_journal=journal,
+            )
+            session.handle_progress("[1/1] Обработка файла")
+            session.handle_fatal_error(
+                "KIE task failed [taskId=task_recraft_123; errorCode=501; "
+                "message=provider could not process image]"
+            )
+
+            failed_call = next(
+                call for call in journal.record.call_args_list
+                if call.args and call.args[0] == "item_failed"
+            )
+            details = failed_call.kwargs["details"]
+            self.assertEqual(details["task"], "task_recraft_123")
+            self.assertEqual(details["error_code"], "501")
+            self.assertEqual(
+                details["error_message"],
+                "provider could not process image",
+            )
+
 
     def test_untrusted_output_path_is_rejected_not_succeeded(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-path-") as temp:

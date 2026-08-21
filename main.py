@@ -2329,7 +2329,7 @@ class WorkerThread(QThread):
                 self._ensure_running()
                 return response
             except urlerror.HTTPError as e:
-                last_error = RuntimeError(f"HTTP {e.code}")
+                last_error = RuntimeError(f"HTTP status={e.code}")
 
                 # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
                 if e.code in {400, 401, 402, 403, 404}:
@@ -2499,7 +2499,10 @@ class WorkerThread(QThread):
             timeout=max(30, self.timeout),
         )
         if int(result.get("code", 0)) != 200:
-            raise RuntimeError(f"KIE createTask rejected the request (code {result.get('code', '-')})")
+            raise RuntimeError(
+                f"KIE createTask rejected [errorCode={result.get('code', '-')}; "
+                f"message={self._safe_error_text(result.get('msg') or 'request rejected')}]"
+            )
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
             raise RuntimeError("KIE createTask не вернул taskId")
@@ -2970,7 +2973,12 @@ class WorkerThread(QThread):
             if state in {"success", "succeeded"}:
                 return self._extract_result_url(data.get("resultJson"))
             if state in {"fail", "failed", "error"}:
-                raise RuntimeError(data.get("failMsg") or "KIE вернул fail")
+                error_code = data.get("failCode") or data.get("errorCode") or "unknown"
+                fail_message = self._safe_error_text(data.get("failMsg") or "KIE вернул fail")
+                raise RuntimeError(
+                    f"KIE task failed [taskId={task_id}; errorCode={error_code}; "
+                    f"message={fail_message}]"
+                )
             time.sleep(self.status_poll_interval)
         raise TimeoutError("Превышено время ожидания результата KIE")
 

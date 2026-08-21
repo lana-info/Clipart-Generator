@@ -69,6 +69,29 @@ class KieRoutingTests(unittest.TestCase):
         messages = "\n".join([*progress, *finished])
         self.assertNotIn(DUMMY_KIE_KEY, messages)
 
+    def test_kie_failed_task_error_contains_safe_task_id_and_code(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        worker._request_json = types.MethodType(
+            lambda self, *args, **kwargs: {
+                "code": 200,
+                "data": {
+                    "state": "fail",
+                    "failCode": 501,
+                    "failMsg": "provider could not process image",
+                },
+            },
+            worker,
+        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            r"taskId=task-123; errorCode=501; message=provider could not process image",
+        ):
+            worker._kie_wait_result("task-123")
+
     def test_gpt_image_2_routes_documented_task_models(self):
         worker = main.WorkerThread(
             "mode1_generate_only",
