@@ -8,6 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QDialog, QWidget
 
+import main
 from license_client import LicenseError
 from main import (
     APP_VERSION,
@@ -51,6 +52,18 @@ class ReleaseEntrypointTests(unittest.TestCase):
             )
         )
         window.close()
+
+    def test_v3_runtime_includes_bundled_local_realesrgan_path(self):
+        with tempfile.TemporaryDirectory(prefix="vibix-config-") as temp_dir:
+            with patch("main.CONFIG_FILE", str(Path(temp_dir) / "missing-config.json")):
+                window = create_v3_application_window()
+            try:
+                self.assertEqual(
+                    window._runtime_settings()["local_realesrgan_dir"],
+                    main.bundled_local_realesrgan_dir(),
+                )
+            finally:
+                window.close()
 
     def test_startup_does_not_open_application_when_license_is_rejected(self):
         window = QWidget()

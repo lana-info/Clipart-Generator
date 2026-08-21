@@ -6746,6 +6746,9 @@ def create_v3_application_window():
                 config = loaded
     except (OSError, UnicodeError, json.JSONDecodeError):
         config = {}
+    # V3 uses this raw config directly; keep the bundled local provider available
+    # even when the legacy config is absent or predates the provider setting.
+    config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
     secrets = EnvCredentialStore(ENV_FILE).load()
 
     app_data = QStandardPaths.writableLocation(
