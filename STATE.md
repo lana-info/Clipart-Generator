@@ -45,6 +45,9 @@ revision until the build is approved.
 - The Windows smoke-test findings are fixed in source and covered by local
   regressions; Azure packaging is `CLOUD_OK`, but installation and visible
   behavior remain `WINDOWS_REQUIRED` at real Windows DPI values.
+- Do not start Azure/GitHub Actions Windows packaging for the current version
+  until all known source issues are resolved and the owner explicitly approves
+  the final build run.
 - Full pytest has two pre-existing baseline inconsistencies outside Task 65: the
   configured-output-path expectation differs from the current implementation,
   and `TECHNICAL_DEBT.md` links to an untracked local `tech_debt/README.md`.
