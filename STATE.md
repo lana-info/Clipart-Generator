@@ -19,7 +19,7 @@ Updated: 2026-08-21
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/fix-diagnostics-results-state`
+- Current task branch: `codex/fix-local-release-readiness`
 - Branch base: `codex/feature-macos-release` at `ac76deb`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,12 +27,11 @@ Updated: 2026-08-21
 
 ## Next task
 
-Wait for explicit owner approval of the next platform-specific Azure build.
-The current Windows installer must not be treated as the local-processing or
-Results/diagnostics candidate: it lacks the corrected Real-ESRGAN runtime and
-the new terminal Results state. After a separately requested Windows build,
-repeat Local Real-ESRGAN, Local rembg, Trim + 300 DPI Results, and diagnostic-ZIP
-acceptance. macOS run `91` remains available for focused acceptance on a real Mac.
+Push the source-verified candidate and run the explicitly approved Windows and
+macOS Azure pipelines. Inspect both artifacts and checksums. Then repeat Local
+Real-ESRGAN, Local rembg, Trim + 300 DPI Results, and diagnostic-ZIP acceptance
+on Windows; perform launch and local-processing acceptance on a real Mac before
+uploading either artifact as a server revision.
 
 ## Blockers and risks
 
@@ -58,9 +57,10 @@ acceptance. macOS run `91` remains available for focused acceptance on a real Ma
   layout, and exported-ZIP behavior still require the next approved build.
 - The verified 3.0.1 installer and Azure run `77` artifact are historical
   evidence only; neither contains the current fix pack.
-- The clean release candidate passes `545` tests with one Linux skip because
-  the Windows Real-ESRGAN binary is unavailable on Linux. Windows packaging
-  and manual installation remain the final platform-specific checks.
+- The current source candidate passes 541 unittest tests and 568 pytest tests
+  plus 73 subtests. The expected Linux skip remains because the Windows
+  Real-ESRGAN binary is unavailable there. Windows/macOS packaging and manual
+  target-machine acceptance remain the final platform-specific checks.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.

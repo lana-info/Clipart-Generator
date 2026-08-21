@@ -58,6 +58,13 @@ class ProcessingEditorTests(unittest.TestCase):
             editor.operation_widgets["local_rembg_model"].itemData(0),
             "birefnet-general",
         )
+        self.assertIn(
+            "МБ",
+            editor.operation_widgets["local_rembg_model"].itemText(0),
+        )
+        profile = editor.operation_widgets["local_rembg_profile"]
+        profile.setCurrentIndex(profile.findData("anime"))
+        self.assertEqual(state.processing.operations.local_rembg_model, "isnet-anime")
         state.processing.operations.upscale_after = True
         state.processing.operations.upscale_after_provider = "kie"
         state.processing.operations.kie_upscale_after_model = "recraft/crisp-upscale"

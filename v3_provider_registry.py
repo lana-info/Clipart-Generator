@@ -114,11 +114,17 @@ LOCAL_REMBG_PROFILE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Аниме", "anime"),
     ("Запасной", "fallback"),
 )
+LOCAL_REMBG_PROFILE_MODELS: Final[dict[str, str]] = {
+    "clipart": "birefnet-general",
+    "people": "birefnet-portrait",
+    "anime": "isnet-anime",
+    "fallback": "isnet-general-use",
+}
 LOCAL_REMBG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
-    ("BiRefNet — общий", "birefnet-general"),
-    ("BiRefNet — портрет", "birefnet-portrait"),
-    ("IS-Net — аниме", "isnet-anime"),
-    ("IS-Net — общий", "isnet-general-use"),
+    ("BiRefNet — общий (~928 МБ при первом запуске)", "birefnet-general"),
+    ("BiRefNet — портрет (~928 МБ при первом запуске)", "birefnet-portrait"),
+    ("IS-Net — аниме (~168 МБ при первом запуске)", "isnet-anime"),
+    ("IS-Net — общий (~170 МБ при первом запуске)", "isnet-general-use"),
 )
 
 

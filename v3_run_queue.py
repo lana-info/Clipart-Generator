@@ -405,7 +405,7 @@ class RunQueueSession(QObject):
                 )
             elif key == "filename":
                 parts.append(
-                    f"filename={json.dumps(Path(str(value)).name, ensure_ascii=False)}"
+                    f"filename={json.dumps(_safe_technical_log_text(Path(str(value)).name), ensure_ascii=False)}"
                 )
             elif isinstance(value, (bool, int)) or (
                 isinstance(value, str)
@@ -490,20 +490,21 @@ class RunQueueSession(QObject):
     @property
     def progress_percent(self) -> int:
         terminal = sum(
-            item.status
+            self.items[index].status
             in {
                 RunItemStatus.SUCCEEDED,
                 RunItemStatus.FAILED,
                 RunItemStatus.CANCELLED,
             }
-            for item in self.items
+            for index in self.active_order
         )
-        completed = round((terminal / len(self.items)) * 100) if self.items else 0
+        total = len(self.active_order)
+        completed = round((terminal / total) * 100) if total else 0
         active = 0
         if self.current_index is not None:
             active = self._item_progress.get(self.current_index, 0)
             if active:
-                active = round(active / max(len(self.items), 1))
+                active = round(active / max(total, 1))
         value = max(completed, completed + active)
         self._last_progress = max(self._last_progress, min(100, value))
         return self._last_progress
@@ -896,6 +897,8 @@ class RunQueueSession(QObject):
                 generated_prompts=[],
             )
         self.current_index = None
+        self._item_progress.clear()
+        self._last_progress = 0
         self.running = True
         self.stop_after_current_requested = False
         self._deferred_stop = None

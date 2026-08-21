@@ -61,8 +61,10 @@ def test_launch_worker_constructs_wires_and_starts():
 
 def test_legacy_runtime_adapter_translates_stage_and_keeps_fake_runtime_injected():
     for prefix, stage in LEGACY_STAGE_PREFIXES:
-        assert legacy_progress_stage(prefix + "...") == (stage, "running")
-        assert legacy_progress_stage(prefix + " готово") == (stage, "complete")
+        expected = "failed" if "Не удалось" in prefix else "running"
+        assert legacy_progress_stage(prefix + "...") == (stage, expected)
+        complete_expected = "failed" if "Не удалось" in prefix else "complete"
+        assert legacy_progress_stage(prefix + " готово") == (stage, complete_expected)
     assert legacy_progress_stage("Удаление фона: пропущено") == ("background_removal", "skipped")
     assert legacy_progress_stage("Удаление фона: ошибка") == ("background_removal", "failed")
     assert legacy_progress_stage("неизвестное сообщение") is None

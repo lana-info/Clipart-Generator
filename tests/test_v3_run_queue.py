@@ -356,6 +356,7 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(session.active_order, [1])
             self.assertEqual(session.items[1].attempts, 2)
             self.assertEqual(session.items[1].stage_statuses, {})
+            self.assertEqual(session.progress_percent, 0)
 
     def test_fatal_kie_error_keeps_safe_task_diagnostics(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-kie-error-") as temp:
@@ -723,6 +724,23 @@ class V3RunQueueTests(unittest.TestCase):
                 session.technical_log,
             )
 
+    def test_technical_log_redacts_secret_like_output_filename(self):
+        with tempfile.TemporaryDirectory(prefix="v3-secret-output-") as temp:
+            root = Path(temp)
+            output = root / "output" / "sk-live-secret123_result.png"
+            output.parent.mkdir()
+            Image.new("RGB", (4, 4), "white").save(output)
+            session = RunQueueSession(
+                processing_request(root, [root / "source.png"]),
+                ProjectMode.PROCESSING,
+            )
+
+            session.handle_progress("[1/1] Обработка файла: source.png")
+            session.handle_progress(f"Итог сохранён: {output}")
+
+            self.assertNotIn("sk-live-secret123", session.technical_log)
+            self.assertIn("[hidden]", session.technical_log)
+
     def test_retry_does_not_start_worker_when_online_authorization_fails(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-license-retry-") as temp:
             state = ProjectState(
@@ -887,6 +905,49 @@ class V3RunQueueTests(unittest.TestCase):
                     for message in messages
                 )
             )
+
+    def test_real_qthread_trim_and_dpi_finishes_in_results_state(self):
+        from main import WorkerThread
+
+        with tempfile.TemporaryDirectory(prefix="v3-worker-qthread-") as temp:
+            root = Path(temp)
+            source = root / "source.png"
+            image = Image.new("RGBA", (12, 12), (0, 0, 0, 0))
+            for x in range(3, 9):
+                for y in range(2, 10):
+                    image.putpixel((x, y), (230, 40, 30, 255))
+            image.save(source)
+            request = processing_request(root, [source])
+            request.settings.update(
+                {
+                    "upscale": False,
+                    "upscale_after": False,
+                    "remove_bg": False,
+                    "unsharp_enabled": False,
+                    "edge_shrink_enabled": False,
+                    "trim_enabled": True,
+                    "trim_mode": "alpha",
+                    "export_300_dpi": True,
+                }
+            )
+            session = RunQueueSession(request, ProjectMode.PROCESSING)
+            worker = WorkerThread(**request.worker_kwargs())
+            worker.progress.connect(session.handle_progress)
+            worker.progress_value.connect(session.handle_progress_value)
+            worker.finished.connect(session.handle_finished)
+            worker.error.connect(session.handle_fatal_error)
+
+            worker.start()
+            self.assertTrue(worker.wait(10_000))
+            self.app.processEvents()
+
+            self.assertFalse(session.running)
+            self.assertIs(session.items[0].status, RunItemStatus.SUCCEEDED)
+            output = Path(session.items[0].output_path)
+            self.assertTrue(output.is_file())
+            with Image.open(output) as result:
+                self.assertEqual(result.size, (6, 8))
+                self.assertAlmostEqual(result.info["dpi"][0], 300, delta=1)
 
     def test_open_folder_uses_only_the_session_output_directory(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-open-") as temp:

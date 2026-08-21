@@ -56,7 +56,10 @@ steps:
       mkdir -p "$target_path"
       ditto -x -k "$archive_path" "$target_path"
       chmod 755 "$target_path/realesrgan-ncnn-vulkan"
-      file "$target_path/realesrgan-ncnn-vulkan" | grep -q 'arm64'
+      architecture="$(file "$target_path/realesrgan-ncnn-vulkan")"
+      echo "$architecture" | grep -q 'x86_64'
+      echo "$architecture" | grep -q 'arm64'
+      "$target_path/realesrgan-ncnn-vulkan" -h >/dev/null
     displayName: Download verified macOS Real-ESRGAN runtime
 
   - bash: |
@@ -97,6 +100,7 @@ steps:
       test -x "$executable"
       file "$executable" | grep -q 'x86_64'
       "$executable" --release-entrypoint-smoke "--expected-app-version=${{ parameters.appVersion }}"
+      "$executable" --local-processing-smoke
 
       archive="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.zip"
       checksum="release/VibixImages-macOS-${{ parameters.appVersion }}-x64.sha256"

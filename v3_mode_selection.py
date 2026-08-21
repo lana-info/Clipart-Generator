@@ -289,6 +289,7 @@ class V3ApplicationView(QWidget):
         license_gate: OnlineLicenseGate | None = None,
         diagnostic_journal: Any | None = None,
         update_client: Any | None = None,
+        legacy_project: ProjectState | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
@@ -300,6 +301,7 @@ class V3ApplicationView(QWidget):
         self._license_gate = license_gate
         self._diagnostic_journal = diagnostic_journal
         self._update_client = update_client
+        self._legacy_project = legacy_project
         self._update_controller = None
         self._initialization_overlay: InitializationProgressOverlay | None = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
@@ -535,7 +537,19 @@ class V3ApplicationView(QWidget):
         data = self._preferences.get(mode.value, {})
         if not isinstance(data, dict):
             data = {}
+        use_legacy = not data and self._legacy_project is not None
+        if use_legacy:
+            if mode is ProjectMode.PROCESSING:
+                state.processing.operations = state.processing.operations.from_dict(
+                    self._legacy_project.processing.operations.to_dict()
+                )
+            elif mode is ProjectMode.CLIPART:
+                state.clipart.operations = state.clipart.operations.from_dict(
+                    self._legacy_project.clipart.operations.to_dict()
+                )
         work_dir = str(self._preferences.get("last_work_dir", "")).strip()
+        if not work_dir and use_legacy:
+            work_dir = str(self._legacy_project.common.work_dir).strip()
         work_path = Path(work_dir).expanduser() if work_dir else default_work_directory()
         if not work_path.is_dir() or not os.access(work_path, os.W_OK):
             work_path = default_work_directory()

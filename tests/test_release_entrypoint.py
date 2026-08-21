@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QDialog, QWidget
+from PIL import Image
 
 import main
 from license_client import LicenseError, LicenseUnavailableError
@@ -67,6 +69,45 @@ class ReleaseEntrypointTests(unittest.TestCase):
                     window._runtime_settings()["local_realesrgan_dir"],
                     main.bundled_local_realesrgan_dir(),
                 )
+            finally:
+                window.close()
+
+    def test_production_entrypoint_seeds_new_v3_project_from_legacy_settings(self):
+        with tempfile.TemporaryDirectory(prefix="vibix-legacy-config-") as temp_dir:
+            root = Path(temp_dir)
+            config_path = root / "config.json"
+            legacy_work = root / "legacy-work"
+            legacy_work.mkdir()
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "run_mode": "process_only",
+                        "last_work_dir": str(legacy_work),
+                        "upscale": False,
+                        "remove_bg": True,
+                        "remove_bg_provider": "local_rembg",
+                        "local_rembg_model": "isnet-anime",
+                        "trim_enabled": True,
+                        "export_300_dpi": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch("main.CONFIG_FILE", str(config_path)), patch.object(
+                main.QStandardPaths, "writableLocation", return_value=str(root)
+            ):
+                window = create_v3_application_window()
+            try:
+                window._handle_mode_selected(ProjectMode.PROCESSING.value)
+                operations = window.shell.state.processing.operations
+                self.assertEqual(window.shell.state.common.work_dir, str(legacy_work))
+                self.assertTrue(operations.remove_background)
+                self.assertEqual(
+                    operations.remove_background_provider, "local_rembg"
+                )
+                self.assertEqual(operations.local_rembg_model, "isnet-anime")
+                self.assertTrue(operations.trim)
+                self.assertTrue(operations.export_300_dpi)
             finally:
                 window.close()
 
@@ -261,11 +302,18 @@ class ReleaseEntrypointTests(unittest.TestCase):
         import_rembg,
     ):
         validate_realesrgan.return_value = ("runtime/realesrgan-ncnn-vulkan.exe", "")
-        import_rembg.return_value = (lambda *_args, **_kwargs: object(), lambda *_args, **_kwargs: b"")
+        buffer = main.BytesIO()
+        Image.new("RGBA", (8, 8), (255, 0, 0, 128)).save(buffer, format="PNG")
+        session = object()
+        new_session = Mock(return_value=session)
+        remove = Mock(return_value=buffer.getvalue())
+        import_rembg.return_value = (new_session, remove)
 
         self.assertEqual(main.run_local_processing_entrypoint_check(), 0)
         validate_realesrgan.assert_called_once_with(main.bundled_local_realesrgan_dir())
         import_rembg.assert_called_once_with()
+        new_session.assert_called_once_with("u2netp")
+        self.assertIs(remove.call_args.kwargs["session"], session)
 
         validate_realesrgan.return_value = ("", "models missing")
         self.assertEqual(main.run_local_processing_entrypoint_check(), 1)

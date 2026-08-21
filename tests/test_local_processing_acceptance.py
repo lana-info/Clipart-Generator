@@ -71,6 +71,14 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             self.skipTest(error)
         return Path(exe_path)
 
+    def create_fake_realesrgan_runtime(self, root):
+        (root / main.REALESRGAN_EXE_NAME).write_bytes(b"fake")
+        models = root / "models"
+        models.mkdir()
+        for name in ("realesr-animevideov3-x2", "realesrgan-x4plus-anime"):
+            (models / f"{name}.bin").write_bytes(b"model")
+            (models / f"{name}.param").write_bytes(b"params")
+
     def test_clipart_2x_uses_model_present_in_bundled_runtime(self):
         self.assertEqual(
             main.get_local_realesrgan_model_name("clipart", 2),
@@ -165,6 +173,173 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "Real-ESRGAN"):
                 worker._run_local_realesrgan(str(source_path), str(Path(temp_dir) / "output.png"))
+
+    def test_local_realesrgan_keeps_straight_rgb_under_soft_alpha(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-soft-alpha-") as temp_dir:
+            root = Path(temp_dir)
+            self.create_fake_realesrgan_runtime(root)
+            source_path = root / "source.png"
+            output_path = root / "output.png"
+            Image.new("RGBA", (2, 2), (220, 10, 20, 128)).save(source_path)
+            worker = self.make_worker(root, local_realesrgan_dir=str(root))
+
+            class FakeProcess:
+                returncode = 0
+
+                def __init__(self, command, **_kwargs):
+                    with Image.open(command[command.index("-i") + 1]) as image:
+                        image.resize((4, 4)).save(command[command.index("-o") + 1])
+
+                def communicate(self, timeout=None):
+                    return "", ""
+
+                def poll(self):
+                    return self.returncode
+
+            with patch.object(main.subprocess, "Popen", FakeProcess):
+                worker._run_local_realesrgan(str(source_path), str(output_path), scale=2)
+
+            with Image.open(output_path) as result:
+                red, green, blue, alpha = result.getpixel((1, 1))
+            self.assertGreater(red, 200)
+            self.assertLess(green, 40)
+            self.assertLess(blue, 40)
+            self.assertGreater(alpha, 0)
+
+    def test_local_realesrgan_rejects_oversized_projected_output_before_launch(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-large-output-") as temp_dir:
+            root = Path(temp_dir)
+            self.create_fake_realesrgan_runtime(root)
+            source_path = root / "source.png"
+            Image.new("RGB", (3000, 3000), "white").save(source_path)
+            worker = self.make_worker(root, local_realesrgan_dir=str(root))
+
+            with patch.object(main.subprocess, "Popen") as popen:
+                with self.assertRaisesRegex(ValueError, "result.*pixel limit"):
+                    worker._run_local_realesrgan(
+                        str(source_path), str(root / "output.png"), scale=4
+                    )
+
+            popen.assert_not_called()
+
+    def test_local_rembg_failure_emits_exact_failed_stage(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-rembg-stage-") as temp_dir:
+            root = Path(temp_dir)
+            source_path = root / "source.png"
+            Image.new("RGB", (8, 8), "white").save(source_path)
+            worker = main.WorkerThread(
+                "mode2_process",
+                str(root),
+                worker_settings(
+                    remove_bg=True,
+                    remove_bg_provider="local_rembg",
+                ),
+                selected_files=[str(source_path)],
+            )
+            messages = []
+            worker.progress.connect(messages.append)
+            worker._run_local_rembg = types.MethodType(
+                lambda self, *_args: (_ for _ in ()).throw(RuntimeError("model failed")),
+                worker,
+            )
+
+            worker._mode2_process_files(emit_final=False)
+
+            self.assertIn(
+                "  Этап обработки: background_removal; status=running",
+                messages,
+            )
+            self.assertIn(
+                "  Этап обработки: background_removal; status=failed",
+                messages,
+            )
+            self.assertTrue(any("model failed" in message for message in messages))
+
+    def test_local_realesrgan_timeout_terminates_child_process(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-realesrgan-timeout-") as temp_dir:
+            root = Path(temp_dir)
+            self.create_fake_realesrgan_runtime(root)
+            source_path = root / "source.png"
+            Image.new("RGB", (8, 8), "white").save(source_path)
+            worker = self.make_worker(root, local_realesrgan_dir=str(root))
+
+            class HangingProcess:
+                returncode = None
+                terminated = False
+
+                def __init__(self, *_args, **_kwargs):
+                    pass
+
+                def poll(self):
+                    return self.returncode
+
+                def terminate(self):
+                    self.terminated = True
+                    self.returncode = -15
+
+                def kill(self):
+                    self.returncode = -9
+
+                def communicate(self, timeout=None):
+                    return "", ""
+
+            process = HangingProcess()
+            with patch.object(main.subprocess, "Popen", return_value=process), patch.object(
+                main, "LOCAL_REALESRGAN_TIMEOUT_SECONDS", 0
+            ):
+                with self.assertRaisesRegex(TimeoutError, "exceeded"):
+                    worker._run_local_realesrgan(
+                        str(source_path), str(root / "output.png"), scale=2
+                    )
+
+            self.assertTrue(process.terminated)
+
+    def test_invisible_cleanup_only_is_dispatched_as_local_processing(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-invisible-only-") as temp_dir:
+            root = Path(temp_dir)
+            source_path = root / "source.png"
+            Image.new("RGB", (8, 8), "white").save(source_path)
+            with patch.object(main, "gpu_backend_available", return_value=True):
+                worker = main.WorkerThread(
+                    "mode2_process",
+                    str(root),
+                    worker_settings(invisible_watermark_cleanup_enabled=True),
+                    selected_files=[str(source_path)],
+                )
+
+            def fake_cleanup(source, destination, **_kwargs):
+                shutil.copyfile(source, destination)
+
+            with patch.object(main, "clean_invisible_watermark", fake_cleanup):
+                worker._mode2_process_files(emit_final=False)
+
+            self.assertEqual(len(list((root / "output").glob("*.png"))), 1)
+
+    def test_local_realesrgan_reports_missing_selected_photo_model_before_launch(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photo-model-") as temp_dir:
+            root = Path(temp_dir)
+            self.create_fake_realesrgan_runtime(root)
+            source_path = root / "source.png"
+            Image.new("RGB", (8, 8), "white").save(source_path)
+            worker = self.make_worker(
+                root,
+                local_realesrgan_dir=str(root),
+                local_realesrgan_profile="photo",
+            )
+
+            with patch.object(main.subprocess, "Popen") as popen:
+                with self.assertRaisesRegex(ValueError, "realesrgan-x4plus"):
+                    worker._run_local_realesrgan(
+                        str(source_path), str(root / "output.png"), scale=4
+                    )
+
+            popen.assert_not_called()
+
+    def test_dpi_failure_keeps_safe_underlying_cause_for_technical_log(self):
+        worker = self.make_worker(Path.cwd())
+        with patch.object(main.Image, "open", side_effect=OSError("disk is read-only")):
+            with self.assertRaisesRegex(RuntimeError, "disk is read-only"):
+                worker._set_png_dpi("result.png", dpi=300)
 
     def test_local_process_without_kie_uses_expected_pipeline_order(self):
         with tempfile.TemporaryDirectory(prefix="clipart-local-pipeline-") as temp_dir:

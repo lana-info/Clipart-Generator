@@ -18,6 +18,8 @@ REQUIRED_FILES = (
     "models/realesr-animevideov3-x2.param",
     "models/realesrgan-x4plus-anime.bin",
     "models/realesrgan-x4plus-anime.param",
+    "models/realesrgan-x4plus.bin",
+    "models/realesrgan-x4plus.param",
 )
 
 

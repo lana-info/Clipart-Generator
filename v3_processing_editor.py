@@ -25,6 +25,7 @@ from v3_provider_registry import (
     KIE_MODEL_OPTIONS,
     LOCAL_REMBG_MODEL_OPTIONS,
     LOCAL_REMBG_PROFILE_OPTIONS,
+    LOCAL_REMBG_PROFILE_MODELS,
     processing_provider_options,
     upscale_model_preserves_alpha,
     provider_visible_controls,
@@ -584,6 +585,16 @@ class ProcessingPipelineEditor(QScrollArea):
         raise TypeError(f"Unsupported control: {type(control).__name__}")
 
     def _sync(self, *_: Any) -> None:
+        profile_combo = self.operation_widgets.get("local_rembg_profile")
+        model_combo = self.operation_widgets.get("local_rembg_model")
+        if self.sender() is profile_combo and isinstance(model_combo, QComboBox):
+            model_index = model_combo.findData(
+                LOCAL_REMBG_PROFILE_MODELS.get(profile_combo.currentData(), "")
+            )
+            if model_index >= 0:
+                previous = model_combo.blockSignals(True)
+                model_combo.setCurrentIndex(model_index)
+                model_combo.blockSignals(previous)
         current = self.state_owner.operations.to_dict()
         for name, control in self.operation_widgets.items():
             current[name] = self._value(control)

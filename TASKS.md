@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Download the installer from Azure run `77`, verify its
-SHA-256, then repeat focused Windows acceptance. Do not upload a revision before
-that exact artifact is approved.**
+Current next task: **Push the verified local-processing release candidate, run
+the explicitly approved Windows and macOS Azure pipelines, and inspect both
+artifacts. Do not upload a server revision before target-machine acceptance.**
 
 ## Phase 1 - Preparation
 
@@ -1751,3 +1751,28 @@ Verification:
 - [x] `compileall` and `git diff --check` passed.
 - [ ] Verify the Results screen and exported diagnostic ZIP in the next
   explicitly approved Windows Azure build; no Azure build was started here.
+
+### Task 69 - Local Processing Release Readiness
+
+Status: Source verified; Windows and macOS Azure builds explicitly approved and pending
+
+Implemented:
+- Preserve straight RGB under soft alpha in Local Real-ESRGAN, validate projected
+  output dimensions/pixels and the selected model before launch, and terminate a
+  hung process on cancellation or the bounded timeout.
+- Add the Photo model to the Windows runtime gate and strengthen macOS checks for
+  both slices of the universal runtime.
+- Make rembg profile presets select their documented models and show the first-run
+  model download sizes in the dropdown.
+- Emit exact background-removal stage states, retain safe DPI failure causes, redact
+  token-like output names, and reset retry progress correctly.
+- Restore legacy processing choices when V3 preferences do not yet exist and verify
+  a real QThread Trim + 300 DPI run reaches terminal Results with a valid output.
+- Exercise a tiny rembg inference in packaged Windows and macOS smoke checks.
+
+Verification:
+- [x] Full unittest suite: 541 passed, 2 expected environment/platform skips.
+- [x] Full pytest suite: 568 passed, 1 expected platform skip, 2 deselected,
+  and 73 subtests passed.
+- [x] `compileall`, sensitive-artifact scan, and `git diff --check` passed.
+- [ ] Run and inspect the approved Windows and macOS Azure builds.

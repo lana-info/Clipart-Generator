@@ -11,6 +11,7 @@ SECRET_KEY_PATTERN = re.compile(
     r"(?i)(?:api[_-]?key|authorization|bearer|credential|license[_-]?key|nonce|password|private[_-]?key|proof|secret|token)"
 )
 SECRET_VALUE_PATTERNS = (
+    re.compile(r"(?i)sk-[a-z0-9_-]{8,}"),
     re.compile(r"(?i)(bearer\s+)[^\s,;]+"),
     re.compile(
         r"(?i)((?:api[_-]?key|access[_-]?token|authorization|x-api-key|license[_-]?key|nonce|password|private[_-]?key|proof|secret|token)['\"]?\s*[:=]\s*['\"]?)[^&\s,;\"'}]+"

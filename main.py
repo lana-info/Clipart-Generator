@@ -14,6 +14,7 @@ import math
 import subprocess
 import shutil
 import threading
+from pathlib import Path
 from types import MappingProxyType
 from io import BytesIO, StringIO
 from urllib.parse import urlparse
@@ -141,6 +142,7 @@ MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
 MAX_UPDATE_DOWNLOAD_RETRIES = 3
 UPDATE_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 UPDATE_DOWNLOAD_TIMEOUT_SECONDS = 300
+LOCAL_REALESRGAN_TIMEOUT_SECONDS = 600
 
 
 class ProcessingCancelled(RuntimeError):
@@ -659,6 +661,16 @@ def validate_local_image_input(image_path):
         raise ValueError("Local input image is invalid") from exc
 
 
+def validate_local_realesrgan_output_size(image_path, scale):
+    with Image.open(image_path) as image:
+        width = image.width * scale
+        height = image.height * scale
+    if max(width, height) > MAX_PROVIDER_IMAGE_DIMENSION:
+        raise ValueError("Local Real-ESRGAN result exceeds dimension limit")
+    if width * height > MAX_PROVIDER_IMAGE_PIXELS:
+        raise ValueError("Local Real-ESRGAN result exceeds pixel limit")
+
+
 def validate_recraft_crisp_upscale_input(image_path):
     """Validate the local file against Recraft Crisp Upscale limits."""
     try:
@@ -935,6 +947,7 @@ class WorkerThread(QThread):
                     self._emit_file_progress(idx, total, 58)
                     if (
                         self.visible_mark_cleanup_enabled
+                        or self.invisible_watermark_cleanup_enabled
                         or self.upscale
                         or self.upscale_after
                         or self.unsharp_enabled
@@ -1012,6 +1025,7 @@ class WorkerThread(QThread):
 
         if not (
             self.visible_mark_cleanup_enabled
+            or self.invisible_watermark_cleanup_enabled
             or self.upscale
             or self.upscale_after
             or self.unsharp_enabled
@@ -1062,6 +1076,7 @@ class WorkerThread(QThread):
 
                 if (
                     self.visible_mark_cleanup_enabled
+                    or self.invisible_watermark_cleanup_enabled
                     or self.upscale
                     or self.upscale_after
                     or self.unsharp_enabled
@@ -1323,46 +1338,47 @@ class WorkerThread(QThread):
             self._ensure_running()
 
         if self.remove_bg:
-            if self._uses_local_rembg_remove_bg():
-                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-                nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
-                self._run_local_rembg(current_path, nobg_path)
-                self.progress.emit(f"  Промежуточный локальный без фона: {nobg_path}")
-                current_path = nobg_path
-                current_url = None
-                local_result = True
-            elif self._uses_local_ben2_remove_bg():
-                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-                nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
-                self._run_local_ben2(current_path, nobg_path)
-                self.progress.emit(f"  Промежуточный BEN2 без фона: {nobg_path}")
-                current_path = nobg_path
-                current_url = None
-                local_result = True
-            elif self._uses_photoroom_remove_bg():
-                current_path = self._ensure_local_path(
-                    current_path,
-                    current_url,
-                    raw_dir,
-                    idx,
-                    prefix,
-                    "photoroom_source",
-                )
-                nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
-                self._run_photoroom_remove_bg(current_path, nobg_path)
-                self.progress.emit(f"  Промежуточный PhotoRoom без фона: {nobg_path}")
-                current_path = nobg_path
-                current_url = None
-                local_result = True
-            else:
-                current_url = self._ensure_kie_url(current_url, current_path)
-                self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
-                current_url = self._kie_run_model_task(self.kie_remove_bg_model, current_url)
-                nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
-                self._download_file(current_url, nobg_path)
-                self.progress.emit(f"  Промежуточный без фона: {nobg_path}")
-                current_path = nobg_path
-                local_result = False
+            self.progress.emit("  Этап обработки: background_removal; status=running")
+            try:
+                if self._uses_local_rembg_remove_bg():
+                    current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+                    nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
+                    self._run_local_rembg(current_path, nobg_path)
+                    self.progress.emit(f"  Промежуточный локальный без фона: {nobg_path}")
+                    current_path = nobg_path
+                    current_url = None
+                    local_result = True
+                elif self._uses_local_ben2_remove_bg():
+                    current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+                    nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
+                    self._run_local_ben2(current_path, nobg_path)
+                    self.progress.emit(f"  Промежуточный BEN2 без фона: {nobg_path}")
+                    current_path = nobg_path
+                    current_url = None
+                    local_result = True
+                elif self._uses_photoroom_remove_bg():
+                    current_path = self._ensure_local_path(
+                        current_path, current_url, raw_dir, idx, prefix, "photoroom_source"
+                    )
+                    nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
+                    self._run_photoroom_remove_bg(current_path, nobg_path)
+                    self.progress.emit(f"  Промежуточный PhotoRoom без фона: {nobg_path}")
+                    current_path = nobg_path
+                    current_url = None
+                    local_result = True
+                else:
+                    current_url = self._ensure_kie_url(current_url, current_path)
+                    self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
+                    current_url = self._kie_run_model_task(self.kie_remove_bg_model, current_url)
+                    nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
+                    self._download_file(current_url, nobg_path)
+                    self.progress.emit(f"  Промежуточный без фона: {nobg_path}")
+                    current_path = nobg_path
+                    local_result = False
+            except Exception:
+                self.progress.emit("  Этап обработки: background_removal; status=failed")
+                raise
+            self.progress.emit("  Этап обработки: background_removal; status=complete")
             self._ensure_running()
 
         if self.upscale_after:
@@ -1580,7 +1596,13 @@ class WorkerThread(QThread):
         validate_local_image_input(input_path)
 
         scale = normalize_local_realesrgan_scale(scale or self.local_realesrgan_scale)
+        validate_local_realesrgan_output_size(input_path, scale)
         model_name = get_local_realesrgan_model_name(self.local_realesrgan_profile, scale)
+        models_dir = os.path.join(os.path.dirname(exe_path), "models")
+        for suffix in (".bin", ".param"):
+            model_path = os.path.join(models_dir, model_name + suffix)
+            if not os.path.isfile(model_path):
+                raise ValueError(f"Не найдена модель Real-ESRGAN: {model_path}")
         actual_input_path = input_path
         alpha_channel = None
         temp_dir = None
@@ -1590,9 +1612,7 @@ class WorkerThread(QThread):
                 alpha_channel = source_rgba.getchannel("A")
                 temp_dir = tempfile.TemporaryDirectory()
                 actual_input_path = os.path.join(temp_dir.name, "realesrgan_rgb_input.png")
-                background = Image.new("RGB", source_rgba.size, (255, 255, 255))
-                background.paste(source_rgba.convert("RGB"), mask=alpha_channel)
-                background.save(actual_input_path, format="PNG")
+                source_rgba.convert("RGB").save(actual_input_path, format="PNG")
         try:
             command = [
                 exe_path,
@@ -1605,20 +1625,42 @@ class WorkerThread(QThread):
                 "-s",
                 str(scale),
             ]
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 command,
                 cwd=os.path.dirname(exe_path),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                check=False,
             )
+            deadline = time.monotonic() + LOCAL_REALESRGAN_TIMEOUT_SECONDS
+            while True:
+                self._ensure_running()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"Local Real-ESRGAN exceeded {LOCAL_REALESRGAN_TIMEOUT_SECONDS} seconds"
+                    )
+                try:
+                    stdout, stderr = process.communicate(timeout=min(0.25, remaining))
+                    break
+                except subprocess.TimeoutExpired:
+                    continue
+        except (ProcessingCancelled, TimeoutError):
+            if "process" in locals() and process.poll() is None:
+                process.terminate()
+                try:
+                    process.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate()
+            raise
         finally:
             if temp_dir is not None:
                 temp_dir.cleanup()
-        if completed.returncode != 0:
-            stderr = (completed.stderr or "").strip()
-            stdout = (completed.stdout or "").strip()
-            details = stderr or stdout or f"exit code {completed.returncode}"
+        if process.returncode != 0:
+            stderr = (stderr or "").strip()
+            stdout = (stdout or "").strip()
+            details = stderr or stdout or f"exit code {process.returncode}"
             raise RuntimeError(f"Local Real-ESRGAN failed: {details}")
         if not os.path.isfile(output_path):
             raise RuntimeError(f"Local Real-ESRGAN did not create output file: {output_path}")
@@ -3172,7 +3214,8 @@ class WorkerThread(QThread):
                 )
         except Exception as e:
             raise RuntimeError(
-                f"Не удалось установить DPI для {os.path.basename(file_path)}"
+                f"Не удалось установить DPI для {os.path.basename(file_path)}: "
+                f"{self._safe_error_text(e, limit=200)}"
             ) from e
 
     @staticmethod
@@ -3189,7 +3232,8 @@ class WorkerThread(QThread):
                     raise ValueError("DPI metadata does not match")
         except Exception as error:
             raise RuntimeError(
-                f"Не удалось подтвердить DPI {dpi} для итогового PNG"
+                f"Не удалось подтвердить DPI {dpi} для итогового PNG: "
+                f"{safe_error_text(error, limit=200)}"
             ) from error
 
 
@@ -6878,6 +6922,7 @@ def create_v3_application_window():
     from update_client import UpdateClient, current_platform_id
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
     from v3_license import OnlineLicenseGate
+    from v3_project_state import migrate_v2_config
 
     config = {}
     try:
@@ -6922,6 +6967,7 @@ def create_v3_application_window():
         license_gate=OnlineLicenseGate(license_client),
         diagnostic_journal=diagnostic_journal,
         update_client=update_client,
+        legacy_project=migrate_v2_config(config) if config else None,
     )
     diagnostic_journal.record(
         "application_ui_ready",
@@ -7169,15 +7215,23 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
 
 
 def run_local_processing_entrypoint_check() -> int:
-    """Check packaged local runtimes without downloading a model or processing a file."""
+    """Exercise the packaged local runtimes with a tiny rembg inference."""
     _, realesrgan_error = validate_local_realesrgan_exe(bundled_local_realesrgan_dir())
     if realesrgan_error:
         return 1
     try:
         new_session, remove = import_rembg_tools()
+        source = BytesIO()
+        Image.new("RGB", (8, 8), "white").save(source, format="PNG")
+        session = new_session("u2netp")
+        result_data = remove(source.getvalue(), session=session)
+        with Image.open(BytesIO(result_data)) as result:
+            result.load()
+            if result.size != (8, 8) or "A" not in result.getbands():
+                return 1
     except Exception:
         return 1
-    return 0 if callable(new_session) and callable(remove) else 1
+    return 0
 
 
 if __name__ == "__main__":

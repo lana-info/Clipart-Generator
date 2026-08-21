@@ -75,10 +75,10 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertEqual(
             LOCAL_REMBG_MODEL_OPTIONS,
             (
-                ("BiRefNet — общий", "birefnet-general"),
-                ("BiRefNet — портрет", "birefnet-portrait"),
-                ("IS-Net — аниме", "isnet-anime"),
-                ("IS-Net — общий", "isnet-general-use"),
+                ("BiRefNet — общий (~928 МБ при первом запуске)", "birefnet-general"),
+                ("BiRefNet — портрет (~928 МБ при первом запуске)", "birefnet-portrait"),
+                ("IS-Net — аниме (~168 МБ при первом запуске)", "isnet-anime"),
+                ("IS-Net — общий (~170 МБ при первом запуске)", "isnet-general-use"),
             ),
         )
 

@@ -13,15 +13,20 @@ PREPARE_SCRIPT = ROOT_DIR / "scripts" / "prepare_realesrgan_runtime.py"
 
 
 class WindowsRealEsrganBundleTests(unittest.TestCase):
-    def _write_archive(self, path: Path, *, include_models: bool) -> str:
+    def _write_archive(
+        self, path: Path, *, include_models: bool, include_photo: bool = True
+    ) -> str:
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("realesrgan-ncnn-vulkan.exe", b"test executable")
             archive.writestr("vcomp140.dll", b"test runtime")
             if include_models:
-                for name in (
+                names = [
                     "realesr-animevideov3-x2",
                     "realesrgan-x4plus-anime",
-                ):
+                ]
+                if include_photo:
+                    names.append("realesrgan-x4plus")
+                for name in names:
                     archive.writestr(f"models/{name}.bin", b"model")
                     archive.writestr(f"models/{name}.param", b"parameters")
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -58,6 +63,8 @@ class WindowsRealEsrganBundleTests(unittest.TestCase):
             self.assertTrue((target / "models" / "realesr-animevideov3-x2.param").is_file())
             self.assertTrue((target / "models" / "realesrgan-x4plus-anime.bin").is_file())
             self.assertTrue((target / "models" / "realesrgan-x4plus-anime.param").is_file())
+            self.assertTrue((target / "models" / "realesrgan-x4plus.bin").is_file())
+            self.assertTrue((target / "models" / "realesrgan-x4plus.param").is_file())
 
     def test_rejects_archive_without_required_models(self):
         with tempfile.TemporaryDirectory(prefix="realesrgan-incomplete-") as temp:
@@ -70,6 +77,21 @@ class WindowsRealEsrganBundleTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("required Real-ESRGAN file is missing", result.stderr)
+            self.assertFalse(target.exists())
+
+    def test_rejects_archive_without_photo_model(self):
+        with tempfile.TemporaryDirectory(prefix="realesrgan-no-photo-") as temp:
+            root = Path(temp)
+            archive = root / "runtime.zip"
+            target = root / "runtime"
+            digest = self._write_archive(
+                archive, include_models=True, include_photo=False
+            )
+
+            result = self._run_prepare(archive, target, digest)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("realesrgan-x4plus", result.stderr)
             self.assertFalse(target.exists())
 
     def test_rejects_archive_with_wrong_sha256(self):
