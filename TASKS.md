@@ -1660,7 +1660,7 @@ Verification:
 
 ### Task 66 - macOS Azure Release
 
-Status: Implementation verified locally; Azure packaging and Mac acceptance pending
+Status: Azure artifact verified; Mac acceptance pending
 
 Implemented:
 - Add a separate manual Azure pipeline for an unsigned `macos-x64` `.app`
@@ -1676,8 +1676,14 @@ Implemented:
   API credentials, license state, diagnostics, and update downloads.
 
 Verification:
-- [x] Full Linux-safe suite: 532 passed, 1 expected platform skip, 2 deselected.
+- [x] Full Linux-safe suite: 534 passed, 1 expected platform skip, 2 deselected,
+  plus 73 unittest subtests.
 - [x] Real-ESRGAN macOS archive SHA-256 and universal arm64 slice verified.
-- [ ] Azure `macos-x64` artifact build.
+- [x] Azure run `91` succeeded from source commit `6b41682`; artifact
+  `macos-x64` contains `VibixImages-macOS-3.0.2-x64.zip` (`245630259` bytes)
+  and a matching SHA-256 sidecar:
+  `04d4bf58f085f5239a7a6a5c46c3b6470d32ee6d116828ee383d29708399f6d9`.
+- [x] The downloaded ZIP passed `unzip -t`; the application launcher and bundled
+  Real-ESRGAN executable are Mach-O x86_64 binaries with executable permissions.
 - [ ] Manual Gatekeeper acknowledgement, launch, licensing, provider, and update
   acceptance on Apple Silicon hardware.

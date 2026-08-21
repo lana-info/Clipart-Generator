@@ -6,7 +6,8 @@ Updated: 2026-08-21
 
 - VDS is the primary development environment.
 - Windows is the environment for Windows-specific behavior and visual verification.
-- GitHub is the handoff point between environments.
+- GitHub is the source-code handoff point between environments; release
+  artifacts are built and published by Azure Pipelines.
 - Only one side edits the active branch at a time.
 - Before changing sides, the active side runs relevant checks, commits, and pushes.
 - The receiving side uses `git fetch` and `git pull --ff-only`.
@@ -23,11 +24,10 @@ Updated: 2026-08-21
 
 ## Next task
 
-Build the unsigned Intel/Rosetta application through the manual
-`azure-pipelines-macos.yml` pipeline, verify the ZIP and SHA-256 artifact, then
-perform focused acceptance on a real Mac. The server supports a separate
-`macos-x64` revision; do not publish that revision until the downloaded Azure
-artifact has passed the Mac launch and licensing checks.
+Perform focused acceptance of the verified Azure run `91` artifact on a real
+Mac. The server supports a separate `macos-x64` revision; do not publish that
+revision until the downloaded Azure artifact has passed the Mac launch and
+licensing checks.
 
 ## Blockers and risks
 
@@ -60,6 +60,9 @@ artifact has passed the Mac launch and licensing checks.
 - Azure's hosted macOS ARM64 preview is paused. The Azure artifact is x86_64 and
   requires Apple's free Rosetta 2 on Apple Silicon; a native ARM64 build would
   require a self-hosted Apple Silicon agent or a different CI provider.
+- Azure run `91` succeeded from source commit `6b41682`; artifact `macos-x64`
+  contains `VibixImages-macOS-3.0.2-x64.zip` (`245630259` bytes) with SHA-256
+  `04d4bf58f085f5239a7a6a5c46c3b6470d32ee6d116828ee383d29708399f6d9`.
 
 ## Approved brand direction
 
