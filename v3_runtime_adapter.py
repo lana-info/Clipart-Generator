@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Protocol
@@ -25,7 +26,13 @@ LEGACY_STAGE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("Удаление контура:", "edge_cleanup"),
     ("Промежуточный без контура:", "edge_cleanup"),
     ("Trim ", "trim"),
+    ("Установлен DPI ", "export_300_dpi"),
+    ("Не удалось установить DPI ", "export_300_dpi"),
     ("Очистка файла:", "metadata_cleanup"),
+)
+_STAGE_EVENT = re.compile(
+    r"^Этап обработки: (?P<stage>[a-z0-9_]+); "
+    r"status=(?P<status>running|complete|failed|skipped)$"
 )
 
 
@@ -45,11 +52,14 @@ class RuntimeAdapter(Protocol):
 
 def legacy_progress_stage(message: str) -> tuple[str, str] | None:
     text = str(message or "").strip()
+    structured = _STAGE_EVENT.fullmatch(text)
+    if structured:
+        return structured.group("stage"), structured.group("status")
     for prefix, stage in LEGACY_STAGE_PREFIXES:
         if not text.startswith(prefix):
             continue
         lowered = text.casefold()
-        if "ошибка" in lowered:
+        if "ошибка" in lowered or "не удалось" in lowered:
             status = "failed"
         elif any(marker in lowered for marker in ("пропущ", "не потребовал", "не найден", "не требуется")):
             status = "skipped"

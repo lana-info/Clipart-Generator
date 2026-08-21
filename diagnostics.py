@@ -33,6 +33,8 @@ _ALLOWED_DETAILS = {
     "current_version",
     "decision",
     "downloaded_bytes",
+    "elapsed_ms",
+    "enabled_stages",
     "error_code",
     "error_message",
     "filename",
@@ -44,13 +46,17 @@ _ALLOWED_DETAILS = {
     "license_key",
     "mode",
     "model",
+    "model_routes",
     "operation_type",
+    "output_bytes",
     "provider",
+    "provider_routes",
     "reason",
     "stage",
     "status",
     "task",
     "total_bytes",
+    "trim_mode",
 }
 _SECRET_KEYS = {"api_key", "license_key", "token", "proof", "password", "secret"}
 _PROHIBITED_KEYS = {"prompt", "image", "raw_response", "environment", "device_private_key"}
@@ -161,7 +167,8 @@ class DiagnosticJournal:
                 return item
             try:
                 current_size = self.session_path.stat().st_size
-                if current_size + len(encoded) > self.session_max_bytes:
+                reserve = 0 if self._truncated else len(self._truncated_marker_bytes())
+                if current_size + len(encoded) + reserve > self.session_max_bytes:
                     self._dropped_events += 1
                     self._write_truncated_marker(current_size)
                     return item
@@ -224,6 +231,12 @@ class DiagnosticJournal:
         if self._truncated:
             return
         self._truncated = True
+        encoded = self._truncated_marker_bytes()
+        if current_size + len(encoded) <= self.session_max_bytes:
+            with self.session_path.open("ab") as handle:
+                handle.write(encoded)
+
+    def _truncated_marker_bytes(self) -> bytes:
         marker = {
             "schema_version": 1,
             "timestamp": self._now().astimezone(timezone.utc).isoformat(),
@@ -234,10 +247,7 @@ class DiagnosticJournal:
             "app_version": self.app_version,
             "platform": _safe_text(f"{platform.system()} {platform.release()}", 120),
         }
-        encoded = self._encode_bounded(marker)
-        if current_size + len(encoded) <= self.session_max_bytes:
-            with self.session_path.open("ab") as handle:
-                handle.write(encoded)
+        return self._encode_bounded(marker)
 
     def _prune(self) -> None:
         if self.session_path is None or not self.directory.is_dir():

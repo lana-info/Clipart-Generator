@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from v3_project_state import ProjectMode
 from v3_run_queue import ProgressEvent, RunQueueSession
+from v3_runtime_adapter import legacy_progress_stage
 
 
 class StructuredProgressTests(unittest.TestCase):
@@ -36,6 +37,16 @@ class StructuredProgressTests(unittest.TestCase):
         self.assertEqual(session.progress_percent, 42)
         session.handle_progress_value(10)
         self.assertEqual(session.progress_percent, 42)
+
+    def test_machine_stage_markers_distinguish_upscale_positions(self) -> None:
+        self.assertEqual(
+            legacy_progress_stage("Этап обработки: upscale_before; status=running"),
+            ("upscale_before", "running"),
+        )
+        self.assertEqual(
+            legacy_progress_stage("Этап обработки: upscale_after; status=complete"),
+            ("upscale_after", "complete"),
+        )
 
 
 if __name__ == "__main__":

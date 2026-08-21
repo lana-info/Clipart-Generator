@@ -333,7 +333,7 @@ class V3ApplicationView(QWidget):
             recent_project = self._load_recent_project()
         if recent_project is not None:
             self.set_recent_project(recent_project)
-        self.show_new_project()
+        self.show_new_project(trigger="application_start")
         if self._update_client is not None:
             from v3_updater import UpdateController
 
@@ -437,14 +437,23 @@ class V3ApplicationView(QWidget):
         self._recent_project = None
         self.mode_selection.set_recent_project_summary(None)
 
-    def show_new_project(self) -> None:
+    def _set_application_screen(self, widget: QWidget, screen: str, status: str) -> None:
+        self.stack.setCurrentWidget(widget)
+        self.screen_changed.emit(screen)
+        self._diagnostic_event(
+            "screen_changed",
+            "Изменился экран приложения.",
+            screen=screen,
+            details={"status": status},
+        )
+
+    def show_new_project(self, *, trigger: str = "new_project_requested") -> None:
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self.mode_selection.reset_selection()
         self.mode_selection.set_mode_switch_context(False)
         self.mode_selection.set_recent_project_summary(self._recent_project)
         self.refresh_license_status()
-        self.stack.setCurrentWidget(self.mode_selection)
-        self.screen_changed.emit("mode_selection")
+        self._set_application_screen(self.mode_selection, "mode_selection", trigger)
 
     def show_mode_switcher(self) -> None:
         if self.shell is None:
@@ -454,15 +463,21 @@ class V3ApplicationView(QWidget):
         self.mode_selection.reset_selection()
         self.mode_selection.set_mode_switch_context(True)
         self.mode_selection.set_recent_project_summary(None)
-        self.stack.setCurrentWidget(self.mode_selection)
-        self.screen_changed.emit("mode_selection")
+        self._set_application_screen(
+            self.mode_selection,
+            "mode_selection",
+            "mode_switch_requested",
+        )
 
     def cancel_mode_switch(self) -> bool:
         if self.shell is None:
             return False
         self.mode_selection.set_mode_switch_context(False)
-        self.stack.setCurrentWidget(self.shell)
-        self.screen_changed.emit("wizard")
+        self._set_application_screen(
+            self.shell,
+            "wizard",
+            "mode_switch_cancelled",
+        )
         return True
 
     def _handle_mode_selected(self, mode_value: str) -> None:
@@ -479,8 +494,11 @@ class V3ApplicationView(QWidget):
         ):
             self._ensure_mode_controller(self.shell, mode)
             self.shell.request_mode_switch(mode)
-            self.stack.setCurrentWidget(self.shell)
-            self.screen_changed.emit("wizard")
+            self._set_application_screen(
+                self.shell,
+                "wizard",
+                "mode_switched",
+            )
             return
 
         state = ProjectState(mode=mode)
@@ -606,14 +624,14 @@ class V3ApplicationView(QWidget):
         shell.initialization_stage.connect(self._show_initialization_stage)
         self._ensure_mode_controller(shell, state.mode)
         shell.state_changed.connect(self._save_draft)
+        shell.step_changed.connect(self._record_workflow_step)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         shell.api_settings_requested.connect(self._show_api_settings)
         shell.diagnostics_requested.connect(self._show_diagnostics)
         shell.finish_requested.connect(self._finish_workflow)
         self.shell = shell
         self.stack.addWidget(shell)
-        self.stack.setCurrentWidget(shell)
-        self.screen_changed.emit("wizard")
+        self._set_application_screen(shell, "wizard", "project_opened")
         self._save_draft()
 
     def _ensure_mode_controller(self, shell: AppShell, mode: ProjectMode) -> Any:
@@ -681,4 +699,22 @@ class V3ApplicationView(QWidget):
 
     def _finish_workflow(self, _mode: str) -> None:
         """Return to mode selection without reusing the completed shell."""
-        self.show_new_project()
+        self._diagnostic_event(
+            "workflow_finished",
+            "Пользователь завершил работу с экраном результатов.",
+            screen="results",
+            outcome="success",
+            details={
+                "mode": _mode,
+                "status": "explicit_user_action",
+            },
+        )
+        self.show_new_project(trigger="workflow_finished")
+
+    def _record_workflow_step(self, mode: str, step: str) -> None:
+        self._diagnostic_event(
+            "workflow_step_changed",
+            "Открыт следующий этап рабочего процесса.",
+            screen=step,
+            details={"mode": mode, "stage": step},
+        )

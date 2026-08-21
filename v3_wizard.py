@@ -482,12 +482,13 @@ class AppShell(QWidget):
 
     def _refresh_footer(self) -> None:
         index = self.state.route.index(self.state.current_step)
-        self.back_button.setEnabled(index > 0)
+        on_results = self.state.current_step is StepId.RESULTS
+        self.back_button.setVisible(not on_results)
+        self.next_button.setVisible(not on_results)
+        self.back_button.setEnabled(index > 0 and not on_results)
 
         if self.state.current_step is StepId.REVIEW_RUN:
             text = "Запустить"
-        elif self.state.current_step is StepId.RESULTS:
-            text = "Готово"
         else:
             text = "Далее"
         self.next_button.setText(text)
@@ -539,9 +540,9 @@ class AppShell(QWidget):
 
     def go_next(self) -> StepId:
         if self.state.current_step is StepId.RESULTS:
-            self._clear_validation()
-            self.finish_requested.emit(self.state.mode.value)
-            self.refresh()
+            # Results have their own terminal-only action.  Reusing this
+            # focused button would turn the preceding "Запустить" input into
+            # an accidental reset to mode selection.
             return self.state.current_step
 
         if self.state.current_step is StepId.REVIEW_RUN:

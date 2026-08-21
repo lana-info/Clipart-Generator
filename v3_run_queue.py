@@ -59,6 +59,8 @@ _STOP_MARKERS = (
     "Остановлено пользователем",
     "Остановлено после текущего файла",
 )
+_LOG_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^\r\n,;]+")
+_LOG_POSIX_PATH = re.compile(r"(?<![:/])/(?:[^/\s;]+/)+([^/\s;]+)")
 
 
 class RunQueueError(ValueError):
@@ -184,6 +186,116 @@ def _safe_technical_error_details(message: Any) -> tuple[str, dict[str, str]]:
     return technical_message, details
 
 
+def _safe_technical_log_text(value: Any) -> str:
+    text = redact_text(value, limit=500)
+    text = _LOG_WINDOWS_PATH.sub(
+        lambda match: "<path>/" + match.group(0).replace("\\", "/").rsplit("/", 1)[-1],
+        text,
+    )
+    return _LOG_POSIX_PATH.sub(lambda match: f"<path>/{match.group(1)}", text)
+
+
+def _enabled_run_stages(settings: Any, mode: ProjectMode) -> list[str]:
+    source = settings if isinstance(settings, dict) else dict(settings or {})
+    stages: list[str] = []
+    if mode is not ProjectMode.PROCESSING:
+        stages.append("generation")
+    for enabled, stage in (
+        (source.get("visible_mark_cleanup_enabled"), "visible_mark_cleanup"),
+        (source.get("invisible_watermark_cleanup_enabled"), "invisible_watermark_cleanup"),
+        (source.get("upscale"), "upscale_before"),
+        (source.get("unsharp_enabled"), "unsharp"),
+        (source.get("remove_bg"), "background_removal"),
+        (source.get("upscale_after"), "upscale_after"),
+        (source.get("edge_shrink_enabled"), "edge_cleanup"),
+        (source.get("trim_enabled"), "trim"),
+        (
+            any(
+                source.get(name)
+                for name in (
+                    "cleanup_remove_exif",
+                    "cleanup_remove_xmp",
+                    "cleanup_remove_iptc",
+                    "cleanup_remove_comments_text",
+                    "cleanup_remove_embedded_thumbnail",
+                    "cleanup_remove_generator_fields",
+                    "cleanup_remove_embedded_c2pa",
+                )
+            ),
+            "metadata_cleanup",
+        ),
+        (source.get("export_300_dpi"), "export_300_dpi"),
+    ):
+        if enabled:
+            stages.append(stage)
+    stages.append("export")
+    return stages
+
+
+def _provider_model_routes(
+    settings: Any,
+    mode: ProjectMode,
+) -> tuple[list[str], list[str]]:
+    source = settings if isinstance(settings, dict) else dict(settings or {})
+    providers: list[str] = []
+    models: list[str] = []
+    if mode is not ProjectMode.PROCESSING:
+        providers.append("generation:kie")
+        for route, key in (
+            ("text_generation", "text_generation_model"),
+            ("reference_generation", "reference_generation_model"),
+        ):
+            model = str(source.get(key) or "").strip()
+            if model:
+                models.append(f"{route}:{model}")
+    for enabled_key, stage, provider_key in (
+        ("upscale", "upscale_before", "upscale_provider"),
+        ("remove_bg", "background_removal", "remove_bg_provider"),
+        ("upscale_after", "upscale_after", "upscale_after_provider"),
+    ):
+        if not source.get(enabled_key):
+            continue
+        provider = str(source.get(provider_key) or "unknown").strip()
+        providers.append(f"{stage}:{provider}")
+        if stage == "background_removal":
+            model_key = (
+                "kie_remove_bg_model"
+                if provider == "kie"
+                else "local_rembg_model"
+                if provider == "local_rembg"
+                else ""
+            )
+        elif stage == "upscale_after":
+            model_key = (
+                "kie_upscale_after_model"
+                if provider == "kie"
+                else "local_realesrgan_after_scale"
+                if provider == "local_realesrgan"
+                else ""
+            )
+        else:
+            model_key = (
+                "kie_upscale_model"
+                if provider == "kie"
+                else "local_realesrgan_profile"
+                if provider == "local_realesrgan"
+                else ""
+            )
+        model = str(source.get(model_key) or "").strip() if model_key else ""
+        if provider == "local_realesrgan":
+            profile = str(source.get("local_realesrgan_profile") or "clipart").strip()
+            scale_key = (
+                "local_realesrgan_after_scale"
+                if stage == "upscale_after"
+                else "local_realesrgan_scale"
+            )
+            scale = str(source.get(scale_key) or "").strip()
+            model = f"{profile}-{scale}x" if scale else profile
+        if model:
+            models.append(f"{stage}:{model}")
+    return providers, models
+
+
 def _request_items(request: Any, mode: ProjectMode) -> list[RunItem]:
     generated = list(getattr(request, "generated_prompts", []) or [])
     selected = list(getattr(request, "selected_files", []) or [])
@@ -257,18 +369,66 @@ class RunQueueSession(QObject):
         self._technical_events: list[str] = []
         self._diagnostic_journal = diagnostic_journal
         self.operation_id = uuid.uuid4().hex
-        self._event("run_started", count=len(self.items))
+        settings = getattr(request, "settings", {}) or {}
+        provider_routes, model_routes = _provider_model_routes(settings, mode)
+        self._event(
+            "run_started",
+            count=len(self.items),
+            operation_type=str(getattr(request, "mode", "") or ""),
+            enabled_stages=_enabled_run_stages(settings, mode),
+            provider_routes=provider_routes,
+            model_routes=model_routes,
+            trim_mode=(
+                str(settings.get("trim_mode") or "")
+                if settings.get("trim_enabled")
+                else ""
+            ),
+        )
 
     def _event(self, name: str, **fields: Any) -> None:
         if len(self._technical_events) >= MAX_TECHNICAL_EVENTS:
             return
-        parts = [f"event={name}"]
+        elapsed_ms = max(0, round((time.monotonic() - self.started_at) * 1000))
+        parts = [
+            f"seq={len(self._technical_events) + 1}",
+            f"elapsed_ms={elapsed_ms}",
+            f"operation_id={self.operation_id}",
+            f"mode={self.mode.value}",
+            f"event={name}",
+        ]
         for key, value in fields.items():
-            if isinstance(value, (bool, int)) or (
+            if key == "elapsed_ms" or value is None or value == "" or value == [] or value == {}:
+                continue
+            if key == "error_message":
+                parts.append(
+                    f"error_message={json.dumps(_safe_technical_log_text(value), ensure_ascii=False)}"
+                )
+            elif key == "filename":
+                parts.append(
+                    f"filename={json.dumps(Path(str(value)).name, ensure_ascii=False)}"
+                )
+            elif isinstance(value, (bool, int)) or (
                 isinstance(value, str)
                 and re.fullmatch(r"[a-z0-9_.-]{1,80}", value)
             ):
                 parts.append(f"{key}={str(value).lower() if isinstance(value, bool) else value}")
+            elif isinstance(value, (list, tuple)) and all(
+                isinstance(item, str)
+                and re.fullmatch(r"[a-z0-9_./:-]{1,160}", item)
+                for item in value
+            ):
+                parts.append(f"{key}={','.join(value)}")
+            elif isinstance(value, dict) and all(
+                isinstance(item_key, str)
+                and re.fullmatch(r"[a-z0-9_.-]{1,80}", item_key)
+                and isinstance(item_value, (bool, int))
+                for item_key, item_value in value.items()
+            ):
+                compact = ",".join(
+                    f"{item_key}:{str(item_value).lower() if isinstance(item_value, bool) else item_value}"
+                    for item_key, item_value in sorted(value.items())
+                )
+                parts.append(f"{key}={compact}")
         self._technical_events.append(" ".join(parts))
         if self._diagnostic_journal is not None:
             summaries = {
@@ -287,13 +447,23 @@ class RunQueueSession(QObject):
             for source, target in (
                 ("item", "item_index"),
                 ("count", "item_total"),
+                ("operation_type", "operation_type"),
                 ("attempt", "attempt"),
                 ("reason", "reason"),
                 ("stage", "stage"),
+                ("status", "status"),
                 ("task", "task"),
                 ("error_code", "error_code"),
                 ("error_message", "error_message"),
                 ("http_status", "http_status"),
+                ("enabled_stages", "enabled_stages"),
+                ("trim_mode", "trim_mode"),
+                ("provider_routes", "provider_routes"),
+                ("model_routes", "model_routes"),
+                ("filename", "filename"),
+                ("output_bytes", "output_bytes"),
+                ("counts", "counts"),
+                ("elapsed_ms", "elapsed_ms"),
             ):
                 if source in fields:
                     details[target] = fields[source]
@@ -440,7 +610,7 @@ class RunQueueSession(QObject):
             self._cancel_pending()
             self.running = False
             self.finished_at = time.monotonic()
-            self._event("run_cancelled")
+            self._record_run_cancelled()
             self.changed.emit()
             return
 
@@ -484,11 +654,44 @@ class RunQueueSession(QObject):
             trusted = _trusted_worker_path(raw, self.output_dir)
             if trusted:
                 item.output_path = trusted
-                self._close_running_stages(item, "complete")
-                item.stage_statuses["export"] = "complete"
-                item.status = RunItemStatus.SUCCEEDED
-                item.short_message = "Результат сохранён."
-                self._event("item_succeeded", item=item.index)
+                try:
+                    output_bytes = Path(trusted).stat().st_size
+                except OSError:
+                    output_bytes = 0
+                failed_stage = next(
+                    (
+                        stage
+                        for stage, status in item.stage_statuses.items()
+                        if status == "failed"
+                    ),
+                    "",
+                )
+                if failed_stage:
+                    self._close_running_stages(item, "failed")
+                    item.stage_statuses["export"] = "complete"
+                    item.status = RunItemStatus.FAILED
+                    item.short_message = (
+                        "Файл создан, но один из выбранных этапов завершился ошибкой."
+                    )
+                    self._event(
+                        "item_failed",
+                        item=item.index,
+                        reason="stage_failed",
+                        stage=failed_stage,
+                        filename=Path(trusted).name,
+                        output_bytes=output_bytes,
+                    )
+                else:
+                    self._close_running_stages(item, "complete")
+                    item.stage_statuses["export"] = "complete"
+                    item.status = RunItemStatus.SUCCEEDED
+                    item.short_message = "Результат сохранён."
+                    self._event(
+                        "item_succeeded",
+                        item=item.index,
+                        filename=Path(trusted).name,
+                        output_bytes=output_bytes,
+                    )
             else:
                 self._close_running_stages(item, "failed")
                 item.status = RunItemStatus.FAILED
@@ -554,7 +757,16 @@ class RunQueueSession(QObject):
             self._cancel_pending()
             self.running = False
             self.finished_at = time.monotonic()
-            self._event("run_cancelled")
+            self._record_run_cancelled()
+
+    def _record_run_cancelled(self) -> None:
+        if self.finished_at is None:
+            self.finished_at = time.monotonic()
+        self._event(
+            "run_cancelled",
+            counts=self.counts(),
+            elapsed_ms=round((self.finished_at - self.started_at) * 1000),
+        )
 
     def _cancel_pending(self) -> None:
         for item in self.items:
@@ -588,7 +800,7 @@ class RunQueueSession(QObject):
             self._cancel_pending()
             self.running = False
             self.finished_at = time.monotonic()
-            self._event("run_cancelled")
+            self._record_run_cancelled()
         self.changed.emit()
         return True
 
@@ -610,7 +822,12 @@ class RunQueueSession(QObject):
         self.current_index = None
         self.running = False
         self.finished_at = time.monotonic()
-        self._event("run_failed" if incomplete else "run_finished", reason="missing_completion" if incomplete else "")
+        self._event(
+            "run_failed" if incomplete else "run_finished",
+            reason="missing_completion" if incomplete else "",
+            counts=self.counts(),
+            elapsed_ms=round((self.finished_at - self.started_at) * 1000),
+        )
         self.changed.emit()
 
     def handle_fatal_error(self, message: Any) -> None:
@@ -633,7 +850,12 @@ class RunQueueSession(QObject):
         self.current_index = None
         self.running = False
         self.finished_at = time.monotonic()
-        self._event("run_failed", reason=code)
+        self._event(
+            "run_failed",
+            reason=code,
+            counts=self.counts(),
+            elapsed_ms=round((self.finished_at - self.started_at) * 1000),
+        )
         self.changed.emit()
 
     def prepare_retry(self) -> Any | None:
@@ -839,6 +1061,7 @@ class RunResultsPage(QWidget):
     stop_requested = pyqtSignal()
     retry_requested = pyqtSignal()
     process_more_requested = pyqtSignal()
+    finish_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -929,6 +1152,11 @@ class RunResultsPage(QWidget):
             ButtonVariant.SECONDARY,
         )
         self.process_more_button.clicked.connect(self.process_more_requested.emit)
+        self.finish_button = V3Button(
+            "Завершить и на главную",
+            ButtonVariant.SECONDARY,
+        )
+        self.finish_button.clicked.connect(self.finish_requested.emit)
         self.open_folder_button = V3Button(
             "Открыть папку с результатами",
             ButtonVariant.PRIMARY,
@@ -948,6 +1176,7 @@ class RunResultsPage(QWidget):
             self.stop_button,
             self.retry_button,
             self.process_more_button,
+            self.finish_button,
         ):
             workflow_layout.addWidget(button)
         workflow_layout.addStretch()
@@ -994,6 +1223,7 @@ class RunResultsPage(QWidget):
             self.stop_button.hide()
             self.retry_button.hide()
             self.process_more_button.hide()
+            self.finish_button.hide()
             self.open_folder_button.setEnabled(False)
             self.log_button.setEnabled(False)
             self.export_button.setEnabled(False)
@@ -1026,15 +1256,18 @@ class RunResultsPage(QWidget):
         stop_visible = session.running and not session.stop_after_current_requested
         retry_visible = not session.running and bool(session.failed_indices)
         process_more_visible = not session.running
+        finish_visible = not session.running
         self.stop_button.setVisible(stop_visible)
         self.retry_button.setVisible(retry_visible)
         self.process_more_button.setVisible(process_more_visible)
+        self.finish_button.setVisible(finish_visible)
         self.workflow_actions.setVisible(
-            stop_visible or retry_visible or process_more_visible
+            stop_visible or retry_visible or process_more_visible or finish_visible
         )
         self.utility_actions.setVisible(True)
         self.stop_button.setEnabled(stop_visible)
         self.retry_button.setEnabled(retry_visible)
+        self.finish_button.setEnabled(finish_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
         self.log_button.setEnabled(True)
         self.export_button.setEnabled(True)
@@ -1227,6 +1460,12 @@ class RunQueueSupport:
         self.page.stop_requested.connect(self.stop_after_current)
         self.page.retry_requested.connect(self.retry_failed)
         self.page.process_more_requested.connect(self.process_more)
+        self.page.finish_requested.connect(self.finish_workflow)
+
+    def finish_workflow(self) -> None:
+        if self.session is None or self.session.running:
+            return
+        self.controller.shell.finish_requested.emit(self.mode.value)
 
     def process_more(self) -> None:
         if self.session is not None and self.session.running:

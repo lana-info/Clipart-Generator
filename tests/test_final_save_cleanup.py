@@ -220,6 +220,8 @@ class FinalSaveCleanupTests(unittest.TestCase):
                 selected_files=[str(source_path)],
             )
             self.assertTrue(worker.metadata_cleanup_options.preserve_dpi)
+            progress = []
+            worker.progress.connect(progress.append)
             worker._mode2_process_files(emit_final=False)
 
             output_path = next((temp_path / "output").glob("*.png"))
@@ -230,6 +232,10 @@ class FinalSaveCleanupTests(unittest.TestCase):
             self.assertFalse(inspection["categories"]["comments_text"]["present"])
             self.assertTrue(inspection["categories"]["xmp"]["present"])
             self.assertTrue(inspection["categories"]["icc_profile"]["present"])
+            self.assertEqual(
+                sum(message.startswith("  Установлен DPI 300") for message in progress),
+                1,
+            )
 
     def test_trim_cannot_hide_c2pa_before_explicit_cleanup(self):
         with tempfile.TemporaryDirectory(prefix="clipart-final-cleanup-c2pa-") as temp_dir:

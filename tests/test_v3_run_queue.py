@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import QApplication
 
 from license_client import LicenseError
 from v3_clipart_flow import ClipartRunRequest, install_clipart_flow
+from v3_processing_flow import install_processing_flow
 from v3_project_state import (
     CommonProjectData,
     ProjectMode,
@@ -256,6 +257,9 @@ class V3RunQueueTests(unittest.TestCase):
                 session.items[1].status,
                 RunItemStatus.CANCELLED,
             )
+            self.assertIn("event=run_cancelled", session.technical_log)
+            self.assertIn("counts=", session.technical_log)
+            self.assertIn("elapsed_ms=", session.technical_log)
 
     def test_stop_after_current_uses_native_boundary_and_cancels_pending(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-stop-") as temp:
@@ -378,6 +382,27 @@ class V3RunQueueTests(unittest.TestCase):
                 details["error_message"],
                 "provider could not process image",
             )
+            self.assertIn(
+                'error_message="provider could not process image"',
+                session.technical_log,
+            )
+
+    def test_technical_error_keeps_the_cause_but_redacts_secrets_and_paths(self):
+        with tempfile.TemporaryDirectory(prefix="v3-safe-error-") as temp:
+            private_path = Path(temp) / "private" / "model.onnx"
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "input.png"]),
+                ProjectMode.PROCESSING,
+            )
+            session.handle_progress("[1/1] Обработка файла: input.png")
+            session.handle_fatal_error(
+                f"Local rembg DLL load failed at {private_path}; api_key={SECRET_KEY}"
+            )
+
+            self.assertIn("Local rembg DLL load failed", session.technical_log)
+            self.assertIn("<path>/model.onnx", session.technical_log)
+            self.assertNotIn(str(private_path), session.technical_log)
+            self.assertNotIn(SECRET_KEY, session.technical_log)
 
 
     def test_untrusted_output_path_is_rejected_not_succeeded(self):
@@ -547,6 +572,156 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertNotIn(SECRET_KEY, log)
             shell.close()
             shell.deleteLater()
+
+    def test_results_replace_the_focused_run_action_with_a_terminal_only_finish_action(self):
+        with tempfile.TemporaryDirectory(prefix="v3-results-finish-") as temp:
+            state = ProjectState(
+                mode=ProjectMode.PROCESSING,
+                common=CommonProjectData(work_dir=temp),
+            )
+            state.set_step(StepId.RESULTS)
+            shell = AppShell(state)
+            page = RunResultsPage(state)
+            shell.set_step_page(ProjectMode.PROCESSING, StepId.RESULTS, page)
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "input.png"]),
+                ProjectMode.PROCESSING,
+            )
+            page.set_session(session)
+            shell.next_button.setFocus()
+            shell.refresh()
+
+            self.assertTrue(shell.next_button.isHidden())
+            self.assertTrue(page.finish_button.isHidden())
+            unexpected_finish: list[str] = []
+            shell.finish_requested.connect(unexpected_finish.append)
+            shell.go_next()
+            self.assertEqual(unexpected_finish, [])
+
+            output = Path(temp) / "output" / "input.png"
+            output.parent.mkdir()
+            Image.new("RGB", (4, 4), "white").save(output)
+            session.handle_progress("[1/1] Обработка файла: input.png")
+            session.handle_progress(f"Итог сохранён: {output}")
+            session.handle_finished()
+
+            self.assertFalse(page.finish_button.isHidden())
+            finish_events: list[bool] = []
+            page.finish_requested.connect(lambda: finish_events.append(True))
+            page.finish_button.click()
+            self.assertEqual(finish_events, [True])
+            shell.close()
+            shell.deleteLater()
+
+    def test_results_finish_signal_is_ignored_until_the_queue_is_terminal(self):
+        with tempfile.TemporaryDirectory(prefix="v3-terminal-guard-") as temp:
+            state = ProjectState(
+                mode=ProjectMode.PROCESSING,
+                common=CommonProjectData(work_dir=temp),
+            )
+            shell = AppShell(state)
+            controller = install_processing_flow(shell, worker_factory=WorkerFactory())
+            session = controller.run_queue.start_new(
+                processing_request(temp, [Path(temp) / "input.png"])
+            )
+            finish_events: list[str] = []
+            shell.finish_requested.connect(finish_events.append)
+
+            controller.run_queue.page.finish_requested.emit()
+            self.assertEqual(finish_events, [])
+
+            session.handle_fatal_error("local processing failed")
+            controller.run_queue.page.finish_requested.emit()
+            self.assertEqual(finish_events, [ProjectMode.PROCESSING.value])
+            shell.close()
+            shell.deleteLater()
+
+    def test_technical_log_is_ordered_and_identifies_the_exact_local_stages(self):
+        with tempfile.TemporaryDirectory(prefix="v3-technical-log-") as temp:
+            root = Path(temp)
+            output = root / "output" / "result.png"
+            output.parent.mkdir()
+            Image.new("RGB", (4, 4), "white").save(output)
+            request = ClipartRunRequest(
+                mode="mode2_process",
+                work_dir=str(root),
+                settings={
+                    "output_dir": str(output.parent),
+                    "trim_enabled": True,
+                    "trim_mode": "software_background",
+                    "export_300_dpi": True,
+                    "kie_api_key": SECRET_KEY,
+                },
+                selected_files=[str(root / "private-source.png")],
+            )
+            session = RunQueueSession(request, ProjectMode.PROCESSING)
+            session.handle_progress("[1/1] Обработка файла: private-source.png")
+            session.handle_progress("Trim по программному фону: 20x20 → 12x12")
+            session.handle_progress("Установлен DPI 300 для result.png")
+            session.handle_progress(f"Итог сохранён: {output}")
+            session.handle_finished()
+
+            log = session.technical_log
+            self.assertIn("seq=1", log)
+            self.assertIn(f"operation_id={session.operation_id}", log)
+            self.assertIn("enabled_stages=trim,export_300_dpi,export", log)
+            self.assertIn(
+                "event=stage_updated item=1 stage=export_300_dpi status=complete",
+                log,
+            )
+            self.assertIn('event=item_succeeded item=1 filename="result.png"', log)
+            self.assertIn("event=run_finished", log)
+            self.assertIn("elapsed_ms=", log)
+            self.assertNotIn(str(root), log)
+            self.assertNotIn(SECRET_KEY, log)
+
+    def test_output_file_does_not_hide_a_failed_selected_stage(self):
+        with tempfile.TemporaryDirectory(prefix="v3-stage-failed-") as temp:
+            root = Path(temp)
+            output = root / "output" / "result.png"
+            output.parent.mkdir()
+            Image.new("RGB", (4, 4), "white").save(output)
+            request = ClipartRunRequest(
+                mode="mode2_process",
+                work_dir=str(root),
+                settings={
+                    "output_dir": str(output.parent),
+                    "export_300_dpi": True,
+                },
+                selected_files=[str(root / "source.png")],
+            )
+            session = RunQueueSession(request, ProjectMode.PROCESSING)
+
+            session.handle_progress("[1/1] Обработка файла: source.png")
+            session.handle_progress("Не удалось установить DPI для result.png: save failed")
+            session.handle_progress(f"Итог сохранён: {output}")
+            session.handle_finished()
+
+            self.assertIs(session.items[0].status, RunItemStatus.FAILED)
+            self.assertEqual(session.items[0].output_path, str(output.resolve()))
+            self.assertEqual(
+                session.items[0].stage_statuses["export_300_dpi"],
+                "failed",
+            )
+            self.assertIn("reason=stage_failed", session.technical_log)
+
+    def test_technical_log_keeps_safe_cyrillic_output_filename(self):
+        with tempfile.TemporaryDirectory(prefix="v3-cyrillic-output-") as temp:
+            root = Path(temp)
+            output = root / "output" / "Мой результат 01.PNG"
+            output.parent.mkdir()
+            Image.new("RGB", (4, 4), "white").save(output)
+            session = RunQueueSession(
+                processing_request(root, [root / "source.png"]),
+                ProjectMode.PROCESSING,
+            )
+            session.handle_progress("[1/1] Обработка файла: source.png")
+            session.handle_progress(f"Итог сохранён: {output}")
+
+            self.assertIn(
+                'filename="Мой результат 01.PNG"',
+                session.technical_log,
+            )
 
     def test_retry_does_not_start_worker_when_online_authorization_fails(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-license-retry-") as temp:

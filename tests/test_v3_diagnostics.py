@@ -3,12 +3,14 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from PIL import Image
 from PyQt6.QtWidgets import QApplication
 
+import main
 from diagnostics import DiagnosticJournal
 from v3_diagnostics import DiagnosticJournalDialog
 from v3_mode_selection import V3ApplicationView
-from v3_project_state import ProjectMode
+from v3_project_state import ProjectMode, StepId
 from v3_run_queue import RunQueueSession
 
 
@@ -59,6 +61,203 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             self.assertIn("item_failed", raw)
             self.assertIn("timeout", raw)
             self.assertNotIn(str(root), raw)
+
+    def test_run_start_identifies_local_provider_and_model_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            request = SimpleNamespace(
+                work_dir=str(root),
+                settings={
+                    "output_dir": str(root / "output"),
+                    "remove_bg": True,
+                    "remove_bg_provider": "local_rembg",
+                    "local_rembg_profile": "quality",
+                    "local_rembg_model": "isnet-general-use",
+                },
+                generated_prompts=[],
+                selected_files=[str(root / "source.png")],
+            )
+
+            RunQueueSession(
+                request,
+                ProjectMode.PROCESSING,
+                diagnostic_journal=journal,
+            )
+
+            started = next(
+                event for event in journal.read_events()
+                if event["event"] == "run_started"
+            )
+            self.assertEqual(
+                started["details"]["provider_routes"],
+                ["background_removal:local_rembg"],
+            )
+            self.assertEqual(
+                started["details"]["model_routes"],
+                ["background_removal:isnet-general-use"],
+            )
+
+    def test_generation_run_identifies_kie_models_and_operation_type(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            request = SimpleNamespace(
+                mode="mode1_generate_only",
+                work_dir=str(root),
+                settings={
+                    "text_generation_model": "gpt-image-2",
+                    "reference_generation_model": "gpt-image-2-image-to-image",
+                },
+                generated_prompts=[{"prompt": "private", "references": []}],
+                selected_files=[],
+            )
+
+            RunQueueSession(
+                request,
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+
+            started = next(
+                event for event in journal.read_events()
+                if event["event"] == "run_started"
+            )
+            self.assertEqual(started["details"]["operation_type"], "mode1_generate_only")
+            self.assertEqual(started["details"]["provider_routes"], ["generation:kie"])
+            self.assertEqual(
+                started["details"]["model_routes"],
+                [
+                    "text_generation:gpt-image-2",
+                    "reference_generation:gpt-image-2-image-to-image",
+                ],
+            )
+
+    def test_trim_print_run_records_configuration_stages_output_and_terminal_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output_dir = root / "output"
+            source = root / "private-source.png"
+            image = Image.new("RGB", (20, 20), "white")
+            for x in range(4, 16):
+                for y in range(5, 15):
+                    image.putpixel((x, y), (20, 40, 60))
+            image.save(source)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            settings = {
+                "output_dir": str(output_dir),
+                "upscale": False,
+                "upscale_after": False,
+                "unsharp_enabled": False,
+                "remove_bg": False,
+                "edge_shrink_enabled": False,
+                "trim_enabled": True,
+                "trim_mode": "white",
+                "export_300_dpi": True,
+                "kie_api_key": "sk-secret-value",
+            }
+            request = SimpleNamespace(
+                mode="mode2_process",
+                work_dir=str(root),
+                settings=settings,
+                generated_prompts=[],
+                selected_files=[str(source)],
+            )
+            session = RunQueueSession(
+                request,
+                ProjectMode.PROCESSING,
+                diagnostic_journal=journal,
+            )
+            worker = main.WorkerThread(
+                "mode2_process",
+                str(root),
+                settings,
+                selected_files=[str(source)],
+            )
+            worker.progress.connect(session.handle_progress)
+            worker.progress_value.connect(session.handle_progress_value)
+            worker._mode2_process_files(emit_final=False)
+            session.handle_finished()
+            output = next(output_dir.glob("*.png"))
+
+            events = list(reversed(journal.read_events()))
+            started = next(event for event in events if event["event"] == "run_started")
+            succeeded = next(event for event in events if event["event"] == "item_succeeded")
+            finished = next(event for event in events if event["event"] == "run_finished")
+            stages = [
+                event["details"]
+                for event in events
+                if event["event"] == "stage_updated"
+            ]
+
+            self.assertEqual(
+                started["details"]["enabled_stages"],
+                ["trim", "export_300_dpi", "export"],
+            )
+            self.assertEqual(started["details"]["trim_mode"], "white")
+            self.assertIn(
+                {"mode": "processing", "item_index": 1, "stage": "export_300_dpi", "status": "complete"},
+                stages,
+            )
+            self.assertEqual(succeeded["details"]["filename"], output.name)
+            self.assertEqual(succeeded["details"]["output_bytes"], output.stat().st_size)
+            self.assertEqual(finished["details"]["counts"]["succeeded"], 1)
+            self.assertIn("elapsed_ms", finished["details"])
+            raw = journal.session_path.read_text(encoding="utf-8")
+            self.assertNotIn(str(root), raw)
+            self.assertNotIn("sk-secret-value", raw)
+
+    def test_explicit_results_exit_records_what_screen_changed_and_why(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            view = V3ApplicationView(
+                draft_path=root / "project_state.json",
+                diagnostic_journal=journal,
+            )
+            view._handle_mode_selected(ProjectMode.PROCESSING.value)
+            view.shell.state.set_step(StepId.RESULTS)
+            view.shell.refresh()
+
+            view.shell.finish_requested.emit(ProjectMode.PROCESSING.value)
+
+            events = journal.read_events()
+            finished = next(event for event in events if event["event"] == "workflow_finished")
+            screen = next(
+                event
+                for event in events
+                if event["event"] == "screen_changed"
+                and event.get("screen") == "mode_selection"
+                and event.get("details", {}).get("status") == "workflow_finished"
+            )
+            self.assertEqual(finished["screen"], "results")
+            self.assertEqual(finished["details"]["mode"], "processing")
+            self.assertEqual(finished["details"]["status"], "explicit_user_action")
+            self.assertEqual(screen["screen"], "mode_selection")
+            view.close()
+
+    def test_mode_switch_screen_transitions_are_recorded_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.0")
+            view = V3ApplicationView(diagnostic_journal=journal)
+            view._handle_mode_selected(ProjectMode.PROCESSING.value)
+            view.show_mode_switcher()
+            view.cancel_mode_switch()
+
+            transitions = [
+                event
+                for event in reversed(journal.read_events())
+                if event["event"] == "screen_changed"
+            ]
+            self.assertEqual(
+                [event["details"]["status"] for event in transitions[-3:]],
+                ["project_opened", "mode_switch_requested", "mode_switch_cancelled"],
+            )
+            self.assertEqual(
+                [event["screen"] for event in transitions[-3:]],
+                ["wizard", "mode_selection", "wizard"],
+            )
+            view.close()
 
     def test_local_processing_failure_keeps_safe_technical_reason(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -146,10 +345,16 @@ class V3DiagnosticJournalTests(unittest.TestCase):
                 event for event in journal.read_events()
                 if event["event"] == "item_failed"
             )
+            run_failed = next(
+                event for event in journal.read_events()
+                if event["event"] == "run_failed"
+            )
             self.assertEqual(
                 failed["details"]["error_message"],
                 "Local rembg is not available: DLL load failed; api_key=[hidden]",
             )
+            self.assertEqual(run_failed["details"]["counts"]["failed"], 1)
+            self.assertIn("elapsed_ms", run_failed["details"])
             self.assertNotIn("sk-secret-value", journal.session_path.read_text(encoding="utf-8"))
 
 

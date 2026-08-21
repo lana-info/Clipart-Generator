@@ -74,6 +74,13 @@ class DiagnosticJournalTests(unittest.TestCase):
             )
             for line in journal.session_path.read_text(encoding="utf-8").splitlines():
                 self.assertIsInstance(json.loads(line), dict)
+            self.assertEqual(
+                sum(
+                    json.loads(line).get("event") == "log_truncated"
+                    for line in journal.session_path.read_text(encoding="utf-8").splitlines()
+                ),
+                1,
+            )
 
     def test_unwritable_journal_falls_back_to_memory_without_blocking(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.object(

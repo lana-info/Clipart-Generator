@@ -1453,6 +1453,8 @@ class WorkerThread(QThread):
         local_scale,
         kie_model,
     ):
+        stage = "upscale_after" if "after" in step_name else "upscale_before"
+        self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "local_realesrgan":
             current_path = self._ensure_local_path(
                 current_path,
@@ -1477,6 +1479,7 @@ class WorkerThread(QThread):
                     del self._active_local_realesrgan_scale
                 else:
                     self._active_local_realesrgan_scale = previous_scale
+            self.progress.emit(f"  Этап обработки: {stage}; status=complete")
             return current_path, None, True
 
         if kie_model == "recraft/crisp-upscale" and current_path and os.path.isfile(current_path):
@@ -1492,12 +1495,14 @@ class WorkerThread(QThread):
             model_name=kie_model,
         )
         current_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
+        self.progress.emit(f"  Этап обработки: {stage}; status=complete")
         return current_path, current_url, False
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
 
         if self.upscale:
+            self.progress.emit("  Этап обработки: upscale_before; status=running")
             pipeline_url = self._upscale_pipeline_step(
                 pipeline_url,
                 raw_dir,
@@ -1506,6 +1511,7 @@ class WorkerThread(QThread):
                 "upscaled",
                 self._resolve_upscale_factor(),
             )
+            self.progress.emit("  Этап обработки: upscale_before; status=complete")
 
         if self.remove_bg:
             self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
@@ -1829,7 +1835,13 @@ class WorkerThread(QThread):
                 self._save_image_as_png(source_path, stage_path)
 
             self._ensure_running()
+            if self.export_300_dpi:
+                self._verify_png_dpi(stage_path, dpi=300)
             self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
+            if self.export_300_dpi:
+                self.progress.emit(
+                    f"  Установлен DPI 300 для {os.path.basename(output_path)}"
+                )
         finally:
             if stage_path and os.path.exists(stage_path):
                 try:
@@ -3158,9 +3170,27 @@ class WorkerThread(QThread):
                     format="PNG",
                     **self._get_png_save_kwargs(img, dpi_override=dpi),
                 )
-            self.progress.emit(f"  Установлен DPI {dpi} для {os.path.basename(file_path)}")
         except Exception as e:
-            self.progress.emit(f"  Не удалось установить DPI для {os.path.basename(file_path)}: {e}")
+            raise RuntimeError(
+                f"Не удалось установить DPI для {os.path.basename(file_path)}"
+            ) from e
+
+    @staticmethod
+    def _verify_png_dpi(file_path, dpi=300):
+        try:
+            with Image.open(file_path) as image:
+                actual = image.info.get("dpi")
+                if (
+                    not isinstance(actual, (tuple, list))
+                    or len(actual) < 2
+                    or abs(float(actual[0]) - dpi) > 1
+                    or abs(float(actual[1]) - dpi) > 1
+                ):
+                    raise ValueError("DPI metadata does not match")
+        except Exception as error:
+            raise RuntimeError(
+                f"Не удалось подтвердить DPI {dpi} для итогового PNG"
+            ) from error
 
 
 class PromptTableWidget(QTableWidget):

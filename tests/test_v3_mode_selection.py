@@ -314,7 +314,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         completed_shell.state.set_step(StepId.RESULTS)
         completed_shell.refresh()
 
-        completed_shell.next_button.click()
+        completed_shell.finish_requested.emit(ProjectMode.PROCESSING.value)
         self.app.processEvents()
 
         self.assertIs(view.stack.currentWidget(), view.mode_selection)

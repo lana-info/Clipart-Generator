@@ -19,7 +19,7 @@ Updated: 2026-08-21
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/fix-windows-local-processing-3-0-2`
+- Current task branch: `codex/fix-diagnostics-results-state`
 - Branch base: `codex/feature-macos-release` at `ac76deb`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -28,10 +28,11 @@ Updated: 2026-08-21
 ## Next task
 
 Wait for explicit owner approval of the next platform-specific Azure build.
-The current Windows installer must not be treated as the local-processing
-candidate: its Real-ESRGAN archive lacks `models`. After a separately requested
-Windows build, repeat Local Real-ESRGAN and Local rembg acceptance. macOS run
-`91` remains available for focused acceptance on a real Mac.
+The current Windows installer must not be treated as the local-processing or
+Results/diagnostics candidate: it lacks the corrected Real-ESRGAN runtime and
+the new terminal Results state. After a separately requested Windows build,
+repeat Local Real-ESRGAN, Local rembg, Trim + 300 DPI Results, and diagnostic-ZIP
+acceptance. macOS run `91` remains available for focused acceptance on a real Mac.
 
 ## Blockers and risks
 
@@ -52,6 +53,9 @@ Windows build, repeat Local Real-ESRGAN and Local rembg acceptance. macOS run
   only after explicit owner approval.
 - Do not start an Azure Windows or macOS release build unless the owner
   explicitly requests that platform's build after the desired fixes are ready.
+- Source now keeps successful worker completion on Results and records an
+  ordered privacy-safe technical trail. The exact packaged Windows focus,
+  layout, and exported-ZIP behavior still require the next approved build.
 - The verified 3.0.1 installer and Azure run `77` artifact are historical
   evidence only; neither contains the current fix pack.
 - The clean release candidate passes `545` tests with one Linux skip because

@@ -1723,3 +1723,31 @@ Verification:
   `git diff --check` passed.
 - [ ] Run a new manual Windows Azure build only after explicit owner approval,
   then retest Local Real-ESRGAN and Local rembg in the packaged application.
+
+### Task 68 - Results State And Actionable Diagnostics
+
+Status: Source fix verified; packaged Windows acceptance pending
+
+Implemented:
+- Keep the shared `Запустить` navigation action out of the Results state so its
+  retained keyboard focus cannot reset the workflow to mode selection.
+- Show a separate `Завершить и на главную` action only after the queue reaches
+  a terminal state; worker completion itself remains on Results.
+- Record ordered, privacy-safe run events with sequence number, elapsed time,
+  operation ID, mode, enabled stages, provider/model routes, per-stage status,
+  output filename/size, terminal counts, and sanitized technical errors.
+- Record workflow step changes and explicit Results exits so support can tell
+  whether the application navigated because of a user action.
+- Reserve room for one `log_truncated` marker when the bounded journal reaches
+  its size limit.
+
+Verification:
+- [x] TDD regressions failed before implementation and pass afterward for the
+  Results transition, Trim + 300 DPI event trail, provider/model routes,
+  sanitized errors, explicit screen exit, and truncation marker.
+- [x] A real WorkerThread Trim + white-background + 300-DPI run created the
+  expected PNG and produced ordered Trim, DPI, output, and terminal events.
+- [x] Full unittest suite: 530 passed, 2 expected environment/platform skips.
+- [x] `compileall` and `git diff --check` passed.
+- [ ] Verify the Results screen and exported diagnostic ZIP in the next
+  explicitly approved Windows Azure build; no Azure build was started here.
