@@ -45,12 +45,21 @@ class ConfigSchemaTests(unittest.TestCase):
             path.write_text('{"schema_version": 1,', encoding="utf-8")
             self.assertEqual(load_preferences(path)["schema_version"], PREFERENCES_SCHEMA_VERSION)
 
-    def test_output_dir_does_not_follow_invalid_configured_path(self):
+    def test_output_dir_preserves_configured_path_with_writable_parent(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             fallback = work / "output"
             fallback.mkdir()
-            self.assertEqual(resolve_output_directory(work, work / "missing"), fallback)
+            configured = work / "missing"
+            self.assertEqual(resolve_output_directory(work, configured), configured)
+
+    def test_output_dir_falls_back_when_configured_parent_is_invalid(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            fallback = work / "output"
+            fallback.mkdir()
+            configured = work / "missing-parent" / "missing"
+            self.assertEqual(resolve_output_directory(work, configured), fallback)
 
 
 if __name__ == "__main__":
