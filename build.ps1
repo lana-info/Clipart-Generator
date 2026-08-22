@@ -60,6 +60,7 @@ Write-Host "==> Build app with PyInstaller"
     --collect-submodules "scipy._external.array_api_compat" `
     --collect-submodules "rembg.sessions" `
     --copy-metadata "rembg" `
+    --copy-metadata "pymatting" `
     main.py
 
 if ($LASTEXITCODE -ne 0) {
