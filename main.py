@@ -21,6 +21,29 @@ from urllib.parse import urlparse
 from urllib import error as urlerror
 from urllib import request, parse
 from datetime import datetime, timedelta, timezone
+
+
+_GUI_NULL_STREAMS = []
+
+
+def ensure_gui_standard_streams():
+    """Provide writable streams when a windowed executable has no console."""
+    created_streams = []
+    for stream_name in ("stdout", "stderr"):
+        if getattr(sys, stream_name, None) is not None:
+            continue
+        stream = open(os.devnull, "w", encoding="utf-8")
+        setattr(sys, stream_name, stream)
+        _GUI_NULL_STREAMS.append(stream)
+        created_streams.append(stream)
+    return tuple(created_streams)
+
+
+# PyInstaller's Windows --windowed mode sets both streams to None. Some local
+# ML dependencies (notably tqdm during rembg model download) still write to
+# stderr and otherwise fail before inference starts.
+ensure_gui_standard_streams()
+
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata

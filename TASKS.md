@@ -1784,7 +1784,7 @@ Verification:
 
 ### Task 70 - Installed Local Background Runtime Repair
 
-Status: Source fix verified; explicitly approved Windows build pending
+Status: Source fix verified; replacement Windows build pending
 
 Implemented:
 - Restore `Local BEN2` in the provider selector and preserve existing BEN2
@@ -1805,17 +1805,19 @@ Implemented:
   release plus local-processing smoke checks from that installed copy.
 - Collect SciPy's dynamically imported Array API compatibility modules required
   by rembg in the Windows PyInstaller package.
+- Provide writable null standard streams in a windowed Windows process so rembg's
+  first-model-download progress cannot fail when no console is attached.
 
 Verification:
 - [x] TDD regressions failed before implementation and pass afterward for BEN2
   selection/help, pinned build dependencies, rembg import, installer cleanup,
   prerequisite inclusion, and installed-artifact Azure verification.
-- [x] Full unittest suite: 556 passed, 2 expected environment/platform skips.
-- [x] Full pytest suite: 583 passed, 1 expected platform skip, 2 deselected,
+- [x] Full unittest suite: 557 passed, 2 expected environment/platform skips.
+- [x] Full pytest suite: 584 passed, 1 expected platform skip, 2 deselected,
   and 73 subtests passed.
 - [x] `py_compile`, PowerShell parsing, model pin/size/hash verification, and
   `git diff --check` passed.
 - [x] Real official BEN2 ONNX inference completed with a valid `64x64` RGBA
   result and alpha range `(0, 255)` using bounded ONNX Runtime session options.
-- [ ] Run a replacement Windows Azure build only after explicit owner approval;
-  monitor it every ten minutes and repair/retry the same platform if Azure fails.
+- [ ] Run the explicitly approved replacement Windows Azure build; monitor it and
+  repair/retry the same platform if Azure fails.

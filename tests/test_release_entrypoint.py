@@ -1,5 +1,6 @@
 import os
 import json
+import sys
 import tempfile
 import types
 import unittest
@@ -304,6 +305,18 @@ class ReleaseEntrypointTests(unittest.TestCase):
             result = main.import_rembg_tools()
 
         self.assertEqual(result, (fake_rembg.new_session, fake_rembg.remove))
+
+    def test_gui_runtime_provides_writable_streams_without_a_console(self):
+        with patch.object(sys, "stdout", None), patch.object(sys, "stderr", None):
+            created_streams = main.ensure_gui_standard_streams()
+
+            self.assertIsNotNone(sys.stdout)
+            self.assertIsNotNone(sys.stderr)
+            sys.stdout.write("stdout probe")
+            sys.stderr.write("stderr probe")
+
+        for stream in created_streams:
+            stream.close()
 
     @patch("main.load_local_ben2_model")
     @patch("main.import_rembg_tools")
