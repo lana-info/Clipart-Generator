@@ -73,8 +73,6 @@ begin
     Result := 'Для завершения установки системных компонентов Microsoft требуется перезагрузка Windows. Перезагрузите компьютер и затем снова запустите установщик Vibix Images.';
   end
   else if (ResultCode <> 0) and (ResultCode <> 1638) then
-    Result := Format(
-      'Не удалось установить системные компоненты Microsoft (код %d).',
-      [ResultCode]
-    );
+    Result := 'Не удалось установить системные компоненты Microsoft (код ' +
+      IntToStr(ResultCode) + ').';
 end;
