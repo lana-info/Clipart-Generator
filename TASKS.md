@@ -1820,7 +1820,8 @@ Verification:
 - [x] Real official BEN2 ONNX inference completed with a valid `64x64` RGBA
   result and alpha range `(0, 255)` using bounded ONNX Runtime session options.
 - [x] Azure Windows run `116` succeeded from commit `6ed1537`; its installed-copy
-  gate exercised Local Real-ESRGAN plus real rembg and BEN2 inference.
+  gate validated the bundled Local Real-ESRGAN runtime and performed real rembg
+  and BEN2 inference.
 - [x] Azure macOS x64 run `117` succeeded from the same commit; its packaged
   release and local-processing gates passed.
 - [x] Downloaded artifacts match their SHA-256 sidecars; the macOS ZIP also
