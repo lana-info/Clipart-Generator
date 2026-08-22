@@ -1,8 +1,41 @@
 import unittest
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 
 class WindowsInstallerContractTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is not available")
+    def test_packaging_removes_only_top_level_vc_runtime_duplicates(self):
+        with tempfile.TemporaryDirectory(prefix="vibix-vc-runtime-") as temp:
+            app_dir = Path(temp) / "Vibix Images"
+            internal_dir = app_dir / "_internal"
+            nested_dir = internal_dir / "PyQt6" / "Qt6" / "bin"
+            nested_dir.mkdir(parents=True)
+            for name in ("msvcp140.dll", "vcruntime140_1.dll", "onnxruntime.dll"):
+                (internal_dir / name).write_bytes(b"fixture")
+            (nested_dir / "MSVCP140.dll").write_bytes(b"fixture")
+
+            subprocess.run(
+                [
+                    shutil.which("pwsh"),
+                    "-NoProfile",
+                    "-File",
+                    "scripts/remove_bundled_vc_runtime.ps1",
+                    "-AppDir",
+                    str(app_dir),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertFalse((internal_dir / "msvcp140.dll").exists())
+            self.assertFalse((internal_dir / "vcruntime140_1.dll").exists())
+            self.assertTrue((internal_dir / "onnxruntime.dll").exists())
+            self.assertTrue((nested_dir / "MSVCP140.dll").exists())
+
     def test_upgrade_removes_stale_native_runtime_before_copy(self):
         installer = Path("installer.iss").read_text(encoding="utf-8")
 

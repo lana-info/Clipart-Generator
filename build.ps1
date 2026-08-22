@@ -70,6 +70,7 @@ $AppExeName = "Vibix Images.exe"
 if (-not (Test-Path -LiteralPath $distAppDir)) {
     throw "PyInstaller output is missing: $distAppDir"
 }
+& (Join-Path $projectRoot "scripts\remove_bundled_vc_runtime.ps1") -AppDir $distAppDir
 if (-not (Test-Path -LiteralPath (Join-Path $distAppDir $AppExeName))) {
     throw "Packaged executable is missing: $(Join-Path $distAppDir $AppExeName)"
 }
