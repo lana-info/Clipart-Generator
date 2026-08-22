@@ -1803,13 +1803,15 @@ Implemented:
   installation directory.
 - Install the completed Windows installer into an isolated Azure path and run
   release plus local-processing smoke checks from that installed copy.
+- Collect SciPy's dynamically imported Array API compatibility modules required
+  by rembg in the Windows PyInstaller package.
 
 Verification:
 - [x] TDD regressions failed before implementation and pass afterward for BEN2
   selection/help, pinned build dependencies, rembg import, installer cleanup,
   prerequisite inclusion, and installed-artifact Azure verification.
-- [x] Full unittest suite: 555 passed, 2 expected environment/platform skips.
-- [x] Full pytest suite: 582 passed, 1 expected platform skip, 2 deselected,
+- [x] Full unittest suite: 556 passed, 2 expected environment/platform skips.
+- [x] Full pytest suite: 583 passed, 1 expected platform skip, 2 deselected,
   and 73 subtests passed.
 - [x] `py_compile`, PowerShell parsing, model pin/size/hash verification, and
   `git diff --check` passed.

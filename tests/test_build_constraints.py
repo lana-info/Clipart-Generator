@@ -20,6 +20,14 @@ class BuildConstraintsTests(unittest.TestCase):
         self.assertNotIn("torch==", macos_pipeline)
         self.assertNotIn("requirements-ben2.txt", macos_pipeline)
 
+    def test_windows_collects_scipy_array_api_compat_for_rembg(self):
+        build_script = Path("build.ps1").read_text(encoding="utf-8")
+
+        self.assertIn(
+            '--collect-submodules "scipy._external.array_api_compat"',
+            build_script,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
