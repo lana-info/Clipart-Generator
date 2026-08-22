@@ -1797,9 +1797,10 @@ Implemented:
 - Extend the packaged local-processing gate through a real BEN2 ONNX model load and
   inference, in addition to the existing Real-ESRGAN and rembg checks.
 - Bundle Microsoft's signed Visual C++ x64 runtime required by ONNX Runtime,
-  exclude PyInstaller's shadowing top-level VC runtime copies, replace stale
-  native files atomically on upgrade, and preserve user settings stored outside
-  the installation directory.
+  exclude PyInstaller's shadowing standard-name VC runtime copies recursively
+  while preserving private hash-named libraries, replace stale native files
+  atomically on upgrade, and preserve user settings stored outside the
+  installation directory.
 - Install the completed Windows installer into an isolated Azure path and run
   release plus local-processing smoke checks from that installed copy.
 

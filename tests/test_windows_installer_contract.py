@@ -7,7 +7,7 @@ from pathlib import Path
 
 class WindowsInstallerContractTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is not available")
-    def test_packaging_removes_only_top_level_vc_runtime_duplicates(self):
+    def test_packaging_removes_shadowing_vc_runtime_duplicates_recursively(self):
         with tempfile.TemporaryDirectory(prefix="vibix-vc-runtime-") as temp:
             app_dir = Path(temp) / "Vibix Images"
             internal_dir = app_dir / "_internal"
@@ -16,6 +16,9 @@ class WindowsInstallerContractTests(unittest.TestCase):
             for name in ("msvcp140.dll", "vcruntime140_1.dll", "onnxruntime.dll"):
                 (internal_dir / name).write_bytes(b"fixture")
             (nested_dir / "MSVCP140.dll").write_bytes(b"fixture")
+            hashed_runtime = internal_dir / "numpy.libs" / "msvcp140-ownedhash.dll"
+            hashed_runtime.parent.mkdir()
+            hashed_runtime.write_bytes(b"fixture")
 
             subprocess.run(
                 [
@@ -34,7 +37,8 @@ class WindowsInstallerContractTests(unittest.TestCase):
             self.assertFalse((internal_dir / "msvcp140.dll").exists())
             self.assertFalse((internal_dir / "vcruntime140_1.dll").exists())
             self.assertTrue((internal_dir / "onnxruntime.dll").exists())
-            self.assertTrue((nested_dir / "MSVCP140.dll").exists())
+            self.assertFalse((nested_dir / "MSVCP140.dll").exists())
+            self.assertTrue(hashed_runtime.exists())
 
     def test_upgrade_removes_stale_native_runtime_before_copy(self):
         installer = Path("installer.iss").read_text(encoding="utf-8")
