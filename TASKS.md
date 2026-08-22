@@ -1784,7 +1784,7 @@ Verification:
 
 ### Task 70 - Installed Local Background Runtime Repair
 
-Status: Source fix verified; replacement Windows build pending
+Status: Automated release verification complete; owner target testing pending
 
 Implemented:
 - Restore `Local BEN2` in the provider selector and preserve existing BEN2
@@ -1819,5 +1819,11 @@ Verification:
   `git diff --check` passed.
 - [x] Real official BEN2 ONNX inference completed with a valid `64x64` RGBA
   result and alpha range `(0, 255)` using bounded ONNX Runtime session options.
-- [ ] Run the explicitly approved replacement Windows Azure build; monitor it and
-  repair/retry the same platform if Azure fails.
+- [x] Azure Windows run `116` succeeded from commit `6ed1537`; its installed-copy
+  gate exercised Local Real-ESRGAN plus real rembg and BEN2 inference.
+- [x] Azure macOS x64 run `117` succeeded from the same commit; its packaged
+  release and local-processing gates passed.
+- [x] Downloaded artifacts match their SHA-256 sidecars; the macOS ZIP also
+  passes `unzip -t`.
+- [ ] Perform focused visual and production-license acceptance on the owner's
+  Windows and Mac computers before uploading a 3.0.3 server revision.

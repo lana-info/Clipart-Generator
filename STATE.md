@@ -19,19 +19,18 @@ Updated: 2026-08-22
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/fix-local-release-readiness`
-- Branch base: `codex/feature-macos-release` at `ac76deb`
+- Current task branch: `codex/release-3.0.3`
+- Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-After explicit owner approval, run a replacement Windows Azure build from the
-Task 70 source and monitor it every ten minutes until it succeeds. Then repeat
-Local Real-ESRGAN, Local rembg, Local BEN2, Trim + 300 DPI Results, and
-diagnostic-ZIP acceptance on Windows. Do not upload Windows run `102` or any
-replacement artifact as a server revision until focused acceptance passes.
+Download Azure Windows run `116` and macOS run `117` for owner acceptance.
+Repeat Local Real-ESRGAN, Local rembg, Local BEN2, Trim + 300 DPI Results, and
+diagnostic-ZIP acceptance on Windows. Do not upload either 3.0.3 artifact as a
+server revision until the owner explicitly requests it after focused testing.
 
 ## Blockers and risks
 
@@ -57,7 +56,7 @@ replacement artifact as a server revision until focused acceptance passes.
   layout, and exported-ZIP behavior still require the next approved build.
 - The verified 3.0.1 installer and Azure run `77` artifact are historical
   evidence only; neither contains the current fix pack.
-- The current source candidate passes 543 unittest tests and 570 pytest tests
+- The current source candidate passes 557 unittest tests and 584 pytest tests
   plus 73 subtests. The expected Linux skip remains because the Windows
   Real-ESRGAN binary is unavailable there. Windows/macOS packaging and manual
   target-machine acceptance remain the final platform-specific checks.
@@ -74,7 +73,14 @@ replacement artifact as a server revision until focused acceptance passes.
   prerequisite, removes stale native runtime files during upgrade, verifies an
   installed copy in Azure, restores BEN2 through the pinned official 223 MB
   ONNX model, and performs real rembg/BEN2 packaged inference. A replacement
-  Windows build still requires explicit approval.
+  Windows build was replaced by verified run `116`.
+- Final 3.0.3 Azure Windows run `116` and macOS run `117` both succeeded from
+  commit `6ed15376d74753078aab6c82a7ae29b673e40fbe`. The downloaded Windows
+  installer is `222630658` bytes with SHA-256
+  `d9acd80fe1c87aa10e2294b5456ccb67709e6fa9effe9acefa3b023b552eadfd`.
+  The downloaded macOS ZIP is `245716567` bytes with SHA-256
+  `ae18022315b459b37906f2c0f8ced34b07f26bfb7af97eb2c0a9a6bd6e3b62f9`;
+  both sidecars match and the macOS archive passes `unzip -t`.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.
