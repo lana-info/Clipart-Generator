@@ -28,7 +28,7 @@ class MainUiAcceptanceTests(unittest.TestCase):
             patch.object(main.QTimer, "singleShot"),
         )
 
-    def test_unbundled_ben2_is_not_selectable_and_legacy_setting_uses_rembg(self):
+    def test_bundled_ben2_is_selectable_and_explains_first_download(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-ben2-") as temp_dir:
             temp_path = Path(temp_dir)
             (temp_path / "config.json").write_text(
@@ -39,8 +39,14 @@ class MainUiAcceptanceTests(unittest.TestCase):
             with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
                 window = main.MainWindow()
                 try:
-                    self.assertEqual(window.remove_bg_provider_combo.findData("local_ben2"), -1)
-                    self.assertEqual(window.remove_bg_provider_combo.currentData(), "local_rembg")
+                    self.assertGreaterEqual(
+                        window.remove_bg_provider_combo.findData("local_ben2"),
+                        0,
+                    )
+                    self.assertEqual(window.remove_bg_provider_combo.currentData(), "local_ben2")
+                    self.assertIn("около 230 МБ", window.local_ben2_download_note.text())
+                    self.assertIn("300 МБ", window.local_ben2_download_note.text())
+                    self.assertIn("4 ГБ", window.local_ben2_download_note.text())
                 finally:
                     window.settings_save_timer.stop()
                     window.api_key_mask_timer.stop()

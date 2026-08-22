@@ -1,6 +1,7 @@
 import os
 import json
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -294,12 +295,24 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertEqual(run_packaged_entrypoint_check(APP_VERSION), 0)
         self.assertEqual(run_packaged_entrypoint_check("999.0"), 1)
 
+    def test_rembg_import_returns_both_runtime_entrypoints(self):
+        fake_rembg = types.ModuleType("rembg")
+        fake_rembg.new_session = object()
+        fake_rembg.remove = object()
+
+        with patch.dict("sys.modules", {"rembg": fake_rembg}):
+            result = main.import_rembg_tools()
+
+        self.assertEqual(result, (fake_rembg.new_session, fake_rembg.remove))
+
+    @patch("main.load_local_ben2_model")
     @patch("main.import_rembg_tools")
     @patch("main.validate_local_realesrgan_exe")
-    def test_local_processing_smoke_checks_bundled_runtime_and_rembg_import(
+    def test_local_processing_smoke_checks_bundled_rembg_and_ben2_inference(
         self,
         validate_realesrgan,
         import_rembg,
+        load_ben2,
     ):
         validate_realesrgan.return_value = ("runtime/realesrgan-ncnn-vulkan.exe", "")
         buffer = main.BytesIO()
@@ -308,22 +321,60 @@ class ReleaseEntrypointTests(unittest.TestCase):
         new_session = Mock(return_value=session)
         remove = Mock(return_value=buffer.getvalue())
         import_rembg.return_value = (new_session, remove)
+        ben2_model = Mock()
+        ben2_output = Image.new("RGBA", (64, 64), (255, 0, 0, 0))
+        ben2_alpha = Image.new("L", (64, 64), 0)
+        ben2_alpha.paste(255, (14, 10, 50, 56))
+        ben2_output.putalpha(ben2_alpha)
+        ben2_model.inference.return_value = ben2_output
+        load_ben2.return_value = ben2_model
 
         self.assertEqual(main.run_local_processing_entrypoint_check(), 0)
         validate_realesrgan.assert_called_once_with(main.bundled_local_realesrgan_dir())
         import_rembg.assert_called_once_with()
         new_session.assert_called_once_with("u2netp")
         self.assertIs(remove.call_args.kwargs["session"], session)
+        load_ben2.assert_called_once_with()
+        self.assertEqual(ben2_model.inference.call_count, 1)
+        ben2_input = ben2_model.inference.call_args.args[0]
+        self.assertEqual(ben2_input.size, (64, 64))
+        self.assertNotEqual(ben2_input.getpixel((0, 0)), ben2_input.getpixel((32, 32)))
 
         validate_realesrgan.return_value = ("", "models missing")
         self.assertEqual(main.run_local_processing_entrypoint_check(), 1)
 
+    @patch("main.load_local_ben2_model")
+    @patch("main.import_rembg_tools")
+    @patch("main.validate_local_realesrgan_exe")
+    def test_local_processing_smoke_rejects_constant_ben2_alpha(
+        self,
+        validate_realesrgan,
+        import_rembg,
+        load_ben2,
+    ):
+        validate_realesrgan.return_value = ("runtime/realesrgan-ncnn-vulkan.exe", "")
+        buffer = main.BytesIO()
+        Image.new("RGBA", (8, 8), (255, 0, 0, 128)).save(buffer, format="PNG")
+        import_rembg.return_value = (
+            Mock(return_value=object()),
+            Mock(return_value=buffer.getvalue()),
+        )
+        ben2_model = Mock()
+        ben2_model.inference.return_value = Image.new(
+            "RGBA", (64, 64), (255, 0, 0, 0)
+        )
+        load_ben2.return_value = ben2_model
+
+        self.assertEqual(main.run_local_processing_entrypoint_check(), 1)
+
+    @patch("main.load_local_ben2_model")
     @patch("main.import_rembg_tools")
     @patch("main.validate_local_realesrgan_exe")
     def test_local_processing_smoke_writes_safe_failure_report(
         self,
         validate_realesrgan,
         import_rembg,
+        load_ben2,
     ):
         validate_realesrgan.return_value = ("runtime/realesrgan", "")
         import_rembg.return_value = (
@@ -339,6 +390,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
             text = report.read_text(encoding="utf-8")
             self.assertIn("rembg_session", text)
             self.assertIn("session provider unavailable", text)
+        load_ben2.assert_not_called()
 
     def test_packaged_version_file_is_the_application_version_authority(self):
         with tempfile.TemporaryDirectory() as temporary:

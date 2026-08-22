@@ -26,6 +26,7 @@ licenses.db
 # Артефакты сборки
 build/
 dist/
+build-prerequisites/
 *.spec
 
 # Временные файлы документации

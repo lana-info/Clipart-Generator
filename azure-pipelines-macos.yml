@@ -124,7 +124,7 @@ steps:
                   "--local-processing-smoke",
                   f"--local-processing-smoke-report={sys.argv[2]}",
               ],
-              timeout=420,
+              timeout=1200,
               check=False,
           )
       except subprocess.TimeoutExpired:

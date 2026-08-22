@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-21
+Updated: 2026-08-22
 
 ## Operating model
 
@@ -27,11 +27,11 @@ Updated: 2026-08-21
 
 ## Next task
 
-Download Azure Windows run `102` and macOS run `103` for target-machine
-acceptance. Repeat Local Real-ESRGAN, Local rembg, Trim + 300 DPI Results, and
-diagnostic-ZIP acceptance on Windows; perform launch and local-processing
-acceptance on a real Mac. Do not upload either artifact as a server revision
-until that platform's focused acceptance passes.
+After explicit owner approval, run a replacement Windows Azure build from the
+Task 70 source and monitor it every ten minutes until it succeeds. Then repeat
+Local Real-ESRGAN, Local rembg, Local BEN2, Trim + 300 DPI Results, and
+diagnostic-ZIP acceptance on Windows. Do not upload Windows run `102` or any
+replacement artifact as a server revision until focused acceptance passes.
 
 ## Blockers and risks
 
@@ -68,6 +68,13 @@ until that platform's focused acceptance passes.
   The downloaded macOS ZIP is `245668325` bytes with SHA-256
   `ba8d0cc134f0ad8b75dfd419889d942cf5e202ef4db307320a8a771c4b3c6887`;
   its sidecar matches and `unzip -t` reports no errors.
+- Windows target testing invalidated run `102` for publication: Local rembg
+  cannot initialize `onnxruntime_pybind11_state`, and Local BEN2 is absent from
+  its release UI. The source repair now bundles the Microsoft Visual C++ x64
+  prerequisite, removes stale native runtime files during upgrade, verifies an
+  installed copy in Azure, restores BEN2 through the pinned official 223 MB
+  ONNX model, and performs real rembg/BEN2 packaged inference. A replacement
+  Windows build still requires explicit approval.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.

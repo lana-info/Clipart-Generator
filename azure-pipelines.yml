@@ -22,8 +22,11 @@ steps:
 
   - powershell: |
       python -m pip install --upgrade pip
+      if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed with exit code $LASTEXITCODE" }
       python -m pip install -c constraints-build.txt -r requirements.txt
+      if ($LASTEXITCODE -ne 0) { throw "Runtime dependency installation failed with exit code $LASTEXITCODE" }
       python -m pip install -c constraints-build.txt -r requirements-dev.txt
+      if ($LASTEXITCODE -ne 0) { throw "Build dependency installation failed with exit code $LASTEXITCODE" }
     displayName: Install build dependencies
 
   - powershell: |
@@ -62,17 +65,34 @@ steps:
       if (-not (Test-Path -LiteralPath $exe)) { throw "Packaged executable is missing: $exe" }
       & $exe --release-entrypoint-smoke "--expected-app-version=${{ parameters.appVersion }}"
       if ($LASTEXITCODE -ne 0) { throw "Packaged release smoke failed with exit code $LASTEXITCODE" }
-      & $exe --local-processing-smoke
-      if ($LASTEXITCODE -ne 0) { throw "Packaged local-processing smoke failed with exit code $LASTEXITCODE" }
     displayName: Verify packaged release entrypoint
 
   - powershell: |
+      $prerequisiteDir = '.\build-prerequisites'
+      New-Item -ItemType Directory -Force -Path $prerequisiteDir | Out-Null
+      $vcRedistPath = Join-Path $prerequisiteDir 'vc_redist.x64.exe'
+      Invoke-WebRequest -Uri 'https://aka.ms/vc14/vc_redist.x64.exe' -OutFile $vcRedistPath
+      $signature = Get-AuthenticodeSignature -FilePath $vcRedistPath
+      if ($signature.Status -ne 'Valid') {
+        throw "Microsoft Visual C++ runtime signature is not valid: $($signature.Status)"
+      }
+      if ($signature.SignerCertificate.Subject -notlike '*Microsoft Corporation*') {
+        throw "Microsoft Visual C++ runtime has an unexpected signer"
+      }
+
       choco install innosetup -y --no-progress
       $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
       if (-not (Test-Path -LiteralPath $iscc)) { throw "Inno Setup compiler is missing: $iscc" }
       & $iscc '/DAppVersion=${{ parameters.appVersion }}' '.\installer.iss'
       if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
     displayName: Build Windows installer
+
+  - powershell: |
+      powershell -ExecutionPolicy Bypass -File .\scripts\verify_installed_windows_artifact.ps1 `
+        -InstallerPath '.\release\VibixImages-Setup-${{ parameters.appVersion }}.exe' `
+        -ExpectedAppVersion '${{ parameters.appVersion }}'
+      if ($LASTEXITCODE -ne 0) { throw "Installed Windows verification failed with exit code $LASTEXITCODE" }
+    displayName: Verify installed Windows application
 
   - powershell: |
       $setupPath = 'release\VibixImages-Setup-${{ parameters.appVersion }}.exe'

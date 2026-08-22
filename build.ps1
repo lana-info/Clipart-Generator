@@ -26,7 +26,9 @@ if ($AppVersion -notmatch '^\d+\.\d+(\.\d+)?$') {
 
 Write-Host "==> Install build dependencies"
 & $pythonExe -m pip install -c constraints-build.txt -r requirements.txt
+if ($LASTEXITCODE -ne 0) { throw "Runtime dependency installation failed with exit code $LASTEXITCODE" }
 & $pythonExe -m pip install -c constraints-build.txt -r requirements-dev.txt
+if ($LASTEXITCODE -ne 0) { throw "Build dependency installation failed with exit code $LASTEXITCODE" }
 
 Write-Host "==> Clean previous build artifacts"
 if (Test-Path "build") { Remove-Item "build" -Recurse -Force }

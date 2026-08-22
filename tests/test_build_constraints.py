@@ -11,6 +11,15 @@ class BuildConstraintsTests(unittest.TestCase):
         self.assertTrue(all("[" not in entry and "]" not in entry for entry in entries))
         self.assertIn("rembg==2.0.67", entries)
 
+    def test_ben2_onnx_packaging_does_not_add_pytorch(self):
+        pipeline = Path("azure-pipelines.yml").read_text(encoding="utf-8")
+        macos_pipeline = Path("azure-pipelines-macos.yml").read_text(encoding="utf-8")
+
+        self.assertNotIn("torch==", pipeline)
+        self.assertNotIn("requirements-ben2.txt", pipeline)
+        self.assertNotIn("torch==", macos_pipeline)
+        self.assertNotIn("requirements-ben2.txt", macos_pipeline)
+
 
 if __name__ == "__main__":
     unittest.main()

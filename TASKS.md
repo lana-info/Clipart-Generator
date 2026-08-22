@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Test Azure Windows run `102` and macOS run `103` on target
-hardware. Do not upload a server revision before that platform's focused
-acceptance passes.**
+Current next task: **After explicit owner approval, build a replacement Windows
+artifact for Task 70 and verify installed Local rembg plus Local BEN2 on the
+target PC. Azure run `102` must not be published as a server revision.**
 
 ## Phase 1 - Preparation
 
@@ -1703,9 +1703,9 @@ Implemented:
   runtime smoke gate that checks both Real-ESRGAN resources and rembg imports.
 - Keep safe local/provider failure details in diagnostics, including bounded
   task ID, provider error code, and sanitized error message.
-- Remove the non-functional BEN2 choice from release UI. Existing BEN2 settings
-  migrate to Local rembg rather than KIE; the standalone BEN2 research script
-  remains available for a separately managed test environment.
+- Temporarily remove the non-functional BEN2 choice from that release candidate.
+  Task 70 supersedes this limitation by packaging the pinned BEN2 runtime and
+  restoring the provider with an explicit first-download notice.
 
 Verification:
 - [x] TDD regressions observed failing before each implementation and passing
@@ -1754,7 +1754,7 @@ Verification:
 
 ### Task 69 - Local Processing Release Readiness
 
-Status: Azure artifacts verified; target-machine acceptance pending
+Status: Windows target acceptance failed; replacement source fix verified
 
 Implemented:
 - Preserve straight RGB under soft alpha in Local Real-ESRGAN, validate projected
@@ -1777,5 +1777,41 @@ Verification:
 - [x] `compileall`, sensitive-artifact scan, and `git diff --check` passed.
 - [x] Azure Windows run `102` and macOS run `103` succeeded from source commit
   `a085167`; both downloaded artifacts match their SHA-256 sidecars.
-- [ ] Perform focused local-processing and Results/diagnostics acceptance on
-  target Windows and Mac hardware before publishing server revisions.
+- [x] Windows run `102` target testing exposed a Local rembg ONNX Runtime DLL
+  initialization failure and confirmed that Local BEN2 was absent from release UI.
+- [ ] Replace Windows run `102` through Task 70, then perform focused
+  local-processing and Results/diagnostics acceptance before publication.
+
+### Task 70 - Installed Local Background Runtime Repair
+
+Status: Source fix verified; explicitly approved Windows build pending
+
+Implemented:
+- Restore `Local BEN2` in the provider selector and preserve existing BEN2
+  settings instead of silently migrating them to rembg.
+- Use the official BEN2 ONNX model pinned to revision `e48a207` and exact
+  size/SHA-256 instead of adding the incompatible, much larger PyTorch runtime.
+- Explain before use that BEN2 downloads an approximately 230 MB model once,
+  needs internet for that first download, should have 300 MB disk space, and
+  needs approximately 4 GB of free RAM during CPU processing.
+- Extend the packaged local-processing gate through a real BEN2 ONNX model load and
+  inference, in addition to the existing Real-ESRGAN and rembg checks.
+- Bundle Microsoft's signed Visual C++ x64 runtime required by ONNX Runtime,
+  replace stale PyInstaller native files atomically on upgrade, and preserve
+  user settings stored outside the installation directory.
+- Install the completed Windows installer into an isolated Azure path and run
+  release plus local-processing smoke checks from that installed copy.
+
+Verification:
+- [x] TDD regressions failed before implementation and pass afterward for BEN2
+  selection/help, pinned build dependencies, rembg import, installer cleanup,
+  prerequisite inclusion, and installed-artifact Azure verification.
+- [x] Full unittest suite: 554 passed, 2 expected environment/platform skips.
+- [x] Full pytest suite: 581 passed, 1 expected platform skip, 2 deselected,
+  and 73 subtests passed.
+- [x] `py_compile`, PowerShell parsing, model pin/size/hash verification, and
+  `git diff --check` passed.
+- [x] Real official BEN2 ONNX inference completed with a valid `64x64` RGBA
+  result and alpha range `(0, 255)` using bounded ONNX Runtime session options.
+- [ ] Run a replacement Windows Azure build only after explicit owner approval;
+  monitor it every ten minutes and repair/retry the same platform if Azure fails.

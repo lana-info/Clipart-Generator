@@ -48,6 +48,7 @@ from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
 from security_redaction import redact_text
 from processing_contract import publish_atomic, run_workspace
+from local_ben2 import load_local_ben2_onnx_model
 from network_security import HttpsOnlyRedirectHandler as SharedHttpsOnlyRedirectHandler
 from legacy_visible_mark_widget import VisibleMarkSettingsWidget
 from model_catalog import (
@@ -395,6 +396,14 @@ def import_rembg_tools():
     except BaseException as exc:
         raise RuntimeError(f"Local rembg is not available: {exc}") from exc
     return new_session, remove
+
+
+def load_local_ben2_model(progress=None, cancel_check=None):
+    return load_local_ben2_onnx_model(
+        os.path.join(USER_DATA_DIR, "models", "ben2"),
+        progress=progress,
+        cancel_check=cancel_check,
+    )
 
 
 def normalize_edge_shrink_pixels(pixels):
@@ -1727,21 +1736,11 @@ class WorkerThread(QThread):
 
     def _get_local_ben2_model(self):
         if self.local_ben2_model is None:
-            try:
-                from ben2 import AutoModel
-                import torch
-            except ImportError as exc:
-                raise RuntimeError(
-                    "Local BEN2 is not available. Install test dependencies first: "
-                    "python -m pip install torch torchvision transformers pillow "
-                    "git+https://github.com/PramaLLC/BEN2.git"
-                ) from exc
-
-            self.progress.emit("  Local BEN2: загрузка модели. Первый запуск может быть долгим...")
-            model = AutoModel.from_pretrained("PramaLLC/BEN2")
-            model.to(torch.device("cpu"))
-            model.eval()
-            self.local_ben2_model = model
+            self.progress.emit("  Local BEN2: подготовка ONNX-модели. Первый запуск может быть долгим...")
+            self.local_ben2_model = load_local_ben2_model(
+                progress=self.progress.emit,
+                cancel_check=self._ensure_running,
+            )
         return self.local_ben2_model
 
     def _run_local_ben2(self, input_path, output_path):
@@ -4588,9 +4587,8 @@ class MainWindow(QMainWindow):
         self.remove_bg_provider_combo.addItem("KIE", "kie")
         self.remove_bg_provider_combo.addItem("PhotoRoom Standard", "photoroom")
         self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
+        self.remove_bg_provider_combo.addItem("Local BEN2", "local_ben2")
         remove_bg_provider = str(self.config.get("remove_bg_provider", "kie") or "kie")
-        if remove_bg_provider == "local_ben2":
-            remove_bg_provider = "local_rembg"
         remove_bg_provider_index = self.remove_bg_provider_combo.findData(remove_bg_provider)
         self.remove_bg_provider_combo.setCurrentIndex(remove_bg_provider_index if remove_bg_provider_index >= 0 else 0)
 
@@ -4626,6 +4624,14 @@ class MainWindow(QMainWindow):
 
         self.local_ben2_refine_checkbox = QCheckBox("Уточнять передний план")
         self.local_ben2_refine_checkbox.setChecked(bool(self.config.get("local_ben2_refine_foreground", False)))
+        self.local_ben2_download_note = QLabel(
+            "При первом запуске будет загружена официальная ONNX-модель BEN2 — около 230 МБ. "
+            "Нужен интернет; рекомендуется не менее 300 МБ свободного места. "
+            "Во время обработки требуется около 4 ГБ свободной оперативной памяти. "
+            "После загрузки обработка выполняется локально."
+        )
+        self.local_ben2_download_note.setWordWrap(True)
+        self.local_ben2_download_note.setStyleSheet("color:#f0b44d;")
         self.local_ben2_alpha_threshold_spin = QSpinBox()
         self.local_ben2_alpha_threshold_spin.setRange(0, 255)
         self.local_ben2_alpha_threshold_spin.setValue(
@@ -4763,6 +4769,7 @@ class MainWindow(QMainWindow):
             "BEN2: локальное уточнение маски",
             [
                 ("Когда:", QLabel("При выборе BEN2: после апскейла до фона, до обрезки края")),
+                ("Первая загрузка:", self.local_ben2_download_note),
                 ("Уточнять передний план:", self.local_ben2_refine_checkbox),
                 ("Порог прозрачности:", self.local_ben2_alpha_threshold_spin),
                 ("Мягкость края:", self.local_ben2_edge_softness_combo),
@@ -7255,6 +7262,34 @@ def run_local_processing_entrypoint_check(report_path=None) -> int:
                 return 1
     except Exception as error:
         write_report("rembg_inference", error)
+        return 1
+    write_report("ben2_model", "started")
+    try:
+        ben2_model = load_local_ben2_model()
+    except Exception as error:
+        write_report("ben2_model", error)
+        return 1
+    write_report("ben2_inference", "started")
+    try:
+        ben2_source = Image.new("RGB", (64, 64), "white")
+        ben2_source.paste((20, 40, 120), (14, 10, 50, 56))
+        ben2_result = ben2_model.inference(ben2_source)
+        if (
+            not isinstance(ben2_result, Image.Image)
+            or ben2_result.size != ben2_source.size
+            or "A" not in ben2_result.getbands()
+        ):
+            write_report("ben2_output", "invalid RGBA output")
+            return 1
+        alpha_min, alpha_max = ben2_result.getchannel("A").getextrema()
+        if alpha_min == alpha_max:
+            write_report(
+                "ben2_output",
+                f"invalid constant alpha mask: {alpha_min}",
+            )
+            return 1
+    except Exception as error:
+        write_report("ben2_inference", error)
         return 1
     write_report("complete", "ok")
     return 0
