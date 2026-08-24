@@ -29,6 +29,7 @@ from v3_run_queue import (
     RunResultsPage,
     build_safe_run_report,
     export_safe_run_report,
+    format_elapsed_duration,
 )
 from v3_wizard import AppShell
 
@@ -105,6 +106,11 @@ class V3RunQueueTests(unittest.TestCase):
 
     def tearDown(self):
         self.app.processEvents()
+
+    def test_elapsed_duration_is_human_readable(self):
+        self.assertEqual(format_elapsed_duration(45), "45 секунд")
+        self.assertEqual(format_elapsed_duration(93), "1 мин 33 сек")
+        self.assertEqual(format_elapsed_duration(3848), "1 ч 4 мин 8 сек")
 
     def test_all_routes_end_in_the_shared_results_step(self):
         for mode in ProjectMode:
@@ -656,8 +662,9 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertIn("📁 Папка результата:", page.summary_label.text())
             self.assertIn("⏱ Время:", page.summary_label.text())
             self.assertIn("идёт обработка", page._stage_label("processing"))
-            self.assertEqual(page.viewer.before.accessibleName(), "До изображение")
-            self.assertEqual(page.viewer.after.accessibleName(), "После изображение")
+            self.assertFalse(page.viewer.isVisible())
+            self.assertEqual(page.log_button.text(), "Диагностика")
+            self.assertEqual(page.queue.minimumHeight(), 360)
             self.assertEqual(page.open_folder_button.accessibleName(), "Открыть папку с результатами")
             page.close()
             page.deleteLater()

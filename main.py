@@ -14,12 +14,14 @@ import math
 import subprocess
 import shutil
 import threading
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from types import MappingProxyType
 from io import BytesIO, StringIO
 from urllib.parse import urlparse
 from urllib import error as urlerror
 from urllib import request, parse
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
@@ -749,6 +751,18 @@ class WorkerThread(QThread):
         self.reference_generation_resolution = settings.get("reference_generation_resolution", "1K")
         self.timeout = max(10, int(settings.get("timeout", 60)))
         self.retries = max(0, int(settings.get("retries", 3)))
+        try:
+            configured_concurrency = int(settings.get("generation_concurrency", 3))
+        except (TypeError, ValueError):
+            configured_concurrency = 3
+        self.generation_concurrency = max(1, min(3, configured_concurrency))
+        try:
+            configured_interval = float(settings.get("generation_launch_interval", 1.0))
+        except (TypeError, ValueError):
+            configured_interval = 1.0
+        self.generation_launch_interval = max(0.0, configured_interval)
+        self._generation_launch_lock = threading.Lock()
+        self._next_generation_launch_at = 0.0
         self.generation_wait_timeout = max(120, int(settings.get("generation_wait_timeout", 300)))
         self.status_poll_interval = max(5.0, min(60.0, float(settings.get("status_poll_interval", 20))))
         self.output_dir = settings.get("output_dir") or os.path.join(self.work_dir, "output")
@@ -878,6 +892,9 @@ class WorkerThread(QThread):
             raise ValueError("Не указан PhotoRoom API Key")
         if process_generated:
             self._log_upscale_plan()
+        if not process_generated and self.generation_concurrency > 1:
+            self._mode1_generate_parallel(emit_final=emit_final)
+            return
 
         raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
@@ -964,6 +981,127 @@ class WorkerThread(QThread):
                 self.finished.emit(f"Mode 1: Готово (0/{total}). Изображения не созданы.")
             else:
                 self.finished.emit(f"Mode 1: Готово ({done}/{total})")
+
+    def _wait_for_generation_launch_slot(self) -> None:
+        while True:
+            self._ensure_running()
+            with self._generation_launch_lock:
+                now = time.monotonic()
+                if now >= self._next_generation_launch_at:
+                    self._next_generation_launch_at = (
+                        now + self.generation_launch_interval
+                    )
+                    return
+                delay = self._next_generation_launch_at - now
+            time.sleep(min(delay, 0.1))
+
+    def _generate_only_entry(
+        self,
+        idx: int,
+        total: int,
+        entry: dict[str, Any],
+        raw_dir: str,
+        output_dir: str,
+    ) -> None:
+        self._wait_for_generation_launch_slot()
+        self.progress.emit(f"[{idx}/{total}] Генерация")
+        self._emit_file_progress(idx, total, 4)
+        prompt_text = entry.get("prompt", "")
+        references = entry.get("references", [])
+        self._emit_file_progress(idx, total, 18)
+        image_url = self._kie_generate_image(prompt_text, references)
+        self._emit_file_progress(idx, total, 36)
+        self._ensure_running()
+        gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
+        self._download_file(image_url, gen_path)
+        self._ensure_running()
+        self.progress.emit(f"  Сгенерировано: {gen_path}")
+        self._emit_file_progress(idx, total, 70)
+        out_path = os.path.join(output_dir, f"result_{idx:03d}_{self.run_stamp}.png")
+        self._save_final_output(
+            image_url,
+            gen_path,
+            out_path,
+            raw_dir,
+            idx,
+            "gen",
+        )
+        self._emit_file_progress(idx, total, 100)
+        self.progress.emit(f"  Итог сохранён: {out_path}")
+
+    def _mode1_generate_parallel(self, emit_final=True):
+        raw_dir = self._create_run_raw_dir()
+        output_dir = self.output_dir
+        os.makedirs(raw_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
+        entries = self._normalize_prompt_entries(self.generated_prompts)
+        if not entries:
+            if emit_final:
+                self.finished.emit("Mode 1: Нет записей. Добавьте промпты")
+            return
+
+        total = len(entries)
+        done_count = 0
+        self._next_generation_launch_at = 0.0
+        pending = iter(enumerate(entries, start=1))
+        active = {}
+
+        with ThreadPoolExecutor(max_workers=self.generation_concurrency) as executor:
+            def submit_next() -> bool:
+                if not self.is_running or self.stop_after_current_requested:
+                    return False
+                try:
+                    idx, entry = next(pending)
+                except StopIteration:
+                    return False
+                future = executor.submit(
+                    self._generate_only_entry,
+                    idx,
+                    total,
+                    entry,
+                    raw_dir,
+                    output_dir,
+                )
+                active[future] = idx
+                return True
+
+            for _ in range(self.generation_concurrency):
+                if not submit_next():
+                    break
+
+            while active:
+                completed, _ = wait(
+                    tuple(active),
+                    return_when=FIRST_COMPLETED,
+                )
+                for future in completed:
+                    idx = active.pop(future)
+                    try:
+                        future.result()
+                    except ProcessingCancelled:
+                        self.progress.emit(f"[{idx}/{total}] Остановлено")
+                    except Exception as error:
+                        self.progress.emit(
+                            f"[{idx}/{total}] Ошибка: {self._safe_error_text(error)}"
+                        )
+                    else:
+                        done_count += 1
+                    submit_next()
+
+        if not self.is_running:
+            self.progress.emit("Остановлено пользователем")
+            return
+        if self.stop_after_current_requested:
+            self.progress.emit("Остановлено после текущего файла")
+            return
+        self.progress_value.emit(100)
+        if emit_final:
+            if done_count == 0:
+                self.finished.emit(
+                    f"Mode 1: Готово (0/{total}). Изображения не созданы."
+                )
+            else:
+                self.finished.emit(f"Mode 1: Готово ({done_count}/{total})")
 
     def _emit_file_progress(
         self,
@@ -1591,6 +1729,7 @@ class WorkerThread(QThread):
                 capture_output=True,
                 text=True,
                 check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         finally:
             if temp_dir is not None:
@@ -2376,7 +2515,8 @@ class WorkerThread(QThread):
         self._protect_secret_headers_from_redirects(req)
         method = req.get_method().upper()
         retry_limit = self.retries if method in {"GET", "HEAD", "OPTIONS"} else 0
-        for attempt in range(retry_limit + 1):
+        rate_limit_retry_limit = min(max(self.retries, 1), 2)
+        for attempt in range(max(retry_limit, rate_limit_retry_limit) + 1):
             self._ensure_running()
             try:
                 with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
@@ -2389,6 +2529,12 @@ class WorkerThread(QThread):
                 # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
                 if e.code in {400, 401, 402, 403, 404}:
                     break
+
+                # 429 безопасно повторить даже для POST: KIE отклонил запрос
+                # лимитом и не создал задачу. Остальные POST-ошибки не повторяем,
+                # чтобы не рисковать дублированием платной операции.
+                if e.code == 429 and method == "POST":
+                    retry_limit = rate_limit_retry_limit
 
                 if attempt >= retry_limit:
                     break
@@ -3750,6 +3896,8 @@ class MainWindow(QMainWindow):
         default_config = {
             "retries": 3,
             "timeout": 60,
+            "generation_concurrency": 3,
+            "generation_launch_interval": 1.0,
             "generation_wait_timeout": 300,
             "status_poll_interval": 20,
             "app_version": APP_VERSION,

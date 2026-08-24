@@ -651,6 +651,35 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(request_mock.call_count, 1)
         self.assertNotIn(DUMMY_KIE_KEY, str(raised.exception))
 
+    def test_post_rate_limit_is_retried_with_a_small_bound(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY, retries=5),
+        )
+        req = main.request.Request(
+            "https://api.kie.ai/api/v1/jobs/createTask",
+            data=b"{}",
+            method="POST",
+        )
+        rate_limited = main.urlerror.HTTPError(
+            req.full_url,
+            429,
+            "Too Many Requests",
+            {},
+            BytesIO(b"rate limited"),
+        )
+        response = BytesIO(b"ok")
+        response.headers = {}
+
+        with (
+            patch.object(main, "open_url_secure", side_effect=[rate_limited, response]) as request_mock,
+            patch.object(main.time, "sleep"),
+        ):
+            self.assertEqual(worker._request_with_retries(req), b"ok")
+
+        self.assertEqual(request_mock.call_count, 2)
+
     def test_ambiguous_upload_failure_does_not_try_another_post_endpoint(self):
         with tempfile.TemporaryDirectory(prefix="clipart-upload-once-") as temp_dir:
             source_path = Path(temp_dir) / "source.png"

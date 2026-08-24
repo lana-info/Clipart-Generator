@@ -1,8 +1,10 @@
 import shutil
+import subprocess
 import tempfile
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
@@ -139,6 +141,28 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "Real-ESRGAN"):
                 worker._run_local_realesrgan(str(source_path), str(Path(temp_dir) / "output.png"))
+
+    def test_local_realesrgan_hides_windows_console_when_started(self):
+        self.require_local_realesrgan()
+        with tempfile.TemporaryDirectory(prefix="clipart-realesrgan-window-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            output_path = Path(temp_dir) / "output.png"
+            Image.new("RGB", (4, 4), "white").save(source_path)
+            worker = self.make_worker(temp_dir)
+            captured = {}
+
+            def fake_run(command, **kwargs):
+                captured.update(kwargs)
+                shutil.copyfile(source_path, command[command.index("-o") + 1])
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with patch("main.subprocess.run", side_effect=fake_run):
+                worker._run_local_realesrgan(str(source_path), str(output_path))
+
+            self.assertEqual(
+                captured["creationflags"],
+                getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
 
     def test_local_process_without_kie_uses_expected_pipeline_order(self):
         with tempfile.TemporaryDirectory(prefix="clipart-local-pipeline-") as temp_dir:

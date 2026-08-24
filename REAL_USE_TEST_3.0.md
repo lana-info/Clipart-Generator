@@ -4,6 +4,16 @@
 
 Для каждого шага заполнить: ожидаемый результат, фактический результат, `PASS/FAIL/BLOCKED`, изменились ли исходники, время, API/локальный модуль и стоимость.
 
+## Focused implementation evidence — 2026-08-24
+
+| Область | Статус | Факт |
+|---|---|---|
+| Экран файлов | VERIFIED (offscreen) | Единая галочка overwrite, `Очистить всё` у счётчика, drop-zone, имя/пиксели/DPI/MB; 25 focused tests |
+| Экран результатов | VERIFIED (offscreen) | Увеличенный список, preview по hover/click, человеческая длительность, единая диагностика; targeted suite green |
+| Диагностический отчёт | VERIFIED | Сводка, настройки provider/model, task-события, статусы файлов и redaction; секреты и пользовательские пути не включаются |
+| Локальный Real-ESRGAN | SOURCE VERIFIED | Windows console hidden via `CREATE_NO_WINDOW`; bundled executable unavailable in Linux worktree, Windows smoke pending |
+| Параллельная генерация | VERIFIED (mock) | До 3 задач, старт не чаще 1/сек, bounded retry для HTTP 429, порядок/ошибки/остановка покрыты тестами; платный KIE run не запускался |
+
 ## Сценарий A — Clipart
 
 | Шаг | Действие | Ожидаемый результат | Факт | Статус | Исходники | Время | API/модуль | Стоимость |

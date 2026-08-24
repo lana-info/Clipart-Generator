@@ -31,6 +31,22 @@ the remaining Windows smoke findings), then implement `CG3-TASK-035`
 (controlled parallel KIE generation, initially up to three tasks with one new
 task per second). Vectorization and Patterns remain deferred.
 
+## Current implementation checkpoint — 2026-08-24
+
+- Files and Results UX changes from `CG3-TASK-034` are implemented and covered
+  by offscreen tests: file metadata is name/pixels/DPI/MB, overwrite is one
+  safe-by-default checkbox, the drop zone is visible, Results uses a larger
+  queue with hover/click preview, human duration, and one Diagnostics dialog.
+- Local Real-ESRGAN subprocesses request hidden Windows console creation; the
+  source registry still exposes both local background-removal providers
+  (`rembg` and `BEN2`) and Local Real-ESRGAN for upscale.
+- `CG3-TASK-035` has a first implementation: generation-only work uses at most
+  three workers, launches new KIE tasks at no more than one per second, retries
+  HTTP 429 with bounded backoff, and preserves per-item output/error handling.
+- Full unittest discovery passes: 493 tests, 2 skips. No paid KIE request was
+  made. Windows rendered smoke and a small real KIE speed/credit run remain
+  pending.
+
 The Windows 3.0.1 smoke test covered installation, startup licensing, folder
 persistence, diagnostics, local processing, cancellation, and basic lifecycle.
 Unchecked acceptance items are `SKIP / NOT TESTED`, not proven passes. Do not
@@ -49,6 +65,10 @@ acceptance are approved.
   manual check on the target Windows computer.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
+- KIE documentation still lists `recraft/crisp-upscale`, but that does not
+  prove account/region availability; the implementation does not silently
+  switch a failed Recraft task to another paid model. Topaz remains the safe
+  default.
 - The Windows smoke test found a misleading offline saved-license key prompt,
   an enabled SynthID consent control for an unavailable capability, stale file
   UI after `process more`, a clipped/incorrect wizard header, and slow eager
