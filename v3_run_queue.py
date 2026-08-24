@@ -67,6 +67,17 @@ class RunQueueError(ValueError):
     pass
 
 
+def format_elapsed_duration(seconds: int | float) -> str:
+    total = max(0, int(round(float(seconds))))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours} ч {minutes} мин {secs} сек"
+    if minutes:
+        return f"{minutes} мин {secs} сек"
+    return f"{secs} секунд"
+
+
 @dataclass(frozen=True, slots=True)
 class ProgressEvent:
     """Stable progress contract; legacy worker text is adapted into this shape."""
@@ -933,16 +944,37 @@ class RunQueueSession(QObject):
 def build_safe_run_report(session: RunQueueSession) -> dict[str, Any]:
     if not isinstance(session, RunQueueSession):
         raise TypeError("session must be a RunQueueSession")
+    settings = getattr(session.request, "settings", {}) or {}
+    diagnostic_settings = {
+        key: redact_text(str(settings[key]), limit=160)
+        for key in (
+            "run_mode",
+            "text_generation_model",
+            "reference_generation_model",
+            "upscale_provider",
+            "upscale_after_provider",
+            "remove_bg_provider",
+            "kie_upscale_model",
+            "kie_upscale_after_model",
+            "kie_remove_bg_model",
+        )
+        if key in settings and settings[key] not in (None, "")
+    }
     return {
         "schema_version": 1,
         "mode": session.mode.value,
+        "operation_id": session.operation_id,
         "summary": session.counts(),
+        "elapsed_seconds": session.elapsed_seconds,
+        "settings": diagnostic_settings,
+        "technical_log": redact_text(session.technical_log, limit=MAX_TECHNICAL_EVENTS * 160),
         "items": [
             {
                 "index": item.index,
                 "display_name": item.display_name[:260],
                 "processing": item.status.value,
                 "attempts": item.attempts,
+                "message": redact_text(item.short_message, limit=500),
                 "stages": dict(sorted(item.stage_statuses.items())),
                 "file_hints": "not_inferred",
                 "pixel_evidence": "not_inferred",
@@ -1124,16 +1156,29 @@ class RunResultsPage(QWidget):
         self.current_label.setWordWrap(True)
         self.queue = RunQueue(tokens=tokens)
         self.queue.setAccessibleName("Очередь выполнения")
-        self.queue.setMinimumHeight(160)
+        self.queue.setMinimumHeight(360)
         self.queue.currentRowChanged.connect(self._selection_changed)
         self.viewer = BeforeAfterViewer()
+        self.viewer.hide()
+        self.preview_popup = QLabel(self, flags=Qt.WindowType.ToolTip)
+        self.preview_popup.setWindowTitle("Предпросмотр")
+        self.preview_popup.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_popup.setMinimumSize(280, 220)
+        self.preview_popup.setStyleSheet(
+            "QLabel { background: #172133; border: 1px solid #5f728e; "
+            "padding: 8px; color: #eaf1fb; }"
+        )
+        self.preview_popup.hide()
+        self.queue.setMouseTracking(True)
+        self.queue.viewport().setMouseTracking(True)
+        self.queue.itemEntered.connect(self._show_item_preview)
 
         self.processing_label = QLabel()
         self.stages_label = QLabel()
         self.file_hints_label = QLabel()
         self.pixel_evidence_label = QLabel()
         self.handoff_label = QLabel()
-        self.technical_note = QLabel("Подробности этапов и проверки доступны в «Техническом логе».")
+        self.technical_note = QLabel("Подробности запуска доступны в «Диагностике».")
         self.technical_note.setWordWrap(True)
         self.technical_note.setProperty("v3Small", True)
         for label in (
@@ -1195,15 +1240,10 @@ class RunResultsPage(QWidget):
         )
         self.open_folder_button.clicked.connect(self._open_folder)
         self.log_button = V3Button(
-            "Технический лог",
+            "Диагностика",
             ButtonVariant.GHOST,
         )
         self.log_button.clicked.connect(self._show_log)
-        self.export_button = V3Button(
-            "Экспортировать отчёт",
-            ButtonVariant.GHOST,
-        )
-        self.export_button.clicked.connect(self._choose_report_path)
         for button in (
             self.stop_button,
             self.immediate_stop_button,
@@ -1215,8 +1255,7 @@ class RunResultsPage(QWidget):
         workflow_layout.addStretch()
         utility_primary_layout.addWidget(self.open_folder_button)
         utility_primary_layout.addStretch()
-        for button in (self.log_button, self.export_button):
-            utility_secondary_layout.addWidget(button)
+        utility_secondary_layout.addWidget(self.log_button)
         utility_secondary_layout.addStretch()
         utility_layout.addWidget(utility_primary)
         utility_layout.addWidget(utility_secondary)
@@ -1230,7 +1269,6 @@ class RunResultsPage(QWidget):
             self.progress_bar,
             self.current_label,
             self.queue,
-            self.viewer,
             self.processing_label,
             self.stages_label,
             self.file_hints_label,
@@ -1260,7 +1298,6 @@ class RunResultsPage(QWidget):
             self.finish_button.hide()
             self.open_folder_button.setEnabled(False)
             self.log_button.setEnabled(False)
-            self.export_button.setEnabled(False)
             self._selection_changed(-1)
             return
         counts = session.counts()
@@ -1311,7 +1348,6 @@ class RunResultsPage(QWidget):
         self.finish_button.setEnabled(finish_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
         self.log_button.setEnabled(True)
-        self.export_button.setEnabled(True)
         self._selection_changed(self.queue.currentRow())
 
     @staticmethod
@@ -1340,7 +1376,7 @@ class RunResultsPage(QWidget):
             f"⏭ Пропущено: {counts['cancelled']}   "
             f"Всего: {len(session.items)}\n"
             f"📁 Папка результата: {session.output_dir}\n"
-            f"⏱ Время: {session.elapsed_seconds} с"
+            f"⏱ Время: {format_elapsed_duration(session.elapsed_seconds)}"
         )
 
     def _selected_item(self, row: int) -> RunItem | None:
@@ -1355,7 +1391,7 @@ class RunResultsPage(QWidget):
     def _selection_changed(self, row: int) -> None:
         item = self._selected_item(row)
         if item is None:
-            self.viewer.set_paths("", "")
+            self.preview_popup.hide()
             self._set_status_label(
                 self.processing_label,
                 "Ожидание запуска",
@@ -1366,7 +1402,7 @@ class RunResultsPage(QWidget):
             self.pixel_evidence_label.setText("Проверка пикселей: не выполнялась")
             self.handoff_label.setText("Передача на проверку: не выполнялась")
             return
-        self.viewer.set_paths(item.source_path, item.output_path)
+        self._show_item_preview(self.queue.item(row))
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
@@ -1404,6 +1440,33 @@ class RunResultsPage(QWidget):
             + (record.openai_status if record is not None else "не выполнялась")
         )
 
+    def _show_item_preview(self, row: QListWidgetItem | None) -> None:
+        if row is None or self.session is None:
+            self.preview_popup.hide()
+            return
+        item = self._selected_item(row.data(Qt.ItemDataRole.UserRole))
+        if item is None:
+            self.preview_popup.hide()
+            return
+        path = item.output_path if item.status is RunItemStatus.SUCCEEDED else item.source_path
+        pixmap = BeforeAfterViewer._pixmap(path)
+        self.preview_popup.clear()
+        if pixmap is None:
+            self.preview_popup.setText("Предпросмотр недоступен")
+        else:
+            self.preview_popup.setPixmap(
+                pixmap.scaled(
+                    QSize(360, 280),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        rect = self.queue.visualItemRect(row)
+        point = self.queue.viewport().mapToGlobal(rect.topRight())
+        self.preview_popup.adjustSize()
+        self.preview_popup.move(point.x() - self.preview_popup.width(), point.y())
+        self.preview_popup.show()
+
     @staticmethod
     def _set_status_label(
         label: QLabel,
@@ -1433,20 +1496,23 @@ class RunResultsPage(QWidget):
         if self.session is None:
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle("Технический лог")
+        dialog.setWindowTitle("Диагностика")
         dialog.resize(720, 420)
         layout = QVBoxLayout(dialog)
         text = QPlainTextEdit()
         text.setReadOnly(True)
         text.setPlainText(self.session.technical_log)
         layout.addWidget(text)
+        save_button = V3Button("Сохранить диагностический отчёт", ButtonVariant.PRIMARY)
+        save_button.clicked.connect(lambda: self._choose_report_path(dialog))
+        layout.addWidget(save_button)
         close_button = V3Button("Закрыть", ButtonVariant.SECONDARY)
         close_button.clicked.connect(dialog.close)
         layout.addWidget(close_button)
         self._log_dialog = dialog
         dialog.show()
 
-    def _choose_report_path(self) -> None:
+    def _choose_report_path(self, dialog: QDialog | None = None) -> None:
         if self.session is None:
             return
         destination, _ = QFileDialog.getSaveFileName(
@@ -1465,6 +1531,8 @@ class RunResultsPage(QWidget):
             )
             return
         self.summary_label.setText("Отчёт выполнения сохранён.")
+        if dialog is not None:
+            dialog.close()
 
 def _safe_progress_text(message: Any) -> str:
     text = str(message or "").strip()

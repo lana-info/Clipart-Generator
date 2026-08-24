@@ -7,12 +7,13 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PyQt6.QtCore import QMimeData, QObject, QUrl, pyqtSignal
+from PyQt6.QtCore import QMimeData, QObject, QUrl, Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from v3_mode_selection import V3ApplicationView
 from v3_processing_flow import (
     MAX_PROCESSING_FILES,
+    LocalImageInfo,
     ProcessingFilesPage,
     ProcessingPipelinePage,
     ProcessingRecipePage,
@@ -115,6 +116,33 @@ class V3ProcessingFlowTests(unittest.TestCase):
         apply_processing_recipe(state, "basic_enhancement")
         return state, source
 
+    def test_local_image_summary_shows_only_requested_metadata(self):
+        info = LocalImageInfo(
+            path="/tmp/flower.png",
+            name="flower.png",
+            width=1024,
+            height=1024,
+            color_mode="RGBA",
+            size_bytes=3 * 1024 * 1024,
+            dpi=300,
+        )
+        self.assertEqual(
+            info.summary,
+            "flower.png · 1024×1024 · 300 DPI · 3.0 МБ",
+        )
+
+    def test_local_image_summary_handles_missing_dpi(self):
+        info = LocalImageInfo(
+            path="/tmp/flower.png",
+            name="flower.png",
+            width=1024,
+            height=1024,
+            color_mode="RGB",
+            size_bytes=1024,
+            dpi=None,
+        )
+        self.assertIn("DPI не указан", info.summary)
+
     def test_application_view_installs_c1_to_c6_route(self):
         view = V3ApplicationView(worker_factory=WorkerFactory())
         view.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
@@ -179,7 +207,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertEqual(len(accepted), 1)
             self.assertEqual(accepted[0].name, "sample.png")
             self.assertEqual((accepted[0].width, accepted[0].height), (7, 9))
-            self.assertIn("RGBA", accepted[0].summary)
+            self.assertIn("DPI не указан", accepted[0].summary)
             self.assertFalse(page.thumbnail_labels[0].pixmap().isNull())
             self.assertEqual(page.validation_issues(), ())
 
@@ -200,6 +228,19 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertTrue(event.accepted)
             self.assertEqual(state.processing.selected_files, [str(source.resolve())])
             self.assertFalse(page.thumbnail_labels[0].pixmap().isNull())
+
+    def test_files_screen_uses_single_overwrite_toggle_and_visible_drop_zone(self):
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        shell = AppShell(state)
+        controller = install_processing_flow(shell)
+        page = controller.files_page
+
+        self.assertFalse(page.overwrite_checkbox.isChecked())
+        self.assertEqual(page.overwrite_checkbox.text(), "Перезаписывать существующие файлы")
+        self.assertEqual(page.clear_button.text(), "Очистить всё")
+        self.assertFalse(page.clear_button.isEnabled())
+        self.assertGreaterEqual(page.drop_label.minimumHeight(), 64)
+        self.assertEqual(page.drop_label.alignment(), Qt.AlignmentFlag.AlignCenter)
     def test_invalid_and_animated_files_fail_closed(self):
         with tempfile.TemporaryDirectory(prefix="processing-invalid-") as temp:
             invalid = Path(temp) / "not-image.png"

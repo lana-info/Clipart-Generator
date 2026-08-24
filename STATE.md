@@ -33,6 +33,35 @@ wholesale, and then run a distinctly versioned Windows replacement build only
 after explicit owner approval. The replacement must pass artwork and hidden
 helper-process checks from the installed copy before owner acceptance.
 
+## Current implementation checkpoint — 2026-08-24
+
+The current product priority is to finish the existing interface and close the
+remaining UX findings before adding new product modes. The immediate plan is
+recorded in `TASKS_3.0.ru.md`: complete `CG3-TASK-034` (rendered UI smoke and
+the remaining Windows smoke findings), then implement `CG3-TASK-035`
+(controlled parallel KIE generation, initially up to three tasks with one new
+task per second). Vectorization and Patterns remain deferred.
+
+- Files and Results UX changes from `CG3-TASK-034` are implemented and covered
+  by offscreen tests: file metadata is name/pixels/DPI/MB, overwrite is one
+  safe-by-default checkbox, the drop zone is visible, Results uses a larger
+  queue with hover/click preview, human duration, and one Diagnostics dialog.
+- Local Real-ESRGAN subprocesses request hidden Windows console creation; the
+  source registry still exposes both local background-removal providers
+  (`rembg` and `BEN2`) and Local Real-ESRGAN for upscale.
+- `CG3-TASK-035` has a first implementation: generation-only work uses at most
+  three workers, launches new KIE tasks at no more than one per second, retries
+  HTTP 429 with bounded backoff, and preserves per-item output/error handling.
+- Full unittest discovery passes: 493 tests, 2 skips. No paid KIE request was
+  made. Windows rendered smoke and a small real KIE speed/credit run remain
+  pending.
+
+The Windows 3.0.1 smoke test covered installation, startup licensing, folder
+persistence, diagnostics, local processing, cancellation, and basic lifecycle.
+Unchecked acceptance items are `SKIP / NOT TESTED`, not proven passes. Do not
+upload or publish an update revision until the current source and focused
+acceptance are approved.
+
 ## Blockers and risks
 
 - Azure Windows run `139` reached the offline release gate on 2026-08-25 and
@@ -96,6 +125,20 @@ helper-process checks from the installed copy before owner acceptance.
   The downloaded macOS ZIP is `245716567` bytes with SHA-256
   `ae18022315b459b37906f2c0f8ced34b07f26bfb7af97eb2c0a9a6bd6e3b62f9`;
   both sidecars match and the macOS archive passes `unzip -t`.
+- KIE documentation still lists `recraft/crisp-upscale`, but that does not
+  prove account/region availability; the implementation does not silently
+  switch a failed Recraft task to another paid model. Topaz remains the safe
+  default.
+- The Windows smoke test found a misleading offline saved-license key prompt,
+  an enabled SynthID consent control for an unavailable capability, stale file
+  UI after `process more`, a clipped/incorrect wizard header, and slow eager
+  first-mode initialization. These are tracked in Task 65.
+- Do not start Azure/GitHub Actions Windows packaging for the current version
+  until all known source issues are resolved and the owner explicitly approves
+  the final build run.
+- The installer from run `31909510317` predates the new updater and diagnostic
+  journal. Use the verified `3.0.1` installer from run `31924194111` for current
+  acceptance.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.

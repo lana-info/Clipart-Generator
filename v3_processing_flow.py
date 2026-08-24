@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QDoubleSpinBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -85,13 +86,15 @@ class LocalImageInfo:
     height: int
     color_mode: str
     size_bytes: int
+    dpi: int | None = None
 
     @property
     def summary(self) -> str:
         size_mb = self.size_bytes / (1024 * 1024)
+        dpi_label = f"{self.dpi} DPI" if self.dpi is not None else "DPI не указан"
         return (
             f"{self.name} · {self.width}×{self.height} · "
-            f"{self.color_mode} · {size_mb:.1f} МБ"
+            f"{dpi_label} · {size_mb:.1f} МБ"
         )
 
 
@@ -464,6 +467,13 @@ def inspect_local_image(path: str | os.PathLike[str]) -> LocalImageInfo:
             if width * height > MAX_LOCAL_IMAGE_PIXELS:
                 raise ProcessingFlowError("Изображение превышает лимит пикселей")
             color_mode = image.mode
+            raw_dpi = image.info.get("dpi")
+            if isinstance(raw_dpi, (tuple, list)):
+                raw_dpi = raw_dpi[0] if raw_dpi else None
+            try:
+                dpi = int(round(float(raw_dpi))) if raw_dpi else None
+            except (TypeError, ValueError):
+                dpi = None
             image.load()
     except ProcessingFlowError:
         raise
@@ -478,6 +488,7 @@ def inspect_local_image(path: str | os.PathLike[str]) -> LocalImageInfo:
         height=height,
         color_mode=color_mode,
         size_bytes=size,
+        dpi=dpi,
     )
 
 
@@ -491,7 +502,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
     ) -> None:
         super().__init__(
             "Файлы",
-            "Добавьте собственные или лицензированные изображения.",
+            "Выберите изображения для обработки.",
             tokens=tokens,
         )
         self.state = state
@@ -508,35 +519,30 @@ class ProcessingFilesPage(_ScrollableStepPage):
         )
         self.choose_button.clicked.connect(self._choose_files)
         row_layout.addWidget(self.choose_button)
-        self.clear_button = V3Button("Очистить", ButtonVariant.SECONDARY)
-        self.clear_button.clicked.connect(self.clear_files)
-        row_layout.addWidget(self.clear_button)
         row_layout.addStretch(1)
         self.add_widget(row)
 
         self.output_selector = WorkspaceSelector(
-            "Папка результата",
+            "Папка для результатов",
             self._default_output_dir(),
             changed=self._sync_output_dir,
         )
         self.output_selector.edit.textChanged.connect(self._sync_output_dir)
         self.add_widget(self.output_selector)
 
-        self.collision_group = QGroupBox("Если файл с таким именем уже существует")
-        collision_layout = QVBoxLayout(self.collision_group)
-        self.keep_both_radio = QRadioButton(
-            "Не перезаписывать, сохранить новый файл с номером"
+        self.overwrite_checkbox = QCheckBox(
+            "Перезаписывать существующие файлы"
         )
-        self.overwrite_radio = QRadioButton("Перезаписывать существующий файл")
-        self.keep_both_radio.toggled.connect(self._set_collision_policy)
-        collision_layout.addWidget(self.keep_both_radio)
-        collision_layout.addWidget(self.overwrite_radio)
-        self.add_widget(self.collision_group)
+        self.overwrite_checkbox.toggled.connect(self._set_collision_policy)
+        self.add_widget(self.overwrite_checkbox)
 
         self.drop_label = QLabel(
-            "Перетащите изображения сюда. URL и папки не принимаются."
+            "Перетащите изображения сюда или нажмите «Выбрать файлы»."
         )
         self.drop_label.setWordWrap(True)
+        self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drop_label.setFrameShape(QFrame.Shape.StyledPanel)
+        self.drop_label.setMinimumHeight(72)
         self.drop_label.setProperty("v3Status", True)
         self.add_widget(self.drop_label)
         self.files_container = QWidget()
@@ -545,7 +551,15 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.thumbnail_labels: list[QLabel] = []
         self.file_count_label = QLabel()
         self.file_count_label.setProperty("v3Status", True)
-        self.add_widget(self.file_count_label)
+        count_row = QWidget()
+        count_layout = QHBoxLayout(count_row)
+        count_layout.setContentsMargins(0, 0, 0, 0)
+        count_layout.addWidget(self.file_count_label)
+        count_layout.addStretch(1)
+        self.clear_button = V3Button("Очистить всё", ButtonVariant.SECONDARY)
+        self.clear_button.clicked.connect(self.clear_files)
+        count_layout.addWidget(self.clear_button)
+        self.add_widget(count_row)
         self.error_label = QLabel()
         self.error_label.setWordWrap(True)
         self.add_widget(self.error_label)
@@ -564,11 +578,8 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.state.set_output_dir_for_mode(value, ProjectMode.PROCESSING)
         self.changed()
 
-    def _set_collision_policy(self, keep_both: bool) -> None:
-        if keep_both:
-            self.state.processing.overwrite_existing = False
-        elif self.overwrite_radio.isChecked():
-            self.state.processing.overwrite_existing = True
+    def _set_collision_policy(self, overwrite: bool) -> None:
+        self.state.processing.overwrite_existing = bool(overwrite)
         self.changed()
 
     def _choose_files(self) -> None:
@@ -663,12 +674,9 @@ class ProcessingFilesPage(_ScrollableStepPage):
             selected_output = default_output
         if not self.output_selector.path():
             self.output_selector.set_path(selected_output or default_output)
-        self.keep_both_radio.blockSignals(True)
-        self.overwrite_radio.blockSignals(True)
-        self.keep_both_radio.setChecked(not self.state.processing.overwrite_existing)
-        self.overwrite_radio.setChecked(self.state.processing.overwrite_existing)
-        self.keep_both_radio.blockSignals(False)
-        self.overwrite_radio.blockSignals(False)
+        self.overwrite_checkbox.blockSignals(True)
+        self.overwrite_checkbox.setChecked(self.state.processing.overwrite_existing)
+        self.overwrite_checkbox.blockSignals(False)
         infos: list[LocalImageInfo] = []
         errors: list[str] = []
         for path in self.state.processing.selected_files:
@@ -711,19 +719,20 @@ class ProcessingFilesPage(_ScrollableStepPage):
                 remove_button.clicked.connect(
                     lambda _checked=False, target=info.path: self.remove_file(target)
                 )
-                row.addWidget(remove_button)
                 row.addWidget(thumbnail)
                 metadata = QLabel(info.summary)
                 metadata.setWordWrap(True)
                 row.addWidget(metadata, 1)
+                row.addWidget(remove_button)
                 self.files_layout.addWidget(card)
                 self.thumbnail_labels.append(thumbnail)
         else:
             placeholder = QLabel("Файлы пока не выбраны")
             self.files_layout.addWidget(placeholder)
         self.file_count_label.setText(
-            f"Выбрано изображений: {len(self.state.processing.selected_files)}"
+            f"Выбрано файлов: {len(self.state.processing.selected_files)}"
         )
+        self.clear_button.setEnabled(bool(self.state.processing.selected_files))
         if errors:
             self.error_label.setText(
                 "Недоступны или недопустимы: " + ", ".join(errors[:3])
