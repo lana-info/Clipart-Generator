@@ -10,6 +10,7 @@ from v3_provider_registry import (
     known_provider_ids,
     processing_provider_options,
     provider_label,
+    normalize_kie_upscale_model,
     provider_preserves_alpha,
     provider_requires_api_key,
     provider_requires_cost,
@@ -64,7 +65,7 @@ class ProviderRegistryTests(unittest.TestCase):
                 ("Local BEN2", "local_ben2"),
             ),
         )
-        self.assertEqual(KIE_MODEL_OPTIONS, (("Topaz", "topaz/upscale"), ("Recraft Crisp", "recraft/crisp-upscale")))
+        self.assertEqual(KIE_MODEL_OPTIONS, (("Topaz", "topaz/upscale"),))
         self.assertEqual(
             KIE_REMOVE_BG_MODEL_OPTIONS,
             (("Recraft Remove Background", "recraft/remove-background"),),
@@ -81,6 +82,16 @@ class ProviderRegistryTests(unittest.TestCase):
                 ("IS-Net — аниме", "isnet-anime"),
                 ("IS-Net — общий", "isnet-general-use"),
             ),
+        )
+
+    def test_unavailable_recraft_upscale_is_migrated_to_topaz(self) -> None:
+        self.assertEqual(
+            normalize_kie_upscale_model("recraft/crisp-upscale"),
+            "topaz/upscale",
+        )
+        self.assertEqual(
+            normalize_kie_upscale_model("unknown/upscale"),
+            "unknown/upscale",
         )
 
     def test_provider_visible_controls_cover_expected_widgets(self) -> None:

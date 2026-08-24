@@ -148,7 +148,7 @@ class UpscalePositionTests(unittest.TestCase):
                 upscale=False,
                 upscale_after=True,
                 upscale_after_provider="kie",
-                kie_upscale_after_model="recraft/crisp-upscale",
+                kie_upscale_after_model="topaz/upscale",
                 remove_bg=False,
             )
             worker = main.WorkerThread(
@@ -181,7 +181,10 @@ class UpscalePositionTests(unittest.TestCase):
             worker._mode2_process_files(emit_final=False)
 
             self.assertEqual(calls[0], "upload")
-            self.assertEqual(calls[1], ("recraft/crisp-upscale", None))
+            self.assertEqual(
+                calls[1],
+                ("topaz/upscale", {"image_url": "mock://source", "upscale_factor": "8"}),
+            )
             self.assertEqual(calls.count("download"), 2)
             self.assertEqual(len(list((temp_path / "output").glob("*.png"))), 1)
 

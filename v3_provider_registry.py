@@ -102,9 +102,12 @@ PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
     ),
 }
 
+KIE_UPSCALE_FALLBACK_MODEL: Final[str] = "topaz/upscale"
+DISABLED_KIE_UPSCALE_MODELS: Final[frozenset[str]] = frozenset(
+    {"recraft/crisp-upscale"}
+)
 KIE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
-    ("Topaz", "topaz/upscale"),
-    ("Recraft Crisp", "recraft/crisp-upscale"),
+    ("Topaz", KIE_UPSCALE_FALLBACK_MODEL),
 )
 KIE_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Recraft Remove Background", "recraft/remove-background"),
@@ -128,6 +131,14 @@ def provider_spec(provider_id: str) -> ProviderSpec:
         return PROVIDER_SPECS[provider_id]
     except KeyError as error:
         raise KeyError(f"Unknown processing provider: {provider_id}") from error
+
+
+def normalize_kie_upscale_model(model_id: object) -> str:
+    """Return a selectable KIE upscale model, migrating unavailable legacy IDs."""
+    normalized = str(model_id or "").strip()
+    if normalized in DISABLED_KIE_UPSCALE_MODELS:
+        return KIE_UPSCALE_FALLBACK_MODEL
+    return normalized
 
 
 def known_provider_ids() -> tuple[str, ...]:

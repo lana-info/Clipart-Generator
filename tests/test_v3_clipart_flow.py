@@ -334,7 +334,7 @@ class V3ClipartFlowTests(unittest.TestCase):
                         {"kie_api_key": "test-key"},
                     )
 
-    def test_alpha_safe_upscale_rejects_recraft_after_bg_removal(self):
+    def test_unavailable_recraft_upscale_is_migrated_before_run(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-recraft-alpha-safe-") as temp:
             state = self.make_state(temp)
             state.clipart.operations.remove_background = True
@@ -342,11 +342,14 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.clipart.operations.upscale_after_provider = "kie"
             state.clipart.operations.kie_upscale_after_model = "recraft/crisp-upscale"
 
-            with self.assertRaisesRegex(ClipartFlowError, "Recraft Crisp|прозрач"):
-                build_clipart_run_request(
-                    state,
-                    {"kie_api_key": "test-key"},
-                )
+            request = build_clipart_run_request(
+                state,
+                {"kie_api_key": "test-key"},
+            )
+            self.assertEqual(
+                request.settings["kie_upscale_after_model"],
+                "topaz/upscale",
+            )
 
     def test_request_is_accepted_by_real_worker_constructor(self):
         from main import WorkerThread

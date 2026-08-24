@@ -43,7 +43,7 @@ task per second). Vectorization and Patterns remain deferred.
 - `CG3-TASK-035` has a first implementation: generation-only work uses at most
   three workers, launches new KIE tasks at no more than one per second, retries
   HTTP 429 with bounded backoff, and preserves per-item output/error handling.
-- Full unittest discovery passes: 493 tests, 2 skips. No paid KIE request was
+- Full unittest discovery passes: 496 tests, 2 skips. No paid KIE request was
   made. Windows rendered smoke and a small real KIE speed/credit run remain
   pending.
 

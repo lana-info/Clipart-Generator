@@ -61,6 +61,7 @@ from model_catalog import (
     MODEL_SPECS,
     resolve_generation_endpoint,
 )
+from v3_provider_registry import normalize_kie_upscale_model
 
 try:
     import certifi
@@ -793,8 +794,12 @@ class WorkerThread(QThread):
         self.trim_enabled = bool(settings.get("trim_enabled", False))
         self.trim_mode = str(settings.get("trim_mode", "alpha") or "alpha")
         self.export_300_dpi = bool(settings.get("export_300_dpi", False))
-        self.kie_upscale_model = settings.get("kie_upscale_model", "topaz/upscale")
-        self.kie_upscale_after_model = settings.get("kie_upscale_after_model", self.kie_upscale_model)
+        self.kie_upscale_model = normalize_kie_upscale_model(
+            settings.get("kie_upscale_model", "topaz/upscale")
+        )
+        self.kie_upscale_after_model = normalize_kie_upscale_model(
+            settings.get("kie_upscale_after_model", self.kie_upscale_model)
+        )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.upscale_factor = int(settings.get("upscale_factor", 4) or 4)
         self.upscale_provider = settings.get("upscale_provider", "kie")
@@ -1652,7 +1657,9 @@ class WorkerThread(QThread):
         upscale_factor,
         model_name=None,
     ):
-        model_name = (model_name or self.kie_upscale_model).strip()
+        model_name = normalize_kie_upscale_model(
+            model_name or self.kie_upscale_model
+        )
         self.progress.emit(f"  Апскейл через {model_name}...")
         if model_name == "topaz/upscale":
             upscale_input = {
@@ -3997,6 +4004,15 @@ class MainWindow(QMainWindow):
                 reference_model = "gpt-image/1.5-image-to-image"
         self.config["reference_generation_model"] = reference_model
 
+        # Recraft Crisp is temporarily unavailable in the KIE workflow. Migrate
+        # old saved selections before they can reach the worker or UI.
+        self.config["kie_upscale_model"] = normalize_kie_upscale_model(
+            self.config.get("kie_upscale_model", "topaz/upscale")
+        )
+        self.config["kie_upscale_after_model"] = normalize_kie_upscale_model(
+            self.config.get("kie_upscale_after_model", "topaz/upscale")
+        )
+
         legacy_ratio = str(self.config.get("generation_size", "1:1") or "1:1")
         self.config["text_generation_ratio"] = str(self.config.get("text_generation_ratio", legacy_ratio) or "1:1")
         self.config["reference_generation_ratio"] = str(self.config.get("reference_generation_ratio", legacy_ratio) or "1:1")
@@ -4628,13 +4644,13 @@ class MainWindow(QMainWindow):
         )
 
         self.kie_upscale_model_combo = QComboBox()
-        self.kie_upscale_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
+        self.kie_upscale_model_combo.addItems(["topaz/upscale"])
         uim = self.config.get("kie_upscale_model", "topaz/upscale")
         ui_index = self.kie_upscale_model_combo.findText(uim)
         self.kie_upscale_model_combo.setCurrentIndex(ui_index if ui_index >= 0 else 0)
 
         self.kie_upscale_after_model_combo = QComboBox()
-        self.kie_upscale_after_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
+        self.kie_upscale_after_model_combo.addItems(["topaz/upscale"])
         upscale_after_model = self.config.get("kie_upscale_after_model", uim)
         upscale_after_model_index = self.kie_upscale_after_model_combo.findText(upscale_after_model)
         self.kie_upscale_after_model_combo.setCurrentIndex(
@@ -5211,26 +5227,10 @@ class MainWindow(QMainWindow):
     def update_upscale_provider_controls_state(self, *_):
         before_is_local = self.upscale_provider_combo.currentData() == "local_realesrgan"
         after_is_local = self.upscale_after_provider_combo.currentData() == "local_realesrgan"
-        after_recraft_blocked = bool(
-            self.chk_remove_bg.isChecked()
-            and self.chk_upscale_after.isChecked()
-            and not after_is_local
+        self.upscale_after_note.setText(
+            "Recraft Crisp временно недоступен в KIE и скрыт из выбора. "
+            "Используйте Topaz или Local Real-ESRGAN."
         )
-        recraft_index = self.kie_upscale_after_model_combo.findText("recraft/crisp-upscale")
-        if recraft_index >= 0:
-            recraft_item = self.kie_upscale_after_model_combo.model().item(recraft_index)
-            recraft_item.setEnabled(not after_recraft_blocked)
-        if after_recraft_blocked:
-            self.upscale_after_note.setText(
-                "Recraft Crisp недоступен после удаления фона: модель не поддерживает "
-                "прозрачный вход. Используйте Local Real-ESRGAN или включите Recraft Crisp "
-                "до удаления фона."
-            )
-        else:
-            self.upscale_after_note.setText(
-                "После удаления фона рекомендуется Local Real-ESRGAN, потому что "
-                "Recraft Crisp не поддерживает прозрачные входные изображения."
-            )
         self.local_realesrgan_dir_input.setEnabled(before_is_local or after_is_local)
         self.local_realesrgan_profile_combo.setEnabled(before_is_local or after_is_local)
         self.local_realesrgan_scale_combo.setEnabled(before_is_local)

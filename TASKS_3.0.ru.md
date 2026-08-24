@@ -1052,6 +1052,8 @@ Status: In progress — Linux-safe implementation выполнена; нужен
   секретов/содержимого пользовательских файлов.
 - [x] Запускать локальные backend-процессы без видимых окон PowerShell/консоли,
   сохраняя stdout/stderr в диагностике.
+- [x] Исключить временно недоступный `recraft/crisp-upscale` из UI и рабочего
+  KIE-маршрута; старые сохранённые значения мигрировать на `topaz/upscale`.
 - [x] Обновить targeted UI/regression tests и зафиксировать результат в
   `REAL_USE_TEST_3.0.md` и `QUALITY_GATE_ISSUES_3.0.md`.
 

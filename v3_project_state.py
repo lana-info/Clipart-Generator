@@ -8,6 +8,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from v3_provider_registry import normalize_kie_upscale_model
+
 
 PROJECT_STATE_SCHEMA_VERSION = 1
 MAX_DRAFT_BYTES = 2 * 1024 * 1024
@@ -498,11 +500,12 @@ class ImageOperationData:
             minimum=1,
             maximum=16,
         )
-        self.kie_upscale_model = _text(self.kie_upscale_model, limit=200) or "topaz/upscale"
-        self.kie_upscale_after_model = _text(
-            self.kie_upscale_after_model,
-            limit=200,
-        ) or "topaz/upscale"
+        self.kie_upscale_model = normalize_kie_upscale_model(
+            _text(self.kie_upscale_model, limit=200)
+        )
+        self.kie_upscale_after_model = normalize_kie_upscale_model(
+            _text(self.kie_upscale_after_model, limit=200)
+        )
         self.local_realesrgan_profile = _text(
             self.local_realesrgan_profile,
             limit=100,

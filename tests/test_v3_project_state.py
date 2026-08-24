@@ -10,6 +10,7 @@ from v3_project_state import (
     ClipartModeData,
     CommonProjectData,
     GenerationData,
+    ImageOperationData,
     PinterestModeData,
     ProcessingModeData,
     ProjectMode,
@@ -26,6 +27,15 @@ from v3_project_state import (
 
 
 class ProjectRoutesTests(unittest.TestCase):
+    def test_saved_recraft_upscale_selection_migrates_to_topaz(self):
+        operations = ImageOperationData(
+            kie_upscale_model="recraft/crisp-upscale",
+            kie_upscale_after_model="recraft/crisp-upscale",
+        )
+
+        self.assertEqual(operations.kie_upscale_model, "topaz/upscale")
+        self.assertEqual(operations.kie_upscale_after_model, "topaz/upscale")
+
     def test_processing_collision_policy_round_trips_through_state(self):
         state = ProjectState(
             mode=ProjectMode.PROCESSING,

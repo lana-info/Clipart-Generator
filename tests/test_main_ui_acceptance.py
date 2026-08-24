@@ -28,6 +28,31 @@ class MainUiAcceptanceTests(unittest.TestCase):
             patch.object(main.QTimer, "singleShot"),
         )
 
+    def test_unavailable_recraft_selection_is_migrated_and_hidden(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-ui-recraft-migration-") as temp_dir:
+            temp_path = Path(temp_dir)
+            (temp_path / "config.json").write_text(
+                json.dumps(
+                    {
+                        "kie_upscale_model": "recraft/crisp-upscale",
+                        "kie_upscale_after_model": "recraft/crisp-upscale",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            patches = self.isolated_paths(temp_path)
+            with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5]:
+                window = main.MainWindow()
+                self.assertEqual(window.config["kie_upscale_model"], "topaz/upscale")
+                self.assertEqual(window.config["kie_upscale_after_model"], "topaz/upscale")
+                self.assertEqual(window.kie_upscale_model_combo.count(), 1)
+                self.assertEqual(window.kie_upscale_after_model_combo.count(), 1)
+                self.assertEqual(window.kie_upscale_model_combo.currentText(), "topaz/upscale")
+                window.settings_save_timer.stop()
+                window.api_key_mask_timer.stop()
+                window.deleteLater()
+                self.app.processEvents()
+
     def test_work_folder_key_lock_and_processing_settings_persist(self):
         with tempfile.TemporaryDirectory(prefix="clipart-ui-settings-") as temp_dir:
             temp_path = Path(temp_dir)

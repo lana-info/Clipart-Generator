@@ -84,6 +84,7 @@ from v3_provider_registry import (
     provider_requires_api_key,
     provider_supports_operation,
     provider_visible_controls,
+    normalize_kie_upscale_model,
     upscale_model_preserves_alpha,
 )
 from v3_wizard import AppShell
@@ -525,8 +526,12 @@ def _worker_settings(
             "upscale_after": operations.upscale_after,
             "upscale_after_provider": operations.upscale_after_provider,
             "upscale_factor": operations.upscale_factor,
-            "kie_upscale_model": operations.kie_upscale_model,
-            "kie_upscale_after_model": operations.kie_upscale_after_model,
+            "kie_upscale_model": normalize_kie_upscale_model(
+                operations.kie_upscale_model
+            ),
+            "kie_upscale_after_model": normalize_kie_upscale_model(
+                operations.kie_upscale_after_model
+            ),
             "local_realesrgan_profile": operations.local_realesrgan_profile,
             "local_realesrgan_scale": operations.local_realesrgan_scale,
             "local_realesrgan_after_scale": (
@@ -669,6 +674,12 @@ def build_clipart_run_request(
 
     generation = state.clipart.generation
     operations = state.clipart.operations
+    operations.kie_upscale_model = normalize_kie_upscale_model(
+        operations.kie_upscale_model
+    )
+    operations.kie_upscale_after_model = normalize_kie_upscale_model(
+        operations.kie_upscale_after_model
+    )
     _validate_prompt_references(state.clipart.prompts)
     _validate_processing_providers(operations)
     _validate_alpha_safe_upscale(operations)

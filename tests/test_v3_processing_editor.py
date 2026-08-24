@@ -65,10 +65,10 @@ class ProcessingEditorTests(unittest.TestCase):
         recraft_index = editor.operation_widgets["kie_upscale_after_model"].findData(
             "recraft/crisp-upscale"
         )
-        self.assertFalse(
-            editor.operation_widgets["kie_upscale_after_model"].model()
-            .item(recraft_index)
-            .isEnabled()
+        self.assertEqual(recraft_index, -1)
+        self.assertEqual(
+            editor.operation_widgets["kie_upscale_after_model"].currentData(),
+            "topaz/upscale",
         )
         self.assertTrue(hasattr(editor, "cleanup_checkbox"))
         self.assertFalse(editor.cleanup_checkbox.isChecked())
