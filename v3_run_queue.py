@@ -805,6 +805,29 @@ class RunQueueSession(QObject):
         self.changed.emit()
         return True
 
+    def request_immediate_stop(self, *, immediate_stop: Callable[[], None]) -> bool:
+        """Interrupt the active worker and close the run immediately."""
+        if not self.running:
+            return False
+        self._event("immediate_stop_requested")
+        current = (
+            self.items[self.current_index]
+            if self.current_index is not None
+            and 0 <= self.current_index < len(self.items)
+            else None
+        )
+        if current is not None and current.status is RunItemStatus.RUNNING:
+            self._close_running_stages(current, "cancelled")
+            current.status = RunItemStatus.CANCELLED
+            current.short_message = "Операция прервана пользователем."
+        self._cancel_pending()
+        self.running = False
+        self.finished_at = time.monotonic()
+        self._record_run_cancelled()
+        self.changed.emit()
+        immediate_stop()
+        return True
+
     def handle_finished(self) -> None:
         if not self.running and self.finished_at is not None:
             return
@@ -1062,6 +1085,7 @@ class BeforeAfterViewer(QFrame):
 
 class RunResultsPage(QWidget):
     stop_requested = pyqtSignal()
+    immediate_stop_requested = pyqtSignal()
     retry_requested = pyqtSignal()
     process_more_requested = pyqtSignal()
     finish_requested = pyqtSignal()
@@ -1145,6 +1169,11 @@ class RunResultsPage(QWidget):
             ButtonVariant.SECONDARY,
         )
         self.stop_button.clicked.connect(self.stop_requested.emit)
+        self.immediate_stop_button = V3Button(
+            "Прервать сейчас",
+            ButtonVariant.DESTRUCTIVE,
+        )
+        self.immediate_stop_button.clicked.connect(self.immediate_stop_requested.emit)
         self.retry_button = V3Button(
             "Повторить ошибки",
             ButtonVariant.SECONDARY,
@@ -1177,6 +1206,7 @@ class RunResultsPage(QWidget):
         self.export_button.clicked.connect(self._choose_report_path)
         for button in (
             self.stop_button,
+            self.immediate_stop_button,
             self.retry_button,
             self.process_more_button,
             self.finish_button,
@@ -1224,6 +1254,7 @@ class RunResultsPage(QWidget):
         session = self.session
         if session is None:
             self.stop_button.hide()
+            self.immediate_stop_button.hide()
             self.retry_button.hide()
             self.process_more_button.hide()
             self.finish_button.hide()
@@ -1257,18 +1288,25 @@ class RunResultsPage(QWidget):
         if row >= 0:
             self.queue.setCurrentRow(min(row, len(session.items) - 1))
         stop_visible = session.running and not session.stop_after_current_requested
+        immediate_stop_visible = session.running
         retry_visible = not session.running and bool(session.failed_indices)
         process_more_visible = not session.running
         finish_visible = not session.running
         self.stop_button.setVisible(stop_visible)
+        self.immediate_stop_button.setVisible(immediate_stop_visible)
         self.retry_button.setVisible(retry_visible)
         self.process_more_button.setVisible(process_more_visible)
         self.finish_button.setVisible(finish_visible)
         self.workflow_actions.setVisible(
-            stop_visible or retry_visible or process_more_visible or finish_visible
+            stop_visible
+            or immediate_stop_visible
+            or retry_visible
+            or process_more_visible
+            or finish_visible
         )
         self.utility_actions.setVisible(True)
         self.stop_button.setEnabled(stop_visible)
+        self.immediate_stop_button.setEnabled(immediate_stop_visible)
         self.retry_button.setEnabled(retry_visible)
         self.finish_button.setEnabled(finish_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
@@ -1461,6 +1499,7 @@ class RunQueueSupport:
             tokens=controller.shell.tokens,
         )
         self.page.stop_requested.connect(self.stop_after_current)
+        self.page.immediate_stop_requested.connect(self.stop_now)
         self.page.retry_requested.connect(self.retry_failed)
         self.page.process_more_requested.connect(self.process_more)
         self.page.finish_requested.connect(self.finish_workflow)
@@ -1629,6 +1668,19 @@ class RunQueueSupport:
             immediate_stop=immediate,
             native_after_current=native if callable(native) else None,
         )
+
+    def stop_now(self) -> bool:
+        worker = getattr(self.controller, "worker", None)
+        if (
+            self.session is None
+            or worker is None
+            or worker is not self._active_worker
+        ):
+            return False
+        immediate = getattr(worker, "stop", None)
+        if not callable(immediate):
+            return False
+        return self.session.request_immediate_stop(immediate_stop=immediate)
 
     def retry_failed(self) -> Any | None:
         if self.session is None:

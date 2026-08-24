@@ -326,6 +326,28 @@ class V3RunQueueTests(unittest.TestCase):
                 RunItemStatus.CANCELLED,
             )
 
+    def test_immediate_stop_cancels_current_and_pending_items_without_waiting(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-immediate-stop-") as temp:
+            session = RunQueueSession(
+                generation_request(temp, count=3),
+                ProjectMode.CLIPART,
+            )
+            calls = []
+            session.handle_progress("[1/3] Генерация")
+
+            self.assertTrue(
+                session.request_immediate_stop(
+                    immediate_stop=lambda: calls.append("stop"),
+                )
+            )
+
+            self.assertEqual(calls, ["stop"])
+            self.assertFalse(session.running)
+            self.assertTrue(
+                all(item.status is RunItemStatus.CANCELLED for item in session.items)
+            )
+            self.assertIn("прервана пользователем", session.items[0].short_message)
+
     def test_retry_request_contains_only_failed_private_payloads(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-retry-") as temp:
             session = RunQueueSession(
