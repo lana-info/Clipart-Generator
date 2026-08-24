@@ -307,6 +307,26 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.close()
         view.deleteLater()
 
+    def test_mode_switcher_restarts_after_results_instead_of_reopening_results(self):
+        view = V3ApplicationView()
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        view.shell.state.set_step(StepId.RESULTS)
+        view.shell.refresh()
+
+        view.shell.change_mode_button.click()
+        view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
+
+        self.assertEqual(view.project_state.mode, ProjectMode.PINTEREST)
+        self.assertEqual(
+            view.project_state.current_step,
+            route_for_mode(ProjectMode.PINTEREST)[0],
+        )
+        self.assertIs(view.stack.currentWidget(), view.shell)
+        results_page = view.shell.pinterest_flow_controller.pages[StepId.RESULTS]
+        self.assertIsNot(view.shell.current_page, results_page)
+        view.close()
+        view.deleteLater()
+
     def test_done_returns_to_mode_selection_without_reusing_completed_shell(self):
         view = V3ApplicationView()
         view.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()

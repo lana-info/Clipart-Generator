@@ -631,9 +631,17 @@ class AppShell(QWidget):
     def _switch_mode(self, mode: ProjectMode) -> None:
         self._run_request_key = None
         self.mode_switch_banner.hide()
+        restart_workflow = self.state.current_step is StepId.RESULTS
         self.state.switch_mode(mode)
+        if restart_workflow:
+            # Results are terminal for the previous run.  Reusing that step
+            # after switching mode makes the new mode open on the old results
+            # page, with no way to start a fresh workflow.
+            self.state.set_step(route_for_mode(mode)[0])
         self._invalid_key = None
         self.validation_label.clear()
         self.validation_label.hide()
         self.mark_dirty()
         self.mode_changed.emit(mode.value)
+        if restart_workflow:
+            self.step_changed.emit(mode.value, self.state.current_step.value)
