@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-20
+Updated: 2026-08-24
 
 ## Operating model
 
@@ -24,12 +24,18 @@ Updated: 2026-08-20
 
 ## Next task
 
+The current product priority is to finish the existing interface and close the
+remaining UX findings before adding new product modes. The immediate plan is
+recorded in `TASKS_3.0.ru.md`: complete `CG3-TASK-034` (rendered UI smoke and
+the remaining Windows smoke findings), then implement `CG3-TASK-035`
+(controlled parallel KIE generation, initially up to three tasks with one new
+task per second). Vectorization and Patterns remain deferred.
+
 The Windows 3.0.1 smoke test covered installation, startup licensing, folder
 persistence, diagnostics, local processing, cancellation, and basic lifecycle.
-The owner stopped the remaining manual checks; unchecked acceptance items are
-`SKIP / NOT TESTED`, not proven passes. Implement Task 65 as a new fix pack,
-run local regressions and a new Windows build, then repeat focused acceptance.
-Do not upload or publish an update revision until that build is approved.
+Unchecked acceptance items are `SKIP / NOT TESTED`, not proven passes. Do not
+upload or publish an update revision until the current source and focused
+acceptance are approved.
 
 ## Blockers and risks
 
