@@ -5,7 +5,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QTextEdit  # noqa: E402
 
 from v3_prompt_csv_import import (  # noqa: E402
     PromptCsvImportDialog,
@@ -85,7 +85,24 @@ class PromptCsvImportTests(unittest.TestCase):
         self.assertTrue(dialog.get_entries())
         self.assertIn("Валидных: 1", dialog.summary_label.text())
 
+    def test_dialog_keeps_long_preview_bounded_and_wrapped(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-csv-long-preview-") as temp_dir:
+            csv_path = Path(temp_dir) / "prompts.csv"
+            csv_path.write_text(
+                "prompt\n" + ("very long prompt " * 400) + "\n",
+                encoding="utf-8-sig",
+                newline="",
+            )
+
+            dialog = PromptCsvImportDialog(csv_path)
+
+        self.assertLessEqual(dialog.width(), 1000)
+        self.assertEqual(
+            dialog.preview_text.lineWrapMode(),
+            QTextEdit.LineWrapMode.WidgetWidth,
+        )
+        self.assertIn("показано 1 из 1", dialog.preview_text.toPlainText())
+
 
 if __name__ == "__main__":
     unittest.main()
-

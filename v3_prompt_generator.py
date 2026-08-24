@@ -189,6 +189,7 @@ def normalize_prompt_entries(
     values: Sequence[Any],
     *,
     limit: int = MAX_PROMPT_ENTRIES,
+    deduplicate: bool = True,
 ) -> list[PromptEntry]:
     if not isinstance(values, Sequence) or isinstance(
         values,
@@ -210,7 +211,7 @@ def normalize_prompt_entries(
             continue
         prompt = normalize_prompt_text(entry.prompt)
         key = prompt.casefold()
-        if not prompt or key in seen:
+        if not prompt or (deduplicate and key in seen):
             continue
         seen.add(key)
         result.append(
@@ -260,10 +261,12 @@ def replace_project_prompts(
     state: ProjectState,
     mode: ProjectMode | str,
     values: Sequence[Any],
+    *,
+    deduplicate: bool = True,
 ) -> list[PromptEntry]:
     normalized_mode = (
         mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
     )
     target = _mode_data(state, normalized_mode)
-    target.prompts = normalize_prompt_entries(values)
+    target.prompts = normalize_prompt_entries(values, deduplicate=deduplicate)
     return target.prompts

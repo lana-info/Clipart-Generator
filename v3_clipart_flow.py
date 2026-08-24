@@ -1447,9 +1447,15 @@ class ClipartPromptInputPage(_ScrollableStepPage):
                 self.state,
                 ProjectMode.CLIPART,
                 list(self.state.clipart.prompts) + normalized_entries,
+                deduplicate=False,
             )
         else:
-            replace_project_prompts(self.state, ProjectMode.CLIPART, normalized_entries)
+            replace_project_prompts(
+                self.state,
+                ProjectMode.CLIPART,
+                normalized_entries,
+                deduplicate=False,
+            )
         self.card.set_state("default")
         self.changed()
 

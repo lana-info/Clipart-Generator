@@ -206,7 +206,12 @@ class PromptCsvImportDialog(QDialog):
         self._result: CsvImportResult | None = None
         self._action: str | None = None
         self.setWindowTitle("Импорт промптов из CSV")
-        self.resize(840, 620)
+        # Keep long prompt text from determining the dialog's width.  Without
+        # an explicit bound, Qt can size the modal window wider than the
+        # screen because the preview contains very long single-line prompts.
+        self.setMinimumSize(760, 520)
+        self.setMaximumSize(1000, 760)
+        self.resize(900, 620)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -237,6 +242,10 @@ class PromptCsvImportDialog(QDialog):
         self.preview_text = QTextEdit()
         self.preview_text.setReadOnly(True)
         self.preview_text.setPlaceholderText("Здесь будет предпросмотр импорта")
+        self.preview_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.preview_text.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         layout.addWidget(self.preview_text, 1)
 
         self.button_box = QDialogButtonBox()
@@ -340,7 +349,10 @@ class PromptCsvImportDialog(QDialog):
         parts: list[str] = []
         valid_entries = result.entries[:MAX_CSV_PREVIEW_ROWS]
         if valid_entries:
-            parts.append("Предпросмотр валидных строк:")
+            parts.append(
+                "Предпросмотр валидных строк "
+                f"(показано {len(valid_entries)} из {len(result.entries)}):"
+            )
             for index, entry in enumerate(valid_entries, start=1):
                 prompt = str(entry.get("prompt", "")).strip()
                 references = join_references(entry.get("references", []))
@@ -387,4 +399,3 @@ class PromptCsvImportDialog(QDialog):
 
     def import_action(self) -> str | None:
         return self._action
-

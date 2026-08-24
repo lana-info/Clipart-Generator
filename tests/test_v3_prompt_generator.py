@@ -147,6 +147,17 @@ class V3PromptGeneratorTests(unittest.TestCase):
         )
         self.assertEqual(result[0].references, ["D:/one.png"])
 
+    def test_csv_replacement_can_preserve_repeated_prompt_rows(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        result = replace_project_prompts(
+            state,
+            ProjectMode.CLIPART,
+            [PromptEntry("Same prompt"), PromptEntry("same prompt")],
+            deduplicate=False,
+        )
+
+        self.assertEqual([entry.prompt for entry in result], ["Same prompt", "same prompt"])
+
     def test_generator_fields_and_manual_edits_survive_project_draft(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         data = self.sample_data()
