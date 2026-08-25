@@ -27,11 +27,11 @@ Updated: 2026-08-25
 
 ## Next task
 
-Commit and push the packaged-artwork gate, then run a distinctly versioned
-Windows replacement build only after explicit owner approval. The replacement
-must pass the artwork check from both the PyInstaller output and the copy
-installed by Inno Setup before owner visual acceptance. Do not upload it as a
-server revision until that acceptance succeeds.
+Finish the focused audit of user-visible changes that exist only on
+`codex/tech-debt-11`, port approved items without merging the divergent branch
+wholesale, and then run a distinctly versioned Windows replacement build only
+after explicit owner approval. The replacement must pass artwork and hidden
+helper-process checks from the installed copy before owner acceptance.
 
 ## Blockers and risks
 
@@ -52,6 +52,11 @@ server revision until that acceptance succeeds.
   the downloaded installer hash matched run `32900235313`. The old gate checked
   only that three cards existed. The replacement source now rejects null card
   pixmaps and verifies the application again after Inno Setup installs it.
+- The same owner test exposed visible helper-process console windows. Root cause:
+  the `CREATE_NO_WINDOW` change existed only in divergent commit `82fe6ff` and
+  was absent from the artwork release branch. The focused fix is now applied to
+  Local Real-ESRGAN and all optional local watermark subprocesses. The `3.0.5`
+  artifact is not a publication candidate.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 - Azure Windows run `81` proved KIE balance and KIE processing on the owner's

@@ -25,6 +25,21 @@ def test_broken_executable_is_not_reported_available(monkeypatch):
     assert backend_available() is False
 
 
+def test_backend_probe_suppresses_windows_console(monkeypatch):
+    captured = {}
+    monkeypatch.setattr("shutil.which", lambda _: "remove-ai-watermarks")
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+
+    def fake_run(*args, **kwargs):
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    assert backend_available() is True
+    assert captured["creationflags"] == 0x08000000
+
+
 def test_gpu_backend_requires_nvidia_smi(monkeypatch):
     monkeypatch.setattr("ai_watermark_backend.backend_available", lambda: True)
     monkeypatch.setattr("shutil.which", lambda name: None if name == "nvidia-smi" else "tool")

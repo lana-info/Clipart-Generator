@@ -15,6 +15,11 @@ class WatermarkBackendError(RuntimeError):
     pass
 
 
+def hidden_window_creation_flags() -> int:
+    """Prevent helper processes from creating a console on Windows."""
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
 def backend_available() -> bool:
     executable = shutil.which("remove-ai-watermarks")
     if not executable:
@@ -28,6 +33,7 @@ def backend_available() -> bool:
             timeout=5,
             check=False,
             shell=False,
+            creationflags=hidden_window_creation_flags(),
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -50,6 +56,7 @@ def gpu_backend_available() -> bool:
             timeout=5,
             check=False,
             shell=False,
+            creationflags=hidden_window_creation_flags(),
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -94,6 +101,7 @@ def clean_invisible_watermark(
             timeout=timeout_seconds,
             check=False,
             shell=False,
+            creationflags=hidden_window_creation_flags(),
         )
     except subprocess.TimeoutExpired as error:
         raise WatermarkBackendError("Экспериментальная очистка превысила лимит времени") from error

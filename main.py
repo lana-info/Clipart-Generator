@@ -51,6 +51,7 @@ from ai_watermark_backend import (
     WatermarkBackendError,
     clean_invisible_watermark,
     gpu_backend_available,
+    hidden_window_creation_flags,
 )
 from metadata_inspector import inspect_image_metadata
 from visible_mark_cleanup import (
@@ -1663,6 +1664,7 @@ class WorkerThread(QThread):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                creationflags=hidden_window_creation_flags(),
             )
             deadline = time.monotonic() + LOCAL_REALESRGAN_TIMEOUT_SECONDS
             while True:

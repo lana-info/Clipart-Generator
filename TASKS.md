@@ -6,9 +6,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Commit and push the packaged-artwork regression gate, then
-run a distinctly versioned replacement Windows build only after explicit owner
-approval. Verify the images in the installed application before any server
+Current next task: **Audit the user-visible changes stranded on the divergent
+`codex/tech-debt-11` branch, port approved items without a wholesale merge, and
+then prepare a distinctly versioned Windows replacement build. Verify images
+and absence of console windows in the installed application before any server
 publication.**
 
 ## Phase 1 - Preparation

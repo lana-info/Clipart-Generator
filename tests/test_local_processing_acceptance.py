@@ -1,4 +1,5 @@
 import shutil
+import subprocess
 import tempfile
 import types
 import unittest
@@ -173,6 +174,40 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "Real-ESRGAN"):
                 worker._run_local_realesrgan(str(source_path), str(Path(temp_dir) / "output.png"))
+
+    def test_local_realesrgan_hides_windows_console_when_started(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-realesrgan-window-") as temp_dir:
+            root = Path(temp_dir)
+            self.create_fake_realesrgan_runtime(root)
+            source_path = root / "source.png"
+            output_path = root / "output.png"
+            Image.new("RGB", (4, 4), "white").save(source_path)
+            worker = self.make_worker(root, local_realesrgan_dir=str(root))
+            captured = {}
+
+            class FakeProcess:
+                returncode = 0
+
+                def __init__(self, command, **kwargs):
+                    captured.update(kwargs)
+                    shutil.copyfile(
+                        command[command.index("-i") + 1],
+                        command[command.index("-o") + 1],
+                    )
+
+                def communicate(self, timeout=None):
+                    return "", ""
+
+                def poll(self):
+                    return self.returncode
+
+            with patch.object(main.subprocess, "Popen", FakeProcess):
+                worker._run_local_realesrgan(str(source_path), str(output_path), scale=2)
+
+            self.assertEqual(
+                captured["creationflags"],
+                getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
 
     def test_local_realesrgan_keeps_straight_rgb_under_soft_alpha(self):
         with tempfile.TemporaryDirectory(prefix="clipart-soft-alpha-") as temp_dir:

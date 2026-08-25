@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Windows helper processes now request `CREATE_NO_WINDOW`: Local Real-ESRGAN
+  and the optional local watermark backend no longer create visible console or
+  PowerShell-style windows. A regression test covers the Real-ESRGAN launch
+  boundary; all three optional-backend probes/runs use the same hidden flag.
 - Windows release verification now fails when any approved mode illustration
   is missing or resolves to a null pixmap. GitHub Actions also installs the
   finished Inno Setup package into an isolated directory and repeats that smoke
