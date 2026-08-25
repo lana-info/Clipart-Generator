@@ -12,6 +12,11 @@
 
 ## Unreleased
 
+- Download page copy now presents Vibix Images as a batch neural-image
+  generator, including clipart series, uses recognizable Windows/macOS marks,
+  states the 24-hour license-key delivery window, and reserves a disabled help
+  and video entry for future materials. Approved mode and installer artwork is
+  now hash-locked and documented as mandatory across the site and desktop build.
 - GitHub Actions now builds the Windows-only installer with the same signed
   Microsoft Visual C++ prerequisite required by the Inno Setup package and
   uploads the complete installer/checksum/provenance artifact set. Manual run

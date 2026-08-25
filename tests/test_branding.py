@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -43,6 +44,8 @@ class BrandingTests(unittest.TestCase):
         self.assertIn('Создать клипарт', installer)
         self.assertIn('Создать Pinterest-пины', installer)
         self.assertIn('Обработать изображения', installer)
+        self.assertIn('Массовая генерация изображений', installer)
+        self.assertIn('активируйте лицензию', installer)
         self.assertIn('WizardImageFile=assets\\installer-wizard-hq.png', installer)
         wizard_image = PROJECT_ROOT / "assets" / "installer-wizard-hq.png"
         self.assertTrue(wizard_image.is_file())
@@ -59,6 +62,52 @@ class BrandingTests(unittest.TestCase):
         for name in ("clipart", "pinterest", "processing"):
             self.assertIn(f'assets/mode-{name}.png;assets', build)
             self.assertIn(f"assets/mode-{name}.png:assets", mac_build)
+
+    def test_approved_mode_artwork_is_preserved_across_app_site_and_installer(self):
+        approved = {
+            "clipart": "4eb6d0247e6412cd19d388da2928fd058d34d5a52eb2b548dc7b6aeb95e32843",
+            "pinterest": "ef221f2504f274be8849265240a287eaf8b51a252972d149b1bfa9d7afb32d96",
+            "processing": "4a5fb6b4804e8f6a24e3c7c61bc92317022ea8e5d91db317b230ca0f78529bed",
+        }
+
+        for name, expected_sha256 in approved.items():
+            app_asset = PROJECT_ROOT / "assets" / f"mode-{name}.png"
+            site_asset = (
+                PROJECT_ROOT
+                / "website"
+                / "vibix-download"
+                / "assets"
+                / f"mode-{name}-hq.png"
+            )
+            self.assertEqual(hashlib.sha256(app_asset.read_bytes()).hexdigest(), expected_sha256)
+            self.assertEqual(site_asset.read_bytes(), app_asset.read_bytes())
+
+        installer_art = PROJECT_ROOT / "assets" / "installer-wizard-hq.png"
+        self.assertEqual(
+            hashlib.sha256(installer_art.read_bytes()).hexdigest(),
+            "577f19f18b35a753852081afa41b1d0139dcff642202aff03ddf098258a1c76b",
+        )
+
+        handoff = (
+            PROJECT_ROOT / "docs" / "brand" / "VIBIX_PRODUCT_FAMILY_HANDOFF.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Approved Vibix Images mode artwork", handoff)
+        self.assertIn("must be used", handoff)
+
+    def test_download_page_uses_approved_copy_platform_icons_and_future_help(self):
+        page = (
+            PROJECT_ROOT / "website" / "vibix-download" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Массовая генерация изображений", page)
+        self.assertIn("в том числе согласованные наборы клипартов", page)
+        self.assertIn("в течение 24 часов", page)
+        self.assertIn("Инструкция и видео — скоро", page)
+        self.assertIn("Vibix Images развивается", page)
+        self.assertIn('rel="icon" href="assets/vibix-images.svg"', page)
+        self.assertIn('class="platform-logo"', page)
+        self.assertNotIn('aria-hidden="true">⊞</span>', page)
+        self.assertNotIn('aria-hidden="true">●</span>', page)
 
 
 if __name__ == "__main__":

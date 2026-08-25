@@ -19,7 +19,7 @@ Updated: 2026-08-25
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/release-3.0.3`
+- Current task branch: `codex/ui-download-copy-help`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,11 +27,13 @@ Updated: 2026-08-25
 
 ## Next task
 
-Download GitHub Actions artifact `windows-3.0.5` from run `32900235313` for
-owner acceptance. Repeat visual installer/application checks, production
-license activation, Local Real-ESRGAN, Local rembg, Local BEN2, Trim + 300 DPI
-Results, and diagnostic-ZIP acceptance on Windows. Do not upload it as a server
-revision until the owner explicitly requests publication after focused testing.
+Upload the refreshed `website/vibix-download-files.zip` contents to the Timeweb
+`download` directory, then download GitHub Actions artifact `windows-3.0.5` from
+run `32900235313` for owner acceptance. Repeat visual installer/application
+checks, production license activation, Local Real-ESRGAN, Local rembg, Local
+BEN2, Trim + 300 DPI Results, and diagnostic-ZIP acceptance on Windows. Do not
+upload it as a server revision until the owner explicitly requests publication
+after focused testing.
 
 ## Blockers and risks
 

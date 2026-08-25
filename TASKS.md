@@ -6,9 +6,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Download the verified GitHub Windows `3.0.5` artifact from
-run `32900235313` and perform focused visual, license, Local rembg, and Local
-BEN2 acceptance on the target PC before any server publication.**
+Current next task: **Upload the refreshed download-page archive to Timeweb,
+then download the verified GitHub Windows `3.0.5` artifact from run
+`32900235313` and perform focused visual, license, Local rembg, and Local BEN2
+acceptance on the target PC before any server publication.**
 
 ## Phase 1 - Preparation
 

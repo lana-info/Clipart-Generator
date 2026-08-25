@@ -70,6 +70,25 @@ replace only the tile and pixel colors according to the product table above.
 7. The application subtitle for Vibix Images is
    `AI Image Generation & Processing`.
 
+## Approved Vibix Images mode artwork
+
+The following raster illustrations are approved product assets and must be used
+without replacement in the application mode cards, the download website, and
+the coordinated Windows installer artwork:
+
+| Mode | Canonical application asset | Website copy | SHA-256 |
+| --- | --- | --- | --- |
+| Clipart / batch generation | `assets/mode-clipart.png` | `website/vibix-download/assets/mode-clipart-hq.png` | `4eb6d0247e6412cd19d388da2928fd058d34d5a52eb2b548dc7b6aeb95e32843` |
+| Pinterest pins | `assets/mode-pinterest.png` | `website/vibix-download/assets/mode-pinterest-hq.png` | `ef221f2504f274be8849265240a287eaf8b51a252972d149b1bfa9d7afb32d96` |
+| Image processing | `assets/mode-processing.png` | `website/vibix-download/assets/mode-processing-hq.png` | `4a5fb6b4804e8f6a24e3c7c61bc92317022ea8e5d91db317b230ca0f78529bed` |
+
+The website copies must remain byte-identical to the canonical application
+assets. `assets/installer-wizard-hq.png` is the approved installer composition
+derived from the same visual family; its SHA-256 is
+`577f19f18b35a753852081afa41b1d0139dcff642202aff03ddf098258a1c76b`.
+Any intentional replacement requires explicit owner approval plus an update to
+the brand handoff and branding regression hashes.
+
 ## Deliverables still pending
 
 - Master wordmark and product lockups.
