@@ -88,6 +88,24 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("Microsoft Corporation", workflow)
         self.assertIn("build-prerequisites", workflow)
 
+    def test_github_packaged_smoke_requires_rendered_mode_artwork(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+            encoding="utf-8"
+        )
+        source = Path("main.py").read_text(encoding="utf-8")
+
+        self.assertIn("packaged mode artwork", workflow)
+        self.assertIn("mode_artwork_is_rendered", source)
+
+    def test_github_verifies_mode_artwork_from_the_installed_copy(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("Verify installed Windows application", workflow)
+        self.assertIn("$installedExe", workflow)
+        self.assertIn("--release-entrypoint-smoke", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

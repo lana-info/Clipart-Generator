@@ -19,7 +19,7 @@ Updated: 2026-08-25
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/ui-download-copy-help`
+- Current task branch: `codex/fix-packaged-mode-artwork`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,13 +27,11 @@ Updated: 2026-08-25
 
 ## Next task
 
-Upload the refreshed `website/vibix-download-files.zip` contents to the Timeweb
-`download` directory, then download GitHub Actions artifact `windows-3.0.5` from
-run `32900235313` for owner acceptance. Repeat visual installer/application
-checks, production license activation, Local Real-ESRGAN, Local rembg, Local
-BEN2, Trim + 300 DPI Results, and diagnostic-ZIP acceptance on Windows. Do not
-upload it as a server revision until the owner explicitly requests publication
-after focused testing.
+Commit and push the packaged-artwork gate, then run a distinctly versioned
+Windows replacement build only after explicit owner approval. The replacement
+must pass the artwork check from both the PyInstaller output and the copy
+installed by Inno Setup before owner visual acceptance. Do not upload it as a
+server revision until that acceptance succeeds.
 
 ## Blockers and risks
 
@@ -50,6 +48,10 @@ after focused testing.
 - Automated packaged checks passed, but final installation, production-license
   activation, Windows visual behavior, and SmartScreen behavior still require a
   manual check on the target Windows computer.
+- Owner testing of GitHub `3.0.5` showed the pre-artwork card layout even though
+  the downloaded installer hash matched run `32900235313`. The old gate checked
+  only that three cards existed. The replacement source now rejects null card
+  pixmaps and verifies the application again after Inno Setup installs it.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 - Azure Windows run `81` proved KIE balance and KIE processing on the owner's

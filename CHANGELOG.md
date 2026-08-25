@@ -12,6 +12,11 @@
 
 ## Unreleased
 
+- Windows release verification now fails when any approved mode illustration
+  is missing or resolves to a null pixmap. GitHub Actions also installs the
+  finished Inno Setup package into an isolated directory and repeats that smoke
+  check against the installed executable, closing the gap exposed by the owner
+  test of the `3.0.5` artifact.
 - Download page copy now presents Vibix Images as a batch neural-image
   generator, including clipart series, uses recognizable Windows/macOS marks,
   states the 24-hour license-key delivery window, and reserves a disabled help

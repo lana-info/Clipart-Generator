@@ -7181,6 +7181,13 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
     dialog.close()
 
     packaged_view = V3ApplicationView(license_gate=gate)
+    mode_artwork_is_rendered = all(
+        card.illustration is not None
+        and hasattr(card.illustration, "pixmap")
+        and card.illustration.pixmap() is not None
+        and not card.illustration.pixmap().isNull()
+        for card in packaged_view.mode_selection.mode_cards.values()
+    )
     controls_are_present = (
         packaged_view.mode_selection.license_status_label.text()
         == "Лицензия не активирована"
@@ -7234,6 +7241,7 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
     return 0 if (
         len(MODE_CARD_SPECS) == 3
         and V3ApplicationView
+        and mode_artwork_is_rendered
         and license_input_is_safe
         and controls_are_present
         and controls_are_connected
