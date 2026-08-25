@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 112" role="img" aria-labelledby="title desc">
+  <title id="title">Vibix Images</title>
+  <desc id="desc">A white V and a separate dark pixel aligned on the same lower baseline, on a rounded teal tile.</desc>
+  <rect x="4" y="4" width="104" height="104" rx="27" fill="#2DD4BF"/>
+  <path d="M21 28H40L54 69L68 28H86L62 82H46Z" fill="#FFFFFF"/>
+  <rect x="83" y="69" width="13" height="13" rx="2.5" fill="#0F766E"/>
+</svg>
