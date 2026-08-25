@@ -35,7 +35,7 @@ server revision until the owner explicitly requests it after focused testing.
 ## Blockers and risks
 
 - Azure Windows run `139` reached the offline release gate on 2026-08-25:
-  135 tests passed, two expected skips remained, and the new PNG mode-card test
+  133 tests passed, two expected skips remained, and the new PNG mode-card test
   passed. It exposed a legacy `QSvgWidget` aspect-ratio API error, fixed and
   pushed in commit `631eb43`. The replacement Windows run `140` could not start
   because the Azure organization had no hosted pipeline minutes remaining.
