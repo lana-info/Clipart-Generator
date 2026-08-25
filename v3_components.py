@@ -562,7 +562,9 @@ class ModeCard(QFrame):
             resolved_path = Path(illustration_path)
             if resolved_path.suffix.lower() == ".svg":
                 illustration = QSvgWidget(str(resolved_path), self)
-                illustration.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+                illustration.renderer().setAspectRatioMode(
+                    Qt.AspectRatioMode.KeepAspectRatio
+                )
             else:
                 illustration = _AspectRatioPixmapLabel(
                     QPixmap(str(resolved_path)),
