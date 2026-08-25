@@ -78,6 +78,16 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("WaitForExit", verifier)
         self.assertIn("local-processing-smoke-report", verifier)
 
+    def test_github_downloads_and_verifies_visual_cpp_prerequisite(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("https://aka.ms/vc14/vc_redist.x64.exe", workflow)
+        self.assertIn("Get-AuthenticodeSignature", workflow)
+        self.assertIn("Microsoft Corporation", workflow)
+        self.assertIn("build-prerequisites", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

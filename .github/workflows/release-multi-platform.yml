@@ -104,6 +104,21 @@ jobs:
           }
           Write-Host "Fresh executable passed source and packaged license startup smoke checks."
 
+      - name: Download verified Visual C++ runtime
+        shell: powershell
+        run: |
+          $prerequisiteDir = ".\build-prerequisites"
+          New-Item -ItemType Directory -Force -Path $prerequisiteDir | Out-Null
+          $vcRedistPath = Join-Path $prerequisiteDir "vc_redist.x64.exe"
+          Invoke-WebRequest -Uri "https://aka.ms/vc14/vc_redist.x64.exe" -OutFile $vcRedistPath
+          $signature = Get-AuthenticodeSignature -FilePath $vcRedistPath
+          if ($signature.Status -ne "Valid") {
+            throw "Microsoft Visual C++ runtime signature is not valid: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Subject -notlike "*Microsoft Corporation*") {
+            throw "Microsoft Visual C++ runtime has an unexpected signer"
+          }
+
       - name: Build Windows setup (Inno Setup)
         shell: powershell
         run: |
