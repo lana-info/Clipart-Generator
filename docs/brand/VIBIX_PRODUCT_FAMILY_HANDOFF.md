@@ -73,8 +73,15 @@ replace only the tile and pixel colors according to the product table above.
 ## Deliverables still pending
 
 - Master wordmark and product lockups.
-- Windows multi-resolution ICO and transparent PNG exports.
-- Installer artwork and final application integration.
+- Transparent PNG exports for future marketing surfaces.
+- macOS DMG artwork, if the ZIP distribution is later replaced by a graphical installer.
+
+Completed for Vibix Images:
+
+- Windows multi-resolution ICO and application integration.
+- Three mode illustrations for the start screen in `assets/mode-*.svg`.
+- Windows Inno Setup artwork in `assets/installer-wizard.png` and matching
+  welcome/completion messaging.
 
 Open `vibix-product-family.html` beside this file for the portable visual
 sample.
