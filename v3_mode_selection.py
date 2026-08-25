@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -94,6 +95,14 @@ class SelectionIntent(str, Enum):
     SWITCH_MODE = "switch_mode"
 
 
+def mode_illustration_path(mode: ProjectMode) -> Path:
+    """Resolve a packaged mode illustration for both source and PyInstaller runs."""
+    resource_root = Path(
+        getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)
+    )
+    return resource_root / "assets" / f"mode-{mode.value}.svg"
+
+
 class ModeSelectionScreen(QWidget):
     mode_selected = pyqtSignal(str)
     continue_last_project_requested = pyqtSignal()
@@ -183,6 +192,7 @@ class ModeSelectionScreen(QWidget):
                 spec.description,
                 spec.result,
                 tokens=tokens,
+                illustration_path=mode_illustration_path(mode),
             )
             card.selected.connect(self._select_mode)
             card.setSizePolicy(

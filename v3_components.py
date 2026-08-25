@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -514,6 +516,7 @@ class ModeCard(QFrame):
         parent: QWidget | None = None,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        illustration_path: str | Path | None = None,
     ) -> None:
         super().__init__(parent)
         self.mode_id = mode_id
@@ -532,6 +535,22 @@ class ModeCard(QFrame):
             tokens.space_4,
         )
         layout.setSpacing(tokens.space_3)
+
+        self.illustration = None
+        if illustration_path:
+            illustration = QSvgWidget(str(illustration_path), self)
+            illustration.setObjectName("modeIllustration")
+            illustration.setAccessibleName(f"Иллюстрация режима: {title}")
+            illustration.setMinimumHeight(112)
+            illustration.setMaximumHeight(156)
+            illustration.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
+            )
+            illustration.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+            illustration.setStyleSheet("background: transparent; border: none;")
+            self.illustration = illustration
+            layout.addWidget(illustration)
 
         self.title_label = QLabel(title)
         self.title_label.setProperty("v3Title", True)

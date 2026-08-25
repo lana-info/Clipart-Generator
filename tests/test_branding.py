@@ -40,6 +40,23 @@ class BrandingTests(unittest.TestCase):
         self.assertIn('#define AppName "Vibix Images"', installer)
         self.assertIn('#define AppExeName "Vibix Images.exe"', installer)
         self.assertIn('SetupIconFile=assets\\vibix-images.ico', installer)
+        self.assertIn('Создать клипарт', installer)
+        self.assertIn('Создать Pinterest-пины', installer)
+        self.assertIn('Обработать изображения', installer)
+        self.assertIn('WizardImageFile=assets\\installer-wizard.png', installer)
+        self.assertTrue((PROJECT_ROOT / "assets" / "installer-wizard.png").is_file())
+
+    def test_mode_illustrations_are_packaged_for_both_desktop_builds(self):
+        for name in ("clipart", "pinterest", "processing"):
+            asset = PROJECT_ROOT / "assets" / f"mode-{name}.svg"
+            self.assertTrue(asset.is_file())
+            self.assertIn("<svg", asset.read_text(encoding="utf-8"))
+
+        build = (PROJECT_ROOT / "build.ps1").read_text(encoding="utf-8")
+        mac_build = (PROJECT_ROOT / "azure-pipelines-macos.yml").read_text(encoding="utf-8")
+        for name in ("clipart", "pinterest", "processing"):
+            self.assertIn(f'assets/mode-{name}.svg;assets', build)
+            self.assertIn(f"assets/mode-{name}.svg:assets", mac_build)
 
 
 if __name__ == "__main__":

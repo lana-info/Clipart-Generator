@@ -17,6 +17,10 @@ UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+DisableWelcomePage=no
+WizardImageFile=assets\installer-wizard.png
+WizardImageBackColor=$101827
+WizardKeepAspectRatio=yes
 OutputDir=release
 OutputBaseFilename=VibixImages-Setup-{#AppVersion}
 ArchitecturesAllowed=x64
@@ -26,6 +30,11 @@ RestartApplications=no
 
 [Languages]
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+
+[Messages]
+WelcomeLabel1=Добро пожаловать в установщик {#AppName}
+WelcomeLabel2=Установщик подготовит приложение Vibix Images для трёх задач:%n%n• Создать клипарт%n• Создать Pinterest-пины%n• Обработать изображения%n%nПосле установки запустите приложение и активируйте лицензию.
+FinishedLabel=Vibix Images установлен.%n%nТеперь можно создавать клипарты, Pinterest-пины и обрабатывать изображения.
 
 [Tasks]
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные задачи:"; Flags: unchecked

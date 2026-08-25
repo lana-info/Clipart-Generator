@@ -105,6 +105,18 @@ class V3ComponentTests(unittest.TestCase):
         self.assertIn("Выбран режим", card.accessibleDescription())
         card.deleteLater()
 
+    def test_mode_card_accepts_optional_illustration(self):
+        card = ModeCard(
+            "clipart",
+            "Создать клипарт",
+            "Серия изолированных объектов",
+            "набор PNG",
+            illustration_path="assets/mode-clipart.svg",
+        )
+        self.assertIsNotNone(card.illustration)
+        self.assertEqual(card.illustration.accessibleName(), "Иллюстрация режима: Создать клипарт")
+        card.deleteLater()
+
     def test_advanced_section_is_collapsed_by_default_and_keyboard_focusable(self):
         section = AdvancedSection()
         section.add_widget(QLabel("Редкая настройка"))
