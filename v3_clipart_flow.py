@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGroupBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -1167,12 +1168,54 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         )
         self.state = state
         self.changed = changed
+        self.tokens = tokens
+        self.progress_label = QLabel("Шаг 1 из 2 · Добавление промптов")
+        self.progress_label.setProperty("v3Selection", True)
+        self.progress_label.setAccessibleName(self.progress_label.text())
+        self.add_widget(self.progress_label)
+
+        source_choices = (
+            (
+                "Сгенерировать серию",
+                "По теме и стилю",
+            ),
+            (
+                "Вставить готовые",
+                "Один или несколько\nКаждый с новой строки",
+            ),
+            (
+                "Импортировать CSV",
+                "Готовый список из файла",
+            ),
+        )
+        source_row = QWidget()
+        source_layout = QHBoxLayout(source_row)
+        source_layout.setContentsMargins(0, 0, 0, 0)
+        source_layout.setSpacing(tokens.space_3)
+        self.source_button_group = QButtonGroup(self)
+        self.source_button_group.setExclusive(True)
+        self.source_buttons: list[QPushButton] = []
+        for index, (title, description) in enumerate(source_choices):
+            button = QPushButton(f"{title}\n{description}")
+            button.setProperty("v3SourceChoice", True)
+            button.setCheckable(True)
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setAccessibleName(title)
+            button.setAccessibleDescription(description)
+            button.clicked.connect(
+                lambda checked=False, target=index: self._select_source(target)
+            )
+            self.source_button_group.addButton(button, index)
+            self.source_buttons.append(button)
+            source_layout.addWidget(button, 1)
+        self.add_widget(source_row)
+
         self.source_combo = QComboBox()
         self.source_combo.setAccessibleName("Источник промптов")
         self.source_combo.addItem("Сгенерировать серию", "generator")
         self.source_combo.addItem("Вставить готовые промпты", "paste")
         self.source_combo.addItem("Импортировать CSV", "csv")
-        self.add_widget(self.source_combo)
+        self.source_combo.hide()
 
         self.source_stack = QStackedWidget()
         self.generator_widget = self._build_generator()
@@ -1185,10 +1228,20 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         ):
             self.source_stack.addWidget(widget)
         self.add_widget(self.source_stack)
-        self.source_combo.currentIndexChanged.connect(
-            self.source_stack.setCurrentIndex
-        )
+        self.source_combo.currentIndexChanged.connect(self._select_source)
         self.source_combo.setCurrentIndex(1)
+        self._select_source(1)
+
+    def _select_source(self, index: int) -> None:
+        if not 0 <= index < self.source_stack.count():
+            return
+        self.source_stack.setCurrentIndex(index)
+        if self.source_combo.currentIndex() != index:
+            self.source_combo.blockSignals(True)
+            self.source_combo.setCurrentIndex(index)
+            self.source_combo.blockSignals(False)
+        for button_index, button in enumerate(self.source_buttons):
+            button.setChecked(button_index == index)
 
     def _build_generator(self) -> QWidget:
         draft = self.state.clipart.prompt_generator
@@ -1198,7 +1251,8 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.generator_section = AdvancedSection(
             "Создать варианты промптов по шаблону"
         )
-        self.generator_section.set_expanded(False)
+        self.generator_section.set_expanded(True)
+        self.generator_section.toggle_button.hide()
         layout.addWidget(self.generator_section)
 
         section_intro = QLabel(
@@ -1350,20 +1404,33 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             self._preview()
         if not self._generated_variants:
             return
+        self._store_entries(list(self._generated_variants), action=action)
+
+    def _store_entries(
+        self,
+        entries: Sequence[PromptEntry],
+        *,
+        action: str,
+        deduplicate: bool = True,
+    ) -> bool:
+        normalized = list(entries)
         if action == "append":
-            replace_project_prompts(
-                self.state,
-                ProjectMode.CLIPART,
-                list(self.state.clipart.prompts) + list(self._generated_variants),
-            )
-        else:
-            replace_project_prompts(
-                self.state,
-                ProjectMode.CLIPART,
-                list(self._generated_variants),
-            )
+            if len(self.state.clipart.prompts) + len(normalized) > MAX_PROMPT_ENTRIES:
+                self.card.set_state(
+                    "error",
+                    f"Максимум {MAX_PROMPT_ENTRIES} промптов. Уменьшите добавляемый список.",
+                )
+                return False
+            normalized = list(self.state.clipart.prompts) + normalized
+        replace_project_prompts(
+            self.state,
+            ProjectMode.CLIPART,
+            normalized,
+            deduplicate=deduplicate,
+        )
         self.card.set_state("default")
         self.changed()
+        return True
 
     def _generate(self) -> None:
         try:
@@ -1379,13 +1446,30 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.paste_edit = QPlainTextEdit()
         self.paste_edit.setPlaceholderText("Один промпт в каждой строке")
         self.paste_edit.setAccessibleName("Готовые промпты")
+        self.paste_edit.setMinimumHeight(140)
+        self.paste_edit.setMaximumHeight(180)
         layout.addWidget(self.paste_edit)
-        self.paste_button = V3Button("Заменить список")
-        self.paste_button.clicked.connect(self._apply_paste)
-        layout.addWidget(self.paste_button)
+        actions = QWidget()
+        actions.setMaximumHeight(self.tokens.control_height + 2)
+        action_layout = QHBoxLayout(actions)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        self.append_paste_button = V3Button(
+            "Добавить к списку",
+            ButtonVariant.SECONDARY,
+        )
+        self.paste_button = V3Button("Заменить все промпты")
+        self.append_paste_button.clicked.connect(
+            lambda: self._apply_paste("append")
+        )
+        self.paste_button.clicked.connect(lambda: self._apply_paste("replace"))
+        action_layout.addWidget(self.append_paste_button)
+        action_layout.addWidget(self.paste_button)
+        action_layout.addStretch()
+        layout.addWidget(actions)
+        layout.addStretch()
         return widget
 
-    def _apply_paste(self) -> None:
+    def _apply_paste(self, action: str = "replace") -> None:
         text = self.paste_edit.toPlainText()
         if len(text) > MAX_CSV_BYTES:
             self.card.set_state("error", "Вставленный текст превышает допустимый размер")
@@ -1405,9 +1489,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
                 )
                 return
             entries.append(PromptEntry(prompt=prompt))
-        replace_project_prompts(self.state, ProjectMode.CLIPART, entries)
-        self.card.set_state("default")
-        self.changed()
+        self._store_entries(entries, action=action)
 
     def _build_csv(self) -> QWidget:
         widget = QWidget()
@@ -1443,21 +1525,14 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             self.card.set_state("error", "Не найдено ни одной валидной строки CSV")
             return
         if dialog.import_action() == "append":
-            replace_project_prompts(
-                self.state,
-                ProjectMode.CLIPART,
-                list(self.state.clipart.prompts) + normalized_entries,
-                deduplicate=False,
-            )
+            action = "append"
         else:
-            replace_project_prompts(
-                self.state,
-                ProjectMode.CLIPART,
-                normalized_entries,
-                deduplicate=False,
-            )
-        self.card.set_state("default")
-        self.changed()
+            action = "replace"
+        self._store_entries(
+            normalized_entries,
+            action=action,
+            deduplicate=False,
+        )
 
 
 class ClipartPromptReviewPage(_ScrollableStepPage):
@@ -1476,10 +1551,25 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.state = state
         self.changed = changed
         self._updating = False
+        self.progress_label = QLabel("Шаг 2 из 2 · Проверка серии")
+        self.progress_label.setProperty("v3Selection", True)
+        self.progress_label.setAccessibleName(self.progress_label.text())
+        self.add_widget(self.progress_label)
         self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["Промпт", "Референсы через |"])
+        self.table.setHorizontalHeaderLabels(["Промпт", "Референсы"])
         self.table.setAccessibleName("Таблица промптов")
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.setMinimumHeight(220)
+        self.table.setMaximumHeight(330)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.horizontalHeader().setSectionResizeMode(
+            0,
+            QHeaderView.ResizeMode.Stretch,
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            1,
+            QHeaderView.ResizeMode.Interactive,
+        )
+        self.table.horizontalHeader().resizeSection(1, 220)
         self.table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -1495,8 +1585,8 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.table.model().rowsMoved.connect(self._rows_moved)
         self.add_widget(self.table)
 
-        actions = QWidget()
-        action_layout = QHBoxLayout(actions)
+        prompt_actions = QWidget()
+        action_layout = QHBoxLayout(prompt_actions)
         action_layout.setContentsMargins(0, 0, 0, 0)
         prompt_actions_label = QLabel("Промпты:")
         prompt_actions_label.setProperty("v3Small", True)
@@ -1507,12 +1597,18 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         action_layout.addWidget(self.add_button)
         action_layout.addWidget(self.duplicate_button)
         action_layout.addWidget(self.delete_button)
+        action_layout.addStretch()
+        self.add_widget(prompt_actions)
+
+        reference_actions = QWidget()
+        reference_layout = QHBoxLayout(reference_actions)
+        reference_layout.setContentsMargins(0, 0, 0, 0)
         references_actions_label = QLabel("Референсы:")
         references_actions_label.setProperty("v3Small", True)
-        action_layout.addWidget(references_actions_label)
-        self.add_refs_button = V3Button("🖼 +", ButtonVariant.SECONDARY)
-        self.replace_refs_button = V3Button("🖼 ↻", ButtonVariant.SECONDARY)
-        self.delete_refs_button = V3Button("🖼 −", ButtonVariant.SECONDARY)
+        reference_layout.addWidget(references_actions_label)
+        self.add_refs_button = V3Button("Добавить", ButtonVariant.SECONDARY)
+        self.replace_refs_button = V3Button("Заменить", ButtonVariant.SECONDARY)
+        self.delete_refs_button = V3Button("Удалить", ButtonVariant.SECONDARY)
         self.add_refs_button.setToolTip("Добавить референсы")
         self.replace_refs_button.setToolTip("Заменить референсы")
         self.delete_refs_button.setToolTip("Удалить референсы")
@@ -1528,8 +1624,9 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             self.replace_refs_button,
             self.delete_refs_button,
         ):
-            action_layout.addWidget(button)
-        self.add_widget(actions)
+            reference_layout.addWidget(button)
+        reference_layout.addStretch()
+        self.add_widget(reference_actions)
         self.issues_label = QLabel()
         self.issues_label.setWordWrap(True)
         self.issues_label.setProperty("v3Small", True)
@@ -1569,6 +1666,13 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             prompt_item.setData(Qt.ItemDataRole.UserRole, row)
             self.table.setItem(row, 0, prompt_item)
             refs_item = QTableWidgetItem(_reference_summary(entry.references))
+            refs_item.setData(
+                Qt.ItemDataRole.UserRole,
+                tuple(entry.references),
+            )
+            refs_item.setFlags(
+                refs_item.flags() & ~Qt.ItemFlag.ItemIsEditable
+            )
             refs_item.setToolTip("\n".join(entry.references) or "Нет референсов")
             self.table.setItem(row, 1, refs_item)
         self._updating = False
@@ -1687,10 +1791,19 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             prompt_item = self.table.item(row, 0)
             refs_item = self.table.item(row, 1)
             prompt = prompt_item.text() if prompt_item else ""
+            stored_references = (
+                refs_item.data(Qt.ItemDataRole.UserRole)
+                if refs_item is not None
+                else ()
+            )
             references = [
-                value.strip()
-                for value in (refs_item.text() if refs_item else "").split("|")
-                if value.strip()
+                str(value)
+                for value in (
+                    stored_references
+                    if isinstance(stored_references, (list, tuple))
+                    else ()
+                )
+                if str(value)
             ]
             if len(prompt) > MAX_TEXT_LENGTH:
                 self.card.set_state("error", "Промпт превышает допустимую длину")
@@ -1814,6 +1927,12 @@ class PromptWorkspacePage(_ScrollableStepPage):
             self._on_section_changed,
             tokens=tokens,
         )
+        # The legacy combined workspace remains compact for saved drafts and
+        # compatibility tests. The routed input page shows the selected source
+        # directly, without hiding its controls behind another disclosure.
+        if hasattr(self.input_section, "generator_section"):
+            self.input_section.generator_section.toggle_button.show()
+            self.input_section.generator_section.set_expanded(False)
         if hasattr(self.review_section, "up_button"):
             self.review_section.up_button.hide()
         if hasattr(self.review_section, "down_button"):
@@ -2678,7 +2797,15 @@ class ClipartFlowController(QObject):
         )
         self.pages.register(
             StepId.PROMPTS,
-            lambda: PromptWorkspacePage(
+            lambda: ClipartPromptInputPage(
+                self.shell.state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+        )
+        self.pages.register(
+            StepId.PROMPT_REVIEW,
+            lambda: ClipartPromptReviewPage(
                 self.shell.state,
                 changed,
                 tokens=self.shell.tokens,

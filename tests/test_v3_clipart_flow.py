@@ -21,8 +21,8 @@ from v3_clipart_flow import (
     ClipartProcessingPage,
     ClipartProjectPage,
     ClipartPromptInputPage,
+    ClipartPromptReviewPage,
     ClipartReviewRunPage,
-    PromptWorkspacePage,
     build_clipart_run_request,
     clipart_pipeline_steps,
     estimate_clipart_cost,
@@ -110,7 +110,11 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
-            PromptWorkspacePage,
+            ClipartPromptInputPage,
+        )
+        self.assertIsInstance(
+            controller.pages[StepId.PROMPT_REVIEW],
+            ClipartPromptReviewPage,
         )
         self.assertIsInstance(
             controller.pages[StepId.PROCESSING_OPTIONS],
@@ -137,11 +141,14 @@ class V3ClipartFlowTests(unittest.TestCase):
             prompt_page = controller.pages[StepId.PROMPTS]
             prompt_page.paste_edit.setPlainText("Fox\nBear")
             prompt_page.paste_button.click()
-            self.assertEqual(shell.go_next(), StepId.GENERATION)
+            self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
 
-            review_page = controller.pages[StepId.PROMPTS].review_section
+            review_page = controller.pages[StepId.PROMPT_REVIEW]
             review_page.table.item(0, 0).setText("Red fox")
-            review_page.table.item(0, 1).setText("D:/fox.png")
+            state.clipart.prompts[0].references = ["D:/fox.png"]
+            review_page.refresh_from_state()
+            self.assertEqual(shell.go_next(), StepId.GENERATION)
+            self.assertEqual(shell.go_back(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
             self.assertEqual(shell.go_back(), StepId.PROJECT)
 
@@ -155,6 +162,75 @@ class V3ClipartFlowTests(unittest.TestCase):
                 state.clipart.prompts[0].references,
                 ["D:/fox.png"],
             )
+
+    def test_prompt_input_presents_three_clear_source_choices(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        shell = AppShell(state)
+        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PROMPTS]
+
+        self.assertEqual(
+            [button.text().split("\n", 1)[0] for button in page.source_buttons],
+            [
+                "Сгенерировать серию",
+                "Вставить готовые",
+                "Импортировать CSV",
+            ],
+        )
+        self.assertTrue(page.source_buttons[1].isChecked())
+        self.assertEqual(page.source_stack.currentIndex(), 1)
+        self.assertEqual(page.progress_label.text(), "Шаг 1 из 2 · Добавление промптов")
+
+    def test_append_reports_prompt_limit_instead_of_silently_dropping_rows(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry(f"Prompt {index}") for index in range(MAX_PROMPT_ENTRIES)
+        ]
+        page = ClipartPromptInputPage(state, lambda: None)
+        page.paste_edit.setPlainText("One more prompt")
+
+        page.append_paste_button.click()
+
+        self.assertEqual(len(state.clipart.prompts), MAX_PROMPT_ENTRIES)
+        self.assertIn("Максимум", page.card.status_label.text())
+
+    def test_prompt_review_uses_human_readable_reference_actions(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        self.assertEqual(page.table.horizontalHeaderItem(1).text(), "Референсы")
+        self.assertEqual(page.add_refs_button.accessibleName(), "Добавить референсы")
+        self.assertEqual(page.replace_refs_button.accessibleName(), "Заменить референсы")
+        self.assertEqual(page.delete_refs_button.accessibleName(), "Удалить референсы")
+        self.assertEqual(page.progress_label.text(), "Шаг 2 из 2 · Проверка серии")
+
+    def test_editing_prompt_text_preserves_reference_paths(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry("Fox", ["D:/one.png", "D:/two.png"]),
+        ]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        page.table.item(0, 0).setText("Red fox")
+
+        self.assertEqual(state.clipart.prompts[0].prompt, "Red fox")
+        self.assertEqual(
+            state.clipart.prompts[0].references,
+            ["D:/one.png", "D:/two.png"],
+        )
+
+    def test_review_keeps_prompt_column_wider_than_references(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry("Fox", ["D:/a-very-long-reference-file-name.png"]),
+        ]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        page.resize(632, 480)
+        page.show()
+        self.app.processEvents()
+
+        self.assertGreater(page.table.columnWidth(0), page.table.columnWidth(1))
 
     def test_generator_page_creates_editable_prompt_entries(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
@@ -224,11 +300,11 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(state.clipart.prompts, [])
         self.assertIn(
             "Максимум",
-            input_page.input_section.card.status_label.text(),
+            input_page.card.status_label.text(),
         )
 
         state.clipart.prompts = [PromptEntry("First")]
-        review_page = controller.pages[StepId.PROMPTS].review_section
+        review_page = controller.pages[StepId.PROMPT_REVIEW]
         review_page.refresh_from_state()
         review_page.table.setCurrentCell(0, 0)
         state.clipart.prompts = [PromptEntry(f"Prompt {index}") for index in range(MAX_PROMPT_ENTRIES)]
@@ -542,7 +618,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.prompts = [PromptEntry("Original")]
         shell = AppShell(state)
         controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROMPTS].review_section
+        page = controller.pages[StepId.PROMPT_REVIEW]
         page.table.item(0, 0).setText("x" * (20_000 + 1))
         self.assertEqual(state.clipart.prompts[0].prompt, "Original")
         self.assertEqual(page.table.item(0, 0).text(), "Original")

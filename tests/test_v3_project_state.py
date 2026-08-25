@@ -40,6 +40,7 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.GENERATION,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
@@ -51,6 +52,7 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
@@ -77,8 +79,10 @@ class ProjectRoutesTests(unittest.TestCase):
         state.common.work_dir = "D:/work"
         self.assertEqual(state.next_step(), StepId.PROMPTS)
         state.clipart.prompts.append(PromptEntry("blue whale"))
-        self.assertEqual(state.next_step(), StepId.GENERATION)
+        self.assertEqual(state.next_step(), StepId.PROMPT_REVIEW)
         state.clipart.prompts[0].prompt = "small blue whale"
+        self.assertEqual(state.next_step(), StepId.GENERATION)
+        self.assertEqual(state.previous_step(), StepId.PROMPT_REVIEW)
         self.assertEqual(state.previous_step(), StepId.PROMPTS)
         self.assertEqual(state.clipart.prompts[0].prompt, "small blue whale")
 

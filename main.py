@@ -7336,7 +7336,7 @@ def run_packaged_entrypoint_check(
     packaged_view = V3ApplicationView(license_gate=gate)
     evidence_is_saved = True
     if evidence_dir is not None:
-        from v3_project_state import ProjectMode, StepId
+        from v3_project_state import ProjectMode, PromptEntry, StepId
 
         evidence_root = Path(evidence_dir)
         try:
@@ -7353,11 +7353,31 @@ def run_packaged_entrypoint_check(
                 ProjectMode.CLIPART
             ].start_button.click()
             QApplication.processEvents()
+            packaged_view.shell.state.clipart.prompts = [
+                PromptEntry(
+                    "Watercolor baby fox, isolated on white background",
+                    ["C:/smoke/reference-fox.png"],
+                ),
+                PromptEntry("Watercolor baby bear with wildflowers"),
+                PromptEntry("Watercolor woodland rabbit, soft neutral palette"),
+            ]
             packaged_view.shell.state.set_step(StepId.PROMPTS)
             packaged_view.shell.refresh()
             QApplication.processEvents()
             QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
             QApplication.processEvents()
+            prompt_review_page = (
+                packaged_view.shell.clipart_flow_controller.pages[
+                    StepId.PROMPT_REVIEW
+                ]
+            )
+            prompt_review_is_rendered = (
+                prompt_review_page.table.rowCount() == 3
+                and prompt_review_page.table.columnWidth(0)
+                > prompt_review_page.table.columnWidth(1)
+                and packaged_view.shell.state.clipart.prompts[0].references
+                == ["C:/smoke/reference-fox.png"]
+            )
             evidence_is_saved = (
                 packaged_view.grab().save(
                     str(evidence_root / "clipart-prompts.png"),
@@ -7365,8 +7385,24 @@ def run_packaged_entrypoint_check(
                 )
                 and evidence_is_saved
             )
+
+            packaged_view.shell.state.set_step(StepId.PROMPT_REVIEW)
+            packaged_view.shell.refresh()
+            QApplication.processEvents()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            QApplication.processEvents()
+            evidence_is_saved = (
+                packaged_view.grab().save(
+                    str(evidence_root / "clipart-prompt-review.png"),
+                    "PNG",
+                )
+                and evidence_is_saved
+            )
         except (OSError, RuntimeError, AttributeError):
             evidence_is_saved = False
+            prompt_review_is_rendered = False
+    else:
+        prompt_review_is_rendered = True
     mode_artwork_is_rendered = all(
         card.illustration is not None
         and hasattr(card.illustration, "pixmap")
@@ -7429,6 +7465,7 @@ def run_packaged_entrypoint_check(
         and V3ApplicationView
         and mode_artwork_is_rendered
         and evidence_is_saved
+        and prompt_review_is_rendered
         and license_input_is_safe
         and controls_are_present
         and controls_are_connected

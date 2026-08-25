@@ -90,7 +90,8 @@ steps:
   - powershell: |
       powershell -ExecutionPolicy Bypass -File .\scripts\verify_installed_windows_artifact.ps1 `
         -InstallerPath '.\release\VibixImages-Setup-${{ parameters.appVersion }}.exe' `
-        -ExpectedAppVersion '${{ parameters.appVersion }}'
+        -ExpectedAppVersion '${{ parameters.appVersion }}' `
+        -EvidenceDir '$(Build.ArtifactStagingDirectory)\ui-evidence'
       if ($LASTEXITCODE -ne 0) { throw "Installed Windows verification failed with exit code $LASTEXITCODE" }
     displayName: Verify installed Windows application
 

@@ -53,6 +53,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
     ProjectMode.CLIPART: (
         StepId.PROJECT,
         StepId.PROMPTS,
+        StepId.PROMPT_REVIEW,
         StepId.GENERATION,
         StepId.PROCESSING_OPTIONS,
         StepId.REVIEW_RUN,
@@ -61,6 +62,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
     ProjectMode.PINTEREST: (
         StepId.PROJECT,
         StepId.PROMPTS,
+        StepId.PROMPT_REVIEW,
         StepId.PIN_FORMAT_MODEL,
         StepId.PROCESSING_OPTIONS,
         StepId.REVIEW_RUN,
@@ -1262,11 +1264,6 @@ class ProjectState:
                 normalized_step = step if isinstance(step, StepId) else StepId(step)
             except (TypeError, ValueError):
                 continue
-            if (
-                normalized_step is StepId.PROMPT_REVIEW
-                and normalized_mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}
-            ):
-                normalized_step = StepId.PROMPTS
             if normalized_step in ROUTES[normalized_mode]:
                 normalized_steps[normalized_mode] = normalized_step
         self.current_step_by_mode = normalized_steps
@@ -1299,11 +1296,6 @@ class ProjectState:
             normalized = step if isinstance(step, StepId) else StepId(step)
         except (TypeError, ValueError) as error:
             raise ProjectStateError(f"Unsupported step: {step!r}") from error
-        if (
-            normalized is StepId.PROMPT_REVIEW
-            and self.mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}
-        ):
-            normalized = StepId.PROMPTS
         if normalized not in self.route:
             raise ProjectStateError(
                 f"Step {normalized.value!r} is not part of {self.mode.value!r} route"
@@ -1332,7 +1324,11 @@ class ProjectState:
             )
             if target in {StepId.PROJECT, StepId.REVIEW_RUN} and not self.common.work_dir:
                 issues.append("work_dir_required")
-            if target in {StepId.PROMPTS, StepId.REVIEW_RUN}:
+            if target in {
+                StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
+                StepId.REVIEW_RUN,
+            }:
                 if not prompts:
                     issues.append("prompts_required")
             if target in {

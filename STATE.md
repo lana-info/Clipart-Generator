@@ -19,7 +19,7 @@ Updated: 2026-08-25
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/fix-packaged-mode-artwork`
+- Current task branch: `codex/restore-prompt-review-step`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,9 +27,22 @@ Updated: 2026-08-25
 
 ## Next task
 
-Owner target-machine acceptance of the corrected Windows `3.0.5` installer
-from GitHub run `32906900417`. Do not publish this build to the license server
-until the owner accepts it.
+Owner visual approval of the restored two-step Prompt flow. Do not start a new
+Windows build or publish `3.0.5` until the source screenshots are approved.
+
+## Prompt flow checkpoint — 2026-08-25
+
+- Clipart and Pinterest now use two explicit steps: prompt source/input, then
+  series and reference review. The approved mode-selection screen is unchanged.
+- The input step presents three visible source choices: generated series,
+  pasted prompts, and CSV import. Paste supports explicit append or replace.
+- The review step gives the prompt text most of the table width and separates
+  prompt actions from reference actions with readable labels.
+- Offscreen screenshots were reviewed at 980×700 and 1366×900; controls remain
+  visible without horizontal scrolling at the supported minimum size.
+- GitHub and Azure Windows pipelines are configured to capture both prompt
+  steps in addition to mode selection from the installed copy. Execution of
+  the updated gate awaits a separately approved installer build.
 
 ## Current implementation checkpoint — 2026-08-24
 
@@ -55,7 +68,7 @@ task per second). Vectorization and Patterns remain deferred.
   smoke can save 1366×900 screenshots of mode selection and Clipart prompts;
   GitHub produces them from the application after Inno Setup installation and
   uploads them beside the installer for visual review.
-- Full local pytest passes: 605 tests, 1 expected Linux skip, 2 deselected and
+- Full local pytest passes: 613 tests, 1 expected Linux skip, 2 deselected and
   73 subtests. No paid KIE request was made. Windows installed-copy rendered
   smoke and a small real KIE speed/credit run remain pending.
 - GitHub Windows run `32906900417` succeeded from source commit `9222eea`.

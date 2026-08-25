@@ -22,7 +22,7 @@ from v3_pinterest_flow import (
     estimate_pinterest_cost,
     install_pinterest_flow,
 )
-from v3_clipart_flow import PromptWorkspacePage
+from v3_clipart_flow import ClipartPromptReviewPage
 from v3_project_state import (
     ProjectMode,
     ProjectState,
@@ -95,6 +95,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
@@ -107,7 +108,11 @@ class V3PinterestFlowTests(unittest.TestCase):
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
-            PromptWorkspacePage,
+            PinterestPromptInputPage,
+        )
+        self.assertIsInstance(
+            controller.pages[StepId.PROMPT_REVIEW],
+            ClipartPromptReviewPage,
         )
         self.assertIsInstance(
             controller.pages[StepId.PIN_FORMAT_MODEL],
@@ -348,10 +353,12 @@ class V3PinterestFlowTests(unittest.TestCase):
             prompts = controller.pages[StepId.PROMPTS]
             prompts.paste_edit.setPlainText("Kitchen idea\nGarden idea")
             prompts.paste_button.click()
+            self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_next(), StepId.PIN_FORMAT_MODEL)
             format_page = controller.pages[StepId.PIN_FORMAT_MODEL]
             format_page.variants_spin.setValue(3)
             selected_ratio = format_page.ratio_combo.currentText()
+            self.assertEqual(shell.go_back(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
 
         self.assertEqual(state.common.project_name, "")
