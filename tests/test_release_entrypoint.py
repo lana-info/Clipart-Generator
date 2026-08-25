@@ -296,6 +296,25 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertEqual(run_packaged_entrypoint_check(APP_VERSION), 0)
         self.assertEqual(run_packaged_entrypoint_check("999.0"), 1)
 
+    def test_packaged_smoke_writes_reviewable_mode_and_prompt_screenshots(self):
+        with tempfile.TemporaryDirectory(prefix="vibix-ui-evidence-") as temp_dir:
+            evidence_dir = Path(temp_dir)
+
+            result = run_packaged_entrypoint_check(
+                APP_VERSION,
+                evidence_dir=evidence_dir,
+            )
+
+            self.assertEqual(result, 0)
+            for filename in ("mode-selection.png", "clipart-prompts.png"):
+                screenshot_path = evidence_dir / filename
+                self.assertTrue(screenshot_path.is_file(), filename)
+                with Image.open(screenshot_path) as screenshot:
+                    self.assertEqual(screenshot.size, (1366, 900))
+                    colors = screenshot.convert("RGB").getcolors(maxcolors=100_000)
+                    self.assertIsNotNone(colors)
+                    self.assertGreater(len(colors), 100)
+
     def test_rembg_import_returns_both_runtime_entrypoints(self):
         fake_rembg = types.ModuleType("rembg")
         fake_rembg.new_session = object()

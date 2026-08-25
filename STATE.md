@@ -27,11 +27,10 @@ Updated: 2026-08-25
 
 ## Next task
 
-Finish the focused audit of user-visible changes that exist only on
-`codex/tech-debt-11`, port approved items without merging the divergent branch
-wholesale, and then run a distinctly versioned Windows replacement build only
-after explicit owner approval. The replacement must pass artwork and hidden
-helper-process checks from the installed copy before owner acceptance.
+Run the explicitly approved GitHub Windows-only replacement build as version
+`3.0.5`, download the artifact, verify its checksum/provenance and inspect the
+two UI evidence screenshots produced by the installed executable. Do not
+publish this build to the license server until the owner accepts it.
 
 ## Current implementation checkpoint — 2026-08-24
 
@@ -52,9 +51,14 @@ task per second). Vectorization and Patterns remain deferred.
 - `CG3-TASK-035` has a first implementation: generation-only work uses at most
   three workers, launches new KIE tasks at no more than one per second, retries
   HTTP 429 with bounded backoff, and preserves per-item output/error handling.
-- Full unittest discovery passes: 493 tests, 2 skips. No paid KIE request was
-  made. Windows rendered smoke and a small real KIE speed/credit run remain
-  pending.
+- The release branch now also contains the previously divergent Files/Results
+  UX work and controlled parallel-generation implementation. The packaged
+  smoke can save 1366×900 screenshots of mode selection and Clipart prompts;
+  GitHub produces them from the application after Inno Setup installation and
+  uploads them beside the installer for visual review.
+- Full local pytest passes: 605 tests, 1 expected Linux skip, 2 deselected and
+  73 subtests. No paid KIE request was made. Windows installed-copy rendered
+  smoke and a small real KIE speed/credit run remain pending.
 
 The Windows 3.0.1 smoke test covered installation, startup licensing, folder
 persistence, diagnostics, local processing, cancellation, and basic lifecycle.

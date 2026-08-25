@@ -730,7 +730,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
             placeholder = QLabel("Файлы пока не выбраны")
             self.files_layout.addWidget(placeholder)
         self.file_count_label.setText(
-            f"Выбрано файлов: {len(self.state.processing.selected_files)}"
+            f"Выбрано изображений: {len(self.state.processing.selected_files)}"
         )
         self.clear_button.setEnabled(bool(self.state.processing.selected_files))
         if errors:

@@ -137,10 +137,19 @@ jobs:
           if (-not (Test-Path -LiteralPath $installedExe)) {
             throw "Installed executable is missing: $installedExe"
           }
+          $evidenceDir = Join-Path $env:GITHUB_WORKSPACE "release\ui-evidence"
           $env:QT_QPA_PLATFORM = "offscreen"
-          & $installedExe --release-entrypoint-smoke "--expected-app-version=${{ steps.version.outputs.app_version }}"
+          & $installedExe --release-entrypoint-smoke `
+            "--expected-app-version=${{ steps.version.outputs.app_version }}" `
+            "--ui-evidence-dir=$evidenceDir"
           if ($LASTEXITCODE -ne 0) {
             throw "Installed packaged mode artwork smoke failed with exit code $LASTEXITCODE"
+          }
+          foreach ($evidenceName in @("mode-selection.png", "clipart-prompts.png")) {
+            $evidencePath = Join-Path $evidenceDir $evidenceName
+            if (-not (Test-Path -LiteralPath $evidencePath)) {
+              throw "Installed application UI evidence is missing: $evidencePath"
+            }
           }
 
       - name: Calculate setup hash
@@ -175,6 +184,7 @@ jobs:
             release/VibixImages-Setup-${{ steps.version.outputs.app_version }}.sha256
             release/VERSION.txt
             release/build-provenance.json
+            release/ui-evidence/*.png
 
   build-macos:
     if: ${{ false }} # Windows-only release workflow.

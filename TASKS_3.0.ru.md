@@ -1052,6 +1052,9 @@ Status: In progress — Linux-safe implementation выполнена; нужен
   сохраняя stdout/stderr в диагностике.
 - [x] Обновить targeted UI/regression tests и зафиксировать результат в
   `REAL_USE_TEST_3.0.md` и `QUALITY_GATE_ISSUES_3.0.md`.
+- [x] Добавить снимки 1366×900 стартового экрана и страницы промптов из уже
+  установленного Inno Setup приложения в артефакт GitHub Actions. Финальная
+  отметка rendered smoke остаётся открытой до просмотра Windows-снимков.
 
 Acceptance:
 

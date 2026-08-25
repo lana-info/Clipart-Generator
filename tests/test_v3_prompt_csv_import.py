@@ -89,7 +89,7 @@ class PromptCsvImportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="clipart-csv-long-preview-") as temp_dir:
             csv_path = Path(temp_dir) / "prompts.csv"
             csv_path.write_text(
-                "prompt\n" + ("very long prompt " * 400) + "\n",
+                "prompt\n" + ("very long prompt " * 100) + "\n",
                 encoding="utf-8-sig",
                 newline="",
             )

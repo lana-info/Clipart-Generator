@@ -7292,7 +7292,11 @@ def run_release_entrypoint_smoke(app) -> int:
     return 0 if valid else 1
 
 
-def run_packaged_entrypoint_check(expected_app_version=None) -> int:
+def run_packaged_entrypoint_check(
+    expected_app_version=None,
+    *,
+    evidence_dir=None,
+) -> int:
     from v3_license import LicenseDialog, OnlineLicenseGate
     from v3_mode_selection import (
         MODE_CARD_SPECS,
@@ -7330,6 +7334,39 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
     dialog.close()
 
     packaged_view = V3ApplicationView(license_gate=gate)
+    evidence_is_saved = True
+    if evidence_dir is not None:
+        from v3_project_state import ProjectMode, StepId
+
+        evidence_root = Path(evidence_dir)
+        try:
+            evidence_root.mkdir(parents=True, exist_ok=True)
+            packaged_view.resize(1366, 900)
+            packaged_view.show()
+            QApplication.processEvents()
+            evidence_is_saved = packaged_view.grab().save(
+                str(evidence_root / "mode-selection.png"),
+                "PNG",
+            )
+
+            packaged_view.mode_selection.mode_cards[
+                ProjectMode.CLIPART
+            ].start_button.click()
+            QApplication.processEvents()
+            packaged_view.shell.state.set_step(StepId.PROMPTS)
+            packaged_view.shell.refresh()
+            QApplication.processEvents()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            QApplication.processEvents()
+            evidence_is_saved = (
+                packaged_view.grab().save(
+                    str(evidence_root / "clipart-prompts.png"),
+                    "PNG",
+                )
+                and evidence_is_saved
+            )
+        except (OSError, RuntimeError, AttributeError):
+            evidence_is_saved = False
     mode_artwork_is_rendered = all(
         card.illustration is not None
         and hasattr(card.illustration, "pixmap")
@@ -7391,6 +7428,7 @@ def run_packaged_entrypoint_check(expected_app_version=None) -> int:
         len(MODE_CARD_SPECS) == 3
         and V3ApplicationView
         and mode_artwork_is_rendered
+        and evidence_is_saved
         and license_input_is_safe
         and controls_are_present
         and controls_are_connected
@@ -7487,11 +7525,18 @@ if __name__ == "__main__":
     configure_application_identity(app)
     if "--release-entrypoint-smoke" in sys.argv:
         expected_version = None
+        evidence_dir = None
         for argument in sys.argv:
             if argument.startswith("--expected-app-version="):
                 expected_version = argument.split("=", 1)[1]
-                break
-        sys.exit(run_packaged_entrypoint_check(expected_version))
+            elif argument.startswith("--ui-evidence-dir="):
+                evidence_dir = argument.split("=", 1)[1]
+        sys.exit(
+            run_packaged_entrypoint_check(
+                expected_version,
+                evidence_dir=evidence_dir,
+            )
+        )
     if "--local-processing-smoke" in sys.argv:
         report_path = None
         for argument in sys.argv:
