@@ -139,8 +139,8 @@ jobs:
           path: |
             release/VibixImages-Setup-${{ steps.version.outputs.app_version }}.exe
             release/VibixImages-Setup-${{ steps.version.outputs.app_version }}.sha256
-          release/VERSION.txt
-          release/build-provenance.json
+            release/VERSION.txt
+            release/build-provenance.json
 
   build-macos:
     if: ${{ false }} # Windows-only release workflow.
