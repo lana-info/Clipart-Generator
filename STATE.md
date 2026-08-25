@@ -26,10 +26,9 @@ Updated: 2026-08-24
 
 The current product priority is to finish the existing interface and close the
 remaining UX findings before adding new product modes. The immediate plan is
-recorded in `TASKS_3.0.ru.md`: complete `CG3-TASK-034` (rendered UI smoke and
-the remaining Windows smoke findings), then implement `CG3-TASK-035`
-(controlled parallel KIE generation, initially up to three tasks with one new
-task per second). Vectorization and Patterns remain deferred.
+recorded in `TASKS_3.0.ru.md`: complete the remaining rendered/Windows smoke
+checks around `CG3-TASK-034` and validate `CG3-TASK-035` from the packaged
+runtime. Vectorization and Patterns remain deferred.
 
 ## Current implementation checkpoint — 2026-08-24
 
@@ -43,9 +42,10 @@ task per second). Vectorization and Patterns remain deferred.
 - `CG3-TASK-035` has a first implementation: generation-only work uses at most
   three workers, launches new KIE tasks at no more than one per second, retries
   HTTP 429 with bounded backoff, and preserves per-item output/error handling.
-- Full unittest discovery passes: 496 tests, 2 skips. No paid KIE request was
-  made. Windows rendered smoke and a small real KIE speed/credit run remain
-  pending.
+- A controlled live KIE smoke run completed on 2026-08-25: three GPT Image 2
+  1K tasks were accepted and downloaded successfully, with an estimated cost
+  of $0.09. Exact packaged-app execution and Windows rendered smoke remain
+  pending; the current VDS checkout lacks the runtime Pillow dependency.
 
 The Windows 3.0.1 smoke test covered installation, startup licensing, folder
 persistence, diagnostics, local processing, cancellation, and basic lifecycle.

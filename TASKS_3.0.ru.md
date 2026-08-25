@@ -1071,7 +1071,8 @@ Dependencies: текущий `CG3-TASK-033` и ручные UI-наблюден�
 
 ### CG3-TASK-035 — Добавить контролируемую параллельную генерацию
 
-Status: In progress — базовая реализация и regression tests выполнены
+Status: In progress — базовая реализация и live KIE smoke выполнены; нужен
+проверочный запуск из packaged runtime
 
 Цель: ускорить генерацию нескольких изображений через независимые задачи с
 ограничением нагрузки на KIE и сохранением предсказуемого поведения интерфейса.
@@ -1090,8 +1091,10 @@ Status: In progress — базовая реализация и regression tests 
 - [x] Не допустить конфликтов имён и одновременной небезопасной записи файлов.
 - [x] Добавить regression tests для лимитера, параллельного выполнения,
   отмены, ошибок и публикации результатов.
-- [ ] Проверить реальную скорость, расход кредитов и устойчивость на малом
-  тестовом наборе до увеличения числа задач.
+- [x] Проверить доступность модели, успешность выполнения и расход на малом
+  реальном наборе: 3 задачи GPT Image 2 1K, около $0,09.
+- [ ] Проверить параллельный запуск через само приложение/packaged runtime и
+  подтвердить, что UI остаётся отзывчивым.
 
 Acceptance:
 
@@ -1105,9 +1108,12 @@ Acceptance:
 Dependencies: `CG3-TASK-034`, текущий `WorkerThread`, `RunQueue` и provider
 contracts.
 
-Evidence 2026-08-24: targeted suite passes; parallel generation uses at most
-3 workers and starts new KIE tasks no faster than one per second. Live KIE
-credit/speed measurement and Windows rendered smoke remain pending.
+Evidence 2026-08-25: parallel generation uses at most 3 workers and starts new
+KIE tasks no faster than one per second; the live KIE smoke run accepted and
+completed 3 GPT Image 2 1K tasks for about $0.09. Packaged-app execution and
+Windows rendered smoke remain pending. The combined generation-plus-processing
+pipeline remains sequential by design until local processing concurrency is
+separately approved and validated.
 
 ### Отложенные идеи, не входящие в текущий этап
 
