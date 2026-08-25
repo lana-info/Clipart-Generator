@@ -23,11 +23,11 @@ with a real license account still require a real Windows machine.
 
 ## Latest successful run
 
-Run `135` completed successfully on 2026-08-25 from branch
+Run `136` completed successfully on 2026-08-25 from branch
 `codex/tech-debt-11`. The `windows-installer` artifact contains:
 
-- `VibixImages-Setup-3.0.1.exe`
-- `VibixImages-Setup-3.0.1.sha256`
+- `VibixImages-Setup-3.0.5.exe`
+- `VibixImages-Setup-3.0.5.sha256`
 
 The checksum was verified after downloading the artifact. Manual Windows
 installation and visual smoke are still required before public delivery.
