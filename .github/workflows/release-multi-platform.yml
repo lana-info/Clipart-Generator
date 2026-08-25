@@ -148,7 +148,7 @@ jobs:
             throw "Installed executable is missing: $installedExe"
           }
           $evidenceDir = Join-Path $env:GITHUB_WORKSPACE "release\ui-evidence"
-          $env:QT_QPA_PLATFORM = "offscreen"
+          $env:QT_QPA_PLATFORM = "windows"
           $smokeArguments = @(
             "--release-entrypoint-smoke",
             "--expected-app-version=${{ steps.version.outputs.app_version }}",

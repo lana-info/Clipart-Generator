@@ -120,6 +120,16 @@ class WindowsInstallerContractTests(unittest.TestCase):
             workflow,
         )
 
+    def test_github_captures_windows_ui_with_native_font_rendering(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+            encoding="utf-8"
+        )
+        installed_step = workflow.split(
+            "- name: Verify installed Windows application", 1
+        )[1].split("- name: Calculate setup hash", 1)[0]
+
+        self.assertIn('$env:QT_QPA_PLATFORM = "windows"', installed_step)
+
 
 if __name__ == "__main__":
     unittest.main()
