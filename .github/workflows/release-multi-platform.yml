@@ -98,9 +98,13 @@ jobs:
           if (-not (Test-Path -LiteralPath $exe)) {
             throw "Fresh PyInstaller executable was not found: $exe"
           }
-          & $exe --release-entrypoint-smoke "--expected-app-version=${{ steps.version.outputs.app_version }}"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Packaged license startup or packaged mode artwork smoke failed with exit code $LASTEXITCODE"
+          $packagedArguments = @(
+            "--release-entrypoint-smoke",
+            "--expected-app-version=${{ steps.version.outputs.app_version }}"
+          )
+          $packagedCheck = Start-Process -FilePath $exe -ArgumentList $packagedArguments -Wait -PassThru
+          if ($packagedCheck.ExitCode -ne 0) {
+            throw "Packaged license startup or packaged mode artwork smoke failed with exit code $($packagedCheck.ExitCode)"
           }
           Write-Host "Fresh executable passed source, packaged license startup, and packaged mode artwork smoke checks."
 
@@ -129,9 +133,15 @@ jobs:
         run: |
           $setupPath = "release\VibixImages-Setup-${{ steps.version.outputs.app_version }}.exe"
           $installRoot = Join-Path $env:RUNNER_TEMP "vibix-installed-smoke"
-          & $setupPath /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$installRoot"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Installed-artifact setup failed with exit code $LASTEXITCODE"
+          $setupArguments = @(
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            "/DIR=$installRoot"
+          )
+          $setupProcess = Start-Process -FilePath $setupPath -ArgumentList $setupArguments -Wait -PassThru
+          if ($setupProcess.ExitCode -ne 0) {
+            throw "Installed-artifact setup failed with exit code $($setupProcess.ExitCode)"
           }
           $installedExe = Join-Path $installRoot "Vibix Images.exe"
           if (-not (Test-Path -LiteralPath $installedExe)) {
@@ -139,11 +149,14 @@ jobs:
           }
           $evidenceDir = Join-Path $env:GITHUB_WORKSPACE "release\ui-evidence"
           $env:QT_QPA_PLATFORM = "offscreen"
-          & $installedExe --release-entrypoint-smoke `
-            "--expected-app-version=${{ steps.version.outputs.app_version }}" `
+          $smokeArguments = @(
+            "--release-entrypoint-smoke",
+            "--expected-app-version=${{ steps.version.outputs.app_version }}",
             "--ui-evidence-dir=$evidenceDir"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Installed packaged mode artwork smoke failed with exit code $LASTEXITCODE"
+          )
+          $smokeProcess = Start-Process -FilePath $installedExe -ArgumentList $smokeArguments -Wait -PassThru
+          if ($smokeProcess.ExitCode -ne 0) {
+            throw "Installed packaged mode artwork smoke failed with exit code $($smokeProcess.ExitCode)"
           }
           foreach ($evidenceName in @("mode-selection.png", "clipart-prompts.png")) {
             $evidencePath = Join-Path $evidenceDir $evidenceName

@@ -106,6 +106,20 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("$installedExe", workflow)
         self.assertIn("--release-entrypoint-smoke", workflow)
 
+    def test_github_waits_for_gui_installer_and_installed_smoke_processes(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "Start-Process -FilePath $setupPath -ArgumentList $setupArguments -Wait -PassThru",
+            workflow,
+        )
+        self.assertIn(
+            "Start-Process -FilePath $installedExe -ArgumentList $smokeArguments -Wait -PassThru",
+            workflow,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
