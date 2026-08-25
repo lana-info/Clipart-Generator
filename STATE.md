@@ -82,6 +82,9 @@ acceptance are approved.
 - The installer from run `31909510317` predates the new updater and diagnostic
   journal. Use the verified `3.0.1` installer from run `31924194111` for current
   acceptance.
+- Azure pipeline run `135` from `codex/tech-debt-11` completed successfully on
+  2026-08-25. It passed the packaged release smoke, built Inno Setup, published
+  `VibixImages-Setup-3.0.1.exe`, and generated a matching SHA-256 checksum.
 - Secure update delivery is deployed and the Windows artifact exists, but no
   `3.0.1` revision is published yet. Manual Windows installation should precede
   a controlled draft upload and end-to-end update test.
