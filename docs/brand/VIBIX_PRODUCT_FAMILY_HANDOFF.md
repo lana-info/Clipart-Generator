@@ -79,8 +79,8 @@ replace only the tile and pixel colors according to the product table above.
 Completed for Vibix Images:
 
 - Windows multi-resolution ICO and application integration.
-- Three mode illustrations for the start screen in `assets/mode-*.svg`.
-- Windows Inno Setup artwork in `assets/installer-wizard.png` and matching
+- Three high-resolution mode illustrations for the start screen in `assets/mode-*.png`.
+- Windows Inno Setup artwork in `assets/installer-wizard-hq.png` and matching
   welcome/completion messaging.
 
 Open `vibix-product-family.html` beside this file for the portable visual

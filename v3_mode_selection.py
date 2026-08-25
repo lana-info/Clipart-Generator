@@ -100,7 +100,7 @@ def mode_illustration_path(mode: ProjectMode) -> Path:
     resource_root = Path(
         getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)
     )
-    return resource_root / "assets" / f"mode-{mode.value}.svg"
+    return resource_root / "assets" / f"mode-{mode.value}.png"
 
 
 class ModeSelectionScreen(QWidget):

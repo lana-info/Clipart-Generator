@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QPalette
+from PyQt6.QtGui import QColor, QPalette, QPixmap
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtWidgets import (
     QApplication,
@@ -62,6 +62,27 @@ class V3DesignTokens:
 
 
 DEFAULT_TOKENS = V3DesignTokens()
+
+
+class _AspectRatioPixmapLabel(QLabel):
+    """Display a raster illustration without stretching it."""
+
+    def __init__(self, pixmap: QPixmap, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._source_pixmap = pixmap
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        super().setPixmap(pixmap)
+
+    def resizeEvent(self, event) -> None:
+        if not self._source_pixmap.isNull() and self.width() > 0 and self.height() > 0:
+            super().setPixmap(
+                self._source_pixmap.scaled(
+                    self.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        super().resizeEvent(event)
 
 
 class ButtonVariant(str, Enum):
@@ -538,7 +559,15 @@ class ModeCard(QFrame):
 
         self.illustration = None
         if illustration_path:
-            illustration = QSvgWidget(str(illustration_path), self)
+            resolved_path = Path(illustration_path)
+            if resolved_path.suffix.lower() == ".svg":
+                illustration = QSvgWidget(str(resolved_path), self)
+                illustration.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
+            else:
+                illustration = _AspectRatioPixmapLabel(
+                    QPixmap(str(resolved_path)),
+                    self,
+                )
             illustration.setObjectName("modeIllustration")
             illustration.setAccessibleName(f"Иллюстрация режима: {title}")
             illustration.setMinimumHeight(112)
@@ -547,7 +576,6 @@ class ModeCard(QFrame):
                 QSizePolicy.Policy.Expanding,
                 QSizePolicy.Policy.Fixed,
             )
-            illustration.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
             illustration.setStyleSheet("background: transparent; border: none;")
             self.illustration = illustration
             layout.addWidget(illustration)

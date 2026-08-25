@@ -86,12 +86,12 @@ server revision until the owner explicitly requests it after focused testing.
   a controlled draft upload and end-to-end update test.
 - The macOS build is intentionally unsigned and not notarized. Gatekeeper will
   warn on first launch; the application must not automate bypassing that warning.
-- The mode-selection screen now uses packaged SVG illustrations for the three
-  primary workflows (clipart, Pinterest pins, and image processing). Windows
-  Inno Setup welcome and completion messages now explain the same workflows and
-  the license activation step. This visual change is source-verified only;
-  packaged Windows/macOS visual acceptance remains pending an owner-approved
-  build.
+- The mode-selection screen now uses packaged 1774×887 PNG illustrations for
+  the three primary workflows (clipart, Pinterest pins, and image processing),
+  matching the public download page. Windows Inno Setup uses the coordinated
+  `assets/installer-wizard-hq.png` artwork and retains the workflow/license
+  messaging. Source and packaging checks are complete; packaged Windows visual
+  acceptance remains pending the explicitly approved Azure build.
 - Azure's hosted macOS ARM64 preview is paused. The Azure artifact is x86_64 and
   requires Apple's free Rosetta 2 on Apple Silicon; a native ARM64 build would
   require a self-hosted Apple Silicon agent or a different CI provider.

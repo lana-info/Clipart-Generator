@@ -43,20 +43,22 @@ class BrandingTests(unittest.TestCase):
         self.assertIn('Создать клипарт', installer)
         self.assertIn('Создать Pinterest-пины', installer)
         self.assertIn('Обработать изображения', installer)
-        self.assertIn('WizardImageFile=assets\\installer-wizard.png', installer)
-        self.assertTrue((PROJECT_ROOT / "assets" / "installer-wizard.png").is_file())
+        self.assertIn('WizardImageFile=assets\\installer-wizard-hq.png', installer)
+        wizard_image = PROJECT_ROOT / "assets" / "installer-wizard-hq.png"
+        self.assertTrue(wizard_image.is_file())
+        self.assertGreater(wizard_image.stat().st_size, 1_000_000)
 
     def test_mode_illustrations_are_packaged_for_both_desktop_builds(self):
         for name in ("clipart", "pinterest", "processing"):
-            asset = PROJECT_ROOT / "assets" / f"mode-{name}.svg"
+            asset = PROJECT_ROOT / "assets" / f"mode-{name}.png"
             self.assertTrue(asset.is_file())
-            self.assertIn("<svg", asset.read_text(encoding="utf-8"))
+            self.assertGreater(asset.stat().st_size, 1_000_000)
 
         build = (PROJECT_ROOT / "build.ps1").read_text(encoding="utf-8")
         mac_build = (PROJECT_ROOT / "azure-pipelines-macos.yml").read_text(encoding="utf-8")
         for name in ("clipart", "pinterest", "processing"):
-            self.assertIn(f'assets/mode-{name}.svg;assets', build)
-            self.assertIn(f"assets/mode-{name}.svg:assets", mac_build)
+            self.assertIn(f'assets/mode-{name}.png;assets', build)
+            self.assertIn(f"assets/mode-{name}.png:assets", mac_build)
 
 
 if __name__ == "__main__":

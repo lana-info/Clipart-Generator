@@ -49,9 +49,9 @@ Write-Host "==> Build app with PyInstaller"
     --icon "assets/vibix-images.ico" `
     --add-data ".env.example;." `
     --add-data "assets/vibix-images.ico;assets" `
-    --add-data "assets/mode-clipart.svg;assets" `
-    --add-data "assets/mode-pinterest.svg;assets" `
-    --add-data "assets/mode-processing.svg;assets" `
+    --add-data "assets/mode-clipart.png;assets" `
+    --add-data "assets/mode-pinterest.png;assets" `
+    --add-data "assets/mode-processing.png;assets" `
     --add-data "release/VERSION.txt;release" `
     --add-data "third_party/remove_ai_watermarks_gemini/assets;third_party/remove_ai_watermarks_gemini/assets" `
     --add-data "third_party/remove_ai_watermarks_gemini/LICENSE;third_party/remove_ai_watermarks_gemini" `

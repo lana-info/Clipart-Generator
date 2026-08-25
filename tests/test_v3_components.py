@@ -117,6 +117,23 @@ class V3ComponentTests(unittest.TestCase):
         self.assertEqual(card.illustration.accessibleName(), "Иллюстрация режима: Создать клипарт")
         card.deleteLater()
 
+    def test_mode_card_renders_png_illustration_with_a_loaded_pixmap(self):
+        card = ModeCard(
+            "clipart",
+            "Создать клипарт",
+            "Серия изолированных объектов",
+            "набор PNG",
+            illustration_path="website/vibix-download/assets/mode-clipart-hq.png",
+        )
+        self.assertIsInstance(card.illustration, QLabel)
+        self.assertIsNotNone(card.illustration.pixmap())
+        self.assertFalse(card.illustration.pixmap().isNull())
+        self.assertEqual(
+            card.illustration.accessibleName(),
+            "Иллюстрация режима: Создать клипарт",
+        )
+        card.deleteLater()
+
     def test_advanced_section_is_collapsed_by_default_and_keyboard_focusable(self):
         section = AdvancedSection()
         section.add_widget(QLabel("Редкая настройка"))
