@@ -1093,8 +1093,9 @@ Status: In progress — базовая реализация и live KIE smoke в
   отмены, ошибок и публикации результатов.
 - [x] Проверить доступность модели, успешность выполнения и расход на малом
   реальном наборе: 3 задачи GPT Image 2 1K, около $0,09.
-- [ ] Проверить параллельный запуск через само приложение/packaged runtime и
-  подтвердить, что UI остаётся отзывчивым.
+- [x] Проверить параллельный запуск через `WorkerThread` приложения на Ubuntu:
+  2/2 генерации завершились успешно и сохранились.
+- [ ] Проверить запуск из packaged runtime и подтвердить отзывчивость UI.
 
 Acceptance:
 
@@ -1113,7 +1114,9 @@ KIE tasks no faster than one per second; the live KIE smoke run accepted and
 completed 3 GPT Image 2 1K tasks for about $0.09. Packaged-app execution and
 Windows rendered smoke remain pending. The combined generation-plus-processing
 pipeline remains sequential by design until local processing concurrency is
-separately approved and validated.
+separately approved and validated. A second app-level Ubuntu run completed
+2/2 generated files. Ubuntu has rembg/ONNX dependencies, but no cached rembg
+model, no BEN2 dependencies, and no Windows Real-ESRGAN bundle.
 
 ### Отложенные идеи, не входящие в текущий этап
 

@@ -45,7 +45,10 @@ runtime. Vectorization and Patterns remain deferred.
 - A controlled live KIE smoke run completed on 2026-08-25: three GPT Image 2
   1K tasks were accepted and downloaded successfully, with an estimated cost
   of $0.09. Exact packaged-app execution and Windows rendered smoke remain
-  pending; the current VDS checkout lacks the runtime Pillow dependency.
+  pending. The Ubuntu project environment does run the application runtime;
+  a second app-level run completed 2/2 generations successfully. Local rembg
+  dependencies are installed, but its model is not cached; BEN2 and the
+  Windows Real-ESRGAN bundle are not installed on this Linux server.
 
 The Windows 3.0.1 smoke test covered installation, startup licensing, folder
 persistence, diagnostics, local processing, cancellation, and basic lifecycle.
