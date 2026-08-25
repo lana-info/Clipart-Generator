@@ -27,10 +27,9 @@ Updated: 2026-08-25
 
 ## Next task
 
-Run the explicitly approved GitHub Windows-only replacement build as version
-`3.0.5`, download the artifact, verify its checksum/provenance and inspect the
-two UI evidence screenshots produced by the installed executable. Do not
-publish this build to the license server until the owner accepts it.
+Owner target-machine acceptance of the corrected Windows `3.0.5` installer
+from GitHub run `32906900417`. Do not publish this build to the license server
+until the owner accepts it.
 
 ## Current implementation checkpoint — 2026-08-24
 
@@ -59,6 +58,13 @@ task per second). Vectorization and Patterns remain deferred.
 - Full local pytest passes: 605 tests, 1 expected Linux skip, 2 deselected and
   73 subtests. No paid KIE request was made. Windows installed-copy rendered
   smoke and a small real KIE speed/credit run remain pending.
+- GitHub Windows run `32906900417` succeeded from source commit `9222eea`.
+  Inno Setup installed the application into a clean directory; the installed
+  executable passed version, startup, artwork and native-Windows rendered UI
+  checks. The downloaded installer is `191310485` bytes with SHA-256
+  `1a93d54e4c555ef6a0f70523b0ff9126ff7b636dd148c75b9c3a80aaf5b7fd7f`.
+  Its two readable screenshots confirm the three approved raster illustrations
+  and the current Clipart prompt workspace. Server publication was not run.
 
 The Windows 3.0.1 smoke test covered installation, startup licensing, folder
 persistence, diagnostics, local processing, cancellation, and basic lifecycle.
