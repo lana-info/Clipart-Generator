@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- GitHub Actions now builds the Windows-only installer with the same signed
+  Microsoft Visual C++ prerequisite required by the Inno Setup package and
+  uploads the complete installer/checksum/provenance artifact set. Manual run
+  `32900235313` produced the verified `VibixImages-Setup-3.0.5.exe` artifact.
 - Возвращён локальный удалитель фона BEN2 через официальную ONNX-модель без
   тяжёлого PyTorch. Интерфейс предупреждает, что при первом запуске будет
   загружено около 230 МБ, рекомендуется 300 МБ места на диске и около 4 ГБ

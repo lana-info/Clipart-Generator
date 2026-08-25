@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **After explicit owner approval, build a replacement Windows
-artifact for Task 70 and verify installed Local rembg plus Local BEN2 on the
-target PC. Azure run `102` must not be published as a server revision.**
+Current next task: **Download the verified GitHub Windows `3.0.5` artifact from
+run `32900235313` and perform focused visual, license, Local rembg, and Local
+BEN2 acceptance on the target PC before any server publication.**
 
 ## Phase 1 - Preparation
 
@@ -1826,5 +1826,8 @@ Verification:
   release and local-processing gates passed.
 - [x] Downloaded artifacts match their SHA-256 sidecars; the macOS ZIP also
   passes `unzip -t`.
+- [x] GitHub Windows run `32900235313` succeeded from commit `44ec8a7`; the
+  downloaded `VibixImages-Setup-3.0.5.exe` is `191303609` bytes and matches its
+  SHA-256 sidecar (`bbd4bfcbb952bdf10a7b606671b1177be02ed8da47215d1abf8f6dccb3e50978`).
 - [ ] Perform focused visual and production-license acceptance on the owner's
-  Windows and Mac computers before uploading a 3.0.3 server revision.
+  Windows computer before uploading a 3.0.5 server revision.

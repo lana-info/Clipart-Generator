@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-22
+Updated: 2026-08-25
 
 ## Operating model
 
@@ -27,20 +27,19 @@ Updated: 2026-08-22
 
 ## Next task
 
-Download Azure Windows run `116` and macOS run `117` for owner acceptance.
-Repeat Local Real-ESRGAN, Local rembg, Local BEN2, Trim + 300 DPI Results, and
-diagnostic-ZIP acceptance on Windows. Do not upload either 3.0.3 artifact as a
-server revision until the owner explicitly requests it after focused testing.
+Download GitHub Actions artifact `windows-3.0.5` from run `32900235313` for
+owner acceptance. Repeat visual installer/application checks, production
+license activation, Local Real-ESRGAN, Local rembg, Local BEN2, Trim + 300 DPI
+Results, and diagnostic-ZIP acceptance on Windows. Do not upload it as a server
+revision until the owner explicitly requests publication after focused testing.
 
 ## Blockers and risks
 
-- Azure Windows run `139` reached the offline release gate on 2026-08-25:
-  133 tests passed, two expected skips remained, and the new PNG mode-card test
-  passed. It exposed a legacy `QSvgWidget` aspect-ratio API error, fixed and
-  pushed in commit `631eb43`. The replacement Windows run `140` could not start
-  because the Azure organization had no hosted pipeline minutes remaining.
-  A fresh run from `codex/ui-mode-cards-installer` at `631eb43` is required
-  after hosted capacity is restored; no 3.0.5 installer artifact exists yet.
+- Azure Windows run `139` reached the offline release gate on 2026-08-25 and
+  exposed a legacy `QSvgWidget` aspect-ratio API error, fixed in commit
+  `631eb43`; replacement run `140` could not start because Azure had no hosted
+  minutes. GitHub Actions run `32900235313` replaced that blocked build and
+  produced the verified Windows `3.0.5` artifact from commit `44ec8a7`.
 - The deployed license service and signed online desktop contract are active;
   availability of VDS, DNS, TLS, and PostgreSQL is therefore a direct
   application-availability dependency.
