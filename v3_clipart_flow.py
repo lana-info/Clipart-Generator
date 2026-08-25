@@ -12,8 +12,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtCore import QObject, QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -907,6 +907,66 @@ def _reference_summary(paths: Sequence[str]) -> str:
     return f"{len(paths)} референсов: {names}"
 
 
+def _review_action_icon(kind: str) -> QIcon:
+    """Draw stable cross-platform review icons without relying on emoji fonts."""
+    pixmap = QPixmap(32, 32)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    outline = QColor("#9fb3c8")
+    accent = QColor("#2dd4bf")
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(QPen(outline, 2.0))
+
+    is_reference = kind.startswith("reference_")
+    operation = kind.split("_", 1)[1]
+    if is_reference:
+        painter.drawRoundedRect(QRectF(3.5, 5.5, 24, 19), 3, 3)
+        painter.drawEllipse(QRectF(20, 8, 4, 4))
+        painter.drawLine(6, 21, 12, 15)
+        painter.drawLine(12, 15, 16, 19)
+        painter.drawLine(16, 19, 20, 15)
+        painter.drawLine(20, 15, 25, 21)
+    elif operation == "duplicate":
+        painter.drawRoundedRect(QRectF(4.5, 7.5, 16, 19), 2.5, 2.5)
+        painter.drawRoundedRect(QRectF(10.5, 3.5, 16, 19), 2.5, 2.5)
+        painter.drawLine(14, 10, 23, 10)
+        painter.drawLine(14, 14, 22, 14)
+    else:
+        painter.drawRoundedRect(QRectF(5.5, 3.5, 20, 24), 3, 3)
+        painter.drawLine(10, 10, 21, 10)
+        painter.drawLine(10, 15, 20, 15)
+        painter.drawLine(10, 20, 17, 20)
+
+    if operation in {"add", "delete", "replace"}:
+        painter.setPen(QPen(accent, 2.4))
+        painter.setBrush(QColor("#1f2937"))
+        painter.drawEllipse(QRectF(18, 18, 12, 12))
+        if operation == "add":
+            painter.drawLine(21, 24, 27, 24)
+            painter.drawLine(24, 21, 24, 27)
+        elif operation == "delete":
+            painter.drawLine(21, 24, 27, 24)
+        else:
+            painter.drawArc(QRectF(20, 20, 8, 8), 30 * 16, 285 * 16)
+            painter.drawLine(26, 20, 29, 20)
+            painter.drawLine(29, 20, 29, 23)
+
+    painter.end()
+    return QIcon(pixmap)
+
+
+class _PromptReviewTable(QTableWidget):
+    """Keep the prompt/reference columns at the product-defined 2:1 ratio."""
+
+    def resizeEvent(self, event: Any) -> None:
+        super().resizeEvent(event)
+        width = max(self.viewport().width(), 2)
+        prompt_width = round(width * 2 / 3)
+        self.setColumnWidth(0, prompt_width)
+        self.setColumnWidth(1, width - prompt_width)
+
+
 def _capability_summary(option: GenerationModelOption) -> str:
     ratios = ", ".join(option.ratios[:4]) if option.ratios else "любой"
     if option.resolutions:
@@ -1555,21 +1615,15 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.progress_label.setProperty("v3Selection", True)
         self.progress_label.setAccessibleName(self.progress_label.text())
         self.add_widget(self.progress_label)
-        self.table = QTableWidget(0, 2)
+        self.table = _PromptReviewTable(0, 2)
         self.table.setHorizontalHeaderLabels(["Промпт", "Референсы"])
         self.table.setAccessibleName("Таблица промптов")
         self.table.setMinimumHeight(220)
         self.table.setMaximumHeight(330)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(
-            0,
-            QHeaderView.ResizeMode.Stretch,
-        )
-        self.table.horizontalHeader().setSectionResizeMode(
-            1,
             QHeaderView.ResizeMode.Interactive,
         )
-        self.table.horizontalHeader().resizeSection(1, 220)
         self.table.setSelectionBehavior(
             QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -1588,33 +1642,41 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         prompt_actions = QWidget()
         action_layout = QHBoxLayout(prompt_actions)
         action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(tokens.space_2)
         prompt_actions_label = QLabel("Промпты:")
         prompt_actions_label.setProperty("v3Small", True)
         action_layout.addWidget(prompt_actions_label)
-        self.add_button = V3Button("Добавить", ButtonVariant.SECONDARY)
-        self.duplicate_button = V3Button("Дублировать", ButtonVariant.SECONDARY)
-        self.delete_button = V3Button("Удалить", ButtonVariant.SECONDARY)
-        action_layout.addWidget(self.add_button)
-        action_layout.addWidget(self.duplicate_button)
-        action_layout.addWidget(self.delete_button)
-        action_layout.addStretch()
-        self.add_widget(prompt_actions)
+        self.add_button = self._compact_action_button(
+            "prompt_add",
+            "Добавить промпт",
+        )
+        self.duplicate_button = self._compact_action_button(
+            "prompt_duplicate",
+            "Дублировать выбранные промпты",
+        )
+        self.delete_button = self._compact_action_button(
+            "prompt_delete",
+            "Удалить выбранные промпты",
+        )
+        for button in (self.add_button, self.duplicate_button, self.delete_button):
+            action_layout.addWidget(button)
 
-        reference_actions = QWidget()
-        reference_layout = QHBoxLayout(reference_actions)
-        reference_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.addSpacing(tokens.space_4)
         references_actions_label = QLabel("Референсы:")
         references_actions_label.setProperty("v3Small", True)
-        reference_layout.addWidget(references_actions_label)
-        self.add_refs_button = V3Button("Добавить", ButtonVariant.SECONDARY)
-        self.replace_refs_button = V3Button("Заменить", ButtonVariant.SECONDARY)
-        self.delete_refs_button = V3Button("Удалить", ButtonVariant.SECONDARY)
-        self.add_refs_button.setToolTip("Добавить референсы")
-        self.replace_refs_button.setToolTip("Заменить референсы")
-        self.delete_refs_button.setToolTip("Удалить референсы")
-        self.add_refs_button.setAccessibleName("Добавить референсы")
-        self.replace_refs_button.setAccessibleName("Заменить референсы")
-        self.delete_refs_button.setAccessibleName("Удалить референсы")
+        action_layout.addWidget(references_actions_label)
+        self.add_refs_button = self._compact_action_button(
+            "reference_add",
+            "Добавить референсы",
+        )
+        self.replace_refs_button = self._compact_action_button(
+            "reference_replace",
+            "Заменить референсы",
+        )
+        self.delete_refs_button = self._compact_action_button(
+            "reference_delete",
+            "Удалить референсы",
+        )
         self.up_button = V3Button("Выше", ButtonVariant.GHOST)
         self.down_button = V3Button("Ниже", ButtonVariant.GHOST)
         self.up_button.hide()
@@ -1624,9 +1686,9 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             self.replace_refs_button,
             self.delete_refs_button,
         ):
-            reference_layout.addWidget(button)
-        reference_layout.addStretch()
-        self.add_widget(reference_actions)
+            action_layout.addWidget(button)
+        action_layout.addStretch()
+        self.add_widget(prompt_actions)
         self.issues_label = QLabel()
         self.issues_label.setWordWrap(True)
         self.issues_label.setProperty("v3Small", True)
@@ -1639,6 +1701,16 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.replace_refs_button.clicked.connect(self._replace_references)
         self.delete_refs_button.clicked.connect(self._delete_references)
         self.refresh_from_state()
+
+    @staticmethod
+    def _compact_action_button(kind: str, label: str) -> V3Button:
+        button = V3Button("", ButtonVariant.SECONDARY)
+        button.setIcon(_review_action_icon(kind))
+        button.setIconSize(QSize(26, 26))
+        button.setFixedSize(54, 40)
+        button.setToolTip(label)
+        button.setAccessibleName(label)
+        return button
 
     def _rows_moved(self, *_: Any) -> None:
         if self._updating:

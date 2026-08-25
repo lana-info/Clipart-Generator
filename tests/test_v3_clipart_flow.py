@@ -194,15 +194,26 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(len(state.clipart.prompts), MAX_PROMPT_ENTRIES)
         self.assertIn("Максимум", page.card.status_label.text())
 
-    def test_prompt_review_uses_human_readable_reference_actions(self):
+    def test_prompt_review_uses_compact_icon_actions_with_tooltips(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox")]
         page = ClipartPromptReviewPage(state, lambda: None)
 
         self.assertEqual(page.table.horizontalHeaderItem(1).text(), "Референсы")
-        self.assertEqual(page.add_refs_button.accessibleName(), "Добавить референсы")
-        self.assertEqual(page.replace_refs_button.accessibleName(), "Заменить референсы")
-        self.assertEqual(page.delete_refs_button.accessibleName(), "Удалить референсы")
+        actions = (
+            (page.add_button, "Добавить промпт"),
+            (page.duplicate_button, "Дублировать выбранные промпты"),
+            (page.delete_button, "Удалить выбранные промпты"),
+            (page.add_refs_button, "Добавить референсы"),
+            (page.replace_refs_button, "Заменить референсы"),
+            (page.delete_refs_button, "Удалить референсы"),
+        )
+        for button, label in actions:
+            self.assertEqual(button.text(), "")
+            self.assertEqual(button.toolTip(), label)
+            self.assertEqual(button.accessibleName(), label)
+            self.assertFalse(button.icon().isNull())
+            self.assertLessEqual(button.maximumWidth(), 64)
         self.assertEqual(page.progress_label.text(), "Шаг 2 из 2 · Проверка серии")
 
     def test_editing_prompt_text_preserves_reference_paths(self):
@@ -220,7 +231,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             ["D:/one.png", "D:/two.png"],
         )
 
-    def test_review_keeps_prompt_column_wider_than_references(self):
+    def test_review_keeps_two_thirds_prompt_and_one_third_references(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [
             PromptEntry("Fox", ["D:/a-very-long-reference-file-name.png"]),
@@ -230,7 +241,15 @@ class V3ClipartFlowTests(unittest.TestCase):
         page.show()
         self.app.processEvents()
 
-        self.assertGreater(page.table.columnWidth(0), page.table.columnWidth(1))
+        total_width = page.table.columnWidth(0) + page.table.columnWidth(1)
+        prompt_share = page.table.columnWidth(0) / total_width
+        self.assertAlmostEqual(prompt_share, 2 / 3, delta=0.04)
+
+        page.resize(1100, 600)
+        self.app.processEvents()
+        total_width = page.table.columnWidth(0) + page.table.columnWidth(1)
+        prompt_share = page.table.columnWidth(0) / total_width
+        self.assertAlmostEqual(prompt_share, 2 / 3, delta=0.04)
 
     def test_generator_page_creates_editable_prompt_entries(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

@@ -7371,13 +7371,6 @@ def run_packaged_entrypoint_check(
                     StepId.PROMPT_REVIEW
                 ]
             )
-            prompt_review_is_rendered = (
-                prompt_review_page.table.rowCount() == 3
-                and prompt_review_page.table.columnWidth(0)
-                > prompt_review_page.table.columnWidth(1)
-                and packaged_view.shell.state.clipart.prompts[0].references
-                == ["C:/smoke/reference-fox.png"]
-            )
             evidence_is_saved = (
                 packaged_view.grab().save(
                     str(evidence_root / "clipart-prompts.png"),
@@ -7391,6 +7384,22 @@ def run_packaged_entrypoint_check(
             QApplication.processEvents()
             QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
             QApplication.processEvents()
+            review_columns_width = (
+                prompt_review_page.table.columnWidth(0)
+                + prompt_review_page.table.columnWidth(1)
+            )
+            prompt_review_is_rendered = (
+                prompt_review_page.table.rowCount() == 3
+                and review_columns_width > 0
+                and abs(
+                    prompt_review_page.table.columnWidth(0)
+                    / review_columns_width
+                    - 2 / 3
+                )
+                <= 0.04
+                and packaged_view.shell.state.clipart.prompts[0].references
+                == ["C:/smoke/reference-fox.png"]
+            )
             evidence_is_saved = (
                 packaged_view.grab().save(
                     str(evidence_root / "clipart-prompt-review.png"),
