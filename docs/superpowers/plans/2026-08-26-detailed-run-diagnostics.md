@@ -32,31 +32,31 @@
 - Produces: `safe_provider_message(value: object) -> str`
 - Produces: `count_provider_results(value: object) -> int`
 
-- [ ] **Step 1: Write failing metadata and privacy tests**
+- [x] **Step 1: Write failing metadata and privacy tests**
 
   Add tests using temporary RGB/RGBA images and hostile values containing a
   secret, local path, prompt and signed URL. Assert that allowed metadata is
   preserved and prohibited content is absent from serialized events.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
   Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest -v tests.test_provider_diagnostics`
 
   Expected: import failure because `provider_diagnostics` does not exist.
 
-- [ ] **Step 3: Implement the allowlisted builder**
+- [x] **Step 3: Implement the allowlisted builder**
 
   Implement immutable allowlists for event names and scalar fields. Read only
   image metadata with Pillow, reduce filenames to basenames, bound all strings,
   reuse `security_redaction.redact_text`, and reject mappings/lists except for
   explicitly normalized parameter summaries.
 
-- [ ] **Step 4: Verify GREEN and security properties**
+- [x] **Step 4: Verify GREEN and security properties**
 
   Re-run the focused test. Search the module for accidental serialization of
   `headers`, `prompt`, `url`, `raw_response`, `body` or binary content.
 
-- [ ] **Step 5: Commit the component**
+- [x] **Step 5: Commit the component**
 
   Commit message: `feat: add safe provider diagnostic events`
 
@@ -72,33 +72,33 @@
 - Produces: `DiagnosticJournal.record_structured(event: Mapping[str, object]) -> dict[str, object]`
 - Produces: `RunQueueSession.handle_diagnostic(event: Mapping[str, object]) -> None`
 
-- [ ] **Step 1: Write failing schema and ordering tests**
+- [x] **Step 1: Write failing schema and ordering tests**
 
   Assert schema version 2, expanded scalar metadata, operation/item
   correlation, ordered technical-log lines, 8 MiB session and 24 MiB total
   defaults, and secret-safe ZIP export. Include malformed input and disk-write
   failure cases that do not raise into the run.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
   Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest -v tests.test_v3_diagnostics tests.test_v3_run_queue`
 
   Expected: failures for missing structured-recording interfaces and old
   storage limits.
 
-- [ ] **Step 3: Extend journal and session minimally**
+- [x] **Step 3: Extend journal and session minimally**
 
   Add the new allowlisted fields, schema migration-compatible reads for v1/v2,
   `record_structured`, and `handle_diagnostic`. Attach authoritative
   `operation_id`, item number, totals and retry attempt in the session instead
   of trusting worker-supplied identifiers. Keep legacy progress parsing.
 
-- [ ] **Step 4: Verify GREEN and existing exports**
+- [x] **Step 4: Verify GREEN and existing exports**
 
   Re-run both modules and confirm existing diagnostic/run-report tests still
   pass without changing their public behavior.
 
-- [ ] **Step 5: Commit the integration**
+- [x] **Step 5: Commit the integration**
 
   Commit message: `feat: correlate detailed run diagnostics`
 
@@ -116,38 +116,38 @@
 - Produces: `WorkerThread._emit_diagnostic(event: str, **values: object) -> None`
 - Consumes: `RunQueueSession.handle_diagnostic(event)`
 
-- [ ] **Step 1: Write failing signal and provider-boundary tests**
+- [x] **Step 1: Write failing signal and provider-boundary tests**
 
   Cover input inspection, upload start/finish, task submission, every status
   poll, provider success/failure, result download, local-stage completion and
   item completion. Assert exact task/error identifiers remain while prompts,
   keys, headers, paths, URLs and response bodies do not reach emitted events.
 
-- [ ] **Step 2: Run focused provider tests and verify RED**
+- [x] **Step 2: Run focused provider tests and verify RED**
 
   Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest -v tests.test_kie_routing tests.test_photoroom_provider tests.test_v3_run_queue`
 
   Expected: failures because the worker has no structured diagnostic signal.
 
-- [ ] **Step 3: Emit events without changing request flow**
+- [x] **Step 3: Emit events without changing request flow**
 
   Add the signal and best-effort emitter. Instrument existing network calls
   immediately before and after upload/create/poll/download operations and
   existing local stage boundaries. Parse KIE `resultJson` only for result
   count. Never emit request dictionaries or provider URLs.
 
-- [ ] **Step 4: Connect the signal to the active run session**
+- [x] **Step 4: Connect the signal to the active run session**
 
   Update `RunQueueCoordinator.connect_worker` with the same active-worker
   generation guard used for progress/error signals so late events from an old
   worker cannot contaminate a retry.
 
-- [ ] **Step 5: Verify GREEN and no extra requests**
+- [x] **Step 5: Verify GREEN and no extra requests**
 
   Re-run the focused tests. Assert mocked network-call counts are unchanged by
   diagnostics.
 
-- [ ] **Step 6: Commit provider instrumentation**
+- [x] **Step 6: Commit provider instrumentation**
 
   Commit message: `feat: trace image provider operations`
 
@@ -160,27 +160,27 @@
 **Interfaces:**
 - Produces: optional `diagnostic_callback: Callable[[dict[str, object]], None] | None` on `RunPodClient`
 
-- [ ] **Step 1: Write failing submit/status/error callback tests**
+- [x] **Step 1: Write failing submit/status/error callback tests**
 
   Assert callbacks receive HTTP status, job identifier, provider state and safe
   errors while API key, endpoint URL and worker payload are absent. Assert the
   callback cannot break the RunPod request if it raises.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
   Run: `.venv/bin/python -m pytest -q tests/test_cloud_gpu_backend.py`
 
-- [ ] **Step 3: Add best-effort callback instrumentation**
+- [x] **Step 3: Add best-effort callback instrumentation**
 
   Keep the public `submit` and `status` return values unchanged. Capture HTTP
   status before parsing, emit only allowlisted summaries and make callback
   failures non-fatal.
 
-- [ ] **Step 4: Verify GREEN and unchanged request bodies**
+- [x] **Step 4: Verify GREEN and unchanged request bodies**
 
   Re-run the focused module and confirm existing payload assertions pass.
 
-- [ ] **Step 5: Commit RunPod instrumentation**
+- [x] **Step 5: Commit RunPod instrumentation**
 
   Commit message: `feat: trace runpod operations safely`
 
@@ -193,29 +193,29 @@
 **Interfaces:**
 - Produces: severity/source/item filter controls and Russian detail labels in `DiagnosticJournalDialog`
 
-- [ ] **Step 1: Write failing UI filtering tests**
+- [x] **Step 1: Write failing UI filtering tests**
 
   Build a journal with local, KIE, PhotoRoom and error events. Assert each
   filter changes the visible event set, item selection is based on safe names,
   detail text includes stage/model/status/duration, and no prohibited values
   appear. Render at 1400 x 900 and 980 x 700 offscreen.
 
-- [ ] **Step 2: Run focused UI tests and verify RED**
+- [x] **Step 2: Run focused UI tests and verify RED**
 
   Run: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest -v tests.test_v3_diagnostics`
 
-- [ ] **Step 3: Implement compact filter row and translated details**
+- [x] **Step 3: Implement compact filter row and translated details**
 
   Add three `QComboBox` controls, rebuild the list from the original event
   collection on changes, retain selected-event behavior and keep vertical
   splitter scrolling. Translate stable field names with a fixed label map.
 
-- [ ] **Step 4: Verify GREEN and screenshots**
+- [x] **Step 4: Verify GREEN and screenshots**
 
   Re-run the focused test and save offscreen screenshots in the existing test
   artifact location without committing generated images.
 
-- [ ] **Step 5: Commit the UI**
+- [x] **Step 5: Commit the UI**
 
   Commit message: `feat: add diagnostic journal filters`
 
@@ -231,20 +231,20 @@
 **Interfaces:**
 - Documents each provider endpoint/model, official documentation link, request fields, limits, response fields, implementation location, diagnostic events and last verification date.
 
-- [ ] **Step 1: Write the API contract register**
+- [x] **Step 1: Write the API contract register**
 
   Cover KIE common endpoints and every visible KIE model, PhotoRoom, RunPod and
   the internal licence/update service. Mark dormant GPT-4o compatibility code
   as inactive and list each confirmed contract discrepancy separately rather
   than claiming it is fixed by diagnostics.
 
-- [ ] **Step 2: Document journal usage and privacy boundary**
+- [x] **Step 2: Document journal usage and privacy boundary**
 
   Explain how to filter by image/provider/error, identify the last successful
   stage and export a support package. State explicitly that prompts, secrets,
   URLs and images are excluded.
 
-- [ ] **Step 3: Run focused and full verification**
+- [x] **Step 3: Run focused and full verification**
 
   Run:
 
@@ -256,17 +256,17 @@
 
   Expected: all tests pass; only the documented Linux skip/deselection remains.
 
-- [ ] **Step 4: Run security review**
+- [x] **Step 4: Run security review**
 
   Search changed files and exported fixtures for test secrets, prompt text,
   `Authorization`, URLs, private paths and raw response fragments. Confirm no
   new dependency, external write, paid call or build occurred.
 
-- [ ] **Step 5: Update project state and commit**
+- [x] **Step 5: Update project state and commit**
 
   Record exact test counts and remaining provider-contract discrepancies.
   Commit message: `docs: record api and diagnostic contracts`
 
-- [ ] **Step 6: Push the verified feature branch**
+- [x] **Step 6: Push the verified feature branch**
 
   Push `feature/detailed-diagnostics` without starting a build or release.

@@ -6,11 +6,11 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Implement the approved detailed, privacy-safe diagnostic
-journal described in
-`docs/superpowers/specs/2026-08-26-detailed-run-diagnostics-design.md`.
-Do not start a Windows build or publish an artifact without a new, explicit
-owner command.**
+Current next task: **Obtain owner acceptance of the detailed diagnostic
+journal, then correct the provider-contract discrepancies listed in
+`docs/API_CONTRACTS.md`, beginning with removal of automatic paid KIE model
+probes. Do not start a Windows build or publish an artifact without a new,
+explicit owner command.**
 
 ## Phase 1 - Preparation
 

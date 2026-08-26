@@ -1,0 +1,119 @@
+# Реестр API-контрактов Vibix Images
+
+Последняя сверка: **2026-08-26**.
+
+Этот документ отвечает на два вопроса для каждого внешнего сервиса:
+
+1. Что требует официальная документация.
+2. Что сейчас отправляет и принимает Vibix Images.
+
+Проверка контрактов выполняется локальными тестами без платных запросов. Живой
+запрос допустим только после отдельного решения владельца. Никогда не вставляйте
+API-ключи, лицензионные ключи, промпты или подписанные URL в этот документ.
+
+## Общий KIE Market API
+
+| Операция | Текущий вызов | Официальная документация | Диагностика |
+|---|---|---|---|
+| Загрузка файла | `POST https://kieai.redpandaai.co/api/file-stream-upload`; multipart `file`, `uploadPath` | [Upload File Stream](https://docs.kie.ai/file-upload-api/upload-file-stream/) | `provider_upload_started`, `provider_upload_finished` |
+| Создание задачи | `POST https://api.kie.ai/api/v1/jobs/createTask`; JSON `model`, `input` | [Market Quickstart](https://docs.kie.ai/market/quickstart) | `provider_task_submitted`, `provider_task_failed` |
+| Состояние задачи | `GET https://api.kie.ai/api/v1/jobs/recordInfo?taskId=...` | [Get Task Details](https://docs.kie.ai/market/common/get-task-detail) | `provider_task_polled`, `provider_task_succeeded`, `provider_task_failed` |
+| Баланс | `GET https://api.kie.ai/api/v1/chat/credit` | [Get Account Credits](https://docs.kie.ai/common-api/get-account-credits) | только пользовательский результат проверки баланса |
+
+Авторизация выполняется через `Authorization: Bearer ...`. Ключ, заголовки,
+полные ответы, `resultJson` и URL результатов в диагностику не попадают.
+Сохраняются только HTTP-статус, `taskId`, `state`, `failCode`, безопасный
+`failMsg`, номер опроса, длительность и количество результатов.
+
+## Модели генерации KIE
+
+| Модель в приложении | Поля запроса | Документация и ограничения | Текущее состояние |
+|---|---|---|---|
+| `gpt-image/1.5-text-to-image` | `prompt`, `aspect_ratio`, `quality` | [GPT Image 1.5](https://kie.ai/gpt-image-1.5); 1:1, 2:3, 3:2; medium/high | Соответствует |
+| `gpt-image/1.5-image-to-image` | `input_urls`, `prompt`, `aspect_ratio`, `quality` | [GPT Image 1.5](https://kie.ai/gpt-image-1.5); до 16 JPEG/PNG/WEBP, 10 МБ на файл | Поля соответствуют; интерфейс намеренно ограничен пятью референсами |
+| `gpt-image-2` → `gpt-image-2-text-to-image` / `gpt-image-2-image-to-image` | `prompt`, `aspect_ratio`, `resolution`, при необходимости `input_urls` | [GPT Image 2](https://kie.ai/gpt-image-2); 1K/2K/4K, расширенный набор пропорций, до 16 референсов по 30 МБ | Поля соответствуют; список пропорций в приложении неполный |
+| `nano-banana-2` | `prompt`, `image_input`, `aspect_ratio`, `resolution`, `output_format` | [Nano Banana 2](https://docs.kie.ai/market/google/nanobanana2); до 14 референсов по 30 МБ | Соответствует; интерфейс ограничен пятью референсами |
+| `nano-banana-pro` | `prompt`, `image_input`, `aspect_ratio`, `resolution`, `output_format` | [Nano Banana Pro](https://kie.ai/nano-banana-pro); до 8 референсов по 30 МБ | Соответствует; интерфейс ограничен пятью референсами |
+| `qwen-image-2` | `prompt`, `image_size`, `output_format`, `nsfw_checker`, при редактировании `image_url` | [Qwen Image 2](https://kie.ai/qwen-image-2); text и edit имеют разные пропорции; максимум 3 референса по 10 МБ | Требуется разделить пропорции по режимам и ограничить референсы тремя |
+| `flux-2/pro-text-to-image`, `flux-2/flex-text-to-image` | `prompt`, `aspect_ratio`, `resolution` | [FLUX.2](https://kie.ai/flux-2); `auto` не разрешён для text-to-image; промпт 3–5000 символов | Требуется убрать `auto` и проверять минимум 3 символа |
+| `flux-2/pro-image-to-image`, `flux-2/flex-image-to-image` | `prompt`, `input_urls`, `aspect_ratio`, `resolution` | [FLUX.2](https://kie.ai/flux-2); `auto` разрешён; до 8 референсов по 10 МБ | Соответствует; интерфейс ограничен пятью референсами |
+
+Для генерации журнал записывает номер промпта, число символов и количество
+референсов. Точный текст промпта не записывается.
+
+## Обработка изображений KIE
+
+| Модель | Текущий payload | Официальная документация | Текущее состояние |
+|---|---|---|---|
+| `topaz/image-upscale` | `image_url`, строковый `upscale_factor` 1/2/4 | [Topaz Image Upscale](https://docs.kie.ai/market/topaz/image-upscale); JPEG/PNG/WEBP, 10 МБ, результат до 20 000 px | Соответствует; проверяется до загрузки |
+| `recraft/crisp-upscale` | `image` | [Recraft Crisp Upscale](https://docs.kie.ai/market/recraft/crisp-upscale); JPEG/PNG/WEBP, 10 МБ | Модель доступна в интерфейсе; локальная проверка всё ещё ограничивает файл 5 МБ и требует актуализации |
+| `recraft/remove-background` | `image` | [Recraft Remove Background](https://docs.kie.ai/market/recraft/remove-background); JPEG/PNG/WEBP, 5 МБ, до 16 MP, сторона 256–4096 px | Payload соответствует; отсутствует предварительная provider-specific проверка |
+
+Недоступность Recraft у провайдера не скрывает модель из интерфейса. Ошибка
+показывается с реальным безопасным `failCode`/`failMsg`; автоматической замены
+модели и дополнительного платного запроса быть не должно.
+
+## PhotoRoom
+
+| Операция | Текущий вызов | Документация | Состояние |
+|---|---|---|---|
+| Удаление фона | `POST https://sdk.photoroom.com/v1/segment`; multipart `image_file`, `format=png`, `channels=rgba`, `size=full`, `crop=false`, `despill=false` | [API Reference](https://docs.photoroom.com/api-reference-openapi), [форматы и размеры](https://docs.photoroom.com/remove-background-api-basic-plan/which-image-sizes-and-formats-are-supported) | Вызов соответствует; требуется предварительная проверка 50 МБ и максимальной стороны 6000 px |
+| Баланс/аккаунт | `GET https://image-api.photoroom.com/v2/account` | [PhotoRoom API](https://docs.photoroom.com/api-reference-openapi) | Соответствует |
+
+Диагностика сохраняет HTTP-статус, длительность, размер ответа и параметры
+проверенного PNG/RGBA. Бинарный ответ и ключ не сохраняются.
+
+## RunPod Serverless
+
+| Операция | Текущий вызов | Документация | Состояние |
+|---|---|---|---|
+| Запуск | `POST https://api.runpod.ai/v2/{endpoint_id}/run`; `{"input": ...}` | [Endpoint Operations](https://docs.runpod.io/serverless/endpoints/operation-reference) | Базовый контракт соответствует; схема `input` определяется пользовательским worker endpoint |
+| Состояние | `GET https://api.runpod.ai/v2/{endpoint_id}/status/{job_id}` | [Endpoint Operations](https://docs.runpod.io/serverless/endpoints/operation-reference) | Соответствует |
+
+Клиент поддерживает безопасный диагностический callback. Payload worker-а,
+API-ключ и endpoint URL в события не копируются.
+
+## Лицензирование и обновления
+
+Базовый URL: `https://services.etsyneuroclub.com/licenses`.
+
+| Назначение | Контракт клиента |
+|---|---|
+| Активация | `POST /api/v1/licenses/activate` |
+| Проверка лицензии | `POST /api/v1/licenses/validate` |
+| Получение ключа проверки обновлений | `GET /api/v1/releases/key` |
+| Подписанный манифест | `POST /api/v1/releases/manifest` |
+| Частное скачивание | `GET /downloads/{token}` |
+
+Контракт сверяется с соседним репозиторием `license-service/API_CONTRACT.md`.
+Клиент проверяет подпись, nonce, продукт, устройство, срок, размер и SHA-256.
+Старый GitHub `version.json` остаётся неактивным compatibility-кодом.
+
+## Подтверждённые расхождения, требующие отдельного исправления
+
+1. Перед обычной генерацией `_ensure_models_available_before_run` создаёт
+   реальные тестовые KIE-задачи. Это может расходовать кредиты. Автоматическую
+   проверку нужно заменить локальной проверкой контракта; платный тест допустим
+   только отдельным явным действием пользователя.
+2. GPT Image 2: расширить список поддерживаемых пропорций с учётом ограничений
+   2K/4K.
+3. Qwen Image 2: разделить пропорции text/edit и ограничить edit тремя
+   референсами.
+4. FLUX.2 text-to-image: исключить `auto` и проверять длину промпта 3–5000.
+5. Добавить model-specific лимиты размера и количества референсов до загрузки.
+6. Обновить Recraft Crisp с исторических 5 МБ до документированных 10 МБ.
+7. Добавить preflight для Recraft Remove Background и PhotoRoom.
+
+Диагностика не считается исправлением этих контрактных расхождений: она только
+делает их причины видимыми.
+
+## Как обновлять реестр
+
+При изменении модели или API одновременно:
+
+1. открыть официальную ссылку и записать дату сверки;
+2. обновить model/endpoint/payload и ограничения в коде;
+3. добавить или изменить локальный contract test;
+4. проверить диагностические события успеха и ошибки;
+5. выполнить полный offline-набор тестов;
+6. не выполнять платный запрос без отдельного разрешения владельца.

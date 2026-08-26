@@ -19,7 +19,7 @@ Updated: 2026-08-26
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `fix/kie-topaz-image-upscale`
+- Current task branch: `feature/detailed-diagnostics`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,13 +27,30 @@ Updated: 2026-08-26
 
 ## Next task
 
-Implement the owner-approved detailed, privacy-safe diagnostic journal after
-review of
-`docs/superpowers/specs/2026-08-26-detailed-run-diagnostics-design.md`.
-The journal must identify every image, stage, provider/model and safe provider
-response without storing prompt text, secrets, private paths, URLs or image
-contents. Do not start a new Windows build or publish `3.0.5` without a new,
-explicit owner command.
+Obtain owner acceptance of the detailed diagnostic journal, then correct the
+provider-contract discrepancies in `docs/API_CONTRACTS.md`, starting with the
+automatic paid KIE model probes. Do not start a new Windows build or publish
+`3.0.5` without a new, explicit owner command.
+
+## Detailed diagnostics checkpoint — 2026-08-26
+
+- Diagnostic schema v2 records a correlated timeline for each image: safe file
+  metadata, stage/provider/model, parameters, duration, HTTP status, task ID,
+  polling state, result count and bounded provider error.
+- KIE generation/processing, PhotoRoom, RunPod and principal local processing
+  stages emit structured events without additional network requests. Legacy
+  progress parsing remains as a compatibility fallback.
+- The journal can filter by severity, provider and image and displays Russian
+  labels at the supported 980 x 700 minimum. Session storage remains bounded at
+  8 MiB and 24 MiB total across the newest three launches.
+- Exact prompts, API/licence keys, headers, full paths, URLs, raw responses and
+  image contents are excluded from memory logs, persistent files and ZIP
+  exports. Provider messages that echo the current prompt are redacted.
+- `docs/API_CONTRACTS.md` records official links, current calls, diagnostic
+  events and confirmed discrepancies; diagnostics does not claim those
+  discrepancies are fixed.
+- Full offline pytest passes: 653 tests, 1 expected Linux skip, 2 deselected and
+  83 subtests. No live/paid API request, build or release was run.
 
 ## KIE Topaz checkpoint — 2026-08-26
 
