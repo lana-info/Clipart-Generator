@@ -148,6 +148,24 @@ class V3PinterestFlowTests(unittest.TestCase):
             "Manual Pinterest edit",
         )
 
+    def test_prompt_input_deletes_selected_pinterest_prompt(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.prompts = [
+            PromptEntry("First pin"),
+            PromptEntry("Second pin"),
+        ]
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PROMPTS]
+        page.current_prompts_table.selectRow(0)
+
+        page.delete_selected_prompts_button.click()
+
+        self.assertEqual(
+            [entry.prompt for entry in state.pinterest.prompts],
+            ["Second pin"],
+        )
+
     def test_reference_models_expand_and_report_incompatibility(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-ref-") as temp:
             image_path = Path(temp) / "reference.png"

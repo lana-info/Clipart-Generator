@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPlainTextEdit,
     QScrollArea,
     QRadioButton,
@@ -927,7 +928,7 @@ def _review_action_icon(kind: str) -> QIcon:
         painter.drawLine(12, 15, 16, 19)
         painter.drawLine(16, 19, 20, 15)
         painter.drawLine(20, 15, 25, 21)
-    elif operation == "duplicate":
+    elif operation in {"duplicate", "delete_all"}:
         painter.drawRoundedRect(QRectF(4.5, 7.5, 16, 19), 2.5, 2.5)
         painter.drawRoundedRect(QRectF(10.5, 3.5, 16, 19), 2.5, 2.5)
         painter.drawLine(14, 10, 23, 10)
@@ -938,14 +939,14 @@ def _review_action_icon(kind: str) -> QIcon:
         painter.drawLine(10, 15, 20, 15)
         painter.drawLine(10, 20, 17, 20)
 
-    if operation in {"add", "delete", "replace"}:
+    if operation in {"add", "delete", "delete_all", "replace"}:
         painter.setPen(QPen(accent, 2.4))
         painter.setBrush(QColor("#1f2937"))
         painter.drawEllipse(QRectF(18, 18, 12, 12))
         if operation == "add":
             painter.drawLine(21, 24, 27, 24)
             painter.drawLine(24, 21, 24, 27)
-        elif operation == "delete":
+        elif operation in {"delete", "delete_all"}:
             painter.drawLine(21, 24, 27, 24)
         else:
             painter.drawArc(QRectF(20, 20, 8, 8), 30 * 16, 285 * 16)
@@ -954,6 +955,32 @@ def _review_action_icon(kind: str) -> QIcon:
 
     painter.end()
     return QIcon(pixmap)
+
+
+def _compact_review_action_button(kind: str, label: str) -> V3Button:
+    button = V3Button("", ButtonVariant.SECONDARY)
+    button.setIcon(_review_action_icon(kind))
+    button.setIconSize(QSize(26, 26))
+    button.setFixedSize(50, 40)
+    button.setToolTip(label)
+    button.setAccessibleName(label)
+    return button
+
+
+def _confirm_delete_all_prompts(parent: QWidget, count: int) -> bool:
+    if count <= 0:
+        return False
+    answer = QMessageBox.question(
+        parent,
+        "Удалить все промпты?",
+        (
+            f"Из текущего проекта будут удалены все промпты ({count}) и их "
+            "привязки к референсам. Файлы референсов на диске останутся."
+        ),
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No,
+    )
+    return answer == QMessageBox.StandardButton.Yes
 
 
 class _PromptReviewTable(QTableWidget):
@@ -1233,6 +1260,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.progress_label.setProperty("v3Selection", True)
         self.progress_label.setAccessibleName(self.progress_label.text())
         self.add_widget(self.progress_label)
+        self._build_current_prompts_list()
 
         source_choices = (
             (
@@ -1291,6 +1319,107 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.source_combo.currentIndexChanged.connect(self._select_source)
         self.source_combo.setCurrentIndex(1)
         self._select_source(1)
+        self.refresh_from_state()
+
+    def _build_current_prompts_list(self) -> None:
+        self.current_prompts_label = QLabel()
+        self.current_prompts_label.setProperty("v3Selection", True)
+        self.add_widget(self.current_prompts_label)
+
+        self.current_prompts_table = QTableWidget(0, 1)
+        self.current_prompts_table.setHorizontalHeaderLabels(["Добавленные промпты"])
+        self.current_prompts_table.setAccessibleName("Добавленные промпты")
+        self.current_prompts_table.setMinimumHeight(120)
+        self.current_prompts_table.setMaximumHeight(190)
+        self.current_prompts_table.horizontalHeader().setSectionResizeMode(
+            0,
+            QHeaderView.ResizeMode.Stretch,
+        )
+        self.current_prompts_table.setSelectionBehavior(
+            QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.current_prompts_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+        self.current_prompts_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        self.add_widget(self.current_prompts_table)
+
+        self.current_prompts_actions = QWidget()
+        action_layout = QHBoxLayout(self.current_prompts_actions)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(self.tokens.space_2)
+        actions_label = QLabel("Список:")
+        actions_label.setProperty("v3Small", True)
+        action_layout.addWidget(actions_label)
+        self.delete_selected_prompts_button = _compact_review_action_button(
+            "prompt_delete",
+            "Удалить выбранные промпты",
+        )
+        self.delete_all_prompts_button = _compact_review_action_button(
+            "prompt_delete_all",
+            "Удалить все промпты",
+        )
+        action_layout.addWidget(self.delete_selected_prompts_button)
+        action_layout.addWidget(self.delete_all_prompts_button)
+        action_layout.addStretch()
+        self.add_widget(self.current_prompts_actions)
+
+        self.delete_selected_prompts_button.clicked.connect(
+            self._delete_selected_prompts
+        )
+        self.delete_all_prompts_button.clicked.connect(self._delete_all_prompts)
+
+    def refresh_from_state(self) -> None:
+        if not hasattr(self, "current_prompts_table"):
+            return
+        prompts = self.state.clipart.prompts
+        self.current_prompts_label.setText(f"Добавлено промптов: {len(prompts)}")
+        self.current_prompts_table.setRowCount(len(prompts))
+        for row, entry in enumerate(prompts):
+            item = QTableWidgetItem(entry.prompt)
+            item.setToolTip(
+                f"{entry.prompt}\n{_reference_summary(entry.references)}"
+            )
+            self.current_prompts_table.setItem(row, 0, item)
+        has_prompts = bool(prompts)
+        self.current_prompts_label.setVisible(has_prompts)
+        self.current_prompts_table.setVisible(has_prompts)
+        self.current_prompts_actions.setVisible(has_prompts)
+        self.current_prompts_table.setFixedHeight(
+            min(160, max(84, 32 + 28 * min(len(prompts), 4)))
+        )
+        self.delete_selected_prompts_button.setEnabled(has_prompts)
+        self.delete_all_prompts_button.setEnabled(has_prompts)
+
+    def _selected_prompt_rows(self) -> list[int]:
+        return sorted(
+            {
+                index.row()
+                for index in self.current_prompts_table.selectionModel().selectedRows()
+                if 0 <= index.row() < len(self.state.clipart.prompts)
+            }
+        )
+
+    def _delete_selected_prompts(self) -> None:
+        rows = self._selected_prompt_rows()
+        if not rows:
+            return
+        for row in reversed(rows):
+            del self.state.clipart.prompts[row]
+        self.refresh_from_state()
+        self.changed()
+
+    def _delete_all_prompts(self) -> None:
+        if not _confirm_delete_all_prompts(
+            self,
+            len(self.state.clipart.prompts),
+        ):
+            return
+        self.state.clipart.prompts = []
+        self.refresh_from_state()
+        self.changed()
 
     def _select_source(self, index: int) -> None:
         if not 0 <= index < self.source_stack.count():
@@ -1489,6 +1618,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             deduplicate=deduplicate,
         )
         self.card.set_state("default")
+        self.refresh_from_state()
         self.changed()
         return True
 
@@ -1646,34 +1776,43 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         prompt_actions_label = QLabel("Промпты:")
         prompt_actions_label.setProperty("v3Small", True)
         action_layout.addWidget(prompt_actions_label)
-        self.add_button = self._compact_action_button(
+        self.add_button = _compact_review_action_button(
             "prompt_add",
             "Добавить промпт",
         )
-        self.duplicate_button = self._compact_action_button(
+        self.duplicate_button = _compact_review_action_button(
             "prompt_duplicate",
             "Дублировать выбранные промпты",
         )
-        self.delete_button = self._compact_action_button(
+        self.delete_button = _compact_review_action_button(
             "prompt_delete",
             "Удалить выбранные промпты",
         )
-        for button in (self.add_button, self.duplicate_button, self.delete_button):
+        self.delete_all_button = _compact_review_action_button(
+            "prompt_delete_all",
+            "Удалить все промпты",
+        )
+        for button in (
+            self.add_button,
+            self.duplicate_button,
+            self.delete_button,
+            self.delete_all_button,
+        ):
             action_layout.addWidget(button)
 
         action_layout.addSpacing(tokens.space_4)
         references_actions_label = QLabel("Референсы:")
         references_actions_label.setProperty("v3Small", True)
         action_layout.addWidget(references_actions_label)
-        self.add_refs_button = self._compact_action_button(
+        self.add_refs_button = _compact_review_action_button(
             "reference_add",
             "Добавить референсы",
         )
-        self.replace_refs_button = self._compact_action_button(
+        self.replace_refs_button = _compact_review_action_button(
             "reference_replace",
             "Заменить референсы",
         )
-        self.delete_refs_button = self._compact_action_button(
+        self.delete_refs_button = _compact_review_action_button(
             "reference_delete",
             "Удалить референсы",
         )
@@ -1697,20 +1836,11 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.add_button.clicked.connect(self._add)
         self.duplicate_button.clicked.connect(self._duplicate)
         self.delete_button.clicked.connect(self._delete)
+        self.delete_all_button.clicked.connect(self._delete_all)
         self.add_refs_button.clicked.connect(self._add_references)
         self.replace_refs_button.clicked.connect(self._replace_references)
         self.delete_refs_button.clicked.connect(self._delete_references)
         self.refresh_from_state()
-
-    @staticmethod
-    def _compact_action_button(kind: str, label: str) -> V3Button:
-        button = V3Button("", ButtonVariant.SECONDARY)
-        button.setIcon(_review_action_icon(kind))
-        button.setIconSize(QSize(26, 26))
-        button.setFixedSize(54, 40)
-        button.setToolTip(label)
-        button.setAccessibleName(label)
-        return button
 
     def _rows_moved(self, *_: Any) -> None:
         if self._updating:
@@ -1929,10 +2059,24 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.changed()
 
     def _delete(self) -> None:
-        row = self._selected_row()
-        if row < 0:
+        rows = self._selected_rows()
+        if not rows:
+            row = self._selected_row()
+            rows = [row] if row >= 0 else []
+        if not rows:
             return
-        del self.state.clipart.prompts[row]
+        for row in reversed(rows):
+            del self.state.clipart.prompts[row]
+        self.refresh_from_state()
+        self.changed()
+
+    def _delete_all(self) -> None:
+        if not _confirm_delete_all_prompts(
+            self,
+            len(self.state.clipart.prompts),
+        ):
+            return
+        self.state.clipart.prompts = []
         self.refresh_from_state()
         self.changed()
 

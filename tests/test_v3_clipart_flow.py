@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QCheckBox
+from PyQt6.QtCore import QItemSelectionModel, QObject, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QCheckBox, QMessageBox
 from PIL import Image
 
 import v3_clipart_flow
@@ -194,6 +194,57 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(len(state.clipart.prompts), MAX_PROMPT_ENTRIES)
         self.assertIn("Максимум", page.card.status_label.text())
 
+    def test_prompt_input_lists_current_prompts_and_deletes_selected_only(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry("Fox", ["D:/fox.png"]),
+            PromptEntry("Bear"),
+            PromptEntry("Rabbit"),
+        ]
+        page = ClipartPromptInputPage(state, lambda: None)
+
+        self.assertEqual(page.current_prompts_table.rowCount(), 3)
+        selection = page.current_prompts_table.selectionModel()
+        for row in (0, 2):
+            selection.select(
+                page.current_prompts_table.model().index(row, 0),
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+        page.delete_selected_prompts_button.click()
+
+        self.assertEqual(
+            [entry.prompt for entry in state.clipart.prompts],
+            ["Bear"],
+        )
+
+    def test_prompt_input_delete_all_is_icon_only_and_requires_confirmation(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
+        page = ClipartPromptInputPage(state, lambda: None)
+
+        self.assertEqual(page.delete_all_prompts_button.text(), "")
+        self.assertEqual(
+            page.delete_all_prompts_button.toolTip(),
+            "Удалить все промпты",
+        )
+        self.assertFalse(page.delete_all_prompts_button.icon().isNull())
+        with patch.object(
+            v3_clipart_flow.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.No,
+        ):
+            page.delete_all_prompts_button.click()
+        self.assertEqual(len(state.clipart.prompts), 2)
+
+        with patch.object(
+            v3_clipart_flow.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            page.delete_all_prompts_button.click()
+        self.assertEqual(state.clipart.prompts, [])
+
     def test_prompt_review_uses_compact_icon_actions_with_tooltips(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox")]
@@ -204,6 +255,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             (page.add_button, "Добавить промпт"),
             (page.duplicate_button, "Дублировать выбранные промпты"),
             (page.delete_button, "Удалить выбранные промпты"),
+            (page.delete_all_button, "Удалить все промпты"),
             (page.add_refs_button, "Добавить референсы"),
             (page.replace_refs_button, "Заменить референсы"),
             (page.delete_refs_button, "Удалить референсы"),
@@ -230,6 +282,49 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.clipart.prompts[0].references,
             ["D:/one.png", "D:/two.png"],
         )
+
+    def test_prompt_review_deletes_selected_rows_and_never_touches_reference_files(self):
+        with tempfile.TemporaryDirectory(prefix="vibix-delete-prompts-") as temp:
+            reference = Path(temp) / "reference.png"
+            Image.new("RGBA", (2, 2), (255, 255, 255, 255)).save(reference)
+            state = ProjectState(mode=ProjectMode.CLIPART)
+            state.clipart.prompts = [
+                PromptEntry("Fox", [str(reference)]),
+                PromptEntry("Bear"),
+                PromptEntry("Rabbit"),
+            ]
+            page = ClipartPromptReviewPage(state, lambda: None)
+            selection = page.table.selectionModel()
+            for row in (0, 2):
+                selection.select(
+                    page.table.model().index(row, 0),
+                    QItemSelectionModel.SelectionFlag.Select
+                    | QItemSelectionModel.SelectionFlag.Rows,
+                )
+
+            page.delete_button.click()
+
+            self.assertEqual(
+                [entry.prompt for entry in state.clipart.prompts],
+                ["Bear"],
+            )
+            self.assertTrue(reference.is_file())
+
+    def test_prompt_review_delete_all_requires_confirmation(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        self.assertEqual(page.delete_all_button.text(), "")
+        self.assertEqual(page.delete_all_button.toolTip(), "Удалить все промпты")
+        with patch.object(
+            v3_clipart_flow.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            page.delete_all_button.click()
+
+        self.assertEqual(state.clipart.prompts, [])
 
     def test_review_keeps_two_thirds_prompt_and_one_third_references(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
