@@ -61,6 +61,53 @@ class ParallelGenerationTests(unittest.TestCase):
                 ["001", "002", "003", "004"],
             )
 
+    def test_global_kie_concurrency_accepts_five_and_one_is_sequential(self):
+        for limit in (1, 5):
+            with self.subTest(limit=limit), tempfile.TemporaryDirectory(
+                prefix=f"parallel-generation-{limit}-"
+            ) as temp_dir:
+                worker = main.WorkerThread(
+                    "mode1_generate_only",
+                    temp_dir,
+                    {
+                        "kie_api_key": "test-key",
+                        "kie_concurrency": limit,
+                        "generation_launch_interval": 0,
+                    },
+                    generated_prompts=[
+                        {"prompt": f"prompt-{index}", "references": []}
+                        for index in range(1, 7)
+                    ],
+                )
+                lock = threading.Lock()
+                active = 0
+                max_active = 0
+
+                def fake_generate(self, prompt, references=None):
+                    nonlocal active, max_active
+                    with lock:
+                        active += 1
+                        max_active = max(max_active, active)
+                    time.sleep(0.03)
+                    with lock:
+                        active -= 1
+                    return prompt
+
+                def fake_download(self, url, output_path):
+                    Path(output_path).write_bytes(b"fake-download")
+
+                def fake_save(self, final_url, source_path, output_path, *args):
+                    Path(output_path).write_bytes(b"fake-result")
+
+                worker._kie_generate_image = types.MethodType(fake_generate, worker)
+                worker._download_file = types.MethodType(fake_download, worker)
+                worker._save_final_output = types.MethodType(fake_save, worker)
+
+                worker._mode1_generate(process_generated=False, emit_final=False)
+
+                self.assertLessEqual(max_active, limit)
+                self.assertEqual(max_active, limit)
+
 
 if __name__ == "__main__":
     unittest.main()

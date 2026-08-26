@@ -1,9 +1,19 @@
+import os
 from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import main
 import provider_clients
+from PyQt6.QtWidgets import QApplication
 from provider_clients import check_kie_balance, parse_kie_balance_response
-from v3_api_settings import check_photoroom_balance, load_credentials, save_credentials
+from v3_api_settings import (
+    KIE_CONCURRENCY_CHOICES,
+    ApiSettingsDialog,
+    check_photoroom_balance,
+    load_credentials,
+    save_credentials,
+)
 
 
 def test_credentials_round_trip(tmp_path: Path):
@@ -44,3 +54,36 @@ def test_balance_parser_rejects_unknown_schema():
 def test_photoroom_balance_parser(monkeypatch):
     monkeypatch.setattr(provider_clients, "secure_json_request", lambda *args, **kwargs: {"images": {"available": 83, "subscription": 100}})
     assert "83" in check_photoroom_balance("secret")
+
+
+def test_api_dialog_exposes_only_supported_kie_concurrency_values(monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr("v3_api_settings.load_credentials", lambda: {})
+    dialog = ApiSettingsDialog(initial={"kie_concurrency": 5})
+
+    assert KIE_CONCURRENCY_CHOICES == (1, 2, 3, 5, 10)
+    assert [
+        int(dialog.kie_concurrency_combo.itemData(index))
+        for index in range(dialog.kie_concurrency_combo.count())
+    ] == [1, 2, 3, 5, 10]
+    assert dialog.kie_concurrency_combo.currentData() == 5
+    dialog.close()
+    app.processEvents()
+
+
+def test_api_dialog_returns_concurrency_but_never_writes_it_as_credential(monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    saved = []
+    monkeypatch.setattr("v3_api_settings.load_credentials", lambda: {})
+    monkeypatch.setattr("v3_api_settings.save_credentials", lambda values: saved.append(dict(values)))
+    dialog = ApiSettingsDialog(initial={"kie_concurrency": 3})
+    dialog.kie_concurrency_combo.setCurrentIndex(
+        dialog.kie_concurrency_combo.findData(10)
+    )
+
+    dialog._save()
+
+    assert dialog.settings["kie_concurrency"] == 10
+    assert "kie_concurrency" not in saved[0]
+    dialog.close()
+    app.processEvents()

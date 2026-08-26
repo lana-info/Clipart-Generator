@@ -8,12 +8,22 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Mapping
 
-from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+)
 
 from v3_components import ButtonVariant, V3Button
 from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS
 from provider_clients import check_kie_balance, check_photoroom_balance
 from app_identity import APP_NAME
+from runtime_settings import KIE_CONCURRENCY_CHOICES, normalize_kie_concurrency
 
 
 def user_env_path() -> Path:
@@ -96,7 +106,7 @@ def _legacy_check_kie_balance(api_key: str, timeout: float = 15.0) -> str:
 
 
 class ApiSettingsDialog(QDialog):
-    def __init__(self, initial: Mapping[str, str] | None = None, parent=None) -> None:
+    def __init__(self, initial: Mapping[str, Any] | None = None, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Настройки API")
         self.setMinimumWidth(560)
@@ -145,6 +155,17 @@ class ApiSettingsDialog(QDialog):
         form.addRow("PhotoRoom API Key", photo_row)
         form.addRow("RunPod API Key", self.runpod_key_edit)
         form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
+        self.kie_concurrency_combo = QComboBox()
+        for concurrency in KIE_CONCURRENCY_CHOICES:
+            self.kie_concurrency_combo.addItem(str(concurrency), concurrency)
+        selected_concurrency = normalize_kie_concurrency(
+            values.get("kie_concurrency"),
+            legacy_value=values.get("generation_concurrency"),
+        )
+        self.kie_concurrency_combo.setCurrentIndex(
+            self.kie_concurrency_combo.findData(selected_concurrency)
+        )
+        form.addRow("Одновременных задач KIE", self.kie_concurrency_combo)
         layout.addLayout(form)
         actions = QVBoxLayout()
         self.status = QLabel()
@@ -155,7 +176,7 @@ class ApiSettingsDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        self.settings: dict[str, str] = {}
+        self.settings: dict[str, Any] = {}
 
     def _check_balance(self) -> None:
         try:
@@ -175,6 +196,15 @@ class ApiSettingsDialog(QDialog):
             "photoroom_api_key": self.photo_edit.text().strip(),
             "runpod_api_key": self.runpod_key_edit.text().strip(),
             "runpod_endpoint_id": self.runpod_endpoint_edit.text().strip(),
+            "kie_concurrency": normalize_kie_concurrency(
+                self.kie_concurrency_combo.currentData()
+            ),
         }
-        save_credentials(self.settings)
+        save_credentials(
+            {
+                key: value
+                for key, value in self.settings.items()
+                if key in ALL_PROVIDER_CREDENTIAL_KEYS
+            }
+        )
         self.accept()

@@ -67,6 +67,7 @@ from v3_api_settings import check_photoroom_balance as check_photoroom_balance_a
 from output_naming import processed_output_path
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
+from runtime_settings import normalize_kie_concurrency
 from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
@@ -871,11 +872,13 @@ class WorkerThread(QThread):
         self.reference_generation_resolution = settings.get("reference_generation_resolution", "1K")
         self.timeout = max(10, int(settings.get("timeout", 60)))
         self.retries = max(0, int(settings.get("retries", 3)))
-        try:
-            configured_concurrency = int(settings.get("generation_concurrency", 3))
-        except (TypeError, ValueError):
-            configured_concurrency = 3
-        self.generation_concurrency = max(1, min(3, configured_concurrency))
+        self.kie_concurrency = normalize_kie_concurrency(
+            settings.get("kie_concurrency"),
+            legacy_value=settings.get("generation_concurrency"),
+        )
+        # Compatibility name for the generation-only executor. The same value
+        # now governs every KIE operation in the run.
+        self.generation_concurrency = self.kie_concurrency
         try:
             configured_interval = float(settings.get("generation_launch_interval", 1.0))
         except (TypeError, ValueError):
@@ -4550,6 +4553,7 @@ class MainWindow(QMainWindow):
             "retries": 3,
             "timeout": 60,
             "generation_concurrency": 3,
+            "kie_concurrency": 3,
             "generation_launch_interval": 1.0,
             "generation_wait_timeout": 300,
             "status_poll_interval": 20,
@@ -4615,9 +4619,15 @@ class MainWindow(QMainWindow):
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 self.config = json.load(f)
+            had_kie_concurrency = "kie_concurrency" in self.config
             for key, value in default_config.items():
                 if key not in self.config:
                     self.config[key] = value
+            if not had_kie_concurrency:
+                self.config["kie_concurrency"] = normalize_kie_concurrency(
+                    None,
+                    legacy_value=self.config.get("generation_concurrency"),
+                )
         else:
             self.config = default_config
         self.config["kie_upscale_model"] = normalize_kie_upscale_model(

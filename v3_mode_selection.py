@@ -308,7 +308,7 @@ class V3ApplicationView(QWidget):
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self._recent_project: ProjectState | None = None
         self._runtime_settings_provider = runtime_settings_provider
-        self._v3_runtime_settings: dict[str, str] = {}
+        self._v3_runtime_settings: dict[str, Any] = {}
         self._worker_factory = worker_factory
         self._license_gate = license_gate
         self._diagnostic_journal = diagnostic_journal
@@ -322,6 +322,12 @@ class V3ApplicationView(QWidget):
             if self._draft_path is not None else None
         )
         self._preferences = self._load_preferences()
+        if "kie_concurrency" in self._preferences:
+            from runtime_settings import normalize_kie_concurrency
+
+            self._v3_runtime_settings["kie_concurrency"] = normalize_kie_concurrency(
+                self._preferences.get("kie_concurrency")
+            )
         self.shell: AppShell | None = None
 
         self.setMinimumSize(*V3_WINDOW_MINIMUM_SIZE)
@@ -373,6 +379,20 @@ class V3ApplicationView(QWidget):
         dialog = ApiSettingsDialog(initial=self._runtime_settings(), parent=self.shell or self)
         if dialog.exec():
             self._v3_runtime_settings.update(dialog.settings)
+            if "kie_concurrency" in dialog.settings:
+                from runtime_settings import normalize_kie_concurrency
+
+                self._preferences["kie_concurrency"] = normalize_kie_concurrency(
+                    dialog.settings.get("kie_concurrency")
+                )
+                if self._preferences_path is not None:
+                    try:
+                        save_preferences_atomic(
+                            self._preferences_path,
+                            self._preferences,
+                        )
+                    except OSError:
+                        pass
             self._diagnostic_event(
                 "api_settings_saved",
                 "Настройки API сохранены.",
