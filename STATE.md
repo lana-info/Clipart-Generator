@@ -19,7 +19,7 @@ Updated: 2026-08-26
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `feature/detailed-diagnostics`
+- Current task branch: `fix/provider-api-contracts`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,10 +27,25 @@ Updated: 2026-08-26
 
 ## Next task
 
-Obtain owner acceptance of the detailed diagnostic journal, then correct the
-provider-contract discrepancies in `docs/API_CONTRACTS.md`, starting with the
-automatic paid KIE model probes. Do not start a new Windows build or publish
-`3.0.5` without a new, explicit owner command.
+Finish offline verification and integrate the provider-contract fixes into
+`develop/3.0`. Do not start a Windows build or publish `3.0.5` without a new,
+explicit owner command. Packaged Windows acceptance remains a later owner-run
+step.
+
+## Provider contract checkpoint — 2026-08-26
+
+- Ordinary generation no longer creates paid KIE availability probes; live
+  model checks remain explicit user actions only.
+- GPT Image 2, Qwen Image 2 and FLUX.2 use mode-specific documented ratios,
+  resolutions, prompt limits, and reference limits before upload.
+- Recraft Crisp, Recraft Remove Background and PhotoRoom preflight now match
+  their documented file and image constraints.
+- The deployed license service is recorded accurately: service URL approved,
+  license and update terms implemented, and the admin panel uses username and
+  password with TOTP as an additional second factor.
+- Full offline pytest passes: 669 tests, 1 expected Linux skip, 2 deselected
+  and 83 subtests; syntax, sensitive-artifact, startup-smoke and diff checks pass.
+- No live/paid API request or release build is part of this checkpoint.
 
 ## Detailed diagnostics checkpoint — 2026-08-26
 

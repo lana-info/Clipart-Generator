@@ -31,12 +31,12 @@ API-ключи, лицензионные ключи, промпты или по�
 |---|---|---|---|
 | `gpt-image/1.5-text-to-image` | `prompt`, `aspect_ratio`, `quality` | [GPT Image 1.5](https://kie.ai/gpt-image-1.5); 1:1, 2:3, 3:2; medium/high | Соответствует |
 | `gpt-image/1.5-image-to-image` | `input_urls`, `prompt`, `aspect_ratio`, `quality` | [GPT Image 1.5](https://kie.ai/gpt-image-1.5); до 16 JPEG/PNG/WEBP, 10 МБ на файл | Поля соответствуют; интерфейс намеренно ограничен пятью референсами |
-| `gpt-image-2` → `gpt-image-2-text-to-image` / `gpt-image-2-image-to-image` | `prompt`, `aspect_ratio`, `resolution`, при необходимости `input_urls` | [GPT Image 2](https://kie.ai/gpt-image-2); 1K/2K/4K, расширенный набор пропорций, до 16 референсов по 30 МБ | Поля соответствуют; список пропорций в приложении неполный |
+| `gpt-image-2` → `gpt-image-2-text-to-image` / `gpt-image-2-image-to-image` | `prompt`, `aspect_ratio`, `resolution`, при необходимости `input_urls` | [GPT Image 2 text](https://docs.kie.ai/market/gpt/gpt-image-2-text-to-image), [GPT Image 2 image](https://docs.kie.ai/market/gpt/gpt-image-2-image-to-image); 1K/2K/4K, расширенный набор пропорций, до 16 референсов по 30 МБ | Соответствует; ограничения пропорций для 2K/4K проверяются локально |
 | `nano-banana-2` | `prompt`, `image_input`, `aspect_ratio`, `resolution`, `output_format` | [Nano Banana 2](https://docs.kie.ai/market/google/nanobanana2); до 14 референсов по 30 МБ | Соответствует; интерфейс ограничен пятью референсами |
 | `nano-banana-pro` | `prompt`, `image_input`, `aspect_ratio`, `resolution`, `output_format` | [Nano Banana Pro](https://kie.ai/nano-banana-pro); до 8 референсов по 30 МБ | Соответствует; интерфейс ограничен пятью референсами |
-| `qwen-image-2` | `prompt`, `image_size`, `output_format`, `nsfw_checker`, при редактировании `image_url` | [Qwen Image 2](https://kie.ai/qwen-image-2); text и edit имеют разные пропорции; максимум 3 референса по 10 МБ | Требуется разделить пропорции по режимам и ограничить референсы тремя |
-| `flux-2/pro-text-to-image`, `flux-2/flex-text-to-image` | `prompt`, `aspect_ratio`, `resolution` | [FLUX.2](https://kie.ai/flux-2); `auto` не разрешён для text-to-image; промпт 3–5000 символов | Требуется убрать `auto` и проверять минимум 3 символа |
-| `flux-2/pro-image-to-image`, `flux-2/flex-image-to-image` | `prompt`, `input_urls`, `aspect_ratio`, `resolution` | [FLUX.2](https://kie.ai/flux-2); `auto` разрешён; до 8 референсов по 10 МБ | Соответствует; интерфейс ограничен пятью референсами |
+| `qwen-image-2` → `qwen2/text-to-image` / `qwen2/image-edit` | `prompt`, `image_size`, `output_format`, при редактировании один строковый `image_url` | [Qwen Image 2 text](https://docs.kie.ai/market/qwen2/text-to-image), [Qwen Image 2 edit](https://docs.kie.ai/market/qwen2/image-edit); text и edit имеют разные пропорции, edit принимает один URL | Соответствует; endpoint, payload, пропорции и один локальный референс до 10 МБ проверяются до загрузки |
+| `flux-2/pro-text-to-image`, `flux-2/flex-text-to-image` | `prompt`, `aspect_ratio`, `resolution` | [FLUX.2 Pro](https://docs.kie.ai/market/flux2/pro-text-to-image), [FLUX.2 Flex](https://docs.kie.ai/market/flux2/flex-text-to-image); `auto` не разрешён для text-to-image; промпт 3–5000 символов | Соответствует; `auto` отсутствует, длина проверяется локально |
+| `flux-2/pro-image-to-image`, `flux-2/flex-image-to-image` | `prompt`, `input_urls`, `aspect_ratio`, `resolution` | [FLUX.2](https://kie.ai/flux-2); `auto` разрешён; до 8 референсов по 10 МБ | Соответствует; интерфейс ограничен пятью референсами, лимиты проверяются до загрузки |
 
 Для генерации журнал записывает номер промпта, число символов и количество
 референсов. Точный текст промпта не записывается.
@@ -46,8 +46,8 @@ API-ключи, лицензионные ключи, промпты или по�
 | Модель | Текущий payload | Официальная документация | Текущее состояние |
 |---|---|---|---|
 | `topaz/image-upscale` | `image_url`, строковый `upscale_factor` 1/2/4 | [Topaz Image Upscale](https://docs.kie.ai/market/topaz/image-upscale); JPEG/PNG/WEBP, 10 МБ, результат до 20 000 px | Соответствует; проверяется до загрузки |
-| `recraft/crisp-upscale` | `image` | [Recraft Crisp Upscale](https://docs.kie.ai/market/recraft/crisp-upscale); JPEG/PNG/WEBP, 10 МБ | Модель доступна в интерфейсе; локальная проверка всё ещё ограничивает файл 5 МБ и требует актуализации |
-| `recraft/remove-background` | `image` | [Recraft Remove Background](https://docs.kie.ai/market/recraft/remove-background); JPEG/PNG/WEBP, 5 МБ, до 16 MP, сторона 256–4096 px | Payload соответствует; отсутствует предварительная provider-specific проверка |
+| `recraft/crisp-upscale` | `image` | [Recraft Crisp Upscale](https://docs.kie.ai/market/recraft/crisp-upscale); JPEG/PNG/WEBP, 10 МБ | Соответствует; недокументированные ограничения размеров не применяются |
+| `recraft/remove-background` | `image` | [Recraft Remove Background](https://docs.kie.ai/market/recraft/remove-background); JPEG/PNG/WEBP, 5 МБ, до 16 MP, сторона 256–4096 px | Соответствует; provider-specific проверка выполняется до загрузки |
 
 Недоступность Recraft у провайдера не скрывает модель из интерфейса. Ошибка
 показывается с реальным безопасным `failCode`/`failMsg`; автоматической замены
@@ -57,7 +57,7 @@ API-ключи, лицензионные ключи, промпты или по�
 
 | Операция | Текущий вызов | Документация | Состояние |
 |---|---|---|---|
-| Удаление фона | `POST https://sdk.photoroom.com/v1/segment`; multipart `image_file`, `format=png`, `channels=rgba`, `size=full`, `crop=false`, `despill=false` | [API Reference](https://docs.photoroom.com/api-reference-openapi), [форматы и размеры](https://docs.photoroom.com/remove-background-api-basic-plan/which-image-sizes-and-formats-are-supported) | Вызов соответствует; требуется предварительная проверка 50 МБ и максимальной стороны 6000 px |
+| Удаление фона | `POST https://sdk.photoroom.com/v1/segment`; multipart `image_file`, `format=png`, `channels=rgba`, `size=full`, `crop=false`, `despill=false` | [API Reference](https://docs.photoroom.com/api-reference-openapi), [форматы и размеры](https://docs.photoroom.com/remove-background-api-basic-plan/file-size-resolution-and-format) | Соответствует; приложение принимает декодируемое подмножество PNG/JPEG/WEBP и проверяет 50 МБ и сторону 6000 px до запроса. HEIC провайдер поддерживает, но приложение не заявляет без пакетного декодера |
 | Баланс/аккаунт | `GET https://image-api.photoroom.com/v2/account` | [PhotoRoom API](https://docs.photoroom.com/api-reference-openapi) | Соответствует |
 
 Диагностика сохраняет HTTP-статус, длительность, размер ответа и параметры
@@ -89,23 +89,29 @@ API-ключ и endpoint URL в события не копируются.
 Клиент проверяет подпись, nonce, продукт, устройство, срок, размер и SHA-256.
 Старый GitHub `version.json` остаётся неактивным compatibility-кодом.
 
-## Подтверждённые расхождения, требующие отдельного исправления
+Административная панель использует логин `admin` и пароль. TOTP-код является
+дополнительным вторым фактором; публичной регистрации и сброса привязки
+пользователем нет.
 
-1. Перед обычной генерацией `_ensure_models_available_before_run` создаёт
-   реальные тестовые KIE-задачи. Это может расходовать кредиты. Автоматическую
-   проверку нужно заменить локальной проверкой контракта; платный тест допустим
-   только отдельным явным действием пользователя.
-2. GPT Image 2: расширить список поддерживаемых пропорций с учётом ограничений
-   2K/4K.
-3. Qwen Image 2: разделить пропорции text/edit и ограничить edit тремя
-   референсами.
-4. FLUX.2 text-to-image: исключить `auto` и проверять длину промпта 3–5000.
-5. Добавить model-specific лимиты размера и количества референсов до загрузки.
-6. Обновить Recraft Crisp с исторических 5 МБ до документированных 10 МБ.
-7. Добавить preflight для Recraft Remove Background и PhotoRoom.
+## Устранённые расхождения — 2026-08-26
 
-Диагностика не считается исправлением этих контрактных расхождений: она только
-делает их причины видимыми.
+1. Обычный запуск больше не создаёт тестовую KIE-задачу. Живой тест модели
+   остаётся только отдельным явным действием пользователя.
+2. GPT Image 2 поддерживает документированные пропорции и условные ограничения
+   разрешений 2K/4K.
+3. Qwen Image 2 использует точные endpoint `qwen2/text-to-image` и
+   `qwen2/image-edit`, разные пропорции и один строковый `image_url`.
+4. FLUX.2 text-to-image не предлагает `auto` и проверяет 3–5000 символов.
+5. Количество и размер локальных референсов проверяются по выбранной модели до
+   загрузки провайдеру.
+6. Recraft Crisp принимает документированный предел 10 МБ без исторических
+   ограничений по пикселям или сторонам.
+7. Recraft Remove Background и PhotoRoom получили предварительную проверку
+   формата, размера файла и геометрии изображения.
+
+Для ссылочных референсов приложение может проверить количество, но не скачивает
+файл только ради определения его размера. Ограничение размера такого URL
+окончательно контролирует провайдер.
 
 ## Как обновлять реестр
 
