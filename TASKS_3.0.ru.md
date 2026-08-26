@@ -1138,13 +1138,14 @@ Status: Done in source — live KIE/Windows acceptance pending
 
 - [x] Выделить из текущего последовательного worker независимую единицу
   генерации с изолированным состоянием и результатом.
-- [x] Добавить единый настраиваемый лимит KIE 1/2/3/5/10, по умолчанию 3,
-  для генерации, Topaz, KIE background removal и остальных существующих
-  KIE-этапов.
+- [x] Добавить отдельные лимиты KIE и PhotoRoom 1/2/3, по умолчанию 3 для
+  каждого провайдера, с общим фиксированным пределом шести одновременных
+  сетевых задач. Лимит KIE общий для генерации, Topaz, KIE background removal
+  и остальных существующих KIE-этапов.
 - [x] Сохранить последовательный порядок этапов внутри одного изображения,
   разрешив независимым изображениям выполнять KIE-этапы одновременно.
-- [x] Оставить PhotoRoom и локальные операции в отдельной последовательной
-  полосе выполнения.
+- [x] Выполнять независимые задачи PhotoRoom параллельно в пределах его лимита;
+  локальные операции оставить последовательными.
 - [x] Ввести глобальный ограничитель запуска новых KIE-задач: начать с одной
   новой задачи в секунду.
 - [x] Обработать HTTP 429, временные сетевые ошибки и повтор с backoff.
@@ -1154,9 +1155,10 @@ Status: Done in source — live KIE/Windows acceptance pending
 - [x] Сохранить порядок результатов, per-file errors, отмену и остановку после
   уже запущенных задач; новые pending-задачи после остановки не стартуют.
 - [x] Не допустить конфликтов имён и одновременной небезопасной записи файлов.
-- [x] Добавить regression tests для лимитера, generation-only,
-  processing-only, generate-then-process, последовательных PhotoRoom/local,
-  отмены, ошибок, публикации и точной привязки Results.
+- [x] Добавить regression tests для лимитов обоих провайдеров, общего cap 6,
+  generation-only, processing-only, generate-then-process, launch guard
+  PhotoRoom, последовательных local-операций, отмены, ошибок, публикации и
+  точной привязки Results без раскрытия private paths.
 - [ ] Проверить реальную скорость, расход кредитов и устойчивость на малом
   тестовом наборе до увеличения числа задач.
 
@@ -1164,21 +1166,26 @@ Acceptance:
 
 - [x] Несколько KIE-задач выполняются одновременно, а Results поддерживает
   несколько активных строк.
-- [x] В тестах не превышается выбранный глобальный лимит KIE.
+- [x] В тестах независимые лимиты KIE и PhotoRoom не превышают 3, а общий
+  сетевой cap не превышает 6.
 - [x] HTTP 429 ограниченно повторяется и не приводит к потере всей очереди.
 - [x] Результаты и ошибки однозначно соответствуют исходным промптам/файлам.
-- [x] Последовательный режим сохраняется при лимите 1; PhotoRoom/local всегда
-  выполняются по одному.
+- [x] Последовательный режим сохраняется при лимите 1; local-операции всегда
+  выполняются по одному, а PhotoRoom соблюдает собственный launch guard.
 
 Dependencies: `CG3-TASK-034`, текущий `WorkerThread`, `RunQueue` и provider
 contracts.
 
-Evidence 2026-08-26: full offline suite passes (700 tests, 1 expected Linux
-skip, 2 deselected, 87 subtests). Indexed out-of-order Results, limits
-1/3/5, all three run shapes, PhotoRoom/local serialization, cancellation,
-Recraft contracts and bounded 429 behavior are covered. No paid KIE call,
-Windows build, merge or server publication was performed. Live KIE
-credit/speed measurement and target-Windows acceptance remain pending.
+Evidence 2026-08-26: focused offscreen suite passed (292 tests and 24
+subtests); full offline suite passed (724 tests, 1 expected Linux skip,
+2 deselected, 87 subtests). Separate provider limits 1/2/3 (default 3), the
+fixed cap 6, indexed out-of-order Results, all three run shapes, PhotoRoom
+launch guard, sequential local processing, cancellation, unchanged Recraft
+contracts, bounded 429 behavior, and path-private diagnostics are covered.
+fal.ai is excluded. `py_compile`, tracked sensitive-artifact scan and
+`git diff --check` passed. No paid KIE call, build, merge, push or server
+publication was performed. Live KIE credit/speed measurement and
+target-Windows acceptance remain pending.
 
 ### Отложенные идеи, не входящие в текущий этап
 

@@ -6,10 +6,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Review the verified Windows 3.0.5 source checkpoint,
+Current next task: **Review the provider-aware Windows 3.0.5 source checkpoint,
 then merge and start a Windows-only build only after a separate owner command.
-`CG3-TASK-034A` and the source implementation of `CG3-TASK-035` are complete;
-do not upload a server revision before target-Windows acceptance.**
+The source verification for `CG3-TASK-035` is complete; do not upload a server
+revision before target-Windows acceptance.**
 
 ## Phase 1 - Preparation
 
@@ -1867,3 +1867,35 @@ Verification:
 - [x] Branding and release-entrypoint unit tests pass; `git diff --check` passes.
 - [ ] Compile and visually inspect the installer on Windows in a separately
   approved build. No Windows build was started for this task.
+
+### Task 72 - Provider-Aware Source Verification
+
+Status: Source verification complete; review and target-Windows acceptance pending
+
+Verified source behavior:
+
+- KIE and PhotoRoom have independent settings limited to 1, 2, or 3 active
+  tasks, each defaulting to 3. The shared fixed release cap is 6 simultaneous
+  network tasks.
+- KIE generation, Topaz, KIE background removal, and other existing KIE work
+  share the KIE limit. PhotoRoom has its own launch guard: an initial burst no
+  larger than its selected limit, then a sustained 60-images-per-minute pace;
+  bounded HTTP 429 handling remains visible.
+- Local processing remains sequential. Recraft payload, availability, and
+  no-silent-fallback behavior are unchanged; fal.ai remains excluded.
+- Results and diagnostics retain the exact item index for concurrent events and
+  keep prompts, credentials, raw provider responses, and full private paths out
+  of user-facing diagnostics.
+
+Verification:
+
+- [x] Focused offscreen settings, scheduling, queue, navigation, completion,
+  provider-contract, diagnostics, and installer-artwork regressions: 292 passed
+  and 24 subtests passed.
+- [x] Full offscreen pytest suite: 724 passed, 1 expected Linux skip,
+  2 deselected, and 87 subtests passed.
+- [x] `python -m py_compile main.py runtime_settings.py v3_api_settings.py`,
+  tracked sensitive-artifact scan, and `git diff --check` passed.
+- [x] No paid provider request, build, merge, server publication, or push ran.
+- [ ] Obtain review, then separately approve a Windows-only build and
+  target-Windows acceptance before any server revision publication.

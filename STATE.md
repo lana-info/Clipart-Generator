@@ -20,39 +20,39 @@ Updated: 2026-08-26
 
 - Base branch: `develop/3.0`
 - Provider-contract checkpoint branch: `fix/provider-api-contracts`
-- Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
+- Verified provider-aware source: `08648e2a623291b8ba90684e37d947b1db427a0f`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
 
-Review the verified `codex/fix-windows-acceptance-ux-3.0.5` source checkpoint.
-Merge and start a Windows-only build only after a separate owner command; do
-not publish a revision to the update service before target-machine acceptance.
+Review the verified `codex/fix-windows-acceptance-ux-3.0.5` provider-aware
+source checkpoint. Merge and start a Windows-only build only after a separate
+owner command; do not publish a revision to the update service before
+target-machine acceptance.
 
-## Parallel KIE stabilization checkpoint — 2026-08-26
+## Provider-aware parallel stabilization checkpoint — 2026-08-26
 
-- One application setting now controls the maximum active KIE work with
-  choices 1, 2, 3, 5 and 10 and a default of 3. It is stored with normal app
-  preferences, never with API credentials, and migrates the old generation
-  concurrency value.
-- Generation-only, processing-only and generate-then-process runs share the
-  bounded image queue. Existing generation, Topaz, KIE background removal and
-  other KIE operations can overlap across images while each image keeps its
-  selected stage order.
-- PhotoRoom and local operations remain sequential. Recraft payload,
-  availability and no-silent-fallback behavior are unchanged; fal.ai is not
-  part of this checkpoint.
-- Worker lifecycle events carry the exact item index. Results can show several
-  active rows and attach out-of-order output, failure and cancellation events
-  to the correct prompt/file without the legacy shared cursor.
-- Topaz remains limited to 2x/4x. Pending tasks do not start after a stop
-  request; already active work settles safely. The existing one-new-KIE-task
-  launch interval and bounded HTTP 429 behavior remain in force.
-- Full offline pytest passes: 700 tests, 1 expected Linux skip, 2 deselected
-  and 87 subtests. Python compilation, sensitive-artifact scan and
-  `git diff --check` pass. No paid request, build, merge or publication ran.
+- KIE and PhotoRoom now have independent 1/2/3 settings, each defaulting to
+  3, behind a fixed six-task network cap. KIE's limit is shared by generation,
+  Topaz, KIE background removal, and other existing KIE operations.
+- Generation-only, processing-only and generate-then-process runs preserve
+  per-image stage order while independent provider work can overlap. Local
+  processing remains sequential.
+- PhotoRoom uses its own launch guard: an initial burst of at most its selected
+  provider limit, followed by a 60-images-per-minute pace. Bounded HTTP 429
+  handling remains in force.
+- Recraft payload, availability and no-silent-fallback behavior are unchanged;
+  fal.ai remains excluded. Topaz remains limited to 2x/4x.
+- Worker lifecycle events retain the exact item index. Results can show several
+  active rows and route out-of-order output, failure and cancellation to the
+  correct prompt/file. User-facing diagnostics exclude prompts, credentials,
+  raw provider responses and full private paths.
+- Focused offscreen regressions pass: 292 tests and 24 subtests. Full offline
+  pytest passes: 724 tests, 1 expected Linux skip, 2 deselected and 87 subtests.
+  Python compilation, tracked sensitive-artifact scan and `git diff --check`
+  pass. No paid request, build, merge, push or server publication ran.
 
 ## Windows acceptance UX checkpoint — 2026-08-26
 
