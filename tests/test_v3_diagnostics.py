@@ -7,7 +7,11 @@ from PIL import Image
 from PyQt6.QtWidgets import QApplication
 
 import main
-from diagnostics import DiagnosticJournal
+from diagnostics import (
+    DEFAULT_SESSION_MAX_BYTES,
+    DEFAULT_TOTAL_MAX_BYTES,
+    DiagnosticJournal,
+)
 from v3_diagnostics import DiagnosticJournalDialog
 from v3_mode_selection import V3ApplicationView
 from v3_project_state import ProjectMode, StepId
@@ -40,6 +44,61 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             self.assertGreater(view._diagnostics_dialog.event_list.count(), 0)
             view._diagnostics_dialog.close()
             view.close()
+
+    def test_structured_provider_event_uses_v2_schema_and_safe_details(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+
+            journal.record_structured(
+                {
+                    "event": "provider_task_failed",
+                    "provider": "kie",
+                    "model": "recraft/crisp-upscale",
+                    "stage": "upscale_before",
+                    "task": "task-123",
+                    "http_status": 200,
+                    "provider_state": "fail",
+                    "error_code": "501",
+                    "error_message": "provider failed; api_key=sk-secret-value",
+                    "item_index": 2,
+                    "item_total": 8,
+                    "attempt": 1,
+                    "elapsed_ms": 950,
+                    "prompt": "private prompt",
+                    "result_url": "https://example.test/file?token=secret",
+                },
+                operation_id="operation-123",
+            )
+
+            event = journal.read_events()[0]
+            raw = journal.session_path.read_text(encoding="utf-8")
+            self.assertEqual(event["schema_version"], 2)
+            self.assertEqual(event["operation_id"], "operation-123")
+            self.assertEqual(event["details"]["provider"], "kie")
+            self.assertEqual(event["details"]["task"], "task-123")
+            self.assertEqual(event["details"]["item_index"], 2)
+            self.assertNotIn("private prompt", raw)
+            self.assertNotIn("sk-secret-value", raw)
+            self.assertNotIn("example.test", raw)
+
+    def test_detailed_journal_limits_cover_large_image_batches(self) -> None:
+        self.assertEqual(DEFAULT_SESSION_MAX_BYTES, 8 * 1024 * 1024)
+        self.assertEqual(DEFAULT_TOTAL_MAX_BYTES, 24 * 1024 * 1024)
+
+    def test_read_events_keeps_legacy_v1_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            journal.session_path.write_text(
+                '{"schema_version":1,"timestamp":"2026-08-26T00:00:00+00:00",'
+                '"sequence":1,"event":"legacy","summary":"old"}\n',
+                encoding="utf-8",
+            )
+
+            events = journal.read_events()
+
+            self.assertEqual(events[0]["event"], "legacy")
 
     def test_run_queue_writes_terminal_events_without_source_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

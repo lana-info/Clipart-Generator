@@ -36,6 +36,7 @@ from v3_components import (
     V3DesignTokens,
 )
 from security_redaction import redact_text
+from provider_diagnostics import build_provider_event
 from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
@@ -396,7 +397,7 @@ class RunQueueSession(QObject):
             ),
         )
 
-    def _event(self, name: str, **fields: Any) -> None:
+    def _event(self, name: str, _record_journal: bool = True, **fields: Any) -> None:
         if len(self._technical_events) >= MAX_TECHNICAL_EVENTS:
             return
         elapsed_ms = max(0, round((time.monotonic() - self.started_at) * 1000))
@@ -441,7 +442,7 @@ class RunQueueSession(QObject):
                 )
                 parts.append(f"{key}={compact}")
         self._technical_events.append(" ".join(parts))
-        if self._diagnostic_journal is not None:
+        if self._diagnostic_journal is not None and _record_journal:
             summaries = {
                 "run_started": "Запущена обработка пакета.",
                 "item_started": "Начата обработка файла.",
@@ -492,6 +493,45 @@ class RunQueueSession(QObject):
                 ),
                 retry="started" if name == "retry_started" else None,
                 details=details,
+            )
+
+    def handle_diagnostic(self, event: Any) -> None:
+        """Correlate one worker/provider event without trusting private input."""
+        try:
+            source = dict(event) if isinstance(event, dict) else {}
+            name = str(source.pop("event", "") or "")
+            safe = build_provider_event(name, **source)
+            safe_name = str(safe.pop("event"))
+            safe.pop("severity", None)
+            safe.pop("summary", None)
+
+            try:
+                requested_index = int(safe.get("item_index", 0) or 0)
+            except (TypeError, ValueError, OverflowError):
+                requested_index = 0
+            if not 1 <= requested_index <= len(self.items):
+                requested_index = (
+                    self.current_index + 1 if self.current_index is not None else 1
+                )
+            requested_index = min(max(1, requested_index), max(1, len(self.items)))
+            safe["item_index"] = requested_index
+            safe["item_total"] = len(self.items)
+            if self.items:
+                safe["attempt"] = self.items[requested_index - 1].attempts
+
+            self._event(safe_name, _record_journal=False, **safe)
+            if self._diagnostic_journal is not None:
+                recorder = getattr(self._diagnostic_journal, "record_structured", None)
+                if callable(recorder):
+                    recorder(
+                        {"event": safe_name, **safe},
+                        operation_id=self.operation_id,
+                    )
+        except Exception:
+            self._event(
+                "diagnostic_parse_failed",
+                _record_journal=False,
+                status="rejected",
             )
 
     @property

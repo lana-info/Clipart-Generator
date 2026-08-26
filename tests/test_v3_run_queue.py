@@ -113,6 +113,54 @@ class V3RunQueueTests(unittest.TestCase):
         self.assertEqual(format_elapsed_duration(93), "1 мин 33 сек")
         self.assertEqual(format_elapsed_duration(3848), "1 ч 4 мин 8 сек")
 
+    def test_structured_diagnostic_is_correlated_and_ordered(self):
+        with tempfile.TemporaryDirectory(prefix="v3-structured-diagnostic-") as temp:
+            root = Path(temp)
+            journal = Mock()
+            session = RunQueueSession(
+                generation_request(root, count=2),
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+
+            session.handle_diagnostic(
+                {
+                    "event": "provider_task_polled",
+                    "provider": "kie",
+                    "model": "gpt-image-2-text-to-image",
+                    "task": "task-456",
+                    "provider_state": "waiting",
+                    "poll_attempt": 2,
+                    "item_index": 2,
+                    "item_total": 999,
+                    "attempt": 999,
+                    "prompt": SECRET_PROMPT,
+                }
+            )
+
+            call = journal.record_structured.call_args
+            event = call.args[0]
+            self.assertEqual(call.kwargs["operation_id"], session.operation_id)
+            self.assertEqual(event["item_index"], 2)
+            self.assertEqual(event["item_total"], 2)
+            self.assertEqual(event["attempt"], 1)
+            self.assertIn("event=provider_task_polled", session.technical_log)
+            self.assertIn("task=task-456", session.technical_log)
+            self.assertNotIn(SECRET_PROMPT, session.technical_log)
+
+    def test_malformed_structured_diagnostic_never_breaks_run(self):
+        with tempfile.TemporaryDirectory(prefix="v3-malformed-diagnostic-") as temp:
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "input.png"]),
+                ProjectMode.PROCESSING,
+                diagnostic_journal=Mock(record_structured=Mock(side_effect=OSError("disk"))),
+            )
+
+            session.handle_diagnostic({"event": "unknown", "raw_response": object()})
+
+            self.assertTrue(session.running)
+            self.assertIn("event=diagnostic_parse_failed", session.technical_log)
+
     def test_all_routes_end_in_the_shared_results_step(self):
         for mode in ProjectMode:
             with self.subTest(mode=mode):
