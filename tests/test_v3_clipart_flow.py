@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QItemSelectionModel, QObject, Qt, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QMessageBox
+from PyQt6.QtCore import QItemSelectionModel, QMimeData, QObject, QUrl, Qt, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QMessageBox
 from PIL import Image
 
 import v3_clipart_flow
@@ -19,6 +19,7 @@ from v3_clipart_flow import (
     MAX_CLIPART_REQUESTS,
     ClipartFlowError,
     ClipartProcessingPage,
+    ClipartGenerationPage,
     ClipartProjectPage,
     ClipartPromptInputPage,
     ClipartPromptReviewPage,
@@ -76,6 +77,22 @@ class WorkerFactory:
         return worker
 
 
+class FakeCsvDropEvent:
+    def __init__(self, paths):
+        self._mime = QMimeData()
+        self._mime.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
+        self.accepted = False
+
+    def mimeData(self):
+        return self._mime
+
+    def acceptProposedAction(self):
+        self.accepted = True
+
+    def ignore(self):
+        self.accepted = False
+
+
 class V3ClipartFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -125,6 +142,20 @@ class V3ClipartFlowTests(unittest.TestCase):
             controller.pages[StepId.REVIEW_RUN],
             ClipartReviewRunPage,
         )
+
+    def test_process_more_starts_clean_clipart_workflow_at_first_step(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("old prompt")]
+        state.set_step(StepId.RESULTS)
+        shell = AppShell(state)
+        controller = install_clipart_flow(shell)
+
+        controller.run_queue.process_more()
+        self.app.processEvents()
+
+        self.assertEqual(state.current_step, StepId.PROJECT)
+        self.assertEqual(state.clipart.prompts, [])
+        self.assertIs(shell.current_page, controller.pages[StepId.PROJECT])
 
     def test_project_and_prompt_data_survive_forward_and_back_navigation(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-flow-") as temp:
@@ -350,6 +381,33 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         self.assertIn("следующем шаге", page.paste_status_label.text())
         self.assertFalse(hasattr(page, "paste_button"))
+
+    def test_csv_source_has_primary_button_and_accepts_csv_drop(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-csv-drop-") as temp:
+            csv_path = Path(temp) / "prompts.csv"
+            csv_path.write_text("prompt\nfox\n", encoding="utf-8")
+            image_path = Path(temp) / "image.png"
+            Image.new("RGB", (2, 2), "white").save(image_path)
+            page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
+            dropped = []
+            page.csv_drop_zone.file_dropped.connect(dropped.append)
+
+            valid_event = FakeCsvDropEvent([csv_path])
+            page.csv_drop_zone.dragEnterEvent(valid_event)
+            self.assertTrue(valid_event.accepted)
+            with patch.object(
+                v3_clipart_flow.PromptCsvImportDialog,
+                "exec",
+                return_value=QDialog.DialogCode.Rejected,
+            ):
+                page.csv_drop_zone.dropEvent(valid_event)
+
+            invalid_event = FakeCsvDropEvent([image_path])
+            page.csv_drop_zone.dragEnterEvent(invalid_event)
+
+        self.assertEqual(page.csv_button.property("variant"), "primary")
+        self.assertEqual(dropped, [str(csv_path)])
+        self.assertFalse(invalid_event.accepted)
 
     def test_paste_keeps_duplicate_prompt_as_a_separate_entry_with_its_references(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
@@ -895,8 +953,59 @@ class V3ClipartFlowTests(unittest.TestCase):
             review = ClipartReviewRunPage(state)
 
         self.assertEqual(estimate.request_count, 3)
+        self.assertEqual(estimate.generation_request_count, 1)
+        self.assertEqual(estimate.processing_request_count, 2)
         self.assertIn("3 запросов", estimate.summary)
         self.assertIn("изображений 1", review.summary_label.text())
+
+    def test_generation_page_does_not_show_intermediate_cost(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        page = ClipartGenerationPage(state, lambda: None)
+
+        visible_copy = " ".join(
+            label.text() for label in page.findChildren(QLabel)
+        ).lower()
+        self.assertNotIn("ориентировочно", visible_copy)
+        self.assertNotIn("стоимость", visible_copy)
+
+    def test_final_review_separates_generation_and_processing_costs(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry(f"Prompt {index}") for index in range(80)]
+        operations = state.clipart.operations
+        operations.upscale_before = True
+        operations.remove_background = False
+        operations.upscale_after = False
+        operations.unsharp = False
+        operations.edge_shrink = False
+        operations.trim = False
+        operations.export_300_dpi = False
+        review = ClipartReviewRunPage(state)
+        estimate = estimate_clipart_cost(state)
+
+        self.assertEqual(estimate.generation_request_count, 80)
+        self.assertEqual(estimate.processing_request_count, 80)
+        self.assertEqual(estimate.request_count, 160)
+        self.assertIn("генерация 80", review.requests_label.text())
+        self.assertIn("обработка 80", review.requests_label.text())
+        self.assertIn("всего 160", review.requests_label.text())
+        self.assertIn("генерация", review.cost_breakdown_label.text())
+        self.assertIn("обработка", review.cost_breakdown_label.text())
+        review_copy = " ".join(
+            label.text() for label in review.findChildren(QLabel)
+        )
+        self.assertNotIn("API-ключи не сохраняются", review_copy)
+
+        review.set_preflight_status("Обязательные поля заполнены; запуск готов.", ready=True)
+        self.assertTrue(review.requirements_label.isHidden())
+
+    def test_clipart_processing_can_be_skipped(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        operations = state.clipart.operations
+        operations.upscale_before = False
+        operations.remove_background = False
+        page = ClipartProcessingPage(state, lambda: None)
+
+        self.assertNotIn("processing_operation_required", page.validation_issues())
 
     def test_offscreen_layout_keeps_navigation_visible_at_minimum_size(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-ui-") as temp:

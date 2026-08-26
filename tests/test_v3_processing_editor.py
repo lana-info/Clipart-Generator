@@ -140,6 +140,48 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertTrue(state.pinterest.operations.remove_exif)
         self.assertIn("Trim", editor.pipeline_label.text())
 
+    def test_operation_requirement_can_be_disabled_for_generation_modes(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        operations = state.processing.operations
+        for name in (
+            "visible_mark_cleanup",
+            "invisible_watermark_cleanup",
+            "upscale_before",
+            "upscale_after",
+            "remove_background",
+            "unsharp",
+            "edge_shrink",
+            "trim",
+            "export_300_dpi",
+            "remove_exif",
+            "remove_xmp",
+            "remove_iptc",
+            "remove_comments_text",
+            "remove_embedded_thumbnail",
+            "remove_generator_fields",
+            "remove_embedded_c2pa",
+        ):
+            setattr(operations, name, False)
+
+        required = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+        optional = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Optional pipeline",
+            include_cleanup=True,
+            require_operation=False,
+        )
+
+        self.assertIn("processing_operation_required", required.validation_issues())
+        self.assertNotIn("processing_operation_required", optional.validation_issues())
+
 
 if __name__ == "__main__":
     unittest.main()

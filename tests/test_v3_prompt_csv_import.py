@@ -85,11 +85,37 @@ class PromptCsvImportTests(unittest.TestCase):
         self.assertTrue(dialog.get_entries())
         self.assertIn("Найдено промптов: 1", dialog.summary_label.text())
 
-    def test_dialog_keeps_long_content_bounded_without_prompt_preview(self):
-        with tempfile.TemporaryDirectory(prefix="clipart-csv-long-preview-") as temp_dir:
+    def test_dialog_shows_three_parsed_prompts_and_reference_mapping(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-csv-preview-") as temp_dir:
             csv_path = Path(temp_dir) / "prompts.csv"
             csv_path.write_text(
-                "prompt\n" + ("very long prompt " * 100) + "\n",
+                "prompt,refs\n"
+                "first prompt,first.png\n"
+                "second prompt,\n"
+                "third prompt,third.png\n"
+                "fourth prompt,fourth.png\n",
+                encoding="utf-8-sig",
+                newline="",
+            )
+
+            dialog = PromptCsvImportDialog(csv_path)
+            references_index = dialog.references_column_combo.findData(1)
+            dialog.references_column_combo.setCurrentIndex(references_index)
+
+        self.assertEqual(dialog.preview_table.rowCount(), 3)
+        self.assertEqual(dialog.preview_table.item(0, 1).text(), "first prompt")
+        self.assertEqual(dialog.preview_table.item(0, 2).text(), "first.png")
+        self.assertEqual(dialog.preview_table.item(1, 1).text(), "second prompt")
+        self.assertEqual(dialog.preview_table.item(1, 2).text(), "Нет референсов")
+        self.assertEqual(dialog.preview_table.item(2, 1).text(), "third prompt")
+        self.assertEqual(dialog.preview_table.item(2, 2).text(), "third.png")
+
+    def test_dialog_keeps_long_preview_content_bounded(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-csv-long-preview-") as temp_dir:
+            csv_path = Path(temp_dir) / "prompts.csv"
+            prompt = "very long prompt " * 100
+            csv_path.write_text(
+                "prompt\n" + prompt + "\n",
                 encoding="utf-8-sig",
                 newline="",
             )
@@ -98,6 +124,8 @@ class PromptCsvImportTests(unittest.TestCase):
 
         self.assertLessEqual(dialog.width(), 1000)
         self.assertFalse(hasattr(dialog, "preview_text"))
+        self.assertTrue(dialog.preview_table.item(0, 1).text().endswith("…"))
+        self.assertEqual(dialog.preview_table.item(0, 1).toolTip(), prompt.strip())
 
 
 if __name__ == "__main__":

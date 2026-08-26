@@ -249,6 +249,7 @@ class ProcessingPipelineEditor(QScrollArea):
         title: str,
         description: str,
         include_cleanup: bool,
+        require_operation: bool = True,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__()
@@ -274,6 +275,7 @@ class ProcessingPipelineEditor(QScrollArea):
         self.state_owner = state_owner
         self.changed = changed
         self.include_cleanup = include_cleanup
+        self.require_operation = require_operation
         self.operation_widgets: dict[str, QWidget] = {}
         operations = state_owner.operations
 
@@ -760,7 +762,7 @@ class ProcessingPipelineEditor(QScrollArea):
 
     def validation_issues(self) -> tuple[str, ...]:
         issues: list[str] = []
-        if not processing_pipeline_steps(
+        if self.require_operation and not processing_pipeline_steps(
             self.state_owner.operations,
             include_cleanup=self.include_cleanup,
         ):

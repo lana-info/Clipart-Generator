@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QLabel
 
 import v3_pinterest_flow
 from v3_mode_selection import V3ApplicationView
@@ -118,6 +118,20 @@ class V3PinterestFlowTests(unittest.TestCase):
             controller.pages[StepId.PIN_FORMAT_MODEL],
             PinterestFormatModelPage,
         )
+
+    def test_process_more_starts_clean_pinterest_workflow_at_first_step(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.prompts = [PromptEntry("old pin prompt")]
+        state.set_step(StepId.RESULTS)
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell)
+
+        controller.run_queue.process_more()
+        self.app.processEvents()
+
+        self.assertEqual(state.current_step, StepId.PROJECT)
+        self.assertEqual(state.pinterest.prompts, [])
+        self.assertIs(shell.current_page, controller.pages[StepId.PROJECT])
         self.assertIsInstance(
             controller.pages[StepId.REVIEW_RUN],
             PinterestReviewRunPage,
@@ -334,6 +348,15 @@ class V3PinterestFlowTests(unittest.TestCase):
         self.assertEqual(estimate.request_count, 4)
         self.assertEqual(estimate.estimated_usd, Decimal("0.120"))
 
+    def test_pinterest_processing_can_be_skipped(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.operations.upscale_before = False
+        state.pinterest.operations.remove_background = False
+        adapter = v3_pinterest_flow._pinterest_project_adapter(state)
+        page = v3_pinterest_flow.PinterestProcessingPage(adapter, lambda: None)
+
+        self.assertNotIn("processing_operation_required", page.validation_issues())
+
     def test_reference_prompt_remains_vertical_and_is_preflighted(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-reference-") as temp:
             image_path = Path(temp) / "reference.png"
@@ -405,7 +428,11 @@ class V3PinterestFlowTests(unittest.TestCase):
                 "Пакетный экспорт PNG",
                 controller.review_page.pipeline_label.text(),
             )
-            self.assertNotIn("Редактора текста", controller.review_page.warning_label.text())
+            review_copy = " ".join(
+                label.text()
+                for label in controller.review_page.findChildren(QLabel)
+            )
+            self.assertNotIn("API-ключи не сохраняются", review_copy)
             shell.go_next()
 
         self.assertEqual(len(factory.workers), 1)

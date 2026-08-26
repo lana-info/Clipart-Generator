@@ -158,7 +158,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         self.assertIsInstance(pages[StepId.PIPELINE], ProcessingPipelinePage)
         self.assertIsInstance(pages[StepId.REVIEW_RUN], ProcessingReviewRunPage)
 
-    def test_process_more_keeps_inputs_visible_and_returns_to_files_step(self):
+    def test_process_more_clears_old_inputs_and_returns_to_files_step(self):
         with tempfile.TemporaryDirectory(prefix="processing-more-") as temp:
             state, source = self.make_state(temp)
             shell = AppShell(state)
@@ -177,12 +177,15 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.app.processEvents()
 
             self.assertEqual(state.current_step, StepId.FILES)
-            self.assertEqual(state.processing.selected_files, [str(source)])
+            self.assertEqual(state.processing.selected_files, [])
             self.assertEqual(state.processing.verification_records, [])
             self.assertIs(shell.current_page, controller.files_page)
-            self.assertEqual(controller.files_page.file_count_label.text(), "Выбрано изображений: 1")
-            self.assertEqual(controller.files_page.validation_issues(), ())
-            self.assertEqual(len(controller.files_page.thumbnail_labels), 1)
+            self.assertEqual(controller.files_page.file_count_label.text(), "Выбрано изображений: 0")
+            self.assertEqual(
+                controller.files_page.validation_issues(),
+                ("selected_files_required",),
+            )
+            self.assertEqual(len(controller.files_page.thumbnail_labels), 0)
 
     def test_standalone_synthid_consent_is_disabled_and_marked_unavailable(self):
         state = ProjectState(mode=ProjectMode.PROCESSING)

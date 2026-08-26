@@ -11,10 +11,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable
 
-from PyQt6.QtCore import QObject, QSize, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QSize, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QImageReader, QPixmap
 from PyQt6.QtWidgets import (
     QDialog,
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -1155,6 +1156,43 @@ class BeforeAfterViewer(QFrame):
             label.setText("" if pixmap is not None else empty)
 
 
+class RunCompletionDialog(QDialog):
+    def __init__(self, page: "RunResultsPage", session: RunQueueSession) -> None:
+        super().__init__(page)
+        self.page = page
+        self.setWindowTitle("Задание выполнено")
+        self.setModal(False)
+        self.setMinimumWidth(520)
+        layout = QVBoxLayout(self)
+        title = QLabel("Задание выполнено")
+        title.setProperty("v3Title", True)
+        counts = session.counts()
+        self.summary_label = QLabel(
+            f"Обработано: {counts['succeeded']}\n"
+            f"С ошибками: {counts['failed']}\n"
+            f"Пропущено: {counts['cancelled']}\n"
+            f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
+        )
+        self.summary_label.setWordWrap(True)
+        folder_label = QLabel(f"Папка результата: {session.output_dir}")
+        folder_label.setWordWrap(True)
+        actions = QHBoxLayout()
+        self.open_folder_button = V3Button(
+            "Открыть папку с результатами",
+            ButtonVariant.PRIMARY,
+        )
+        self.open_folder_button.setEnabled(session.output_dir.is_dir())
+        self.open_folder_button.clicked.connect(page._open_folder)
+        self.close_button = V3Button("Закрыть", ButtonVariant.SECONDARY)
+        self.close_button.clicked.connect(self.close)
+        actions.addWidget(self.open_folder_button)
+        actions.addWidget(self.close_button)
+        layout.addWidget(title)
+        layout.addWidget(self.summary_label)
+        layout.addWidget(folder_label)
+        layout.addLayout(actions)
+
+
 class RunResultsPage(QWidget):
     stop_requested = pyqtSignal()
     immediate_stop_requested = pyqtSignal()
@@ -1172,6 +1210,9 @@ class RunResultsPage(QWidget):
         self.state = state
         self.session: RunQueueSession | None = None
         self._log_dialog: QDialog | None = None
+        self._completion_dialog: RunCompletionDialog | None = None
+        self._completion_shown_at: float | None = None
+        self._preview_item_index: int | None = None
         page_layout = QVBoxLayout(self)
         page_layout.setContentsMargins(0, 0, 0, 0)
         self.scroll_area = QScrollArea()
@@ -1212,6 +1253,12 @@ class RunResultsPage(QWidget):
         self.queue.setMouseTracking(True)
         self.queue.viewport().setMouseTracking(True)
         self.queue.itemEntered.connect(self._show_item_preview)
+        self.queue.viewport().installEventFilter(self)
+        self.queue.installEventFilter(self)
+        self.installEventFilter(self)
+        app = QApplication.instance()
+        if app is not None:
+            app.applicationStateChanged.connect(self._application_state_changed)
 
         self.processing_label = QLabel()
         self.stages_label = QLabel()
@@ -1265,7 +1312,7 @@ class RunResultsPage(QWidget):
         )
         self.retry_button.clicked.connect(self.retry_requested.emit)
         self.process_more_button = V3Button(
-            "Обработать ещё файлы",
+            "Начать заново в этом режиме",
             ButtonVariant.SECONDARY,
         )
         self.process_more_button.clicked.connect(self.process_more_requested.emit)
@@ -1289,9 +1336,9 @@ class RunResultsPage(QWidget):
             self.immediate_stop_button,
             self.retry_button,
             self.process_more_button,
-            self.finish_button,
         ):
             workflow_layout.addWidget(button)
+        self.finish_button.hide()
         workflow_layout.addStretch()
         utility_primary_layout.addWidget(self.open_folder_button)
         utility_primary_layout.addStretch()
@@ -1325,6 +1372,7 @@ class RunResultsPage(QWidget):
         if not isinstance(session, RunQueueSession):
             raise TypeError("session must be a RunQueueSession")
         self.session = session
+        self._completion_shown_at = None
         session.changed.connect(self.refresh_from_state)
         self.refresh_from_state()
 
@@ -1368,7 +1416,7 @@ class RunResultsPage(QWidget):
         immediate_stop_visible = session.running
         retry_visible = not session.running and bool(session.failed_indices)
         process_more_visible = not session.running
-        finish_visible = not session.running
+        finish_visible = False
         self.stop_button.setVisible(stop_visible)
         self.immediate_stop_button.setVisible(immediate_stop_visible)
         self.retry_button.setVisible(retry_visible)
@@ -1389,6 +1437,7 @@ class RunResultsPage(QWidget):
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
         self.log_button.setEnabled(True)
         self._selection_changed(self.queue.currentRow())
+        self._show_completion_if_needed(session)
 
     @staticmethod
     def _stage_label(stage: str) -> str:
@@ -1442,7 +1491,7 @@ class RunResultsPage(QWidget):
             self.pixel_evidence_label.setText("Проверка пикселей: не выполнялась")
             self.handoff_label.setText("Передача на проверку: не выполнялась")
             return
-        self._show_item_preview(self.queue.item(row))
+        self.preview_popup.hide()
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
@@ -1482,12 +1531,14 @@ class RunResultsPage(QWidget):
 
     def _show_item_preview(self, row: QListWidgetItem | None) -> None:
         if row is None or self.session is None:
-            self.preview_popup.hide()
+            self._hide_item_preview()
             return
-        item = self._selected_item(row.data(Qt.ItemDataRole.UserRole))
+        item_index = row.data(Qt.ItemDataRole.UserRole)
+        item = self._selected_item(item_index)
         if item is None:
-            self.preview_popup.hide()
+            self._hide_item_preview()
             return
+        self._preview_item_index = item_index
         path = item.output_path if item.status is RunItemStatus.SUCCEEDED else item.source_path
         pixmap = BeforeAfterViewer._pixmap(path)
         self.preview_popup.clear()
@@ -1506,6 +1557,69 @@ class RunResultsPage(QWidget):
         self.preview_popup.adjustSize()
         self.preview_popup.move(point.x() - self.preview_popup.width(), point.y())
         self.preview_popup.show()
+
+    def _hide_item_preview(self) -> None:
+        self._preview_item_index = None
+        self.preview_popup.hide()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        event_type = event.type()
+        if (
+            watched is self.queue.viewport()
+            and event_type == QEvent.Type.MouseMove
+        ):
+            hovered = self.queue.itemAt(event.position().toPoint())
+            if hovered is None:
+                self._hide_item_preview()
+            else:
+                hovered_index = hovered.data(Qt.ItemDataRole.UserRole)
+                if hovered_index != self._preview_item_index:
+                    self._show_item_preview(hovered)
+        if event_type in {
+            QEvent.Type.Leave,
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.ApplicationDeactivate,
+        }:
+            self._hide_item_preview()
+        elif (
+            event_type is QEvent.Type.KeyPress
+            and getattr(event, "key", lambda: None)() == Qt.Key.Key_Escape
+        ):
+            self._hide_item_preview()
+        return super().eventFilter(watched, event)
+
+    def _application_state_changed(self, state: Qt.ApplicationState) -> None:
+        if state is not Qt.ApplicationState.ApplicationActive:
+            self._hide_item_preview()
+
+    def reset_transient_ui(self) -> None:
+        self._hide_item_preview()
+        if self._completion_dialog is not None:
+            self._completion_dialog.close()
+            self._completion_dialog.deleteLater()
+            self._completion_dialog = None
+        self._completion_shown_at = None
+
+    def hideEvent(self, event: Any) -> None:
+        self.reset_transient_ui()
+        super().hideEvent(event)
+
+    def _show_completion_if_needed(self, session: RunQueueSession) -> None:
+        if session.running:
+            if self._completion_dialog is not None:
+                self._completion_dialog.close()
+                self._completion_dialog.deleteLater()
+                self._completion_dialog = None
+            return
+        if session.finished_at is None:
+            return
+        if self._completion_shown_at == session.finished_at:
+            return
+        self._completion_shown_at = session.finished_at
+        if self._completion_dialog is not None:
+            self._completion_dialog.close()
+        self._completion_dialog = RunCompletionDialog(self, session)
+        self._completion_dialog.show()
 
     @staticmethod
     def _set_status_label(
@@ -1620,10 +1734,17 @@ class RunQueueSupport:
     def process_more(self) -> None:
         if self.session is not None and self.session.running:
             return
+        self.reset_for_new_workflow()
+        self.controller.start_processing_again()
+
+    def reset_for_new_workflow(self) -> bool:
+        if self.session is not None and self.session.running:
+            return False
+        self.page.reset_transient_ui()
         self.session = None
         self.page.session = None
         self.page.refresh_from_state()
-        self.controller.start_processing_again()
+        return True
 
     def start_new(self, request: Any) -> RunQueueSession:
         session = RunQueueSession(

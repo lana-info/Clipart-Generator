@@ -173,6 +173,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
             title="Обработка",
             description="Тот же порядок обработки, что и в режимах Clipart и Обработка.",
             include_cleanup=True,
+            require_operation=False,
             tokens=tokens,
         )
         # Processing is a separate wizard step shared with the other modes.
@@ -307,6 +308,7 @@ class PinterestProcessingPage(ProcessingPipelineEditor):
             title="Обработка изображений",
             description="Единые настройки обработки изображений для Pinterest.",
             include_cleanup=True,
+            require_operation=False,
             tokens=tokens,
         )
 
@@ -322,13 +324,14 @@ class PinterestReviewRunPage(ClipartReviewRunPage):
         self.card.description_label.setText(
             "Проверьте пакет изображений и стоимость перед явным запуском."
         )
-        self.warning_label.clear()
-        self.warning_label.setVisible(False)
 
     def refresh_from_state(self) -> None:
         super().refresh_from_state()
         self.pipeline_label.setText(
-            "Порядок: Генерация изображения → Пакетный экспорт PNG"
+            self.pipeline_label.text().replace(
+                "Экспорт PNG",
+                "Пакетный экспорт PNG",
+            )
         )
 
 
@@ -375,6 +378,12 @@ class PinterestFlowController(QObject):
     @staticmethod
     def _missing_authorization() -> None:
         raise LicenseError("Лицензионный сервис не настроен")
+
+    def start_processing_again(self) -> None:
+        self.shell.state.pinterest.prompts.clear()
+        self.shell.state.set_step(StepId.PROJECT)
+        self.pages[StepId.PROJECT].refresh_from_state()
+        self.shell.mark_dirty()
 
     def _install_pages(self) -> None:
         changed = self.shell.mark_dirty

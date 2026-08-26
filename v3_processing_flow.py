@@ -1276,6 +1276,7 @@ class ProcessingFlowController(QObject):
         raise LicenseError("Лицензионный сервис не настроен")
 
     def start_processing_again(self) -> None:
+        self.shell.state.processing.selected_files.clear()
         self.shell.state.processing.verification_records.clear()
         self.shell.state.set_step(StepId.FILES)
         self.files_page.refresh_from_state()

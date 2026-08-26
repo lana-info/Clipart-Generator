@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHeaderView,
@@ -129,6 +130,10 @@ class CostEstimate:
     request_count: int
     estimated_usd: Decimal
     complete: bool
+    generation_request_count: int = 0
+    processing_request_count: int = 0
+    generation_usd: Decimal = Decimal("0")
+    processing_usd: Decimal = Decimal("0")
 
     @property
     def summary(self) -> str:
@@ -403,9 +408,11 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
         raise TypeError("state must be a ProjectState")
     generation = state.clipart.generation
     variants = generation.variants
-    total = Decimal("0")
+    generation_total = Decimal("0")
+    processing_total = Decimal("0")
     complete = True
-    provider_request_count = len(state.clipart.prompts) * variants
+    generation_request_count = len(state.clipart.prompts) * variants
+    processing_request_count = 0
 
     for entry in state.clipart.prompts:
         if entry.references:
@@ -418,7 +425,7 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
         if unit is None:
             complete = False
         else:
-            total += unit * variants
+            generation_total += unit * variants
 
     _, processing_pricing = _legacy_catalog()
     operations = state.clipart.operations
@@ -429,24 +436,28 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
         if operations.remove_background_provider == "kie":
             processing_models.append(operations.kie_remove_bg_model)
         elif operations.remove_background_provider == "photoroom":
-            total += Decimal("0.02") * len(state.clipart.prompts) * variants
-            provider_request_count += len(state.clipart.prompts) * variants
+            processing_total += Decimal("0.02") * len(state.clipart.prompts) * variants
+            processing_request_count += len(state.clipart.prompts) * variants
     if operations.upscale_after and operations.upscale_after_provider == "kie":
         processing_models.append(operations.kie_upscale_after_model)
 
     output_count = len(state.clipart.prompts) * variants
-    provider_request_count += len(processing_models) * output_count
+    processing_request_count += len(processing_models) * output_count
     for model_id in processing_models:
         unit = _price_usd(processing_pricing.get(model_id), "")
         if unit is None:
             complete = False
         else:
-            total += unit * output_count
+            processing_total += unit * output_count
 
     return CostEstimate(
-        request_count=provider_request_count,
-        estimated_usd=total,
+        request_count=generation_request_count + processing_request_count,
+        estimated_usd=generation_total + processing_total,
         complete=complete,
+        generation_request_count=generation_request_count,
+        processing_request_count=processing_request_count,
+        generation_usd=generation_total,
+        processing_usd=processing_total,
     )
 
 
@@ -1036,6 +1047,42 @@ class _PromptReviewTable(QTableWidget):
         prompt_width = round(width * 2 / 3)
         self.setColumnWidth(0, prompt_width)
         self.setColumnWidth(1, width - prompt_width)
+
+
+class _CsvDropZone(QFrame):
+    file_dropped = pyqtSignal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setProperty("v3Status", True)
+        self.setMinimumHeight(150)
+
+    @staticmethod
+    def _csv_paths(event: Any) -> list[str]:
+        mime = event.mimeData()
+        if not mime.hasUrls():
+            return []
+        return [
+            url.toLocalFile()
+            for url in mime.urls()
+            if url.isLocalFile() and Path(url.toLocalFile()).suffix.casefold() == ".csv"
+        ]
+
+    def dragEnterEvent(self, event: Any) -> None:
+        if self._csv_paths(event):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: Any) -> None:
+        paths = self._csv_paths(event)
+        if not paths:
+            event.ignore()
+            return
+        self.file_dropped.emit(paths[0])
+        event.acceptProposedAction()
 
 
 def _capability_summary(option: GenerationModelOption) -> str:
@@ -1654,12 +1701,30 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        text = QLabel("Выберите CSV-файл. Столбцы промптов и референсов можно сопоставить перед импортом.")
+        self.csv_drop_zone = _CsvDropZone()
+        drop_layout = QVBoxLayout(self.csv_drop_zone)
+        drop_layout.setContentsMargins(
+            self.tokens.space_4,
+            self.tokens.space_4,
+            self.tokens.space_4,
+            self.tokens.space_4,
+        )
+        text = QLabel("Перетащите CSV-файл сюда")
         text.setWordWrap(True)
-        layout.addWidget(text)
-        self.csv_button = V3Button("Выбрать CSV", ButtonVariant.SECONDARY)
+        text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        drop_layout.addWidget(text)
+        self.csv_button = V3Button("Выбрать CSV", ButtonVariant.PRIMARY)
         self.csv_button.clicked.connect(self._choose_csv)
-        layout.addWidget(self.csv_button)
+        drop_layout.addWidget(self.csv_button, 0, Qt.AlignmentFlag.AlignCenter)
+        mapping_hint = QLabel(
+            "Перед импортом можно проверить разделитель и сопоставить колонки."
+        )
+        mapping_hint.setProperty("v3Small", True)
+        mapping_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        drop_layout.addWidget(mapping_hint)
+        self.csv_drop_zone.file_dropped.connect(self._import_csv_file)
+        layout.addWidget(self.csv_drop_zone)
+        layout.addStretch(1)
         return widget
 
     def _choose_csv(self) -> None:
@@ -1671,6 +1736,9 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         )
         if not selected:
             return
+        self._import_csv_file(selected)
+
+    def _import_csv_file(self, selected: str) -> None:
         try:
             dialog = PromptCsvImportDialog(selected, self)
         except RuntimeError as error:
@@ -2240,10 +2308,6 @@ class ClipartGenerationPage(_ScrollableStepPage):
         advanced.add_widget(reference_widget)
         self.add_widget(advanced)
 
-        self.cost_label = QLabel()
-        self.cost_label.setWordWrap(True)
-        self.cost_label.setProperty("v3Status", True)
-        self.add_widget(self.cost_label)
         for label, control in (
             ("Модель", self.model_combo),
             ("Пропорция", self.ratio_combo),
@@ -2359,9 +2423,6 @@ class ClipartGenerationPage(_ScrollableStepPage):
             ),
             variants=self.variants_spin.value(),
         )
-        estimate = estimate_clipart_cost(self.state)
-        self.cost_label.setText(estimate.summary)
-        self.cost_label.setAccessibleName("Стоимость. " + estimate.summary)
         if mark:
             self.changed()
 
@@ -2817,6 +2878,7 @@ class _SharedClipartProcessingPage(ProcessingPipelineEditor):
             title="Обработка изображений",
             description="Единые настройки обработки изображений для всех режимов.",
             include_cleanup=True,
+            require_operation=False,
             tokens=tokens,
         )
         self.state = state
@@ -2841,28 +2903,31 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.state = state
         self.output_label = QLabel()
         self.output_label.setWordWrap(True)
+        self.output_label.setProperty("v3Status", True)
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
+        self.summary_label.setProperty("v3Status", True)
+        self.requests_label = QLabel()
+        self.requests_label.setWordWrap(True)
+        self.requests_label.setProperty("v3Status", True)
+        self.cost_breakdown_label = QLabel()
+        self.cost_breakdown_label.setWordWrap(True)
+        self.cost_breakdown_label.setProperty("v3Status", True)
         self.pipeline_label = QLabel()
         self.pipeline_label.setWordWrap(True)
         self.requirements_label = QLabel()
         self.requirements_label.setWordWrap(True)
         self.requirements_label.setProperty("v3Status", True)
-        self.warning_label = QLabel(
-            "API-ключи не сохраняются в проекте и читаются из настроек только при запуске."
-        )
-        self.warning_label.setWordWrap(True)
-        self.warning_label.setProperty("v3Status", True)
-        self.warning_label.setProperty("state", "warning")
         self.run_status_label = QLabel()
         self.run_status_label.setWordWrap(True)
         self.run_status_label.setProperty("v3Small", True)
         for widget in (
             self.output_label,
             self.summary_label,
+            self.requests_label,
+            self.cost_breakdown_label,
             self.pipeline_label,
             self.requirements_label,
-            self.warning_label,
             self.run_status_label,
         ):
             self.add_widget(widget)
@@ -2889,9 +2954,26 @@ class ClipartReviewRunPage(_ScrollableStepPage):
             )
         output_count = len(self.state.clipart.prompts) * variants
         self.summary_label.setText(
-            f"{estimate.summary} · изображений {output_count} · {model_summary} · "
-            f"{generation.ratio} · {generation.resolution}"
+            f"Всего изображений {output_count} · {model_summary} · "
+            f"формат {generation.ratio} · {generation.resolution}"
         )
+        self.requests_label.setText(
+            "API-вызовы: "
+            f"генерация {estimate.generation_request_count} · "
+            f"обработка {estimate.processing_request_count} · "
+            f"всего {estimate.request_count}"
+        )
+        if estimate.complete:
+            self.cost_breakdown_label.setText(
+                "Ориентировочная стоимость: "
+                f"генерация ${estimate.generation_usd:.3f} · "
+                f"обработка ${estimate.processing_usd:.3f} · "
+                f"всего ${estimate.estimated_usd:.3f}"
+            )
+        else:
+            self.cost_breakdown_label.setText(
+                "Ориентировочная стоимость не рассчитана полностью"
+            )
         self.pipeline_label.setText(
             "Порядок: "
             + " → ".join(
@@ -2900,6 +2982,12 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         )
 
     def set_preflight_status(self, text: str, *, ready: bool) -> None:
+        if ready:
+            self.requirements_label.clear()
+            self.requirements_label.setVisible(False)
+            self.requirements_label.setAccessibleName("")
+            return
+        self.requirements_label.setVisible(True)
         prefix = "✓ " if ready else "✕ "
         self.requirements_label.setText(prefix + text)
         self.requirements_label.setProperty(
@@ -2999,6 +3087,12 @@ class ClipartFlowController(QObject):
     @staticmethod
     def _missing_authorization() -> None:
         raise LicenseError("Лицензионный сервис не настроен")
+
+    def start_processing_again(self) -> None:
+        self.shell.state.clipart.prompts.clear()
+        self.shell.state.set_step(StepId.PROJECT)
+        self.pages[StepId.PROJECT].refresh_from_state()
+        self.shell.mark_dirty()
 
     def _install_pages(self) -> None:
         changed = self.shell.mark_dirty

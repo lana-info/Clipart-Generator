@@ -31,7 +31,7 @@ from v3_components import (
     V3_WINDOW_MINIMUM_SIZE,
     apply_v3_theme,
 )
-from v3_project_state import ProjectMode, ProjectState
+from v3_project_state import ProjectMode, ProjectState, StepId
 from v3_project_state import ProjectStateError, load_project_draft, save_project_draft
 from v3_clipart_flow import install_clipart_flow
 from v3_pinterest_flow import install_pinterest_flow
@@ -54,10 +54,10 @@ MODE_CARD_SPECS: dict[ProjectMode, ModeCardSpec] = {
     ProjectMode.CLIPART: ModeCardSpec(
         title="Создать клипарт",
         description=(
-            "Создайте согласованную серию изолированных объектов "
-            "с настройкой генерации и обработки."
+            "Массово создавайте изображения в нейросетях, включая "
+            "согласованные серии клипартов, с гибкой генерацией и обработкой."
         ),
-        result="набор готовых PNG-клипартов",
+        result="серия готовых изображений, в том числе PNG-клипартов",
     ),
     ProjectMode.PINTEREST: ModeCardSpec(
         title="Создать Pinterest-пины",
@@ -511,12 +511,21 @@ class V3ApplicationView(QWidget):
             self._selection_intent is SelectionIntent.SWITCH_MODE
             and self.shell is not None
         ):
-            self._ensure_mode_controller(self.shell, mode)
-            self.shell.request_mode_switch(mode)
+            controller = self._ensure_mode_controller(self.shell, mode)
+            if self.shell.state.mode is not mode:
+                self.shell.request_mode_switch(mode)
+            if not controller.run_queue.reset_for_new_workflow():
+                self._set_application_screen(
+                    self.shell,
+                    "wizard",
+                    "workflow_still_running",
+                )
+                return
+            controller.start_processing_again()
             self._set_application_screen(
                 self.shell,
                 "wizard",
-                "mode_switched",
+                "workflow_restarted",
             )
             return
 

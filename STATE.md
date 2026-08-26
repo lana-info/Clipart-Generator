@@ -27,10 +27,27 @@ Updated: 2026-08-26
 
 ## Next task
 
-Perform owner target-machine acceptance of the Windows 3.0.5 artifact from
-GitHub Actions run `33002277766`: inspect the new dark installer and exercise
-the prompt flow, provider routes and diagnostic journal. Do not publish it to
-the update service before that acceptance.
+Continue owner testing of the remaining modes and collect any additional
+acceptance findings. The current UX fixes are source-only until a separately
+approved Windows build; do not publish a revision to the update service before
+target-machine acceptance.
+
+## Windows acceptance UX checkpoint — 2026-08-26
+
+- Starting a mode, including the same mode from Results, now always opens a
+  clean first step. Results exposes one same-mode restart action; mode switching
+  remains in the shared header.
+- CSV import has a primary top-of-page button, drag-and-drop, bounded mapping
+  controls and a live three-row prompt/reference preview.
+- Clipart and Pinterest can generate without processing. The Generation step
+  no longer displays a partial estimate; Review separates images, generation
+  calls, processing calls and their cost components from one calculation.
+- Review no longer highlights API-key storage or a generic ready message.
+  Result hover previews close on pointer leave, app deactivation and Escape;
+  terminal runs show a compact count/time/folder summary.
+- Full offline pytest passes: 687 tests, 1 expected Linux skip, 2 deselected
+  and 83 subtests. Syntax, sensitive-artifact and diff checks pass. No Windows
+  build, paid API call or server publication was run for this checkpoint.
 
 ## Branded Windows installer checkpoint — 2026-08-26
 

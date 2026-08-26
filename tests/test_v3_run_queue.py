@@ -9,7 +9,8 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, pyqtSignal
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication
 
 from license_client import LicenseError
@@ -75,6 +76,15 @@ class WorkerFactory:
         worker = FakeWorker(**kwargs)
         self.workers.append(worker)
         return worker
+
+
+class FakeMouseMoveEvent(QEvent):
+    def __init__(self, position: QPointF):
+        super().__init__(QEvent.Type.MouseMove)
+        self._position = position
+
+    def position(self) -> QPointF:
+        return self._position
 
 
 def generation_request(work_dir, count=3):
@@ -687,7 +697,7 @@ class V3RunQueueTests(unittest.TestCase):
             shell.close()
             shell.deleteLater()
 
-    def test_results_replace_the_focused_run_action_with_a_terminal_only_finish_action(self):
+    def test_results_offer_only_restart_in_the_same_mode_when_terminal(self):
         with tempfile.TemporaryDirectory(prefix="v3-results-finish-") as temp:
             state = ProjectState(
                 mode=ProjectMode.PROCESSING,
@@ -719,13 +729,149 @@ class V3RunQueueTests(unittest.TestCase):
             session.handle_progress(f"Итог сохранён: {output}")
             session.handle_finished()
 
-            self.assertFalse(page.finish_button.isHidden())
-            finish_events: list[bool] = []
-            page.finish_requested.connect(lambda: finish_events.append(True))
-            page.finish_button.click()
-            self.assertEqual(finish_events, [True])
+            self.assertTrue(page.finish_button.isHidden())
+            self.assertFalse(page.process_more_button.isHidden())
+            self.assertEqual(
+                page.process_more_button.text(),
+                "Начать заново в этом режиме",
+            )
             shell.close()
             shell.deleteLater()
+
+    def test_hover_preview_disappears_when_pointer_leaves_or_app_deactivates(self):
+        with tempfile.TemporaryDirectory(prefix="v3-hover-preview-") as temp:
+            root = Path(temp)
+            image = root / "preview.png"
+            Image.new("RGB", (8, 8), "purple").save(image)
+            session = RunQueueSession(
+                processing_request(root, [image]),
+                ProjectMode.PROCESSING,
+            )
+            page = RunResultsPage(ProjectState(mode=ProjectMode.PROCESSING))
+            page.set_session(session)
+            page.show()
+            self.app.processEvents()
+
+            page._show_item_preview(page.queue.item(0))
+            self.assertTrue(page.preview_popup.isVisible())
+            page.eventFilter(
+                page.queue.viewport(),
+                FakeMouseMoveEvent(QPointF(page.queue.viewport().rect().bottomRight())),
+            )
+            self.assertFalse(page.preview_popup.isVisible())
+
+            page._show_item_preview(page.queue.item(0))
+            self.assertTrue(page.preview_popup.isVisible())
+            QApplication.sendEvent(
+                page.queue.viewport(),
+                QEvent(QEvent.Type.Leave),
+            )
+            self.assertFalse(page.preview_popup.isVisible())
+
+            page._show_item_preview(page.queue.item(0))
+            self.assertTrue(page.preview_popup.isVisible())
+            page.eventFilter(
+                page.queue,
+                QKeyEvent(
+                    QEvent.Type.KeyPress,
+                    Qt.Key.Key_Escape,
+                    Qt.KeyboardModifier.NoModifier,
+                ),
+            )
+            self.assertFalse(page.preview_popup.isVisible())
+
+            page._show_item_preview(page.queue.item(0))
+            self.assertTrue(page.preview_popup.isVisible())
+            page._application_state_changed(
+                Qt.ApplicationState.ApplicationInactive
+            )
+            self.assertFalse(page.preview_popup.isVisible())
+
+            page._show_item_preview(page.queue.item(0))
+            self.assertTrue(page.preview_popup.isVisible())
+            page.hide()
+            self.app.processEvents()
+            self.assertFalse(page.preview_popup.isVisible())
+            page.close()
+
+    def test_completion_dialog_summarizes_terminal_run(self):
+        with tempfile.TemporaryDirectory(prefix="v3-completion-dialog-") as temp:
+            root = Path(temp)
+            source = root / "input.png"
+            output = root / "output" / "input.png"
+            output.parent.mkdir()
+            Image.new("RGB", (8, 8), "white").save(source)
+            Image.new("RGB", (8, 8), "white").save(output)
+            session = RunQueueSession(
+                processing_request(root, [source]),
+                ProjectMode.PROCESSING,
+            )
+            page = RunResultsPage(ProjectState(mode=ProjectMode.PROCESSING))
+            page.set_session(session)
+            session.handle_progress("[1/1] Обработка файла: input.png")
+            session.handle_progress(f"Итог сохранён: {output}")
+            session.handle_finished()
+            self.app.processEvents()
+
+            dialog = page._completion_dialog
+            self.assertIsNotNone(dialog)
+            self.assertTrue(dialog.isVisible())
+            self.assertIn("Обработано: 1", dialog.summary_label.text())
+            self.assertIn("Пропущено: 0", dialog.summary_label.text())
+            self.assertIn("Время:", dialog.summary_label.text())
+            self.assertTrue(dialog.open_folder_button.isEnabled())
+            dialog.close()
+            page.close()
+
+    def test_restart_closes_old_completion_dialog_before_opening_first_step(self):
+        with tempfile.TemporaryDirectory(prefix="v3-restart-dialog-") as temp:
+            root = Path(temp)
+            state = ProjectState(
+                mode=ProjectMode.PROCESSING,
+                common=CommonProjectData(work_dir=temp),
+            )
+            state.processing.selected_files = [str(root / "input.png")]
+            state.set_step(StepId.RESULTS)
+            shell = AppShell(state)
+            controller = install_processing_flow(shell, worker_factory=WorkerFactory())
+            session = controller.run_queue.start_new(
+                processing_request(root, [root / "input.png"])
+            )
+            session.handle_fatal_error("failed")
+            self.app.processEvents()
+            dialog = controller.run_queue.page._completion_dialog
+            self.assertIsNotNone(dialog)
+            self.assertTrue(dialog.isVisible())
+
+            controller.run_queue.process_more()
+            self.app.processEvents()
+
+            self.assertFalse(dialog.isVisible())
+            self.assertIsNone(controller.run_queue.page._completion_dialog)
+            self.assertEqual(state.current_step, StepId.FILES)
+            shell.close()
+
+    def test_retry_closes_the_previous_completion_dialog(self):
+        with tempfile.TemporaryDirectory(prefix="v3-retry-dialog-") as temp:
+            root = Path(temp)
+            session = RunQueueSession(
+                processing_request(root, [root / "input.png"]),
+                ProjectMode.PROCESSING,
+            )
+            page = RunResultsPage(ProjectState(mode=ProjectMode.PROCESSING))
+            page.set_session(session)
+            session.handle_fatal_error("failed")
+            self.app.processEvents()
+            dialog = page._completion_dialog
+            self.assertIsNotNone(dialog)
+            self.assertTrue(dialog.isVisible())
+
+            self.assertIsNotNone(session.prepare_retry())
+            self.app.processEvents()
+
+            self.assertFalse(dialog.isVisible())
+            self.assertIsNone(page._completion_dialog)
+            page.close()
 
     def test_results_finish_signal_is_ignored_until_the_queue_is_terminal(self):
         with tempfile.TemporaryDirectory(prefix="v3-terminal-guard-") as temp:

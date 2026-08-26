@@ -12,9 +12,12 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
 )
 
@@ -235,9 +238,30 @@ class PromptCsvImportDialog(QDialog):
         self.summary_label.setWordWrap(True)
         layout.addWidget(self.summary_label)
 
+        preview_title = QLabel("Первые три распознанных промпта")
+        layout.addWidget(preview_title)
+        self.preview_table = QTableWidget(0, 3)
+        self.preview_table.setHorizontalHeaderLabels(["№", "Промпт", "Референсы"])
+        self.preview_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.preview_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.preview_table.verticalHeader().hide()
+        self.preview_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.preview_table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        self.preview_table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch
+        )
+        self.preview_table.setMinimumHeight(170)
+        self.preview_table.setMaximumHeight(220)
+        layout.addWidget(self.preview_table)
+
         self.issues_label = QLabel("")
         self.issues_label.setWordWrap(True)
-        layout.addWidget(self.issues_label, 1)
+        layout.addWidget(self.issues_label)
+        layout.addStretch(1)
 
         self.button_box = QDialogButtonBox()
         self.import_button = QPushButton("Импортировать промпты")
@@ -335,6 +359,26 @@ class PromptCsvImportDialog(QDialog):
             f"ошибок: {len(refreshed.issues)}"
         )
         self.issues_label.setText(self._build_issues_text(refreshed))
+        self._update_preview_table(refreshed)
+
+    @staticmethod
+    def _preview_cell(text: str, *, limit: int = 120) -> QTableWidgetItem:
+        normalized = str(text or "").strip()
+        visible = normalized if len(normalized) <= limit else normalized[: limit - 1].rstrip() + "…"
+        item = QTableWidgetItem(visible)
+        item.setToolTip(normalized)
+        return item
+
+    def _update_preview_table(self, result: CsvImportResult) -> None:
+        entries = result.entries[:3]
+        self.preview_table.setRowCount(len(entries))
+        for row, entry in enumerate(entries):
+            prompt = str(entry.get("prompt", "")).strip()
+            references = split_references(entry.get("references", []))
+            references_text = " | ".join(references) if references else "Нет референсов"
+            self.preview_table.setItem(row, 0, QTableWidgetItem(str(row + 1)))
+            self.preview_table.setItem(row, 1, self._preview_cell(prompt))
+            self.preview_table.setItem(row, 2, self._preview_cell(references_text, limit=80))
 
     def _build_issues_text(self, result: CsvImportResult) -> str:
         if not result.issues:

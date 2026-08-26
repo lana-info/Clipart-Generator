@@ -49,6 +49,13 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.resize(1, 1)
         self.assertEqual((view.width(), view.height()), V3_WINDOW_MINIMUM_SIZE)
 
+    def test_clipart_card_describes_mass_image_generation(self):
+        spec = MODE_CARD_SPECS[ProjectMode.CLIPART]
+
+        self.assertIn("Массов", spec.description)
+        self.assertIn("клипарт", spec.description.lower())
+        self.assertIn("изображен", spec.result.lower())
+
     def test_user_resized_window_size_survives_screen_and_step_changes(self):
         view = V3ApplicationView()
         view.resize(1037, 733)
@@ -398,6 +405,44 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertIs(view.stack.currentWidget(), view.shell)
         results_page = view.shell.pinterest_flow_controller.pages[StepId.RESULTS]
         self.assertIsNot(view.shell.current_page, results_page)
+        view.close()
+        view.deleteLater()
+
+    def test_starting_same_mode_from_results_opens_a_fresh_first_step(self):
+        view = V3ApplicationView()
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        completed_shell = view.shell
+        completed_shell.state.clipart.prompts.append(PromptEntry("old prompt"))
+        completed_shell.state.set_step(StepId.RESULTS)
+        completed_shell.refresh()
+
+        completed_shell.change_mode_button.click()
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+
+        self.assertIs(view.shell, completed_shell)
+        self.assertEqual(view.project_state.mode, ProjectMode.CLIPART)
+        self.assertEqual(
+            view.project_state.current_step,
+            route_for_mode(ProjectMode.CLIPART)[0],
+        )
+        self.assertEqual(view.project_state.clipart.prompts, [])
+        self.assertIs(view.stack.currentWidget(), view.shell)
+        view.close()
+        view.deleteLater()
+
+    def test_starting_same_mode_from_an_intermediate_step_opens_a_fresh_first_step(self):
+        view = V3ApplicationView()
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        view.shell.state.clipart.prompts.append(PromptEntry("old prompt"))
+        view.shell.state.set_step(StepId.GENERATION)
+        view.shell.refresh()
+
+        view.shell.change_mode_button.click()
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+
+        self.assertEqual(view.project_state.current_step, StepId.PROJECT)
+        self.assertEqual(view.project_state.clipart.prompts, [])
+        self.assertIs(view.stack.currentWidget(), view.shell)
         view.close()
         view.deleteLater()
 
