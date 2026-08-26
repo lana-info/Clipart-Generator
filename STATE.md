@@ -110,7 +110,8 @@ target-machine acceptance.
 - Root cause confirmed without a paid call: the application still sent the
   retired `topaz/upscale` model and silently replaced configured 4× with 8×.
 - The worker, V3 state, provider registry and legacy config now migrate to
-  `topaz/image-upscale`; the shared editor exposes only 1×, 2× and 4×.
+  `topaz/image-upscale`; the shared editor exposes only 2× and 4×, while old
+  saved 1× values migrate safely to 2×.
 - Local inputs are rejected before upload when they are not JPEG/PNG/WEBP,
   exceed 10 MB or would exceed 20,000 px on the longest output side. The error
   states that no KIE task was created.

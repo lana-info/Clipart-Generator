@@ -45,7 +45,7 @@ API-ключи, лицензионные ключи, промпты или по�
 
 | Модель | Текущий payload | Официальная документация | Текущее состояние |
 |---|---|---|---|
-| `topaz/image-upscale` | `image_url`, строковый `upscale_factor` 1/2/4 | [Topaz Image Upscale](https://docs.kie.ai/market/topaz/image-upscale); JPEG/PNG/WEBP, 10 МБ, результат до 20 000 px | Соответствует; проверяется до загрузки |
+| `topaz/image-upscale` | `image_url`, строковый `upscale_factor` 1/2/4; продукт предлагает 2×/4× | [Topaz Image Upscale](https://docs.kie.ai/market/topaz/image-upscale); JPEG/PNG/WEBP, 10 МБ, результат до 20 000 px | Соответствует; старое 1× мигрирует на 2×, ограничения проверяются до загрузки |
 | `recraft/crisp-upscale` | `image` | [Recraft Crisp Upscale](https://docs.kie.ai/market/recraft/crisp-upscale); JPEG/PNG/WEBP, 10 МБ | Соответствует; недокументированные ограничения размеров не применяются |
 | `recraft/remove-background` | `image` | [Recraft Remove Background](https://docs.kie.ai/market/recraft/remove-background); JPEG/PNG/WEBP, 5 МБ, до 16 MP, сторона 256–4096 px | Соответствует; provider-specific проверка выполняется до загрузки |
 

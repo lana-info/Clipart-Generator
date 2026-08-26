@@ -39,6 +39,7 @@ class ProjectRoutesTests(unittest.TestCase):
             operations.kie_upscale_after_model,
             "topaz/image-upscale",
         )
+        self.assertEqual(ImageOperationData(upscale_factor=1).upscale_factor, 2)
         for invalid_factor in (True, 1.5, "1.5", 8, None):
             with self.subTest(invalid_factor=invalid_factor):
                 self.assertEqual(

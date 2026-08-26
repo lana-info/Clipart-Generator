@@ -6,7 +6,7 @@ from typing import Final
 
 KIE_TOPAZ_MODEL_ID: Final = "topaz/image-upscale"
 LEGACY_KIE_TOPAZ_MODEL_IDS: Final = frozenset({"topaz/upscale"})
-TOPAZ_UPSCALE_FACTORS: Final = (1, 2, 4)
+TOPAZ_UPSCALE_FACTORS: Final = (2, 4)
 TOPAZ_MAX_FILE_BYTES: Final = 10_000_000
 TOPAZ_MAX_OUTPUT_SIDE: Final = 20_000
 
@@ -27,6 +27,8 @@ def normalize_topaz_upscale_factor(value: object) -> int:
         factor = int(value)
     except (TypeError, ValueError):
         return 4
+    if factor == 1:
+        return 2
     return factor if factor in TOPAZ_UPSCALE_FACTORS else 4
 
 
