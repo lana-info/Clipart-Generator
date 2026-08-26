@@ -821,6 +821,7 @@ def is_schema_required_error_message(message):
 
 class WorkerThread(QThread):
     progress = pyqtSignal(str)
+    item_progress = pyqtSignal(object)
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
     progress_value = pyqtSignal(int)

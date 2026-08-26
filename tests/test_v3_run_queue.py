@@ -42,6 +42,7 @@ SECRET_KEY = "secret-api-key-do-not-log"
 
 class FakeWorker(QObject):
     progress = pyqtSignal(str)
+    item_progress = pyqtSignal(object)
     progress_value = pyqtSignal(int)
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
@@ -192,6 +193,47 @@ class V3RunQueueTests(unittest.TestCase):
             self.app.processEvents()
 
             self.assertIn("task=active-task", controller.run_queue.session.technical_log)
+            shell.close()
+            shell.deleteLater()
+
+    def test_indexed_worker_progress_is_authoritative_over_legacy_text(self):
+        with tempfile.TemporaryDirectory(prefix="v3-indexed-progress-") as temp:
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            state.clipart.prompts = [
+                PromptEntry(f"{SECRET_PROMPT} one"),
+                PromptEntry(f"{SECRET_PROMPT} two"),
+            ]
+            state.clipart.operations.upscale_before = False
+            state.clipart.operations.remove_background = False
+            state.set_step(StepId.REVIEW_RUN)
+            shell = AppShell(state)
+            factory = WorkerFactory()
+            controller = install_clipart_flow(
+                shell,
+                runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
+                worker_factory=factory,
+                authorization_provider=Mock(return_value=None),
+            )
+            shell.go_next()
+            worker = factory.workers[0]
+
+            worker.item_progress.emit(
+                {
+                    "item_index": 2,
+                    "total_items": 2,
+                    "stage": "generation",
+                    "status": "running",
+                }
+            )
+            worker.progress.emit("[1/2] Генерация")
+            self.app.processEvents()
+
+            session = controller.run_queue.session
+            self.assertIs(session.items[0].status, RunItemStatus.PENDING)
+            self.assertIs(session.items[1].status, RunItemStatus.RUNNING)
             shell.close()
             shell.deleteLater()
 

@@ -91,6 +91,8 @@ class ProgressEvent:
     message: str = ""
     percent: int | None = None
     indeterminate: bool = False
+    source_path: str = ""
+    output_path: str = ""
 
 
 class RunItemStatus(str, Enum):
@@ -541,23 +543,22 @@ class RunQueueSession(QObject):
 
     @property
     def progress_percent(self) -> int:
-        terminal = sum(
-            self.items[index].status
-            in {
-                RunItemStatus.SUCCEEDED,
-                RunItemStatus.FAILED,
-                RunItemStatus.CANCELLED,
-            }
-            for index in self.active_order
-        )
         total = len(self.active_order)
-        completed = round((terminal / total) * 100) if total else 0
-        active = 0
-        if self.current_index is not None:
-            active = self._item_progress.get(self.current_index, 0)
-            if active:
-                active = round(active / max(total, 1))
-        value = max(completed, completed + active)
+        if not total:
+            return 0
+        terminal_statuses = {
+            RunItemStatus.SUCCEEDED,
+            RunItemStatus.FAILED,
+            RunItemStatus.CANCELLED,
+        }
+        accumulated = 0
+        for index in self.active_order:
+            item = self.items[index]
+            if item.status in terminal_statuses:
+                accumulated += 100
+            elif item.status is RunItemStatus.RUNNING:
+                accumulated += self._item_progress.get(index, 0)
+        value = round(accumulated / total)
         self._last_progress = max(self._last_progress, min(100, value))
         return self._last_progress
 
@@ -591,6 +592,147 @@ class RunQueueSession(QObject):
         global_index = self.active_order[local_index - 1]
         return self.items[global_index]
 
+    def handle_item_progress(self, event: Any) -> None:
+        """Apply one indexed lifecycle event without a shared item cursor."""
+        if isinstance(event, dict):
+            event = ProgressEvent(
+                item_index=event.get("item_index"),
+                total_items=event.get("total_items"),
+                stage=str(event.get("stage") or ""),
+                status=str(event.get("status") or "running"),
+                message=str(event.get("message") or ""),
+                percent=event.get("percent"),
+                indeterminate=bool(event.get("indeterminate", False)),
+                source_path=str(event.get("source_path") or ""),
+                output_path=str(event.get("output_path") or ""),
+            )
+        if not isinstance(event, ProgressEvent):
+            self._event("worker_progress_rejected", reason="invalid_event")
+            return
+        try:
+            local_index = int(event.item_index or 0)
+            total_items = int(event.total_items or 0)
+        except (TypeError, ValueError, OverflowError):
+            self._event("worker_progress_rejected", reason="invalid_index")
+            return
+        item = self._active_item(local_index)
+        if item is None or total_items != len(self.active_order):
+            self._event("worker_progress_rejected", reason="index_mismatch")
+            return
+
+        global_index = item.index - 1
+        status = str(event.status or "running").strip().lower()
+        stage = str(event.stage or "").strip()
+        self.current_index = global_index
+        if stage:
+            self.current_stage = stage
+        self.activity_indeterminate = bool(event.indeterminate)
+        if event.percent is not None:
+            try:
+                numeric = max(0, min(100, int(event.percent)))
+            except (TypeError, ValueError, OverflowError):
+                numeric = None
+            if numeric is not None:
+                self._item_progress[global_index] = max(
+                    self._item_progress.get(global_index, 0), numeric
+                )
+                self.activity_indeterminate = event.indeterminate or numeric <= 0
+
+        if status == "running":
+            was_pending = item.status is RunItemStatus.PENDING
+            item.status = RunItemStatus.RUNNING
+            item.short_message = "Выполняется."
+            if stage:
+                item.stage_statuses[stage] = "running"
+            if was_pending:
+                self._event("item_started", item=item.index, attempt=item.attempts)
+        elif status in {"stage_complete", "generated"}:
+            item.status = RunItemStatus.RUNNING
+            if stage:
+                item.stage_statuses[stage] = "complete"
+            if event.source_path:
+                trusted = _trusted_worker_path(event.source_path, self.output_dir / ".run")
+                if trusted:
+                    item.source_path = trusted
+                else:
+                    self._event(
+                        "worker_path_rejected",
+                        item=item.index,
+                        kind="generated",
+                    )
+        elif status == "succeeded":
+            trusted = _trusted_worker_path(event.output_path, self.output_dir)
+            if not trusted:
+                self._close_running_stages(item, "failed")
+                item.status = RunItemStatus.FAILED
+                item.short_message = "Worker вернул недопустимый путь результата."
+                self._event(
+                    "item_failed",
+                    item=item.index,
+                    reason="output_path_rejected",
+                )
+            else:
+                item.output_path = trusted
+                self._close_running_stages(item, "complete")
+                item.stage_statuses[stage or "export"] = "complete"
+                failed_stage = next(
+                    (
+                        name
+                        for name, stage_status in item.stage_statuses.items()
+                        if stage_status == "failed"
+                    ),
+                    "",
+                )
+                if failed_stage:
+                    item.status = RunItemStatus.FAILED
+                    item.short_message = (
+                        "Файл создан, но один из выбранных этапов завершился ошибкой."
+                    )
+                    self._event(
+                        "item_failed",
+                        item=item.index,
+                        reason="stage_failed",
+                        stage=failed_stage,
+                        filename=Path(trusted).name,
+                    )
+                else:
+                    item.status = RunItemStatus.SUCCEEDED
+                    item.short_message = "Результат сохранён."
+                    self._event(
+                        "item_succeeded",
+                        item=item.index,
+                        filename=Path(trusted).name,
+                    )
+            self._after_terminal_item()
+        elif status == "failed":
+            technical_message, technical_details = _safe_technical_error_details(
+                event.message
+            )
+            code, user_message = _failure_reason(technical_message)
+            self._close_running_stages(item, "failed")
+            if stage:
+                item.stage_statuses[stage] = "failed"
+            item.status = RunItemStatus.FAILED
+            item.short_message = user_message
+            self._event(
+                "item_failed",
+                item=item.index,
+                reason=code,
+                **technical_details,
+            )
+            self._after_terminal_item()
+        elif status == "cancelled":
+            self._close_running_stages(item, "cancelled")
+            if stage:
+                item.stage_statuses[stage] = "cancelled"
+            item.status = RunItemStatus.CANCELLED
+            item.short_message = "Операция отменена безопасно."
+            self._event("item_cancelled", item=item.index)
+        else:
+            self._event("worker_progress_rejected", reason="invalid_status")
+            return
+        self.changed.emit()
+
     def handle_progress(self, message: Any) -> None:
         if isinstance(message, dict):
             message = ProgressEvent(
@@ -601,17 +743,12 @@ class RunQueueSession(QObject):
                 message=str(message.get("message") or ""),
                 percent=message.get("percent"),
                 indeterminate=bool(message.get("indeterminate", False)),
+                source_path=str(message.get("source_path") or ""),
+                output_path=str(message.get("output_path") or ""),
             )
         if isinstance(message, ProgressEvent):
-            if message.percent is not None:
-                self.handle_progress_value(message.percent)
-            if message.stage:
-                self.current_stage = message.stage
-            self.activity_indeterminate = message.indeterminate
-            if message.message:
-                message = message.message
-            else:
-                message = ""
+            self.handle_item_progress(message)
+            return
         text = str(message or "").strip()
         match = _ITEM_START.match(text)
         if match:
@@ -1716,6 +1853,7 @@ class RunQueueSupport:
         self.session: RunQueueSession | None = None
         self._worker_generation = 0
         self._active_worker: Any | None = None
+        self._structured_progress_generation: int | None = None
         self.page = RunResultsPage(
             controller.shell.state,
             tokens=controller.shell.tokens,
@@ -1764,6 +1902,15 @@ class RunQueueSupport:
         self._worker_generation += 1
         generation = self._worker_generation
         self._active_worker = worker
+        self._structured_progress_generation = None
+        if hasattr(worker, "item_progress"):
+            worker.item_progress.connect(
+                lambda event, source=worker, token=generation: self._item_progress_event(
+                    source,
+                    token,
+                    event,
+                )
+            )
         if hasattr(worker, "progress"):
             worker.progress.connect(
                 lambda message, source=worker, token=generation: self._progress(
@@ -1819,9 +1966,25 @@ class RunQueueSupport:
     ) -> None:
         if not self._is_active(worker, generation):
             return
-        if self.session is not None:
+        if (
+            self.session is not None
+            and self._structured_progress_generation != generation
+        ):
             self.session.handle_progress(message)
         self.controller.progress.emit(_safe_progress_text(message))
+
+    def _item_progress_event(
+        self,
+        worker: Any,
+        generation: int,
+        event: Any,
+    ) -> None:
+        if not self._is_active(worker, generation) or self.session is None:
+            return
+        self._structured_progress_generation = generation
+        self.session.handle_item_progress(event)
+        self.controller.progress.emit(_safe_progress_text(getattr(event, "message", "")))
+        self.controller.progress_value.emit(self.session.progress_percent)
 
     def _diagnostic(
         self,
