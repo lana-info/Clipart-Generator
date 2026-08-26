@@ -15,8 +15,12 @@
 - Windows installer source now uses the built-in Inno Setup Polar dark style,
   the approved graphite/teal Vibix Images treatment and a simplified
   `Добро пожаловать → Установка → Готово` flow while preserving destination and
-  desktop-shortcut choices. Both Windows workflows pin Inno Setup 6.7.1; no new
-  installer build was started.
+  desktop-shortcut choices. Both Windows workflows pin Inno Setup 6.7.1.
+  Windows-only GitHub run `33002277766` built version 3.0.5 from merged commit
+  `631219f1b2494857d82f07a380e2f6cf538a4f02`, installed the package, and
+  verified the approved application artwork and prompt screens. The installer
+  SHA-256 is
+  `fceb6abfb44c2feb93ce8f2e2142987dc551fa47b0ddf1d7667341b6f12e8fef`.
 
 - Windows-only GitHub run `32977293110` rebuilt version 3.0.5 from merged
   `develop/3.0` commit `5732eedd`, installed the resulting package, and verified

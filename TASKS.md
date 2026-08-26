@@ -6,10 +6,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **After a new explicit owner command, build the integrated
-`develop/3.0` source for Windows and perform target-machine acceptance of the
-new three-stage dark installer, application artwork, hidden helper processes,
-licensing, and prompt workflow. Do not upload a server revision before that
+Current next task: **Perform owner target-machine acceptance of Windows 3.0.5
+from GitHub Actions run `33002277766`: visually inspect the new three-stage dark
+installer and verify application artwork, hidden helper processes, licensing,
+and the prompt workflow. Do not upload a server revision before that
 acceptance.**
 
 ## Phase 1 - Preparation
