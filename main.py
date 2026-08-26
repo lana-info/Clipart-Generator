@@ -14,6 +14,7 @@ import math
 import subprocess
 import shutil
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from types import MappingProxyType
@@ -169,6 +170,7 @@ LICENSE_PUBLIC_KEYS = {
     "license-v1": "2J5W6NVq8-zE5g0MocublzW5aER1hzRqwFLGuzKuwMw",
 }
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
+MAX_REMOTE_CONCURRENCY = 6
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
 MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
 MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -884,6 +886,10 @@ class WorkerThread(QThread):
         # Compatibility name for the generation-only executor. The same value
         # now governs every KIE operation in the run.
         self.generation_concurrency = self.kie_concurrency
+        self._kie_slots = threading.BoundedSemaphore(self.kie_concurrency)
+        self._photoroom_slots = threading.BoundedSemaphore(
+            self.photoroom_concurrency
+        )
         try:
             configured_interval = float(settings.get("generation_launch_interval", 1.0))
         except (TypeError, ValueError):
@@ -891,6 +897,16 @@ class WorkerThread(QThread):
         self.generation_launch_interval = max(0.0, configured_interval)
         self._generation_launch_lock = threading.Lock()
         self._next_generation_launch_at = 0.0
+        try:
+            photoroom_launch_interval = float(
+                settings.get("_photoroom_launch_interval", 1.0)
+            )
+        except (TypeError, ValueError):
+            photoroom_launch_interval = 1.0
+        self._photoroom_launch_interval = max(0.0, photoroom_launch_interval)
+        self._photoroom_launch_lock = threading.Lock()
+        self._photoroom_initial_launches = 0
+        self._next_photoroom_launch_at = 0.0
         self.generation_wait_timeout = max(120, int(settings.get("generation_wait_timeout", 300)))
         self.status_poll_interval = max(5.0, min(60.0, float(settings.get("status_poll_interval", 20))))
         self.output_dir = settings.get("output_dir") or os.path.join(self.work_dir, "output")
@@ -1010,6 +1026,19 @@ class WorkerThread(QThread):
     def _ensure_running(self):
         if not self.is_running:
             raise ProcessingCancelled("Остановлено пользователем")
+
+    @contextmanager
+    def _provider_slot(self, slots):
+        acquired = False
+        try:
+            while not acquired:
+                self._ensure_running()
+                acquired = slots.acquire(timeout=0.05)
+            self._ensure_running()
+            yield
+        finally:
+            if acquired:
+                slots.release()
 
     def _safe_error_text(self, error, limit=500):
         prompt_text = str(
@@ -1206,6 +1235,35 @@ class WorkerThread(QThread):
                 delay = self._next_generation_launch_at - now
             time.sleep(min(delay, 0.1))
 
+    def _wait_for_photoroom_launch_slot(self) -> None:
+        """Reserve a paced PhotoRoom launch and its provider semaphore slot."""
+        while True:
+            self._ensure_running()
+            delay = 0.05
+            with self._photoroom_launch_lock:
+                now = time.monotonic()
+                in_initial_burst = (
+                    self._photoroom_initial_launches < self.photoroom_concurrency
+                )
+                launch_due = (
+                    in_initial_burst or now >= self._next_photoroom_launch_at
+                )
+                if launch_due and self._photoroom_slots.acquire(blocking=False):
+                    if in_initial_burst:
+                        if self._photoroom_initial_launches == 0:
+                            self._next_photoroom_launch_at = (
+                                now + self._photoroom_launch_interval
+                            )
+                        self._photoroom_initial_launches += 1
+                    else:
+                        self._next_photoroom_launch_at = (
+                            now + self._photoroom_launch_interval
+                        )
+                    return
+                if not launch_due:
+                    delay = self._next_photoroom_launch_at - now
+            time.sleep(min(delay, 0.1))
+
     def _generate_entry(
         self,
         idx: int,
@@ -1309,8 +1367,12 @@ class WorkerThread(QThread):
         self._next_generation_launch_at = 0.0
         pending = iter(enumerate(entries, start=1))
         active = {}
+        worker_limit = self._remote_worker_limit(
+            include_generation=True,
+            include_processing=process_generated,
+        )
 
-        with ThreadPoolExecutor(max_workers=self.generation_concurrency) as executor:
+        with ThreadPoolExecutor(max_workers=worker_limit) as executor:
             def submit_next() -> bool:
                 if not self.is_running or self.stop_after_current_requested:
                     return False
@@ -1330,7 +1392,7 @@ class WorkerThread(QThread):
                 active[future] = idx
                 return True
 
-            for _ in range(self.generation_concurrency):
+            for _ in range(worker_limit):
                 if not submit_next():
                     break
 
@@ -1657,11 +1719,7 @@ class WorkerThread(QThread):
     ) -> None:
         total = len(self.selected_files)
         done_count = 0
-        worker_limit = (
-            self.kie_concurrency
-            if self._uses_any_kie_upscale() or self._uses_kie_remove_bg()
-            else 1
-        )
+        worker_limit = self._remote_worker_limit()
         if worker_limit == 1:
             for idx, file_path in enumerate(self.selected_files, start=1):
                 if not self.is_running:
@@ -1874,6 +1932,24 @@ class WorkerThread(QThread):
 
     def _uses_kie_remove_bg(self):
         return self.remove_bg and not self._uses_local_remove_bg() and not self._uses_photoroom_remove_bg()
+
+    def _remote_worker_limit(
+        self,
+        *,
+        include_generation: bool = False,
+        include_processing: bool = True,
+    ) -> int:
+        uses_kie = include_generation or (
+            include_processing
+            and (self._uses_any_kie_upscale() or self._uses_kie_remove_bg())
+        )
+        uses_photoroom = include_processing and self._uses_photoroom_remove_bg()
+        limit = 0
+        if uses_kie:
+            limit += self.kie_concurrency
+        if uses_photoroom:
+            limit += self.photoroom_concurrency
+        return max(1, min(MAX_REMOTE_CONCURRENCY, limit))
 
     def _can_use_legacy_kie_processing_pipeline(self):
         return (
@@ -2088,12 +2164,11 @@ class WorkerThread(QThread):
                     current_url = None
                     local_result = True
                 elif self._uses_photoroom_remove_bg():
-                    with self._local_operation_lock:
-                        current_path = self._ensure_local_path(
-                            current_path, current_url, raw_dir, idx, prefix, "photoroom_source"
-                        )
-                        nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
-                        self._run_photoroom_remove_bg(current_path, nobg_path)
+                    current_path = self._ensure_local_path(
+                        current_path, current_url, raw_dir, idx, prefix, "photoroom_source"
+                    )
+                    nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
+                    self._run_photoroom_remove_bg(current_path, nobg_path)
                     self.progress.emit(f"  Промежуточный PhotoRoom без фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
@@ -3355,6 +3430,17 @@ class WorkerThread(QThread):
             method="POST",
         )
 
+        self._wait_for_photoroom_launch_slot()
+        try:
+            return self._execute_photoroom_remove_bg_request(
+                req,
+                input_path,
+                output_path,
+            )
+        finally:
+            self._photoroom_slots.release()
+
+    def _execute_photoroom_remove_bg_request(self, req, input_path, output_path):
         self.progress.emit("  Удаление фона через PhotoRoom Standard...")
         started = time.monotonic()
         self._emit_diagnostic(
@@ -3563,12 +3649,13 @@ class WorkerThread(QThread):
         return task_id
 
     def _kie_run_model_task(self, model, image_url, extra_input=None):
-        input_payload = {} if model == KIE_TOPAZ_MODEL_ID else {"image": image_url}
-        if isinstance(extra_input, dict):
-            input_payload.update(extra_input)
-        task_id = self._kie_create_task(model, input_payload)
-        self.progress.emit(f"  Task ID: {task_id}")
-        return self._kie_wait_result(task_id)
+        with self._provider_slot(self._kie_slots):
+            input_payload = {} if model == KIE_TOPAZ_MODEL_ID else {"image": image_url}
+            if isinstance(extra_input, dict):
+                input_payload.update(extra_input)
+            task_id = self._kie_create_task(model, input_payload)
+            self.progress.emit(f"  Task ID: {task_id}")
+            return self._kie_wait_result(task_id)
 
     def _resolve_reference_url(self, reference_value):
         ref = str(reference_value or "").strip()
@@ -3594,36 +3681,41 @@ class WorkerThread(QThread):
         return urls
 
     def _kie_generate_image(self, prompt, references=None):
-        reference_items = split_references(references or [])
-        normalized_model = self._select_generation_model(reference_items)
-        has_references = bool(reference_items)
-        ratio, resolution = self._get_generation_profile(has_references)
-        reference_sizes = tuple(
-            os.path.getsize(reference)
-            for reference in reference_items
-            if not urlparse(reference).scheme and os.path.isfile(reference)
-        )
-        validate_generation_contract(
-            normalized_model,
-            has_references=has_references,
-            ratio=ratio,
-            resolution=resolution,
-            prompt=prompt,
-            reference_count=len(reference_items),
-            reference_sizes=reference_sizes,
-        )
-        reference_urls = self._resolve_reference_urls(reference_items)
-        model_meta = GENERATION_MODEL_META.get(normalized_model, {})
-        model_type = model_meta.get("type", "text_to_image")
+        with self._provider_slot(self._kie_slots):
+            reference_items = split_references(references or [])
+            normalized_model = self._select_generation_model(reference_items)
+            has_references = bool(reference_items)
+            ratio, resolution = self._get_generation_profile(has_references)
+            reference_sizes = tuple(
+                os.path.getsize(reference)
+                for reference in reference_items
+                if not urlparse(reference).scheme and os.path.isfile(reference)
+            )
+            validate_generation_contract(
+                normalized_model,
+                has_references=has_references,
+                ratio=ratio,
+                resolution=resolution,
+                prompt=prompt,
+                reference_count=len(reference_items),
+                reference_sizes=reference_sizes,
+            )
+            reference_urls = self._resolve_reference_urls(reference_items)
+            model_meta = GENERATION_MODEL_META.get(normalized_model, {})
+            model_type = model_meta.get("type", "text_to_image")
 
-        if model_type in {"image_to_image", "edit"} and not reference_urls:
-            raise RuntimeError("Для выбранной модели нужен референс изображения")
+            if model_type in {"image_to_image", "edit"} and not reference_urls:
+                raise RuntimeError("Для выбранной модели нужен референс изображения")
 
-        if normalized_model == "gpt4o-image":
-            if reference_urls:
-                raise RuntimeError("Модель GPT‑4o Image не поддерживает референс в этом режиме")
-            return self._kie_generate_4o_image(prompt)
-        return self._kie_generate_generic_model(normalized_model, prompt, reference_urls=reference_urls)
+            if normalized_model == "gpt4o-image":
+                if reference_urls:
+                    raise RuntimeError("Модель GPT‑4o Image не поддерживает референс в этом режиме")
+                return self._kie_generate_4o_image(prompt)
+            return self._kie_generate_generic_model(
+                normalized_model,
+                prompt,
+                reference_urls=reference_urls,
+            )
 
     def _normalize_model_ratio(self, model_name, ratio, has_references=False):
         allowed = set(ratios_for_mode(model_name, has_references))

@@ -222,6 +222,86 @@ class PhotoRoomProviderTests(unittest.TestCase):
             request_mock.assert_not_called()
             self.assertFalse(output_path.exists())
 
+    def test_photoroom_failure_isolated_to_one_parallel_item(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-isolation-") as temp_dir:
+            temp_path = Path(temp_dir)
+            sources = []
+            for index in range(1, 4):
+                source_path = temp_path / f"source-{index}.png"
+                create_rgb_source(source_path)
+                sources.append(str(source_path))
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                photoroom_settings(
+                    photoroom_concurrency=3,
+                    _photoroom_launch_interval=0,
+                    output_dir=str(temp_path / "output"),
+                ),
+                selected_files=sources,
+            )
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+
+            def fake_request(worker_self, req, timeout=None):
+                if worker_self._diagnostic_context.item_index == 2:
+                    raise RuntimeError("controlled PhotoRoom failure")
+                return create_photoroom_response_bytes()
+
+            worker._request_with_retries = types.MethodType(fake_request, worker)
+
+            worker._mode2_process_files(emit_final=False)
+
+            outputs = list((temp_path / "output").glob("*.png"))
+            self.assertEqual(len(outputs), 2)
+            failed_indexes = {
+                event["item_index"]
+                for event in item_events
+                if event.get("status") == "failed"
+            }
+            self.assertEqual(failed_indexes, {2})
+
+    def test_photoroom_429_retry_is_bounded_and_writes_one_output(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-429-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "source.png"
+            output_path = temp_path / "output.png"
+            create_rgb_source(source_path)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                photoroom_settings(retries=5),
+                selected_files=[str(source_path)],
+            )
+            rate_limits = [
+                main.urlerror.HTTPError(
+                    main.PHOTOROOM_SEGMENT_URL,
+                    429,
+                    "Too Many Requests",
+                    {},
+                    BytesIO(b"rate limited"),
+                )
+                for _ in range(2)
+            ]
+            response = BytesIO(create_photoroom_response_bytes())
+            response.headers = {}
+
+            with (
+                patch.object(
+                    main,
+                    "open_url_secure",
+                    side_effect=[*rate_limits, response],
+                ) as request_mock,
+                patch.object(main.time, "sleep"),
+            ):
+                result = worker._run_photoroom_remove_bg(
+                    str(source_path), str(output_path)
+                )
+
+            self.assertEqual(request_mock.call_count, 3)
+            self.assertEqual(result, str(output_path))
+            self.assertEqual(list(temp_path.glob("output*.png")), [output_path])
+
     def test_process_only_photoroom_does_not_use_kie(self):
         with tempfile.TemporaryDirectory(prefix="clipart-photoroom-pipeline-") as temp_dir:
             temp_path = Path(temp_dir)
@@ -235,15 +315,14 @@ class PhotoRoomProviderTests(unittest.TestCase):
             )
             calls = []
 
-            def fake_photoroom(worker_self, input_path, output_path):
+            def fake_request(worker_self, req, timeout=None):
                 calls.append("photoroom")
-                Path(output_path).write_bytes(create_photoroom_response_bytes())
-                return output_path
+                return create_photoroom_response_bytes()
 
             def fail_kie_upload(worker_self, file_path):
                 raise AssertionError("PhotoRoom process-only must not upload to KIE")
 
-            worker._run_photoroom_remove_bg = types.MethodType(fake_photoroom, worker)
+            worker._request_with_retries = types.MethodType(fake_request, worker)
             worker._kie_upload_file = types.MethodType(fail_kie_upload, worker)
             worker._mode2_process_files()
 
