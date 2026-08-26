@@ -235,7 +235,6 @@ class PhotoRoomProviderTests(unittest.TestCase):
                 temp_dir,
                 photoroom_settings(
                     photoroom_concurrency=3,
-                    _photoroom_launch_interval=0,
                     output_dir=str(temp_path / "output"),
                 ),
                 selected_files=sources,
@@ -260,6 +259,63 @@ class PhotoRoomProviderTests(unittest.TestCase):
                 if event.get("status") == "failed"
             }
             self.assertEqual(failed_indexes, {2})
+
+    def test_item_entry_clears_reused_thread_diagnostic_fields(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            photoroom_settings(),
+        )
+        worker._diagnostic_context.model = "stale-model"
+        worker._diagnostic_context.provider = "stale-provider"
+        worker._diagnostic_context.prompt_text = "stale prompt"
+        worker._diagnostic_context.last_http_status = 599
+
+        worker._set_diagnostic_context(2, 3, "processing")
+
+        for field in ("model", "provider", "prompt_text", "last_http_status"):
+            self.assertIsNone(getattr(worker._diagnostic_context, field, None))
+
+    def test_photoroom_failure_keeps_exact_stage_provider_and_model_in_item_progress(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-stage-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "source.png"
+            create_rgb_source(source_path)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                photoroom_settings(
+                    photoroom_concurrency=1,
+                    output_dir=str(temp_path / "output"),
+                ),
+                selected_files=[str(source_path)],
+            )
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+            forbidden_stale_text = "prior-item-secret-prompt"
+            worker._diagnostic_context.prompt_text = forbidden_stale_text
+            worker._diagnostic_context.model = "prior-model"
+            worker._diagnostic_context.last_http_status = 599
+
+            denied = main.urlerror.HTTPError(
+                main.PHOTOROOM_SEGMENT_URL,
+                403,
+                "Forbidden",
+                {},
+                BytesIO(b"forbidden"),
+            )
+            with patch.object(main, "open_url_secure", side_effect=denied):
+                worker._mode2_process_files(emit_final=False)
+
+            failed = next(
+                event for event in item_events if event.get("status") == "failed"
+            )
+            self.assertEqual(failed["stage"], "background_removal")
+            self.assertEqual(failed["provider"], "photoroom")
+            self.assertEqual(failed["model"], "remove-background-v1")
+            self.assertNotIn(forbidden_stale_text, str(failed))
+            self.assertNotIn("prior-model", str(failed))
+            self.assertNotIn("599", str(failed))
 
     def test_photoroom_429_retry_is_bounded_and_writes_one_output(self):
         with tempfile.TemporaryDirectory(prefix="clipart-photoroom-429-") as temp_dir:

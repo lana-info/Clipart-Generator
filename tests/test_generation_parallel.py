@@ -5,6 +5,8 @@ import time
 import types
 import unittest
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,6 +23,7 @@ class ProviderActivity:
         self.maximum = {"kie": 0, "photoroom": 0}
         self.max_remote = 0
         self.overlapped = False
+        self.remote_six = threading.Event()
         self.order = defaultdict(list)
         self.kie_models = defaultdict(list)
 
@@ -31,6 +34,8 @@ class ProviderActivity:
                 self.maximum[provider], self.active[provider]
             )
             self.max_remote = max(self.max_remote, sum(self.active.values()))
+            if sum(self.active.values()) == main.MAX_REMOTE_CONCURRENCY:
+                self.remote_six.set()
             self.overlapped = self.overlapped or all(self.active.values())
             self.order[item_index].append(provider)
             if provider == "kie":
@@ -49,34 +54,62 @@ def install_fake_kie_network(
     release=None,
     started=None,
     started_target=0,
+    release_by_item=None,
+    release_waves=None,
 ):
     tasks = {}
     tasks_lock = threading.Lock()
 
-    def fake_create(worker_self, model, input_payload):
+    def fake_request(worker_self, req, timeout=None):
         item_index = worker_self._diagnostic_context.item_index
-        with tasks_lock:
-            task_id = f"task-{item_index}-{len(tasks) + 1}"
-            tasks[task_id] = item_index
-        activity.start("kie", item_index, model)
-        if started is not None:
+        if "file-stream-upload" in req.full_url:
+            return b'{"success":true,"data":{"downloadUrl":"https://example.invalid/input.png"}}'
+        if "createTask" in req.full_url:
+            payload = main.json.loads(req.data.decode("utf-8"))
             with tasks_lock:
-                if len(tasks) >= started_target:
-                    started.set()
-        return task_id
+                task_count = len(tasks) + 1
+                task_id = f"task-{item_index}-{task_count}"
+                wave_release = None
+                if release_waves is not None:
+                    wave_release = release_waves[0 if task_count <= 3 else 1]
+                tasks[task_id] = (item_index, wave_release)
+            activity.start("kie", item_index, payload["model"])
+            if started is not None and task_count >= started_target:
+                started.set()
+            return main.json.dumps(
+                {"code": 200, "data": {"taskId": task_id}}
+            ).encode("utf-8")
+        if "recordInfo" in req.full_url:
+            task_id = main.parse.parse_qs(main.urlparse(req.full_url).query)["taskId"][0]
+            try:
+                item_release = (
+                    tasks[task_id][1]
+                    or (
+                        release_by_item.get(item_index)
+                        if release_by_item is not None
+                        else release
+                    )
+                )
+                if item_release is None:
+                    threading.Event().wait(delay)
+                else:
+                    item_release.wait(timeout=2)
+                return main.json.dumps(
+                    {
+                        "code": 200,
+                        "data": {
+                            "state": "success",
+                            "resultJson": main.json.dumps(
+                                {"resultUrls": [f"https://example.invalid/{task_id}.png"]}
+                            ),
+                        },
+                    }
+                ).encode("utf-8")
+            finally:
+                activity.finish("kie")
+        raise AssertionError(f"Unexpected KIE request: {req.full_url}")
 
-    def fake_wait(worker_self, task_id):
-        try:
-            if release is None:
-                time.sleep(delay)
-            else:
-                release.wait(timeout=2)
-            return f"https://example.invalid/{task_id}.png"
-        finally:
-            activity.finish("kie")
-
-    worker._kie_create_task = types.MethodType(fake_create, worker)
-    worker._kie_wait_result = types.MethodType(fake_wait, worker)
+    worker._request_with_retries = types.MethodType(fake_request, worker)
 
 
 def install_fake_photoroom_network(
@@ -92,9 +125,12 @@ def install_fake_photoroom_network(
     response_bytes = create_photoroom_response_bytes(size=(8, 8))
     start_count = 0
     count_lock = threading.Lock()
+    previous_request = worker._request_with_retries
 
     def fake_request(worker_self, req, timeout=None):
         nonlocal start_count
+        if req.full_url != main.PHOTOROOM_SEGMENT_URL:
+            return previous_request(req, timeout=timeout)
         item_index = worker_self._diagnostic_context.item_index
         activity.start("photoroom", item_index)
         with count_lock:
@@ -126,9 +162,6 @@ def create_inputs(temp_dir, count):
 
 
 def install_fake_file_io(worker, saved=None):
-    def fake_upload(worker_self, _path):
-        return "https://example.invalid/input.png"
-
     def fake_download(worker_self, _url, output_path):
         main.Image.new("RGBA", (8, 8), "white").save(output_path)
 
@@ -137,12 +170,148 @@ def install_fake_file_io(worker, saved=None):
         if saved is not None:
             saved.append(Path(output_path).name)
 
-    worker._kie_upload_file = types.MethodType(fake_upload, worker)
     worker._download_file = types.MethodType(fake_download, worker)
     worker._save_final_output = types.MethodType(fake_save, worker)
 
 
 class ParallelGenerationTests(unittest.TestCase):
+    def test_kie_uploads_share_the_provider_limit_with_other_kie_network_work(self):
+        with tempfile.TemporaryDirectory(prefix="parallel-kie-upload-") as temp_dir:
+            inputs = create_inputs(temp_dir, 6)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {
+                    "kie_api_key": "test-key",
+                    "kie_concurrency": 3,
+                    "generation_launch_interval": 0,
+                },
+            )
+            release = threading.Event()
+            three_started = threading.Event()
+            lock = threading.Lock()
+            active = 0
+            maximum = 0
+            started = 0
+
+            def fake_request(worker_self, req, timeout=None):
+                nonlocal active, maximum, started
+                with lock:
+                    active += 1
+                    started += 1
+                    maximum = max(maximum, active)
+                    if started >= 3:
+                        three_started.set()
+                try:
+                    self.assertTrue(release.wait(timeout=2), "upload release deadlock")
+                    return b'{"success":true,"data":{"downloadUrl":"https://example.invalid/input.png"}}'
+                finally:
+                    with lock:
+                        active -= 1
+
+            worker._request_with_retries = types.MethodType(fake_request, worker)
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                futures = [executor.submit(worker._kie_upload_file, path) for path in inputs]
+                self.assertTrue(three_started.wait(timeout=1), "three uploads did not start")
+                self.assertFalse(
+                    threading.Event().wait(0.05) or maximum > 3,
+                    "a fourth KIE network operation started while three leases were held",
+                )
+                release.set()
+                for future in futures:
+                    self.assertEqual(
+                        future.result(timeout=2),
+                        "https://example.invalid/input.png",
+                    )
+
+            self.assertEqual(maximum, 3)
+
+    def test_stop_after_current_cancels_a_kie_upload_waiting_for_a_provider_slot(self):
+        with tempfile.TemporaryDirectory(prefix="parallel-kie-stop-") as temp_dir:
+            first_path, second_path = create_inputs(temp_dir, 2)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {"kie_api_key": "test-key", "kie_concurrency": 1},
+            )
+            first_started = threading.Event()
+            release_first = threading.Event()
+            lock = threading.Lock()
+            network_calls = 0
+
+            def fake_request(worker_self, req, timeout=None):
+                nonlocal network_calls
+                with lock:
+                    network_calls += 1
+                    call_number = network_calls
+                if call_number == 1:
+                    first_started.set()
+                    self.assertTrue(release_first.wait(timeout=2), "first upload release deadlock")
+                return b'{"success":true,"data":{"downloadUrl":"https://example.invalid/input.png"}}'
+
+            worker._request_with_retries = types.MethodType(fake_request, worker)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(worker._kie_upload_file, first_path)
+                self.assertTrue(first_started.wait(timeout=1), "first upload did not start")
+                second = executor.submit(worker._kie_upload_file, second_path)
+                self.assertFalse(second.done(), "second upload did not wait for the KIE slot")
+                worker.request_stop_after_current()
+                release_first.set()
+                self.assertEqual(
+                    first.result(timeout=2),
+                    "https://example.invalid/input.png",
+                )
+                with self.assertRaises(main.ProcessingCancelled):
+                    second.result(timeout=2)
+
+            self.assertEqual(network_calls, 1)
+
+    def test_kie_provider_slot_is_reused_after_upload_failure(self):
+        with tempfile.TemporaryDirectory(prefix="parallel-kie-reuse-") as temp_dir:
+            first_path, second_path = create_inputs(temp_dir, 2)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {"kie_api_key": "test-key", "kie_concurrency": 1},
+            )
+            call_count = 0
+
+            def fake_request(worker_self, req, timeout=None):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    raise RuntimeError("controlled upload failure")
+                return b'{"success":true,"data":{"downloadUrl":"https://example.invalid/recovered.png"}}'
+
+            worker._request_with_retries = types.MethodType(fake_request, worker)
+            with self.assertRaisesRegex(RuntimeError, "controlled upload failure"):
+                worker._kie_upload_file(first_path)
+            self.assertEqual(
+                worker._kie_upload_file(second_path),
+                "https://example.invalid/recovered.png",
+            )
+
+    def test_nested_reference_upload_reuses_the_current_kie_lease(self):
+        with tempfile.TemporaryDirectory(prefix="parallel-kie-reference-") as temp_dir:
+            reference_path = create_inputs(temp_dir, 1)[0]
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp_dir,
+                {
+                    "kie_api_key": "test-key",
+                    "kie_concurrency": 1,
+                    "generation_launch_interval": 0,
+                },
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            activity = ProviderActivity()
+            install_fake_kie_network(worker, activity)
+
+            result = worker._kie_generate_image("reference prompt", [reference_path])
+
+            self.assertTrue(result.endswith(".png"))
+            self.assertEqual(activity.maximum["kie"], 1)
+
     def test_generation_runs_independent_items_concurrently_and_preserves_indexes(self):
         with tempfile.TemporaryDirectory(prefix="parallel-generation-") as temp_dir:
             worker = main.WorkerThread(
@@ -267,7 +436,6 @@ class ParallelGenerationTests(unittest.TestCase):
                     {
                         "photoroom_api_key": "photo-key",
                         "photoroom_concurrency": limit,
-                        "_photoroom_launch_interval": 0,
                         "upscale": False,
                         "remove_bg": True,
                         "remove_bg_provider": "photoroom",
@@ -275,6 +443,7 @@ class ParallelGenerationTests(unittest.TestCase):
                     },
                     selected_files=create_inputs(temp_dir, 6),
                 )
+                worker._photoroom_launch_interval = 0.0
                 activity = ProviderActivity()
                 install_fake_photoroom_network(worker, activity)
                 install_fake_file_io(worker)
@@ -294,7 +463,6 @@ class ParallelGenerationTests(unittest.TestCase):
                     "kie_concurrency": 3,
                     "photoroom_concurrency": 3,
                     "generation_launch_interval": 0,
-                    "_photoroom_launch_interval": 0,
                     "upscale": True,
                     "upscale_provider": "kie",
                     "remove_bg": True,
@@ -303,13 +471,53 @@ class ParallelGenerationTests(unittest.TestCase):
                 },
                 selected_files=create_inputs(temp_dir, 6),
             )
+            worker._photoroom_launch_interval = 0.0
             activity = ProviderActivity()
-            install_fake_kie_network(worker, activity, delay=0.02)
-            install_fake_photoroom_network(worker, activity, delay=0.10)
+            first_kie_wave = threading.Event()
+            second_kie_wave = threading.Event()
+            first_three_kie_started = threading.Event()
+            photoroom_release = threading.Event()
+            three_photoroom_started = threading.Event()
+            install_fake_kie_network(
+                worker,
+                activity,
+                release_waves=(first_kie_wave, second_kie_wave),
+                started=first_three_kie_started,
+                started_target=3,
+            )
+            install_fake_photoroom_network(
+                worker,
+                activity,
+                release=photoroom_release,
+                started=three_photoroom_started,
+                started_target=3,
+            )
             install_fake_file_io(worker)
+            runner = threading.Thread(
+                target=worker._mode2_process_files,
+                kwargs={"emit_final": False},
+            )
+            runner.start()
+            try:
+                self.assertTrue(
+                    first_three_kie_started.wait(timeout=1),
+                    "first KIE wave did not start",
+                )
+                first_kie_wave.set()
+                self.assertTrue(
+                    three_photoroom_started.wait(timeout=1),
+                    "PhotoRoom wave did not start",
+                )
+                self.assertTrue(
+                    activity.remote_six.wait(timeout=1),
+                    "three KIE and three PhotoRoom operations did not overlap",
+                )
+            finally:
+                second_kie_wave.set()
+                photoroom_release.set()
+                runner.join(timeout=3)
 
-            worker._mode2_process_files(emit_final=False)
-
+            self.assertFalse(runner.is_alive())
             self.assertTrue(activity.overlapped)
             self.assertEqual(activity.maximum["kie"], 3)
             self.assertEqual(activity.maximum["photoroom"], 3)
@@ -328,7 +536,6 @@ class ParallelGenerationTests(unittest.TestCase):
                 {
                     "photoroom_api_key": "photo-key",
                     "photoroom_concurrency": 3,
-                    "_photoroom_launch_interval": 0,
                     "upscale": True,
                     "upscale_provider": "local_realesrgan",
                     "remove_bg": True,
@@ -337,6 +544,7 @@ class ParallelGenerationTests(unittest.TestCase):
                 },
                 selected_files=create_inputs(temp_dir, 5),
             )
+            worker._photoroom_launch_interval = 0.0
             activity = ProviderActivity()
             install_fake_photoroom_network(worker, activity)
             install_fake_file_io(worker)
@@ -370,7 +578,6 @@ class ParallelGenerationTests(unittest.TestCase):
                 {
                     "photoroom_api_key": "photo-key",
                     "photoroom_concurrency": 3,
-                    "_photoroom_launch_interval": 0,
                     "upscale": False,
                     "remove_bg": True,
                     "remove_bg_provider": "photoroom",
@@ -378,6 +585,7 @@ class ParallelGenerationTests(unittest.TestCase):
                 },
                 selected_files=create_inputs(temp_dir, 8),
             )
+            worker._photoroom_launch_interval = 0.0
             activity = ProviderActivity()
             release = threading.Event()
             three_started = threading.Event()
@@ -410,7 +618,6 @@ class ParallelGenerationTests(unittest.TestCase):
             ".",
             {
                 "photoroom_concurrency": 3,
-                "_photoroom_launch_interval": 1.0,
             },
         )
         now = [0.0]
@@ -435,15 +642,126 @@ class ParallelGenerationTests(unittest.TestCase):
         self.assertAlmostEqual(starts[3], 1.0, places=6)
         self.assertAlmostEqual(starts[4], 2.0, places=6)
 
+    def test_photoroom_first_post_burst_start_is_one_second_after_delayed_final_burst(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            {"photoroom_concurrency": 3},
+        )
+        now = [0.0]
+        starts = []
+
+        def fake_monotonic():
+            return now[0]
+
+        def fake_sleep(delay):
+            now[0] += delay
+
+        with (
+            patch.object(main.time, "monotonic", side_effect=fake_monotonic),
+            patch.object(main.time, "sleep", side_effect=fake_sleep),
+        ):
+            for launch_time in (0.0, 0.25, 0.5):
+                now[0] = launch_time
+                worker._wait_for_photoroom_launch_slot()
+                starts.append(now[0])
+                worker._photoroom_slots.release()
+            worker._wait_for_photoroom_launch_slot()
+            starts.append(now[0])
+            worker._photoroom_slots.release()
+
+        self.assertEqual(starts[:3], [0.0, 0.25, 0.5])
+        self.assertAlmostEqual(starts[3], 1.5, places=6)
+
+    def test_photoroom_production_pacing_cannot_be_disabled_by_settings(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            {
+                "photoroom_concurrency": 3,
+                "_photoroom_launch_interval": 0,
+            },
+        )
+
+        self.assertEqual(worker._photoroom_launch_interval, 1.0)
+
+    def test_each_concurrent_photoroom_429_retry_gets_a_separately_paced_launch(self):
+        with tempfile.TemporaryDirectory(prefix="parallel-photoroom-retry-") as temp_dir:
+            first_path, second_path = create_inputs(temp_dir, 2)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {
+                    "photoroom_api_key": "photo-key",
+                    "photoroom_concurrency": 2,
+                    "retries": 1,
+                },
+            )
+            response_bytes = create_photoroom_response_bytes(size=(8, 8))
+            clock = [0.0]
+            clock_lock = threading.Lock()
+            attempts_by_thread = defaultdict(int)
+            launch_times = []
+            initial_attempts = threading.Barrier(2)
+
+            def fake_monotonic():
+                with clock_lock:
+                    return clock[0]
+
+            def fake_sleep(delay):
+                if delay >= 1.0:
+                    return
+                with clock_lock:
+                    clock[0] += delay
+
+            def fake_open(req, timeout=None, context=None):
+                thread_id = threading.get_ident()
+                attempts_by_thread[thread_id] += 1
+                with clock_lock:
+                    launch_times.append(clock[0])
+                if attempts_by_thread[thread_id] == 1:
+                    initial_attempts.wait(timeout=1)
+                    raise main.urlerror.HTTPError(
+                        req.full_url,
+                        429,
+                        "Too Many Requests",
+                        {},
+                        BytesIO(b"rate limited"),
+                    )
+                response = BytesIO(response_bytes)
+                response.status = 200
+                response.headers = {}
+                return response
+
+            outputs = [str(Path(temp_dir) / f"output-{index}.png") for index in (1, 2)]
+            with (
+                patch.object(main.time, "monotonic", side_effect=fake_monotonic),
+                patch.object(main.time, "sleep", side_effect=fake_sleep),
+                patch.object(main, "open_url_secure", side_effect=fake_open),
+                ThreadPoolExecutor(max_workers=2) as executor,
+            ):
+                futures = [
+                    executor.submit(worker._run_photoroom_remove_bg, source, output)
+                    for source, output in zip((first_path, second_path), outputs)
+                ]
+                for future in futures:
+                    future.result(timeout=2)
+
+            self.assertEqual(len(launch_times), 4)
+            ordered = sorted(launch_times)
+            self.assertEqual(ordered[:2], [0.0, 0.0])
+            self.assertGreaterEqual(ordered[2], 1.0)
+            self.assertGreaterEqual(ordered[3] - ordered[2], 1.0)
+
     def test_photoroom_launch_guard_does_not_reserve_start_while_provider_is_full(self):
         worker = main.WorkerThread(
             "mode2_process",
             ".",
             {
                 "photoroom_concurrency": 1,
-                "_photoroom_launch_interval": 0,
             },
         )
+        worker._photoroom_launch_interval = 0.0
         self.assertTrue(worker._photoroom_slots.acquire(blocking=False))
         returned = threading.Event()
 

@@ -170,6 +170,7 @@ LICENSE_PUBLIC_KEYS = {
     "license-v1": "2J5W6NVq8-zE5g0MocublzW5aER1hzRqwFLGuzKuwMw",
 }
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
+PHOTOROOM_LAUNCH_INTERVAL_SECONDS = 1.0
 MAX_REMOTE_CONCURRENCY = 6
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
 MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
@@ -194,6 +195,14 @@ LOCAL_REALESRGAN_TIMEOUT_SECONDS = 600
 
 class ProcessingCancelled(RuntimeError):
     pass
+
+
+class ItemExecutionError(RuntimeError):
+    def __init__(self, message, *, stage="", provider="", model=""):
+        super().__init__(str(message or "Item processing failed")[:500])
+        self.stage = str(stage or "")[:100]
+        self.provider = str(provider or "")[:100]
+        self.model = str(model or "")[:200]
 
 
 class ResponseLimitError(RuntimeError):
@@ -846,6 +855,7 @@ class WorkerThread(QThread):
         self._item_context = threading.local()
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         self._diagnostic_context = threading.local()
+        self._provider_lease_context = threading.local()
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
         self._secret_values = tuple(
@@ -897,13 +907,7 @@ class WorkerThread(QThread):
         self.generation_launch_interval = max(0.0, configured_interval)
         self._generation_launch_lock = threading.Lock()
         self._next_generation_launch_at = 0.0
-        try:
-            photoroom_launch_interval = float(
-                settings.get("_photoroom_launch_interval", 1.0)
-            )
-        except (TypeError, ValueError):
-            photoroom_launch_interval = 1.0
-        self._photoroom_launch_interval = max(0.0, photoroom_launch_interval)
+        self._photoroom_launch_interval = PHOTOROOM_LAUNCH_INTERVAL_SECONDS
         self._photoroom_launch_lock = threading.Lock()
         self._photoroom_initial_launches = 0
         self._next_photoroom_launch_at = 0.0
@@ -1027,16 +1031,43 @@ class WorkerThread(QThread):
         if not self.is_running:
             raise ProcessingCancelled("Остановлено пользователем")
 
+    def _ensure_provider_submission_allowed(self):
+        with self._publish_lock:
+            if not self.is_running:
+                raise ProcessingCancelled("Остановлено пользователем")
+            if self.stop_after_current_requested:
+                raise ProcessingCancelled("Остановлено после текущего файла")
+
     @contextmanager
-    def _provider_slot(self, slots):
+    def _provider_lease(self, provider):
+        provider_name = str(provider or "")
+        depths = getattr(self._provider_lease_context, "depths", None)
+        if depths is None:
+            depths = {}
+            self._provider_lease_context.depths = depths
+        current_depth = int(depths.get(provider_name, 0))
+        if current_depth:
+            depths[provider_name] = current_depth + 1
+            try:
+                yield
+            finally:
+                depths[provider_name] -= 1
+            return
+
+        slots = {
+            "kie": self._kie_slots,
+            "photoroom": self._photoroom_slots,
+        }[provider_name]
         acquired = False
         try:
             while not acquired:
-                self._ensure_running()
+                self._ensure_provider_submission_allowed()
                 acquired = slots.acquire(timeout=0.05)
-            self._ensure_running()
+            self._ensure_provider_submission_allowed()
+            depths[provider_name] = 1
             yield
         finally:
+            depths.pop(provider_name, None)
             if acquired:
                 slots.release()
 
@@ -1053,13 +1084,15 @@ class WorkerThread(QThread):
         item_total: int,
         stage: str = "",
     ) -> None:
+        for name in ("model", "provider", "prompt_text", "last_http_status"):
+            setattr(self._diagnostic_context, name, None)
         self._diagnostic_context.item_index = max(1, int(item_index))
         self._diagnostic_context.item_total = max(1, int(item_total))
         self._diagnostic_context.stage = str(stage or "")
 
     def _diagnostic_context_values(self) -> dict[str, object]:
         values: dict[str, object] = {}
-        for name in ("item_index", "item_total", "stage", "model"):
+        for name in ("item_index", "item_total", "stage", "provider", "model"):
             value = getattr(self._diagnostic_context, name, None)
             if value not in (None, ""):
                 values[name] = value
@@ -1089,6 +1122,8 @@ class WorkerThread(QThread):
         }
         for key in (
             "message",
+            "provider",
+            "model",
             "percent",
             "indeterminate",
             "source_path",
@@ -1098,8 +1133,55 @@ class WorkerThread(QThread):
                 event[key] = values[key]
         self.item_progress.emit(event)
 
+    def _execute_item_entry(self, operation, *args):
+        try:
+            return operation(*args)
+        except ProcessingCancelled:
+            raise
+        except ItemExecutionError:
+            raise
+        except Exception as error:
+            raise ItemExecutionError(
+                self._safe_error_text(error),
+                stage=getattr(self._diagnostic_context, "stage", ""),
+                provider=getattr(self._diagnostic_context, "provider", ""),
+                model=getattr(self._diagnostic_context, "model", ""),
+            ) from error
+
+    def _item_failure_details(self, error, fallback_stage):
+        if isinstance(error, ItemExecutionError):
+            return (
+                str(error),
+                error.stage or fallback_stage,
+                error.provider,
+                error.model,
+            )
+        return self._safe_error_text(error), fallback_stage, "", ""
+
     def _protect_secret_headers_from_redirects(self, req):
         protect_secret_headers_from_redirects(req)
+
+    def _request_provider(self, req):
+        parsed = urlparse(str(getattr(req, "full_url", "") or ""))
+        hostname = str(parsed.hostname or "").lower()
+        if str(getattr(req, "full_url", "")) == PHOTOROOM_SEGMENT_URL:
+            return "photoroom"
+        if (
+            hostname == "kie.ai"
+            or hostname.endswith(".kie.ai")
+            or hostname == "redpandaai.co"
+            or hostname.endswith(".redpandaai.co")
+        ):
+            return "kie"
+        return ""
+
+    @contextmanager
+    def _network_attempt_lease(self, provider):
+        if provider:
+            with self._provider_lease(provider):
+                yield
+            return
+        yield
 
     def _mode1_generate(self, process_generated, emit_final=True):
         self.progress.emit("Mode 1: Генерация из промптов")
@@ -1235,34 +1317,37 @@ class WorkerThread(QThread):
                 delay = self._next_generation_launch_at - now
             time.sleep(min(delay, 0.1))
 
-    def _wait_for_photoroom_launch_slot(self) -> None:
-        """Reserve a paced PhotoRoom launch and its provider semaphore slot."""
+    def _wait_for_photoroom_launch(self) -> None:
         while True:
             self._ensure_running()
-            delay = 0.05
             with self._photoroom_launch_lock:
                 now = time.monotonic()
                 in_initial_burst = (
                     self._photoroom_initial_launches < self.photoroom_concurrency
                 )
-                launch_due = (
-                    in_initial_burst or now >= self._next_photoroom_launch_at
-                )
-                if launch_due and self._photoroom_slots.acquire(blocking=False):
+                if in_initial_burst or now >= self._next_photoroom_launch_at:
                     if in_initial_burst:
-                        if self._photoroom_initial_launches == 0:
-                            self._next_photoroom_launch_at = (
-                                now + self._photoroom_launch_interval
-                            )
                         self._photoroom_initial_launches += 1
-                    else:
-                        self._next_photoroom_launch_at = (
-                            now + self._photoroom_launch_interval
-                        )
+                    self._next_photoroom_launch_at = (
+                        now + self._photoroom_launch_interval
+                    )
                     return
-                if not launch_due:
-                    delay = self._next_photoroom_launch_at - now
+                delay = self._next_photoroom_launch_at - now
             time.sleep(min(delay, 0.1))
+
+    def _wait_for_photoroom_launch_slot(self) -> None:
+        """Compatibility helper that returns with one paced slot reserved."""
+        acquired = False
+        try:
+            while not acquired:
+                self._ensure_provider_submission_allowed()
+                acquired = self._photoroom_slots.acquire(timeout=0.05)
+            self._ensure_provider_submission_allowed()
+            self._wait_for_photoroom_launch()
+        except Exception:
+            if acquired:
+                self._photoroom_slots.release()
+            raise
 
     def _generate_entry(
         self,
@@ -1381,6 +1466,7 @@ class WorkerThread(QThread):
                 except StopIteration:
                     return False
                 future = executor.submit(
+                    self._execute_item_entry,
                     self._generate_entry,
                     idx,
                     total,
@@ -1414,27 +1500,31 @@ class WorkerThread(QThread):
                         )
                         self.progress.emit(f"[{idx}/{total}] Остановлено")
                     except Exception as error:
-                        self._set_diagnostic_context(idx, total, "generation")
+                        safe_error, stage, provider, model = self._item_failure_details(
+                            error,
+                            "processing" if process_generated else "generation",
+                        )
                         self._emit_diagnostic(
                             "item_finished",
+                            item_index=idx,
+                            item_total=total,
+                            stage=stage,
+                            provider=provider,
+                            model=model,
                             outcome="failed",
-                            error_message=self._safe_error_text(error),
+                            error_message=safe_error,
                         )
                         self.progress.emit(
-                            f"[{idx}/{total}] Ошибка: {self._safe_error_text(error)}"
+                            f"[{idx}/{total}] Ошибка: {safe_error}"
                         )
                         self._emit_item_progress(
                             idx,
                             total,
-                            str(
-                                getattr(
-                                    self._diagnostic_context,
-                                    "stage",
-                                    "processing" if process_generated else "generation",
-                                )
-                            ),
+                            stage,
                             "failed",
-                            message=self._safe_error_text(error),
+                            provider=provider,
+                            model=model,
+                            message=safe_error,
                         )
                     else:
                         self._emit_item_progress(
@@ -1725,7 +1815,8 @@ class WorkerThread(QThread):
                 if not self.is_running:
                     break
                 try:
-                    out_path = self._process_file_entry(
+                    out_path = self._execute_item_entry(
+                        self._process_file_entry,
                         idx,
                         total,
                         file_path,
@@ -1742,10 +1833,17 @@ class WorkerThread(QThread):
                     self.progress.emit("Остановлено пользователем")
                     break
                 except Exception as error:
-                    self._set_diagnostic_context(idx, total, "processing")
-                    safe_error = self._safe_error_text(error)
+                    safe_error, stage, provider, model = self._item_failure_details(
+                        error,
+                        "processing",
+                    )
                     self._emit_diagnostic(
                         "item_finished",
+                        item_index=idx,
+                        item_total=total,
+                        stage=stage,
+                        provider=provider,
+                        model=model,
                         outcome="failed",
                         error_message=safe_error,
                     )
@@ -1753,8 +1851,10 @@ class WorkerThread(QThread):
                     self._emit_item_progress(
                         idx,
                         total,
-                        "processing",
+                        stage,
                         "failed",
+                        provider=provider,
+                        model=model,
                         message=safe_error,
                     )
                 else:
@@ -1793,6 +1893,7 @@ class WorkerThread(QThread):
                 except StopIteration:
                     return False
                 future = executor.submit(
+                    self._execute_item_entry,
                     self._process_file_entry,
                     idx,
                     total,
@@ -1821,10 +1922,17 @@ class WorkerThread(QThread):
                             "cancelled",
                         )
                     except Exception as error:
-                        self._set_diagnostic_context(idx, total, "processing")
-                        safe_error = self._safe_error_text(error)
+                        safe_error, stage, provider, model = self._item_failure_details(
+                            error,
+                            "processing",
+                        )
                         self._emit_diagnostic(
                             "item_finished",
+                            item_index=idx,
+                            item_total=total,
+                            stage=stage,
+                            provider=provider,
+                            model=model,
                             outcome="failed",
                             error_message=safe_error,
                         )
@@ -1832,8 +1940,10 @@ class WorkerThread(QThread):
                         self._emit_item_progress(
                             idx,
                             total,
-                            "processing",
+                            stage,
                             "failed",
+                            provider=provider,
+                            model=model,
                             message=safe_error,
                         )
                     else:
@@ -2137,6 +2247,8 @@ class WorkerThread(QThread):
                 if self._uses_photoroom_remove_bg()
                 else self.kie_remove_bg_model
             )
+            self._diagnostic_context.provider = remove_provider
+            self._diagnostic_context.model = remove_model
             self._emit_diagnostic(
                 "stage_started",
                 provider=remove_provider,
@@ -3312,22 +3424,26 @@ class WorkerThread(QThread):
         last_error = None
         ssl_context = build_ssl_context()
         self._protect_secret_headers_from_redirects(req)
+        provider = self._request_provider(req)
         method = req.get_method().upper()
         retry_limit = self.retries if method in {"GET", "HEAD", "OPTIONS"} else 0
         rate_limit_retry_limit = min(max(self.retries, 1), 2)
         for attempt in range(max(retry_limit, rate_limit_retry_limit) + 1):
             self._ensure_running()
             try:
-                with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
-                    response_status = getattr(resp, "status", None)
-                    response_getcode = getattr(resp, "getcode", None)
-                    if response_status is None and callable(response_getcode):
-                        try:
-                            response_status = response_getcode()
-                        except Exception:
-                            response_status = None
-                    self._diagnostic_context.last_http_status = int(response_status or 200)
-                    response = read_response_limited(resp, MAX_API_RESPONSE_BYTES)
+                with self._network_attempt_lease(provider):
+                    if provider == "photoroom":
+                        self._wait_for_photoroom_launch()
+                    with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
+                        response_status = getattr(resp, "status", None)
+                        response_getcode = getattr(resp, "getcode", None)
+                        if response_status is None and callable(response_getcode):
+                            try:
+                                response_status = response_getcode()
+                            except Exception:
+                                response_status = None
+                        self._diagnostic_context.last_http_status = int(response_status or 200)
+                        response = read_response_limited(resp, MAX_API_RESPONSE_BYTES)
                 self._ensure_running()
                 return response
             except urlerror.HTTPError as e:
@@ -3430,15 +3546,12 @@ class WorkerThread(QThread):
             method="POST",
         )
 
-        self._wait_for_photoroom_launch_slot()
-        try:
+        with self._provider_lease("photoroom"):
             return self._execute_photoroom_remove_bg_request(
                 req,
                 input_path,
                 output_path,
             )
-        finally:
-            self._photoroom_slots.release()
 
     def _execute_photoroom_remove_bg_request(self, req, input_path, output_path):
         self.progress.emit("  Удаление фона через PhotoRoom Standard...")
@@ -3507,6 +3620,10 @@ class WorkerThread(QThread):
         return output_path
 
     def _kie_upload_file(self, file_path):
+        with self._provider_lease("kie"):
+            return self._kie_upload_file_leased(file_path)
+
+    def _kie_upload_file_leased(self, file_path):
         boundary = "----ClipartBoundary" + uuid.uuid4().hex
         filename = os.path.basename(file_path)
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -3649,7 +3766,7 @@ class WorkerThread(QThread):
         return task_id
 
     def _kie_run_model_task(self, model, image_url, extra_input=None):
-        with self._provider_slot(self._kie_slots):
+        with self._provider_lease("kie"):
             input_payload = {} if model == KIE_TOPAZ_MODEL_ID else {"image": image_url}
             if isinstance(extra_input, dict):
                 input_payload.update(extra_input)
@@ -3681,7 +3798,7 @@ class WorkerThread(QThread):
         return urls
 
     def _kie_generate_image(self, prompt, references=None):
-        with self._provider_slot(self._kie_slots):
+        with self._provider_lease("kie"):
             reference_items = split_references(references or [])
             normalized_model = self._select_generation_model(reference_items)
             has_references = bool(reference_items)
