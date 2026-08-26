@@ -6,11 +6,11 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Audit the user-visible changes stranded on the divergent
-`codex/tech-debt-11` branch, port approved items without a wholesale merge, and
-then prepare a distinctly versioned Windows replacement build. Verify images
-and absence of console windows in the installed application before any server
-publication.**
+Current next task: **Obtain owner acceptance of the detailed diagnostic
+journal, then correct the provider-contract discrepancies listed in
+`docs/API_CONTRACTS.md`, beginning with removal of automatic paid KIE model
+probes. Do not start a Windows build or publish an artifact without a new,
+explicit owner command.**
 
 ## Phase 1 - Preparation
 
@@ -1363,7 +1363,7 @@ Reference: `LICENSE_UPDATE_SERVICE_PRD.md`
 
 ### Task 56 - Approve License And Update Service Architecture
 
-Status: In Review
+Status: Complete
 
 Goal:
 Approve the business rules, security boundaries, API surface, database model,
@@ -1376,28 +1376,28 @@ Acceptance:
 - [x] Offline use is prohibited and cannot be authorized by a local cache.
 - [x] Multiple products and separate update entitlements are represented.
 - [x] The first stage requires no new paid service.
-- [ ] Exact subdomain is approved.
-- [ ] License duration policy is approved.
-- [ ] Update entitlement policy is approved.
+- [x] Exact service URL is `https://services.etsyneuroclub.com/licenses`.
+- [x] License duration is represented by `expires_at`; perpetual licenses are supported.
+- [x] Update entitlement is represented independently by `updates_until`.
 - [x] Independent architecture/security review findings are reflected in the PRD.
 
 ### Task 57 - Create Separate Private Server Repository
 
-Status: Local foundation prepared - private remote still required
+Status: Complete
 
 Scope:
 - Create the server repository only after architecture approval.
-- A local repository foundation now exists at
+- The separate private repository exists at
   `/root/projects/Clipart Generator/license-service`, with environment-only
-  staging configuration and tests. It has no API, database, secrets, or
-  deployment behavior.
+  configuration, migrations, tests, API, administration, and deployment
+  documentation. Secrets, database state, and artifacts remain outside Git.
 - Add server-specific instructions, secret exclusions, migrations, tests, and
   deployment boundaries.
 - Do not copy `licenses.db`, desktop secrets, or release artifacts.
 
 ### Task 58 - Implement Core License API And Database
 
-Status: Planned - requires architecture approval
+Status: Implemented and deployed
 
 Scope:
 - Implement products, high-entropy keys, HMAC lookup and protected key
@@ -1420,12 +1420,13 @@ Verification:
 
 ### Task 59 - Implement Protected Administrative Panel
 
-Status: Planned - requires architecture approval
+Status: Implemented and deployed
 
 Scope:
 - Create the first administrator locally; expose no public registration.
-- Administrator login with secure sessions, free TOTP two-factor
-  authentication, recovery codes, and rate limiting.
+- Administrator login uses the `admin` username and password. TOTP is the
+  additional second factor; secure sessions, recovery codes, and rate limiting
+  are implemented.
 - Generate one or multiple keys and show full values only on creation/export.
 - Search, suspend, revoke, extend, and manually reset a device binding.
 - Display safe device/license identifiers and an immutable audit history.
@@ -1435,7 +1436,7 @@ Scope:
 
 ### Task 60 - Prepare Free Staging Deployment On VDS
 
-Status: Planned - deployment requires separate approval
+Status: Deployed; recurring operations remain
 
 Scope:
 - Configure the approved subdomain, free TLS, reverse proxy, isolated service,
@@ -1445,6 +1446,12 @@ Scope:
   complete a restore test before production.
 - Do not alter existing VDS projects or reuse their database credentials.
 - Do not start production service or publish releases in this task.
+
+Verification:
+- [x] DNS, TLS, reverse proxy, isolated PostgreSQL, health checks and service deployment completed.
+- [x] Backup and rollback image were prepared before deployment.
+- [x] First restore drill completed successfully on 2026-08-14.
+- [ ] Continue periodic backup/restore and monitoring checks as operations work.
 
 ### Task 61 - Integrate Mandatory Online License Gate
 

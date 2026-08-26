@@ -20,7 +20,7 @@
 - Основной код: `main.py`.
 - GUI: PyQt6.
 - Уже есть KIE-обработка:
-  - `topaz/upscale`;
+  - `topaz/image-upscale`;
   - `recraft/crisp-upscale`;
   - `recraft/remove-background`.
 - Уже есть trim:
@@ -150,7 +150,7 @@ KIE остается fallback, если локальная модель дает
   "local_realesrgan_profile": "clipart",
   "local_realesrgan_scale": 4,
   "local_realesrgan_after_scale": 4,
-  "kie_upscale_after_model": "topaz/upscale",
+  "kie_upscale_after_model": "topaz/image-upscale",
   "remove_bg_provider": "kie",
   "photoroom_api_key": "",
   "local_rembg_profile": "clipart",

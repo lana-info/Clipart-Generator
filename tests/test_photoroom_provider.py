@@ -80,7 +80,10 @@ class PhotoRoomProviderTests(unittest.TestCase):
                 selected_files=[str(source_path)],
             )
             progress = []
+            diagnostics = []
             worker.progress.connect(progress.append)
+            worker.diagnostic.connect(diagnostics.append)
+            worker._set_diagnostic_context(1, 1, "background_removal")
             captured = {}
 
             def fake_request(worker_self, req, timeout=None):
@@ -106,6 +109,56 @@ class PhotoRoomProviderTests(unittest.TestCase):
                 self.assertEqual(result.mode, "RGBA")
                 self.assertEqual(result.getchannel("A").getextrema(), (0, 255))
             self.assertNotIn(DUMMY_PHOTOROOM_KEY, "\n".join(progress))
+            submitted = next(
+                event for event in diagnostics
+                if event["event"] == "provider_task_submitted"
+            )
+            finished = next(
+                event for event in diagnostics
+                if event["event"] == "stage_finished"
+            )
+            self.assertEqual(submitted["provider"], "photoroom")
+            self.assertEqual(submitted["model"], "remove-background-v1")
+            self.assertEqual(finished["width"], 20)
+            self.assertEqual(finished["height"], 16)
+            self.assertTrue(finished["has_alpha"])
+            self.assertNotIn(
+                DUMMY_PHOTOROOM_KEY,
+                str(diagnostics),
+            )
+
+    def test_input_contract_is_checked_before_photoroom_request(self):
+        self.assertEqual(main.PHOTOROOM_MAX_BYTES, 50 * 1024 * 1024)
+        self.assertEqual(main.PHOTOROOM_MAX_DIMENSION, 6000)
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-limits-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            output_path = Path(temp_dir) / "output.png"
+            create_rgb_source(source_path, size=(20, 16))
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                photoroom_settings(),
+                selected_files=[str(source_path)],
+            )
+            with (
+                patch.object(
+                    main,
+                    "validate_photoroom_input",
+                    side_effect=RuntimeError("PhotoRoom input exceeds 50 MB"),
+                ) as validate_mock,
+                patch.object(worker, "_request_with_retries") as request_mock,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "50 MB"):
+                    worker._run_photoroom_remove_bg(str(source_path), str(output_path))
+            validate_mock.assert_called_once_with(str(source_path))
+            request_mock.assert_not_called()
+
+    def test_unsupported_heic_is_rejected_before_photoroom_request(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-heic-") as temp_dir:
+            source_path = Path(temp_dir) / "source.heic"
+            source_path.write_bytes(b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64)
+            with self.assertRaisesRegex(RuntimeError, "PNG, JPG, or WEBP"):
+                main.validate_photoroom_input(str(source_path))
 
     def test_missing_key_and_invalid_response_are_actionable(self):
         with tempfile.TemporaryDirectory(prefix="clipart-photoroom-errors-") as temp_dir:
@@ -133,9 +186,18 @@ class PhotoRoomProviderTests(unittest.TestCase):
                 lambda worker_self, req, timeout=None: b'{"error":"invalid image"}',
                 invalid_worker,
             )
+            diagnostics = []
+            invalid_worker.diagnostic.connect(diagnostics.append)
+            invalid_worker._set_diagnostic_context(1, 1, "background_removal")
             with self.assertRaisesRegex(RuntimeError, "PhotoRoom вернул некорректное изображение"):
                 invalid_worker._run_photoroom_remove_bg(str(source_path), str(output_path))
             self.assertFalse(output_path.exists())
+            failed = next(
+                event for event in diagnostics
+                if event["event"] == "provider_task_failed"
+            )
+            self.assertEqual(failed["provider"], "photoroom")
+            self.assertIn("некорректное изображение", failed["error_message"])
 
     def test_oversized_upload_is_rejected_before_photoroom_request(self):
         with tempfile.TemporaryDirectory(prefix="clipart-photoroom-upload-limit-") as temp_dir:

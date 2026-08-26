@@ -8,6 +8,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from v3_provider_registry import (
+    KIE_TOPAZ_MODEL_ID,
+    normalize_kie_upscale_model,
+    normalize_topaz_upscale_factor,
+)
+
 
 PROJECT_STATE_SCHEMA_VERSION = 1
 MAX_DRAFT_BYTES = 2 * 1024 * 1024
@@ -53,6 +59,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
     ProjectMode.CLIPART: (
         StepId.PROJECT,
         StepId.PROMPTS,
+        StepId.PROMPT_REVIEW,
         StepId.GENERATION,
         StepId.PROCESSING_OPTIONS,
         StepId.REVIEW_RUN,
@@ -61,6 +68,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
     ProjectMode.PINTEREST: (
         StepId.PROJECT,
         StepId.PROMPTS,
+        StepId.PROMPT_REVIEW,
         StepId.PIN_FORMAT_MODEL,
         StepId.PROCESSING_OPTIONS,
         StepId.REVIEW_RUN,
@@ -178,17 +186,25 @@ class PromptEntry:
 class PromptGeneratorData:
     theme: str = ""
     subjects: list[str] = field(default_factory=list)
+    variations: list[str] = field(default_factory=list)
     style: str = ""
     palette: str = ""
     composition: str = ""
     background: str = ""
+    consistency: str = ""
     restrictions: list[str] = field(default_factory=list)
+    # Kept in the draft schema for backward compatibility with 3.0.5 files.
+    # New prompt series use the object × variation combinations instead.
     count: int = 12
 
     def __post_init__(self) -> None:
         self.theme = _text(self.theme, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
         self.subjects = _string_list(
             self.subjects,
+            limit=MAX_PROMPT_GENERATOR_ITEMS,
+        )
+        self.variations = _string_list(
+            self.variations,
             limit=MAX_PROMPT_GENERATOR_ITEMS,
         )
         self.style = _text(self.style, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
@@ -200,6 +216,9 @@ class PromptGeneratorData:
         )
         self.background = _text(
             self.background, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH
+        )
+        self.consistency = _text(
+            self.consistency, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH
         )
         self.restrictions = _string_list(
             self.restrictions,
@@ -216,10 +235,12 @@ class PromptGeneratorData:
         return {
             "theme": self.theme,
             "subjects": list(self.subjects),
+            "variations": list(self.variations),
             "style": self.style,
             "palette": self.palette,
             "composition": self.composition,
             "background": self.background,
+            "consistency": self.consistency,
             "restrictions": list(self.restrictions),
             "count": self.count,
         }
@@ -236,50 +257,23 @@ class PromptGeneratorData:
         return cls(
             theme=data.get("theme", base.theme),
             subjects=data.get("subjects", base.subjects),
+            variations=data.get("variations", base.variations),
             style=data.get("style", base.style),
             palette=data.get("palette", base.palette),
             composition=data.get("composition", base.composition),
             background=data.get("background", base.background),
+            consistency=data.get("consistency", base.consistency),
             restrictions=data.get("restrictions", base.restrictions),
             count=data.get("count", base.count),
         )
 
 
 def clipart_prompt_generator_defaults() -> PromptGeneratorData:
-    return PromptGeneratorData(
-        style="cohesive professional clipart illustration",
-        palette="a consistent harmonious palette across the full series",
-        composition=(
-            "one isolated subject, centered, fully visible, clear silhouette"
-        ),
-        background="pure solid white background, no environment or ground",
-        restrictions=[
-            "no text",
-            "no logo",
-            "no watermark",
-            "no frame",
-            "no cropped parts",
-            "no cast or contact shadow",
-        ],
-    )
+    return PromptGeneratorData()
 
 
 def pinterest_prompt_generator_defaults() -> PromptGeneratorData:
-    return PromptGeneratorData(
-        style="polished editorial social media image",
-        palette="a consistent harmonious palette across the full series",
-        composition=(
-            "vertical composition, clear focal point, balanced negative space, "
-            "safe zones near the edges"
-        ),
-        background="cohesive full-frame background supporting the main subject",
-        restrictions=[
-            "no watermark",
-            "no logo",
-            "no mandatory text overlay",
-            "no collage or editable layer layout",
-        ],
-    )
+    return PromptGeneratorData()
 
 
 def _prompt_entries(value: Any) -> list[PromptEntry]:
@@ -445,8 +439,8 @@ class ImageOperationData:
     upscale_after: bool = False
     upscale_after_provider: str = "local_realesrgan"
     upscale_factor: int = 4
-    kie_upscale_model: str = "topaz/upscale"
-    kie_upscale_after_model: str = "topaz/upscale"
+    kie_upscale_model: str = KIE_TOPAZ_MODEL_ID
+    kie_upscale_after_model: str = KIE_TOPAZ_MODEL_ID
     local_realesrgan_profile: str = "clipart"
     local_realesrgan_scale: int = 4
     local_realesrgan_after_scale: int = 4
@@ -492,17 +486,13 @@ class ImageOperationData:
             self.upscale_after_provider,
             limit=100,
         ) or "local_realesrgan"
-        self.upscale_factor = _bounded_int(
-            self.upscale_factor,
-            default=4,
-            minimum=1,
-            maximum=16,
+        self.upscale_factor = normalize_topaz_upscale_factor(self.upscale_factor)
+        self.kie_upscale_model = normalize_kie_upscale_model(
+            _text(self.kie_upscale_model, limit=200)
         )
-        self.kie_upscale_model = _text(self.kie_upscale_model, limit=200) or "topaz/upscale"
-        self.kie_upscale_after_model = _text(
-            self.kie_upscale_after_model,
-            limit=200,
-        ) or "topaz/upscale"
+        self.kie_upscale_after_model = normalize_kie_upscale_model(
+            _text(self.kie_upscale_after_model, limit=200)
+        )
         self.local_realesrgan_profile = _text(
             self.local_realesrgan_profile,
             limit=100,
@@ -623,10 +613,10 @@ class ImageOperationData:
                 "local_realesrgan",
             ),
             upscale_factor=config.get("upscale_factor", 4),
-            kie_upscale_model=config.get("kie_upscale_model", "topaz/upscale"),
+            kie_upscale_model=config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID),
             kie_upscale_after_model=config.get(
                 "kie_upscale_after_model",
-                config.get("kie_upscale_model", "topaz/upscale"),
+                config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID),
             ),
             local_realesrgan_profile=config.get(
                 "local_realesrgan_profile",
@@ -990,10 +980,12 @@ def _validate_prompt_generator_section(
         (
             "theme",
             "subjects",
+            "variations",
             "style",
             "palette",
             "composition",
             "background",
+            "consistency",
             "restrictions",
             "count",
         ),
@@ -1005,8 +997,11 @@ def _validate_prompt_generator_section(
         "palette",
         "composition",
         "background",
+        "consistency",
     ):
         value = section.get(key)
+        if key in {"consistency"} and value is None:
+            continue
         if not isinstance(value, str):
             raise ProjectStateError(
                 f"Project draft field {name}.{key} must be a string"
@@ -1015,8 +1010,10 @@ def _validate_prompt_generator_section(
             raise ProjectStateError(
                 f"Project draft field {name}.{key} is too long"
             )
-    for key in ("subjects", "restrictions"):
+    for key in ("subjects", "variations", "restrictions"):
         values = section.get(key)
+        if key == "variations" and values is None:
+            continue
         if not isinstance(values, list) or not all(
             isinstance(value, str) for value in values
         ):
@@ -1262,11 +1259,6 @@ class ProjectState:
                 normalized_step = step if isinstance(step, StepId) else StepId(step)
             except (TypeError, ValueError):
                 continue
-            if (
-                normalized_step is StepId.PROMPT_REVIEW
-                and normalized_mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}
-            ):
-                normalized_step = StepId.PROMPTS
             if normalized_step in ROUTES[normalized_mode]:
                 normalized_steps[normalized_mode] = normalized_step
         self.current_step_by_mode = normalized_steps
@@ -1299,11 +1291,6 @@ class ProjectState:
             normalized = step if isinstance(step, StepId) else StepId(step)
         except (TypeError, ValueError) as error:
             raise ProjectStateError(f"Unsupported step: {step!r}") from error
-        if (
-            normalized is StepId.PROMPT_REVIEW
-            and self.mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}
-        ):
-            normalized = StepId.PROMPTS
         if normalized not in self.route:
             raise ProjectStateError(
                 f"Step {normalized.value!r} is not part of {self.mode.value!r} route"
@@ -1332,7 +1319,11 @@ class ProjectState:
             )
             if target in {StepId.PROJECT, StepId.REVIEW_RUN} and not self.common.work_dir:
                 issues.append("work_dir_required")
-            if target in {StepId.PROMPTS, StepId.REVIEW_RUN}:
+            if target in {
+                StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
+                StepId.REVIEW_RUN,
+            }:
                 if not prompts:
                     issues.append("prompts_required")
             if target in {

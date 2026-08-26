@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-25
+Updated: 2026-08-26
 
 ## Operating model
 
@@ -19,7 +19,7 @@ Updated: 2026-08-25
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/fix-packaged-mode-artwork`
+- Provider-contract checkpoint branch: `fix/provider-api-contracts`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,9 +27,84 @@ Updated: 2026-08-25
 
 ## Next task
 
-Owner target-machine acceptance of the corrected Windows `3.0.5` installer
-from GitHub run `32906900417`. Do not publish this build to the license server
-until the owner accepts it.
+After owner approval, build the integrated `develop/3.0` source for Windows and
+perform packaged acceptance for the prompt flow, provider routes and diagnostic
+journal. Do not start that build or publish `3.0.5` without a new, explicit
+owner command.
+
+## Provider contract checkpoint — 2026-08-26
+
+- Ordinary generation no longer creates paid KIE availability probes; live
+  model checks remain explicit user actions only.
+- GPT Image 2, Qwen Image 2 and FLUX.2 use mode-specific documented ratios,
+  resolutions, prompt limits, and reference limits before upload.
+- Recraft Crisp, Recraft Remove Background and PhotoRoom preflight now match
+  their documented file and image constraints.
+- The deployed license service is recorded accurately: service URL approved,
+  license and update terms implemented, and the admin panel uses username and
+  password with TOTP as an additional second factor.
+- Full offline pytest passes: 669 tests, 1 expected Linux skip, 2 deselected
+  and 83 subtests; syntax, sensitive-artifact, startup-smoke and diff checks pass.
+- No live/paid API request or release build is part of this checkpoint.
+
+## Detailed diagnostics checkpoint — 2026-08-26
+
+- Diagnostic schema v2 records a correlated timeline for each image: safe file
+  metadata, stage/provider/model, parameters, duration, HTTP status, task ID,
+  polling state, result count and bounded provider error.
+- KIE generation/processing, PhotoRoom, RunPod and principal local processing
+  stages emit structured events without additional network requests. Legacy
+  progress parsing remains as a compatibility fallback.
+- The journal can filter by severity, provider and image and displays Russian
+  labels at the supported 980 x 700 minimum. Session storage remains bounded at
+  8 MiB and 24 MiB total across the newest three launches.
+- Exact prompts, API/licence keys, headers, full paths, URLs, raw responses and
+  image contents are excluded from memory logs, persistent files and ZIP
+  exports. Provider messages that echo the current prompt are redacted.
+- `docs/API_CONTRACTS.md` records official links, current calls, diagnostic
+  events and confirmed discrepancies; diagnostics does not claim those
+  discrepancies are fixed.
+- Full offline pytest passes: 653 tests, 1 expected Linux skip, 2 deselected and
+  83 subtests. No live/paid API request, build or release was run.
+
+## KIE Topaz checkpoint — 2026-08-26
+
+- Root cause confirmed without a paid call: the application still sent the
+  retired `topaz/upscale` model and silently replaced configured 4× with 8×.
+- The worker, V3 state, provider registry and legacy config now migrate to
+  `topaz/image-upscale`; the shared editor exposes only 1×, 2× and 4×.
+- Local inputs are rejected before upload when they are not JPEG/PNG/WEBP,
+  exceed 10 MB or would exceed 20,000 px on the longest output side. The error
+  states that no KIE task was created.
+- Full local pytest passes: 634 tests, 1 expected Linux skip, 2 deselected and
+  83 subtests. No network or paid KIE request was made.
+
+## Prompt flow checkpoint — 2026-08-25
+
+- Clipart and Pinterest now use two explicit steps: prompt source/input, then
+  series and reference review. The approved mode-selection screen is unchanged.
+- The input step presents three visible source choices: generated series, one
+  ready multiline prompt with up to five references, and CSV import. Sources
+  only add; replace-all actions and the duplicate first-step table are removed.
+- The generator combines objects × variations and joins only visible,
+  user-entered fields. It adds no hidden mode text, numbering or requirements;
+  the first two exact results and total count are shown before creation.
+- CSV mapping has one import action, a brief count/error summary and automatic
+  navigation to review; there is no duplicate preview table.
+- The review step gives the prompt text two thirds of a larger table, supports
+  search across hundreds of rows, and keeps compact prompt/reference actions.
+- Offscreen screenshots were reviewed at 1400×900 and the supported 980×700
+  minimum. The variable text fields are aligned and the 200-row review table
+  uses internal scrolling.
+- The whole V3 application now starts at 1120×780, cannot shrink below 980×700,
+  preserves a user-resized window across menu and every route step, and gives
+  large pages internal vertical/horizontal scrolling instead of resizing the
+  top-level window.
+- Full local pytest passes: 629 tests, 1 expected Linux skip, 2 deselected and
+  78 subtests. No paid request or release build was started.
+- GitHub and Azure Windows pipelines are configured to capture both prompt
+  steps in addition to mode selection from the installed copy. Execution of
+  the updated gate awaits a separately approved installer build.
 
 ## Current implementation checkpoint — 2026-08-24
 
@@ -55,7 +130,7 @@ task per second). Vectorization and Patterns remain deferred.
   smoke can save 1366×900 screenshots of mode selection and Clipart prompts;
   GitHub produces them from the application after Inno Setup installation and
   uploads them beside the installer for visual review.
-- Full local pytest passes: 605 tests, 1 expected Linux skip, 2 deselected and
+- Full local pytest passes: 613 tests, 1 expected Linux skip, 2 deselected and
   73 subtests. No paid KIE request was made. Windows installed-copy rendered
   smoke and a small real KIE speed/credit run remain pending.
 - GitHub Windows run `32906900417` succeeded from source commit `9222eea`.

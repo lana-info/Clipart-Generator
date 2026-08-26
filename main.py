@@ -73,6 +73,11 @@ from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
 from security_redaction import redact_text
+from provider_diagnostics import (
+    build_provider_event,
+    count_provider_results,
+    inspect_image_metadata as inspect_diagnostic_image,
+)
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
 from network_security import HttpsOnlyRedirectHandler as SharedHttpsOnlyRedirectHandler
@@ -85,7 +90,16 @@ from model_catalog import (
     SUPPORTED_GENERATION_MODEL_IDS as CATALOG_SUPPORTED_GENERATION_MODEL_IDS,
     VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
     MODEL_SPECS,
+    ratios_for_mode,
     resolve_generation_endpoint,
+    validate_generation_contract,
+)
+from v3_provider_registry import (
+    KIE_TOPAZ_MODEL_ID,
+    TOPAZ_MAX_FILE_BYTES,
+    TOPAZ_MAX_OUTPUT_SIDE,
+    normalize_kie_upscale_model,
+    normalize_topaz_upscale_factor,
 )
 
 try:
@@ -160,10 +174,13 @@ MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_API_UPLOAD_BYTES = 128 * 1024 * 1024
 MAX_PROVIDER_IMAGE_DIMENSION = 32_768
 MAX_PROVIDER_IMAGE_PIXELS = 70_000_000
-RECRAFT_CRISP_MAX_BYTES = 5 * 1024 * 1024
-RECRAFT_CRISP_MAX_DIMENSION = 4096
-RECRAFT_CRISP_MAX_PIXELS = 4 * 1024 * 1024
-RECRAFT_CRISP_MIN_DIMENSION = 32
+RECRAFT_CRISP_MAX_BYTES = 10 * 1024 * 1024
+RECRAFT_REMOVE_BG_MAX_BYTES = 5 * 1024 * 1024
+RECRAFT_REMOVE_BG_MAX_DIMENSION = 4096
+RECRAFT_REMOVE_BG_MAX_PIXELS = 16 * 1024 * 1024
+RECRAFT_REMOVE_BG_MIN_DIMENSION = 256
+PHOTOROOM_MAX_BYTES = 50 * 1024 * 1024
+PHOTOROOM_MAX_DIMENSION = 6000
 MAX_UPDATE_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
 MAX_UPDATE_DOWNLOAD_RETRIES = 3
@@ -284,12 +301,14 @@ MODEL_CAPABILITIES = {
 }
 
 RATIO_OPTIONS_ORDER = [
-    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
+    "1:2", "2:1", "1:3", "3:1", "9:16", "16:9", "9:21", "21:9",
+    "1:4", "4:1", "1:8", "8:1",
 ]
 RESOLUTION_OPTIONS_ORDER = ["1K", "2K", "4K", "8K"]
 
 PROCESSING_PRICING = {
-    "topaz/upscale": "40 credits / $0.20",
+    "topaz/image-upscale": "40 credits / $0.20",
     "recraft/crisp-upscale": "0.5 credits / $0.0025",
     "recraft/remove-background": "1 credit / $0.005",
 }
@@ -711,22 +730,61 @@ def validate_recraft_crisp_upscale_input(image_path):
     try:
         file_size = os.path.getsize(image_path)
         if file_size > RECRAFT_CRISP_MAX_BYTES:
-            raise RuntimeError("Recraft Crisp input file size exceeds 5 MB")
+            raise RuntimeError("Recraft Crisp input file size exceeds 10 MB")
         with Image.open(image_path) as image:
             if image.format not in {"PNG", "JPEG", "WEBP"}:
                 raise RuntimeError("Recraft Crisp input must be PNG, JPG, or WEBP")
             if getattr(image, "n_frames", 1) != 1:
                 raise RuntimeError("Recraft Crisp input must be single-frame")
-            if min(image.size) < RECRAFT_CRISP_MIN_DIMENSION:
-                raise RuntimeError("Recraft Crisp input dimension is below 32 pixels")
-            if max(image.size) > RECRAFT_CRISP_MAX_DIMENSION:
-                raise RuntimeError("Recraft Crisp input dimension exceeds 4096 pixels")
-            if image.width * image.height > RECRAFT_CRISP_MAX_PIXELS:
-                raise RuntimeError("Recraft Crisp input exceeds 4 MP")
+            image.load()
     except RuntimeError:
         raise
     except (OSError, UnidentifiedImageError) as exc:
         raise RuntimeError("Recraft Crisp input image is invalid") from exc
+
+
+def validate_recraft_remove_background_input(image_path):
+    """Validate a local source before upload to Recraft Remove Background."""
+    try:
+        if os.path.getsize(image_path) > RECRAFT_REMOVE_BG_MAX_BYTES:
+            raise RuntimeError("Recraft Remove Background input exceeds 5 MB")
+        with Image.open(image_path) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise RuntimeError("Recraft Remove Background input must be PNG, JPG, or WEBP")
+            if getattr(image, "n_frames", 1) != 1:
+                raise RuntimeError("Recraft Remove Background input must be single-frame")
+            if min(image.size) < RECRAFT_REMOVE_BG_MIN_DIMENSION:
+                raise RuntimeError("Recraft Remove Background input dimension is below 256 pixels")
+            if max(image.size) > RECRAFT_REMOVE_BG_MAX_DIMENSION:
+                raise RuntimeError("Recraft Remove Background input dimension exceeds 4096 pixels")
+            if image.width * image.height > RECRAFT_REMOVE_BG_MAX_PIXELS:
+                raise RuntimeError("Recraft Remove Background input exceeds 16 MP")
+            image.load()
+    except RuntimeError:
+        raise
+    except (OSError, UnidentifiedImageError) as exc:
+        raise RuntimeError("Recraft Remove Background input image is invalid") from exc
+
+
+def validate_photoroom_input(image_path):
+    """Validate a local source against PhotoRoom Remove Background limits."""
+    try:
+        if os.path.getsize(image_path) > PHOTOROOM_MAX_BYTES:
+            raise RuntimeError("PhotoRoom input exceeds 50 MB")
+        if Path(image_path).suffix.lower() in {".heic", ".heif"}:
+            raise RuntimeError("PhotoRoom input must be PNG, JPG, or WEBP")
+        with Image.open(image_path) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise RuntimeError("PhotoRoom input must be PNG, JPG, or WEBP")
+            if getattr(image, "n_frames", 1) != 1:
+                raise RuntimeError("PhotoRoom input must be single-frame")
+            if max(image.size) > PHOTOROOM_MAX_DIMENSION:
+                raise RuntimeError("PhotoRoom input dimension exceeds 6000 pixels")
+            image.load()
+    except RuntimeError:
+        raise
+    except (OSError, UnidentifiedImageError) as exc:
+        raise RuntimeError("PhotoRoom input image is invalid") from exc
 
 
 def validate_upscale_after_background_order(remove_bg, upscale_after, provider, model):
@@ -766,6 +824,7 @@ class WorkerThread(QThread):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
     progress_value = pyqtSignal(int)
+    diagnostic = pyqtSignal(object)
 
     def __init__(self, mode, work_dir, settings, selected_files=None, generated_prompts=None, parent=None):
         super().__init__(parent)
@@ -780,6 +839,7 @@ class WorkerThread(QThread):
         self._precleaned_paths: set[str] = set()
         self._metadata_cleaned_for_current_item = False
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self._diagnostic_context = threading.local()
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
         self._secret_values = tuple(
@@ -852,10 +912,16 @@ class WorkerThread(QThread):
         self.trim_enabled = bool(settings.get("trim_enabled", False))
         self.trim_mode = str(settings.get("trim_mode", "alpha") or "alpha")
         self.export_300_dpi = bool(settings.get("export_300_dpi", False))
-        self.kie_upscale_model = settings.get("kie_upscale_model", "topaz/upscale")
-        self.kie_upscale_after_model = settings.get("kie_upscale_after_model", self.kie_upscale_model)
+        self.kie_upscale_model = normalize_kie_upscale_model(
+            settings.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID)
+        )
+        self.kie_upscale_after_model = normalize_kie_upscale_model(
+            settings.get("kie_upscale_after_model", self.kie_upscale_model)
+        )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
-        self.upscale_factor = int(settings.get("upscale_factor", 4) or 4)
+        self.upscale_factor = normalize_topaz_upscale_factor(
+            settings.get("upscale_factor", 4)
+        )
         self.upscale_provider = settings.get("upscale_provider", "kie")
         self.upscale_after_provider = settings.get("upscale_after_provider", "local_realesrgan")
         self.unsharp_enabled = bool(settings.get("unsharp_enabled", False))
@@ -937,7 +1003,37 @@ class WorkerThread(QThread):
             raise ProcessingCancelled("Остановлено пользователем")
 
     def _safe_error_text(self, error, limit=500):
-        return safe_error_text(error, self._secret_values, limit=limit)
+        prompt_text = str(
+            getattr(self._diagnostic_context, "prompt_text", "") or ""
+        ).strip()
+        redactions = self._secret_values + ((prompt_text,) if prompt_text else ())
+        return safe_error_text(error, redactions, limit=limit)
+
+    def _set_diagnostic_context(
+        self,
+        item_index: int,
+        item_total: int,
+        stage: str = "",
+    ) -> None:
+        self._diagnostic_context.item_index = max(1, int(item_index))
+        self._diagnostic_context.item_total = max(1, int(item_total))
+        self._diagnostic_context.stage = str(stage or "")
+
+    def _diagnostic_context_values(self) -> dict[str, object]:
+        values: dict[str, object] = {}
+        for name in ("item_index", "item_total", "stage", "model"):
+            value = getattr(self._diagnostic_context, name, None)
+            if value not in (None, ""):
+                values[name] = value
+        return values
+
+    def _emit_diagnostic(self, event: str, **values: object) -> None:
+        try:
+            context = self._diagnostic_context_values()
+            context.update(values)
+            self.diagnostic.emit(build_provider_event(event, **context))
+        except Exception:
+            return
 
     def _protect_secret_headers_from_redirects(self, req):
         protect_secret_headers_from_redirects(req)
@@ -976,10 +1072,19 @@ class WorkerThread(QThread):
                 return
 
             self.progress.emit(f"[{idx}/{total}] Генерация")
+            self._set_diagnostic_context(idx, total, "generation")
             self._emit_file_progress(idx, total, 4)
             try:
                 prompt_text = entry.get("prompt", "")
+                self._diagnostic_context.prompt_text = prompt_text
                 references = entry.get("references", [])
+                self._emit_diagnostic(
+                    "item_input_inspected",
+                    prompt_index=idx,
+                    prompt_chars=len(prompt_text),
+                    reference_count=len(split_references(references)),
+                    operation_type="generation",
+                )
                 self._emit_file_progress(idx, total, 18)
                 image_url = self._kie_generate_image(prompt_text, references)
                 self._emit_file_progress(idx, total, 36)
@@ -1025,11 +1130,21 @@ class WorkerThread(QThread):
                 )
                 self._emit_file_progress(idx, total, 100)
                 self.progress.emit(f"  Итог сохранён: {out_path}")
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="succeeded",
+                    **inspect_diagnostic_image(out_path),
+                )
                 done += 1
             except (ProcessingCancelled, VisibleMarkCleanupCancelled):
                 self.progress.emit("Остановлено пользователем")
                 return
             except Exception as e:
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="failed",
+                    error_message=self._safe_error_text(e),
+                )
                 self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
             if self._stop_after_current_if_requested():
@@ -1063,11 +1178,20 @@ class WorkerThread(QThread):
         raw_dir: str,
         output_dir: str,
     ) -> None:
+        self._set_diagnostic_context(idx, total, "generation")
         self._wait_for_generation_launch_slot()
         self.progress.emit(f"[{idx}/{total}] Генерация")
         self._emit_file_progress(idx, total, 4)
         prompt_text = entry.get("prompt", "")
+        self._diagnostic_context.prompt_text = prompt_text
         references = entry.get("references", [])
+        self._emit_diagnostic(
+            "item_input_inspected",
+            prompt_index=idx,
+            prompt_chars=len(prompt_text),
+            reference_count=len(split_references(references)),
+            operation_type="generation",
+        )
         self._emit_file_progress(idx, total, 18)
         image_url = self._kie_generate_image(prompt_text, references)
         self._emit_file_progress(idx, total, 36)
@@ -1088,6 +1212,11 @@ class WorkerThread(QThread):
         )
         self._emit_file_progress(idx, total, 100)
         self.progress.emit(f"  Итог сохранён: {out_path}")
+        self._emit_diagnostic(
+            "item_finished",
+            outcome="succeeded",
+            **inspect_diagnostic_image(out_path),
+        )
 
     def _mode1_generate_parallel(self, emit_final=True):
         raw_dir = self._create_run_raw_dir()
@@ -1141,6 +1270,12 @@ class WorkerThread(QThread):
                     except ProcessingCancelled:
                         self.progress.emit(f"[{idx}/{total}] Остановлено")
                     except Exception as error:
+                        self._set_diagnostic_context(idx, total, "generation")
+                        self._emit_diagnostic(
+                            "item_finished",
+                            outcome="failed",
+                            error_message=self._safe_error_text(error),
+                        )
                         self.progress.emit(
                             f"[{idx}/{total}] Ошибка: {self._safe_error_text(error)}"
                         )
@@ -1233,6 +1368,7 @@ class WorkerThread(QThread):
                 return
 
             self.progress.emit(f"[{idx}/{total}] Обработка файла: {os.path.basename(file_path)}")
+            self._set_diagnostic_context(idx, total, "processing")
             self._emit_file_progress(idx, total, 4)
             try:
                 if not os.path.isfile(file_path):
@@ -1244,6 +1380,11 @@ class WorkerThread(QThread):
                     continue
 
                 source_path = file_path
+                self._emit_diagnostic(
+                    "item_input_inspected",
+                    operation_type="processing",
+                    **inspect_diagnostic_image(source_path),
+                )
 
                 if (
                     self.visible_mark_cleanup_enabled
@@ -1284,11 +1425,21 @@ class WorkerThread(QThread):
                 self._emit_file_progress(idx, total, 100)
 
                 self.progress.emit(f"  Итог сохранён: {out_path}")
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="succeeded",
+                    **inspect_diagnostic_image(out_path),
+                )
                 done += 1
             except (ProcessingCancelled, VisibleMarkCleanupCancelled):
                 self.progress.emit("Остановлено пользователем")
                 return
             except Exception as e:
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="failed",
+                    error_message=self._safe_error_text(e),
+                )
                 self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
             if self._stop_after_current_if_requested():
@@ -1411,6 +1562,16 @@ class WorkerThread(QThread):
         if self._can_use_legacy_kie_processing_pipeline():
             if self.kie_upscale_model == "recraft/crisp-upscale" and not source_url:
                 validate_recraft_crisp_upscale_input(source_path)
+            if (
+                self.kie_upscale_model == KIE_TOPAZ_MODEL_ID
+                and not source_url
+                and source_path
+                and os.path.isfile(source_path)
+            ):
+                self._validate_topaz_source_file(
+                    source_path,
+                    self._resolve_upscale_factor(self.kie_upscale_model),
+                )
             uploaded_url = source_url or self._kie_upload_file(source_path)
             self._ensure_running()
             if not source_url:
@@ -1502,13 +1663,52 @@ class WorkerThread(QThread):
             self._ensure_running()
 
         if self.unsharp_enabled:
+            self._diagnostic_context.stage = "unsharp"
+            unsharp_started = time.monotonic()
+            self._emit_diagnostic(
+                "stage_started",
+                provider="local",
+                model="pillow-unsharp-mask",
+                parameters={
+                    "amount": self.unsharp_amount,
+                    "radius": self.unsharp_radius,
+                    "threshold": self.unsharp_threshold,
+                },
+                outcome="started",
+            )
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
             current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
             current_url = None
             local_result = True
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="local",
+                model="pillow-unsharp-mask",
+                outcome="succeeded",
+                elapsed_ms=round((time.monotonic() - unsharp_started) * 1000),
+                **inspect_diagnostic_image(current_path),
+            )
             self._ensure_running()
 
         if self.remove_bg:
+            self._diagnostic_context.stage = "background_removal"
+            remove_started = time.monotonic()
+            remove_provider = self.remove_bg_provider
+            remove_model = (
+                self.local_rembg_model
+                if self._uses_local_rembg_remove_bg()
+                else "ben2"
+                if self._uses_local_ben2_remove_bg()
+                else "remove-background-v1"
+                if self._uses_photoroom_remove_bg()
+                else self.kie_remove_bg_model
+            )
+            self._emit_diagnostic(
+                "stage_started",
+                provider=remove_provider,
+                model=remove_model,
+                outcome="started",
+            )
             self.progress.emit("  Этап обработки: background_removal; status=running")
             try:
                 if self._uses_local_rembg_remove_bg():
@@ -1538,6 +1738,13 @@ class WorkerThread(QThread):
                     current_url = None
                     local_result = True
                 else:
+                    if (
+                        self.kie_remove_bg_model == "recraft/remove-background"
+                        and not current_url
+                        and current_path
+                        and os.path.isfile(current_path)
+                    ):
+                        validate_recraft_remove_background_input(current_path)
                     current_url = self._ensure_kie_url(current_url, current_path)
                     self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
                     current_url = self._kie_run_model_task(self.kie_remove_bg_model, current_url)
@@ -1547,9 +1754,28 @@ class WorkerThread(QThread):
                     current_path = nobg_path
                     local_result = False
             except Exception:
+                self._emit_diagnostic(
+                    "stage_finished",
+                    provider=remove_provider,
+                    model=remove_model,
+                    outcome="failed",
+                    elapsed_ms=round((time.monotonic() - remove_started) * 1000),
+                )
                 self.progress.emit("  Этап обработки: background_removal; status=failed")
                 raise
             self.progress.emit("  Этап обработки: background_removal; status=complete")
+            self._emit_diagnostic(
+                "stage_finished",
+                provider=remove_provider,
+                model=remove_model,
+                outcome="succeeded",
+                elapsed_ms=round((time.monotonic() - remove_started) * 1000),
+                **(
+                    inspect_diagnostic_image(current_path)
+                    if current_path and os.path.isfile(current_path)
+                    else {}
+                ),
+            )
             self._ensure_running()
 
         if self.upscale_after:
@@ -1567,13 +1793,31 @@ class WorkerThread(QThread):
             self._ensure_running()
 
         if self.edge_shrink_enabled:
+            self._diagnostic_context.stage = "edge_cleanup"
+            edge_started = time.monotonic()
+            self._emit_diagnostic(
+                "stage_started",
+                provider="local",
+                model="alpha-edge-cleanup",
+                parameters={"edge_pixels": self.edge_shrink_pixels},
+                outcome="started",
+            )
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-            if self.remove_bg or self._has_alpha_channel(current_path):
+            edge_applied = self.remove_bg or self._has_alpha_channel(current_path)
+            if edge_applied:
                 current_path = self._edge_shrink_pipeline_step(current_path, raw_dir, idx, prefix)
                 current_url = None
                 local_result = True
             else:
                 self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="local",
+                model="alpha-edge-cleanup",
+                outcome="succeeded" if edge_applied else "skipped",
+                elapsed_ms=round((time.monotonic() - edge_started) * 1000),
+                **inspect_diagnostic_image(current_path),
+            )
             self._ensure_running()
 
         return current_path if local_result else current_url
@@ -1641,6 +1885,23 @@ class WorkerThread(QThread):
         kie_model,
     ):
         stage = "upscale_after" if "after" in step_name else "upscale_before"
+        self._diagnostic_context.stage = stage
+        upscale_started = time.monotonic()
+        upscale_model = (
+            "realesrgan-ncnn-vulkan" if provider == "local_realesrgan" else kie_model
+        )
+        upscale_parameters = {
+            "scale": local_scale
+            if provider == "local_realesrgan"
+            else self._resolve_upscale_factor(kie_model)
+        }
+        self._emit_diagnostic(
+            "stage_started",
+            provider=provider,
+            model=upscale_model,
+            parameters=upscale_parameters,
+            outcome="started",
+        )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "local_realesrgan":
             current_path = self._ensure_local_path(
@@ -1667,10 +1928,24 @@ class WorkerThread(QThread):
                 else:
                     self._active_local_realesrgan_scale = previous_scale
             self.progress.emit(f"  Этап обработки: {stage}; status=complete")
+            self._emit_diagnostic(
+                "stage_finished",
+                provider=provider,
+                model=upscale_model,
+                parameters=upscale_parameters,
+                outcome="succeeded",
+                elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
+                **inspect_diagnostic_image(current_path),
+            )
             return current_path, None, True
 
         if kie_model == "recraft/crisp-upscale" and current_path and os.path.isfile(current_path):
             validate_recraft_crisp_upscale_input(current_path)
+        if kie_model == KIE_TOPAZ_MODEL_ID and current_path and os.path.isfile(current_path):
+            self._validate_topaz_source_file(
+                current_path,
+                self._resolve_upscale_factor(kie_model),
+            )
         current_url = self._ensure_kie_url(current_url, current_path)
         current_url = self._upscale_pipeline_step(
             current_url,
@@ -1683,7 +1958,43 @@ class WorkerThread(QThread):
         )
         current_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
         self.progress.emit(f"  Этап обработки: {stage}; status=complete")
+        self._emit_diagnostic(
+            "stage_finished",
+            provider=provider,
+            model=upscale_model,
+            parameters=upscale_parameters,
+            outcome="succeeded",
+            elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
+        )
         return current_path, current_url, False
+
+    def _validate_topaz_source_file(self, source_path, upscale_factor):
+        file_size = os.path.getsize(source_path)
+        if file_size > TOPAZ_MAX_FILE_BYTES:
+            raise ValueError(
+                "Topaz принимает файлы размером не более 10 МБ; "
+                "задача KIE не была создана"
+            )
+        try:
+            with Image.open(source_path) as source_image:
+                image_format = str(source_image.format or "").upper()
+                width, height = source_image.size
+        except (OSError, UnidentifiedImageError) as error:
+            raise ValueError(
+                "Topaz не смог прочитать исходное изображение; "
+                "задача KIE не была создана"
+            ) from error
+        if image_format not in {"JPEG", "PNG", "WEBP"}:
+            raise ValueError(
+                "Topaz поддерживает только JPEG, PNG и WEBP; "
+                "задача KIE не была создана"
+            )
+        if max(width, height) * upscale_factor > TOPAZ_MAX_OUTPUT_SIDE:
+            raise ValueError(
+                "После апскейла самая длинная сторона превысит 20 000 px; "
+                "уменьшите масштаб или исходное изображение. "
+                "Задача KIE не была создана"
+            )
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
@@ -1723,7 +2034,7 @@ class WorkerThread(QThread):
     ):
         model_name = (model_name or self.kie_upscale_model).strip()
         self.progress.emit(f"  Апскейл через {model_name}...")
-        if model_name == "topaz/upscale":
+        if model_name == KIE_TOPAZ_MODEL_ID:
             upscale_input = {
                 "image_url": image_url,
                 "upscale_factor": str(upscale_factor),
@@ -2422,8 +2733,8 @@ class WorkerThread(QThread):
         model_name = (model_name or self.kie_upscale_model or "").strip()
         if model_name == "recraft/crisp-upscale":
             return 4
-        if model_name == "topaz/upscale":
-            return 8
+        if model_name == KIE_TOPAZ_MODEL_ID:
+            return normalize_topaz_upscale_factor(self.upscale_factor)
         return 4
 
     def _normalize_trim_mode(self, value):
@@ -2546,51 +2857,10 @@ class WorkerThread(QThread):
             selected_model = fallback_model
 
     def _ensure_models_available_before_run(self, run_mode, prompts):
-        if run_mode == "process_only":
-            return True
-
-        api_key = self.kie_api_key_input.text().strip()
-        if not api_key:
-            return True
-
-        timeout = max(10, int(self.config.get("timeout", 60)))
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
-        if not self._probe_model_with_fallback_prompt(
-            combo_box=self.text_generation_model_combo,
-            preferred_model_id=text_model,
-            fallback_model_id="gpt-image/1.5-text-to-image",
-            ratio=self.text_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=None,
-        ):
-            return False
-
-        references_needed = False
-        for entry in prompts or []:
-            if isinstance(entry, dict) and split_references(entry.get("references", [])):
-                references_needed = True
-                break
-
-        if not references_needed:
-            return True
-
-        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
-        return self._probe_model_with_fallback_prompt(
-            combo_box=self.reference_generation_model_combo,
-            preferred_model_id=reference_model,
-            fallback_model_id="gpt-image/1.5-image-to-image",
-            ratio=self.reference_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=["https://picsum.photos/768/768"],
-        )
+        # Ordinary runs must never create paid provider tasks as an availability
+        # probe. Contract compatibility is validated locally before upload; a
+        # live model check remains available only through the explicit UI action.
+        return True
 
     def _kie_headers(self):
         return {
@@ -2611,10 +2881,19 @@ class WorkerThread(QThread):
             self._ensure_running()
             try:
                 with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
+                    response_status = getattr(resp, "status", None)
+                    response_getcode = getattr(resp, "getcode", None)
+                    if response_status is None and callable(response_getcode):
+                        try:
+                            response_status = response_getcode()
+                        except Exception:
+                            response_status = None
+                    self._diagnostic_context.last_http_status = int(response_status or 200)
                     response = read_response_limited(resp, MAX_API_RESPONSE_BYTES)
                 self._ensure_running()
                 return response
             except urlerror.HTTPError as e:
+                self._diagnostic_context.last_http_status = int(e.code)
                 last_error = RuntimeError(f"HTTP status={e.code}")
 
                 # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
@@ -2667,6 +2946,7 @@ class WorkerThread(QThread):
             raise ValueError("Не указан PhotoRoom API Key")
         if not os.path.isfile(input_path):
             raise FileNotFoundError(f"Файл для PhotoRoom не найден: {input_path}")
+        validate_photoroom_input(input_path)
 
         boundary = "----ClipartPhotoRoomBoundary" + uuid.uuid4().hex
         filename = re.sub(r'[\r\n"]', "_", os.path.basename(input_path)) or "image.png"
@@ -2713,7 +2993,26 @@ class WorkerThread(QThread):
         )
 
         self.progress.emit("  Удаление фона через PhotoRoom Standard...")
-        response_bytes = self._request_with_retries(req, timeout=max(60, self.timeout))
+        started = time.monotonic()
+        self._emit_diagnostic(
+            "provider_task_submitted",
+            provider="photoroom",
+            model="remove-background-v1",
+            parameters={"output_format": "png"},
+            **inspect_diagnostic_image(input_path),
+        )
+        try:
+            response_bytes = self._request_with_retries(req, timeout=max(60, self.timeout))
+        except Exception as error:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="photoroom",
+                model="remove-background-v1",
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
+            raise
         try:
             with Image.open(BytesIO(response_bytes)) as response_image:
                 if response_image.format != "PNG" or "A" not in response_image.getbands():
@@ -2731,10 +3030,31 @@ class WorkerThread(QThread):
         except ProcessingCancelled:
             raise
         except Exception as exc:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="photoroom",
+                model="remove-background-v1",
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=(
+                    "PhotoRoom вернул некорректное изображение: "
+                    f"{self._safe_error_text(exc)}"
+                ),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError("PhotoRoom вернул некорректное изображение") from exc
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         result_image.save(output_path, format="PNG", **save_kwargs)
+        self._emit_diagnostic(
+            "stage_finished",
+            provider="photoroom",
+            model="remove-background-v1",
+            outcome="succeeded",
+            http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+            output_bytes=len(response_bytes),
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+            **inspect_diagnostic_image(output_path),
+        )
         return output_path
 
     def _kie_upload_file(self, file_path):
@@ -2742,7 +3062,29 @@ class WorkerThread(QThread):
         filename = os.path.basename(file_path)
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        file_bytes = self._read_upload_file(file_path)
+        started = time.monotonic()
+        self._emit_diagnostic(
+            "provider_upload_started",
+            provider="kie",
+            **inspect_diagnostic_image(file_path),
+        )
+        try:
+            file_bytes = self._read_upload_file(file_path)
+        except ProcessingCancelled:
+            raise
+        except Exception as error:
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="kie",
+                outcome="failed",
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
+            raise RuntimeError(
+                "Не удалось прочитать файл для загрузки в KIE; "
+                "задача KIE не была создана: "
+                f"{self._safe_error_text(error)}"
+            ) from error
 
         parts = []
         parts.append(f"--{boundary}\r\n".encode("utf-8"))
@@ -2771,37 +3113,93 @@ class WorkerThread(QThread):
             data = payload.get("data") or {}
             download_url = data.get("downloadUrl") or data.get("url") or payload.get("url")
             if download_url:
+                self._emit_diagnostic(
+                    "provider_upload_finished",
+                    provider="kie",
+                    outcome="succeeded",
+                    http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                    uploaded_bytes=len(file_bytes),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                    filename=filename,
+                )
                 return download_url
             raise RuntimeError("KIE upload did not return a download URL")
         except ProcessingCancelled:
             raise
         except Exception as error:
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="kie",
+                outcome="failed",
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError(
-                f"Не удалось загрузить файл в KIE: {self._safe_error_text(error)}"
+                "Не удалось загрузить файл в KIE; задача KIE не была создана: "
+                f"{self._safe_error_text(error)}"
             ) from error
 
     def _kie_create_task(self, model, input_payload):
+        started = time.monotonic()
+        self._diagnostic_context.model = str(model or "")
         headers = self._kie_headers()
         headers["Content-Type"] = "application/json"
-        result = self._request_json(
-            "https://api.kie.ai/api/v1/jobs/createTask",
-            method="POST",
-            payload={"model": model, "input": input_payload},
-            headers=headers,
-            timeout=max(30, self.timeout),
-        )
+        try:
+            result = self._request_json(
+                "https://api.kie.ai/api/v1/jobs/createTask",
+                method="POST",
+                payload={"model": model, "input": input_payload},
+                headers=headers,
+                timeout=max(30, self.timeout),
+            )
+        except Exception as error:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="kie",
+                model=model,
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
+            raise
         if int(result.get("code", 0)) != 200:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="kie",
+                model=model,
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_code=result.get("code"),
+                error_message=self._safe_error_text(result.get("msg") or "request rejected"),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError(
                 f"KIE createTask rejected [errorCode={result.get('code', '-')}; "
                 f"message={self._safe_error_text(result.get('msg') or 'request rejected')}]"
             )
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="kie",
+                model=model,
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message="KIE createTask не вернул taskId",
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError("KIE createTask не вернул taskId")
+        self._emit_diagnostic(
+            "provider_task_submitted",
+            provider="kie",
+            model=model,
+            task=task_id,
+            http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         return task_id
 
     def _kie_run_model_task(self, model, image_url, extra_input=None):
-        input_payload = {} if model == "topaz/upscale" else {"image": image_url}
+        input_payload = {} if model == KIE_TOPAZ_MODEL_ID else {"image": image_url}
         if isinstance(extra_input, dict):
             input_payload.update(extra_input)
         task_id = self._kie_create_task(model, input_payload)
@@ -2832,8 +3230,25 @@ class WorkerThread(QThread):
         return urls
 
     def _kie_generate_image(self, prompt, references=None):
-        reference_urls = self._resolve_reference_urls(references)
-        normalized_model = self._select_generation_model(reference_urls)
+        reference_items = split_references(references or [])
+        normalized_model = self._select_generation_model(reference_items)
+        has_references = bool(reference_items)
+        ratio, resolution = self._get_generation_profile(has_references)
+        reference_sizes = tuple(
+            os.path.getsize(reference)
+            for reference in reference_items
+            if not urlparse(reference).scheme and os.path.isfile(reference)
+        )
+        validate_generation_contract(
+            normalized_model,
+            has_references=has_references,
+            ratio=ratio,
+            resolution=resolution,
+            prompt=prompt,
+            reference_count=len(reference_items),
+            reference_sizes=reference_sizes,
+        )
+        reference_urls = self._resolve_reference_urls(reference_items)
         model_meta = GENERATION_MODEL_META.get(normalized_model, {})
         model_type = model_meta.get("type", "text_to_image")
 
@@ -2846,8 +3261,8 @@ class WorkerThread(QThread):
             return self._kie_generate_4o_image(prompt)
         return self._kie_generate_generic_model(normalized_model, prompt, reference_urls=reference_urls)
 
-    def _normalize_model_ratio(self, model_name, ratio):
-        allowed = self._get_model_capabilities(model_name)["ratios"]
+    def _normalize_model_ratio(self, model_name, ratio, has_references=False):
+        allowed = set(ratios_for_mode(model_name, has_references))
         if ratio in allowed or not allowed:
             return ratio
         fallback_ratio = "1:1" if "1:1" in allowed else next(iter(sorted(allowed)))
@@ -2886,7 +3301,11 @@ class WorkerThread(QThread):
             if prompt_ratio:
                 ratio_setting = prompt_ratio
                 self.progress.emit(f"  Пропорция из промпта: {prompt_ratio} (UI=auto)")
-        ratio = self._normalize_model_ratio(model_name, ratio_setting)
+        ratio = self._normalize_model_ratio(
+            model_name,
+            ratio_setting,
+            has_references=bool(reference_urls),
+        )
         quality = self._normalize_model_quality(model_name)
         capabilities = self._get_model_capabilities(model_name)
         allowed_resolutions = capabilities["resolutions"]
@@ -2966,7 +3385,7 @@ class WorkerThread(QThread):
                 "nsfw_checker": True,
             }
             if reference_urls:
-                payload["image_url"] = list(reference_urls)
+                payload["image_url"] = reference_urls[0]
             return payload
 
         if model_name == "qwen/image-edit":
@@ -3189,7 +3608,11 @@ class WorkerThread(QThread):
 
     def _normalize_ratio(self, value):
         raw = (value or "").strip()
-        allowed = {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"}
+        allowed = {
+            "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
+            "1:2", "2:1", "1:3", "3:1", "9:16", "16:9", "9:21", "21:9",
+            "1:4", "4:1", "1:8", "8:1",
+        }
         legacy_map = {
             "1024x1024": "1:1",
             "1024x1536": "3:4",
@@ -3226,52 +3649,152 @@ class WorkerThread(QThread):
         timeout_sec = self.generation_wait_timeout
         deadline = time.time() + timeout_sec
         headers = self._kie_headers()
+        started = time.monotonic()
+        poll_attempt = 0
         while time.time() < deadline:
             self._ensure_running()
+            poll_attempt += 1
 
             url = f"https://api.kie.ai/api/v1/gpt4o-image/record-info?{parse.urlencode({'taskId': task_id})}"
-            result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            try:
+                result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            except Exception as error:
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                    error_message=self._safe_error_text(error),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
+                raise
             if int(result.get("code", 0)) != 200:
                 raise RuntimeError(f"KIE 4o status failed (code {result.get('code', '-')})")
 
             data = result.get("data") or {}
             status = str(data.get("status", "")).upper()
+            self._emit_diagnostic(
+                "provider_task_polled",
+                provider="kie",
+                task=task_id,
+                provider_state=status or "UNKNOWN",
+                poll_attempt=poll_attempt,
+                http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             self.progress.emit(f"  4o статус: {status}")
             if status == "SUCCESS":
                 urls = ((data.get("response") or {}).get("resultUrls") or [])
                 if urls:
+                    self._emit_diagnostic(
+                        "provider_task_succeeded",
+                        provider="kie",
+                        task=task_id,
+                        provider_state=status,
+                        result_count=len(urls),
+                        elapsed_ms=round((time.monotonic() - started) * 1000),
+                    )
                     return urls[0]
                 raise RuntimeError("4o Image не вернул resultUrls")
             if status in {"FAILED", "FAIL", "ERROR"}:
-                raise RuntimeError(data.get("errorMessage") or "4o Image вернул ошибку")
+                fail_message = self._safe_error_text(
+                    data.get("errorMessage") or "4o Image вернул ошибку"
+                )
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    provider_state=status,
+                    error_message=fail_message,
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
+                raise RuntimeError(fail_message)
             time.sleep(self.status_poll_interval)
+        self._emit_diagnostic(
+            "provider_task_failed",
+            provider="kie",
+            task=task_id,
+            provider_state="timeout",
+            error_code="timeout",
+            error_message="Превышено время ожидания 4o Image",
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         raise TimeoutError("Превышено время ожидания 4o Image")
 
     def _kie_wait_result(self, task_id):
         timeout_sec = self.generation_wait_timeout
         deadline = time.time() + timeout_sec
         headers = self._kie_headers()
+        poll_attempt = 0
+        started = time.monotonic()
         while time.time() < deadline:
             self._ensure_running()
+            poll_attempt += 1
 
             url = f"https://api.kie.ai/api/v1/jobs/recordInfo?{parse.urlencode({'taskId': task_id})}"
-            result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            try:
+                result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            except Exception as error:
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                    error_message=self._safe_error_text(error),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
+                raise
             if int(result.get("code", 0)) != 200:
                 raise RuntimeError(f"KIE status failed (code {result.get('code', '-')})")
 
             data = result.get("data") or {}
             state = str(data.get("state", "")).lower()
+            self._emit_diagnostic(
+                "provider_task_polled",
+                provider="kie",
+                task=task_id,
+                provider_state=state or "unknown",
+                poll_attempt=poll_attempt,
+                http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             self.progress.emit(f"  Статус: {state}")
             if state in {"success", "succeeded"}:
+                self._emit_diagnostic(
+                    "provider_task_succeeded",
+                    provider="kie",
+                    task=task_id,
+                    provider_state=state,
+                    result_count=count_provider_results(data.get("resultJson")),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
                 return self._extract_result_url(data.get("resultJson"))
             if state in {"fail", "failed", "error"}:
                 error_code = data.get("failCode") or data.get("errorCode") or "unknown"
                 fail_message = self._safe_error_text(data.get("failMsg") or "KIE вернул fail")
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    provider_state=state,
+                    error_code=error_code,
+                    error_message=fail_message,
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
                 raise RuntimeError(
                     f"KIE task failed [taskId={task_id}; errorCode={error_code}; "
                     f"message={fail_message}]"
                 )
             time.sleep(self.status_poll_interval)
+        self._emit_diagnostic(
+            "provider_task_failed",
+            provider="kie",
+            task=task_id,
+            provider_state="timeout",
+            error_code="timeout",
+            error_message="Превышено время ожидания результата KIE",
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         raise TimeoutError("Превышено время ожидания результата KIE")
 
     def _extract_result_url(self, result_json_raw):
@@ -3316,6 +3839,7 @@ class WorkerThread(QThread):
 
         last_error = None
         attempts = [headers, {"User-Agent": headers["User-Agent"], "Accept": "*/*"}, {}]
+        started = time.monotonic()
         for idx, h in enumerate(attempts, start=1):
             try:
                 self._ensure_running()
@@ -3329,6 +3853,15 @@ class WorkerThread(QThread):
                         f.write(content)
                 if self.export_300_dpi and output_path.lower().endswith(".png") and "output" in output_path.lower():
                     self._set_png_dpi(output_path, dpi=300)
+                self._emit_diagnostic(
+                    "provider_result_downloaded",
+                    provider="kie" if trusted_kie_host else "external",
+                    result_index=1,
+                    http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                    downloaded_bytes=len(content),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                    **inspect_diagnostic_image(output_path),
+                )
                 return
             except ProcessingCancelled:
                 raise
@@ -3338,6 +3871,14 @@ class WorkerThread(QThread):
                     f"  Download попытка {idx} не удалась: {self._safe_error_text(e)}"
                 )
 
+        self._emit_diagnostic(
+            "stage_finished",
+            provider="kie" if trusted_kie_host else "external",
+            outcome="failed",
+            http_status=getattr(self._diagnostic_context, "last_http_status", None),
+            error_message=self._safe_error_text(last_error),
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         raise RuntimeError(
             f"Не удалось скачать файл по URL ({host}): {self._safe_error_text(last_error)}"
         )
@@ -4061,8 +4602,8 @@ class MainWindow(QMainWindow):
             "cleanup_remove_all": False,
             "cleanup_preserve_icc": True,
             "cleanup_preserve_dpi": True,
-            "kie_upscale_model": "topaz/upscale",
-            "kie_upscale_after_model": "topaz/upscale",
+            "kie_upscale_model": KIE_TOPAZ_MODEL_ID,
+            "kie_upscale_after_model": KIE_TOPAZ_MODEL_ID,
             "kie_remove_bg_model": "recraft/remove-background",
             "run_mode": "generate_only",
             "prompt_input_mode": "list",
@@ -4078,6 +4619,18 @@ class MainWindow(QMainWindow):
                     self.config[key] = value
         else:
             self.config = default_config
+        self.config["kie_upscale_model"] = normalize_kie_upscale_model(
+            self.config.get("kie_upscale_model")
+        )
+        self.config["kie_upscale_after_model"] = normalize_kie_upscale_model(
+            self.config.get(
+                "kie_upscale_after_model",
+                self.config["kie_upscale_model"],
+            )
+        )
+        self.config["upscale_factor"] = normalize_topaz_upscale_factor(
+            self.config.get("upscale_factor", 4)
+        )
         # Local Real-ESRGAN is shipped with the application; an old external path is ignored.
         self.config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
         # URL обновлений всегда фиксированный и не редактируется в UI.
@@ -4739,13 +5292,13 @@ class MainWindow(QMainWindow):
         )
 
         self.kie_upscale_model_combo = QComboBox()
-        self.kie_upscale_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
-        uim = self.config.get("kie_upscale_model", "topaz/upscale")
+        self.kie_upscale_model_combo.addItems([KIE_TOPAZ_MODEL_ID, "recraft/crisp-upscale"])
+        uim = self.config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID)
         ui_index = self.kie_upscale_model_combo.findText(uim)
         self.kie_upscale_model_combo.setCurrentIndex(ui_index if ui_index >= 0 else 0)
 
         self.kie_upscale_after_model_combo = QComboBox()
-        self.kie_upscale_after_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
+        self.kie_upscale_after_model_combo.addItems([KIE_TOPAZ_MODEL_ID, "recraft/crisp-upscale"])
         upscale_after_model = self.config.get("kie_upscale_after_model", uim)
         upscale_after_model_index = self.kie_upscale_after_model_combo.findText(upscale_after_model)
         self.kie_upscale_after_model_combo.setCurrentIndex(
@@ -5099,8 +5652,8 @@ class MainWindow(QMainWindow):
     def _get_model_capabilities(self, model_id):
         return get_model_capabilities(model_id)
 
-    def _get_ordered_ratios_for_model(self, model_id):
-        allowed = self._get_model_capabilities(model_id)["ratios"]
+    def _get_ordered_ratios_for_model(self, model_id, has_references=False):
+        allowed = set(ratios_for_mode(model_id, has_references))
         if not allowed:
             return ["1:1"]
         ordered = [value for value in RATIO_OPTIONS_ORDER if value in allowed]
@@ -5152,7 +5705,7 @@ class MainWindow(QMainWindow):
         )
         self._set_combo_values(
             self.reference_ratio_combo,
-            self._get_ordered_ratios_for_model(reference_model),
+            self._get_ordered_ratios_for_model(reference_model, has_references=True),
             preferred_reference_ratio,
         )
 
@@ -5365,8 +5918,10 @@ class MainWindow(QMainWindow):
         if provider_combo.currentData() == "local_realesrgan":
             return normalize_local_realesrgan_scale(local_scale_combo.currentData() or 4)
         model_name = kie_model_combo.currentText().strip()
-        if model_name == "topaz/upscale":
-            return 8
+        if model_name == KIE_TOPAZ_MODEL_ID:
+            return normalize_topaz_upscale_factor(
+                self.config.get("upscale_factor", 4)
+            )
         return 4
 
     def update_upscale_total_label(self, *_):
@@ -6109,44 +6664,10 @@ class MainWindow(QMainWindow):
             ):
                 return False
 
-        api_key = self.kie_api_key_input.text().strip()
-        if not api_key:
-            return True
-
-        timeout = max(10, int(self.config.get("timeout", 60)))
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
-        if not self._probe_model_with_fallback_prompt(
-            combo_box=self.text_generation_model_combo,
-            preferred_model_id=text_model,
-            fallback_model_id="gpt-image/1.5-text-to-image",
-            ratio=self.text_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=None,
-            runtime_settings=runtime_settings,
-        ):
-            return False
-
-        if not references_needed:
-            return True
-
-        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
-        return self._probe_model_with_fallback_prompt(
-            combo_box=self.reference_generation_model_combo,
-            preferred_model_id=reference_model,
-            fallback_model_id="gpt-image/1.5-image-to-image",
-            ratio=self.reference_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=["https://picsum.photos/768/768"],
-            runtime_settings=runtime_settings,
-        )
+        # Automatic preflight is deliberately local. KIE createTask may spend
+        # credits, so a network probe is allowed only through the explicit
+        # user action that checks the selected models.
+        return True
 
     def _uses_local_realesrgan_for_run(self, run_mode):
         if run_mode not in {"process_only", "both"}:
@@ -7099,6 +7620,7 @@ class MainWindow(QMainWindow):
 def create_v3_application_window():
     from diagnostics import DiagnosticJournal
     from update_client import UpdateClient, current_platform_id
+    from v3_components import V3_WINDOW_DEFAULT_SIZE
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
     from v3_license import OnlineLicenseGate
     from v3_project_state import migrate_v2_config
@@ -7155,7 +7677,7 @@ def create_v3_application_window():
         outcome="success",
     )
     window.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
-    window.resize(1120, 780)
+    window.resize(*V3_WINDOW_DEFAULT_SIZE)
     if len(window.mode_selection.mode_cards) != len(MODE_CARD_SPECS):
         raise RuntimeError("V3 mode selection does not contain all mode cards")
     return window
@@ -7336,7 +7858,7 @@ def run_packaged_entrypoint_check(
     packaged_view = V3ApplicationView(license_gate=gate)
     evidence_is_saved = True
     if evidence_dir is not None:
-        from v3_project_state import ProjectMode, StepId
+        from v3_project_state import ProjectMode, PromptEntry, StepId
 
         evidence_root = Path(evidence_dir)
         try:
@@ -7353,11 +7875,24 @@ def run_packaged_entrypoint_check(
                 ProjectMode.CLIPART
             ].start_button.click()
             QApplication.processEvents()
+            packaged_view.shell.state.clipart.prompts = [
+                PromptEntry(
+                    "Watercolor baby fox, isolated on white background",
+                    ["C:/smoke/reference-fox.png"],
+                ),
+                PromptEntry("Watercolor baby bear with wildflowers"),
+                PromptEntry("Watercolor woodland rabbit, soft neutral palette"),
+            ]
             packaged_view.shell.state.set_step(StepId.PROMPTS)
             packaged_view.shell.refresh()
             QApplication.processEvents()
             QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
             QApplication.processEvents()
+            prompt_review_page = (
+                packaged_view.shell.clipart_flow_controller.pages[
+                    StepId.PROMPT_REVIEW
+                ]
+            )
             evidence_is_saved = (
                 packaged_view.grab().save(
                     str(evidence_root / "clipart-prompts.png"),
@@ -7365,8 +7900,40 @@ def run_packaged_entrypoint_check(
                 )
                 and evidence_is_saved
             )
+
+            packaged_view.shell.state.set_step(StepId.PROMPT_REVIEW)
+            packaged_view.shell.refresh()
+            QApplication.processEvents()
+            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            QApplication.processEvents()
+            review_columns_width = (
+                prompt_review_page.table.columnWidth(0)
+                + prompt_review_page.table.columnWidth(1)
+            )
+            prompt_review_is_rendered = (
+                prompt_review_page.table.rowCount() == 3
+                and review_columns_width > 0
+                and abs(
+                    prompt_review_page.table.columnWidth(0)
+                    / review_columns_width
+                    - 2 / 3
+                )
+                <= 0.04
+                and packaged_view.shell.state.clipart.prompts[0].references
+                == ["C:/smoke/reference-fox.png"]
+            )
+            evidence_is_saved = (
+                packaged_view.grab().save(
+                    str(evidence_root / "clipart-prompt-review.png"),
+                    "PNG",
+                )
+                and evidence_is_saved
+            )
         except (OSError, RuntimeError, AttributeError):
             evidence_is_saved = False
+            prompt_review_is_rendered = False
+    else:
+        prompt_review_is_rendered = True
     mode_artwork_is_rendered = all(
         card.illustration is not None
         and hasattr(card.illustration, "pixmap")
@@ -7429,6 +7996,7 @@ def run_packaged_entrypoint_check(
         and V3ApplicationView
         and mode_artwork_is_rendered
         and evidence_is_saved
+        and prompt_review_is_rendered
         and license_input_is_safe
         and controls_are_present
         and controls_are_connected

@@ -63,6 +63,11 @@ class V3DesignTokens:
 
 DEFAULT_TOKENS = V3DesignTokens()
 
+# One geometry contract for the whole desktop application. Pages may scroll,
+# but switching screens must never resize the top-level window.
+V3_WINDOW_DEFAULT_SIZE = (1120, 780)
+V3_WINDOW_MINIMUM_SIZE = (980, 700)
+
 
 class _AspectRatioPixmapLabel(QLabel):
     """Display a raster illustration without stretching it."""
@@ -357,6 +362,28 @@ QPushButton[v3Button="true"]:disabled {{
     color: {tokens.disabled};
     background: {tokens.disabled_soft};
     border: 2px dashed {tokens.disabled};
+}}
+QPushButton[v3SourceChoice="true"] {{
+    min-height: 68px;
+    padding: {tokens.space_3}px {tokens.space_4}px;
+    color: {tokens.text};
+    background: {tokens.surface};
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_card}px;
+    text-align: left;
+    font-weight: {tokens.font_weight_medium};
+}}
+QPushButton[v3SourceChoice="true"]:hover {{
+    background: {tokens.surface_muted};
+    border-color: {tokens.text_muted};
+}}
+QPushButton[v3SourceChoice="true"]:checked {{
+    color: {tokens.text};
+    background: {tokens.accent_soft};
+    border: 2px solid {tokens.accent};
+}}
+QPushButton[v3SourceChoice="true"]:focus {{
+    border: {tokens.focus_width}px solid {tokens.focus};
 }}
 QToolButton[v3Disclosure="true"] {{
     min-height: {tokens.control_height}px;

@@ -78,6 +78,22 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("WaitForExit", verifier)
         self.assertIn("local-processing-smoke-report", verifier)
 
+    def test_azure_publishes_installed_prompt_ui_evidence(self):
+        pipeline = Path("azure-pipelines.yml").read_text(encoding="utf-8")
+        verifier = Path("scripts/verify_installed_windows_artifact.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("-EvidenceDir", pipeline)
+        self.assertIn("ui-evidence", pipeline)
+        self.assertIn("--ui-evidence-dir", verifier)
+        for filename in (
+            "mode-selection.png",
+            "clipart-prompts.png",
+            "clipart-prompt-review.png",
+        ):
+            self.assertIn(filename, verifier)
+
     def test_github_downloads_and_verifies_visual_cpp_prerequisite(self):
         workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
             encoding="utf-8"

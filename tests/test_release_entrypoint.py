@@ -306,7 +306,11 @@ class ReleaseEntrypointTests(unittest.TestCase):
             )
 
             self.assertEqual(result, 0)
-            for filename in ("mode-selection.png", "clipart-prompts.png"):
+            for filename in (
+                "mode-selection.png",
+                "clipart-prompts.png",
+                "clipart-prompt-review.png",
+            ):
                 screenshot_path = evidence_dir / filename
                 self.assertTrue(screenshot_path.is_file(), filename)
                 with Image.open(screenshot_path) as screenshot:

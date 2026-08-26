@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
+from v3_components import V3_WINDOW_DEFAULT_SIZE, V3_WINDOW_MINIMUM_SIZE
 from v3_mode_selection import (
     MODE_CARD_SPECS,
     ModeSelectionScreen,
@@ -36,6 +37,79 @@ class V3ModeSelectionTests(unittest.TestCase):
 
     def tearDown(self):
         self.app.processEvents()
+
+    def test_application_uses_one_default_and_minimum_window_size(self):
+        view = V3ApplicationView()
+
+        self.assertEqual((view.width(), view.height()), V3_WINDOW_DEFAULT_SIZE)
+        self.assertEqual(
+            (view.minimumWidth(), view.minimumHeight()),
+            V3_WINDOW_MINIMUM_SIZE,
+        )
+        view.resize(1, 1)
+        self.assertEqual((view.width(), view.height()), V3_WINDOW_MINIMUM_SIZE)
+
+    def test_user_resized_window_size_survives_screen_and_step_changes(self):
+        view = V3ApplicationView()
+        view.resize(1037, 733)
+        view.show()
+        self.app.processEvents()
+        expected = (1037, 733)
+
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        self.app.processEvents()
+        self.assertEqual((view.width(), view.height()), expected)
+
+        view.shell.state.set_step(StepId.PROMPTS)
+        view.shell.refresh()
+        self.app.processEvents()
+        self.assertEqual((view.width(), view.height()), expected)
+
+        view.show_mode_switcher()
+        self.app.processEvents()
+        self.assertEqual((view.width(), view.height()), expected)
+        self.assertTrue(view.cancel_mode_switch())
+        self.app.processEvents()
+        self.assertEqual((view.width(), view.height()), expected)
+
+    def test_window_size_is_stable_across_every_mode_route(self):
+        for mode in ProjectMode:
+            with self.subTest(mode=mode):
+                view = V3ApplicationView()
+                view.resize(1093, 747)
+                view.show()
+                view.mode_selection.mode_cards[mode].start_button.click()
+                self.app.processEvents()
+
+                for step in view.shell.state.route:
+                    view.shell.state.set_step(step)
+                    view.shell.refresh()
+                    self.app.processEvents()
+                    self.assertEqual((view.width(), view.height()), (1093, 747))
+
+                view.close()
+                view.deleteLater()
+
+    def test_screen_change_preserves_maximized_state_and_restore_geometry(self):
+        view = V3ApplicationView()
+        view.resize(1037, 733)
+        view.show()
+        self.app.processEvents()
+        restore_geometry = view.geometry()
+        view.showMaximized()
+        self.app.processEvents()
+        self.assertEqual(view.normalGeometry(), restore_geometry)
+
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        self.app.processEvents()
+
+        self.assertTrue(view.isMaximized())
+        self.assertEqual(view.normalGeometry(), restore_geometry)
+
+        view.showNormal()
+        self.app.processEvents()
+        self.assertFalse(view.isMaximized())
+        self.assertEqual(view.geometry(), restore_geometry)
 
     def test_each_mode_card_starts_a_fresh_project_on_the_correct_route(self):
         for mode in ProjectMode:

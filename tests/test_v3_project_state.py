@@ -10,6 +10,7 @@ from v3_project_state import (
     ClipartModeData,
     CommonProjectData,
     GenerationData,
+    ImageOperationData,
     PinterestModeData,
     ProcessingModeData,
     ProjectMode,
@@ -26,6 +27,25 @@ from v3_project_state import (
 
 
 class ProjectRoutesTests(unittest.TestCase):
+    def test_legacy_topaz_settings_migrate_to_current_contract(self):
+        operations = ImageOperationData(
+            upscale_factor=8,
+            kie_upscale_model="topaz/upscale",
+            kie_upscale_after_model="topaz/upscale",
+        )
+        self.assertEqual(operations.upscale_factor, 4)
+        self.assertEqual(operations.kie_upscale_model, "topaz/image-upscale")
+        self.assertEqual(
+            operations.kie_upscale_after_model,
+            "topaz/image-upscale",
+        )
+        for invalid_factor in (True, 1.5, "1.5", 8, None):
+            with self.subTest(invalid_factor=invalid_factor):
+                self.assertEqual(
+                    ImageOperationData(upscale_factor=invalid_factor).upscale_factor,
+                    4,
+                )
+
     def test_processing_collision_policy_round_trips_through_state(self):
         state = ProjectState(
             mode=ProjectMode.PROCESSING,
@@ -40,6 +60,7 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.GENERATION,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
@@ -51,6 +72,7 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
@@ -77,8 +99,10 @@ class ProjectRoutesTests(unittest.TestCase):
         state.common.work_dir = "D:/work"
         self.assertEqual(state.next_step(), StepId.PROMPTS)
         state.clipart.prompts.append(PromptEntry("blue whale"))
-        self.assertEqual(state.next_step(), StepId.GENERATION)
+        self.assertEqual(state.next_step(), StepId.PROMPT_REVIEW)
         state.clipart.prompts[0].prompt = "small blue whale"
+        self.assertEqual(state.next_step(), StepId.GENERATION)
+        self.assertEqual(state.previous_step(), StepId.PROMPT_REVIEW)
         self.assertEqual(state.previous_step(), StepId.PROMPTS)
         self.assertEqual(state.clipart.prompts[0].prompt, "small blue whale")
 

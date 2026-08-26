@@ -158,7 +158,7 @@ jobs:
           if ($smokeProcess.ExitCode -ne 0) {
             throw "Installed packaged mode artwork smoke failed with exit code $($smokeProcess.ExitCode)"
           }
-          foreach ($evidenceName in @("mode-selection.png", "clipart-prompts.png")) {
+          foreach ($evidenceName in @("mode-selection.png", "clipart-prompts.png", "clipart-prompt-review.png")) {
             $evidencePath = Join-Path $evidenceDir $evidenceName
             if (-not (Test-Path -LiteralPath $evidencePath)) {
               throw "Installed application UI evidence is missing: $evidencePath"

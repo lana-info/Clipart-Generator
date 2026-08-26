@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$InstallerPath,
     [Parameter(Mandatory = $true)]
-    [string]$ExpectedAppVersion
+    [string]$ExpectedAppVersion,
+    [Parameter(Mandatory = $true)]
+    [string]$EvidenceDir
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,13 +47,26 @@ if (-not (Test-Path -LiteralPath $installedExe)) {
     throw "Installed executable is missing: $installedExe"
 }
 
-$env:QT_QPA_PLATFORM = "offscreen"
+New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
+$env:QT_QPA_PLATFORM = "windows"
 Invoke-BoundedProcess `
     -FilePath $installedExe `
-    -Arguments "--release-entrypoint-smoke", "--expected-app-version=$ExpectedAppVersion" `
+    -Arguments "--release-entrypoint-smoke", "--expected-app-version=$ExpectedAppVersion", "--ui-evidence-dir=$EvidenceDir" `
     -TimeoutSeconds 120 `
     -Description "Installed release smoke"
 
+foreach ($evidenceName in @(
+    "mode-selection.png",
+    "clipart-prompts.png",
+    "clipart-prompt-review.png"
+)) {
+    $evidencePath = Join-Path $EvidenceDir $evidenceName
+    if (-not (Test-Path -LiteralPath $evidencePath)) {
+        throw "Installed application UI evidence is missing: $evidencePath"
+    }
+}
+
+$env:QT_QPA_PLATFORM = "offscreen"
 $smokeReport = Join-Path $env:AGENT_TEMPDIRECTORY "windows-local-processing-smoke.txt"
 try {
     Invoke-BoundedProcess `

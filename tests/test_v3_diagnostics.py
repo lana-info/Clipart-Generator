@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -7,7 +8,11 @@ from PIL import Image
 from PyQt6.QtWidgets import QApplication
 
 import main
-from diagnostics import DiagnosticJournal
+from diagnostics import (
+    DEFAULT_SESSION_MAX_BYTES,
+    DEFAULT_TOTAL_MAX_BYTES,
+    DiagnosticJournal,
+)
 from v3_diagnostics import DiagnosticJournalDialog
 from v3_mode_selection import V3ApplicationView
 from v3_project_state import ProjectMode, StepId
@@ -40,6 +45,175 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             self.assertGreater(view._diagnostics_dialog.event_list.count(), 0)
             view._diagnostics_dialog.close()
             view.close()
+
+    def test_structured_provider_event_uses_v2_schema_and_safe_details(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+
+            journal.record_structured(
+                {
+                    "event": "provider_task_failed",
+                    "provider": "kie",
+                    "model": "recraft/crisp-upscale",
+                    "stage": "upscale_before",
+                    "task": "task-safe-123",
+                    "http_status": 200,
+                    "provider_state": "fail",
+                    "error_code": "501",
+                    "error_message": "provider failed; api_key=sk-secret-value",
+                    "item_index": 2,
+                    "item_total": 8,
+                    "attempt": 1,
+                    "elapsed_ms": 950,
+                    "prompt": "private prompt",
+                    "result_url": "https://example.test/file?token=secret",
+                },
+                operation_id="operation-123",
+            )
+
+            event = journal.read_events()[0]
+            raw = journal.session_path.read_text(encoding="utf-8")
+            self.assertEqual(event["schema_version"], 2)
+            self.assertEqual(event["operation_id"], "operation-123")
+            self.assertEqual(event["details"]["provider"], "kie")
+            self.assertEqual(event["details"]["task"], "task-safe-123")
+            self.assertEqual(event["details"]["item_index"], 2)
+            self.assertNotIn("private prompt", raw)
+            self.assertNotIn("sk-secret-value", raw)
+            self.assertNotIn("example.test", raw)
+            archive_path = journal.export_zip(root / "diagnostics.zip")
+            with zipfile.ZipFile(archive_path) as archive:
+                exported = "\n".join(
+                    archive.read(name).decode("utf-8")
+                    for name in archive.namelist()
+                )
+            self.assertIn("task-safe-123", exported)
+            self.assertNotIn("private prompt", exported)
+            self.assertNotIn("sk-secret-value", exported)
+            self.assertNotIn("example.test", exported)
+
+    def test_detailed_journal_limits_cover_large_image_batches(self) -> None:
+        self.assertEqual(DEFAULT_SESSION_MAX_BYTES, 8 * 1024 * 1024)
+        self.assertEqual(DEFAULT_TOTAL_MAX_BYTES, 24 * 1024 * 1024)
+
+    def test_read_events_keeps_legacy_v1_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.0")
+            journal.session_path.write_text(
+                '{"schema_version":1,"timestamp":"2026-08-26T00:00:00+00:00",'
+                '"sequence":1,"event":"legacy","summary":"old"}\n',
+                encoding="utf-8",
+            )
+
+            events = journal.read_events()
+
+            self.assertEqual(events[0]["event"], "legacy")
+
+    def test_dialog_filters_by_severity_provider_and_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.0")
+            journal.record_structured(
+                {
+                    "event": "provider_task_polled",
+                    "provider": "kie",
+                    "model": "gpt-image-2-text-to-image",
+                    "task": "task-1",
+                    "provider_state": "waiting",
+                    "item_index": 1,
+                    "item_total": 2,
+                    "filename": "first.png",
+                    "stage": "generation",
+                    "elapsed_ms": 100,
+                },
+                operation_id="run-1",
+            )
+            journal.record_structured(
+                {
+                    "event": "provider_task_failed",
+                    "provider": "photoroom",
+                    "model": "remove-background-v1",
+                    "error_code": "invalid_image",
+                    "error_message": "provider failed",
+                    "item_index": 2,
+                    "item_total": 2,
+                    "filename": "second.png",
+                    "stage": "background_removal",
+                    "elapsed_ms": 250,
+                },
+                operation_id="run-1",
+            )
+            dialog = DiagnosticJournalDialog(journal)
+
+            self.assertEqual(dialog.event_list.count(), 2)
+            dialog.source_filter.setCurrentIndex(
+                dialog.source_filter.findData("kie")
+            )
+            self.app.processEvents()
+            self.assertEqual(dialog.event_list.count(), 1)
+            self.assertIn("KIE", dialog.event_list.item(0).text())
+
+            dialog.source_filter.setCurrentIndex(
+                dialog.source_filter.findData("all")
+            )
+            dialog.severity_filter.setCurrentIndex(
+                dialog.severity_filter.findData("error")
+            )
+            self.app.processEvents()
+            self.assertEqual(dialog.event_list.count(), 1)
+            self.assertIn("second.png", dialog.event_list.item(0).text())
+
+            dialog.severity_filter.setCurrentIndex(
+                dialog.severity_filter.findData("all")
+            )
+            image_index = next(
+                index
+                for index in range(dialog.item_filter.count())
+                if "first.png" in dialog.item_filter.itemText(index)
+            )
+            dialog.item_filter.setCurrentIndex(image_index)
+            self.app.processEvents()
+            self.assertEqual(dialog.event_list.count(), 1)
+            dialog.close()
+
+    def test_dialog_details_use_russian_labels_and_fit_minimum_window(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.0")
+            journal.record_structured(
+                {
+                    "event": "provider_task_failed",
+                    "provider": "kie",
+                    "model": "recraft/crisp-upscale",
+                    "task": "task-123",
+                    "http_status": 503,
+                    "provider_state": "failed",
+                    "error_message": "temporarily unavailable",
+                    "item_index": 1,
+                    "item_total": 1,
+                    "filename": "source.png",
+                    "stage": "upscale_before",
+                    "width": 1000,
+                    "height": 800,
+                    "input_bytes": 12345,
+                    "elapsed_ms": 950,
+                },
+                operation_id="run-1",
+            )
+            dialog = DiagnosticJournalDialog(journal)
+            dialog.resize(980, 700)
+            dialog.show()
+            self.app.processEvents()
+
+            details = dialog.detail.toPlainText()
+            self.assertIn("Провайдер: kie", details)
+            self.assertIn("Модель: recraft/crisp-upscale", details)
+            self.assertIn("HTTP-статус: 503", details)
+            self.assertIn("Размер изображения: 1000 × 800", details)
+            self.assertIn("Длительность: 950 мс", details)
+            self.assertLessEqual(dialog.minimumWidth(), 980)
+            self.assertLessEqual(dialog.minimumHeight(), 700)
+            dialog.close()
 
     def test_run_queue_writes_terminal_events_without_source_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

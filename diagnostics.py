@@ -16,10 +16,12 @@ from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Mapping
 
 from security_redaction import redact_text
+from provider_diagnostics import build_provider_event
 
 
-DEFAULT_SESSION_MAX_BYTES = 4 * 1024 * 1024
-DEFAULT_TOTAL_MAX_BYTES = 10 * 1024 * 1024
+DIAGNOSTIC_SCHEMA_VERSION = 2
+DEFAULT_SESSION_MAX_BYTES = 8 * 1024 * 1024
+DEFAULT_TOTAL_MAX_BYTES = 24 * 1024 * 1024
 DEFAULT_EVENT_MAX_BYTES = 16 * 1024
 MAX_SESSIONS = 3
 
@@ -33,11 +35,16 @@ _ALLOWED_DETAILS = {
     "current_version",
     "decision",
     "downloaded_bytes",
+    "color_mode",
     "elapsed_ms",
     "enabled_stages",
     "error_code",
     "error_message",
     "filename",
+    "has_alpha",
+    "height",
+    "image_format",
+    "input_bytes",
     "folder_name",
     "folder_role",
     "http_status",
@@ -48,15 +55,25 @@ _ALLOWED_DETAILS = {
     "model",
     "model_routes",
     "operation_type",
+    "parameters",
+    "poll_attempt",
+    "prompt_chars",
+    "prompt_index",
     "output_bytes",
     "provider",
+    "provider_state",
     "provider_routes",
     "reason",
+    "reference_count",
+    "result_count",
+    "result_index",
     "stage",
     "status",
     "task",
     "total_bytes",
     "trim_mode",
+    "uploaded_bytes",
+    "width",
 }
 _SECRET_KEYS = {"api_key", "license_key", "token", "proof", "password", "secret"}
 _PROHIBITED_KEYS = {"prompt", "image", "raw_response", "environment", "device_private_key"}
@@ -150,7 +167,7 @@ class DiagnosticJournal:
             self._sequence += 1
             sequence = self._sequence
         item = {
-            "schema_version": 1,
+            "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
             "timestamp": self._now().astimezone(timezone.utc).isoformat(),
             "sequence": sequence,
             "severity": severity if severity in {"debug", "info", "warning", "error"} else "info",
@@ -193,6 +210,58 @@ class DiagnosticJournal:
                 self._memory_fallback = self._memory_fallback[-200:]
         return item
 
+    def record_structured(
+        self,
+        event: Mapping[str, Any],
+        *,
+        operation_id: str | None = None,
+        screen: str = "results",
+    ) -> dict[str, Any]:
+        """Persist one already bounded provider/run event defensively."""
+        try:
+            source = dict(event) if isinstance(event, Mapping) else {}
+            event_name = str(source.pop("event", "") or "")
+            safe = build_provider_event(event_name, **source)
+            name = str(safe.pop("event"))
+            severity = str(safe.pop("severity", "info") or "info")
+            summary = str(
+                safe.pop("summary", "")
+                or {
+                    "item_input_inspected": "Проверены параметры исходного изображения.",
+                    "stage_started": "Начат этап обработки изображения.",
+                    "stage_finished": "Завершён этап обработки изображения.",
+                    "provider_upload_started": "Начата загрузка изображения провайдеру.",
+                    "provider_upload_finished": "Загрузка изображения провайдеру завершена.",
+                    "provider_task_submitted": "Задача передана внешнему сервису.",
+                    "provider_task_polled": "Получено состояние задачи внешнего сервиса.",
+                    "provider_task_succeeded": "Внешний сервис успешно завершил задачу.",
+                    "provider_task_failed": "Внешний сервис завершил задачу с ошибкой.",
+                    "provider_result_downloaded": "Результат внешнего сервиса загружен.",
+                    "item_finished": "Обработка изображения завершена.",
+                    "run_finished": "Обработка пакета завершена.",
+                    "diagnostic_parse_failed": "Некорректная диагностическая запись отклонена.",
+                }.get(name, "Записано техническое событие.")
+            )
+            outcome = safe.get("outcome")
+            return self.record(
+                name,
+                summary,
+                severity=severity,
+                operation_id=operation_id,
+                screen=screen,
+                outcome=str(outcome) if outcome not in (None, "") else None,
+                details=safe,
+            )
+        except Exception:
+            return self.record(
+                "diagnostic_parse_failed",
+                "Некорректная диагностическая запись отклонена.",
+                severity="warning",
+                operation_id=operation_id,
+                screen=screen,
+                details={"status": "rejected"},
+            )
+
     def _sanitize_details(self, details: Mapping[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         for raw_name, value in details.items():
@@ -201,6 +270,13 @@ class DiagnosticJournal:
                 continue
             if name in _SECRET_KEYS:
                 result[name] = "[СКРЫТО]"
+            elif (
+                name == "task"
+                and isinstance(value, str)
+                and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", value.strip())
+                and not value.strip().casefold().startswith("sk-")
+            ):
+                result[name] = value.strip()
             elif name == "filename":
                 result[name] = _safe_filename(value)
             elif isinstance(value, bool) or value is None:
@@ -208,11 +284,16 @@ class DiagnosticJournal:
             elif isinstance(value, (int, float)):
                 result[name] = value
             elif isinstance(value, Mapping):
-                result[name] = {
-                    _safe_text(key, 64): number
-                    for key, number in list(value.items())[:20]
-                    if isinstance(number, (int, float, bool)) or number is None
-                }
+                nested: dict[str, Any] = {}
+                for key, nested_value in list(value.items())[:20]:
+                    safe_key = _safe_text(key, 64)
+                    if isinstance(nested_value, bool) or nested_value is None:
+                        nested[safe_key] = nested_value
+                    elif isinstance(nested_value, (int, float)):
+                        nested[safe_key] = nested_value
+                    elif name == "parameters" and isinstance(nested_value, str):
+                        nested[safe_key] = _safe_text(nested_value, 160)
+                result[name] = nested
             elif isinstance(value, (list, tuple)):
                 result[name] = [_safe_text(item, 160) for item in value[:20]]
             else:
@@ -230,7 +311,7 @@ class DiagnosticJournal:
         if len(encoded) <= self.event_max_bytes:
             return encoded
         minimal = {
-            "schema_version": 1,
+            "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
             "timestamp": item.get("timestamp"),
             "severity": item.get("severity"),
             "event": _safe_text(item.get("event"), 48),
@@ -250,7 +331,7 @@ class DiagnosticJournal:
 
     def _truncated_marker_bytes(self) -> bytes:
         marker = {
-            "schema_version": 1,
+            "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
             "timestamp": self._now().astimezone(timezone.utc).isoformat(),
             "severity": "warning",
             "event": "log_truncated",
@@ -297,7 +378,7 @@ class DiagnosticJournal:
                             item = json.loads(line)
                         except (ValueError, UnicodeError):
                             continue
-                        if isinstance(item, dict) and item.get("schema_version") == 1:
+                        if isinstance(item, dict) and item.get("schema_version") in {1, 2}:
                             events.append(item)
             except OSError:
                 continue
@@ -314,14 +395,66 @@ class DiagnosticJournal:
 
     @staticmethod
     def format_event(event: Mapping[str, Any]) -> str:
+        severity_labels = {
+            "debug": "техническое",
+            "info": "информация",
+            "warning": "предупреждение",
+            "error": "ошибка",
+        }
         lines = [
             f"Время: {event.get('timestamp', '—')}",
-            f"Уровень: {event.get('severity', '—')}",
+            f"Уровень: {severity_labels.get(str(event.get('severity')), event.get('severity', '—'))}",
             f"Событие: {event.get('event', '—')}",
             f"Описание: {event.get('summary', '—')}",
         ]
-        for key, value in (event.get("details") or {}).items():
-            lines.append(f"{key}: {value}")
+        details = event.get("details") or {}
+        if not isinstance(details, Mapping):
+            return "\n".join(lines)
+        labels = {
+            "attempt": "Попытка",
+            "color_mode": "Цветовой режим",
+            "elapsed_ms": "Длительность",
+            "error_code": "Код ошибки",
+            "error_message": "Сообщение ошибки",
+            "filename": "Файл",
+            "has_alpha": "Alpha-канал",
+            "http_status": "HTTP-статус",
+            "image_format": "Формат",
+            "input_bytes": "Размер входного файла",
+            "item_index": "Номер изображения",
+            "item_total": "Изображений всего",
+            "model": "Модель",
+            "operation_type": "Операция",
+            "outcome": "Результат",
+            "output_bytes": "Размер результата",
+            "parameters": "Параметры",
+            "poll_attempt": "Номер проверки статуса",
+            "prompt_chars": "Длина промпта",
+            "prompt_index": "Номер промпта",
+            "provider": "Провайдер",
+            "provider_state": "Состояние провайдера",
+            "reference_count": "Количество референсов",
+            "result_count": "Количество результатов",
+            "result_index": "Номер результата",
+            "stage": "Этап",
+            "status": "Статус",
+            "task": "Идентификатор задачи",
+            "uploaded_bytes": "Загружено байт",
+            "downloaded_bytes": "Скачано байт",
+        }
+        width = details.get("width")
+        height = details.get("height")
+        if width not in (None, "") and height not in (None, ""):
+            lines.append(f"Размер изображения: {width} × {height}")
+        for key, value in details.items():
+            if key in {"width", "height", "mode"}:
+                continue
+            label = labels.get(str(key), str(key))
+            if key == "elapsed_ms":
+                value = f"{value} мс"
+            elif key == "has_alpha":
+                value = "есть" if value else "нет"
+            lines.append(f"{label}: {value}")
         return "\n".join(lines)
 
     def export_zip(self, destination: str | Path) -> Path:
@@ -330,7 +463,7 @@ class DiagnosticJournal:
         events = self.read_events()
         text = "\n\n".join(self.format_event(item) for item in events) + "\n"
         system = {
-            "schema_version": 1,
+            "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
             "app_version": self.app_version,
             "platform": platform.system(),
             "platform_release": platform.release(),
@@ -345,7 +478,11 @@ class DiagnosticJournal:
                 archive.writestr("diagnostics.txt", text)
                 archive.writestr(
                     "diagnostics.json",
-                    json.dumps({"schema_version": 1, "events": events}, ensure_ascii=False, indent=2),
+                    json.dumps(
+                        {"schema_version": DIAGNOSTIC_SCHEMA_VERSION, "events": events},
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
                 )
                 archive.writestr("system.json", json.dumps(system, ensure_ascii=False, indent=2))
                 archive.writestr(

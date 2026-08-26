@@ -341,7 +341,7 @@ def estimate_processing_cost(
     file_count: int,
 ) -> str:
     prices = {
-        "topaz/upscale": Decimal("0.20"),
+        "topaz/image-upscale": Decimal("0.20"),
         "recraft/crisp-upscale": Decimal("0.0025"),
         "recraft/remove-background": Decimal("0.005"),
     }

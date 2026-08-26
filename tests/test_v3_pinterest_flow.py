@@ -22,7 +22,7 @@ from v3_pinterest_flow import (
     estimate_pinterest_cost,
     install_pinterest_flow,
 )
-from v3_clipart_flow import PromptWorkspacePage
+from v3_clipart_flow import ClipartPromptReviewPage
 from v3_project_state import (
     ProjectMode,
     ProjectState,
@@ -95,6 +95,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
@@ -107,7 +108,11 @@ class V3PinterestFlowTests(unittest.TestCase):
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
-            PromptWorkspacePage,
+            PinterestPromptInputPage,
+        )
+        self.assertIsInstance(
+            controller.pages[StepId.PROMPT_REVIEW],
+            ClipartPromptReviewPage,
         )
         self.assertIsInstance(
             controller.pages[StepId.PIN_FORMAT_MODEL],
@@ -124,16 +129,14 @@ class V3PinterestFlowTests(unittest.TestCase):
         controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROMPTS]
 
-        self.assertIn("vertical", page.composition_edit.text().lower())
-        self.assertIn("safe zones", page.composition_edit.text().lower())
-        page.generator_section.set_expanded(True)
+        self.assertEqual(page.composition_edit.text(), "")
         page.theme_edit.setText("Small balcony ideas")
         page.subjects_edit.setPlainText("Herb garden\nReading corner")
-        page.count_spin.setValue(3)
-        page.preview_button.click()
-        page.replace_variants_button.click()
+        page.variations_edit.setPlainText("Morning light\nEvening light")
+        page.composition_edit.setText("Vertical composition with safe zones")
+        page.create_series_button.click()
 
-        self.assertEqual(len(state.pinterest.prompts), 3)
+        self.assertEqual(len(state.pinterest.prompts), 4)
         self.assertTrue(
             all("vertical" in entry.prompt.lower() for entry in state.pinterest.prompts)
         )
@@ -141,6 +144,24 @@ class V3PinterestFlowTests(unittest.TestCase):
         self.assertEqual(
             state.pinterest.prompts[0].prompt,
             "Manual Pinterest edit",
+        )
+
+    def test_prompt_review_deletes_selected_pinterest_prompt(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.prompts = [
+            PromptEntry("First pin"),
+            PromptEntry("Second pin"),
+        ]
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PROMPT_REVIEW]
+        page.table.selectRow(0)
+
+        page.delete_button.click()
+
+        self.assertEqual(
+            [entry.prompt for entry in state.pinterest.prompts],
+            ["Second pin"],
         )
 
     def test_reference_models_expand_and_report_incompatibility(self):
@@ -346,12 +367,16 @@ class V3PinterestFlowTests(unittest.TestCase):
             project.work_dir_edit.setText(temp)
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
             prompts = controller.pages[StepId.PROMPTS]
-            prompts.paste_edit.setPlainText("Kitchen idea\nGarden idea")
-            prompts.paste_button.click()
+            prompts.paste_edit.setPlainText("Kitchen idea")
+            prompts.add_prompt_button.click()
+            prompts.paste_edit.setPlainText("Garden idea")
+            prompts.add_prompt_button.click()
+            self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_next(), StepId.PIN_FORMAT_MODEL)
             format_page = controller.pages[StepId.PIN_FORMAT_MODEL]
             format_page.variants_spin.setValue(3)
             selected_ratio = format_page.ratio_combo.currentText()
+            self.assertEqual(shell.go_back(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
 
         self.assertEqual(state.common.project_name, "")

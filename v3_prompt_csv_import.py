@@ -6,7 +6,6 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -15,14 +14,11 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
     QPushButton,
-    QTextEdit,
     QVBoxLayout,
 )
 
 MAX_CSV_BYTES = 2 * 1024 * 1024
-MAX_CSV_PREVIEW_ROWS = 8
 MAX_CSV_PREVIEW_ISSUES = 12
 MAX_TEXT_LENGTH = 5000
 MAX_REFERENCES_PER_PROMPT = 5
@@ -239,21 +235,14 @@ class PromptCsvImportDialog(QDialog):
         self.summary_label.setWordWrap(True)
         layout.addWidget(self.summary_label)
 
-        self.preview_text = QTextEdit()
-        self.preview_text.setReadOnly(True)
-        self.preview_text.setPlaceholderText("Здесь будет предпросмотр импорта")
-        self.preview_text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        self.preview_text.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        layout.addWidget(self.preview_text, 1)
+        self.issues_label = QLabel("")
+        self.issues_label.setWordWrap(True)
+        layout.addWidget(self.issues_label, 1)
 
         self.button_box = QDialogButtonBox()
-        self.add_button = QPushButton("Добавить к списку")
-        self.replace_button = QPushButton("Заменить все промпты")
+        self.import_button = QPushButton("Импортировать промпты")
         self.cancel_button = QPushButton("Отмена")
-        self.button_box.addButton(self.add_button, QDialogButtonBox.ButtonRole.AcceptRole)
-        self.button_box.addButton(self.replace_button, QDialogButtonBox.ButtonRole.DestructiveRole)
+        self.button_box.addButton(self.import_button, QDialogButtonBox.ButtonRole.AcceptRole)
         self.button_box.addButton(self.cancel_button, QDialogButtonBox.ButtonRole.RejectRole)
         layout.addWidget(self.button_box)
 
@@ -261,8 +250,7 @@ class PromptCsvImportDialog(QDialog):
         self.header_checkbox.toggled.connect(self._reload)
         self.prompt_column_combo.currentIndexChanged.connect(self._refresh_preview)
         self.references_column_combo.currentIndexChanged.connect(self._refresh_preview)
-        self.add_button.clicked.connect(self._accept_append)
-        self.replace_button.clicked.connect(self._accept_replace)
+        self.import_button.clicked.connect(self._accept_append)
         self.cancel_button.clicked.connect(self.reject)
 
         self._reload()
@@ -284,7 +272,7 @@ class PromptCsvImportDialog(QDialog):
         except Exception as error:  # noqa: BLE001
             self._result = None
             self.summary_label.setText(f"Ошибка импорта: {error}")
-            self.preview_text.setPlainText("")
+            self.issues_label.setText("")
             self._set_buttons_enabled(False)
             return
 
@@ -334,51 +322,35 @@ class PromptCsvImportDialog(QDialog):
             )
         except Exception as error:  # noqa: BLE001
             self.summary_label.setText(f"Ошибка импорта: {error}")
-            self.preview_text.setPlainText("")
+            self.issues_label.setText("")
             self._set_buttons_enabled(False)
             return
 
         self._result = refreshed
         self._set_buttons_enabled(bool(refreshed.entries))
         self.summary_label.setText(
-            f"Строк данных: {len(refreshed.rows)} | Валидных: {len(refreshed.entries)} | Ошибок: {len(refreshed.issues)} | Разделитель: {refreshed.delimiter if refreshed.delimiter != '\\t' else 'TAB'}"
+            f"{Path(self.file_path).name} · "
+            f"Найдено промптов: {len(refreshed.entries)} · "
+            f"с референсами: {sum(bool(entry.get('references')) for entry in refreshed.entries)} · "
+            f"ошибок: {len(refreshed.issues)}"
         )
-        self.preview_text.setPlainText(self._build_preview_text(refreshed))
+        self.issues_label.setText(self._build_issues_text(refreshed))
 
-    def _build_preview_text(self, result: CsvImportResult) -> str:
-        parts: list[str] = []
-        valid_entries = result.entries[:MAX_CSV_PREVIEW_ROWS]
-        if valid_entries:
-            parts.append(
-                "Предпросмотр валидных строк "
-                f"(показано {len(valid_entries)} из {len(result.entries)}):"
-            )
-            for index, entry in enumerate(valid_entries, start=1):
-                prompt = str(entry.get("prompt", "")).strip()
-                references = join_references(entry.get("references", []))
-                line = f"{index}. {prompt}"
-                if references:
-                    line += f"\n   Референсы: {references}"
-                parts.append(line)
-        if result.issues:
-            parts.append("")
-            parts.append("Ошибки:")
-            for issue in result.issues[:MAX_CSV_PREVIEW_ISSUES]:
-                parts.append(f"Строка {issue.row_number}: {issue.message}")
-            if len(result.issues) > MAX_CSV_PREVIEW_ISSUES:
-                parts.append(f"… и ещё {len(result.issues) - MAX_CSV_PREVIEW_ISSUES} строк с ошибками")
-        return "\n".join(parts).strip()
+    def _build_issues_text(self, result: CsvImportResult) -> str:
+        if not result.issues:
+            return "Файл готов к импорту."
+        parts = ["Проверьте строки с ошибками:"]
+        for issue in result.issues[:MAX_CSV_PREVIEW_ISSUES]:
+            parts.append(f"Строка {issue.row_number}: {issue.message}")
+        if len(result.issues) > MAX_CSV_PREVIEW_ISSUES:
+            parts.append(f"… и ещё {len(result.issues) - MAX_CSV_PREVIEW_ISSUES}")
+        return "\n".join(parts)
 
     def _set_buttons_enabled(self, enabled: bool) -> None:
-        self.add_button.setEnabled(enabled)
-        self.replace_button.setEnabled(enabled)
+        self.import_button.setEnabled(enabled)
 
     def _accept_append(self) -> None:
         self._action = "append"
-        self.accept()
-
-    def _accept_replace(self) -> None:
-        self._action = "replace"
         self.accept()
 
     def get_entries(self) -> list[dict[str, list[str] | str]]:

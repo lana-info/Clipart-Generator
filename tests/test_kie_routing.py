@@ -69,6 +69,115 @@ class KieRoutingTests(unittest.TestCase):
         messages = "\n".join([*progress, *finished])
         self.assertNotIn(DUMMY_KIE_KEY, messages)
 
+    def test_topaz_uses_current_model_and_documented_payload(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            kie_settings(
+                kie_api_key=DUMMY_KIE_KEY,
+                upscale=True,
+                upscale_factor=4,
+                kie_upscale_model="topaz/upscale",
+            ),
+        )
+        captured = {}
+
+        def fake_create(worker_self, model, input_payload):
+            captured["model"] = model
+            captured["input"] = input_payload
+            return "task-topaz"
+
+        worker._kie_create_task = types.MethodType(fake_create, worker)
+        worker._kie_wait_result = types.MethodType(
+            lambda worker_self, task_id: "mock://topaz-result",
+            worker,
+        )
+        worker._download_file = types.MethodType(
+            lambda worker_self, url, output_path: None,
+            worker,
+        )
+
+        factor = worker._resolve_upscale_factor(worker.kie_upscale_model)
+        worker._upscale_pipeline_step(
+            "https://example.invalid/source.png",
+            ".",
+            1,
+            "probe",
+            "upscaled",
+            factor,
+            model_name=worker.kie_upscale_model,
+        )
+
+        self.assertEqual(worker.kie_upscale_model, "topaz/image-upscale")
+        self.assertEqual(factor, 4)
+        self.assertEqual(captured["model"], "topaz/image-upscale")
+        self.assertEqual(
+            captured["input"],
+            {
+                "image_url": "https://example.invalid/source.png",
+                "upscale_factor": "4",
+            },
+        )
+
+    def test_topaz_rejects_oversized_source_before_upload(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-topaz-limit-") as temp_dir:
+            source_path = Path(temp_dir) / "too-wide.png"
+            Image.new("RGB", (5001, 1), "white").save(source_path, format="PNG")
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                kie_settings(
+                    kie_api_key=DUMMY_KIE_KEY,
+                    upscale=True,
+                    upscale_factor=4,
+                    kie_upscale_model="topaz/image-upscale",
+                ),
+            )
+            uploads = []
+            worker._kie_upload_file = types.MethodType(
+                lambda worker_self, path: uploads.append(path) or "mock://uploaded",
+                worker,
+            )
+            with self.assertRaisesRegex(ValueError, "20 000"):
+                worker._run_processing_pipeline(
+                    str(source_path),
+                    None,
+                    temp_dir,
+                    1,
+                    "probe",
+                )
+            self.assertEqual(uploads, [])
+
+    def test_topaz_rejects_file_over_ten_megabytes_before_upload(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-topaz-bytes-") as temp_dir:
+            source_path = Path(temp_dir) / "too-large.png"
+            with source_path.open("wb") as stream:
+                stream.truncate(10_000_001)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                kie_settings(
+                    kie_api_key=DUMMY_KIE_KEY,
+                    upscale=True,
+                    upscale_factor=2,
+                    kie_upscale_model="topaz/image-upscale",
+                ),
+            )
+            uploads = []
+            worker._kie_upload_file = types.MethodType(
+                lambda worker_self, path: uploads.append(path) or "mock://uploaded",
+                worker,
+            )
+            with self.assertRaisesRegex(ValueError, "10 МБ"):
+                worker._run_processing_pipeline(
+                    str(source_path),
+                    None,
+                    temp_dir,
+                    1,
+                    "probe",
+                )
+            self.assertEqual(uploads, [])
+
     def test_kie_failed_task_error_contains_safe_task_id_and_code(self):
         worker = main.WorkerThread(
             "mode2_process",
@@ -86,11 +195,106 @@ class KieRoutingTests(unittest.TestCase):
             },
             worker,
         )
+        events = []
+        worker.diagnostic.connect(events.append)
+        worker._set_diagnostic_context(1, 1, "upscale_before")
         with self.assertRaisesRegex(
             RuntimeError,
             r"taskId=task-123; errorCode=501; message=provider could not process image",
         ):
             worker._kie_wait_result("task-123")
+        failed = next(event for event in events if event["event"] == "provider_task_failed")
+        polled = next(event for event in events if event["event"] == "provider_task_polled")
+        self.assertEqual(failed["task"], "task-123")
+        self.assertEqual(failed["error_code"], "501")
+        self.assertEqual(failed["error_message"], "provider could not process image")
+        self.assertEqual(polled["provider_state"], "fail")
+
+    def test_kie_create_task_emits_safe_model_and_task_without_request_payload(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        events = []
+        worker.diagnostic.connect(events.append)
+        worker._set_diagnostic_context(2, 4, "generation")
+        worker._request_json = types.MethodType(
+            lambda self, *args, **kwargs: {
+                "code": 200,
+                "data": {"taskId": "task-safe-789"},
+            },
+            worker,
+        )
+
+        task_id = worker._kie_create_task(
+            "gpt-image-2-text-to-image",
+            {"prompt": "private prompt", "aspect_ratio": "1:1"},
+        )
+
+        self.assertEqual(task_id, "task-safe-789")
+        submitted = next(event for event in events if event["event"] == "provider_task_submitted")
+        encoded = json.dumps(submitted)
+        self.assertEqual(submitted["model"], "gpt-image-2-text-to-image")
+        self.assertEqual(submitted["task"], "task-safe-789")
+        self.assertEqual(submitted["item_index"], 2)
+        self.assertNotIn("private prompt", encoded)
+        self.assertNotIn(DUMMY_KIE_KEY, encoded)
+
+    def test_status_transport_errors_emit_failure_without_masking_original_error(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        worker._request_json = types.MethodType(
+            lambda self, *args, **kwargs: (_ for _ in ()).throw(
+                RuntimeError("network unavailable")
+            ),
+            worker,
+        )
+        events = []
+        worker.diagnostic.connect(events.append)
+        worker._set_diagnostic_context(1, 1, "generation")
+
+        with self.assertRaisesRegex(RuntimeError, "network unavailable"):
+            worker._kie_wait_result("task-current")
+        with self.assertRaisesRegex(RuntimeError, "network unavailable"):
+            worker._kie_wait_4o_result("task-legacy")
+
+        failed_tasks = [
+            event.get("task")
+            for event in events
+            if event["event"] == "provider_task_failed"
+        ]
+        self.assertEqual(failed_tasks, ["task-current", "task-legacy"])
+
+    def test_provider_error_cannot_echo_current_prompt_into_diagnostics(self):
+        private_prompt = "private watercolor fox prompt"
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        worker._diagnostic_context.prompt_text = private_prompt
+        worker._request_json = types.MethodType(
+            lambda self, *args, **kwargs: {
+                "code": 200,
+                "data": {
+                    "state": "fail",
+                    "failCode": 422,
+                    "failMsg": f"invalid prompt: {private_prompt}",
+                },
+            },
+            worker,
+        )
+        events = []
+        worker.diagnostic.connect(events.append)
+
+        with self.assertRaises(RuntimeError):
+            worker._kie_wait_result("task-prompt-redaction")
+
+        self.assertNotIn(private_prompt, json.dumps(events))
 
     def test_gpt_image_2_routes_documented_task_models(self):
         worker = main.WorkerThread(
@@ -155,6 +359,74 @@ class KieRoutingTests(unittest.TestCase):
             self.assertEqual(
                 main.MainWindow._normalize_generation_model_id(None, endpoint_id),
                 "gpt-image-2",
+            )
+
+    def test_gpt_image_2_payload_preserves_extended_ratio(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                text_generation_ratio="2:1",
+                text_generation_resolution="2K",
+            ),
+        )
+        payload = worker._build_documented_model_input(
+            "gpt-image-2",
+            "valid prompt",
+            [],
+        )
+        self.assertEqual(payload["aspect_ratio"], "2:1")
+
+    def test_qwen_two_routes_exact_model_and_single_reference_payload(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                text_generation_ratio="16:9",
+                reference_generation_ratio="16:9",
+            ),
+        )
+        calls = []
+        worker._kie_create_task = types.MethodType(
+            lambda worker_self, model, payload: calls.append((model, payload)) or "task-qwen",
+            worker,
+        )
+        worker._kie_wait_result = types.MethodType(
+            lambda worker_self, task_id: f"mock://{task_id}",
+            worker,
+        )
+
+        worker._kie_generate_generic_model("qwen-image-2", "text prompt")
+        worker._kie_generate_generic_model(
+            "qwen-image-2",
+            "edit prompt",
+            ["mock://reference.png"],
+        )
+
+        self.assertEqual(calls[0][0], "qwen2/text-to-image")
+        self.assertNotIn("image_url", calls[0][1])
+        self.assertEqual(calls[1][0], "qwen2/image-edit")
+        self.assertEqual(calls[1][1]["image_url"], "mock://reference.png")
+
+    def test_worker_rejects_model_reference_limit_before_upload(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                kie_api_key=DUMMY_KIE_KEY,
+                reference_generation_model="qwen-image-2",
+                reference_generation_ratio="1:1",
+                reference_generation_resolution="1K",
+            ),
+        )
+        worker._kie_upload_file = types.MethodType(
+            lambda worker_self, path: self.fail("upload must not start"),
+            worker,
+        )
+        with self.assertRaisesRegex((RuntimeError, ValueError), "1 референс"):
+            worker._kie_generate_image(
+                "valid prompt",
+                ["one.png", "two.png"],
             )
 
     def test_provider_combinations_require_key_only_for_kie_steps(self):
@@ -297,7 +569,7 @@ class KieRoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="clipart-kie-mixed-") as temp_dir:
             temp_path = Path(temp_dir)
             source_path = temp_path / "source.png"
-            create_rgb_source(source_path, size=(20, 16))
+            create_rgb_source(source_path, size=(300, 300))
             worker = main.WorkerThread(
                 "mode2_process",
                 temp_dir,
@@ -698,7 +970,10 @@ class KieRoutingTests(unittest.TestCase):
                 ) as post_mock,
                 patch.object(worker, "_request_json") as fallback_mock,
             ):
-                with self.assertRaises(RuntimeError):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "задача KIE не была создана",
+                ):
                     worker._kie_upload_file(str(source_path))
 
             self.assertEqual(post_mock.call_count, 1)
@@ -718,23 +993,56 @@ class KieRoutingTests(unittest.TestCase):
                 patch.object(main, "MAX_API_UPLOAD_BYTES", 8),
                 patch.object(worker, "_request_with_retries") as request_mock,
             ):
-                with self.assertRaisesRegex(RuntimeError, "size limit"):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "задача KIE не была создана",
+                ) as raised:
                     worker._kie_upload_file(str(source_path))
 
+            self.assertIn("size limit", str(raised.exception))
             request_mock.assert_not_called()
+
+    def test_missing_upload_file_explains_that_no_kie_task_was_created(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        events = []
+        worker.diagnostic.connect(events.append)
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "задача KIE не была создана",
+        ):
+            worker._kie_upload_file("/definitely/missing/topaz-source.png")
+        failed = next(event for event in events if event["event"] == "stage_finished")
+        self.assertEqual(failed["provider"], "kie")
+        self.assertEqual(failed["outcome"], "failed")
+        self.assertNotIn("/definitely/missing", json.dumps(events))
 
     def test_recraft_crisp_input_limits_are_checked_before_upload(self):
         with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-limits-") as temp_dir:
             source_path = Path(temp_dir) / "source.png"
             create_rgb_source(source_path, size=(64, 64))
 
-            with patch.object(main, "RECRAFT_CRISP_MAX_PIXELS", 100):
-                with self.assertRaisesRegex(RuntimeError, "4 MP|pixel"):
+            with patch.object(main, "RECRAFT_CRISP_MAX_BYTES", 8):
+                with self.assertRaisesRegex(RuntimeError, "10 MB|file size"):
                     main.validate_recraft_crisp_upscale_input(str(source_path))
 
-            with patch.object(main, "RECRAFT_CRISP_MAX_BYTES", 8):
-                with self.assertRaisesRegex(RuntimeError, "5 MB|file size"):
-                    main.validate_recraft_crisp_upscale_input(str(source_path))
+    def test_recraft_crisp_does_not_apply_undocumented_dimension_limit(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-large-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            create_rgb_source(source_path, size=(5000, 1000))
+            self.assertIsNone(main.validate_recraft_crisp_upscale_input(str(source_path)))
+
+    def test_recraft_processing_limits_match_current_documentation(self):
+        self.assertEqual(main.RECRAFT_CRISP_MAX_BYTES, 10 * 1024 * 1024)
+        self.assertEqual(main.RECRAFT_REMOVE_BG_MAX_BYTES, 5 * 1024 * 1024)
+        with tempfile.TemporaryDirectory(prefix="clipart-recraft-remove-limits-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            create_rgb_source(source_path, size=(255, 300))
+            with self.assertRaisesRegex(RuntimeError, "256"):
+                main.validate_recraft_remove_background_input(str(source_path))
 
     def test_recraft_crisp_input_accepts_opaque_chatgpt_style_png(self):
         with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-valid-") as temp_dir:

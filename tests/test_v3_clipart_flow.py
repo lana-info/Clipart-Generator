@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QCheckBox
+from PyQt6.QtCore import QItemSelectionModel, QObject, Qt, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QMessageBox
 from PIL import Image
 
 import v3_clipart_flow
@@ -21,11 +21,12 @@ from v3_clipart_flow import (
     ClipartProcessingPage,
     ClipartProjectPage,
     ClipartPromptInputPage,
+    ClipartPromptReviewPage,
     ClipartReviewRunPage,
-    PromptWorkspacePage,
     build_clipart_run_request,
     clipart_pipeline_steps,
     estimate_clipart_cost,
+    generation_model_options,
     install_clipart_flow,
     missing_runtime_requirements,
     parse_prompt_csv,
@@ -110,7 +111,11 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
-            PromptWorkspacePage,
+            ClipartPromptInputPage,
+        )
+        self.assertIsInstance(
+            controller.pages[StepId.PROMPT_REVIEW],
+            ClipartPromptReviewPage,
         )
         self.assertIsInstance(
             controller.pages[StepId.PROCESSING_OPTIONS],
@@ -135,13 +140,18 @@ class V3ClipartFlowTests(unittest.TestCase):
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
 
             prompt_page = controller.pages[StepId.PROMPTS]
-            prompt_page.paste_edit.setPlainText("Fox\nBear")
-            prompt_page.paste_button.click()
-            self.assertEqual(shell.go_next(), StepId.GENERATION)
+            prompt_page.paste_edit.setPlainText("Fox")
+            prompt_page.add_prompt_button.click()
+            prompt_page.paste_edit.setPlainText("Bear")
+            prompt_page.add_prompt_button.click()
+            self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
 
-            review_page = controller.pages[StepId.PROMPTS].review_section
+            review_page = controller.pages[StepId.PROMPT_REVIEW]
             review_page.table.item(0, 0).setText("Red fox")
-            review_page.table.item(0, 1).setText("D:/fox.png")
+            state.clipart.prompts[0].references = ["D:/fox.png"]
+            review_page.refresh_from_state()
+            self.assertEqual(shell.go_next(), StepId.GENERATION)
+            self.assertEqual(shell.go_back(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
             self.assertEqual(shell.go_back(), StepId.PROJECT)
 
@@ -156,33 +166,301 @@ class V3ClipartFlowTests(unittest.TestCase):
                 ["D:/fox.png"],
             )
 
+    def test_prompt_input_presents_three_clear_source_choices(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        shell = AppShell(state)
+        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PROMPTS]
+
+        self.assertEqual(
+            [button.text() for button in page.source_buttons],
+            [
+                "Сгенерировать серию",
+                "Вставить готовый промпт",
+                "Импортировать CSV",
+            ],
+        )
+        self.assertTrue(page.source_buttons[1].isChecked())
+        self.assertEqual(page.source_stack.currentIndex(), 1)
+        self.assertEqual(page.progress_label.text(), "Шаг 1 из 2 · Добавление промптов")
+
+    def test_append_reports_prompt_limit_instead_of_silently_dropping_rows(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry(f"Prompt {index}") for index in range(MAX_PROMPT_ENTRIES)
+        ]
+        page = ClipartPromptInputPage(state, lambda: None)
+        page.paste_edit.setPlainText("One more prompt")
+
+        page.add_prompt_button.click()
+
+        self.assertEqual(len(state.clipart.prompts), MAX_PROMPT_ENTRIES)
+        self.assertIn("Максимум", page.card.status_label.text())
+
+    def test_prompt_review_uses_compact_icon_actions_with_tooltips(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        self.assertEqual(page.table.horizontalHeaderItem(1).text(), "Референсы")
+        actions = (
+            (page.add_button, "Добавить промпт"),
+            (page.duplicate_button, "Дублировать выбранные промпты"),
+            (page.delete_button, "Удалить выбранные промпты"),
+            (page.delete_all_button, "Удалить все промпты"),
+            (page.add_refs_button, "Добавить референсы"),
+            (page.replace_refs_button, "Заменить референсы"),
+            (page.delete_refs_button, "Удалить референсы"),
+        )
+        for button, label in actions:
+            self.assertEqual(button.text(), "")
+            self.assertEqual(button.toolTip(), label)
+            self.assertEqual(button.accessibleName(), label)
+            self.assertFalse(button.icon().isNull())
+            self.assertLessEqual(button.maximumWidth(), 64)
+        self.assertEqual(page.progress_label.text(), "Шаг 2 из 2 · Проверка серии")
+
+    def test_editing_prompt_text_preserves_reference_paths(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry("Fox", ["D:/one.png", "D:/two.png"]),
+        ]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        page.table.item(0, 0).setText("Red fox")
+
+        self.assertEqual(state.clipart.prompts[0].prompt, "Red fox")
+        self.assertEqual(
+            state.clipart.prompts[0].references,
+            ["D:/one.png", "D:/two.png"],
+        )
+
+    def test_prompt_review_deletes_selected_rows_and_never_touches_reference_files(self):
+        with tempfile.TemporaryDirectory(prefix="vibix-delete-prompts-") as temp:
+            reference = Path(temp) / "reference.png"
+            Image.new("RGBA", (2, 2), (255, 255, 255, 255)).save(reference)
+            state = ProjectState(mode=ProjectMode.CLIPART)
+            state.clipart.prompts = [
+                PromptEntry("Fox", [str(reference)]),
+                PromptEntry("Bear"),
+                PromptEntry("Rabbit"),
+            ]
+            page = ClipartPromptReviewPage(state, lambda: None)
+            selection = page.table.selectionModel()
+            for row in (0, 2):
+                selection.select(
+                    page.table.model().index(row, 0),
+                    QItemSelectionModel.SelectionFlag.Select
+                    | QItemSelectionModel.SelectionFlag.Rows,
+                )
+
+            page.delete_button.click()
+
+            self.assertEqual(
+                [entry.prompt for entry in state.clipart.prompts],
+                ["Bear"],
+            )
+            self.assertTrue(reference.is_file())
+
+    def test_prompt_review_delete_all_requires_confirmation(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        self.assertEqual(page.delete_all_button.text(), "")
+        self.assertEqual(page.delete_all_button.toolTip(), "Удалить все промпты")
+        with patch.object(
+            v3_clipart_flow.QMessageBox,
+            "question",
+            return_value=QMessageBox.StandardButton.Yes,
+        ):
+            page.delete_all_button.click()
+
+        self.assertEqual(state.clipart.prompts, [])
+
+    def test_review_keeps_two_thirds_prompt_and_one_third_references(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry("Fox", ["D:/a-very-long-reference-file-name.png"]),
+        ]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        page.resize(632, 480)
+        page.show()
+        self.app.processEvents()
+
+        total_width = page.table.columnWidth(0) + page.table.columnWidth(1)
+        prompt_share = page.table.columnWidth(0) / total_width
+        self.assertAlmostEqual(prompt_share, 2 / 3, delta=0.04)
+
+        page.resize(1100, 600)
+        self.app.processEvents()
+        total_width = page.table.columnWidth(0) + page.table.columnWidth(1)
+        prompt_share = page.table.columnWidth(0) / total_width
+        self.assertAlmostEqual(prompt_share, 2 / 3, delta=0.04)
+
     def test_generator_page_creates_editable_prompt_entries(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
         controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROMPTS]
-        page.generator_section.set_expanded(True)
-        page.theme_edit.setText("Woodland babies")
+        page.theme_edit.setText("Children's watercolor illustration")
         page.subjects_edit.setPlainText("Fox\nBear")
-        page.count_spin.setValue(3)
+        page.variations_edit.setPlainText("Sitting with flowers\nSleeping")
+        page.style_edit.setText("Soft watercolor")
 
-        self.assertEqual(state.clipart.prompt_generator.theme, "Woodland babies")
+        self.assertEqual(
+            state.clipart.prompt_generator.theme,
+            "Children's watercolor illustration",
+        )
         self.assertEqual(state.clipart.prompt_generator.subjects, ["Fox", "Bear"])
         restored = ProjectState.from_dict(state.to_dict())
-        self.assertEqual(restored.clipart.prompt_generator.count, 3)
+        self.assertEqual(
+            restored.clipart.prompt_generator.variations,
+            ["Sitting with flowers", "Sleeping"],
+        )
 
-        page.preview_button.click()
-        self.assertTrue(page.add_variants_button.isEnabled())
-        self.assertTrue(page.replace_variants_button.isEnabled())
-        page.replace_variants_button.click()
+        page.create_series_button.click()
         state.clipart.prompts[0].references = ["D:/fox.png"]
         generation_page = controller.pages[StepId.GENERATION]
         generation_page.refresh_from_state()
         self.assertTrue(generation_page.reference_advanced.is_expanded)
-        self.assertEqual(len(state.clipart.prompts), 3)
+        self.assertEqual(len(state.clipart.prompts), 4)
+        self.assertNotIn("Series item", state.clipart.prompts[0].prompt)
+        self.assertNotIn("Output intent", state.clipart.prompts[0].prompt)
         self.assertTrue(all(isinstance(item, PromptEntry) for item in state.clipart.prompts))
         state.clipart.prompts[0].prompt = "Manual edit"
         self.assertEqual(state.clipart.prompts[0].prompt, "Manual edit")
+
+    def test_prompt_source_page_has_no_prompt_table_and_paste_adds_one_multiline_prompt(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        page = ClipartPromptInputPage(state, lambda: None)
+
+        self.assertFalse(hasattr(page, "current_prompts_table"))
+        self.assertEqual(
+            [button.text() for button in page.source_buttons],
+            ["Сгенерировать серию", "Вставить готовый промпт", "Импортировать CSV"],
+        )
+        page.paste_edit.setPlainText("First line\nSecond line\nThird line")
+        page.add_prompt_button.click()
+
+        self.assertEqual(len(state.clipart.prompts), 1)
+        self.assertEqual(
+            state.clipart.prompts[0].prompt,
+            "First line Second line Third line",
+        )
+        self.assertIn("следующем шаге", page.paste_status_label.text())
+        self.assertFalse(hasattr(page, "paste_button"))
+
+    def test_paste_keeps_duplicate_prompt_as_a_separate_entry_with_its_references(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Same prompt", ["old.png"])]
+        page = ClipartPromptInputPage(state, lambda: None)
+        page._paste_references = ["new.png"]
+        page.paste_edit.setPlainText("Same prompt")
+
+        page.add_prompt_button.click()
+
+        self.assertEqual(len(state.clipart.prompts), 2)
+        self.assertEqual(state.clipart.prompts[1].references, ["new.png"])
+        self.assertIn("добавлен", page.paste_status_label.text())
+
+    def test_paste_prompt_keeps_up_to_five_reference_paths(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-paste-refs-") as temp:
+            paths = []
+            for index in range(6):
+                path = Path(temp) / f"very-long-reference-file-name-{index}.png"
+                Image.new("RGB", (2, 2), "white").save(path)
+                paths.append(str(path))
+            state = ProjectState(mode=ProjectMode.CLIPART)
+            page = ClipartPromptInputPage(state, lambda: None)
+            page._add_paste_references(paths)
+            self.assertIn("…", page.paste_references_label.text())
+            page.paste_edit.setPlainText("One prompt")
+            page.add_prompt_button.click()
+
+        self.assertEqual(state.clipart.prompts[0].references, paths[:5])
+
+    def test_csv_import_appends_and_opens_prompt_review(self):
+        class AcceptedImport:
+            def __init__(self, *_):
+                pass
+
+            def exec(self):
+                return QDialog.DialogCode.Accepted
+
+            def get_entries(self):
+                return [{"prompt": "Imported fox", "references": ["fox.png"]}]
+
+        advanced = []
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Existing")]
+        page = ClipartPromptInputPage(
+            state,
+            lambda: None,
+            advance=lambda: advanced.append(True),
+        )
+        with (
+            patch.object(
+                v3_clipart_flow.QFileDialog,
+                "getOpenFileName",
+                return_value=("prompts.csv", "CSV files (*.csv)"),
+            ),
+            patch.object(
+                v3_clipart_flow,
+                "PromptCsvImportDialog",
+                AcceptedImport,
+            ),
+        ):
+            page._choose_csv()
+
+        self.assertEqual(
+            [entry.prompt for entry in state.clipart.prompts],
+            ["Existing", "Imported fox"],
+        )
+        self.assertEqual(advanced, [True])
+
+    def test_review_search_filters_large_prompt_table_without_changing_data(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry("Watercolor fox"),
+            PromptEntry("Studio photo of a bear"),
+            PromptEntry("Watercolor rabbit"),
+        ]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        page.search_edit.setText("watercolor")
+
+        self.assertFalse(page.table.isRowHidden(0))
+        self.assertTrue(page.table.isRowHidden(1))
+        self.assertFalse(page.table.isRowHidden(2))
+        self.assertIn("2 из 3", page.search_result_label.text())
+        self.assertEqual(len(state.clipart.prompts), 3)
+
+        page.table.item(0, 0).setText("Studio photo of a fox")
+        self.assertTrue(page.table.isRowHidden(0))
+        self.assertIn("1 из 3", page.search_result_label.text())
+
+    def test_two_consecutive_row_moves_keep_visible_and_saved_order_in_sync(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("A"), PromptEntry("B"), PromptEntry("C")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        page._updating = True
+        for row, source in enumerate((1, 2, 0)):
+            page.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, source)
+        page._updating = False
+        page._rows_moved()
+        self.assertEqual([entry.prompt for entry in state.clipart.prompts], ["B", "C", "A"])
+        self.assertEqual(
+            [page.table.item(row, 0).data(Qt.ItemDataRole.UserRole) for row in range(3)],
+            [0, 1, 2],
+        )
+
+        page._updating = True
+        for row, source in enumerate((2, 0, 1)):
+            page.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, source)
+        page._updating = False
+        page._rows_moved()
+        self.assertEqual([entry.prompt for entry in state.clipart.prompts], ["A", "B", "C"])
 
     def test_csv_import_preserves_quoted_text_and_bounded_references(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-csv-") as temp:
@@ -217,18 +495,19 @@ class V3ClipartFlowTests(unittest.TestCase):
         shell = AppShell(state)
         controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
         input_page = controller.pages[StepId.PROMPTS]
-        input_page.paste_edit.setPlainText(
-            "\n".join(f"Prompt {index}" for index in range(MAX_PROMPT_ENTRIES + 1))
-        )
-        input_page.paste_button.click()
-        self.assertEqual(state.clipart.prompts, [])
+        state.clipart.prompts = [
+            PromptEntry(f"Prompt {index}") for index in range(MAX_PROMPT_ENTRIES)
+        ]
+        input_page.paste_edit.setPlainText("One more prompt")
+        input_page.add_prompt_button.click()
+        self.assertEqual(len(state.clipart.prompts), MAX_PROMPT_ENTRIES)
         self.assertIn(
             "Максимум",
-            input_page.input_section.card.status_label.text(),
+            input_page.card.status_label.text(),
         )
 
         state.clipart.prompts = [PromptEntry("First")]
-        review_page = controller.pages[StepId.PROMPTS].review_section
+        review_page = controller.pages[StepId.PROMPT_REVIEW]
         review_page.refresh_from_state()
         review_page.table.setCurrentCell(0, 0)
         state.clipart.prompts = [PromptEntry(f"Prompt {index}") for index in range(MAX_PROMPT_ENTRIES)]
@@ -319,6 +598,65 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(estimate.request_count, 12)
         self.assertEqual(estimate.estimated_usd, Decimal("0.900"))
         self.assertTrue(estimate.complete)
+
+    def test_generation_options_use_mode_specific_qwen_ratios(self):
+        primary = next(
+            option
+            for option in generation_model_options(references=False)
+            if option.model_id == "qwen-image-2"
+        )
+        reference = next(
+            option
+            for option in generation_model_options(references=True)
+            if option.model_id == "qwen-image-2"
+        )
+        self.assertEqual(primary.ratios, ("1:1", "3:4", "4:3", "9:16", "16:9"))
+        self.assertEqual(
+            reference.ratios,
+            ("1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"),
+        )
+
+    def test_gpt_image_two_exposes_all_documented_ratios(self):
+        primary = next(
+            option
+            for option in generation_model_options(references=False)
+            if option.model_id == "gpt-image-2"
+        )
+        self.assertEqual(
+            set(primary.ratios),
+            {
+                "auto", "1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5",
+                "16:9", "9:16", "2:1", "1:2", "3:1", "1:3", "21:9", "9:21",
+            },
+        )
+
+    def test_qwen_reference_limits_fail_before_worker_creation(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-qwen-contract-") as temp:
+            state = self.make_state(temp)
+            reference_path = str(Path(temp) / "reference.png")
+            state.clipart.prompts = [
+                PromptEntry("Baby turtle", [reference_path] * 2),
+            ]
+            state.clipart.generation.reference_model = "qwen-image-2"
+            state.clipart.generation.reference_ratio = "1:1"
+
+            with self.assertRaisesRegex(ClipartFlowError, "1 референс"):
+                build_clipart_run_request(state, {"kie_api_key": "test-key"})
+
+    def test_reference_file_size_limit_fails_before_worker_creation(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-reference-size-") as temp:
+            state = self.make_state(temp)
+            reference_path = Path(temp) / "reference.png"
+            reference_path.write_bytes(
+                reference_path.read_bytes()
+                + b"\0" * (10 * 1024 * 1024 + 1)
+            )
+            state.clipart.prompts = [PromptEntry("Baby turtle", [str(reference_path)])]
+            state.clipart.generation.reference_model = "qwen-image-2"
+            state.clipart.generation.reference_ratio = "1:1"
+
+            with self.assertRaisesRegex(ClipartFlowError, "10 МБ"):
+                build_clipart_run_request(state, {"kie_api_key": "test-key"})
 
     def test_alpha_safe_upscale_rejects_non_alpha_preserving_provider_after_bg_removal(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-alpha-safe-") as temp:
@@ -542,7 +880,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.prompts = [PromptEntry("Original")]
         shell = AppShell(state)
         controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROMPTS].review_section
+        page = controller.pages[StepId.PROMPT_REVIEW]
         page.table.item(0, 0).setText("x" * (20_000 + 1))
         self.assertEqual(state.clipart.prompts[0].prompt, "Original")
         self.assertEqual(page.table.item(0, 0).text(), "Original")
@@ -578,7 +916,30 @@ class V3ClipartFlowTests(unittest.TestCase):
                 self.app.processEvents()
                 self.assertTrue(page.isVisible())
                 self.assertTrue(page.accessibleName())
+                if step is StepId.PROMPTS:
+                    page._select_source(0)
+                    self.app.processEvents()
+                    self.assertGreater(page.verticalScrollBar().maximum(), 0)
             shell.close()
+
+    def test_large_prompt_generator_scrolls_vertically_and_horizontally_when_needed(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        page = ClipartPromptInputPage(state, lambda: None)
+        page._select_source(0)
+        page.resize(500, 350)
+        page.show()
+        self.app.processEvents()
+
+        self.assertEqual(
+            page.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self.assertEqual(
+            page.horizontalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self.assertGreater(page.verticalScrollBar().maximum(), 0)
+        self.assertGreater(page.horizontalScrollBar().maximum(), 0)
 
     def test_module_does_not_duplicate_worker_or_network_transport(self):
         source = Path(v3_clipart_flow.__file__).read_text(encoding="utf-8")
