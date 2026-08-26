@@ -388,14 +388,66 @@ class DiagnosticJournal:
 
     @staticmethod
     def format_event(event: Mapping[str, Any]) -> str:
+        severity_labels = {
+            "debug": "техническое",
+            "info": "информация",
+            "warning": "предупреждение",
+            "error": "ошибка",
+        }
         lines = [
             f"Время: {event.get('timestamp', '—')}",
-            f"Уровень: {event.get('severity', '—')}",
+            f"Уровень: {severity_labels.get(str(event.get('severity')), event.get('severity', '—'))}",
             f"Событие: {event.get('event', '—')}",
             f"Описание: {event.get('summary', '—')}",
         ]
-        for key, value in (event.get("details") or {}).items():
-            lines.append(f"{key}: {value}")
+        details = event.get("details") or {}
+        if not isinstance(details, Mapping):
+            return "\n".join(lines)
+        labels = {
+            "attempt": "Попытка",
+            "color_mode": "Цветовой режим",
+            "elapsed_ms": "Длительность",
+            "error_code": "Код ошибки",
+            "error_message": "Сообщение ошибки",
+            "filename": "Файл",
+            "has_alpha": "Alpha-канал",
+            "http_status": "HTTP-статус",
+            "image_format": "Формат",
+            "input_bytes": "Размер входного файла",
+            "item_index": "Номер изображения",
+            "item_total": "Изображений всего",
+            "model": "Модель",
+            "operation_type": "Операция",
+            "outcome": "Результат",
+            "output_bytes": "Размер результата",
+            "parameters": "Параметры",
+            "poll_attempt": "Номер проверки статуса",
+            "prompt_chars": "Длина промпта",
+            "prompt_index": "Номер промпта",
+            "provider": "Провайдер",
+            "provider_state": "Состояние провайдера",
+            "reference_count": "Количество референсов",
+            "result_count": "Количество результатов",
+            "result_index": "Номер результата",
+            "stage": "Этап",
+            "status": "Статус",
+            "task": "Идентификатор задачи",
+            "uploaded_bytes": "Загружено байт",
+            "downloaded_bytes": "Скачано байт",
+        }
+        width = details.get("width")
+        height = details.get("height")
+        if width not in (None, "") and height not in (None, ""):
+            lines.append(f"Размер изображения: {width} × {height}")
+        for key, value in details.items():
+            if key in {"width", "height", "mode"}:
+                continue
+            label = labels.get(str(key), str(key))
+            if key == "elapsed_ms":
+                value = f"{value} мс"
+            elif key == "has_alpha":
+                value = "есть" if value else "нет"
+            lines.append(f"{label}: {value}")
         return "\n".join(lines)
 
     def export_zip(self, destination: str | Path) -> Path:

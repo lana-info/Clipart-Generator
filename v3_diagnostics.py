@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
     QDialog,
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -45,6 +46,22 @@ class DiagnosticJournalDialog(QDialog):
         note.setProperty("v3Small", True)
         layout.addWidget(note)
 
+        filters = QHBoxLayout()
+        filters.addWidget(QLabel("Показать:"))
+        self.severity_filter = QComboBox()
+        self.severity_filter.setAccessibleName("Фильтр по уровню диагностики")
+        self.severity_filter.addItem("Все события", "all")
+        self.severity_filter.addItem("Предупреждения и ошибки", "warning_error")
+        self.severity_filter.addItem("Только ошибки", "error")
+        filters.addWidget(self.severity_filter)
+        self.source_filter = QComboBox()
+        self.source_filter.setAccessibleName("Фильтр по провайдеру диагностики")
+        filters.addWidget(self.source_filter)
+        self.item_filter = QComboBox()
+        self.item_filter.setAccessibleName("Фильтр по изображению диагностики")
+        filters.addWidget(self.item_filter, 1)
+        layout.addLayout(filters)
+
         splitter = QSplitter(Qt.Orientation.Vertical)
         self.event_list = QListWidget()
         self.event_list.setAccessibleName("Записи диагностики")
@@ -70,6 +87,10 @@ class DiagnosticJournalDialog(QDialog):
         layout.addLayout(actions)
 
         self.event_list.currentRowChanged.connect(self._show_event)
+        self._populate_filter_options()
+        self.severity_filter.currentIndexChanged.connect(self._populate)
+        self.source_filter.currentIndexChanged.connect(self._populate)
+        self.item_filter.currentIndexChanged.connect(self._populate)
         self._populate()
 
     @staticmethod
@@ -79,28 +100,118 @@ class DiagnosticJournalDialog(QDialog):
         except ValueError:
             return "—"
 
-    def _populate(self) -> None:
-        self.event_list.clear()
+    @staticmethod
+    def _details(event: dict) -> dict:
+        details = event.get("details")
+        return details if isinstance(details, dict) else {}
+
+    @classmethod
+    def _item_key(cls, event: dict) -> str:
+        details = cls._details(event)
+        item_index = details.get("item_index")
+        if item_index in (None, ""):
+            return ""
+        return f"{event.get('operation_id', event.get('session_id', ''))}:{item_index}"
+
+    def _populate_filter_options(self) -> None:
+        source_labels = {
+            "kie": "KIE",
+            "photoroom": "PhotoRoom",
+            "runpod": "RunPod",
+            "local": "Локальная обработка",
+            "local_rembg": "Local rembg",
+            "local_ben2": "Local BEN2",
+            "local_realesrgan": "Local Real-ESRGAN",
+            "external": "Внешний источник",
+        }
+        providers = sorted(
+            {
+                str(self._details(event).get("provider") or "").strip()
+                for event in self.events
+                if str(self._details(event).get("provider") or "").strip()
+            }
+        )
+        self.source_filter.addItem("Все источники", "all")
+        for provider in providers:
+            self.source_filter.addItem(source_labels.get(provider, provider), provider)
+
+        self.item_filter.addItem("Все изображения", "all")
+        seen: set[str] = set()
         for event in self.events:
+            key = self._item_key(event)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            details = self._details(event)
+            item_index = details.get("item_index")
+            filename = str(details.get("filename") or "").strip()
+            label = f"Изображение {item_index}"
+            if filename:
+                label += f" · {filename}"
+            self.item_filter.addItem(label, key)
+
+    def _filtered_events(self) -> list[dict]:
+        severity = self.severity_filter.currentData() or "all"
+        provider = self.source_filter.currentData() or "all"
+        item_key = self.item_filter.currentData() or "all"
+        result: list[dict] = []
+        for event in self.events:
+            event_severity = str(event.get("severity") or "info")
+            if severity == "error" and event_severity != "error":
+                continue
+            if severity == "warning_error" and event_severity not in {"warning", "error"}:
+                continue
+            details = self._details(event)
+            if provider != "all" and str(details.get("provider") or "") != provider:
+                continue
+            if item_key != "all" and self._item_key(event) != item_key:
+                continue
+            result.append(event)
+        return result
+
+    def _populate(self, *_args) -> None:
+        self.event_list.clear()
+        source_labels = {
+            "kie": "KIE",
+            "photoroom": "PhotoRoom",
+            "runpod": "RunPod",
+            "local": "Локально",
+            "local_rembg": "Local rembg",
+            "local_ben2": "Local BEN2",
+            "local_realesrgan": "Local Real-ESRGAN",
+            "external": "Внешний источник",
+        }
+        visible_events = self._filtered_events()
+        for event in visible_events:
             severity = {
                 "error": "Ошибка",
                 "warning": "Внимание",
                 "info": "Информация",
                 "debug": "Техническое",
             }.get(str(event.get("severity")), "Информация")
-            label = (
-                f"{self._local_time(event.get('timestamp'))} · {severity} · "
-                f"{event.get('summary', 'Событие')}"
-            )
+            details = self._details(event)
+            item = details.get("item_index")
+            filename = str(details.get("filename") or "").strip()
+            provider = str(details.get("provider") or "").strip()
+            context = []
+            if item not in (None, ""):
+                context.append(f"Изображение {item}")
+            if filename:
+                context.append(filename)
+            if provider:
+                context.append(source_labels.get(provider, provider))
+            label_parts = [self._local_time(event.get("timestamp")), severity, *context]
+            label_parts.append(str(event.get("summary") or "Событие"))
+            label = " · ".join(label_parts)
             item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, event)
             self.event_list.addItem(item)
-        has_events = bool(self.events)
+        has_events = bool(visible_events)
         self.copy_button.setEnabled(has_events)
         if has_events:
             self.event_list.setCurrentRow(0)
         else:
-            self.detail.setPlainText("Записей пока нет.")
+            self.detail.setPlainText("По выбранным фильтрам записей нет.")
 
     def _selected_event(self):
         item = self.event_list.currentItem()
