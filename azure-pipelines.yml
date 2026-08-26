@@ -80,7 +80,7 @@ steps:
         throw "Microsoft Visual C++ runtime has an unexpected signer"
       }
 
-      choco install innosetup -y --no-progress
+      choco upgrade innosetup --version=6.7.1 -y --no-progress --allow-downgrade
       $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
       if (-not (Test-Path -LiteralPath $iscc)) { throw "Inno Setup compiler is missing: $iscc" }
       & $iscc '/DAppVersion=${{ parameters.appVersion }}' '.\installer.iss'
