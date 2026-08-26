@@ -175,6 +175,205 @@ def install_fake_file_io(worker, saved=None):
 
 
 class ParallelGenerationTests(unittest.TestCase):
+    def test_generation_reference_upload_failure_keeps_exact_kie_context(self):
+        with tempfile.TemporaryDirectory(prefix="kie-generation-reference-failure-") as temp_dir:
+            reference_path = create_inputs(temp_dir, 1)[0]
+            private_prompt = "private generation prompt"
+            api_key = "private-kie-key"
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp_dir,
+                {
+                    "kie_api_key": api_key,
+                    "kie_concurrency": 1,
+                    "generation_launch_interval": 0,
+                },
+                generated_prompts=[
+                    {"prompt": private_prompt, "references": [reference_path]}
+                ],
+            )
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+
+            def fail_upload(worker_self, req, timeout=None):
+                raise RuntimeError(
+                    f"controlled upload failure {private_prompt} {api_key}"
+                )
+
+            worker._request_with_retries = types.MethodType(fail_upload, worker)
+            worker._mode1_generate(process_generated=False, emit_final=False)
+
+            failed = next(
+                event for event in item_events if event.get("status") == "failed"
+            )
+            self.assertEqual(failed["stage"], "generation")
+            self.assertEqual(failed.get("provider"), "kie")
+            self.assertEqual(failed.get("model"), worker.reference_generation_model)
+            self.assertNotIn(private_prompt, str(failed))
+            self.assertNotIn(api_key, str(failed))
+            self.assertNotIn(reference_path, str(failed))
+
+    def test_generation_create_failure_keeps_exact_kie_context(self):
+        with tempfile.TemporaryDirectory(prefix="kie-generation-create-failure-") as temp_dir:
+            private_prompt = "private create prompt"
+            api_key = "private-create-key"
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp_dir,
+                {
+                    "kie_api_key": api_key,
+                    "kie_concurrency": 1,
+                    "generation_launch_interval": 0,
+                },
+                generated_prompts=[
+                    {"prompt": private_prompt, "references": []}
+                ],
+            )
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+
+            def fail_create(worker_self, req, timeout=None):
+                self.assertIn("createTask", req.full_url)
+                raise RuntimeError(
+                    f"controlled create failure {private_prompt} {api_key}"
+                )
+
+            worker._request_with_retries = types.MethodType(fail_create, worker)
+            worker._mode1_generate(process_generated=False, emit_final=False)
+
+            failed = next(
+                event for event in item_events if event.get("status") == "failed"
+            )
+            self.assertEqual(failed["stage"], "generation")
+            self.assertEqual(failed.get("provider"), "kie")
+            self.assertEqual(failed.get("model"), worker.text_generation_model)
+            self.assertNotIn(private_prompt, str(failed))
+            self.assertNotIn(api_key, str(failed))
+
+    def test_normal_kie_upscale_upload_failure_keeps_exact_context(self):
+        with tempfile.TemporaryDirectory(prefix="kie-normal-upscale-failure-") as temp_dir:
+            source_path = create_inputs(temp_dir, 1)[0]
+            api_key = "private-upscale-key"
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {
+                    "kie_api_key": api_key,
+                    "photoroom_api_key": "test-photoroom-key",
+                    "kie_concurrency": 1,
+                    "photoroom_concurrency": 1,
+                    "upscale": True,
+                    "upscale_provider": "kie",
+                    "remove_bg": True,
+                    "remove_bg_provider": "photoroom",
+                    "output_dir": str(Path(temp_dir) / "output"),
+                },
+                selected_files=[source_path],
+            )
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+
+            def fail_upload(worker_self, req, timeout=None):
+                self.assertIn("file-stream-upload", req.full_url)
+                raise RuntimeError(f"controlled upload failure {api_key}")
+
+            worker._request_with_retries = types.MethodType(fail_upload, worker)
+            worker._mode2_process_files(emit_final=False)
+
+            failed = next(
+                event for event in item_events if event.get("status") == "failed"
+            )
+            self.assertEqual(failed["stage"], "upscale_before")
+            self.assertEqual(failed.get("provider"), "kie")
+            self.assertEqual(failed.get("model"), worker.kie_upscale_model)
+            self.assertNotIn(api_key, str(failed))
+            self.assertNotIn(source_path, str(failed))
+
+    def test_legacy_kie_upscale_upload_failure_keeps_exact_context(self):
+        with tempfile.TemporaryDirectory(prefix="kie-legacy-upscale-failure-") as temp_dir:
+            source_path = create_inputs(temp_dir, 1)[0]
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {
+                    "kie_api_key": "test-key",
+                    "kie_concurrency": 1,
+                    "upscale": True,
+                    "upscale_provider": "kie",
+                    "remove_bg": False,
+                    "output_dir": str(Path(temp_dir) / "output"),
+                },
+                selected_files=[source_path],
+            )
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+
+            def fail_upload(worker_self, req, timeout=None):
+                raise RuntimeError("controlled legacy upload failure")
+
+            worker._request_with_retries = types.MethodType(fail_upload, worker)
+
+            worker._mode2_process_files(emit_final=False)
+
+            failed = next(
+                event for event in item_events if event.get("status") == "failed"
+            )
+            self.assertEqual(failed["stage"], "upscale_before")
+            self.assertEqual(failed.get("provider"), "kie")
+            self.assertEqual(failed.get("model"), worker.kie_upscale_model)
+            self.assertNotIn(source_path, str(failed))
+
+    def test_legacy_kie_background_create_failure_keeps_exact_context(self):
+        with tempfile.TemporaryDirectory(prefix="kie-legacy-background-failure-") as temp_dir:
+            source_path = create_inputs(temp_dir, 1)[0]
+            api_key = "private-background-key"
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                {
+                    "kie_api_key": api_key,
+                    "kie_concurrency": 1,
+                    "generation_launch_interval": 0,
+                    "upscale": True,
+                    "upscale_provider": "kie",
+                    "remove_bg": True,
+                    "remove_bg_provider": "kie",
+                    "output_dir": str(Path(temp_dir) / "output"),
+                },
+                selected_files=[source_path],
+            )
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+            create_count = 0
+
+            def fake_request(worker_self, req, timeout=None):
+                nonlocal create_count
+                if "file-stream-upload" in req.full_url:
+                    return b'{"success":true,"data":{"downloadUrl":"https://example.invalid/input.png"}}'
+                if "createTask" in req.full_url:
+                    create_count += 1
+                    if create_count == 2:
+                        raise RuntimeError(
+                            f"controlled background failure {api_key}"
+                        )
+                    return b'{"code":200,"data":{"taskId":"upscale-task"}}'
+                if "recordInfo" in req.full_url:
+                    return b'{"code":200,"data":{"state":"success","resultJson":"{\\"resultUrls\\":[\\"https://example.invalid/upscaled.png\\"]}"}}'
+                raise AssertionError(f"Unexpected request: {req.full_url}")
+
+            worker._request_with_retries = types.MethodType(fake_request, worker)
+            install_fake_file_io(worker)
+            worker._mode2_process_files(emit_final=False)
+
+            failed = next(
+                event for event in item_events if event.get("status") == "failed"
+            )
+            self.assertEqual(failed["stage"], "background_removal")
+            self.assertEqual(failed.get("provider"), "kie")
+            self.assertEqual(failed.get("model"), worker.kie_remove_bg_model)
+            self.assertNotIn(api_key, str(failed))
+            self.assertNotIn(source_path, str(failed))
+
     def test_kie_uploads_share_the_provider_limit_with_other_kie_network_work(self):
         with tempfile.TemporaryDirectory(prefix="parallel-kie-upload-") as temp_dir:
             inputs = create_inputs(temp_dir, 6)

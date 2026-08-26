@@ -1090,6 +1090,11 @@ class WorkerThread(QThread):
         self._diagnostic_context.item_total = max(1, int(item_total))
         self._diagnostic_context.stage = str(stage or "")
 
+    def _set_provider_diagnostic_context(self, stage, provider, model):
+        self._diagnostic_context.stage = str(stage or "")
+        self._diagnostic_context.provider = str(provider or "")
+        self._diagnostic_context.model = str(model or "")
+
     def _diagnostic_context_values(self) -> dict[str, object]:
         values: dict[str, object] = {}
         for name in ("item_index", "item_total", "stage", "provider", "model"):
@@ -2099,6 +2104,11 @@ class WorkerThread(QThread):
         if order_error:
             raise ValueError(order_error)
         if self._can_use_legacy_kie_processing_pipeline():
+            self._set_provider_diagnostic_context(
+                "upscale_before",
+                "kie",
+                self.kie_upscale_model,
+            )
             if self.kie_upscale_model == "recraft/crisp-upscale" and not source_url:
                 validate_recraft_crisp_upscale_input(source_path)
             if (
@@ -2439,6 +2449,7 @@ class WorkerThread(QThread):
         upscale_model = (
             "realesrgan-ncnn-vulkan" if provider == "local_realesrgan" else kie_model
         )
+        self._set_provider_diagnostic_context(stage, provider, upscale_model)
         upscale_parameters = {
             "scale": local_scale
             if provider == "local_realesrgan"
@@ -2550,6 +2561,11 @@ class WorkerThread(QThread):
         pipeline_url = image_url
 
         if self.upscale:
+            self._set_provider_diagnostic_context(
+                "upscale_before",
+                "kie",
+                self.kie_upscale_model,
+            )
             self.progress.emit("  Этап обработки: upscale_before; status=running")
             pipeline_url = self._upscale_pipeline_step(
                 pipeline_url,
@@ -2562,6 +2578,11 @@ class WorkerThread(QThread):
             self.progress.emit("  Этап обработки: upscale_before; status=complete")
 
         if self.remove_bg:
+            self._set_provider_diagnostic_context(
+                "background_removal",
+                "kie",
+                self.kie_remove_bg_model,
+            )
             self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
             pipeline_url = self._kie_run_model_task(self.kie_remove_bg_model, pipeline_url)
             nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
@@ -3767,6 +3788,11 @@ class WorkerThread(QThread):
 
     def _kie_run_model_task(self, model, image_url, extra_input=None):
         with self._provider_lease("kie"):
+            self._set_provider_diagnostic_context(
+                getattr(self._diagnostic_context, "stage", ""),
+                "kie",
+                model,
+            )
             input_payload = {} if model == KIE_TOPAZ_MODEL_ID else {"image": image_url}
             if isinstance(extra_input, dict):
                 input_payload.update(extra_input)
@@ -3801,6 +3827,11 @@ class WorkerThread(QThread):
         with self._provider_lease("kie"):
             reference_items = split_references(references or [])
             normalized_model = self._select_generation_model(reference_items)
+            self._set_provider_diagnostic_context(
+                "generation",
+                "kie",
+                normalized_model,
+            )
             has_references = bool(reference_items)
             ratio, resolution = self._get_generation_profile(has_references)
             reference_sizes = tuple(
