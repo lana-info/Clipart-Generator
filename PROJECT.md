@@ -67,6 +67,9 @@ The Windows-only `3.0.1` build completed successfully in GitHub Actions run
 Setup created the installer. The downloaded installer SHA-256 is
 `e095a018a0dd44d7f9d99c7d4bba7e35a7519974894f0428d957c51c40beb973`.
 The current Windows installer naming convention is
-`VibixImages-Setup-<version>.exe`. The source now contains the approved
-three-stage Polar dark installer design; a new Windows build has not been run
-for this visual change, and requires a separate owner command.
+`VibixImages-Setup-<version>.exe`. GitHub Actions run `33002277766` built the
+approved three-stage Polar dark installer for version `3.0.5` from merged
+`develop/3.0` commit `631219f1b2494857d82f07a380e2f6cf538a4f02`. The workflow
+installed the finished package and verified the application artwork and prompt
+screens from the installed copy. The installer SHA-256 is
+`fceb6abfb44c2feb93ce8f2e2142987dc551fa47b0ddf1d7667341b6f12e8fef`.

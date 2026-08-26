@@ -27,10 +27,10 @@ Updated: 2026-08-26
 
 ## Next task
 
-After a new explicit owner command, build the integrated `develop/3.0` source
-for Windows and perform packaged acceptance for the new dark installer, prompt
-flow, provider routes and diagnostic journal. Do not start that build or
-publish `3.0.5` without that command.
+Perform owner target-machine acceptance of the Windows 3.0.5 artifact from
+GitHub Actions run `33002277766`: inspect the new dark installer and exercise
+the prompt flow, provider routes and diagnostic journal. Do not publish it to
+the update service before that acceptance.
 
 ## Branded Windows installer checkpoint — 2026-08-26
 
@@ -41,8 +41,14 @@ publish `3.0.5` without that command.
   redundant Start Menu and Ready pages are hidden.
 - GitHub and Azure Windows workflows pin Inno Setup 6.7.1, the minimum project
   compiler version supporting the selected style and background directives.
-- Branding and release-entrypoint tests pass locally. No installer was compiled
-  or published; Windows visual acceptance requires a separately approved build.
+- GitHub Actions run `33002277766` built Windows version `3.0.5` from merged
+  commit `631219f1b2494857d82f07a380e2f6cf538a4f02`. The workflow installed the
+  finished package and verified the approved mode artwork and both prompt
+  screens from the installed executable. The installer is `191583836` bytes
+  with SHA-256
+  `fceb6abfb44c2feb93ce8f2e2142987dc551fa47b0ddf1d7667341b6f12e8fef`.
+  macOS and server publication were not run; the visible installer wizard still
+  requires owner review on the target Windows computer.
 
 ## Provider contract checkpoint — 2026-08-26
 
