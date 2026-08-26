@@ -27,9 +27,13 @@ Updated: 2026-08-26
 
 ## Next task
 
-Owner visual approval of the revised prompt flow, stable window behavior and
-Topaz scale control. Do not start a new Windows build or publish `3.0.5` until
-the source screenshots are approved.
+Implement the owner-approved detailed, privacy-safe diagnostic journal after
+review of
+`docs/superpowers/specs/2026-08-26-detailed-run-diagnostics-design.md`.
+The journal must identify every image, stage, provider/model and safe provider
+response without storing prompt text, secrets, private paths, URLs or image
+contents. Do not start a new Windows build or publish `3.0.5` without a new,
+explicit owner command.
 
 ## KIE Topaz checkpoint — 2026-08-26
 
