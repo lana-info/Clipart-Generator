@@ -414,6 +414,31 @@ class MainUiAcceptanceTests(unittest.TestCase):
                 window.deleteLater()
                 self.app.processEvents()
 
+    def test_automatic_run_preflight_never_creates_paid_probe_tasks(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-ui-no-paid-probe-") as temp_dir:
+            temp_path = Path(temp_dir)
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = (
+                self.isolated_paths(temp_path)
+            )
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch:
+                window = main.MainWindow()
+                window.kie_api_key_input.setText("test-probe-key")
+                with patch.object(
+                    window,
+                    "_probe_model_with_fallback_prompt",
+                ) as probe_mock:
+                    allowed = window._ensure_models_available_before_run(
+                        "generate_only",
+                        [{"prompt": "valid prompt", "references": []}],
+                    )
+
+                self.assertTrue(allowed)
+                probe_mock.assert_not_called()
+                window.settings_save_timer.stop()
+                window.api_key_mask_timer.stop()
+                window.deleteLater()
+                self.app.processEvents()
+
 
 if __name__ == "__main__":
     unittest.main()

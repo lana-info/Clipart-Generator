@@ -90,7 +90,9 @@ from model_catalog import (
     SUPPORTED_GENERATION_MODEL_IDS as CATALOG_SUPPORTED_GENERATION_MODEL_IDS,
     VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
     MODEL_SPECS,
+    ratios_for_mode,
     resolve_generation_endpoint,
+    validate_generation_contract,
 )
 from v3_provider_registry import (
     KIE_TOPAZ_MODEL_ID,
@@ -172,10 +174,13 @@ MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_API_UPLOAD_BYTES = 128 * 1024 * 1024
 MAX_PROVIDER_IMAGE_DIMENSION = 32_768
 MAX_PROVIDER_IMAGE_PIXELS = 70_000_000
-RECRAFT_CRISP_MAX_BYTES = 5 * 1024 * 1024
-RECRAFT_CRISP_MAX_DIMENSION = 4096
-RECRAFT_CRISP_MAX_PIXELS = 4 * 1024 * 1024
-RECRAFT_CRISP_MIN_DIMENSION = 32
+RECRAFT_CRISP_MAX_BYTES = 10 * 1024 * 1024
+RECRAFT_REMOVE_BG_MAX_BYTES = 5 * 1024 * 1024
+RECRAFT_REMOVE_BG_MAX_DIMENSION = 4096
+RECRAFT_REMOVE_BG_MAX_PIXELS = 16 * 1024 * 1024
+RECRAFT_REMOVE_BG_MIN_DIMENSION = 256
+PHOTOROOM_MAX_BYTES = 50 * 1024 * 1024
+PHOTOROOM_MAX_DIMENSION = 6000
 MAX_UPDATE_MANIFEST_BYTES = 2 * 1024 * 1024
 MAX_UPDATE_INSTALLER_BYTES = 512 * 1024 * 1024
 MAX_UPDATE_DOWNLOAD_RETRIES = 3
@@ -296,7 +301,9 @@ MODEL_CAPABILITIES = {
 }
 
 RATIO_OPTIONS_ORDER = [
-    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
+    "1:2", "2:1", "1:3", "3:1", "9:16", "16:9", "9:21", "21:9",
+    "1:4", "4:1", "1:8", "8:1",
 ]
 RESOLUTION_OPTIONS_ORDER = ["1K", "2K", "4K", "8K"]
 
@@ -723,22 +730,61 @@ def validate_recraft_crisp_upscale_input(image_path):
     try:
         file_size = os.path.getsize(image_path)
         if file_size > RECRAFT_CRISP_MAX_BYTES:
-            raise RuntimeError("Recraft Crisp input file size exceeds 5 MB")
+            raise RuntimeError("Recraft Crisp input file size exceeds 10 MB")
         with Image.open(image_path) as image:
             if image.format not in {"PNG", "JPEG", "WEBP"}:
                 raise RuntimeError("Recraft Crisp input must be PNG, JPG, or WEBP")
             if getattr(image, "n_frames", 1) != 1:
                 raise RuntimeError("Recraft Crisp input must be single-frame")
-            if min(image.size) < RECRAFT_CRISP_MIN_DIMENSION:
-                raise RuntimeError("Recraft Crisp input dimension is below 32 pixels")
-            if max(image.size) > RECRAFT_CRISP_MAX_DIMENSION:
-                raise RuntimeError("Recraft Crisp input dimension exceeds 4096 pixels")
-            if image.width * image.height > RECRAFT_CRISP_MAX_PIXELS:
-                raise RuntimeError("Recraft Crisp input exceeds 4 MP")
+            image.load()
     except RuntimeError:
         raise
     except (OSError, UnidentifiedImageError) as exc:
         raise RuntimeError("Recraft Crisp input image is invalid") from exc
+
+
+def validate_recraft_remove_background_input(image_path):
+    """Validate a local source before upload to Recraft Remove Background."""
+    try:
+        if os.path.getsize(image_path) > RECRAFT_REMOVE_BG_MAX_BYTES:
+            raise RuntimeError("Recraft Remove Background input exceeds 5 MB")
+        with Image.open(image_path) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise RuntimeError("Recraft Remove Background input must be PNG, JPG, or WEBP")
+            if getattr(image, "n_frames", 1) != 1:
+                raise RuntimeError("Recraft Remove Background input must be single-frame")
+            if min(image.size) < RECRAFT_REMOVE_BG_MIN_DIMENSION:
+                raise RuntimeError("Recraft Remove Background input dimension is below 256 pixels")
+            if max(image.size) > RECRAFT_REMOVE_BG_MAX_DIMENSION:
+                raise RuntimeError("Recraft Remove Background input dimension exceeds 4096 pixels")
+            if image.width * image.height > RECRAFT_REMOVE_BG_MAX_PIXELS:
+                raise RuntimeError("Recraft Remove Background input exceeds 16 MP")
+            image.load()
+    except RuntimeError:
+        raise
+    except (OSError, UnidentifiedImageError) as exc:
+        raise RuntimeError("Recraft Remove Background input image is invalid") from exc
+
+
+def validate_photoroom_input(image_path):
+    """Validate a local source against PhotoRoom Remove Background limits."""
+    try:
+        if os.path.getsize(image_path) > PHOTOROOM_MAX_BYTES:
+            raise RuntimeError("PhotoRoom input exceeds 50 MB")
+        if Path(image_path).suffix.lower() in {".heic", ".heif"}:
+            raise RuntimeError("PhotoRoom input must be PNG, JPG, or WEBP")
+        with Image.open(image_path) as image:
+            if image.format not in {"PNG", "JPEG", "WEBP"}:
+                raise RuntimeError("PhotoRoom input must be PNG, JPG, or WEBP")
+            if getattr(image, "n_frames", 1) != 1:
+                raise RuntimeError("PhotoRoom input must be single-frame")
+            if max(image.size) > PHOTOROOM_MAX_DIMENSION:
+                raise RuntimeError("PhotoRoom input dimension exceeds 6000 pixels")
+            image.load()
+    except RuntimeError:
+        raise
+    except (OSError, UnidentifiedImageError) as exc:
+        raise RuntimeError("PhotoRoom input image is invalid") from exc
 
 
 def validate_upscale_after_background_order(remove_bg, upscale_after, provider, model):
@@ -1692,6 +1738,13 @@ class WorkerThread(QThread):
                     current_url = None
                     local_result = True
                 else:
+                    if (
+                        self.kie_remove_bg_model == "recraft/remove-background"
+                        and not current_url
+                        and current_path
+                        and os.path.isfile(current_path)
+                    ):
+                        validate_recraft_remove_background_input(current_path)
                     current_url = self._ensure_kie_url(current_url, current_path)
                     self.progress.emit(f"  Удаление фона через {self.kie_remove_bg_model}...")
                     current_url = self._kie_run_model_task(self.kie_remove_bg_model, current_url)
@@ -2804,51 +2857,10 @@ class WorkerThread(QThread):
             selected_model = fallback_model
 
     def _ensure_models_available_before_run(self, run_mode, prompts):
-        if run_mode == "process_only":
-            return True
-
-        api_key = self.kie_api_key_input.text().strip()
-        if not api_key:
-            return True
-
-        timeout = max(10, int(self.config.get("timeout", 60)))
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
-        if not self._probe_model_with_fallback_prompt(
-            combo_box=self.text_generation_model_combo,
-            preferred_model_id=text_model,
-            fallback_model_id="gpt-image/1.5-text-to-image",
-            ratio=self.text_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=None,
-        ):
-            return False
-
-        references_needed = False
-        for entry in prompts or []:
-            if isinstance(entry, dict) and split_references(entry.get("references", [])):
-                references_needed = True
-                break
-
-        if not references_needed:
-            return True
-
-        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
-        return self._probe_model_with_fallback_prompt(
-            combo_box=self.reference_generation_model_combo,
-            preferred_model_id=reference_model,
-            fallback_model_id="gpt-image/1.5-image-to-image",
-            ratio=self.reference_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=["https://picsum.photos/768/768"],
-        )
+        # Ordinary runs must never create paid provider tasks as an availability
+        # probe. Contract compatibility is validated locally before upload; a
+        # live model check remains available only through the explicit UI action.
+        return True
 
     def _kie_headers(self):
         return {
@@ -2934,6 +2946,7 @@ class WorkerThread(QThread):
             raise ValueError("Не указан PhotoRoom API Key")
         if not os.path.isfile(input_path):
             raise FileNotFoundError(f"Файл для PhotoRoom не найден: {input_path}")
+        validate_photoroom_input(input_path)
 
         boundary = "----ClipartPhotoRoomBoundary" + uuid.uuid4().hex
         filename = re.sub(r'[\r\n"]', "_", os.path.basename(input_path)) or "image.png"
@@ -3217,8 +3230,25 @@ class WorkerThread(QThread):
         return urls
 
     def _kie_generate_image(self, prompt, references=None):
-        reference_urls = self._resolve_reference_urls(references)
-        normalized_model = self._select_generation_model(reference_urls)
+        reference_items = split_references(references or [])
+        normalized_model = self._select_generation_model(reference_items)
+        has_references = bool(reference_items)
+        ratio, resolution = self._get_generation_profile(has_references)
+        reference_sizes = tuple(
+            os.path.getsize(reference)
+            for reference in reference_items
+            if not urlparse(reference).scheme and os.path.isfile(reference)
+        )
+        validate_generation_contract(
+            normalized_model,
+            has_references=has_references,
+            ratio=ratio,
+            resolution=resolution,
+            prompt=prompt,
+            reference_count=len(reference_items),
+            reference_sizes=reference_sizes,
+        )
+        reference_urls = self._resolve_reference_urls(reference_items)
         model_meta = GENERATION_MODEL_META.get(normalized_model, {})
         model_type = model_meta.get("type", "text_to_image")
 
@@ -3231,8 +3261,8 @@ class WorkerThread(QThread):
             return self._kie_generate_4o_image(prompt)
         return self._kie_generate_generic_model(normalized_model, prompt, reference_urls=reference_urls)
 
-    def _normalize_model_ratio(self, model_name, ratio):
-        allowed = self._get_model_capabilities(model_name)["ratios"]
+    def _normalize_model_ratio(self, model_name, ratio, has_references=False):
+        allowed = set(ratios_for_mode(model_name, has_references))
         if ratio in allowed or not allowed:
             return ratio
         fallback_ratio = "1:1" if "1:1" in allowed else next(iter(sorted(allowed)))
@@ -3271,7 +3301,11 @@ class WorkerThread(QThread):
             if prompt_ratio:
                 ratio_setting = prompt_ratio
                 self.progress.emit(f"  Пропорция из промпта: {prompt_ratio} (UI=auto)")
-        ratio = self._normalize_model_ratio(model_name, ratio_setting)
+        ratio = self._normalize_model_ratio(
+            model_name,
+            ratio_setting,
+            has_references=bool(reference_urls),
+        )
         quality = self._normalize_model_quality(model_name)
         capabilities = self._get_model_capabilities(model_name)
         allowed_resolutions = capabilities["resolutions"]
@@ -3351,7 +3385,7 @@ class WorkerThread(QThread):
                 "nsfw_checker": True,
             }
             if reference_urls:
-                payload["image_url"] = list(reference_urls)
+                payload["image_url"] = reference_urls[0]
             return payload
 
         if model_name == "qwen/image-edit":
@@ -3574,7 +3608,11 @@ class WorkerThread(QThread):
 
     def _normalize_ratio(self, value):
         raw = (value or "").strip()
-        allowed = {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"}
+        allowed = {
+            "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
+            "1:2", "2:1", "1:3", "3:1", "9:16", "16:9", "9:21", "21:9",
+            "1:4", "4:1", "1:8", "8:1",
+        }
         legacy_map = {
             "1024x1024": "1:1",
             "1024x1536": "3:4",
@@ -5614,8 +5652,8 @@ class MainWindow(QMainWindow):
     def _get_model_capabilities(self, model_id):
         return get_model_capabilities(model_id)
 
-    def _get_ordered_ratios_for_model(self, model_id):
-        allowed = self._get_model_capabilities(model_id)["ratios"]
+    def _get_ordered_ratios_for_model(self, model_id, has_references=False):
+        allowed = set(ratios_for_mode(model_id, has_references))
         if not allowed:
             return ["1:1"]
         ordered = [value for value in RATIO_OPTIONS_ORDER if value in allowed]
@@ -5667,7 +5705,7 @@ class MainWindow(QMainWindow):
         )
         self._set_combo_values(
             self.reference_ratio_combo,
-            self._get_ordered_ratios_for_model(reference_model),
+            self._get_ordered_ratios_for_model(reference_model, has_references=True),
             preferred_reference_ratio,
         )
 
@@ -6626,44 +6664,10 @@ class MainWindow(QMainWindow):
             ):
                 return False
 
-        api_key = self.kie_api_key_input.text().strip()
-        if not api_key:
-            return True
-
-        timeout = max(10, int(self.config.get("timeout", 60)))
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-        text_model = self.get_selected_generation_model_id(self.text_generation_model_combo)
-        if not self._probe_model_with_fallback_prompt(
-            combo_box=self.text_generation_model_combo,
-            preferred_model_id=text_model,
-            fallback_model_id="gpt-image/1.5-text-to-image",
-            ratio=self.text_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=None,
-            runtime_settings=runtime_settings,
-        ):
-            return False
-
-        if not references_needed:
-            return True
-
-        reference_model = self.get_selected_generation_model_id(self.reference_generation_model_combo)
-        return self._probe_model_with_fallback_prompt(
-            combo_box=self.reference_generation_model_combo,
-            preferred_model_id=reference_model,
-            fallback_model_id="gpt-image/1.5-image-to-image",
-            ratio=self.reference_ratio_combo.currentText().strip() or "1:1",
-            headers=headers,
-            timeout=timeout,
-            probe_reference_urls=["https://picsum.photos/768/768"],
-            runtime_settings=runtime_settings,
-        )
+        # Automatic preflight is deliberately local. KIE createTask may spend
+        # credits, so a network probe is allowed only through the explicit
+        # user action that checks the selected models.
+        return True
 
     def _uses_local_realesrgan_for_run(self, run_mode):
         if run_mode not in {"process_only", "both"}:

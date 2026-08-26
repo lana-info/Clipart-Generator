@@ -60,15 +60,46 @@ _MODEL_ROWS = (
 _CAPABILITIES = {
     "gpt-image/1.5-text-to-image": {"ratios": {"1:1", "2:3", "3:2"}, "qualities": {"medium", "high"}, "pricing": "4 / 22 credits ($0.02 / $0.11)"},
     "gpt-image/1.5-image-to-image": {"ratios": {"1:1", "2:3", "3:2"}, "qualities": {"medium", "high"}, "pricing": "4 / 22 credits ($0.02 / $0.11)"},
-    "gpt-image-2": {"ratios": {"auto", "1:1", "9:16", "16:9", "4:3", "3:4"}, "resolutions": {"1K", "2K", "4K"}, "pricing": {"1K": "6 credits / $0.03", "2K": "10 credits / $0.05", "4K": "16 credits / $0.08"}, "reference_compatible_text": True},
+    "gpt-image-2": {"ratios": {"auto", "1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "2:1", "1:2", "3:1", "1:3", "21:9", "9:21"}, "resolutions": {"1K", "2K", "4K"}, "pricing": {"1K": "6 credits / $0.03", "2K": "10 credits / $0.05", "4K": "16 credits / $0.08"}, "reference_compatible_text": True},
     "nano-banana-2": {"ratios": {"auto", "1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"}, "resolutions": {"1K", "2K", "4K"}, "pricing": {"1K": "8 credits / $0.04", "2K": "12 credits / $0.06", "4K": "18 credits / $0.09"}, "reference_compatible_text": True},
     "nano-banana-pro": {"ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"}, "resolutions": {"1K", "2K", "4K"}, "pricing": {"1K": "18 credits / $0.09", "2K": "18 credits / $0.09", "4K": "24 credits / $0.12"}, "reference_compatible_text": True},
     "qwen-image-2": {"ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"}, "pricing": "6 credits / $0.03", "reference_compatible_text": True},
-    "flux-2/flex-text-to-image": {"ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}, "resolutions": {"1K", "2K"}, "pricing": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"}},
-    "flux-2/pro-text-to-image": {"ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}, "resolutions": {"1K", "2K"}, "pricing": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"}},
+    "flux-2/flex-text-to-image": {"ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}, "resolutions": {"1K", "2K"}, "pricing": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"}},
+    "flux-2/pro-text-to-image": {"ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}, "resolutions": {"1K", "2K"}, "pricing": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"}},
     "flux-2/flex-image-to-image": {"ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}, "resolutions": {"1K", "2K"}, "pricing": {"1K": "14 credits / $0.07", "2K": "24 credits / $0.12"}},
     "flux-2/pro-image-to-image": {"ratios": {"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}, "resolutions": {"1K", "2K"}, "pricing": {"1K": "5 credits / $0.025", "2K": "7 credits / $0.035"}},
 }
+
+_MODE_RATIOS = MappingProxyType({
+    "qwen-image-2": MappingProxyType({
+        False: frozenset({"1:1", "3:4", "4:3", "9:16", "16:9"}),
+        True: frozenset({"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"}),
+    }),
+    "flux-2/flex-image-to-image": MappingProxyType({
+        True: frozenset({"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}),
+    }),
+    "flux-2/pro-image-to-image": MappingProxyType({
+        True: frozenset({"auto", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9"}),
+    }),
+})
+
+_REFERENCE_LIMITS = MappingProxyType({
+    "gpt-image/1.5-image-to-image": (16, 10 * 1024 * 1024),
+    "gpt-image-2": (16, 30 * 1024 * 1024),
+    "nano-banana-2": (14, 30 * 1024 * 1024),
+    "nano-banana-pro": (8, 30 * 1024 * 1024),
+    "qwen-image-2": (1, 10 * 1024 * 1024),
+    "flux-2/flex-image-to-image": (8, 10 * 1024 * 1024),
+    "flux-2/pro-image-to-image": (8, 10 * 1024 * 1024),
+})
+
+_PROMPT_LIMITS = MappingProxyType({
+    "gpt-image-2": (1, 20_000),
+    "flux-2/flex-text-to-image": (3, 5_000),
+    "flux-2/pro-text-to-image": (3, 5_000),
+    "flux-2/flex-image-to-image": (3, 5_000),
+    "flux-2/pro-image-to-image": (3, 5_000),
+})
 
 _first_rows: dict[str, tuple[str, str]] = {}
 for _model_id, _label, _model_type in _MODEL_ROWS:
@@ -106,4 +137,64 @@ def resolve_generation_endpoint(model_id: str, has_references: bool = False) -> 
     model_spec(model_id)
     if model_id == "gpt-image-2":
         return "gpt-image-2-image-to-image" if has_references else "gpt-image-2-text-to-image"
+    if model_id == "qwen-image-2":
+        return "qwen2/image-edit" if has_references else "qwen2/text-to-image"
     return model_id
+
+
+def ratios_for_mode(model_id: str, has_references: bool = False) -> frozenset[str]:
+    spec = model_spec(model_id)
+    modes = _MODE_RATIOS.get(model_id)
+    if modes and bool(has_references) in modes:
+        return modes[bool(has_references)]
+    return spec.ratios
+
+
+def reference_limits(model_id: str) -> tuple[int | None, int | None]:
+    model_spec(model_id)
+    return _REFERENCE_LIMITS.get(model_id, (None, None))
+
+
+def validate_generation_contract(
+    model_id: str,
+    *,
+    has_references: bool,
+    ratio: str,
+    resolution: str,
+    prompt: str,
+    reference_count: int = 0,
+    reference_sizes: tuple[int, ...] = (),
+) -> None:
+    spec = model_spec(model_id)
+    allowed_ratios = ratios_for_mode(model_id, has_references)
+    if allowed_ratios and ratio not in allowed_ratios:
+        raise ValueError(f"Пропорция {ratio} недоступна для модели {spec.label}")
+    if spec.resolutions and resolution not in spec.resolutions:
+        raise ValueError(f"Разрешение {resolution} недоступно для модели {spec.label}")
+
+    minimum, maximum = _PROMPT_LIMITS.get(model_id, (1, None))
+    prompt_length = len(str(prompt or ""))
+    if prompt_length < minimum or (maximum is not None and prompt_length > maximum):
+        upper = maximum if maximum is not None else "без ограничения"
+        raise ValueError(f"Промпт для {spec.label} должен содержать от {minimum} до {upper} символов")
+
+    if model_id == "gpt-image-2":
+        if ratio == "auto" and resolution != "1K":
+            raise ValueError("GPT Image 2: пропорция auto поддерживает только разрешение 1K")
+        if ratio == "1:1" and resolution == "4K":
+            raise ValueError("GPT Image 2: пропорция 1:1 недоступна в разрешении 4K")
+        if has_references:
+            if ratio in {"5:4", "4:5"} and resolution != "1K":
+                raise ValueError(f"GPT Image 2: пропорция {ratio} поддерживает только 1K с референсами")
+        elif resolution in {"2K", "4K"} and ratio in {"5:4", "4:5", "3:1", "1:3", "9:21"}:
+            raise ValueError(f"GPT Image 2: пропорция {ratio} недоступна в разрешении {resolution}")
+
+    max_references, max_reference_bytes = reference_limits(model_id)
+    if has_references and max_references is not None and reference_count > max_references:
+        reference_word = "референс" if max_references == 1 else "референса"
+        raise ValueError(f"Модель {spec.label} поддерживает максимум {max_references} {reference_word}")
+    if has_references and max_reference_bytes is not None:
+        for size in reference_sizes:
+            if size > max_reference_bytes:
+                limit_mb = max_reference_bytes // (1024 * 1024)
+                raise ValueError(f"Референс для {spec.label} превышает {limit_mb} МБ")

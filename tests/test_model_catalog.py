@@ -6,7 +6,9 @@ from model_catalog import (
     REFERENCE_MODEL_SHORTLIST,
     VISIBLE_GENERATION_MODEL_IDS,
     model_spec,
+    ratios_for_mode,
     resolve_generation_endpoint,
+    validate_generation_contract,
 )
 
 
@@ -37,6 +39,90 @@ class ModelCatalogTests(unittest.TestCase):
             "gpt-image-2-image-to-image",
         )
         self.assertIn("gpt-image-2", REFERENCE_MODEL_SHORTLIST)
+
+    def test_qwen_two_uses_distinct_documented_endpoints(self):
+        self.assertEqual(
+            resolve_generation_endpoint("qwen-image-2"),
+            "qwen2/text-to-image",
+        )
+        self.assertEqual(
+            resolve_generation_endpoint("qwen-image-2", has_references=True),
+            "qwen2/image-edit",
+        )
+
+    def test_mode_specific_ratios_match_documented_contracts(self):
+        self.assertEqual(
+            ratios_for_mode("qwen-image-2", has_references=False),
+            {"1:1", "3:4", "4:3", "9:16", "16:9"},
+        )
+        self.assertEqual(
+            ratios_for_mode("qwen-image-2", has_references=True),
+            {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"},
+        )
+        self.assertNotIn(
+            "auto",
+            ratios_for_mode("flux-2/pro-text-to-image", has_references=False),
+        )
+        self.assertIn(
+            "auto",
+            ratios_for_mode("flux-2/pro-image-to-image", has_references=True),
+        )
+
+    def test_gpt_image_two_resolution_ratio_rules_are_checked_locally(self):
+        with self.assertRaisesRegex(ValueError, "4K.*1:1|1:1.*4K"):
+            validate_generation_contract(
+                "gpt-image-2",
+                has_references=False,
+                ratio="1:1",
+                resolution="4K",
+                prompt="valid prompt",
+            )
+        with self.assertRaisesRegex(ValueError, "auto.*1K|1K.*auto"):
+            validate_generation_contract(
+                "gpt-image-2",
+                has_references=False,
+                ratio="auto",
+                resolution="2K",
+                prompt="valid prompt",
+            )
+        with self.assertRaisesRegex(ValueError, "5:4.*1K|1K.*5:4"):
+            validate_generation_contract(
+                "gpt-image-2",
+                has_references=True,
+                ratio="5:4",
+                resolution="2K",
+                prompt="valid prompt",
+                reference_count=1,
+            )
+
+    def test_flux_prompt_and_model_reference_limits_are_checked_locally(self):
+        with self.assertRaisesRegex(ValueError, "3.*5000"):
+            validate_generation_contract(
+                "flux-2/pro-text-to-image",
+                has_references=False,
+                ratio="1:1",
+                resolution="1K",
+                prompt="x",
+            )
+        with self.assertRaisesRegex(ValueError, "1 референс"):
+            validate_generation_contract(
+                "qwen-image-2",
+                has_references=True,
+                ratio="1:1",
+                resolution="1K",
+                prompt="valid prompt",
+                reference_count=2,
+            )
+        with self.assertRaisesRegex(ValueError, "10 МБ"):
+            validate_generation_contract(
+                "qwen-image-2",
+                has_references=True,
+                ratio="1:1",
+                resolution="1K",
+                prompt="valid prompt",
+                reference_count=1,
+                reference_sizes=(10 * 1024 * 1024 + 1,),
+            )
 
 
 if __name__ == "__main__":

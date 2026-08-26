@@ -127,6 +127,39 @@ class PhotoRoomProviderTests(unittest.TestCase):
                 str(diagnostics),
             )
 
+    def test_input_contract_is_checked_before_photoroom_request(self):
+        self.assertEqual(main.PHOTOROOM_MAX_BYTES, 50 * 1024 * 1024)
+        self.assertEqual(main.PHOTOROOM_MAX_DIMENSION, 6000)
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-limits-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            output_path = Path(temp_dir) / "output.png"
+            create_rgb_source(source_path, size=(20, 16))
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                photoroom_settings(),
+                selected_files=[str(source_path)],
+            )
+            with (
+                patch.object(
+                    main,
+                    "validate_photoroom_input",
+                    side_effect=RuntimeError("PhotoRoom input exceeds 50 MB"),
+                ) as validate_mock,
+                patch.object(worker, "_request_with_retries") as request_mock,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "50 MB"):
+                    worker._run_photoroom_remove_bg(str(source_path), str(output_path))
+            validate_mock.assert_called_once_with(str(source_path))
+            request_mock.assert_not_called()
+
+    def test_unsupported_heic_is_rejected_before_photoroom_request(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-photoroom-heic-") as temp_dir:
+            source_path = Path(temp_dir) / "source.heic"
+            source_path.write_bytes(b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64)
+            with self.assertRaisesRegex(RuntimeError, "PNG, JPG, or WEBP"):
+                main.validate_photoroom_input(str(source_path))
+
     def test_missing_key_and_invalid_response_are_actionable(self):
         with tempfile.TemporaryDirectory(prefix="clipart-photoroom-errors-") as temp_dir:
             temp_path = Path(temp_dir)

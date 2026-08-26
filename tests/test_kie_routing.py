@@ -361,6 +361,74 @@ class KieRoutingTests(unittest.TestCase):
                 "gpt-image-2",
             )
 
+    def test_gpt_image_2_payload_preserves_extended_ratio(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                text_generation_ratio="2:1",
+                text_generation_resolution="2K",
+            ),
+        )
+        payload = worker._build_documented_model_input(
+            "gpt-image-2",
+            "valid prompt",
+            [],
+        )
+        self.assertEqual(payload["aspect_ratio"], "2:1")
+
+    def test_qwen_two_routes_exact_model_and_single_reference_payload(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                text_generation_ratio="16:9",
+                reference_generation_ratio="16:9",
+            ),
+        )
+        calls = []
+        worker._kie_create_task = types.MethodType(
+            lambda worker_self, model, payload: calls.append((model, payload)) or "task-qwen",
+            worker,
+        )
+        worker._kie_wait_result = types.MethodType(
+            lambda worker_self, task_id: f"mock://{task_id}",
+            worker,
+        )
+
+        worker._kie_generate_generic_model("qwen-image-2", "text prompt")
+        worker._kie_generate_generic_model(
+            "qwen-image-2",
+            "edit prompt",
+            ["mock://reference.png"],
+        )
+
+        self.assertEqual(calls[0][0], "qwen2/text-to-image")
+        self.assertNotIn("image_url", calls[0][1])
+        self.assertEqual(calls[1][0], "qwen2/image-edit")
+        self.assertEqual(calls[1][1]["image_url"], "mock://reference.png")
+
+    def test_worker_rejects_model_reference_limit_before_upload(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                kie_api_key=DUMMY_KIE_KEY,
+                reference_generation_model="qwen-image-2",
+                reference_generation_ratio="1:1",
+                reference_generation_resolution="1K",
+            ),
+        )
+        worker._kie_upload_file = types.MethodType(
+            lambda worker_self, path: self.fail("upload must not start"),
+            worker,
+        )
+        with self.assertRaisesRegex((RuntimeError, ValueError), "1 референс"):
+            worker._kie_generate_image(
+                "valid prompt",
+                ["one.png", "two.png"],
+            )
+
     def test_provider_combinations_require_key_only_for_kie_steps(self):
         cases = [
             (
@@ -501,7 +569,7 @@ class KieRoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="clipart-kie-mixed-") as temp_dir:
             temp_path = Path(temp_dir)
             source_path = temp_path / "source.png"
-            create_rgb_source(source_path, size=(20, 16))
+            create_rgb_source(source_path, size=(300, 300))
             worker = main.WorkerThread(
                 "mode2_process",
                 temp_dir,
@@ -957,13 +1025,24 @@ class KieRoutingTests(unittest.TestCase):
             source_path = Path(temp_dir) / "source.png"
             create_rgb_source(source_path, size=(64, 64))
 
-            with patch.object(main, "RECRAFT_CRISP_MAX_PIXELS", 100):
-                with self.assertRaisesRegex(RuntimeError, "4 MP|pixel"):
+            with patch.object(main, "RECRAFT_CRISP_MAX_BYTES", 8):
+                with self.assertRaisesRegex(RuntimeError, "10 MB|file size"):
                     main.validate_recraft_crisp_upscale_input(str(source_path))
 
-            with patch.object(main, "RECRAFT_CRISP_MAX_BYTES", 8):
-                with self.assertRaisesRegex(RuntimeError, "5 MB|file size"):
-                    main.validate_recraft_crisp_upscale_input(str(source_path))
+    def test_recraft_crisp_does_not_apply_undocumented_dimension_limit(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-large-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            create_rgb_source(source_path, size=(5000, 1000))
+            self.assertIsNone(main.validate_recraft_crisp_upscale_input(str(source_path)))
+
+    def test_recraft_processing_limits_match_current_documentation(self):
+        self.assertEqual(main.RECRAFT_CRISP_MAX_BYTES, 10 * 1024 * 1024)
+        self.assertEqual(main.RECRAFT_REMOVE_BG_MAX_BYTES, 5 * 1024 * 1024)
+        with tempfile.TemporaryDirectory(prefix="clipart-recraft-remove-limits-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            create_rgb_source(source_path, size=(255, 300))
+            with self.assertRaisesRegex(RuntimeError, "256"):
+                main.validate_recraft_remove_background_input(str(source_path))
 
     def test_recraft_crisp_input_accepts_opaque_chatgpt_style_png(self):
         with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-valid-") as temp_dir:

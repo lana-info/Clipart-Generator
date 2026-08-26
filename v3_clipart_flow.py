@@ -6,7 +6,7 @@ import json
 import os
 import re
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -99,6 +99,8 @@ from model_catalog import (
     VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
     MODEL_SPECS,
     model_spec,
+    ratios_for_mode,
+    validate_generation_contract,
 )
 
 
@@ -269,7 +271,9 @@ _LEGACY_GENERATION_MODELS = (
 )
 
 _LEGACY_RATIO_OPTIONS_ORDER = (
-    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"
+    "auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
+    "1:2", "2:1", "1:3", "3:1", "9:16", "16:9", "9:21", "21:9",
+    "1:4", "4:1", "1:8", "8:1"
 )
 _LEGACY_RESOLUTION_OPTIONS_ORDER = ("1K", "2K", "4K", "8K")
 _LEGACY_PROCESSING_PRICING = {
@@ -362,7 +366,11 @@ def generation_model_options(
                 include_shared_reference_text and option.reference_compatible_text
             )
         if allowed:
-            result.append(option)
+            mode_ratios = ratios_for_mode(option.model_id, has_references=references)
+            ordered_ratios = tuple(
+                value for value in _LEGACY_RATIO_OPTIONS_ORDER if value in mode_ratios
+            ) or tuple(sorted(mode_ratios))
+            result.append(replace(option, ratios=ordered_ratios))
     return tuple(sorted(result, key=lambda option: option.label.casefold()))
 
 
@@ -721,6 +729,29 @@ def build_clipart_run_request(
     for entry in state.clipart.prompts:
         if not entry.prompt.strip():
             raise ClipartFlowError("Пустой промпт нельзя отправить на генерацию")
+        has_references = bool(entry.references)
+        contract_model = generation.reference_model if has_references else generation.model
+        contract_ratio = generation.reference_ratio if has_references else generation.ratio
+        contract_resolution = (
+            generation.reference_resolution if has_references else generation.resolution
+        )
+        reference_sizes = tuple(
+            Path(reference).expanduser().stat().st_size
+            for reference in entry.references
+            if not reference.lower().startswith(("https://", "http://"))
+        )
+        try:
+            validate_generation_contract(
+                contract_model,
+                has_references=has_references,
+                ratio=contract_ratio,
+                resolution=contract_resolution,
+                prompt=entry.prompt,
+                reference_count=len(entry.references),
+                reference_sizes=reference_sizes,
+            )
+        except (KeyError, OSError, ValueError) as error:
+            raise ClipartFlowError(str(error)) from error
         for _ in range(generation.variants):
             prompts.append(
                 {

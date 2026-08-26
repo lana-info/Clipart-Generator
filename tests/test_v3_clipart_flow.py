@@ -26,6 +26,7 @@ from v3_clipart_flow import (
     build_clipart_run_request,
     clipart_pipeline_steps,
     estimate_clipart_cost,
+    generation_model_options,
     install_clipart_flow,
     missing_runtime_requirements,
     parse_prompt_csv,
@@ -597,6 +598,65 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(estimate.request_count, 12)
         self.assertEqual(estimate.estimated_usd, Decimal("0.900"))
         self.assertTrue(estimate.complete)
+
+    def test_generation_options_use_mode_specific_qwen_ratios(self):
+        primary = next(
+            option
+            for option in generation_model_options(references=False)
+            if option.model_id == "qwen-image-2"
+        )
+        reference = next(
+            option
+            for option in generation_model_options(references=True)
+            if option.model_id == "qwen-image-2"
+        )
+        self.assertEqual(primary.ratios, ("1:1", "3:4", "4:3", "9:16", "16:9"))
+        self.assertEqual(
+            reference.ratios,
+            ("1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"),
+        )
+
+    def test_gpt_image_two_exposes_all_documented_ratios(self):
+        primary = next(
+            option
+            for option in generation_model_options(references=False)
+            if option.model_id == "gpt-image-2"
+        )
+        self.assertEqual(
+            set(primary.ratios),
+            {
+                "auto", "1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5",
+                "16:9", "9:16", "2:1", "1:2", "3:1", "1:3", "21:9", "9:21",
+            },
+        )
+
+    def test_qwen_reference_limits_fail_before_worker_creation(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-qwen-contract-") as temp:
+            state = self.make_state(temp)
+            reference_path = str(Path(temp) / "reference.png")
+            state.clipart.prompts = [
+                PromptEntry("Baby turtle", [reference_path] * 2),
+            ]
+            state.clipart.generation.reference_model = "qwen-image-2"
+            state.clipart.generation.reference_ratio = "1:1"
+
+            with self.assertRaisesRegex(ClipartFlowError, "1 референс"):
+                build_clipart_run_request(state, {"kie_api_key": "test-key"})
+
+    def test_reference_file_size_limit_fails_before_worker_creation(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-reference-size-") as temp:
+            state = self.make_state(temp)
+            reference_path = Path(temp) / "reference.png"
+            reference_path.write_bytes(
+                reference_path.read_bytes()
+                + b"\0" * (10 * 1024 * 1024 + 1)
+            )
+            state.clipart.prompts = [PromptEntry("Baby turtle", [str(reference_path)])]
+            state.clipart.generation.reference_model = "qwen-image-2"
+            state.clipart.generation.reference_ratio = "1:1"
+
+            with self.assertRaisesRegex(ClipartFlowError, "10 МБ"):
+                build_clipart_run_request(state, {"kie_api_key": "test-key"})
 
     def test_alpha_safe_upscale_rejects_non_alpha_preserving_provider_after_bg_removal(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-alpha-safe-") as temp:
