@@ -15,7 +15,7 @@ import subprocess
 import shutil
 import threading
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from types import MappingProxyType
 from io import BytesIO, StringIO
@@ -820,6 +820,47 @@ def safe_error_text(error, secrets=(), limit=500):
     return redact_text(message, tuple(secrets), limit=limit)
 
 
+_QUOTED_ABSOLUTE_PATH = re.compile(
+    r"(?P<quote>['\"])(?P<path>(?:[A-Za-z]:[\\/]|/)[^'\"]+)(?P=quote)"
+)
+_WINDOWS_ABSOLUTE_PATH = re.compile(
+    r"(?i)(?<![A-Za-z0-9_])[A-Z]:[\\/](?:[^\\/\s,;:'\"<>|?*]+[\\/])*[^\\/\s,;:'\"<>|?*]+"
+)
+_POSIX_ABSOLUTE_PATH = re.compile(
+    r"(?<![:/A-Za-z0-9_])/(?:[^/\s,;:'\"<>]+/)+[^/\s,;:'\"<>]+"
+)
+
+
+def sanitize_item_error_paths(value, limit=500):
+    def replacement(raw_path):
+        is_windows = bool(re.match(r"(?i)^[A-Z]:[\\/]", raw_path))
+        basename = (
+            PureWindowsPath(raw_path).name
+            if is_windows
+            else PurePosixPath(raw_path).name
+        )
+        separator = "\\" if is_windows else "/"
+        return f"<path>{separator}{basename}" if basename else "<path>"
+
+    text = str(value or "")
+    text = _QUOTED_ABSOLUTE_PATH.sub(
+        lambda match: (
+            f"{match.group('quote')}{replacement(match.group('path'))}"
+            f"{match.group('quote')}"
+        ),
+        text,
+    )
+    text = _WINDOWS_ABSOLUTE_PATH.sub(
+        lambda match: replacement(match.group(0)),
+        text,
+    )
+    text = _POSIX_ABSOLUTE_PATH.sub(
+        lambda match: replacement(match.group(0)),
+        text,
+    )
+    return text[: max(0, int(limit))]
+
+
 def is_schema_required_error_message(message):
     text = str(message or "").lower()
     return (
@@ -1147,7 +1188,10 @@ class WorkerThread(QThread):
             raise
         except Exception as error:
             raise ItemExecutionError(
-                self._safe_error_text(error),
+                sanitize_item_error_paths(
+                    self._safe_error_text(error, limit=2000),
+                    limit=500,
+                ),
                 stage=getattr(self._diagnostic_context, "stage", ""),
                 provider=getattr(self._diagnostic_context, "provider", ""),
                 model=getattr(self._diagnostic_context, "model", ""),
