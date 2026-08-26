@@ -241,6 +241,61 @@ class KieRoutingTests(unittest.TestCase):
         self.assertNotIn("private prompt", encoded)
         self.assertNotIn(DUMMY_KIE_KEY, encoded)
 
+    def test_status_transport_errors_emit_failure_without_masking_original_error(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        worker._request_json = types.MethodType(
+            lambda self, *args, **kwargs: (_ for _ in ()).throw(
+                RuntimeError("network unavailable")
+            ),
+            worker,
+        )
+        events = []
+        worker.diagnostic.connect(events.append)
+        worker._set_diagnostic_context(1, 1, "generation")
+
+        with self.assertRaisesRegex(RuntimeError, "network unavailable"):
+            worker._kie_wait_result("task-current")
+        with self.assertRaisesRegex(RuntimeError, "network unavailable"):
+            worker._kie_wait_4o_result("task-legacy")
+
+        failed_tasks = [
+            event.get("task")
+            for event in events
+            if event["event"] == "provider_task_failed"
+        ]
+        self.assertEqual(failed_tasks, ["task-current", "task-legacy"])
+
+    def test_provider_error_cannot_echo_current_prompt_into_diagnostics(self):
+        private_prompt = "private watercolor fox prompt"
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        worker._diagnostic_context.prompt_text = private_prompt
+        worker._request_json = types.MethodType(
+            lambda self, *args, **kwargs: {
+                "code": 200,
+                "data": {
+                    "state": "fail",
+                    "failCode": 422,
+                    "failMsg": f"invalid prompt: {private_prompt}",
+                },
+            },
+            worker,
+        )
+        events = []
+        worker.diagnostic.connect(events.append)
+
+        with self.assertRaises(RuntimeError):
+            worker._kie_wait_result("task-prompt-redaction")
+
+        self.assertNotIn(private_prompt, json.dumps(events))
+
     def test_gpt_image_2_routes_documented_task_models(self):
         worker = main.WorkerThread(
             "mode1_generate_only",
@@ -885,11 +940,17 @@ class KieRoutingTests(unittest.TestCase):
             ".",
             kie_settings(kie_api_key=DUMMY_KIE_KEY),
         )
+        events = []
+        worker.diagnostic.connect(events.append)
         with self.assertRaisesRegex(
             RuntimeError,
             "задача KIE не была создана",
         ):
             worker._kie_upload_file("/definitely/missing/topaz-source.png")
+        failed = next(event for event in events if event["event"] == "stage_finished")
+        self.assertEqual(failed["provider"], "kie")
+        self.assertEqual(failed["outcome"], "failed")
+        self.assertNotIn("/definitely/missing", json.dumps(events))
 
     def test_recraft_crisp_input_limits_are_checked_before_upload(self):
         with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-limits-") as temp_dir:

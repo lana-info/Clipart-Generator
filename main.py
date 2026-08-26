@@ -957,7 +957,11 @@ class WorkerThread(QThread):
             raise ProcessingCancelled("Остановлено пользователем")
 
     def _safe_error_text(self, error, limit=500):
-        return safe_error_text(error, self._secret_values, limit=limit)
+        prompt_text = str(
+            getattr(self._diagnostic_context, "prompt_text", "") or ""
+        ).strip()
+        redactions = self._secret_values + ((prompt_text,) if prompt_text else ())
+        return safe_error_text(error, redactions, limit=limit)
 
     def _set_diagnostic_context(
         self,
@@ -1026,6 +1030,7 @@ class WorkerThread(QThread):
             self._emit_file_progress(idx, total, 4)
             try:
                 prompt_text = entry.get("prompt", "")
+                self._diagnostic_context.prompt_text = prompt_text
                 references = entry.get("references", [])
                 self._emit_diagnostic(
                     "item_input_inspected",
@@ -1132,6 +1137,7 @@ class WorkerThread(QThread):
         self.progress.emit(f"[{idx}/{total}] Генерация")
         self._emit_file_progress(idx, total, 4)
         prompt_text = entry.get("prompt", "")
+        self._diagnostic_context.prompt_text = prompt_text
         references = entry.get("references", [])
         self._emit_diagnostic(
             "item_input_inspected",
@@ -3054,6 +3060,13 @@ class WorkerThread(QThread):
         except ProcessingCancelled:
             raise
         except Exception as error:
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="kie",
+                outcome="failed",
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError(
                 "Не удалось прочитать файл для загрузки в KIE; "
                 "задача KIE не была создана: "
@@ -3598,8 +3611,11 @@ class WorkerThread(QThread):
         timeout_sec = self.generation_wait_timeout
         deadline = time.time() + timeout_sec
         headers = self._kie_headers()
+        started = time.monotonic()
+        poll_attempt = 0
         while time.time() < deadline:
             self._ensure_running()
+            poll_attempt += 1
 
             url = f"https://api.kie.ai/api/v1/gpt4o-image/record-info?{parse.urlencode({'taskId': task_id})}"
             try:
@@ -3619,15 +3635,52 @@ class WorkerThread(QThread):
 
             data = result.get("data") or {}
             status = str(data.get("status", "")).upper()
+            self._emit_diagnostic(
+                "provider_task_polled",
+                provider="kie",
+                task=task_id,
+                provider_state=status or "UNKNOWN",
+                poll_attempt=poll_attempt,
+                http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             self.progress.emit(f"  4o статус: {status}")
             if status == "SUCCESS":
                 urls = ((data.get("response") or {}).get("resultUrls") or [])
                 if urls:
+                    self._emit_diagnostic(
+                        "provider_task_succeeded",
+                        provider="kie",
+                        task=task_id,
+                        provider_state=status,
+                        result_count=len(urls),
+                        elapsed_ms=round((time.monotonic() - started) * 1000),
+                    )
                     return urls[0]
                 raise RuntimeError("4o Image не вернул resultUrls")
             if status in {"FAILED", "FAIL", "ERROR"}:
-                raise RuntimeError(data.get("errorMessage") or "4o Image вернул ошибку")
+                fail_message = self._safe_error_text(
+                    data.get("errorMessage") or "4o Image вернул ошибку"
+                )
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    provider_state=status,
+                    error_message=fail_message,
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
+                raise RuntimeError(fail_message)
             time.sleep(self.status_poll_interval)
+        self._emit_diagnostic(
+            "provider_task_failed",
+            provider="kie",
+            task=task_id,
+            provider_state="timeout",
+            error_code="timeout",
+            error_message="Превышено время ожидания 4o Image",
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         raise TimeoutError("Превышено время ожидания 4o Image")
 
     def _kie_wait_result(self, task_id):
@@ -3641,7 +3694,18 @@ class WorkerThread(QThread):
             poll_attempt += 1
 
             url = f"https://api.kie.ai/api/v1/jobs/recordInfo?{parse.urlencode({'taskId': task_id})}"
-            result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            try:
+                result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            except Exception as error:
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                    error_message=self._safe_error_text(error),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
+                raise
             if int(result.get("code", 0)) != 200:
                 raise RuntimeError(f"KIE status failed (code {result.get('code', '-')})")
 

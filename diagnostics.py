@@ -270,6 +270,13 @@ class DiagnosticJournal:
                 continue
             if name in _SECRET_KEYS:
                 result[name] = "[СКРЫТО]"
+            elif (
+                name == "task"
+                and isinstance(value, str)
+                and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", value.strip())
+                and not value.strip().casefold().startswith("sk-")
+            ):
+                result[name] = value.strip()
             elif name == "filename":
                 result[name] = _safe_filename(value)
             elif isinstance(value, bool) or value is None:

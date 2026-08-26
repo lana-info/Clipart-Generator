@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -56,7 +57,7 @@ class V3DiagnosticJournalTests(unittest.TestCase):
                     "provider": "kie",
                     "model": "recraft/crisp-upscale",
                     "stage": "upscale_before",
-                    "task": "task-123",
+                    "task": "task-safe-123",
                     "http_status": 200,
                     "provider_state": "fail",
                     "error_code": "501",
@@ -76,11 +77,21 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             self.assertEqual(event["schema_version"], 2)
             self.assertEqual(event["operation_id"], "operation-123")
             self.assertEqual(event["details"]["provider"], "kie")
-            self.assertEqual(event["details"]["task"], "task-123")
+            self.assertEqual(event["details"]["task"], "task-safe-123")
             self.assertEqual(event["details"]["item_index"], 2)
             self.assertNotIn("private prompt", raw)
             self.assertNotIn("sk-secret-value", raw)
             self.assertNotIn("example.test", raw)
+            archive_path = journal.export_zip(root / "diagnostics.zip")
+            with zipfile.ZipFile(archive_path) as archive:
+                exported = "\n".join(
+                    archive.read(name).decode("utf-8")
+                    for name in archive.namelist()
+                )
+            self.assertIn("task-safe-123", exported)
+            self.assertNotIn("private prompt", exported)
+            self.assertNotIn("sk-secret-value", exported)
+            self.assertNotIn("example.test", exported)
 
     def test_detailed_journal_limits_cover_large_image_batches(self) -> None:
         self.assertEqual(DEFAULT_SESSION_MAX_BYTES, 8 * 1024 * 1024)
