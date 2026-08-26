@@ -19,7 +19,7 @@ Updated: 2026-08-26
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `fix/provider-api-contracts`
+- Provider-contract checkpoint branch: `fix/provider-api-contracts`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,10 +27,10 @@ Updated: 2026-08-26
 
 ## Next task
 
-Finish offline verification and integrate the provider-contract fixes into
-`develop/3.0`. Do not start a Windows build or publish `3.0.5` without a new,
-explicit owner command. Packaged Windows acceptance remains a later owner-run
-step.
+After owner approval, build the integrated `develop/3.0` source for Windows and
+perform packaged acceptance for the prompt flow, provider routes and diagnostic
+journal. Do not start that build or publish `3.0.5` without a new, explicit
+owner command.
 
 ## Provider contract checkpoint — 2026-08-26
 
