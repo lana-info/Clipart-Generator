@@ -27,10 +27,22 @@ Updated: 2026-08-26
 
 ## Next task
 
-After owner approval, build the integrated `develop/3.0` source for Windows and
-perform packaged acceptance for the prompt flow, provider routes and diagnostic
-journal. Do not start that build or publish `3.0.5` without a new, explicit
-owner command.
+After a new explicit owner command, build the integrated `develop/3.0` source
+for Windows and perform packaged acceptance for the new dark installer, prompt
+flow, provider routes and diagnostic journal. Do not start that build or
+publish `3.0.5` without that command.
+
+## Branded Windows installer checkpoint — 2026-08-26
+
+- The installer source now uses Inno Setup's built-in high-DPI Polar dark style
+  with the approved `#101827` surface and coordinated installer artwork.
+- The visible flow is grouped into three stages: welcome, installation and
+  completion. Destination and desktop-shortcut choices remain available while
+  redundant Start Menu and Ready pages are hidden.
+- GitHub and Azure Windows workflows pin Inno Setup 6.7.1, the minimum project
+  compiler version supporting the selected style and background directives.
+- Branding and release-entrypoint tests pass locally. No installer was compiled
+  or published; Windows visual acceptance requires a separately approved build.
 
 ## Provider contract checkpoint — 2026-08-26
 

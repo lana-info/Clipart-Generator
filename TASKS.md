@@ -6,10 +6,11 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Perform owner target-machine acceptance of the verified
-Windows 3.0.5 installer from GitHub run `32977293110`. Do not upload a server
-revision until installation, artwork, hidden helper processes, licensing, and
-the updated prompt workflow are accepted on the owner's Windows computer.**
+Current next task: **After a new explicit owner command, build the integrated
+`develop/3.0` source for Windows and perform target-machine acceptance of the
+new three-stage dark installer, application artwork, hidden helper processes,
+licensing, and prompt workflow. Do not upload a server revision before that
+acceptance.**
 
 ## Phase 1 - Preparation
 
@@ -1845,3 +1846,25 @@ Verification:
   `6c3f4837b381f2da44cd0d54fa4b8fce8ec03b047227efc9e3b57c226d8daba6`.
 - [ ] Perform focused visual and production-license acceptance on the owner's
   Windows computer before uploading a 3.0.5 server revision.
+
+### Task 71 - Branded Three-Stage Windows Installer
+
+Status: Source implementation verified; Windows build requires explicit owner approval
+
+Implemented:
+- Keep Inno Setup as the installer engine and use its built-in high-DPI Polar
+  dark style with a styled title bar, graphite background, and no third-party
+  style dependency.
+- Present the flow as `Добро пожаловать → Установка → Готово`, simplify button
+  text, hide the redundant Start Menu and Ready pages, and preserve destination
+  and desktop-shortcut choices in the installation stage.
+- Continue using the approved hash-locked `assets/installer-wizard-hq.png`.
+- Pin Inno Setup 6.7.1 in both Windows build workflows so the dark-style
+  directives compile reproducibly.
+
+Verification:
+- [x] New regression tests failed against the old installer configuration and
+  passed after implementation.
+- [x] Branding and release-entrypoint unit tests pass; `git diff --check` passes.
+- [ ] Compile and visually inspect the installer on Windows in a separately
+  approved build. No Windows build was started for this task.

@@ -51,6 +51,41 @@ class BrandingTests(unittest.TestCase):
         self.assertTrue(wizard_image.is_file())
         self.assertGreater(wizard_image.stat().st_size, 1_000_000)
 
+    def test_windows_installer_uses_approved_three_stage_dark_design(self):
+        installer = (PROJECT_ROOT / "installer.iss").read_text(encoding="utf-8")
+
+        self.assertIn(
+            "WizardStyle=modern dark polar includetitlebar hidebevels",
+            installer,
+        )
+        self.assertIn("WizardSizePercent=125,120", installer)
+        self.assertIn("WizardResizable=no", installer)
+        self.assertIn("DisableProgramGroupPage=yes", installer)
+        self.assertIn("DisableReadyPage=yes", installer)
+        self.assertIn("ButtonNext=Продолжить", installer)
+        self.assertIn("ButtonInstall=Установить", installer)
+        self.assertIn("ButtonFinish=Готово", installer)
+        self.assertIn("1 из 3 · Добро пожаловать", installer)
+        self.assertIn("2 из 3 · Установка", installer)
+        self.assertIn("3 из 3 · Готово", installer)
+        self.assertIn("procedure CurPageChanged(CurPageID: Integer);", installer)
+        self.assertNotIn("WizardStyleFile=", installer)
+
+    def test_windows_builds_pin_inno_setup_with_dark_style_support(self):
+        github_workflow = (
+            PROJECT_ROOT / ".github" / "workflows" / "release-multi-platform.yml"
+        ).read_text(encoding="utf-8")
+        azure_workflow = (PROJECT_ROOT / "azure-pipelines.yml").read_text(
+            encoding="utf-8"
+        )
+        install_command = (
+            "choco upgrade innosetup --version=6.7.1 -y --no-progress "
+            "--allow-downgrade"
+        )
+
+        self.assertIn(install_command, github_workflow)
+        self.assertIn(install_command, azure_workflow)
+
     def test_mode_illustrations_are_packaged_for_both_desktop_builds(self):
         for name in ("clipart", "pinterest", "processing"):
             asset = PROJECT_ROOT / "assets" / f"mode-{name}.png"
@@ -93,6 +128,7 @@ class BrandingTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("Approved Vibix Images mode artwork", handoff)
         self.assertIn("must be used", handoff)
+        self.assertIn("three-stage dark Inno Setup", handoff)
 
     def test_download_page_uses_approved_copy_platform_icons_and_future_help(self):
         page = (

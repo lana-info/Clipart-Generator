@@ -16,10 +16,16 @@ SetupIconFile=assets\vibix-images.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma
 SolidCompression=yes
-WizardStyle=modern
+; Inno Setup 6.7+ supplies the built-in high-DPI dark Polar style.
+WizardStyle=modern dark polar includetitlebar hidebevels
+WizardSizePercent=125,120
+WizardResizable=no
 DisableWelcomePage=no
+DisableProgramGroupPage=yes
+DisableReadyPage=yes
 WizardImageFile=assets\installer-wizard-hq.png
-WizardImageBackColor=$101827
+WizardBackColor=#101827
+WizardImageBackColor=#101827
 WizardKeepAspectRatio=yes
 OutputDir=release
 OutputBaseFilename=VibixImages-Setup-{#AppVersion}
@@ -32,9 +38,20 @@ RestartApplications=no
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Messages]
-WelcomeLabel1=Добро пожаловать в установщик {#AppName}
-WelcomeLabel2=Массовая генерация изображений в нейросетях, в том числе клипартов.%n%n• Создать клипарт%n• Создать Pinterest-пины%n• Обработать изображения%n%nПосле установки запустите приложение и активируйте лицензию.
-FinishedLabel=Vibix Images установлен.%n%nТеперь можно массово генерировать изображения, создавать клипарты и Pinterest-пины, а также обрабатывать файлы.
+ButtonNext=Продолжить
+ButtonInstall=Установить
+ButtonFinish=Готово
+WelcomeLabel1=1 из 3 · Добро пожаловать%n%n{#AppName}
+WelcomeLabel2=Массовая генерация изображений в нейросетях, в том числе клипартов.%n%n• Создать клипарт%n• Создать Pinterest-пины%n• Обработать изображения%n%nНажмите «Продолжить», чтобы установить приложение.
+WizardSelectDir=2 из 3 · Установка
+SelectDirDesc=Выберите папку для Vibix Images.
+WizardSelectTasks=2 из 3 · Установка
+SelectTasksDesc=Выберите дополнительные параметры.
+WizardInstalling=2 из 3 · Установка
+InstallingLabel=Подождите, пока Vibix Images устанавливается на компьютер.
+FinishedHeadingLabel=3 из 3 · Готово
+FinishedLabel=Vibix Images установлен.%n%nЗапустите приложение и активируйте лицензию, чтобы начать массовую генерацию и обработку изображений.
+ClickFinish=Нажмите «Готово», чтобы закрыть установщик.
 
 [Tasks]
 Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные задачи:"; Flags: unchecked
@@ -56,6 +73,16 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 Filename: "{app}\{#AppExeName}"; Description: "Запустить {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpWelcome then
+    WizardForm.Caption := '{#AppName} — 1 из 3 · Добро пожаловать'
+  else if CurPageID = wpFinished then
+    WizardForm.Caption := '{#AppName} — 3 из 3 · Готово'
+  else
+    WizardForm.Caption := '{#AppName} — 2 из 3 · Установка';
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;

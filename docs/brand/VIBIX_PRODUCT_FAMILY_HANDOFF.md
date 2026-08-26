@@ -89,6 +89,14 @@ derived from the same visual family; its SHA-256 is
 Any intentional replacement requires explicit owner approval plus an update to
 the brand handoff and branding regression hashes.
 
+The Windows installer must keep the approved three-stage dark Inno Setup
+presentation: `Добро пожаловать → Установка → Готово`. It uses the built-in
+high-DPI Polar dark style, the graphite `#101827` surface, Vibix Images accents,
+the approved `installer-wizard-hq.png`, and no third-party style package. The
+destination and desktop-shortcut choices remain available inside the middle
+stage. An intentional visual replacement requires owner approval and updated
+branding regression coverage.
+
 ## Deliverables still pending
 
 - Master wordmark and product lockups.
@@ -100,7 +108,7 @@ Completed for Vibix Images:
 - Windows multi-resolution ICO and application integration.
 - Three high-resolution mode illustrations for the start screen in `assets/mode-*.png`.
 - Windows Inno Setup artwork in `assets/installer-wizard-hq.png` and matching
-  welcome/completion messaging.
+  three-stage dark welcome/install/completion presentation.
 
 Open `vibix-product-family.html` beside this file for the portable visual
 sample.

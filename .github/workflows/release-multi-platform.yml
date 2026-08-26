@@ -40,7 +40,7 @@ jobs:
 
       - name: Install Inno Setup
         shell: powershell
-        run: choco install innosetup -y
+        run: choco upgrade innosetup --version=6.7.1 -y --no-progress --allow-downgrade
 
       - name: Install dependencies
         shell: powershell
