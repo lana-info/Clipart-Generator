@@ -8,6 +8,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from v3_provider_registry import (
+    KIE_TOPAZ_MODEL_ID,
+    normalize_kie_upscale_model,
+    normalize_topaz_upscale_factor,
+)
+
 
 PROJECT_STATE_SCHEMA_VERSION = 1
 MAX_DRAFT_BYTES = 2 * 1024 * 1024
@@ -433,8 +439,8 @@ class ImageOperationData:
     upscale_after: bool = False
     upscale_after_provider: str = "local_realesrgan"
     upscale_factor: int = 4
-    kie_upscale_model: str = "topaz/upscale"
-    kie_upscale_after_model: str = "topaz/upscale"
+    kie_upscale_model: str = KIE_TOPAZ_MODEL_ID
+    kie_upscale_after_model: str = KIE_TOPAZ_MODEL_ID
     local_realesrgan_profile: str = "clipart"
     local_realesrgan_scale: int = 4
     local_realesrgan_after_scale: int = 4
@@ -480,17 +486,13 @@ class ImageOperationData:
             self.upscale_after_provider,
             limit=100,
         ) or "local_realesrgan"
-        self.upscale_factor = _bounded_int(
-            self.upscale_factor,
-            default=4,
-            minimum=1,
-            maximum=16,
+        self.upscale_factor = normalize_topaz_upscale_factor(self.upscale_factor)
+        self.kie_upscale_model = normalize_kie_upscale_model(
+            _text(self.kie_upscale_model, limit=200)
         )
-        self.kie_upscale_model = _text(self.kie_upscale_model, limit=200) or "topaz/upscale"
-        self.kie_upscale_after_model = _text(
-            self.kie_upscale_after_model,
-            limit=200,
-        ) or "topaz/upscale"
+        self.kie_upscale_after_model = normalize_kie_upscale_model(
+            _text(self.kie_upscale_after_model, limit=200)
+        )
         self.local_realesrgan_profile = _text(
             self.local_realesrgan_profile,
             limit=100,
@@ -611,10 +613,10 @@ class ImageOperationData:
                 "local_realesrgan",
             ),
             upscale_factor=config.get("upscale_factor", 4),
-            kie_upscale_model=config.get("kie_upscale_model", "topaz/upscale"),
+            kie_upscale_model=config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID),
             kie_upscale_after_model=config.get(
                 "kie_upscale_after_model",
-                config.get("kie_upscale_model", "topaz/upscale"),
+                config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID),
             ),
             local_realesrgan_profile=config.get(
                 "local_realesrgan_profile",

@@ -273,7 +273,7 @@ _LEGACY_RATIO_OPTIONS_ORDER = (
 )
 _LEGACY_RESOLUTION_OPTIONS_ORDER = ("1K", "2K", "4K", "8K")
 _LEGACY_PROCESSING_PRICING = {
-    "topaz/upscale": "40 credits / $0.20",
+    "topaz/image-upscale": "40 credits / $0.20",
     "recraft/crisp-upscale": "0.5 credits / $0.0025",
     "recraft/remove-background": "1 credit / $0.005",
 }

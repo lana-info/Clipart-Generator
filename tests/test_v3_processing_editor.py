@@ -58,6 +58,19 @@ class ProcessingEditorTests(unittest.TestCase):
             editor.operation_widgets["local_rembg_model"].itemData(0),
             "birefnet-general",
         )
+        self.assertEqual(
+            tuple(
+                editor.operation_widgets["upscale_factor"].itemData(index)
+                for index in range(editor.operation_widgets["upscale_factor"].count())
+            ),
+            (1, 2, 4),
+        )
+        self.assertFalse(editor.operation_widgets["upscale_factor"].isHidden())
+        state.processing.operations.kie_upscale_model = "recraft/crisp-upscale"
+        editor.refresh_from_state()
+        self.assertTrue(editor.operation_widgets["upscale_factor"].isHidden())
+        state.processing.operations.kie_upscale_model = "topaz/image-upscale"
+        editor.refresh_from_state()
         self.assertIn(
             "МБ",
             editor.operation_widgets["local_rembg_model"].itemText(0),

@@ -47,7 +47,7 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertFalse(provider_requires_cost("local_ben2"))
         self.assertTrue(provider_preserves_alpha("local_ben2"))
         self.assertFalse(upscale_model_preserves_alpha("kie", "recraft/crisp-upscale"))
-        self.assertTrue(upscale_model_preserves_alpha("kie", "topaz/upscale"))
+        self.assertTrue(upscale_model_preserves_alpha("kie", "topaz/image-upscale"))
         self.assertTrue(upscale_model_preserves_alpha("local_realesrgan", ""))
 
     def test_field_options_are_shared_and_deterministic(self) -> None:
@@ -63,7 +63,7 @@ class ProviderRegistryTests(unittest.TestCase):
                 ("Local rembg", "local_rembg"),
             ),
         )
-        self.assertEqual(KIE_MODEL_OPTIONS, (("Topaz", "topaz/upscale"), ("Recraft Crisp", "recraft/crisp-upscale")))
+        self.assertEqual(KIE_MODEL_OPTIONS, (("Topaz", "topaz/image-upscale"), ("Recraft Crisp", "recraft/crisp-upscale")))
         self.assertEqual(
             KIE_REMOVE_BG_MODEL_OPTIONS,
             (("Recraft Remove Background", "recraft/remove-background"),),

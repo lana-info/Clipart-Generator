@@ -92,7 +92,7 @@ GENERATION_MODEL_META = MappingProxyType({model_id: next(row for row in GENERATI
 SUPPORTED_GENERATION_MODEL_IDS = frozenset(row[0] for row in _MODEL_ROWS)
 VISIBLE_GENERATION_MODEL_IDS = frozenset({"gpt-image/1.5-text-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "gpt-image/1.5-image-to-image", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
 REFERENCE_MODEL_SHORTLIST = frozenset({"gpt-image/1.5-image-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
-PROCESSING_PRICING = MappingProxyType({"topaz/upscale": "40 credits / $0.20", "recraft/crisp-upscale": "0.5 credits / $0.0025", "recraft/remove-background": "1 credit / $0.005"})
+PROCESSING_PRICING = MappingProxyType({"topaz/image-upscale": "40 credits / $0.20", "recraft/crisp-upscale": "0.5 credits / $0.0025", "recraft/remove-background": "1 credit / $0.005"})
 
 
 def model_spec(model_id: str) -> ModelSpec:

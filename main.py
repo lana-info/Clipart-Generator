@@ -87,6 +87,13 @@ from model_catalog import (
     MODEL_SPECS,
     resolve_generation_endpoint,
 )
+from v3_provider_registry import (
+    KIE_TOPAZ_MODEL_ID,
+    TOPAZ_MAX_FILE_BYTES,
+    TOPAZ_MAX_OUTPUT_SIDE,
+    normalize_kie_upscale_model,
+    normalize_topaz_upscale_factor,
+)
 
 try:
     import certifi
@@ -289,7 +296,7 @@ RATIO_OPTIONS_ORDER = [
 RESOLUTION_OPTIONS_ORDER = ["1K", "2K", "4K", "8K"]
 
 PROCESSING_PRICING = {
-    "topaz/upscale": "40 credits / $0.20",
+    "topaz/image-upscale": "40 credits / $0.20",
     "recraft/crisp-upscale": "0.5 credits / $0.0025",
     "recraft/remove-background": "1 credit / $0.005",
 }
@@ -852,10 +859,16 @@ class WorkerThread(QThread):
         self.trim_enabled = bool(settings.get("trim_enabled", False))
         self.trim_mode = str(settings.get("trim_mode", "alpha") or "alpha")
         self.export_300_dpi = bool(settings.get("export_300_dpi", False))
-        self.kie_upscale_model = settings.get("kie_upscale_model", "topaz/upscale")
-        self.kie_upscale_after_model = settings.get("kie_upscale_after_model", self.kie_upscale_model)
+        self.kie_upscale_model = normalize_kie_upscale_model(
+            settings.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID)
+        )
+        self.kie_upscale_after_model = normalize_kie_upscale_model(
+            settings.get("kie_upscale_after_model", self.kie_upscale_model)
+        )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
-        self.upscale_factor = int(settings.get("upscale_factor", 4) or 4)
+        self.upscale_factor = normalize_topaz_upscale_factor(
+            settings.get("upscale_factor", 4)
+        )
         self.upscale_provider = settings.get("upscale_provider", "kie")
         self.upscale_after_provider = settings.get("upscale_after_provider", "local_realesrgan")
         self.unsharp_enabled = bool(settings.get("unsharp_enabled", False))
@@ -1411,6 +1424,16 @@ class WorkerThread(QThread):
         if self._can_use_legacy_kie_processing_pipeline():
             if self.kie_upscale_model == "recraft/crisp-upscale" and not source_url:
                 validate_recraft_crisp_upscale_input(source_path)
+            if (
+                self.kie_upscale_model == KIE_TOPAZ_MODEL_ID
+                and not source_url
+                and source_path
+                and os.path.isfile(source_path)
+            ):
+                self._validate_topaz_source_file(
+                    source_path,
+                    self._resolve_upscale_factor(self.kie_upscale_model),
+                )
             uploaded_url = source_url or self._kie_upload_file(source_path)
             self._ensure_running()
             if not source_url:
@@ -1671,6 +1694,11 @@ class WorkerThread(QThread):
 
         if kie_model == "recraft/crisp-upscale" and current_path and os.path.isfile(current_path):
             validate_recraft_crisp_upscale_input(current_path)
+        if kie_model == KIE_TOPAZ_MODEL_ID and current_path and os.path.isfile(current_path):
+            self._validate_topaz_source_file(
+                current_path,
+                self._resolve_upscale_factor(kie_model),
+            )
         current_url = self._ensure_kie_url(current_url, current_path)
         current_url = self._upscale_pipeline_step(
             current_url,
@@ -1684,6 +1712,34 @@ class WorkerThread(QThread):
         current_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
         self.progress.emit(f"  Этап обработки: {stage}; status=complete")
         return current_path, current_url, False
+
+    def _validate_topaz_source_file(self, source_path, upscale_factor):
+        file_size = os.path.getsize(source_path)
+        if file_size > TOPAZ_MAX_FILE_BYTES:
+            raise ValueError(
+                "Topaz принимает файлы размером не более 10 МБ; "
+                "задача KIE не была создана"
+            )
+        try:
+            with Image.open(source_path) as source_image:
+                image_format = str(source_image.format or "").upper()
+                width, height = source_image.size
+        except (OSError, UnidentifiedImageError) as error:
+            raise ValueError(
+                "Topaz не смог прочитать исходное изображение; "
+                "задача KIE не была создана"
+            ) from error
+        if image_format not in {"JPEG", "PNG", "WEBP"}:
+            raise ValueError(
+                "Topaz поддерживает только JPEG, PNG и WEBP; "
+                "задача KIE не была создана"
+            )
+        if max(width, height) * upscale_factor > TOPAZ_MAX_OUTPUT_SIDE:
+            raise ValueError(
+                "После апскейла самая длинная сторона превысит 20 000 px; "
+                "уменьшите масштаб или исходное изображение. "
+                "Задача KIE не была создана"
+            )
 
     def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
         pipeline_url = image_url
@@ -1723,7 +1779,7 @@ class WorkerThread(QThread):
     ):
         model_name = (model_name or self.kie_upscale_model).strip()
         self.progress.emit(f"  Апскейл через {model_name}...")
-        if model_name == "topaz/upscale":
+        if model_name == KIE_TOPAZ_MODEL_ID:
             upscale_input = {
                 "image_url": image_url,
                 "upscale_factor": str(upscale_factor),
@@ -2422,8 +2478,8 @@ class WorkerThread(QThread):
         model_name = (model_name or self.kie_upscale_model or "").strip()
         if model_name == "recraft/crisp-upscale":
             return 4
-        if model_name == "topaz/upscale":
-            return 8
+        if model_name == KIE_TOPAZ_MODEL_ID:
+            return normalize_topaz_upscale_factor(self.upscale_factor)
         return 4
 
     def _normalize_trim_mode(self, value):
@@ -2742,7 +2798,16 @@ class WorkerThread(QThread):
         filename = os.path.basename(file_path)
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        file_bytes = self._read_upload_file(file_path)
+        try:
+            file_bytes = self._read_upload_file(file_path)
+        except ProcessingCancelled:
+            raise
+        except Exception as error:
+            raise RuntimeError(
+                "Не удалось прочитать файл для загрузки в KIE; "
+                "задача KIE не была создана: "
+                f"{self._safe_error_text(error)}"
+            ) from error
 
         parts = []
         parts.append(f"--{boundary}\r\n".encode("utf-8"))
@@ -2777,7 +2842,8 @@ class WorkerThread(QThread):
             raise
         except Exception as error:
             raise RuntimeError(
-                f"Не удалось загрузить файл в KIE: {self._safe_error_text(error)}"
+                "Не удалось загрузить файл в KIE; задача KIE не была создана: "
+                f"{self._safe_error_text(error)}"
             ) from error
 
     def _kie_create_task(self, model, input_payload):
@@ -2801,7 +2867,7 @@ class WorkerThread(QThread):
         return task_id
 
     def _kie_run_model_task(self, model, image_url, extra_input=None):
-        input_payload = {} if model == "topaz/upscale" else {"image": image_url}
+        input_payload = {} if model == KIE_TOPAZ_MODEL_ID else {"image": image_url}
         if isinstance(extra_input, dict):
             input_payload.update(extra_input)
         task_id = self._kie_create_task(model, input_payload)
@@ -4061,8 +4127,8 @@ class MainWindow(QMainWindow):
             "cleanup_remove_all": False,
             "cleanup_preserve_icc": True,
             "cleanup_preserve_dpi": True,
-            "kie_upscale_model": "topaz/upscale",
-            "kie_upscale_after_model": "topaz/upscale",
+            "kie_upscale_model": KIE_TOPAZ_MODEL_ID,
+            "kie_upscale_after_model": KIE_TOPAZ_MODEL_ID,
             "kie_remove_bg_model": "recraft/remove-background",
             "run_mode": "generate_only",
             "prompt_input_mode": "list",
@@ -4078,6 +4144,18 @@ class MainWindow(QMainWindow):
                     self.config[key] = value
         else:
             self.config = default_config
+        self.config["kie_upscale_model"] = normalize_kie_upscale_model(
+            self.config.get("kie_upscale_model")
+        )
+        self.config["kie_upscale_after_model"] = normalize_kie_upscale_model(
+            self.config.get(
+                "kie_upscale_after_model",
+                self.config["kie_upscale_model"],
+            )
+        )
+        self.config["upscale_factor"] = normalize_topaz_upscale_factor(
+            self.config.get("upscale_factor", 4)
+        )
         # Local Real-ESRGAN is shipped with the application; an old external path is ignored.
         self.config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
         # URL обновлений всегда фиксированный и не редактируется в UI.
@@ -4739,13 +4817,13 @@ class MainWindow(QMainWindow):
         )
 
         self.kie_upscale_model_combo = QComboBox()
-        self.kie_upscale_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
-        uim = self.config.get("kie_upscale_model", "topaz/upscale")
+        self.kie_upscale_model_combo.addItems([KIE_TOPAZ_MODEL_ID, "recraft/crisp-upscale"])
+        uim = self.config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID)
         ui_index = self.kie_upscale_model_combo.findText(uim)
         self.kie_upscale_model_combo.setCurrentIndex(ui_index if ui_index >= 0 else 0)
 
         self.kie_upscale_after_model_combo = QComboBox()
-        self.kie_upscale_after_model_combo.addItems(["topaz/upscale", "recraft/crisp-upscale"])
+        self.kie_upscale_after_model_combo.addItems([KIE_TOPAZ_MODEL_ID, "recraft/crisp-upscale"])
         upscale_after_model = self.config.get("kie_upscale_after_model", uim)
         upscale_after_model_index = self.kie_upscale_after_model_combo.findText(upscale_after_model)
         self.kie_upscale_after_model_combo.setCurrentIndex(
@@ -5365,8 +5443,10 @@ class MainWindow(QMainWindow):
         if provider_combo.currentData() == "local_realesrgan":
             return normalize_local_realesrgan_scale(local_scale_combo.currentData() or 4)
         model_name = kie_model_combo.currentText().strip()
-        if model_name == "topaz/upscale":
-            return 8
+        if model_name == KIE_TOPAZ_MODEL_ID:
+            return normalize_topaz_upscale_factor(
+                self.config.get("upscale_factor", 4)
+            )
         return 4
 
     def update_upscale_total_label(self, *_):

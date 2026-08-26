@@ -19,7 +19,7 @@ Updated: 2026-08-26
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
-- Current task branch: `codex/restore-prompt-review-step`
+- Current task branch: `fix/kie-topaz-image-upscale`
 - Verified release source: `6ed15376d74753078aab6c82a7ae29b673e40fbe`
 - Recommended VDS path: `~/projects/clipart-generator`
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
@@ -27,9 +27,21 @@ Updated: 2026-08-26
 
 ## Next task
 
-Owner visual approval of the revised prompt flow and stable window behavior.
-Do not start a new Windows build or publish `3.0.5` until the source screenshots
-are approved.
+Owner visual approval of the revised prompt flow, stable window behavior and
+Topaz scale control. Do not start a new Windows build or publish `3.0.5` until
+the source screenshots are approved.
+
+## KIE Topaz checkpoint — 2026-08-26
+
+- Root cause confirmed without a paid call: the application still sent the
+  retired `topaz/upscale` model and silently replaced configured 4× with 8×.
+- The worker, V3 state, provider registry and legacy config now migrate to
+  `topaz/image-upscale`; the shared editor exposes only 1×, 2× and 4×.
+- Local inputs are rejected before upload when they are not JPEG/PNG/WEBP,
+  exceed 10 MB or would exceed 20,000 px on the longest output side. The error
+  states that no KIE task was created.
+- Full local pytest passes: 634 tests, 1 expected Linux skip, 2 deselected and
+  83 subtests. No network or paid KIE request was made.
 
 ## Prompt flow checkpoint — 2026-08-25
 

@@ -21,11 +21,13 @@ from PyQt6.QtWidgets import (
 
 from v3_components import DEFAULT_TOKENS, V3DesignTokens
 from v3_provider_registry import (
+    KIE_TOPAZ_MODEL_ID,
     KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
     LOCAL_REMBG_MODEL_OPTIONS,
     LOCAL_REMBG_PROFILE_OPTIONS,
     LOCAL_REMBG_PROFILE_MODELS,
+    TOPAZ_UPSCALE_FACTORS,
     processing_provider_options,
     upscale_model_preserves_alpha,
     provider_visible_controls,
@@ -346,6 +348,13 @@ class ProcessingPipelineEditor(QScrollArea):
         )
         self._add_combo(
             advanced_form,
+            "upscale_factor",
+            "Topaz масштаб",
+            tuple((f"{factor}x", factor) for factor in TOPAZ_UPSCALE_FACTORS),
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
             "kie_remove_bg_model",
             "KIE модель удаления фона",
             KIE_REMOVE_BG_MODEL_OPTIONS,
@@ -641,6 +650,16 @@ class ProcessingPipelineEditor(QScrollArea):
             and "kie_upscale_model" in before_controls,
             "kie_upscale_after_model": operations.upscale_after
             and "kie_upscale_after_model" in after_controls,
+            "upscale_factor": (
+                operations.upscale_before
+                and operations.upscale_before_provider == "kie"
+                and operations.kie_upscale_model == KIE_TOPAZ_MODEL_ID
+            )
+            or (
+                operations.upscale_after
+                and operations.upscale_after_provider == "kie"
+                and operations.kie_upscale_after_model == KIE_TOPAZ_MODEL_ID
+            ),
             "local_realesrgan_profile": (
                 operations.upscale_before
                 and "local_realesrgan_profile" in before_controls

@@ -69,6 +69,115 @@ class KieRoutingTests(unittest.TestCase):
         messages = "\n".join([*progress, *finished])
         self.assertNotIn(DUMMY_KIE_KEY, messages)
 
+    def test_topaz_uses_current_model_and_documented_payload(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            kie_settings(
+                kie_api_key=DUMMY_KIE_KEY,
+                upscale=True,
+                upscale_factor=4,
+                kie_upscale_model="topaz/upscale",
+            ),
+        )
+        captured = {}
+
+        def fake_create(worker_self, model, input_payload):
+            captured["model"] = model
+            captured["input"] = input_payload
+            return "task-topaz"
+
+        worker._kie_create_task = types.MethodType(fake_create, worker)
+        worker._kie_wait_result = types.MethodType(
+            lambda worker_self, task_id: "mock://topaz-result",
+            worker,
+        )
+        worker._download_file = types.MethodType(
+            lambda worker_self, url, output_path: None,
+            worker,
+        )
+
+        factor = worker._resolve_upscale_factor(worker.kie_upscale_model)
+        worker._upscale_pipeline_step(
+            "https://example.invalid/source.png",
+            ".",
+            1,
+            "probe",
+            "upscaled",
+            factor,
+            model_name=worker.kie_upscale_model,
+        )
+
+        self.assertEqual(worker.kie_upscale_model, "topaz/image-upscale")
+        self.assertEqual(factor, 4)
+        self.assertEqual(captured["model"], "topaz/image-upscale")
+        self.assertEqual(
+            captured["input"],
+            {
+                "image_url": "https://example.invalid/source.png",
+                "upscale_factor": "4",
+            },
+        )
+
+    def test_topaz_rejects_oversized_source_before_upload(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-topaz-limit-") as temp_dir:
+            source_path = Path(temp_dir) / "too-wide.png"
+            Image.new("RGB", (5001, 1), "white").save(source_path, format="PNG")
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                kie_settings(
+                    kie_api_key=DUMMY_KIE_KEY,
+                    upscale=True,
+                    upscale_factor=4,
+                    kie_upscale_model="topaz/image-upscale",
+                ),
+            )
+            uploads = []
+            worker._kie_upload_file = types.MethodType(
+                lambda worker_self, path: uploads.append(path) or "mock://uploaded",
+                worker,
+            )
+            with self.assertRaisesRegex(ValueError, "20 000"):
+                worker._run_processing_pipeline(
+                    str(source_path),
+                    None,
+                    temp_dir,
+                    1,
+                    "probe",
+                )
+            self.assertEqual(uploads, [])
+
+    def test_topaz_rejects_file_over_ten_megabytes_before_upload(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-topaz-bytes-") as temp_dir:
+            source_path = Path(temp_dir) / "too-large.png"
+            with source_path.open("wb") as stream:
+                stream.truncate(10_000_001)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp_dir,
+                kie_settings(
+                    kie_api_key=DUMMY_KIE_KEY,
+                    upscale=True,
+                    upscale_factor=2,
+                    kie_upscale_model="topaz/image-upscale",
+                ),
+            )
+            uploads = []
+            worker._kie_upload_file = types.MethodType(
+                lambda worker_self, path: uploads.append(path) or "mock://uploaded",
+                worker,
+            )
+            with self.assertRaisesRegex(ValueError, "10 МБ"):
+                worker._run_processing_pipeline(
+                    str(source_path),
+                    None,
+                    temp_dir,
+                    1,
+                    "probe",
+                )
+            self.assertEqual(uploads, [])
+
     def test_kie_failed_task_error_contains_safe_task_id_and_code(self):
         worker = main.WorkerThread(
             "mode2_process",
@@ -698,7 +807,10 @@ class KieRoutingTests(unittest.TestCase):
                 ) as post_mock,
                 patch.object(worker, "_request_json") as fallback_mock,
             ):
-                with self.assertRaises(RuntimeError):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "задача KIE не была создана",
+                ):
                     worker._kie_upload_file(str(source_path))
 
             self.assertEqual(post_mock.call_count, 1)
@@ -718,10 +830,26 @@ class KieRoutingTests(unittest.TestCase):
                 patch.object(main, "MAX_API_UPLOAD_BYTES", 8),
                 patch.object(worker, "_request_with_retries") as request_mock,
             ):
-                with self.assertRaisesRegex(RuntimeError, "size limit"):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "задача KIE не была создана",
+                ) as raised:
                     worker._kie_upload_file(str(source_path))
 
+            self.assertIn("size limit", str(raised.exception))
             request_mock.assert_not_called()
+
+    def test_missing_upload_file_explains_that_no_kie_task_was_created(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "задача KIE не была создана",
+        ):
+            worker._kie_upload_file("/definitely/missing/topaz-source.png")
 
     def test_recraft_crisp_input_limits_are_checked_before_upload(self):
         with tempfile.TemporaryDirectory(prefix="clipart-recraft-crisp-limits-") as temp_dir:

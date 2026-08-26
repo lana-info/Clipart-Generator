@@ -10,6 +10,7 @@ from v3_project_state import (
     ClipartModeData,
     CommonProjectData,
     GenerationData,
+    ImageOperationData,
     PinterestModeData,
     ProcessingModeData,
     ProjectMode,
@@ -26,6 +27,25 @@ from v3_project_state import (
 
 
 class ProjectRoutesTests(unittest.TestCase):
+    def test_legacy_topaz_settings_migrate_to_current_contract(self):
+        operations = ImageOperationData(
+            upscale_factor=8,
+            kie_upscale_model="topaz/upscale",
+            kie_upscale_after_model="topaz/upscale",
+        )
+        self.assertEqual(operations.upscale_factor, 4)
+        self.assertEqual(operations.kie_upscale_model, "topaz/image-upscale")
+        self.assertEqual(
+            operations.kie_upscale_after_model,
+            "topaz/image-upscale",
+        )
+        for invalid_factor in (True, 1.5, "1.5", 8, None):
+            with self.subTest(invalid_factor=invalid_factor):
+                self.assertEqual(
+                    ImageOperationData(upscale_factor=invalid_factor).upscale_factor,
+                    4,
+                )
+
     def test_processing_collision_policy_round_trips_through_state(self):
         state = ProjectState(
             mode=ProjectMode.PROCESSING,
