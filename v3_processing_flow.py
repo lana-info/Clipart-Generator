@@ -1070,7 +1070,7 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
     ) -> None:
         super().__init__(
             "Проверка и запуск",
-            "Проверьте порядок, место сохранения и сетевую передачу.",
+            "Проверьте порядок, место сохранения и итоговую стоимость.",
             tokens=tokens,
         )
         self.state = state
@@ -1085,9 +1085,6 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         self.warning_label = QLabel()
         self.warning_label.setWordWrap(True)
         self.warning_label.setProperty("state", "warning")
-        self.network_consent = QCheckBox(
-            "Разрешаю передачу файлов выбранным внешним сервисам"
-        )
         self.requirements_label = QLabel()
         self.requirements_label.setWordWrap(True)
         self.run_status_label = QLabel()
@@ -1097,7 +1094,6 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
             self.pipeline_label,
             self.output_label,
             self.warning_label,
-            self.network_consent,
             self.requirements_label,
             self.run_status_label,
         ):
@@ -1121,8 +1117,6 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
             self.state.processing.recipe,
             PROCESSING_RECIPES["custom"],
         )
-        self.network_consent.setChecked(True)
-        self.network_consent.setVisible(False)
         self.summary_label.setText(
             f"Файлов: {len(files)} · рецепт: "
             f"{recipe.title} "
@@ -1135,7 +1129,6 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
             f"Папка результата: {output_dir}. Исходники не перезаписываются."
         )
         external = uses_external_processing(operations)
-        self.network_consent.setVisible(external)
         warnings: list[str] = []
         if operations.remove_background or operations.edge_shrink or operations.trim:
             warnings.append("Прозрачность и границы объекта могут измениться.")
@@ -1155,7 +1148,13 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         return tuple(issues)
 
     def set_preflight_status(self, text: str, *, ready: bool) -> None:
-        prefix = "✓ " if ready else "✕ "
+        if ready:
+            self.requirements_label.clear()
+            self.requirements_label.setVisible(False)
+            self.requirements_label.setAccessibleName("")
+            return
+        self.requirements_label.setVisible(True)
+        prefix = "✕ "
         self.requirements_label.setText(prefix + text[:500])
         self.requirements_label.setProperty(
             "state", "default" if ready else "error"

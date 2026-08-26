@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
 from PyQt6.QtCore import QMimeData, QObject, QUrl, Qt, pyqtSignal
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QCheckBox
 
 from v3_mode_selection import V3ApplicationView
 from v3_processing_flow import (
@@ -157,6 +157,35 @@ class V3ProcessingFlowTests(unittest.TestCase):
         self.assertIsInstance(pages[StepId.GOAL], ProcessingRecipePage)
         self.assertIsInstance(pages[StepId.PIPELINE], ProcessingPipelinePage)
         self.assertIsInstance(pages[StepId.REVIEW_RUN], ProcessingReviewRunPage)
+
+    def test_processing_review_has_no_duplicate_transfer_checkbox_or_ready_message(self):
+        with tempfile.TemporaryDirectory(prefix="processing-review-copy-") as temp:
+            state, _ = self.make_state(temp)
+            state.processing.operations.upscale_before = True
+            state.processing.operations.upscale_before_provider = "kie"
+            state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
+            shell = AppShell(state)
+            runtime_settings: dict[str, str] = {}
+            controller = install_processing_flow(
+                shell,
+                runtime_settings_provider=lambda: runtime_settings,
+                worker_factory=WorkerFactory(),
+            )
+            page = controller.review_page
+            controller._refresh_preflight()
+            self.assertFalse(page.requirements_label.isHidden())
+            self.assertIn("KIE API Key", page.requirements_label.text())
+
+            runtime_settings["kie_api_key"] = "test-key"
+            controller._refresh_preflight()
+
+            checkbox_copy = " ".join(
+                checkbox.text() for checkbox in page.findChildren(QCheckBox)
+            )
+            self.assertNotIn("Разрешаю передачу файлов", checkbox_copy)
+            self.assertTrue(page.requirements_label.isHidden())
+            self.assertEqual(page.requirements_label.text(), "")
+            self.assertIn("внешнему сервису", page.warning_label.text())
 
     def test_process_more_clears_old_inputs_and_returns_to_files_step(self):
         with tempfile.TemporaryDirectory(prefix="processing-more-") as temp:

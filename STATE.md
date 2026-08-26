@@ -43,9 +43,12 @@ target-machine acceptance.
   no longer displays a partial estimate; Review separates images, generation
   calls, processing calls and their cost components from one calculation.
 - Review no longer highlights API-key storage or a generic ready message.
+  Processing Review also removes the duplicate external-transfer checkbox;
+  choosing a network provider remains explicit on the preceding pipeline step,
+  while missing-key and provider errors stay blocking and visible.
   Result hover previews close on pointer leave, app deactivation and Escape;
   terminal runs show a compact count/time/folder summary.
-- Full offline pytest passes: 687 tests, 1 expected Linux skip, 2 deselected
+- Full offline pytest passes: 688 tests, 1 expected Linux skip, 2 deselected
   and 83 subtests. Syntax, sensitive-artifact and diff checks pass. No Windows
   build, paid API call or server publication was run for this checkpoint.
 
