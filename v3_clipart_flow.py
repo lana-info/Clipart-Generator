@@ -1391,6 +1391,9 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             edit.setMaxLength(MAX_PROMPT_GENERATOR_TEXT_LENGTH)
         self.restrictions_edit = QPlainTextEdit("\n".join(draft.restrictions))
         self.restrictions_edit.setMaximumHeight(72)
+        self.restrictions_edit.setPlaceholderText(
+            "Например: текст, рамки, водяные знаки"
+        )
         fields = (
             ("Что нужно создать", self.theme_edit),
             ("Стиль", self.style_edit),
@@ -1398,7 +1401,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             ("Композиция", self.composition_edit),
             ("Фон", self.background_edit),
             ("Единообразие серии", self.consistency_edit),
-            ("Исключить — по одному в строке", self.restrictions_edit),
+            ("Исключить", self.restrictions_edit),
         )
         for label, control in fields:
             control.setAccessibleName(label)
