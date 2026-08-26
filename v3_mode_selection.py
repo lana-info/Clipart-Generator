@@ -27,6 +27,8 @@ from v3_components import (
     ModeCard,
     V3Button,
     V3DesignTokens,
+    V3_WINDOW_DEFAULT_SIZE,
+    V3_WINDOW_MINIMUM_SIZE,
     apply_v3_theme,
 )
 from v3_project_state import ProjectMode, ProjectState
@@ -121,7 +123,7 @@ class ModeSelectionScreen(QWidget):
         self.tokens = tokens
         self.mode_cards: dict[ProjectMode, ModeCard] = {}
 
-        self.setMinimumSize(980, 700)
+        self.setMinimumSize(*V3_WINDOW_MINIMUM_SIZE)
         self.setAccessibleName("Выбор задачи")
         apply_v3_theme(self, tokens)
 
@@ -322,7 +324,8 @@ class V3ApplicationView(QWidget):
         self._preferences = self._load_preferences()
         self.shell: AppShell | None = None
 
-        self.setMinimumSize(980, 700)
+        self.setMinimumSize(*V3_WINDOW_MINIMUM_SIZE)
+        self.resize(*V3_WINDOW_DEFAULT_SIZE)
         self.setAccessibleName(f"{APP_NAME} 3.0")
 
         layout = QVBoxLayout(self)
@@ -450,7 +453,11 @@ class V3ApplicationView(QWidget):
         self.mode_selection.set_recent_project_summary(None)
 
     def _set_application_screen(self, widget: QWidget, screen: str, status: str) -> None:
+        preserved_size = self.size()
+        preserve_window_state = self.isMaximized() or self.isFullScreen()
         self.stack.setCurrentWidget(widget)
+        if not preserve_window_state:
+            self.resize(preserved_size)
         self.screen_changed.emit(screen)
         self._diagnostic_event(
             "screen_changed",

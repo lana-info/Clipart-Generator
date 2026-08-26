@@ -7099,6 +7099,7 @@ class MainWindow(QMainWindow):
 def create_v3_application_window():
     from diagnostics import DiagnosticJournal
     from update_client import UpdateClient, current_platform_id
+    from v3_components import V3_WINDOW_DEFAULT_SIZE
     from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
     from v3_license import OnlineLicenseGate
     from v3_project_state import migrate_v2_config
@@ -7155,7 +7156,7 @@ def create_v3_application_window():
         outcome="success",
     )
     window.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
-    window.resize(1120, 780)
+    window.resize(*V3_WINDOW_DEFAULT_SIZE)
     if len(window.mode_selection.mode_cards) != len(MODE_CARD_SPECS):
         raise RuntimeError("V3 mode selection does not contain all mode cards")
     return window

@@ -7,9 +7,8 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
 Current next task: **Obtain owner visual approval for the revised two-step
-prompt flow, then implement the separately requested stable desktop-window
-size. Do not start a Windows build or publish an artifact without a new,
-explicit owner command.**
+prompt flow and stable desktop-window behavior. Do not start a Windows build
+or publish an artifact without a new, explicit owner command.**
 
 ## Phase 1 - Preparation
 

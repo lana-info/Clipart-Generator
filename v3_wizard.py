@@ -19,6 +19,7 @@ from v3_components import (
     FormCard,
     V3Button,
     V3DesignTokens,
+    V3_WINDOW_MINIMUM_SIZE,
     apply_v3_theme,
 )
 from app_identity import APP_NAME
@@ -143,7 +144,7 @@ class AppShell(QWidget):
         ] = {}
         self.step_labels: list[QLabel] = []
 
-        self.setMinimumSize(980, 700)
+        self.setMinimumSize(*V3_WINDOW_MINIMUM_SIZE)
         self.setObjectName("v3AppShell")
         self.setAccessibleName(f"{APP_NAME} 3.0")
         apply_v3_theme(self, tokens)

@@ -856,7 +856,30 @@ class V3ClipartFlowTests(unittest.TestCase):
                 self.app.processEvents()
                 self.assertTrue(page.isVisible())
                 self.assertTrue(page.accessibleName())
+                if step is StepId.PROMPTS:
+                    page._select_source(0)
+                    self.app.processEvents()
+                    self.assertGreater(page.verticalScrollBar().maximum(), 0)
             shell.close()
+
+    def test_large_prompt_generator_scrolls_vertically_and_horizontally_when_needed(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        page = ClipartPromptInputPage(state, lambda: None)
+        page._select_source(0)
+        page.resize(500, 350)
+        page.show()
+        self.app.processEvents()
+
+        self.assertEqual(
+            page.verticalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self.assertEqual(
+            page.horizontalScrollBarPolicy(),
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded,
+        )
+        self.assertGreater(page.verticalScrollBar().maximum(), 0)
+        self.assertGreater(page.horizontalScrollBar().maximum(), 0)
 
     def test_module_does_not_duplicate_worker_or_network_transport(self):
         source = Path(v3_clipart_flow.__file__).read_text(encoding="utf-8")

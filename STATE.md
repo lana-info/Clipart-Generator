@@ -27,9 +27,9 @@ Updated: 2026-08-26
 
 ## Next task
 
-Owner visual approval of the revised prompt constructor and source step, then
-the separately scoped stable-window-size task. Do not start a new Windows build
-or publish `3.0.5` until the source screenshots are approved.
+Owner visual approval of the revised prompt flow and stable window behavior.
+Do not start a new Windows build or publish `3.0.5` until the source screenshots
+are approved.
 
 ## Prompt flow checkpoint — 2026-08-25
 
@@ -45,11 +45,15 @@ or publish `3.0.5` until the source screenshots are approved.
   navigation to review; there is no duplicate preview table.
 - The review step gives the prompt text two thirds of a larger table, supports
   search across hundreds of rows, and keeps compact prompt/reference actions.
-- Offscreen screenshots were reviewed at 1400×900; the variable text fields are
-  aligned and the 200-row review table uses internal scrolling. Stable desktop
-  window sizing remains a separate pending task.
-- Full local pytest passes: 624 tests, 1 expected Linux skip, 2 deselected and
-  75 subtests. No paid request or release build was started.
+- Offscreen screenshots were reviewed at 1400×900 and the supported 980×700
+  minimum. The variable text fields are aligned and the 200-row review table
+  uses internal scrolling.
+- The whole V3 application now starts at 1120×780, cannot shrink below 980×700,
+  preserves a user-resized window across menu and every route step, and gives
+  large pages internal vertical/horizontal scrolling instead of resizing the
+  top-level window.
+- Full local pytest passes: 629 tests, 1 expected Linux skip, 2 deselected and
+  78 subtests. No paid request or release build was started.
 - GitHub and Azure Windows pipelines are configured to capture both prompt
   steps in addition to mode selection from the installed copy. Execution of
   the updated gate awaits a separately approved installer build.

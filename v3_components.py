@@ -63,6 +63,11 @@ class V3DesignTokens:
 
 DEFAULT_TOKENS = V3DesignTokens()
 
+# One geometry contract for the whole desktop application. Pages may scroll,
+# but switching screens must never resize the top-level window.
+V3_WINDOW_DEFAULT_SIZE = (1120, 780)
+V3_WINDOW_MINIMUM_SIZE = (980, 700)
+
 
 class _AspectRatioPixmapLabel(QLabel):
     """Display a raster illustration without stretching it."""
