@@ -67,7 +67,7 @@ from v3_api_settings import check_photoroom_balance as check_photoroom_balance_a
 from output_naming import processed_output_path
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
-from runtime_settings import normalize_kie_concurrency
+from runtime_settings import normalize_kie_concurrency, normalize_provider_concurrency
 from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
@@ -877,6 +877,9 @@ class WorkerThread(QThread):
         self.kie_concurrency = normalize_kie_concurrency(
             settings.get("kie_concurrency"),
             legacy_value=settings.get("generation_concurrency"),
+        )
+        self.photoroom_concurrency = normalize_provider_concurrency(
+            settings.get("photoroom_concurrency")
         )
         # Compatibility name for the generation-only executor. The same value
         # now governs every KIE operation in the run.
@@ -4912,6 +4915,7 @@ class MainWindow(QMainWindow):
             "timeout": 60,
             "generation_concurrency": 3,
             "kie_concurrency": 3,
+            "photoroom_concurrency": 3,
             "generation_launch_interval": 1.0,
             "generation_wait_timeout": 300,
             "status_poll_interval": 20,
@@ -4978,6 +4982,7 @@ class MainWindow(QMainWindow):
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 self.config = json.load(f)
             had_kie_concurrency = "kie_concurrency" in self.config
+            had_photoroom_concurrency = "photoroom_concurrency" in self.config
             for key, value in default_config.items():
                 if key not in self.config:
                     self.config[key] = value
@@ -4986,6 +4991,8 @@ class MainWindow(QMainWindow):
                     None,
                     legacy_value=self.config.get("generation_concurrency"),
                 )
+            if not had_photoroom_concurrency:
+                self.config["photoroom_concurrency"] = normalize_provider_concurrency(None)
         else:
             self.config = default_config
         self.config["kie_upscale_model"] = normalize_kie_upscale_model(

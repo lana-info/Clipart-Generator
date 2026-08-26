@@ -5,11 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-KIE_CONCURRENCY_CHOICES = (1, 2, 3, 5, 10)
-DEFAULT_KIE_CONCURRENCY = 3
+PROVIDER_CONCURRENCY_CHOICES = (1, 2, 3)
+DEFAULT_PROVIDER_CONCURRENCY = 3
+
+# Compatibility names for existing KIE-only callers.
+KIE_CONCURRENCY_CHOICES = PROVIDER_CONCURRENCY_CHOICES
+DEFAULT_KIE_CONCURRENCY = DEFAULT_PROVIDER_CONCURRENCY
 
 
-def normalize_kie_concurrency(
+def normalize_provider_concurrency(
     value: Any,
     *,
     legacy_value: Any = None,
@@ -18,10 +22,13 @@ def normalize_kie_concurrency(
     try:
         normalized = int(candidate)
     except (TypeError, ValueError, OverflowError):
-        return DEFAULT_KIE_CONCURRENCY
-    if normalized not in KIE_CONCURRENCY_CHOICES:
-        return DEFAULT_KIE_CONCURRENCY
+        return DEFAULT_PROVIDER_CONCURRENCY
+    if normalized not in PROVIDER_CONCURRENCY_CHOICES:
+        return DEFAULT_PROVIDER_CONCURRENCY
     return normalized
+
+
+normalize_kie_concurrency = normalize_provider_concurrency
 
 
 def build_runtime_settings(
@@ -40,8 +47,11 @@ def build_runtime_settings(
         settings[key] = str(secrets.get(key, config.get(key, "")) or "").strip()
     if visible_mark_confirmed_regions is not None:
         settings["visible_mark_confirmed_regions"] = dict(visible_mark_confirmed_regions)
-    settings["kie_concurrency"] = normalize_kie_concurrency(
+    settings["kie_concurrency"] = normalize_provider_concurrency(
         settings.get("kie_concurrency"),
         legacy_value=settings.get("generation_concurrency"),
+    )
+    settings["photoroom_concurrency"] = normalize_provider_concurrency(
+        settings.get("photoroom_concurrency")
     )
     return settings

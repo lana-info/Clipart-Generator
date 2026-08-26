@@ -23,7 +23,7 @@ from v3_components import ButtonVariant, V3Button
 from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS
 from provider_clients import check_kie_balance, check_photoroom_balance
 from app_identity import APP_NAME
-from runtime_settings import KIE_CONCURRENCY_CHOICES, normalize_kie_concurrency
+from runtime_settings import PROVIDER_CONCURRENCY_CHOICES, normalize_provider_concurrency
 
 
 def user_env_path() -> Path:
@@ -156,9 +156,9 @@ class ApiSettingsDialog(QDialog):
         form.addRow("RunPod API Key", self.runpod_key_edit)
         form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
         self.kie_concurrency_combo = QComboBox()
-        for concurrency in KIE_CONCURRENCY_CHOICES:
+        for concurrency in PROVIDER_CONCURRENCY_CHOICES:
             self.kie_concurrency_combo.addItem(str(concurrency), concurrency)
-        selected_concurrency = normalize_kie_concurrency(
+        selected_concurrency = normalize_provider_concurrency(
             values.get("kie_concurrency"),
             legacy_value=values.get("generation_concurrency"),
         )
@@ -166,6 +166,16 @@ class ApiSettingsDialog(QDialog):
             self.kie_concurrency_combo.findData(selected_concurrency)
         )
         form.addRow("Одновременных задач KIE", self.kie_concurrency_combo)
+        self.photoroom_concurrency_combo = QComboBox()
+        for concurrency in PROVIDER_CONCURRENCY_CHOICES:
+            self.photoroom_concurrency_combo.addItem(str(concurrency), concurrency)
+        selected_photoroom_concurrency = normalize_provider_concurrency(
+            values.get("photoroom_concurrency")
+        )
+        self.photoroom_concurrency_combo.setCurrentIndex(
+            self.photoroom_concurrency_combo.findData(selected_photoroom_concurrency)
+        )
+        form.addRow("Одновременных задач PhotoRoom", self.photoroom_concurrency_combo)
         layout.addLayout(form)
         actions = QVBoxLayout()
         self.status = QLabel()
@@ -196,8 +206,11 @@ class ApiSettingsDialog(QDialog):
             "photoroom_api_key": self.photo_edit.text().strip(),
             "runpod_api_key": self.runpod_key_edit.text().strip(),
             "runpod_endpoint_id": self.runpod_endpoint_edit.text().strip(),
-            "kie_concurrency": normalize_kie_concurrency(
+            "kie_concurrency": normalize_provider_concurrency(
                 self.kie_concurrency_combo.currentData()
+            ),
+            "photoroom_concurrency": normalize_provider_concurrency(
+                self.photoroom_concurrency_combo.currentData()
             ),
         }
         save_credentials(

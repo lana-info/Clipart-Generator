@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -163,6 +164,28 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertEqual(api_requests, [True])
         screen.close()
         screen.deleteLater()
+
+    def test_provider_concurrency_preferences_override_runtime_settings(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-provider-concurrency-") as temp:
+            draft_path = Path(temp) / "project_state.json"
+            preferences_path = Path(temp) / "preferences.json"
+            preferences_path.write_text(
+                json.dumps({"kie_concurrency": 10, "photoroom_concurrency": 2}),
+                encoding="utf-8",
+            )
+
+            view = V3ApplicationView(
+                draft_path=draft_path,
+                runtime_settings_provider=lambda: {
+                    "kie_concurrency": 1,
+                    "photoroom_concurrency": 1,
+                },
+            )
+
+            self.assertEqual(view._runtime_settings()["kie_concurrency"], 3)
+            self.assertEqual(view._runtime_settings()["photoroom_concurrency"], 2)
+            view.close()
+            view.deleteLater()
 
     def test_new_project_defaults_to_pictures_instead_of_process_directory(self):
         with tempfile.TemporaryDirectory(prefix="clipart-default-folder-") as temp:

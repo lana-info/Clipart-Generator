@@ -59,6 +59,9 @@ def migrate_preferences(value: Any) -> dict[str, Any]:
             source[current_key] = source[legacy_key]
     result["last_work_dir"] = source.get("last_work_dir", "") if isinstance(source.get("last_work_dir", ""), str) else ""
     result["last_output_dir"] = source.get("last_output_dir", "") if isinstance(source.get("last_output_dir", ""), str) else ""
+    for key in ("kie_concurrency", "photoroom_concurrency"):
+        if key in source:
+            result[key] = source[key]
     for key in _MODE_KEYS:
         result[key] = _clean_mode(source.get(key))
     result["schema_version"] = PREFERENCES_SCHEMA_VERSION

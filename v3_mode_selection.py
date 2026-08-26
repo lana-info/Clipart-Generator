@@ -322,12 +322,13 @@ class V3ApplicationView(QWidget):
             if self._draft_path is not None else None
         )
         self._preferences = self._load_preferences()
-        if "kie_concurrency" in self._preferences:
-            from runtime_settings import normalize_kie_concurrency
+        from runtime_settings import normalize_provider_concurrency
 
-            self._v3_runtime_settings["kie_concurrency"] = normalize_kie_concurrency(
-                self._preferences.get("kie_concurrency")
-            )
+        for key in ("kie_concurrency", "photoroom_concurrency"):
+            if key in self._preferences:
+                self._v3_runtime_settings[key] = normalize_provider_concurrency(
+                    self._preferences.get(key)
+                )
         self.shell: AppShell | None = None
 
         self.setMinimumSize(*V3_WINDOW_MINIMUM_SIZE)
@@ -379,12 +380,16 @@ class V3ApplicationView(QWidget):
         dialog = ApiSettingsDialog(initial=self._runtime_settings(), parent=self.shell or self)
         if dialog.exec():
             self._v3_runtime_settings.update(dialog.settings)
-            if "kie_concurrency" in dialog.settings:
-                from runtime_settings import normalize_kie_concurrency
+            from runtime_settings import normalize_provider_concurrency
 
-                self._preferences["kie_concurrency"] = normalize_kie_concurrency(
-                    dialog.settings.get("kie_concurrency")
-                )
+            updated_provider_concurrency = False
+            for key in ("kie_concurrency", "photoroom_concurrency"):
+                if key in dialog.settings:
+                    self._preferences[key] = normalize_provider_concurrency(
+                        dialog.settings.get(key)
+                    )
+                    updated_provider_concurrency = True
+            if updated_provider_concurrency:
                 if self._preferences_path is not None:
                     try:
                         save_preferences_atomic(
