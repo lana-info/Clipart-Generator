@@ -149,11 +149,14 @@ acceptance are approved.
 
 ## Blockers and risks
 
-- Azure Windows run `139` reached the offline release gate on 2026-08-25 and
-  exposed a legacy `QSvgWidget` aspect-ratio API error, fixed in commit
-  `631eb43`; replacement run `140` could not start because Azure had no hosted
-  minutes. GitHub Actions run `32900235313` replaced that blocked build and
-  produced the verified Windows `3.0.5` artifact from commit `44ec8a7`.
+- Azure Windows run `141` was requested from the merged `develop/3.0` commit
+  `5732eedd` on 2026-08-26 but Azure rejected the job before checkout because
+  the organization had no free hosted minutes. GitHub Actions run
+  `32977293110` replaced it, built Windows only from the exact same commit,
+  installed the finished package, and passed the installed-copy artwork and UI
+  evidence gates. The downloaded `VibixImages-Setup-3.0.5.exe` is `191362608`
+  bytes with SHA-256
+  `6c3f4837b381f2da44cd0d54fa4b8fce8ec03b047227efc9e3b57c226d8daba6`.
 - The deployed license service and signed online desktop contract are active;
   availability of VDS, DNS, TLS, and PostgreSQL is therefore a direct
   application-availability dependency.
@@ -162,15 +165,17 @@ acceptance are approved.
 - Automated packaged checks passed, but final installation, production-license
   activation, Windows visual behavior, and SmartScreen behavior still require a
   manual check on the target Windows computer.
-- Owner testing of GitHub `3.0.5` showed the pre-artwork card layout even though
-  the downloaded installer hash matched run `32900235313`. The old gate checked
-  only that three cards existed. The replacement source now rejects null card
-  pixmaps and verifies the application again after Inno Setup installs it.
+- Owner testing of the superseded GitHub `3.0.5` showed the pre-artwork card
+  layout even though the downloaded installer hash matched run `32900235313`.
+  The old gate checked only that three cards existed. The replacement source
+  now rejects null card pixmaps and verifies the application again after Inno
+  Setup installs it.
 - The same owner test exposed visible helper-process console windows. Root cause:
   the `CREATE_NO_WINDOW` change existed only in divergent commit `82fe6ff` and
   was absent from the artwork release branch. The focused fix is now applied to
-  Local Real-ESRGAN and all optional local watermark subprocesses. The `3.0.5`
-  artifact is not a publication candidate.
+  Local Real-ESRGAN and all optional local watermark subprocesses. That
+  superseded artifact is not a publication candidate; replacement run
+  `32977293110` contains the fixes and awaits owner target testing.
 - VDS access to the private GitHub repository and Codex authentication must be configured outside Git; no credentials are stored here.
 - Linux cannot replace Windows visual and packaged-client verification.
 - Azure Windows run `81` proved KIE balance and KIE processing on the owner's
@@ -233,8 +238,9 @@ acceptance are approved.
   the three primary workflows (clipart, Pinterest pins, and image processing),
   matching the public download page. Windows Inno Setup uses the coordinated
   `assets/installer-wizard-hq.png` artwork and retains the workflow/license
-  messaging. Source and packaging checks are complete; packaged Windows visual
-  acceptance remains pending the explicitly approved Azure build.
+  messaging. Replacement GitHub run `32977293110` verified these assets from an
+  installed copy; final visual acceptance remains pending on the owner's
+  Windows computer.
 - Azure's hosted macOS ARM64 preview is paused. The Azure artifact is x86_64 and
   requires Apple's free Rosetta 2 on Apple Silicon; a native ARM64 build would
   require a self-hosted Apple Silicon agent or a different CI provider.
@@ -252,8 +258,8 @@ acceptance are approved.
   in `docs/superpowers/specs/2026-08-17-vibix-shared-mark-design.md`.
 - Branding is integrated into the application runtime, Windows icon set, and
   Inno Setup configuration. The current Windows installer naming convention is
-  `VibixImages-Setup-<version>.exe`; a new Windows build is pending the manual
-  Azure pipeline run.
+  `VibixImages-Setup-<version>.exe`; GitHub run `32977293110` is the current
+  verified Windows 3.0.5 acceptance candidate.
 - Previous license keys did not exist, so no license-key migration is required;
   the first Vibix Images installation activates a new key through the existing
   online license flow.

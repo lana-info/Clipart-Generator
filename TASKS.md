@@ -6,11 +6,10 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Obtain owner acceptance of the detailed diagnostic
-journal, then correct the provider-contract discrepancies listed in
-`docs/API_CONTRACTS.md`, beginning with removal of automatic paid KIE model
-probes. Do not start a Windows build or publish an artifact without a new,
-explicit owner command.**
+Current next task: **Perform owner target-machine acceptance of the verified
+Windows 3.0.5 installer from GitHub run `32977293110`. Do not upload a server
+revision until installation, artwork, hidden helper processes, licensing, and
+the updated prompt workflow are accepted on the owner's Windows computer.**
 
 ## Phase 1 - Preparation
 
@@ -1838,5 +1837,11 @@ Verification:
 - [x] GitHub Windows run `32900235313` succeeded from commit `44ec8a7`; the
   downloaded `VibixImages-Setup-3.0.5.exe` is `191303609` bytes and matches its
   SHA-256 sidecar (`bbd4bfcbb952bdf10a7b606671b1177be02ed8da47215d1abf8f6dccb3e50978`).
+- [x] Replacement GitHub Windows run `32977293110` succeeded from merged
+  `develop/3.0` commit `5732eedd71420b80400fc8b15d10b34c989dc888` while macOS was
+  skipped. The workflow installed the completed package and verified the
+  installed application's mode artwork and prompt-screen evidence. The
+  downloaded installer is `191362608` bytes with SHA-256
+  `6c3f4837b381f2da44cd0d54fa4b8fce8ec03b047227efc9e3b57c226d8daba6`.
 - [ ] Perform focused visual and production-license acceptance on the owner's
   Windows computer before uploading a 3.0.5 server revision.

@@ -12,6 +12,12 @@
 
 ## Unreleased
 
+- Windows-only GitHub run `32977293110` rebuilt version 3.0.5 from merged
+  `develop/3.0` commit `5732eedd`, installed the resulting package, and verified
+  the approved mode artwork and prompt screens from the installed executable.
+  The installer SHA-256 is
+  `6c3f4837b381f2da44cd0d54fa4b8fce8ec03b047227efc9e3b57c226d8daba6`.
+
 - Обычный запуск больше не создаёт платные KIE-задачи для проверки доступности
   модели. GPT Image 2, Qwen Image 2 и FLUX.2 используют документированные
   пропорции, разрешения, длину промпта и лимиты референсов до загрузки.
