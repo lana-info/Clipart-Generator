@@ -208,8 +208,16 @@ def build_provider_event(event: str, **values: object) -> dict[str, object]:
             except (TypeError, ValueError, OverflowError):
                 continue
         elif name in _STRING_FIELDS:
-            limit = 500 if name == "error_message" else 200
-            safe = safe_provider_message(value)[:limit]
+            raw_text = str(value or "").strip()
+            if (
+                name == "task"
+                and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", raw_text)
+                and not raw_text.casefold().startswith("sk-")
+            ):
+                safe = raw_text
+            else:
+                limit = 500 if name == "error_message" else 200
+                safe = safe_provider_message(value)[:limit]
             if safe:
                 result[name] = safe
     if "severity" not in result:

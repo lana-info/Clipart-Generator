@@ -195,11 +195,51 @@ class KieRoutingTests(unittest.TestCase):
             },
             worker,
         )
+        events = []
+        worker.diagnostic.connect(events.append)
+        worker._set_diagnostic_context(1, 1, "upscale_before")
         with self.assertRaisesRegex(
             RuntimeError,
             r"taskId=task-123; errorCode=501; message=provider could not process image",
         ):
             worker._kie_wait_result("task-123")
+        failed = next(event for event in events if event["event"] == "provider_task_failed")
+        polled = next(event for event in events if event["event"] == "provider_task_polled")
+        self.assertEqual(failed["task"], "task-123")
+        self.assertEqual(failed["error_code"], "501")
+        self.assertEqual(failed["error_message"], "provider could not process image")
+        self.assertEqual(polled["provider_state"], "fail")
+
+    def test_kie_create_task_emits_safe_model_and_task_without_request_payload(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(kie_api_key=DUMMY_KIE_KEY),
+        )
+        events = []
+        worker.diagnostic.connect(events.append)
+        worker._set_diagnostic_context(2, 4, "generation")
+        worker._request_json = types.MethodType(
+            lambda self, *args, **kwargs: {
+                "code": 200,
+                "data": {"taskId": "task-safe-789"},
+            },
+            worker,
+        )
+
+        task_id = worker._kie_create_task(
+            "gpt-image-2-text-to-image",
+            {"prompt": "private prompt", "aspect_ratio": "1:1"},
+        )
+
+        self.assertEqual(task_id, "task-safe-789")
+        submitted = next(event for event in events if event["event"] == "provider_task_submitted")
+        encoded = json.dumps(submitted)
+        self.assertEqual(submitted["model"], "gpt-image-2-text-to-image")
+        self.assertEqual(submitted["task"], "task-safe-789")
+        self.assertEqual(submitted["item_index"], 2)
+        self.assertNotIn("private prompt", encoded)
+        self.assertNotIn(DUMMY_KIE_KEY, encoded)
 
     def test_gpt_image_2_routes_documented_task_models(self):
         worker = main.WorkerThread(

@@ -73,6 +73,11 @@ from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
 from security_redaction import redact_text
+from provider_diagnostics import (
+    build_provider_event,
+    count_provider_results,
+    inspect_image_metadata as inspect_diagnostic_image,
+)
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
 from network_security import HttpsOnlyRedirectHandler as SharedHttpsOnlyRedirectHandler
@@ -773,6 +778,7 @@ class WorkerThread(QThread):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
     progress_value = pyqtSignal(int)
+    diagnostic = pyqtSignal(object)
 
     def __init__(self, mode, work_dir, settings, selected_files=None, generated_prompts=None, parent=None):
         super().__init__(parent)
@@ -787,6 +793,7 @@ class WorkerThread(QThread):
         self._precleaned_paths: set[str] = set()
         self._metadata_cleaned_for_current_item = False
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self._diagnostic_context = threading.local()
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
         self._secret_values = tuple(
@@ -952,6 +959,32 @@ class WorkerThread(QThread):
     def _safe_error_text(self, error, limit=500):
         return safe_error_text(error, self._secret_values, limit=limit)
 
+    def _set_diagnostic_context(
+        self,
+        item_index: int,
+        item_total: int,
+        stage: str = "",
+    ) -> None:
+        self._diagnostic_context.item_index = max(1, int(item_index))
+        self._diagnostic_context.item_total = max(1, int(item_total))
+        self._diagnostic_context.stage = str(stage or "")
+
+    def _diagnostic_context_values(self) -> dict[str, object]:
+        values: dict[str, object] = {}
+        for name in ("item_index", "item_total", "stage", "model"):
+            value = getattr(self._diagnostic_context, name, None)
+            if value not in (None, ""):
+                values[name] = value
+        return values
+
+    def _emit_diagnostic(self, event: str, **values: object) -> None:
+        try:
+            context = self._diagnostic_context_values()
+            context.update(values)
+            self.diagnostic.emit(build_provider_event(event, **context))
+        except Exception:
+            return
+
     def _protect_secret_headers_from_redirects(self, req):
         protect_secret_headers_from_redirects(req)
 
@@ -989,10 +1022,18 @@ class WorkerThread(QThread):
                 return
 
             self.progress.emit(f"[{idx}/{total}] Генерация")
+            self._set_diagnostic_context(idx, total, "generation")
             self._emit_file_progress(idx, total, 4)
             try:
                 prompt_text = entry.get("prompt", "")
                 references = entry.get("references", [])
+                self._emit_diagnostic(
+                    "item_input_inspected",
+                    prompt_index=idx,
+                    prompt_chars=len(prompt_text),
+                    reference_count=len(split_references(references)),
+                    operation_type="generation",
+                )
                 self._emit_file_progress(idx, total, 18)
                 image_url = self._kie_generate_image(prompt_text, references)
                 self._emit_file_progress(idx, total, 36)
@@ -1038,11 +1079,21 @@ class WorkerThread(QThread):
                 )
                 self._emit_file_progress(idx, total, 100)
                 self.progress.emit(f"  Итог сохранён: {out_path}")
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="succeeded",
+                    **inspect_diagnostic_image(out_path),
+                )
                 done += 1
             except (ProcessingCancelled, VisibleMarkCleanupCancelled):
                 self.progress.emit("Остановлено пользователем")
                 return
             except Exception as e:
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="failed",
+                    error_message=self._safe_error_text(e),
+                )
                 self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
             if self._stop_after_current_if_requested():
@@ -1076,11 +1127,19 @@ class WorkerThread(QThread):
         raw_dir: str,
         output_dir: str,
     ) -> None:
+        self._set_diagnostic_context(idx, total, "generation")
         self._wait_for_generation_launch_slot()
         self.progress.emit(f"[{idx}/{total}] Генерация")
         self._emit_file_progress(idx, total, 4)
         prompt_text = entry.get("prompt", "")
         references = entry.get("references", [])
+        self._emit_diagnostic(
+            "item_input_inspected",
+            prompt_index=idx,
+            prompt_chars=len(prompt_text),
+            reference_count=len(split_references(references)),
+            operation_type="generation",
+        )
         self._emit_file_progress(idx, total, 18)
         image_url = self._kie_generate_image(prompt_text, references)
         self._emit_file_progress(idx, total, 36)
@@ -1101,6 +1160,11 @@ class WorkerThread(QThread):
         )
         self._emit_file_progress(idx, total, 100)
         self.progress.emit(f"  Итог сохранён: {out_path}")
+        self._emit_diagnostic(
+            "item_finished",
+            outcome="succeeded",
+            **inspect_diagnostic_image(out_path),
+        )
 
     def _mode1_generate_parallel(self, emit_final=True):
         raw_dir = self._create_run_raw_dir()
@@ -1154,6 +1218,12 @@ class WorkerThread(QThread):
                     except ProcessingCancelled:
                         self.progress.emit(f"[{idx}/{total}] Остановлено")
                     except Exception as error:
+                        self._set_diagnostic_context(idx, total, "generation")
+                        self._emit_diagnostic(
+                            "item_finished",
+                            outcome="failed",
+                            error_message=self._safe_error_text(error),
+                        )
                         self.progress.emit(
                             f"[{idx}/{total}] Ошибка: {self._safe_error_text(error)}"
                         )
@@ -1246,6 +1316,7 @@ class WorkerThread(QThread):
                 return
 
             self.progress.emit(f"[{idx}/{total}] Обработка файла: {os.path.basename(file_path)}")
+            self._set_diagnostic_context(idx, total, "processing")
             self._emit_file_progress(idx, total, 4)
             try:
                 if not os.path.isfile(file_path):
@@ -1257,6 +1328,11 @@ class WorkerThread(QThread):
                     continue
 
                 source_path = file_path
+                self._emit_diagnostic(
+                    "item_input_inspected",
+                    operation_type="processing",
+                    **inspect_diagnostic_image(source_path),
+                )
 
                 if (
                     self.visible_mark_cleanup_enabled
@@ -1297,11 +1373,21 @@ class WorkerThread(QThread):
                 self._emit_file_progress(idx, total, 100)
 
                 self.progress.emit(f"  Итог сохранён: {out_path}")
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="succeeded",
+                    **inspect_diagnostic_image(out_path),
+                )
                 done += 1
             except (ProcessingCancelled, VisibleMarkCleanupCancelled):
                 self.progress.emit("Остановлено пользователем")
                 return
             except Exception as e:
+                self._emit_diagnostic(
+                    "item_finished",
+                    outcome="failed",
+                    error_message=self._safe_error_text(e),
+                )
                 self.progress.emit(f"  Ошибка: {self._safe_error_text(e)}")
 
             if self._stop_after_current_if_requested():
@@ -1525,13 +1611,52 @@ class WorkerThread(QThread):
             self._ensure_running()
 
         if self.unsharp_enabled:
+            self._diagnostic_context.stage = "unsharp"
+            unsharp_started = time.monotonic()
+            self._emit_diagnostic(
+                "stage_started",
+                provider="local",
+                model="pillow-unsharp-mask",
+                parameters={
+                    "amount": self.unsharp_amount,
+                    "radius": self.unsharp_radius,
+                    "threshold": self.unsharp_threshold,
+                },
+                outcome="started",
+            )
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
             current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
             current_url = None
             local_result = True
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="local",
+                model="pillow-unsharp-mask",
+                outcome="succeeded",
+                elapsed_ms=round((time.monotonic() - unsharp_started) * 1000),
+                **inspect_diagnostic_image(current_path),
+            )
             self._ensure_running()
 
         if self.remove_bg:
+            self._diagnostic_context.stage = "background_removal"
+            remove_started = time.monotonic()
+            remove_provider = self.remove_bg_provider
+            remove_model = (
+                self.local_rembg_model
+                if self._uses_local_rembg_remove_bg()
+                else "ben2"
+                if self._uses_local_ben2_remove_bg()
+                else "remove-background-v1"
+                if self._uses_photoroom_remove_bg()
+                else self.kie_remove_bg_model
+            )
+            self._emit_diagnostic(
+                "stage_started",
+                provider=remove_provider,
+                model=remove_model,
+                outcome="started",
+            )
             self.progress.emit("  Этап обработки: background_removal; status=running")
             try:
                 if self._uses_local_rembg_remove_bg():
@@ -1570,9 +1695,28 @@ class WorkerThread(QThread):
                     current_path = nobg_path
                     local_result = False
             except Exception:
+                self._emit_diagnostic(
+                    "stage_finished",
+                    provider=remove_provider,
+                    model=remove_model,
+                    outcome="failed",
+                    elapsed_ms=round((time.monotonic() - remove_started) * 1000),
+                )
                 self.progress.emit("  Этап обработки: background_removal; status=failed")
                 raise
             self.progress.emit("  Этап обработки: background_removal; status=complete")
+            self._emit_diagnostic(
+                "stage_finished",
+                provider=remove_provider,
+                model=remove_model,
+                outcome="succeeded",
+                elapsed_ms=round((time.monotonic() - remove_started) * 1000),
+                **(
+                    inspect_diagnostic_image(current_path)
+                    if current_path and os.path.isfile(current_path)
+                    else {}
+                ),
+            )
             self._ensure_running()
 
         if self.upscale_after:
@@ -1590,13 +1734,31 @@ class WorkerThread(QThread):
             self._ensure_running()
 
         if self.edge_shrink_enabled:
+            self._diagnostic_context.stage = "edge_cleanup"
+            edge_started = time.monotonic()
+            self._emit_diagnostic(
+                "stage_started",
+                provider="local",
+                model="alpha-edge-cleanup",
+                parameters={"edge_pixels": self.edge_shrink_pixels},
+                outcome="started",
+            )
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-            if self.remove_bg or self._has_alpha_channel(current_path):
+            edge_applied = self.remove_bg or self._has_alpha_channel(current_path)
+            if edge_applied:
                 current_path = self._edge_shrink_pipeline_step(current_path, raw_dir, idx, prefix)
                 current_url = None
                 local_result = True
             else:
                 self.progress.emit("  Удаление контура: пропущено, у изображения нет alpha-канала")
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="local",
+                model="alpha-edge-cleanup",
+                outcome="succeeded" if edge_applied else "skipped",
+                elapsed_ms=round((time.monotonic() - edge_started) * 1000),
+                **inspect_diagnostic_image(current_path),
+            )
             self._ensure_running()
 
         return current_path if local_result else current_url
@@ -1664,6 +1826,23 @@ class WorkerThread(QThread):
         kie_model,
     ):
         stage = "upscale_after" if "after" in step_name else "upscale_before"
+        self._diagnostic_context.stage = stage
+        upscale_started = time.monotonic()
+        upscale_model = (
+            "realesrgan-ncnn-vulkan" if provider == "local_realesrgan" else kie_model
+        )
+        upscale_parameters = {
+            "scale": local_scale
+            if provider == "local_realesrgan"
+            else self._resolve_upscale_factor(kie_model)
+        }
+        self._emit_diagnostic(
+            "stage_started",
+            provider=provider,
+            model=upscale_model,
+            parameters=upscale_parameters,
+            outcome="started",
+        )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "local_realesrgan":
             current_path = self._ensure_local_path(
@@ -1690,6 +1869,15 @@ class WorkerThread(QThread):
                 else:
                     self._active_local_realesrgan_scale = previous_scale
             self.progress.emit(f"  Этап обработки: {stage}; status=complete")
+            self._emit_diagnostic(
+                "stage_finished",
+                provider=provider,
+                model=upscale_model,
+                parameters=upscale_parameters,
+                outcome="succeeded",
+                elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
+                **inspect_diagnostic_image(current_path),
+            )
             return current_path, None, True
 
         if kie_model == "recraft/crisp-upscale" and current_path and os.path.isfile(current_path):
@@ -1711,6 +1899,14 @@ class WorkerThread(QThread):
         )
         current_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
         self.progress.emit(f"  Этап обработки: {stage}; status=complete")
+        self._emit_diagnostic(
+            "stage_finished",
+            provider=provider,
+            model=upscale_model,
+            parameters=upscale_parameters,
+            outcome="succeeded",
+            elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
+        )
         return current_path, current_url, False
 
     def _validate_topaz_source_file(self, source_path, upscale_factor):
@@ -2667,10 +2863,19 @@ class WorkerThread(QThread):
             self._ensure_running()
             try:
                 with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
+                    response_status = getattr(resp, "status", None)
+                    response_getcode = getattr(resp, "getcode", None)
+                    if response_status is None and callable(response_getcode):
+                        try:
+                            response_status = response_getcode()
+                        except Exception:
+                            response_status = None
+                    self._diagnostic_context.last_http_status = int(response_status or 200)
                     response = read_response_limited(resp, MAX_API_RESPONSE_BYTES)
                 self._ensure_running()
                 return response
             except urlerror.HTTPError as e:
+                self._diagnostic_context.last_http_status = int(e.code)
                 last_error = RuntimeError(f"HTTP status={e.code}")
 
                 # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
@@ -2769,7 +2974,26 @@ class WorkerThread(QThread):
         )
 
         self.progress.emit("  Удаление фона через PhotoRoom Standard...")
-        response_bytes = self._request_with_retries(req, timeout=max(60, self.timeout))
+        started = time.monotonic()
+        self._emit_diagnostic(
+            "provider_task_submitted",
+            provider="photoroom",
+            model="remove-background-v1",
+            parameters={"output_format": "png"},
+            **inspect_diagnostic_image(input_path),
+        )
+        try:
+            response_bytes = self._request_with_retries(req, timeout=max(60, self.timeout))
+        except Exception as error:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="photoroom",
+                model="remove-background-v1",
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
+            raise
         try:
             with Image.open(BytesIO(response_bytes)) as response_image:
                 if response_image.format != "PNG" or "A" not in response_image.getbands():
@@ -2787,10 +3011,31 @@ class WorkerThread(QThread):
         except ProcessingCancelled:
             raise
         except Exception as exc:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="photoroom",
+                model="remove-background-v1",
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=(
+                    "PhotoRoom вернул некорректное изображение: "
+                    f"{self._safe_error_text(exc)}"
+                ),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError("PhotoRoom вернул некорректное изображение") from exc
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         result_image.save(output_path, format="PNG", **save_kwargs)
+        self._emit_diagnostic(
+            "stage_finished",
+            provider="photoroom",
+            model="remove-background-v1",
+            outcome="succeeded",
+            http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+            output_bytes=len(response_bytes),
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+            **inspect_diagnostic_image(output_path),
+        )
         return output_path
 
     def _kie_upload_file(self, file_path):
@@ -2798,6 +3043,12 @@ class WorkerThread(QThread):
         filename = os.path.basename(file_path)
         content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
+        started = time.monotonic()
+        self._emit_diagnostic(
+            "provider_upload_started",
+            provider="kie",
+            **inspect_diagnostic_image(file_path),
+        )
         try:
             file_bytes = self._read_upload_file(file_path)
         except ProcessingCancelled:
@@ -2836,34 +3087,89 @@ class WorkerThread(QThread):
             data = payload.get("data") or {}
             download_url = data.get("downloadUrl") or data.get("url") or payload.get("url")
             if download_url:
+                self._emit_diagnostic(
+                    "provider_upload_finished",
+                    provider="kie",
+                    outcome="succeeded",
+                    http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                    uploaded_bytes=len(file_bytes),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                    filename=filename,
+                )
                 return download_url
             raise RuntimeError("KIE upload did not return a download URL")
         except ProcessingCancelled:
             raise
         except Exception as error:
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="kie",
+                outcome="failed",
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError(
                 "Не удалось загрузить файл в KIE; задача KIE не была создана: "
                 f"{self._safe_error_text(error)}"
             ) from error
 
     def _kie_create_task(self, model, input_payload):
+        started = time.monotonic()
+        self._diagnostic_context.model = str(model or "")
         headers = self._kie_headers()
         headers["Content-Type"] = "application/json"
-        result = self._request_json(
-            "https://api.kie.ai/api/v1/jobs/createTask",
-            method="POST",
-            payload={"model": model, "input": input_payload},
-            headers=headers,
-            timeout=max(30, self.timeout),
-        )
+        try:
+            result = self._request_json(
+                "https://api.kie.ai/api/v1/jobs/createTask",
+                method="POST",
+                payload={"model": model, "input": input_payload},
+                headers=headers,
+                timeout=max(30, self.timeout),
+            )
+        except Exception as error:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="kie",
+                model=model,
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message=self._safe_error_text(error),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
+            raise
         if int(result.get("code", 0)) != 200:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="kie",
+                model=model,
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_code=result.get("code"),
+                error_message=self._safe_error_text(result.get("msg") or "request rejected"),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError(
                 f"KIE createTask rejected [errorCode={result.get('code', '-')}; "
                 f"message={self._safe_error_text(result.get('msg') or 'request rejected')}]"
             )
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
+            self._emit_diagnostic(
+                "provider_task_failed",
+                provider="kie",
+                model=model,
+                http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                error_message="KIE createTask не вернул taskId",
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             raise RuntimeError("KIE createTask не вернул taskId")
+        self._emit_diagnostic(
+            "provider_task_submitted",
+            provider="kie",
+            model=model,
+            task=task_id,
+            http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         return task_id
 
     def _kie_run_model_task(self, model, image_url, extra_input=None):
@@ -3296,7 +3602,18 @@ class WorkerThread(QThread):
             self._ensure_running()
 
             url = f"https://api.kie.ai/api/v1/gpt4o-image/record-info?{parse.urlencode({'taskId': task_id})}"
-            result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            try:
+                result = self._request_json(url, method="GET", headers=headers, timeout=30)
+            except Exception as error:
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                    error_message=self._safe_error_text(error),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
+                raise
             if int(result.get("code", 0)) != 200:
                 raise RuntimeError(f"KIE 4o status failed (code {result.get('code', '-')})")
 
@@ -3317,8 +3634,11 @@ class WorkerThread(QThread):
         timeout_sec = self.generation_wait_timeout
         deadline = time.time() + timeout_sec
         headers = self._kie_headers()
+        poll_attempt = 0
+        started = time.monotonic()
         while time.time() < deadline:
             self._ensure_running()
+            poll_attempt += 1
 
             url = f"https://api.kie.ai/api/v1/jobs/recordInfo?{parse.urlencode({'taskId': task_id})}"
             result = self._request_json(url, method="GET", headers=headers, timeout=30)
@@ -3327,17 +3647,52 @@ class WorkerThread(QThread):
 
             data = result.get("data") or {}
             state = str(data.get("state", "")).lower()
+            self._emit_diagnostic(
+                "provider_task_polled",
+                provider="kie",
+                task=task_id,
+                provider_state=state or "unknown",
+                poll_attempt=poll_attempt,
+                http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                elapsed_ms=round((time.monotonic() - started) * 1000),
+            )
             self.progress.emit(f"  Статус: {state}")
             if state in {"success", "succeeded"}:
+                self._emit_diagnostic(
+                    "provider_task_succeeded",
+                    provider="kie",
+                    task=task_id,
+                    provider_state=state,
+                    result_count=count_provider_results(data.get("resultJson")),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
                 return self._extract_result_url(data.get("resultJson"))
             if state in {"fail", "failed", "error"}:
                 error_code = data.get("failCode") or data.get("errorCode") or "unknown"
                 fail_message = self._safe_error_text(data.get("failMsg") or "KIE вернул fail")
+                self._emit_diagnostic(
+                    "provider_task_failed",
+                    provider="kie",
+                    task=task_id,
+                    provider_state=state,
+                    error_code=error_code,
+                    error_message=fail_message,
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                )
                 raise RuntimeError(
                     f"KIE task failed [taskId={task_id}; errorCode={error_code}; "
                     f"message={fail_message}]"
                 )
             time.sleep(self.status_poll_interval)
+        self._emit_diagnostic(
+            "provider_task_failed",
+            provider="kie",
+            task=task_id,
+            provider_state="timeout",
+            error_code="timeout",
+            error_message="Превышено время ожидания результата KIE",
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         raise TimeoutError("Превышено время ожидания результата KIE")
 
     def _extract_result_url(self, result_json_raw):
@@ -3382,6 +3737,7 @@ class WorkerThread(QThread):
 
         last_error = None
         attempts = [headers, {"User-Agent": headers["User-Agent"], "Accept": "*/*"}, {}]
+        started = time.monotonic()
         for idx, h in enumerate(attempts, start=1):
             try:
                 self._ensure_running()
@@ -3395,6 +3751,15 @@ class WorkerThread(QThread):
                         f.write(content)
                 if self.export_300_dpi and output_path.lower().endswith(".png") and "output" in output_path.lower():
                     self._set_png_dpi(output_path, dpi=300)
+                self._emit_diagnostic(
+                    "provider_result_downloaded",
+                    provider="kie" if trusted_kie_host else "external",
+                    result_index=1,
+                    http_status=getattr(self._diagnostic_context, "last_http_status", 200),
+                    downloaded_bytes=len(content),
+                    elapsed_ms=round((time.monotonic() - started) * 1000),
+                    **inspect_diagnostic_image(output_path),
+                )
                 return
             except ProcessingCancelled:
                 raise
@@ -3404,6 +3769,14 @@ class WorkerThread(QThread):
                     f"  Download попытка {idx} не удалась: {self._safe_error_text(e)}"
                 )
 
+        self._emit_diagnostic(
+            "stage_finished",
+            provider="kie" if trusted_kie_host else "external",
+            outcome="failed",
+            http_status=getattr(self._diagnostic_context, "last_http_status", None),
+            error_message=self._safe_error_text(last_error),
+            elapsed_ms=round((time.monotonic() - started) * 1000),
+        )
         raise RuntimeError(
             f"Не удалось скачать файл по URL ({host}): {self._safe_error_text(last_error)}"
         )

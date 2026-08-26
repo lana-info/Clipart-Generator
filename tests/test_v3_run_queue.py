@@ -44,6 +44,7 @@ class FakeWorker(QObject):
     progress_value = pyqtSignal(int)
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
+    diagnostic = pyqtSignal(object)
 
     def __init__(self, **kwargs):
         super().__init__()
@@ -147,6 +148,42 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertIn("event=provider_task_polled", session.technical_log)
             self.assertIn("task=task-456", session.technical_log)
             self.assertNotIn(SECRET_PROMPT, session.technical_log)
+
+    def test_worker_diagnostic_signal_reaches_only_active_session(self):
+        with tempfile.TemporaryDirectory(prefix="v3-worker-diagnostic-") as temp:
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            state.clipart.prompts = [PromptEntry(SECRET_PROMPT)]
+            state.clipart.operations.upscale_before = False
+            state.clipart.operations.remove_background = False
+            state.set_step(StepId.REVIEW_RUN)
+            shell = AppShell(state)
+            factory = WorkerFactory()
+            controller = install_clipart_flow(
+                shell,
+                runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
+                worker_factory=factory,
+                authorization_provider=Mock(return_value=None),
+            )
+            shell.go_next()
+            worker = factory.workers[0]
+
+            worker.diagnostic.emit(
+                {
+                    "event": "provider_task_polled",
+                    "provider": "kie",
+                    "task": "active-task",
+                    "provider_state": "waiting",
+                    "item_index": 1,
+                }
+            )
+            self.app.processEvents()
+
+            self.assertIn("task=active-task", controller.run_queue.session.technical_log)
+            shell.close()
+            shell.deleteLater()
 
     def test_malformed_structured_diagnostic_never_breaks_run(self):
         with tempfile.TemporaryDirectory(prefix="v3-malformed-diagnostic-") as temp:

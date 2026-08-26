@@ -1659,6 +1659,14 @@ class RunQueueSupport:
                     value,
                 )
             )
+        if hasattr(worker, "diagnostic"):
+            worker.diagnostic.connect(
+                lambda event, source=worker, token=generation: self._diagnostic(
+                    source,
+                    token,
+                    event,
+                )
+            )
         if hasattr(worker, "finished"):
             worker.finished.connect(
                 lambda message, source=worker, token=generation: self._dispatch_finished(
@@ -1693,6 +1701,16 @@ class RunQueueSupport:
         if self.session is not None:
             self.session.handle_progress(message)
         self.controller.progress.emit(_safe_progress_text(message))
+
+    def _diagnostic(
+        self,
+        worker: Any,
+        generation: int,
+        event: Any,
+    ) -> None:
+        if not self._is_active(worker, generation) or self.session is None:
+            return
+        self.session.handle_diagnostic(event)
 
     def _progress_value(
         self,
