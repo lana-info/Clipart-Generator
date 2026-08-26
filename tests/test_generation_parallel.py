@@ -176,57 +176,101 @@ def install_fake_file_io(worker, saved=None):
 
 
 class ParallelGenerationTests(unittest.TestCase):
-    def test_item_error_sanitizes_posix_and_windows_paths_but_keeps_basenames(self):
+    def _failed_reference_read_message(self, temp_dir, reference_path, private_path):
+        private_prompt = "private path prompt"
+        api_key = "private-path-api-key"
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            temp_dir,
+            {
+                "kie_api_key": api_key,
+                "kie_concurrency": 1,
+                "generation_launch_interval": 0,
+            },
+            generated_prompts=[
+                {"prompt": private_prompt, "references": [reference_path]}
+            ],
+        )
+        item_events = []
+        worker.item_progress.connect(item_events.append)
+
+        def fail_read(worker_self, file_path):
+            raise OSError(
+                errno.EACCES,
+                (
+                    f"Permission denied while reading {private_path}; "
+                    "provider says retry with PNG; "
+                    f"api_key={api_key}; prompt={private_prompt}"
+                ),
+                private_path,
+            )
+
+        worker._read_upload_file = types.MethodType(fail_read, worker)
+        worker._mode1_generate(process_generated=False, emit_final=False)
+
+        failed = next(
+            event for event in item_events if event.get("status") == "failed"
+        )
+        message = failed["message"]
+        self.assertEqual(failed["stage"], "generation")
+        self.assertEqual(failed.get("provider"), "kie")
+        self.assertEqual(failed.get("model"), worker.reference_generation_model)
+        self.assertIn("Permission denied", message)
+        self.assertIn("provider says retry with PNG", message)
+        self.assertIn("input.png", message)
+        self.assertLessEqual(len(message), 500)
+        self.assertNotIn(private_path, message)
+        self.assertNotIn(private_prompt, message)
+        self.assertNotIn(api_key, message)
+        return message
+
+    def test_item_error_sanitizes_posix_path_with_spaces(self):
+        with tempfile.TemporaryDirectory(prefix="kie-private-path-failure-") as temp_dir:
+            reference_path = (
+                Path(temp_dir) / "Private Folder" / "Customer A" / "input.png"
+            )
+            reference_path.parent.mkdir(parents=True)
+            main.Image.new("RGBA", (8, 8), "white").save(reference_path)
+
+            message = self._failed_reference_read_message(
+                temp_dir,
+                str(reference_path),
+                str(reference_path),
+            )
+
+            self.assertNotIn(temp_dir, message)
+            self.assertNotIn("Private Folder", message)
+            self.assertNotIn("Customer A", message)
+
+    def test_item_error_sanitizes_windows_path_with_spaces(self):
         with tempfile.TemporaryDirectory(prefix="kie-private-path-failure-") as temp_dir:
             reference_path = create_inputs(temp_dir, 1)[0]
-            windows_path = r"C:\Users\Owner\Pictures\private-reference.png"
-            private_prompt = "private path prompt"
-            api_key = "private-path-api-key"
-            worker = main.WorkerThread(
-                "mode1_generate_only",
+            windows_path = r"C:\Users\Jane Doe\Customer A\input.png"
+
+            message = self._failed_reference_read_message(
                 temp_dir,
-                {
-                    "kie_api_key": api_key,
-                    "kie_concurrency": 1,
-                    "generation_launch_interval": 0,
-                },
-                generated_prompts=[
-                    {"prompt": private_prompt, "references": [reference_path]}
-                ],
+                reference_path,
+                windows_path,
             )
-            item_events = []
-            worker.item_progress.connect(item_events.append)
 
-            def fail_read(worker_self, file_path):
-                raise OSError(
-                    errno.EACCES,
-                    (
-                        f"Permission denied while mirroring {windows_path}; "
-                        f"api_key={api_key}; prompt={private_prompt}"
-                    ),
-                    file_path,
-                )
+            self.assertNotIn(r"C:\Users", message)
+            self.assertNotIn("Jane Doe", message)
+            self.assertNotIn("Customer A", message)
 
-            worker._read_upload_file = types.MethodType(fail_read, worker)
-            worker._mode1_generate(process_generated=False, emit_final=False)
+    def test_item_error_sanitizes_unc_path_with_spaces(self):
+        with tempfile.TemporaryDirectory(prefix="kie-private-path-failure-") as temp_dir:
+            reference_path = create_inputs(temp_dir, 1)[0]
+            unc_path = r"\\server\private-share\Customer A\input.png"
 
-            failed = next(
-                event for event in item_events if event.get("status") == "failed"
+            message = self._failed_reference_read_message(
+                temp_dir,
+                reference_path,
+                unc_path,
             )
-            message = failed["message"]
-            self.assertEqual(failed["stage"], "generation")
-            self.assertEqual(failed.get("provider"), "kie")
-            self.assertEqual(failed.get("model"), worker.reference_generation_model)
-            self.assertIn("Permission denied", message)
-            self.assertIn(Path(reference_path).name, message)
-            self.assertIn("private-reference.png", message)
-            self.assertLessEqual(len(message), 500)
-            self.assertNotIn(reference_path, message)
-            self.assertNotIn(temp_dir, message)
-            self.assertNotIn(windows_path, message)
-            self.assertNotIn(r"C:\Users\Owner\Pictures", message)
-            self.assertNotIn(private_prompt, message)
-            self.assertNotIn(api_key, message)
+
+            self.assertNotIn("server", message)
+            self.assertNotIn("private-share", message)
+            self.assertNotIn("Customer A", message)
 
     def test_generation_reference_upload_failure_keeps_exact_kie_context(self):
         with tempfile.TemporaryDirectory(prefix="kie-generation-reference-failure-") as temp_dir:

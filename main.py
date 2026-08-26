@@ -821,7 +821,21 @@ def safe_error_text(error, secrets=(), limit=500):
 
 
 _QUOTED_ABSOLUTE_PATH = re.compile(
-    r"(?P<quote>['\"])(?P<path>(?:[A-Za-z]:[\\/]|/)[^'\"]+)(?P=quote)"
+    r"(?P<quote>['\"])(?P<path>(?:[A-Za-z]:[\\/]|\\{2,}|/)[^'\"\r\n]+)(?P=quote)"
+)
+_WINDOWS_ABSOLUTE_FILE_PATH = re.compile(
+    r"(?i)(?<![A-Za-z0-9_])"
+    r"(?:[A-Z]:[\\/]|\\{2,}[^\\/\r\n,;:'\"<>|?*]+[\\/]"
+    r"[^\\/\r\n,;:'\"<>|?*]+[\\/])"
+    r"(?:[^\\/\r\n,;:'\"<>|?*]+[\\/])*"
+    r"[^\\/\r\n,;:'\"<>|?*]+?\.[A-Z0-9]{1,10}"
+    r"(?=$|[\s,;:'\"<>\]\)}])"
+)
+_POSIX_ABSOLUTE_FILE_PATH = re.compile(
+    r"(?i)(?<![:/A-Za-z0-9_])/"
+    r"(?:[^/\r\n,;:'\"<>]+/)+"
+    r"[^/\r\n,;:'\"<>]+?\.[A-Z0-9]{1,10}"
+    r"(?=$|[\s,;:'\"<>\]\)}])"
 )
 _WINDOWS_ABSOLUTE_PATH = re.compile(
     r"(?i)(?<![A-Za-z0-9_])[A-Z]:[\\/](?:[^\\/\s,;:'\"<>|?*]+[\\/])*[^\\/\s,;:'\"<>|?*]+"
@@ -831,9 +845,74 @@ _POSIX_ABSOLUTE_PATH = re.compile(
 )
 
 
-def sanitize_item_error_paths(value, limit=500):
+def _is_absolute_path_text(value):
+    text = str(value or "")
+    return bool(text) and (
+        PurePosixPath(text).is_absolute()
+        or PureWindowsPath(text).is_absolute()
+    )
+
+
+def _item_error_known_paths(error, operation_args, max_paths=64):
+    paths = []
+    seen_paths = set()
+
+    def add_path(value):
+        try:
+            raw_path = os.fspath(value)
+        except TypeError:
+            return
+        if isinstance(raw_path, bytes):
+            raw_path = os.fsdecode(raw_path)
+        raw_path = str(raw_path or "")
+        if (
+            raw_path
+            and raw_path not in seen_paths
+            and _is_absolute_path_text(raw_path)
+        ):
+            seen_paths.add(raw_path)
+            paths.append(raw_path)
+
+    current_error = error
+    seen_errors = set()
+    while current_error is not None and len(seen_errors) < 8:
+        error_id = id(current_error)
+        if error_id in seen_errors:
+            break
+        seen_errors.add(error_id)
+        add_path(getattr(current_error, "filename", None))
+        add_path(getattr(current_error, "filename2", None))
+        current_error = (
+            getattr(current_error, "__cause__", None)
+            or getattr(current_error, "__context__", None)
+        )
+
+    pending = list(operation_args)
+    seen_containers = set()
+    while pending and len(paths) < max_paths:
+        item = pending.pop()
+        if isinstance(item, (str, bytes, os.PathLike)):
+            add_path(item)
+            continue
+        if isinstance(item, dict):
+            item_id = id(item)
+            if item_id in seen_containers:
+                continue
+            seen_containers.add(item_id)
+            pending.extend(item.values())
+            continue
+        if isinstance(item, (list, tuple, set, frozenset)):
+            item_id = id(item)
+            if item_id in seen_containers:
+                continue
+            seen_containers.add(item_id)
+            pending.extend(item)
+    return tuple(paths[:max_paths])
+
+
+def sanitize_item_error_paths(value, known_paths=(), limit=500):
     def replacement(raw_path):
-        is_windows = bool(re.match(r"(?i)^[A-Z]:[\\/]", raw_path))
+        is_windows = PureWindowsPath(raw_path).is_absolute()
         basename = (
             PureWindowsPath(raw_path).name
             if is_windows
@@ -843,11 +922,27 @@ def sanitize_item_error_paths(value, limit=500):
         return f"<path>{separator}{basename}" if basename else "<path>"
 
     text = str(value or "")
+    for raw_path in sorted(
+        {str(path) for path in known_paths if str(path or "")},
+        key=len,
+        reverse=True,
+    ):
+        variants = {raw_path, repr(raw_path)[1:-1]}
+        for variant in sorted(variants, key=len, reverse=True):
+            text = text.replace(variant, replacement(raw_path))
     text = _QUOTED_ABSOLUTE_PATH.sub(
         lambda match: (
             f"{match.group('quote')}{replacement(match.group('path'))}"
             f"{match.group('quote')}"
         ),
+        text,
+    )
+    text = _WINDOWS_ABSOLUTE_FILE_PATH.sub(
+        lambda match: replacement(match.group(0)),
+        text,
+    )
+    text = _POSIX_ABSOLUTE_FILE_PATH.sub(
+        lambda match: replacement(match.group(0)),
         text,
     )
     text = _WINDOWS_ABSOLUTE_PATH.sub(
@@ -1187,9 +1282,11 @@ class WorkerThread(QThread):
         except ItemExecutionError:
             raise
         except Exception as error:
+            known_paths = _item_error_known_paths(error, args)
             raise ItemExecutionError(
                 sanitize_item_error_paths(
                     self._safe_error_text(error, limit=2000),
+                    known_paths=known_paths,
                     limit=500,
                 ),
                 stage=getattr(self._diagnostic_context, "stage", ""),
