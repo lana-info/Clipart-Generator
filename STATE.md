@@ -27,10 +27,32 @@ Updated: 2026-08-26
 
 ## Next task
 
-Continue owner testing of the remaining modes and collect any additional
-acceptance findings. The current UX fixes are source-only until a separately
-approved Windows build; do not publish a revision to the update service before
-target-machine acceptance.
+Review the verified `codex/fix-windows-acceptance-ux-3.0.5` source checkpoint.
+Merge and start a Windows-only build only after a separate owner command; do
+not publish a revision to the update service before target-machine acceptance.
+
+## Parallel KIE stabilization checkpoint — 2026-08-26
+
+- One application setting now controls the maximum active KIE work with
+  choices 1, 2, 3, 5 and 10 and a default of 3. It is stored with normal app
+  preferences, never with API credentials, and migrates the old generation
+  concurrency value.
+- Generation-only, processing-only and generate-then-process runs share the
+  bounded image queue. Existing generation, Topaz, KIE background removal and
+  other KIE operations can overlap across images while each image keeps its
+  selected stage order.
+- PhotoRoom and local operations remain sequential. Recraft payload,
+  availability and no-silent-fallback behavior are unchanged; fal.ai is not
+  part of this checkpoint.
+- Worker lifecycle events carry the exact item index. Results can show several
+  active rows and attach out-of-order output, failure and cancellation events
+  to the correct prompt/file without the legacy shared cursor.
+- Topaz remains limited to 2x/4x. Pending tasks do not start after a stop
+  request; already active work settles safely. The existing one-new-KIE-task
+  launch interval and bounded HTTP 429 behavior remain in force.
+- Full offline pytest passes: 700 tests, 1 expected Linux skip, 2 deselected
+  and 87 subtests. Python compilation, sensitive-artifact scan and
+  `git diff --check` pass. No paid request, build, merge or publication ran.
 
 ## Windows acceptance UX checkpoint — 2026-08-26
 
