@@ -31,7 +31,7 @@ from v3_components import (
     V3_WINDOW_MINIMUM_SIZE,
     apply_v3_theme,
 )
-from v3_project_state import ProjectMode, ProjectState, StepId
+from v3_project_state import ProjectMode, ProjectState
 from v3_project_state import ProjectStateError, load_project_draft, save_project_draft
 from v3_clipart_flow import install_clipart_flow
 from v3_pinterest_flow import install_pinterest_flow
