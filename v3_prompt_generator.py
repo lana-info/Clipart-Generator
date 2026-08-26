@@ -24,16 +24,12 @@ class PromptGeneratorError(ValueError):
     pass
 
 
-PROMPT_SECTION_LENGTH = 2000
-PROMPT_RESTRICTIONS_LENGTH = 3000
-
-
 def normalize_prompt_text(value: Any, *, limit: int = MAX_TEXT_LENGTH) -> str:
     if not isinstance(value, str):
         return ""
     if type(limit) is not int or not 1 <= limit <= MAX_TEXT_LENGTH:
         raise ValueError(f"limit must be between 1 and {MAX_TEXT_LENGTH}")
-    normalized = unicodedata.normalize("NFKC", value[: limit * 4])
+    normalized = unicodedata.normalize("NFC", value[: limit * 4])
     safe_characters: list[str] = []
     for character in normalized:
         if character.isspace():
@@ -43,18 +39,15 @@ def normalize_prompt_text(value: Any, *, limit: int = MAX_TEXT_LENGTH) -> str:
     return " ".join("".join(safe_characters).split())[:limit]
 
 
-def _normalize_unique_strings(
+def _normalize_strings(
     values: Sequence[Any],
     *,
     limit: int,
 ) -> list[str]:
     result: list[str] = []
-    seen: set[str] = set()
     for value in values:
         normalized = normalize_prompt_text(value, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
-        key = normalized.casefold()
-        if normalized and key not in seen:
-            seen.add(key)
+        if normalized:
             result.append(normalized)
         if len(result) >= limit:
             break
@@ -84,41 +77,39 @@ def normalize_generator_data(
 ) -> PromptGeneratorData:
     if not isinstance(data, PromptGeneratorData):
         raise TypeError("data must be PromptGeneratorData")
-    defaults = prompt_generator_defaults(mode)
-    subjects = _normalize_unique_strings(
+    subjects = _normalize_strings(
         data.subjects,
         limit=MAX_PROMPT_SERIES_COUNT,
     )
-    restrictions = _normalize_unique_strings(
-        [*defaults.restrictions, *data.restrictions],
+    variations = _normalize_strings(
+        data.variations,
+        limit=MAX_PROMPT_SERIES_COUNT,
+    )
+    restrictions = _normalize_strings(
+        data.restrictions,
         limit=MAX_PROMPT_SERIES_COUNT,
     )
     return PromptGeneratorData(
         theme=normalize_prompt_text(data.theme, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
         subjects=subjects,
-        style=normalize_prompt_text(data.style, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
-        or defaults.style,
-        palette=normalize_prompt_text(data.palette, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
-        or defaults.palette,
-        composition=normalize_prompt_text(data.composition, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
-        or defaults.composition,
-        background=normalize_prompt_text(data.background, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
-        or defaults.background,
+        variations=variations,
+        style=normalize_prompt_text(data.style, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
+        palette=normalize_prompt_text(data.palette, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
+        composition=normalize_prompt_text(data.composition, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
+        background=normalize_prompt_text(data.background, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
+        consistency=normalize_prompt_text(data.consistency, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
         restrictions=restrictions,
         count=data.count,
     )
 
 
-def _mode_instruction(mode: ProjectMode) -> str:
-    if mode is ProjectMode.CLIPART:
-        return (
-            "Output intent: one clean isolated clipart asset, suitable for "
-            "background removal and a consistent PNG set."
-        )
-    return (
-        "Output intent: one complete vertical Pinterest image generated from "
-        "this prompt, not a layered layout or publishing action."
-    )
+def _prompt_sentence(value: str) -> str:
+    normalized = normalize_prompt_text(value)
+    if not normalized:
+        return ""
+    if normalized[-1] not in ".!?":
+        normalized += "."
+    return normalized
 
 
 def generate_prompt_series(
@@ -129,60 +120,49 @@ def generate_prompt_series(
         mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
     )
     normalized = normalize_generator_data(normalized_mode, data)
-    if not normalized.theme and not normalized.subjects:
-        raise PromptGeneratorError("A theme or at least one subject is required")
+    fixed_parts = (
+        normalized.theme,
+        normalized.style,
+        normalized.palette,
+        normalized.composition,
+        normalized.background,
+        normalized.consistency,
+        *normalized.restrictions,
+    )
+    if not normalized.subjects and not normalized.variations and not any(fixed_parts):
+        raise PromptGeneratorError("At least one field or object is required")
 
-    subjects = normalized.subjects or [normalized.theme]
-    prompts: list[PromptEntry] = []
-    for index in range(normalized.count):
-        subject = subjects[index % len(subjects)]
-        restrictions = normalize_prompt_text(
-            "; ".join(normalized.restrictions),
-            limit=PROMPT_RESTRICTIONS_LENGTH,
+    subjects = normalized.subjects or [""]
+    variations = normalized.variations or [""]
+    if len(subjects) * len(variations) > MAX_PROMPT_SERIES_COUNT:
+        raise PromptGeneratorError(
+            f"A prompt series can contain at most {MAX_PROMPT_SERIES_COUNT} combinations"
         )
-        prompt_parts = [
-            _mode_instruction(normalized_mode),
-            (
-                f"Series item {index + 1} of {normalized.count}: create a "
-                "distinct pose, arrangement, or interpretation while preserving "
-                "the shared art direction."
-            ),
-            f"Restrictions: {restrictions}.",
-            (
-                "Series consistency: keep the same visual language, rendering "
-                "quality, palette logic, and scale across the complete set."
-            ),
-            "Theme: "
-            + normalize_prompt_text(
-                normalized.theme or subject,
-                limit=PROMPT_SECTION_LENGTH,
-            )
-            + ".",
-            "Subject or scene: "
-            + normalize_prompt_text(subject, limit=PROMPT_SECTION_LENGTH)
-            + ".",
-            "Style: "
-            + normalize_prompt_text(normalized.style, limit=PROMPT_SECTION_LENGTH)
-            + ".",
-            "Palette: "
-            + normalize_prompt_text(normalized.palette, limit=PROMPT_SECTION_LENGTH)
-            + ".",
-            "Composition: "
-            + normalize_prompt_text(
+    prompts: list[PromptEntry] = []
+    for subject in subjects:
+        for variation in variations:
+            prompt_parts = (
+                normalized.theme,
+                subject,
+                variation,
+                normalized.style,
+                normalized.palette,
                 normalized.composition,
-                limit=PROMPT_SECTION_LENGTH,
-            )
-            + ".",
-            "Background: "
-            + normalize_prompt_text(
                 normalized.background,
-                limit=PROMPT_SECTION_LENGTH,
+                normalized.consistency,
+                *normalized.restrictions,
             )
-            + ".",
-        ]
-        prompt = normalize_prompt_text(" ".join(prompt_parts))
-        prompts.append(PromptEntry(prompt=prompt))
-    return normalize_prompt_entries(prompts, limit=normalized.count)
+            prompt = " ".join(
+                sentence
+                for part in prompt_parts
+                if (sentence := _prompt_sentence(part))
+            )
+            prompts.append(PromptEntry(prompt=prompt))
+    return normalize_prompt_entries(
+        prompts,
+        limit=MAX_PROMPT_SERIES_COUNT,
+        deduplicate=False,
+    )
 
 
 def normalize_prompt_entries(

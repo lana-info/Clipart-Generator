@@ -129,16 +129,14 @@ class V3PinterestFlowTests(unittest.TestCase):
         controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROMPTS]
 
-        self.assertIn("vertical", page.composition_edit.text().lower())
-        self.assertIn("safe zones", page.composition_edit.text().lower())
-        page.generator_section.set_expanded(True)
+        self.assertEqual(page.composition_edit.text(), "")
         page.theme_edit.setText("Small balcony ideas")
         page.subjects_edit.setPlainText("Herb garden\nReading corner")
-        page.count_spin.setValue(3)
-        page.preview_button.click()
-        page.replace_variants_button.click()
+        page.variations_edit.setPlainText("Morning light\nEvening light")
+        page.composition_edit.setText("Vertical composition with safe zones")
+        page.create_series_button.click()
 
-        self.assertEqual(len(state.pinterest.prompts), 3)
+        self.assertEqual(len(state.pinterest.prompts), 4)
         self.assertTrue(
             all("vertical" in entry.prompt.lower() for entry in state.pinterest.prompts)
         )
@@ -148,7 +146,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             "Manual Pinterest edit",
         )
 
-    def test_prompt_input_deletes_selected_pinterest_prompt(self):
+    def test_prompt_review_deletes_selected_pinterest_prompt(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         state.pinterest.prompts = [
             PromptEntry("First pin"),
@@ -156,10 +154,10 @@ class V3PinterestFlowTests(unittest.TestCase):
         ]
         shell = AppShell(state)
         controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROMPTS]
-        page.current_prompts_table.selectRow(0)
+        page = controller.pages[StepId.PROMPT_REVIEW]
+        page.table.selectRow(0)
 
-        page.delete_selected_prompts_button.click()
+        page.delete_button.click()
 
         self.assertEqual(
             [entry.prompt for entry in state.pinterest.prompts],
@@ -369,8 +367,10 @@ class V3PinterestFlowTests(unittest.TestCase):
             project.work_dir_edit.setText(temp)
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
             prompts = controller.pages[StepId.PROMPTS]
-            prompts.paste_edit.setPlainText("Kitchen idea\nGarden idea")
-            prompts.paste_button.click()
+            prompts.paste_edit.setPlainText("Kitchen idea")
+            prompts.add_prompt_button.click()
+            prompts.paste_edit.setPlainText("Garden idea")
+            prompts.add_prompt_button.click()
             self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_next(), StepId.PIN_FORMAT_MODEL)
             format_page = controller.pages[StepId.PIN_FORMAT_MODEL]

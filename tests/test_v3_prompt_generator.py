@@ -32,14 +32,15 @@ from v3_prompt_generator import (
 class V3PromptGeneratorTests(unittest.TestCase):
     def sample_data(self):
         return PromptGeneratorData(
-            theme="Ocean baby animals",
+            theme="Watercolor image from the Ocean baby animals series",
             subjects=["Baby whale", "Baby turtle", "Baby octopus"],
+            variations=["holding a shell", "sleeping on a crescent moon"],
             style="soft watercolor",
             palette="aqua, coral, cream",
             composition="centered full subject",
             background="clean white",
+            consistency="same visual language and scale",
             restrictions=["no text", "no scary expression"],
-            count=6,
         )
 
     def test_same_input_produces_the_same_ordered_series(self):
@@ -52,60 +53,95 @@ class V3PromptGeneratorTests(unittest.TestCase):
         )
         self.assertEqual(len(first), 6)
         self.assertIn("Baby whale", first[0].prompt)
-        self.assertIn("Baby turtle", first[1].prompt)
-        self.assertIn("Series item 6 of 6", first[-1].prompt)
+        self.assertIn("holding a shell", first[0].prompt)
+        self.assertIn("sleeping on a crescent moon", first[1].prompt)
+        self.assertIn("Baby turtle", first[2].prompt)
+        self.assertNotIn("Series item", first[-1].prompt)
 
-    def test_maximum_fields_keep_exact_count_and_required_clauses(self):
+    def test_generated_prompt_contains_only_user_entered_text(self):
         long_value = "x" * MAX_PROMPT_GENERATOR_TEXT_LENGTH
         data = PromptGeneratorData(
             theme=long_value,
             subjects=[long_value],
+            variations=["sitting with flowers"],
             style=long_value,
             palette=long_value,
             composition=long_value,
             background=long_value,
+            consistency=long_value,
             restrictions=[long_value],
-            count=3,
         )
 
         prompts = generate_prompt_series(ProjectMode.CLIPART, data)
 
-        self.assertEqual(len(prompts), 3)
-        for index, entry in enumerate(prompts, start=1):
-            self.assertIn(f"Series item {index} of 3", entry.prompt)
-            self.assertIn("Output intent:", entry.prompt)
-            self.assertIn("Restrictions:", entry.prompt)
-            self.assertIn("no text", entry.prompt)
-    def test_modes_have_distinct_safe_defaults(self):
+        self.assertEqual(len(prompts), 1)
+        prompt = prompts[0].prompt
+        self.assertIn("sitting with flowers", prompt)
+        for hidden_text in (
+            "Output intent",
+            "Series item",
+            "Series consistency",
+            "Theme:",
+            "Subject or scene:",
+            "Restrictions:",
+            "clipart",
+        ):
+            self.assertNotIn(hidden_text, prompt)
+
+    def test_empty_optional_fields_are_skipped_and_empty_variations_use_each_object_once(self):
+        data = PromptGeneratorData(
+            theme="Children's illustration",
+            subjects=["Fox", "Bear"],
+            style="soft watercolor",
+        )
+
+        prompts = generate_prompt_series(ProjectMode.PINTEREST, data)
+
+        self.assertEqual(
+            [entry.prompt for entry in prompts],
+            [
+                "Children's illustration. Fox. soft watercolor.",
+                "Children's illustration. Bear. soft watercolor.",
+            ],
+        )
+    def test_modes_start_with_empty_visible_fields(self):
         clipart = prompt_generator_defaults(ProjectMode.CLIPART)
         pinterest = prompt_generator_defaults(ProjectMode.PINTEREST)
 
-        self.assertIn("isolated", clipart.composition)
-        self.assertIn("white background", clipart.background)
-        self.assertIn("no text", clipart.restrictions)
-        self.assertIn("vertical composition", pinterest.composition)
-        self.assertIn("safe zones", pinterest.composition)
-        self.assertIn("no mandatory text overlay", pinterest.restrictions)
-        self.assertNotEqual(clipart.style, pinterest.style)
+        self.assertEqual(clipart.to_dict(), PromptGeneratorData().to_dict())
+        self.assertEqual(pinterest.to_dict(), PromptGeneratorData().to_dict())
 
-    def test_normalization_removes_duplicates_controls_and_bounds_count(self):
+    def test_normalization_preserves_entered_rows_and_unicode_while_removing_controls(self):
         data = PromptGeneratorData(
             theme="  Café\u202e   animals  ",
             subjects=["  Cat  ", "cat", "ＣＡＴ", "\u202eDog"],
             restrictions=["No logo", "no logo", "\u202eNo border"],
-            count=MAX_PROMPT_SERIES_COUNT + 50,
+            variations=[" Front view ", "front view", "Side view"],
         )
         normalized = normalize_generator_data(ProjectMode.PINTEREST, data)
         prompts = generate_prompt_series(ProjectMode.PINTEREST, data)
 
         self.assertEqual(normalized.theme, "Café animals")
-        self.assertEqual(normalized.subjects, ["Cat", "Dog"])
+        self.assertEqual(normalized.subjects, ["Cat", "cat", "ＣＡＴ", "Dog"])
+        self.assertEqual(
+            normalized.variations,
+            ["Front view", "front view", "Side view"],
+        )
         self.assertNotIn("\u202e", " ".join(normalized.restrictions))
-        self.assertEqual(normalized.count, MAX_PROMPT_SERIES_COUNT)
-        self.assertEqual(len(prompts), MAX_PROMPT_SERIES_COUNT)
+        self.assertEqual(len(prompts), 12)
+
+    def test_cartesian_product_preserves_duplicate_rows_even_when_punctuation_matches(self):
+        data = PromptGeneratorData(
+            subjects=["cat.", "cat"],
+            variations=["sitting"],
+        )
+
+        prompts = generate_prompt_series(ProjectMode.CLIPART, data)
+
+        self.assertEqual([entry.prompt for entry in prompts], ["cat. sitting.", "cat. sitting."])
 
     def test_empty_input_and_processing_mode_fail_clearly(self):
-        with self.assertRaisesRegex(PromptGeneratorError, "theme|subject"):
+        with self.assertRaisesRegex(PromptGeneratorError, "field|object"):
             generate_prompt_series(ProjectMode.CLIPART, PromptGeneratorData())
         with self.assertRaisesRegex(PromptGeneratorError, "only available"):
             prompt_generator_defaults(ProjectMode.PROCESSING)
@@ -188,21 +224,20 @@ class V3PromptGeneratorTests(unittest.TestCase):
 
         restored = ProjectState.from_dict(payload)
 
-        self.assertIn("isolated", restored.clipart.prompt_generator.composition)
-        self.assertIn(
-            "vertical composition",
-            restored.pinterest.prompt_generator.composition,
-        )
+        self.assertEqual(restored.clipart.prompt_generator, PromptGeneratorData())
+        self.assertEqual(restored.pinterest.prompt_generator, PromptGeneratorData())
 
     def test_invalid_generator_draft_shape_fails_closed(self):
         corruptions = (
             ("subjects", "not-a-list"),
+            ("variations", "not-a-list"),
             ("restrictions", [1]),
             ("count", True),
             ("count", 0),
             ("count", MAX_PROMPT_SERIES_COUNT + 1),
             ("theme", "x" * (MAX_PROMPT_GENERATOR_TEXT_LENGTH + 1)),
             ("subjects", ["x"] * (MAX_PROMPT_GENERATOR_ITEMS + 1)),
+            ("variations", ["x"] * (MAX_PROMPT_GENERATOR_ITEMS + 1)),
             ("restrictions", ["x" * (MAX_TEXT_LENGTH + 1)]),
         )
         for key, value in corruptions:

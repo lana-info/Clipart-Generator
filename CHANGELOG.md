@@ -12,6 +12,10 @@
 
 ## Unreleased
 
+- Переработан общий двухэтапный сценарий промптов Clipart/Pinterest: прозрачный
+  конструктор «объекты × варианты» больше не добавляет скрытые инструкции,
+  готовый многострочный промпт принимает до пяти референсов, CSV импортируется
+  одним действием, а большая таблица проверки получила поиск по сотням строк.
 - Windows helper processes now request `CREATE_NO_WINDOW`: Local Real-ESRGAN
   and the optional local watermark backend no longer create visible console or
   PowerShell-style windows. A regression test covers the Real-ESRGAN launch

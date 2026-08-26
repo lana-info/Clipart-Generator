@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-25
+Updated: 2026-08-26
 
 ## Operating model
 
@@ -27,19 +27,29 @@ Updated: 2026-08-25
 
 ## Next task
 
-Owner visual approval of the restored two-step Prompt flow. Do not start a new
-Windows build or publish `3.0.5` until the source screenshots are approved.
+Owner visual approval of the revised prompt constructor and source step, then
+the separately scoped stable-window-size task. Do not start a new Windows build
+or publish `3.0.5` until the source screenshots are approved.
 
 ## Prompt flow checkpoint — 2026-08-25
 
 - Clipart and Pinterest now use two explicit steps: prompt source/input, then
   series and reference review. The approved mode-selection screen is unchanged.
-- The input step presents three visible source choices: generated series,
-  pasted prompts, and CSV import. Paste supports explicit append or replace.
-- The review step gives the prompt text most of the table width and separates
-  prompt actions from reference actions with readable labels.
-- Offscreen screenshots were reviewed at 980×700 and 1366×900; controls remain
-  visible without horizontal scrolling at the supported minimum size.
+- The input step presents three visible source choices: generated series, one
+  ready multiline prompt with up to five references, and CSV import. Sources
+  only add; replace-all actions and the duplicate first-step table are removed.
+- The generator combines objects × variations and joins only visible,
+  user-entered fields. It adds no hidden mode text, numbering or requirements;
+  the first two exact results and total count are shown before creation.
+- CSV mapping has one import action, a brief count/error summary and automatic
+  navigation to review; there is no duplicate preview table.
+- The review step gives the prompt text two thirds of a larger table, supports
+  search across hundreds of rows, and keeps compact prompt/reference actions.
+- Offscreen screenshots were reviewed at 1400×900; the variable text fields are
+  aligned and the 200-row review table uses internal scrolling. Stable desktop
+  window sizing remains a separate pending task.
+- Full local pytest passes: 624 tests, 1 expected Linux skip, 2 deselected and
+  75 subtests. No paid request or release build was started.
 - GitHub and Azure Windows pipelines are configured to capture both prompt
   steps in addition to mode selection from the installed copy. Execution of
   the updated gate awaits a separately approved installer build.

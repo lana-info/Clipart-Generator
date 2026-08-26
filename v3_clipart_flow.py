@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHeaderView,
     QHBoxLayout,
@@ -1241,40 +1242,33 @@ class ClipartProjectPage(_ScrollableStepPage):
 
 
 class ClipartPromptInputPage(_ScrollableStepPage):
+    generator_mode = ProjectMode.CLIPART
+
     def __init__(
         self,
         state: ProjectState,
         changed: Callable[[], None],
         *,
+        advance: Callable[[], Any] | None = None,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__(
             "Содержание",
-            "Создайте серию, вставьте готовые строки или импортируйте CSV.",
+            "Создайте серию, добавьте готовый промпт или импортируйте CSV.",
             tokens=tokens,
         )
         self.state = state
         self.changed = changed
+        self.advance = advance
         self.tokens = tokens
         self.progress_label = QLabel("Шаг 1 из 2 · Добавление промптов")
         self.progress_label.setProperty("v3Selection", True)
         self.progress_label.setAccessibleName(self.progress_label.text())
         self.add_widget(self.progress_label)
-        self._build_current_prompts_list()
-
         source_choices = (
-            (
-                "Сгенерировать серию",
-                "По теме и стилю",
-            ),
-            (
-                "Вставить готовые",
-                "Один или несколько\nКаждый с новой строки",
-            ),
-            (
-                "Импортировать CSV",
-                "Готовый список из файла",
-            ),
+            "Сгенерировать серию",
+            "Вставить готовый промпт",
+            "Импортировать CSV",
         )
         source_row = QWidget()
         source_layout = QHBoxLayout(source_row)
@@ -1283,13 +1277,12 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.source_button_group = QButtonGroup(self)
         self.source_button_group.setExclusive(True)
         self.source_buttons: list[QPushButton] = []
-        for index, (title, description) in enumerate(source_choices):
-            button = QPushButton(f"{title}\n{description}")
+        for index, title in enumerate(source_choices):
+            button = QPushButton(title)
             button.setProperty("v3SourceChoice", True)
             button.setCheckable(True)
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setAccessibleName(title)
-            button.setAccessibleDescription(description)
             button.clicked.connect(
                 lambda checked=False, target=index: self._select_source(target)
             )
@@ -1321,105 +1314,11 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self._select_source(1)
         self.refresh_from_state()
 
-    def _build_current_prompts_list(self) -> None:
-        self.current_prompts_label = QLabel()
-        self.current_prompts_label.setProperty("v3Selection", True)
-        self.add_widget(self.current_prompts_label)
-
-        self.current_prompts_table = QTableWidget(0, 1)
-        self.current_prompts_table.setHorizontalHeaderLabels(["Добавленные промпты"])
-        self.current_prompts_table.setAccessibleName("Добавленные промпты")
-        self.current_prompts_table.setMinimumHeight(120)
-        self.current_prompts_table.setMaximumHeight(190)
-        self.current_prompts_table.horizontalHeader().setSectionResizeMode(
-            0,
-            QHeaderView.ResizeMode.Stretch,
-        )
-        self.current_prompts_table.setSelectionBehavior(
-            QAbstractItemView.SelectionBehavior.SelectRows
-        )
-        self.current_prompts_table.setSelectionMode(
-            QAbstractItemView.SelectionMode.ExtendedSelection
-        )
-        self.current_prompts_table.setEditTriggers(
-            QAbstractItemView.EditTrigger.NoEditTriggers
-        )
-        self.add_widget(self.current_prompts_table)
-
-        self.current_prompts_actions = QWidget()
-        action_layout = QHBoxLayout(self.current_prompts_actions)
-        action_layout.setContentsMargins(0, 0, 0, 0)
-        action_layout.setSpacing(self.tokens.space_2)
-        actions_label = QLabel("Список:")
-        actions_label.setProperty("v3Small", True)
-        action_layout.addWidget(actions_label)
-        self.delete_selected_prompts_button = _compact_review_action_button(
-            "prompt_delete",
-            "Удалить выбранные промпты",
-        )
-        self.delete_all_prompts_button = _compact_review_action_button(
-            "prompt_delete_all",
-            "Удалить все промпты",
-        )
-        action_layout.addWidget(self.delete_selected_prompts_button)
-        action_layout.addWidget(self.delete_all_prompts_button)
-        action_layout.addStretch()
-        self.add_widget(self.current_prompts_actions)
-
-        self.delete_selected_prompts_button.clicked.connect(
-            self._delete_selected_prompts
-        )
-        self.delete_all_prompts_button.clicked.connect(self._delete_all_prompts)
-
     def refresh_from_state(self) -> None:
-        if not hasattr(self, "current_prompts_table"):
-            return
-        prompts = self.state.clipart.prompts
-        self.current_prompts_label.setText(f"Добавлено промптов: {len(prompts)}")
-        self.current_prompts_table.setRowCount(len(prompts))
-        for row, entry in enumerate(prompts):
-            item = QTableWidgetItem(entry.prompt)
-            item.setToolTip(
-                f"{entry.prompt}\n{_reference_summary(entry.references)}"
+        if hasattr(self, "prompt_count_label"):
+            self.prompt_count_label.setText(
+                f"В проекте: {len(self.state.clipart.prompts)} промптов"
             )
-            self.current_prompts_table.setItem(row, 0, item)
-        has_prompts = bool(prompts)
-        self.current_prompts_label.setVisible(has_prompts)
-        self.current_prompts_table.setVisible(has_prompts)
-        self.current_prompts_actions.setVisible(has_prompts)
-        self.current_prompts_table.setFixedHeight(
-            min(160, max(84, 32 + 28 * min(len(prompts), 4)))
-        )
-        self.delete_selected_prompts_button.setEnabled(has_prompts)
-        self.delete_all_prompts_button.setEnabled(has_prompts)
-
-    def _selected_prompt_rows(self) -> list[int]:
-        return sorted(
-            {
-                index.row()
-                for index in self.current_prompts_table.selectionModel().selectedRows()
-                if 0 <= index.row() < len(self.state.clipart.prompts)
-            }
-        )
-
-    def _delete_selected_prompts(self) -> None:
-        rows = self._selected_prompt_rows()
-        if not rows:
-            return
-        for row in reversed(rows):
-            del self.state.clipart.prompts[row]
-        self.refresh_from_state()
-        self.changed()
-
-    def _delete_all_prompts(self) -> None:
-        if not _confirm_delete_all_prompts(
-            self,
-            len(self.state.clipart.prompts),
-        ):
-            return
-        self.state.clipart.prompts = []
-        self.refresh_from_state()
-        self.changed()
 
     def _select_source(self, index: int) -> None:
         if not 0 <= index < self.source_stack.count():
@@ -1437,90 +1336,72 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.generator_section = AdvancedSection(
-            "Создать варианты промптов по шаблону"
-        )
-        self.generator_section.set_expanded(True)
-        self.generator_section.toggle_button.hide()
-        layout.addWidget(self.generator_section)
+        title = QLabel("Новая серия промптов")
+        title.setProperty("v3Title", True)
+        layout.addWidget(title)
 
-        section_intro = QLabel(
-            "Этот блок помогает быстро собрать варианты промптов по шаблону. "
-            "Он не запускает генерацию изображений и его можно пропустить."
-        )
-        section_intro.setWordWrap(True)
-        self.generator_section.add_widget(section_intro)
-
-        form = QFormLayout()
+        variable_group = QGroupBox("Меняется в каждом промпте")
+        variable_layout = QGridLayout(variable_group)
         self.theme_edit = QLineEdit(draft.theme)
         self.subjects_edit = QPlainTextEdit("\n".join(draft.subjects))
-        self.subjects_edit.setMaximumHeight(90)
+        self.variations_edit = QPlainTextEdit("\n".join(draft.variations))
+        for edit in (self.subjects_edit, self.variations_edit):
+            edit.setMinimumHeight(115)
+            edit.setMaximumHeight(115)
+        subjects_label = QLabel("Объекты — каждый с новой строки")
+        variations_label = QLabel("Варианты или позы — каждый с новой строки")
+        variable_layout.addWidget(subjects_label, 0, 0)
+        variable_layout.addWidget(variations_label, 0, 1)
+        variable_layout.addWidget(self.subjects_edit, 1, 0)
+        variable_layout.addWidget(self.variations_edit, 1, 1)
+        self.combinations_label = QLabel()
+        self.combinations_label.setProperty("v3Selection", True)
+        variable_layout.addWidget(self.combinations_label, 2, 0, 1, 2)
+        variable_layout.setColumnStretch(0, 1)
+        variable_layout.setColumnStretch(1, 1)
+        layout.addWidget(variable_group)
+
+        fixed_group = QGroupBox("Остаётся одинаковым во всей серии")
+        form = QFormLayout(fixed_group)
         self.style_edit = QLineEdit(draft.style)
         self.palette_edit = QLineEdit(draft.palette)
         self.composition_edit = QLineEdit(draft.composition)
         self.background_edit = QLineEdit(draft.background)
+        self.consistency_edit = QLineEdit(draft.consistency)
         for edit in (
             self.theme_edit,
             self.style_edit,
             self.palette_edit,
             self.composition_edit,
             self.background_edit,
+            self.consistency_edit,
         ):
             edit.setMaxLength(MAX_PROMPT_GENERATOR_TEXT_LENGTH)
         self.restrictions_edit = QPlainTextEdit("\n".join(draft.restrictions))
-        self.restrictions_edit.setMaximumHeight(90)
-        self.count_spin = QSpinBox()
-        self.count_spin.setRange(1, 500)
-        self.count_spin.setValue(draft.count)
+        self.restrictions_edit.setMaximumHeight(72)
         fields = (
-            ("Тема", self.theme_edit),
-            ("Объекты — по одному в строке", self.subjects_edit),
+            ("Что нужно создать", self.theme_edit),
             ("Стиль", self.style_edit),
             ("Палитра", self.palette_edit),
             ("Композиция", self.composition_edit),
             ("Фон", self.background_edit),
-            ("Запреты — по одному в строке", self.restrictions_edit),
-            ("Количество", self.count_spin),
+            ("Единообразие серии", self.consistency_edit),
+            ("Исключить — по одному в строке", self.restrictions_edit),
         )
         for label, control in fields:
             control.setAccessibleName(label)
             form.addRow(label, control)
-        form_widget = QWidget()
-        form_widget.setLayout(form)
-        self.generator_section.add_widget(form_widget)
+        layout.addWidget(fixed_group)
 
-        self.preview_label = QLabel(
-            "Нажмите «Создать варианты», чтобы увидеть будущие промпты."
-        )
+        self.preview_label = QLabel("Пример итогового промпта появится здесь.")
         self.preview_label.setWordWrap(True)
-        self.preview_label.setProperty("v3Small", True)
+        self.preview_label.setProperty("v3Status", True)
         self.preview_label.setAccessibleName("Предпросмотр вариантов")
-        self.generator_section.add_widget(self.preview_label)
+        layout.addWidget(self.preview_label)
 
-        self.preview_button = V3Button("Создать варианты")
-        self.preview_button.clicked.connect(self._preview)
-        self.generate_button = self.preview_button
-        self.generator_section.add_widget(self.preview_button)
-
-        self.generated_variants_label = QLabel("")
-        self.generated_variants_label.setWordWrap(True)
-        self.generated_variants_label.setProperty("v3Small", True)
-        self.generator_section.add_widget(self.generated_variants_label)
-
-        action_row = QWidget()
-        action_layout = QHBoxLayout(action_row)
-        action_layout.setContentsMargins(0, 0, 0, 0)
-        self.add_variants_button = V3Button("Добавить варианты")
-        self.replace_variants_button = V3Button("Заменить все промпты")
-        self.add_variants_button.setEnabled(False)
-        self.replace_variants_button.setEnabled(False)
-        action_layout.addWidget(self.add_variants_button)
-        action_layout.addWidget(self.replace_variants_button)
-        action_layout.addStretch()
-        self.generator_section.add_widget(action_row)
-
-        self.add_variants_button.clicked.connect(lambda: self._apply_generated("append"))
-        self.replace_variants_button.clicked.connect(lambda: self._apply_generated("replace"))
+        self.create_series_button = V3Button("Создать серию промптов")
+        self.create_series_button.clicked.connect(self._create_series)
+        layout.addWidget(self.create_series_button, 0, Qt.AlignmentFlag.AlignLeft)
 
         self._generated_variants: list[PromptEntry] = []
         for edit in (
@@ -1529,71 +1410,64 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             self.palette_edit,
             self.composition_edit,
             self.background_edit,
+            self.consistency_edit,
         ):
             edit.textChanged.connect(self._generator_changed)
         self.subjects_edit.textChanged.connect(self._generator_changed)
+        self.variations_edit.textChanged.connect(self._generator_changed)
         self.restrictions_edit.textChanged.connect(self._generator_changed)
-        self.count_spin.valueChanged.connect(self._generator_changed)
-        self._clear_preview()
+        self._preview()
         return widget
 
-    def _generator_data(self, *, preview: bool = False) -> PromptGeneratorData:
+    def _generator_data(self) -> PromptGeneratorData:
         return PromptGeneratorData(
             theme=self.theme_edit.text(),
             subjects=self.subjects_edit.toPlainText().splitlines(),
+            variations=self.variations_edit.toPlainText().splitlines(),
             style=self.style_edit.text(),
             palette=self.palette_edit.text(),
             composition=self.composition_edit.text(),
             background=self.background_edit.text(),
+            consistency=self.consistency_edit.text(),
             restrictions=self.restrictions_edit.toPlainText().splitlines(),
-            count=1 if preview else self.count_spin.value(),
         )
 
     def _generator_changed(self, *_: Any) -> None:
         self.state.clipart.prompt_generator = self._generator_data()
-        self._clear_preview()
+        self._preview()
         self.changed()
-
-    def _clear_preview(self) -> None:
-        self._generated_variants = []
-        self.preview_label.setText(
-            "Нажмите «Создать варианты», чтобы увидеть будущие промпты."
-        )
-        self.generated_variants_label.setText("")
-        self.add_variants_button.setEnabled(False)
-        self.replace_variants_button.setEnabled(False)
 
     def _preview(self, *_: Any) -> None:
         try:
             entries = generate_prompt_series(
-                ProjectMode.CLIPART,
+                self.generator_mode,
                 self._generator_data(),
             )
-        except PromptGeneratorError:
-            self.card.set_state("error", "Добавьте тему или хотя бы один объект.")
-            self._clear_preview()
+        except PromptGeneratorError as error:
+            self._generated_variants = []
+            self.preview_label.setText("Заполните хотя бы одно поле конструктора.")
+            self.create_series_button.setEnabled(False)
+            subjects = len([line for line in self.subjects_edit.toPlainText().splitlines() if line.strip()])
+            variations = len([line for line in self.variations_edit.toPlainText().splitlines() if line.strip()]) or 1
+            self.combinations_label.setText(
+                f"{subjects} объектов × {variations} вариантов"
+            )
             return
         self.card.set_state("default")
         self._generated_variants = entries
-        self.preview_label.setText(
-            "Будущие промпты готовы. Ниже можно добавить их к текущему списку "
-            "или заменить все промпты."
-        )
-        preview_lines = []
-        for index, entry in enumerate(entries[:8], start=1):
-            preview_lines.append(f"{index}. {entry.prompt}")
-        if len(entries) > 8:
-            preview_lines.append(f"… и ещё {len(entries) - 8} вариантов")
-        self.generated_variants_label.setText("\n".join(preview_lines))
-        self.add_variants_button.setEnabled(True)
-        self.replace_variants_button.setEnabled(True)
+        example_lines = [f"{index}. {entry.prompt}" for index, entry in enumerate(entries[:2], 1)]
+        self.preview_label.setText("Пример итогового промпта:\n" + "\n\n".join(example_lines))
+        self.combinations_label.setText(f"Будет создано {len(entries)} промптов")
+        self.create_series_button.setEnabled(True)
 
-    def _apply_generated(self, action: str) -> None:
-        if not self._generated_variants:
-            self._preview()
-        if not self._generated_variants:
-            return
-        self._store_entries(list(self._generated_variants), action=action)
+    def _create_series(self) -> None:
+        self._preview()
+        if self._generated_variants and self._store_entries(
+            self._generated_variants,
+            action="append",
+        ):
+            if self.advance is not None:
+                self.advance()
 
     def _store_entries(
         self,
@@ -1634,8 +1508,8 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
         self.paste_edit = QPlainTextEdit()
-        self.paste_edit.setPlaceholderText("Один промпт в каждой строке")
-        self.paste_edit.setAccessibleName("Готовые промпты")
+        self.paste_edit.setPlaceholderText("Вставьте один готовый промпт. Он может занимать несколько строк.")
+        self.paste_edit.setAccessibleName("Готовый промпт")
         self.paste_edit.setMinimumHeight(140)
         self.paste_edit.setMaximumHeight(180)
         layout.addWidget(self.paste_edit)
@@ -1643,49 +1517,98 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         actions.setMaximumHeight(self.tokens.control_height + 2)
         action_layout = QHBoxLayout(actions)
         action_layout.setContentsMargins(0, 0, 0, 0)
-        self.append_paste_button = V3Button(
-            "Добавить к списку",
+        self.add_references_button = V3Button(
+            "Добавить референсы",
             ButtonVariant.SECONDARY,
         )
-        self.paste_button = V3Button("Заменить все промпты")
-        self.append_paste_button.clicked.connect(
-            lambda: self._apply_paste("append")
-        )
-        self.paste_button.clicked.connect(lambda: self._apply_paste("replace"))
-        action_layout.addWidget(self.append_paste_button)
-        action_layout.addWidget(self.paste_button)
+        self.add_references_button.clicked.connect(self._choose_paste_references)
+        self.paste_references_label = QLabel("Референсы не выбраны")
+        self.paste_references_label.setProperty("v3Small", True)
+        self.clear_references_button = V3Button("Очистить", ButtonVariant.GHOST)
+        self.clear_references_button.clicked.connect(self._clear_paste_references)
+        self.clear_references_button.hide()
+        action_layout.addWidget(self.add_references_button)
+        action_layout.addWidget(self.paste_references_label, 1)
+        action_layout.addWidget(self.clear_references_button)
         action_layout.addStretch()
         layout.addWidget(actions)
+        self.add_prompt_button = V3Button("Добавить промпт")
+        self.add_prompt_button.clicked.connect(self._apply_paste)
+        layout.addWidget(self.add_prompt_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.paste_status_label = QLabel("")
+        self.paste_status_label.setWordWrap(True)
+        self.paste_status_label.setProperty("v3Selection", True)
+        layout.addWidget(self.paste_status_label)
+        self._paste_references: list[str] = []
         layout.addStretch()
         return widget
 
-    def _apply_paste(self, action: str = "replace") -> None:
+    def _choose_paste_references(self) -> None:
+        selected, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Выберите до 5 референсов",
+            self.state.common.work_dir or os.getcwd(),
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff)",
+        )
+        self._add_paste_references(selected)
+
+    def _add_paste_references(self, references: Sequence[str]) -> None:
+        for reference in references:
+            normalized = str(Path(reference))
+            if normalized in self._paste_references or not _supported_local_reference(normalized):
+                continue
+            if len(self._paste_references) >= MAX_REFERENCES_PER_PROMPT:
+                break
+            self._paste_references.append(normalized)
+        self._refresh_paste_references()
+
+    def _clear_paste_references(self) -> None:
+        self._paste_references = []
+        self._refresh_paste_references()
+
+    def _refresh_paste_references(self) -> None:
+        if not self._paste_references:
+            self.paste_references_label.setText("Референсы не выбраны")
+            self.paste_references_label.setToolTip("")
+            self.clear_references_button.hide()
+            return
+        labels = []
+        for reference in self._paste_references:
+            name = Path(reference).name
+            labels.append(name if len(name) <= 18 else "…" + name[-17:])
+        self.paste_references_label.setText(" · ".join(labels))
+        self.paste_references_label.setToolTip("\n".join(self._paste_references))
+        self.clear_references_button.show()
+
+    def _apply_paste(self) -> None:
         text = self.paste_edit.toPlainText()
         if len(text) > MAX_CSV_BYTES:
             self.card.set_state("error", "Вставленный текст превышает допустимый размер")
             return
-        entries: list[PromptEntry] = []
-        for line in text.splitlines():
-            prompt = line.strip()
-            if not prompt:
-                continue
-            if len(prompt) > MAX_TEXT_LENGTH:
-                self.card.set_state("error", "Один из промптов слишком длинный")
-                return
-            if len(entries) >= MAX_PROMPT_ENTRIES:
-                self.card.set_state(
-                    "error",
-                    f"Максимум {MAX_PROMPT_ENTRIES} промптов",
-                )
-                return
-            entries.append(PromptEntry(prompt=prompt))
-        self._store_entries(entries, action=action)
+        prompt = " ".join(text.split())
+        if not prompt:
+            self.card.set_state("error", "Введите промпт")
+            return
+        if len(prompt) > MAX_TEXT_LENGTH:
+            self.card.set_state("error", "Промпт слишком длинный")
+            return
+        if self._store_entries(
+            [PromptEntry(prompt=prompt, references=self._paste_references)],
+            action="append",
+            deduplicate=False,
+        ):
+            self.paste_edit.clear()
+            self._clear_paste_references()
+            self.paste_status_label.setText(
+                "Промпт добавлен в проект. Вы сможете проверить и "
+                "отредактировать его на следующем шаге."
+            )
 
     def _build_csv(self) -> QWidget:
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        text = QLabel("CSV: сопоставьте столбцы и выберите действие импорта.")
+        text = QLabel("Выберите CSV-файл. Столбцы промптов и референсов можно сопоставить перед импортом.")
         text.setWordWrap(True)
         layout.addWidget(text)
         self.csv_button = V3Button("Выбрать CSV", ButtonVariant.SECONDARY)
@@ -1714,15 +1637,13 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         if not normalized_entries:
             self.card.set_state("error", "Не найдено ни одной валидной строки CSV")
             return
-        if dialog.import_action() == "append":
-            action = "append"
-        else:
-            action = "replace"
-        self._store_entries(
+        imported = self._store_entries(
             normalized_entries,
-            action=action,
+            action="append",
             deduplicate=False,
         )
+        if imported and self.advance is not None:
+            self.advance()
 
 
 class ClipartPromptReviewPage(_ScrollableStepPage):
@@ -1745,11 +1666,22 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.progress_label.setProperty("v3Selection", True)
         self.progress_label.setAccessibleName(self.progress_label.text())
         self.add_widget(self.progress_label)
+        search_row = QWidget()
+        search_layout = QHBoxLayout(search_row)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Найти промпт")
+        self.search_edit.setAccessibleName("Поиск по промптам")
+        self.search_result_label = QLabel()
+        self.search_result_label.setProperty("v3Small", True)
+        search_layout.addWidget(self.search_edit, 1)
+        search_layout.addWidget(self.search_result_label)
+        self.add_widget(search_row)
         self.table = _PromptReviewTable(0, 2)
         self.table.setHorizontalHeaderLabels(["Промпт", "Референсы"])
         self.table.setAccessibleName("Таблица промптов")
-        self.table.setMinimumHeight(220)
-        self.table.setMaximumHeight(330)
+        self.table.setMinimumHeight(360)
+        self.table.setMaximumHeight(520)
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.horizontalHeader().setSectionResizeMode(
             QHeaderView.ResizeMode.Interactive,
@@ -1767,6 +1699,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.table.cellDoubleClicked.connect(self._edit_row)
         self.table.itemChanged.connect(self._table_changed)
         self.table.model().rowsMoved.connect(self._rows_moved)
+        self.search_edit.textChanged.connect(self._apply_search)
         self.add_widget(self.table)
 
         prompt_actions = QWidget()
@@ -1857,6 +1790,12 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 reordered.append(self.state.clipart.prompts[source_row])
         if len(reordered) == len(self.state.clipart.prompts):
             self.state.clipart.prompts = reordered
+            self._updating = True
+            for row in range(self.table.rowCount()):
+                item = self.table.item(row, 0)
+                if item is not None:
+                    item.setData(Qt.ItemDataRole.UserRole, row)
+            self._updating = False
             self._refresh_issues()
             self.changed()
 
@@ -1878,7 +1817,20 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             refs_item.setToolTip("\n".join(entry.references) or "Нет референсов")
             self.table.setItem(row, 1, refs_item)
         self._updating = False
+        self._apply_search()
         self._refresh_issues()
+
+    def _apply_search(self, *_: Any) -> None:
+        query = self.search_edit.text().strip().casefold()
+        visible = 0
+        for row, entry in enumerate(self.state.clipart.prompts):
+            haystack = " ".join((entry.prompt, *entry.references)).casefold()
+            matches = not query or query in haystack
+            self.table.setRowHidden(row, not matches)
+            visible += int(matches)
+        self.search_result_label.setText(
+            f"Показано {visible} из {len(self.state.clipart.prompts)}"
+        )
 
     def _selected_rows(self) -> list[int]:
         rows = {
@@ -2024,6 +1976,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 return
             entries.append(PromptEntry(prompt=prompt, references=references))
         self.state.clipart.prompts = entries
+        self._apply_search()
         self._refresh_issues()
         self.changed()
 
@@ -3016,6 +2969,7 @@ class ClipartFlowController(QObject):
             lambda: ClipartPromptInputPage(
                 self.shell.state,
                 changed,
+                advance=self.shell.go_next,
                 tokens=self.shell.tokens,
             ),
         )

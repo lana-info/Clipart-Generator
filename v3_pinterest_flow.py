@@ -116,47 +116,7 @@ def build_pinterest_run_request(
 
 
 class PinterestPromptInputPage(ClipartPromptInputPage):
-    def _preview(self, *_: Any) -> None:
-        try:
-            entries = generate_prompt_series(
-                ProjectMode.PINTEREST,
-                self._generator_data(),
-            )
-        except PromptGeneratorError:
-            self.card.set_state("error", "Добавьте тему или хотя бы один сюжет.")
-            self._clear_preview()
-            return
-        self.card.set_state("default")
-        self._generated_variants = entries
-        self.preview_label.setText(
-            "Будущие пины готовы. Ниже можно добавить их к текущему списку "
-            "или заменить все промпты."
-        )
-        preview_lines = []
-        for index, entry in enumerate(entries[:8], start=1):
-            preview_lines.append(f"{index}. {entry.prompt}")
-        if len(entries) > 8:
-            preview_lines.append(f"… и ещё {len(entries) - 8} вариантов")
-        self.generated_variants_label.setText("\n".join(preview_lines))
-        self.add_variants_button.setEnabled(True)
-        self.replace_variants_button.setEnabled(True)
-
-    def _generate(self) -> None:
-        try:
-            entries = generate_prompt_series(
-                ProjectMode.PINTEREST,
-                self._generator_data(),
-            )
-            replace_project_prompts(
-                self.state,
-                ProjectMode.PINTEREST,
-                entries,
-            )
-        except PromptGeneratorError as error:
-            self.card.set_state("error", str(error))
-            return
-        self.card.set_state("default")
-        self.changed()
+    generator_mode = ProjectMode.PINTEREST
 
 
 class PinterestFormatModelPage(ClipartGenerationPage):
@@ -431,6 +391,7 @@ class PinterestFlowController(QObject):
             lambda: PinterestPromptInputPage(
                 self.adapter_state,
                 changed,
+                advance=self.shell.go_next,
                 tokens=self.shell.tokens,
             ),
         )

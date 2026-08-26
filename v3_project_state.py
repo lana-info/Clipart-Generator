@@ -180,17 +180,25 @@ class PromptEntry:
 class PromptGeneratorData:
     theme: str = ""
     subjects: list[str] = field(default_factory=list)
+    variations: list[str] = field(default_factory=list)
     style: str = ""
     palette: str = ""
     composition: str = ""
     background: str = ""
+    consistency: str = ""
     restrictions: list[str] = field(default_factory=list)
+    # Kept in the draft schema for backward compatibility with 3.0.5 files.
+    # New prompt series use the object × variation combinations instead.
     count: int = 12
 
     def __post_init__(self) -> None:
         self.theme = _text(self.theme, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
         self.subjects = _string_list(
             self.subjects,
+            limit=MAX_PROMPT_GENERATOR_ITEMS,
+        )
+        self.variations = _string_list(
+            self.variations,
             limit=MAX_PROMPT_GENERATOR_ITEMS,
         )
         self.style = _text(self.style, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH)
@@ -202,6 +210,9 @@ class PromptGeneratorData:
         )
         self.background = _text(
             self.background, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH
+        )
+        self.consistency = _text(
+            self.consistency, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH
         )
         self.restrictions = _string_list(
             self.restrictions,
@@ -218,10 +229,12 @@ class PromptGeneratorData:
         return {
             "theme": self.theme,
             "subjects": list(self.subjects),
+            "variations": list(self.variations),
             "style": self.style,
             "palette": self.palette,
             "composition": self.composition,
             "background": self.background,
+            "consistency": self.consistency,
             "restrictions": list(self.restrictions),
             "count": self.count,
         }
@@ -238,50 +251,23 @@ class PromptGeneratorData:
         return cls(
             theme=data.get("theme", base.theme),
             subjects=data.get("subjects", base.subjects),
+            variations=data.get("variations", base.variations),
             style=data.get("style", base.style),
             palette=data.get("palette", base.palette),
             composition=data.get("composition", base.composition),
             background=data.get("background", base.background),
+            consistency=data.get("consistency", base.consistency),
             restrictions=data.get("restrictions", base.restrictions),
             count=data.get("count", base.count),
         )
 
 
 def clipart_prompt_generator_defaults() -> PromptGeneratorData:
-    return PromptGeneratorData(
-        style="cohesive professional clipart illustration",
-        palette="a consistent harmonious palette across the full series",
-        composition=(
-            "one isolated subject, centered, fully visible, clear silhouette"
-        ),
-        background="pure solid white background, no environment or ground",
-        restrictions=[
-            "no text",
-            "no logo",
-            "no watermark",
-            "no frame",
-            "no cropped parts",
-            "no cast or contact shadow",
-        ],
-    )
+    return PromptGeneratorData()
 
 
 def pinterest_prompt_generator_defaults() -> PromptGeneratorData:
-    return PromptGeneratorData(
-        style="polished editorial social media image",
-        palette="a consistent harmonious palette across the full series",
-        composition=(
-            "vertical composition, clear focal point, balanced negative space, "
-            "safe zones near the edges"
-        ),
-        background="cohesive full-frame background supporting the main subject",
-        restrictions=[
-            "no watermark",
-            "no logo",
-            "no mandatory text overlay",
-            "no collage or editable layer layout",
-        ],
-    )
+    return PromptGeneratorData()
 
 
 def _prompt_entries(value: Any) -> list[PromptEntry]:
@@ -992,10 +978,12 @@ def _validate_prompt_generator_section(
         (
             "theme",
             "subjects",
+            "variations",
             "style",
             "palette",
             "composition",
             "background",
+            "consistency",
             "restrictions",
             "count",
         ),
@@ -1007,8 +995,11 @@ def _validate_prompt_generator_section(
         "palette",
         "composition",
         "background",
+        "consistency",
     ):
         value = section.get(key)
+        if key in {"consistency"} and value is None:
+            continue
         if not isinstance(value, str):
             raise ProjectStateError(
                 f"Project draft field {name}.{key} must be a string"
@@ -1017,8 +1008,10 @@ def _validate_prompt_generator_section(
             raise ProjectStateError(
                 f"Project draft field {name}.{key} is too long"
             )
-    for key in ("subjects", "restrictions"):
+    for key in ("subjects", "variations", "restrictions"):
         values = section.get(key)
+        if key == "variations" and values is None:
+            continue
         if not isinstance(values, list) or not all(
             isinstance(value, str) for value in values
         ):

@@ -5,7 +5,7 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication, QTextEdit  # noqa: E402
+from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from v3_prompt_csv_import import (  # noqa: E402
     PromptCsvImportDialog,
@@ -69,7 +69,7 @@ class PromptCsvImportTests(unittest.TestCase):
             ],
         )
 
-    def test_dialog_exposes_append_and_replace_actions(self):
+    def test_dialog_exposes_one_clear_import_action_and_brief_summary(self):
         with tempfile.TemporaryDirectory(prefix="clipart-csv-dialog-") as temp_dir:
             csv_path = Path(temp_dir) / "prompts.csv"
             csv_path.write_text(
@@ -80,12 +80,12 @@ class PromptCsvImportTests(unittest.TestCase):
 
             dialog = PromptCsvImportDialog(csv_path)
 
-        self.assertEqual(dialog.add_button.text(), "Добавить к списку")
-        self.assertEqual(dialog.replace_button.text(), "Заменить все промпты")
+        self.assertEqual(dialog.import_button.text(), "Импортировать промпты")
+        self.assertFalse(hasattr(dialog, "replace_button"))
         self.assertTrue(dialog.get_entries())
-        self.assertIn("Валидных: 1", dialog.summary_label.text())
+        self.assertIn("Найдено промптов: 1", dialog.summary_label.text())
 
-    def test_dialog_keeps_long_preview_bounded_and_wrapped(self):
+    def test_dialog_keeps_long_content_bounded_without_prompt_preview(self):
         with tempfile.TemporaryDirectory(prefix="clipart-csv-long-preview-") as temp_dir:
             csv_path = Path(temp_dir) / "prompts.csv"
             csv_path.write_text(
@@ -97,11 +97,7 @@ class PromptCsvImportTests(unittest.TestCase):
             dialog = PromptCsvImportDialog(csv_path)
 
         self.assertLessEqual(dialog.width(), 1000)
-        self.assertEqual(
-            dialog.preview_text.lineWrapMode(),
-            QTextEdit.LineWrapMode.WidgetWidth,
-        )
-        self.assertIn("показано 1 из 1", dialog.preview_text.toPlainText())
+        self.assertFalse(hasattr(dialog, "preview_text"))
 
 
 if __name__ == "__main__":
