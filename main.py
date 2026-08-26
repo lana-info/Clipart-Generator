@@ -838,8 +838,10 @@ class WorkerThread(QThread):
         self.is_running = True
         self.stop_after_current_requested = False
         self._publish_lock = threading.Lock()
+        self._local_operation_lock = threading.Lock()
+        self._shared_state_lock = threading.Lock()
         self._precleaned_paths: set[str] = set()
-        self._metadata_cleaned_for_current_item = False
+        self._item_context = threading.local()
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         self._diagnostic_context = threading.local()
 
@@ -1039,6 +1041,31 @@ class WorkerThread(QThread):
         except Exception:
             return
 
+    def _emit_item_progress(
+        self,
+        item_index: int,
+        total_items: int,
+        stage: str,
+        status: str = "running",
+        **values: object,
+    ) -> None:
+        event = {
+            "item_index": max(1, int(item_index)),
+            "total_items": max(1, int(total_items)),
+            "stage": str(stage or ""),
+            "status": str(status or "running"),
+        }
+        for key in (
+            "message",
+            "percent",
+            "indeterminate",
+            "source_path",
+            "output_path",
+        ):
+            if key in values and values[key] not in (None, ""):
+                event[key] = values[key]
+        self.item_progress.emit(event)
+
     def _protect_secret_headers_from_redirects(self, req):
         protect_secret_headers_from_redirects(req)
 
@@ -1051,9 +1078,11 @@ class WorkerThread(QThread):
             raise ValueError("Не указан PhotoRoom API Key")
         if process_generated:
             self._log_upscale_plan()
-        if not process_generated and self.generation_concurrency > 1:
-            self._mode1_generate_parallel(emit_final=emit_final)
-            return
+        self._mode1_generate_parallel(
+            process_generated=process_generated,
+            emit_final=emit_final,
+        )
+        return
 
         raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
@@ -1174,16 +1203,16 @@ class WorkerThread(QThread):
                 delay = self._next_generation_launch_at - now
             time.sleep(min(delay, 0.1))
 
-    def _generate_only_entry(
+    def _generate_entry(
         self,
         idx: int,
         total: int,
         entry: dict[str, Any],
         raw_dir: str,
         output_dir: str,
-    ) -> None:
+        process_generated: bool,
+    ) -> str:
         self._set_diagnostic_context(idx, total, "generation")
-        self._wait_for_generation_launch_slot()
         self.progress.emit(f"[{idx}/{total}] Генерация")
         self._emit_file_progress(idx, total, 4)
         prompt_text = entry.get("prompt", "")
@@ -1204,10 +1233,48 @@ class WorkerThread(QThread):
         self._download_file(image_url, gen_path)
         self._ensure_running()
         self.progress.emit(f"  Сгенерировано: {gen_path}")
-        self._emit_file_progress(idx, total, 70)
+        self._emit_item_progress(
+            idx,
+            total,
+            "generation",
+            "generated",
+            percent=50,
+            source_path=gen_path,
+        )
+        final_url = image_url
+        if process_generated:
+            self._emit_file_progress(idx, total, 58)
+            if (
+                self.visible_mark_cleanup_enabled
+                or self.invisible_watermark_cleanup_enabled
+                or self.upscale
+                or self.upscale_after
+                or self.unsharp_enabled
+                or self.remove_bg
+            ):
+                final_url = self._run_processing_pipeline(
+                    gen_path,
+                    image_url,
+                    raw_dir,
+                    idx,
+                    "gen",
+                )
+            elif self.edge_shrink_enabled:
+                with self._local_operation_lock:
+                    final_url = self._edge_shrink_alpha_source_if_available(
+                        gen_path,
+                        raw_dir,
+                        idx,
+                        "gen",
+                    )
+            else:
+                final_url = None
+            self._emit_file_progress(idx, total, 84)
+        else:
+            self._emit_file_progress(idx, total, 70)
         out_path = os.path.join(output_dir, f"result_{idx:03d}_{self.run_stamp}.png")
         self._save_final_output(
-            image_url,
+            final_url,
             gen_path,
             out_path,
             raw_dir,
@@ -1221,8 +1288,9 @@ class WorkerThread(QThread):
             outcome="succeeded",
             **inspect_diagnostic_image(out_path),
         )
+        return out_path
 
-    def _mode1_generate_parallel(self, emit_final=True):
+    def _mode1_generate_parallel(self, process_generated=False, emit_final=True):
         raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
         os.makedirs(raw_dir, exist_ok=True)
@@ -1248,12 +1316,13 @@ class WorkerThread(QThread):
                 except StopIteration:
                     return False
                 future = executor.submit(
-                    self._generate_only_entry,
+                    self._generate_entry,
                     idx,
                     total,
                     entry,
                     raw_dir,
                     output_dir,
+                    process_generated,
                 )
                 active[future] = idx
                 return True
@@ -1270,8 +1339,14 @@ class WorkerThread(QThread):
                 for future in completed:
                     idx = active.pop(future)
                     try:
-                        future.result()
+                        out_path = future.result()
                     except ProcessingCancelled:
+                        self._emit_item_progress(
+                            idx,
+                            total,
+                            "processing" if process_generated else "generation",
+                            "cancelled",
+                        )
                         self.progress.emit(f"[{idx}/{total}] Остановлено")
                     except Exception as error:
                         self._set_diagnostic_context(idx, total, "generation")
@@ -1283,7 +1358,28 @@ class WorkerThread(QThread):
                         self.progress.emit(
                             f"[{idx}/{total}] Ошибка: {self._safe_error_text(error)}"
                         )
+                        self._emit_item_progress(
+                            idx,
+                            total,
+                            str(
+                                getattr(
+                                    self._diagnostic_context,
+                                    "stage",
+                                    "processing" if process_generated else "generation",
+                                )
+                            ),
+                            "failed",
+                            message=self._safe_error_text(error),
+                        )
                     else:
+                        self._emit_item_progress(
+                            idx,
+                            total,
+                            "export",
+                            "succeeded",
+                            percent=100,
+                            output_path=out_path,
+                        )
                         done_count += 1
                     submit_next()
 
@@ -1311,6 +1407,14 @@ class WorkerThread(QThread):
         if total_items <= 0:
             return
         local = max(0, min(100, int(local_percent)))
+        self._emit_item_progress(
+            item_index,
+            total_items,
+            str(getattr(self._diagnostic_context, "stage", "processing") or "processing"),
+            "running",
+            percent=local,
+            indeterminate=local <= 0,
+        )
         base = ((item_index - 1) / total_items) * 100
         self.progress_value.emit(int(base + local / total_items))
 
@@ -1363,6 +1467,13 @@ class WorkerThread(QThread):
         output_dir = self.output_dir
         os.makedirs(raw_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
+
+        self._mode2_process_files_parallel(
+            raw_dir,
+            output_dir,
+            emit_final=emit_final,
+        )
+        return
 
         total = len(self.selected_files)
         done = 0
@@ -1455,6 +1566,241 @@ class WorkerThread(QThread):
                 self.finished.emit(f"Mode 2: Готово (0/{total}). Изображения не созданы.")
             else:
                 self.finished.emit(f"Mode 2: Готово ({done}/{total})")
+
+    def _process_file_entry(
+        self,
+        idx: int,
+        total: int,
+        file_path: str,
+        raw_dir: str,
+        output_dir: str,
+    ) -> str:
+        self._set_diagnostic_context(idx, total, "processing")
+        self.progress.emit(
+            f"[{idx}/{total}] Обработка файла: {os.path.basename(file_path)}"
+        )
+        self._emit_file_progress(idx, total, 4)
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"Файл не найден: {file_path}")
+
+        source_path = file_path
+        self._emit_diagnostic(
+            "item_input_inspected",
+            operation_type="processing",
+            **inspect_diagnostic_image(source_path),
+        )
+        if (
+            self.visible_mark_cleanup_enabled
+            or self.invisible_watermark_cleanup_enabled
+            or self.upscale
+            or self.upscale_after
+            or self.unsharp_enabled
+            or self.remove_bg
+        ):
+            self._emit_file_progress(idx, total, 24)
+            final_url = self._run_processing_pipeline(
+                source_path,
+                None,
+                raw_dir,
+                idx,
+                "file",
+            )
+        elif self.edge_shrink_enabled:
+            self._emit_file_progress(idx, total, 40)
+            with self._local_operation_lock:
+                final_url = self._edge_shrink_alpha_source_if_available(
+                    source_path,
+                    raw_dir,
+                    idx,
+                    "file",
+                )
+        else:
+            self._emit_file_progress(idx, total, 50)
+            final_url = None
+
+        self._emit_file_progress(idx, total, 80)
+        self._ensure_running()
+        out_path = str(
+            processed_output_path(
+                output_dir,
+                file_path,
+                self.run_stamp,
+                overwrite=self.overwrite_existing,
+            )
+        )
+        self._save_final_output(
+            final_url,
+            source_path,
+            out_path,
+            raw_dir,
+            idx,
+            "file",
+        )
+        self._emit_file_progress(idx, total, 100)
+        self.progress.emit(f"  Итог сохранён: {out_path}")
+        self._emit_diagnostic(
+            "item_finished",
+            outcome="succeeded",
+            **inspect_diagnostic_image(out_path),
+        )
+        return out_path
+
+    def _mode2_process_files_parallel(
+        self,
+        raw_dir: str,
+        output_dir: str,
+        *,
+        emit_final: bool,
+    ) -> None:
+        total = len(self.selected_files)
+        done_count = 0
+        worker_limit = (
+            self.kie_concurrency
+            if self._uses_any_kie_upscale() or self._uses_kie_remove_bg()
+            else 1
+        )
+        if worker_limit == 1:
+            for idx, file_path in enumerate(self.selected_files, start=1):
+                if not self.is_running:
+                    break
+                try:
+                    out_path = self._process_file_entry(
+                        idx,
+                        total,
+                        file_path,
+                        raw_dir,
+                        output_dir,
+                    )
+                except ProcessingCancelled:
+                    self._emit_item_progress(
+                        idx,
+                        total,
+                        "processing",
+                        "cancelled",
+                    )
+                    self.progress.emit("Остановлено пользователем")
+                    break
+                except Exception as error:
+                    self._set_diagnostic_context(idx, total, "processing")
+                    safe_error = self._safe_error_text(error)
+                    self._emit_diagnostic(
+                        "item_finished",
+                        outcome="failed",
+                        error_message=safe_error,
+                    )
+                    self.progress.emit(f"[{idx}/{total}] Ошибка: {safe_error}")
+                    self._emit_item_progress(
+                        idx,
+                        total,
+                        "processing",
+                        "failed",
+                        message=safe_error,
+                    )
+                else:
+                    self._emit_item_progress(
+                        idx,
+                        total,
+                        "export",
+                        "succeeded",
+                        percent=100,
+                        output_path=out_path,
+                    )
+                    done_count += 1
+                if self._stop_after_current_if_requested():
+                    break
+            if not self.is_running:
+                return
+            self.progress_value.emit(100)
+            if emit_final:
+                if done_count == 0:
+                    self.finished.emit(
+                        f"Mode 2: Готово (0/{total}). Изображения не созданы."
+                    )
+                else:
+                    self.finished.emit(f"Mode 2: Готово ({done_count}/{total})")
+            return
+
+        pending = iter(enumerate(self.selected_files, start=1))
+        active: dict[Any, int] = {}
+
+        with ThreadPoolExecutor(max_workers=worker_limit) as executor:
+            def submit_next() -> bool:
+                if not self.is_running or self.stop_after_current_requested:
+                    return False
+                try:
+                    idx, file_path = next(pending)
+                except StopIteration:
+                    return False
+                future = executor.submit(
+                    self._process_file_entry,
+                    idx,
+                    total,
+                    file_path,
+                    raw_dir,
+                    output_dir,
+                )
+                active[future] = idx
+                return True
+
+            for _ in range(worker_limit):
+                if not submit_next():
+                    break
+
+            while active:
+                completed, _ = wait(tuple(active), return_when=FIRST_COMPLETED)
+                for future in completed:
+                    idx = active.pop(future)
+                    try:
+                        out_path = future.result()
+                    except ProcessingCancelled:
+                        self._emit_item_progress(
+                            idx,
+                            total,
+                            "processing",
+                            "cancelled",
+                        )
+                    except Exception as error:
+                        self._set_diagnostic_context(idx, total, "processing")
+                        safe_error = self._safe_error_text(error)
+                        self._emit_diagnostic(
+                            "item_finished",
+                            outcome="failed",
+                            error_message=safe_error,
+                        )
+                        self.progress.emit(f"[{idx}/{total}] Ошибка: {safe_error}")
+                        self._emit_item_progress(
+                            idx,
+                            total,
+                            "processing",
+                            "failed",
+                            message=safe_error,
+                        )
+                    else:
+                        self._emit_item_progress(
+                            idx,
+                            total,
+                            "export",
+                            "succeeded",
+                            percent=100,
+                            output_path=out_path,
+                        )
+                        done_count += 1
+                    submit_next()
+
+        if not self.is_running:
+            self.progress.emit("Остановлено пользователем")
+            return
+        if self.stop_after_current_requested:
+            self.progress.emit("Остановлено после текущего файла")
+            return
+        self.progress_value.emit(100)
+        if emit_final:
+            if done_count == 0:
+                self.finished.emit(
+                    f"Mode 2: Готово (0/{total}). Изображения не созданы."
+                )
+            else:
+                self.finished.emit(f"Mode 2: Готово ({done_count}/{total})")
 
     def _create_run_raw_dir(self):
         """Create an isolated intermediate directory for this run.
@@ -1554,7 +1900,7 @@ class WorkerThread(QThread):
 
     def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
         self._ensure_running()
-        self._metadata_cleaned_for_current_item = False
+        self._item_context.metadata_cleaned = False
         order_error = validate_upscale_after_background_order(
             self.remove_bg,
             self.upscale_after,
@@ -1600,20 +1946,22 @@ class WorkerThread(QThread):
             and not self._uses_kie_remove_bg()
             and not self._uses_photoroom_remove_bg()
         ):
-            current_path = self._ensure_local_path(
-                current_path, current_url, raw_dir, idx, prefix, "metadata_source"
-            )
-            metadata_path = os.path.join(raw_dir, f"{prefix}_metadata_{idx:03d}_{self.run_stamp}.png")
-            try:
-                cleanup_image_metadata(
-                    current_path, metadata_path, self.metadata_cleanup_options
+            with self._local_operation_lock:
+                current_path = self._ensure_local_path(
+                    current_path, current_url, raw_dir, idx, prefix, "metadata_source"
                 )
-                current_path, current_url, local_result = metadata_path, None, True
-                self._precleaned_paths.add(os.path.abspath(metadata_path))
-                self._metadata_cleaned_for_current_item = True
-            except MetadataCleanupError as error:
-                self.progress.emit(f"  Очистка файла: ошибка — {error}")
-                raise
+                metadata_path = os.path.join(raw_dir, f"{prefix}_metadata_{idx:03d}_{self.run_stamp}.png")
+                try:
+                    cleanup_image_metadata(
+                        current_path, metadata_path, self.metadata_cleanup_options
+                    )
+                    current_path, current_url, local_result = metadata_path, None, True
+                    with self._shared_state_lock:
+                        self._precleaned_paths.add(os.path.abspath(metadata_path))
+                    self._item_context.metadata_cleaned = True
+                except MetadataCleanupError as error:
+                    self.progress.emit(f"  Очистка файла: ошибка — {error}")
+                    raise
             self._ensure_running()
 
         if self.visible_mark_cleanup_enabled:
@@ -1625,12 +1973,13 @@ class WorkerThread(QThread):
                 prefix,
                 "visible_mark_source",
             )
-            visible_mark_path = self._visible_mark_cleanup_pipeline_step(
-                current_path,
-                raw_dir,
-                idx,
-                prefix,
-            )
+            with self._local_operation_lock:
+                visible_mark_path = self._visible_mark_cleanup_pipeline_step(
+                    current_path,
+                    raw_dir,
+                    idx,
+                    prefix,
+                )
             if visible_mark_path:
                 current_path = visible_mark_path
                 current_url = None
@@ -1644,9 +1993,10 @@ class WorkerThread(QThread):
             invisible_path = os.path.join(raw_dir, f"{prefix}_invisible_{idx:03d}_{self.run_stamp}.png")
             try:
                 self.progress.emit("  Экспериментальная очистка невидимого watermark")
-                clean_invisible_watermark(
-                    Path(current_path), Path(invisible_path), output_root=Path(raw_dir)
-                )
+                with self._local_operation_lock:
+                    clean_invisible_watermark(
+                        Path(current_path), Path(invisible_path), output_root=Path(raw_dir)
+                    )
                 current_path, current_url, local_result = invisible_path, None, True
             except WatermarkBackendError as error:
                 self.progress.emit(f"  Экспериментальный этап пропущен: {error}")
@@ -1680,8 +2030,9 @@ class WorkerThread(QThread):
                 },
                 outcome="started",
             )
-            current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
-            current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
+            with self._local_operation_lock:
+                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
+                current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
             current_url = None
             local_result = True
             self._emit_diagnostic(
@@ -1716,27 +2067,30 @@ class WorkerThread(QThread):
             self.progress.emit("  Этап обработки: background_removal; status=running")
             try:
                 if self._uses_local_rembg_remove_bg():
-                    current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-                    nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
-                    self._run_local_rembg(current_path, nobg_path)
+                    with self._local_operation_lock:
+                        current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+                        nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")
+                        self._run_local_rembg(current_path, nobg_path)
                     self.progress.emit(f"  Промежуточный локальный без фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
                     local_result = True
                 elif self._uses_local_ben2_remove_bg():
-                    current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-                    nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
-                    self._run_local_ben2(current_path, nobg_path)
+                    with self._local_operation_lock:
+                        current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
+                        nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
+                        self._run_local_ben2(current_path, nobg_path)
                     self.progress.emit(f"  Промежуточный BEN2 без фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
                     local_result = True
                 elif self._uses_photoroom_remove_bg():
-                    current_path = self._ensure_local_path(
-                        current_path, current_url, raw_dir, idx, prefix, "photoroom_source"
-                    )
-                    nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
-                    self._run_photoroom_remove_bg(current_path, nobg_path)
+                    with self._local_operation_lock:
+                        current_path = self._ensure_local_path(
+                            current_path, current_url, raw_dir, idx, prefix, "photoroom_source"
+                        )
+                        nobg_path = os.path.join(raw_dir, f"{prefix}_photoroom_nobg_{idx:03d}_{self.run_stamp}.png")
+                        self._run_photoroom_remove_bg(current_path, nobg_path)
                     self.progress.emit(f"  Промежуточный PhotoRoom без фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
@@ -1809,7 +2163,8 @@ class WorkerThread(QThread):
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
             edge_applied = self.remove_bg or self._has_alpha_channel(current_path)
             if edge_applied:
-                current_path = self._edge_shrink_pipeline_step(current_path, raw_dir, idx, prefix)
+                with self._local_operation_lock:
+                    current_path = self._edge_shrink_pipeline_step(current_path, raw_dir, idx, prefix)
                 current_url = None
                 local_result = True
             else:
@@ -1908,29 +2263,30 @@ class WorkerThread(QThread):
         )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "local_realesrgan":
-            current_path = self._ensure_local_path(
-                current_path,
-                current_url,
-                raw_dir,
-                idx,
-                prefix,
-                f"{step_name}_source",
-            )
-            previous_scale = getattr(self, "_active_local_realesrgan_scale", None)
-            self._active_local_realesrgan_scale = normalize_local_realesrgan_scale(local_scale)
-            try:
-                current_path = self._local_realesrgan_pipeline_step(
+            with self._local_operation_lock:
+                current_path = self._ensure_local_path(
                     current_path,
+                    current_url,
                     raw_dir,
                     idx,
                     prefix,
-                    step_name,
+                    f"{step_name}_source",
                 )
-            finally:
-                if previous_scale is None:
-                    del self._active_local_realesrgan_scale
-                else:
-                    self._active_local_realesrgan_scale = previous_scale
+                previous_scale = getattr(self, "_active_local_realesrgan_scale", None)
+                self._active_local_realesrgan_scale = normalize_local_realesrgan_scale(local_scale)
+                try:
+                    current_path = self._local_realesrgan_pipeline_step(
+                        current_path,
+                        raw_dir,
+                        idx,
+                        prefix,
+                        step_name,
+                    )
+                finally:
+                    if previous_scale is None:
+                        del self._active_local_realesrgan_scale
+                    else:
+                        self._active_local_realesrgan_scale = previous_scale
             self.progress.emit(f"  Этап обработки: {stage}; status=complete")
             self._emit_diagnostic(
                 "stage_finished",
@@ -2406,8 +2762,8 @@ class WorkerThread(QThread):
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
         self._ensure_running()
-        if self._metadata_cleaned_for_current_item:
-            self._metadata_cleaned_for_current_item = False
+        if bool(getattr(self._item_context, "metadata_cleaned", False)):
+            self._item_context.metadata_cleaned = False
             self._replace_output_if_running(stage_path, output_path)
             return None
         if not self._metadata_cleanup_requested():
@@ -3145,6 +3501,7 @@ class WorkerThread(QThread):
             ) from error
 
     def _kie_create_task(self, model, input_payload):
+        self._wait_for_generation_launch_slot()
         started = time.monotonic()
         self._diagnostic_context.model = str(model or "")
         headers = self._kie_headers()
@@ -3476,6 +3833,7 @@ class WorkerThread(QThread):
         return model
 
     def _kie_generate_4o_image(self, prompt):
+        self._wait_for_generation_launch_slot()
         headers = self._kie_headers()
         headers["Content-Type"] = "application/json"
         ratio, _ = self._get_generation_profile(False)
