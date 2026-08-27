@@ -28,9 +28,20 @@ Updated: 2026-08-27
 
 ## Next task
 
-Run owner acceptance on the Windows 3.0.5 installer produced by GitHub Actions
-run `33026433664`. Do not publish a revision to the update service before this
-target-machine acceptance.
+Review and integrate the conditional generation-settings fix found during
+owner acceptance. The existing Windows 3.0.5 artifact from run `33026433664`
+does not contain this source change; do not publish a revision to the update
+service before the corrected target-machine acceptance.
+
+## Generation settings clarity checkpoint — 2026-08-27
+
+- Generation settings identify how many prompts have no references.
+- Reference-model settings are hidden when the current prompt table has no
+  references. When present, the section is clearly named and displays its
+  prompt count.
+- Clipart and Pinterest focused tests pass (67 tests). Full offscreen pytest
+  passes: 733 tests, 1 expected Linux skip, 2 deselected and 87 subtests.
+  Python compilation passes. No paid API request or build was started.
 
 ## Provider-aware parallel stabilization checkpoint — 2026-08-26
 

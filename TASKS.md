@@ -1898,3 +1898,17 @@ Verification:
 - [x] No paid provider request, build, merge, server publication, or push ran.
 - [ ] Obtain review, then separately approve a Windows-only build and
   target-Windows acceptance before any server revision publication.
+
+### Task 73 - Conditional Reference Generation Settings
+
+Status: Source fix verified; integration and packaged Windows acceptance pending
+
+- [x] Label the primary generation settings with the number of prompts without
+  references.
+- [x] Hide reference-generation settings when no prompt has references.
+- [x] Show and label the reference-generation section with its prompt count
+  when references are present.
+- [x] Verify Clipart and Pinterest regressions, Python compilation and the full
+  offscreen test suite.
+- [ ] Merge after owner approval; a Windows build requires a separate explicit
+  command and must include this source change before publication.
