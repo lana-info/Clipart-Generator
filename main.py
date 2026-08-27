@@ -73,6 +73,7 @@ from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
+from v3_localization import app_locale_from_settings
 from release_contract import resolve_release_version
 from security_redaction import redact_absolute_paths, redact_text
 from provider_diagnostics import (
@@ -5343,6 +5344,7 @@ class MainWindow(QMainWindow):
             "prompt_input_mode": "list",
             "last_work_dir": "",
             "last_updates_expired_notice_at": "",
+            "app_language": "ru",
         }
         self._migrate_legacy_local_files()
         if os.path.exists(CONFIG_FILE):
@@ -5362,6 +5364,7 @@ class MainWindow(QMainWindow):
                 self.config["photoroom_concurrency"] = normalize_provider_concurrency(None)
         else:
             self.config = default_config
+        self.config["app_language"] = app_locale_from_settings(self.config)
         self.config["kie_upscale_model"] = normalize_kie_upscale_model(
             self.config.get("kie_upscale_model")
         )

@@ -1303,7 +1303,8 @@ Verification: focused unit tests для модели, нормализации �
 
 ### NEXT-TASK-002 — Подготовить локализацию русского и английского UI
 
-Status: Planned
+Status: In progress — locale contract and persisted `app_language` setting
+implemented; UI translation remains
 
 Acceptance:
 
