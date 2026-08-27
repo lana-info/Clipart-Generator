@@ -68,7 +68,11 @@ class LazyPageRegistry(MutableMapping[StepId, QWidget]):
 
         self._factories[step] = materialize
         if step in route_for_mode(self.mode):
-            self.shell.set_step_factory(self.mode, step, materialize)
+            set_factory = getattr(self.shell, "set_workflow_factory", None)
+            if callable(set_factory):
+                set_factory(self.mode, step, materialize)
+            else:
+                self.shell.set_step_factory(self.mode, step, materialize)
 
     def register_instance(self, step: StepId, page: QWidget) -> None:
         if step in self._factories or step in self._materialized:

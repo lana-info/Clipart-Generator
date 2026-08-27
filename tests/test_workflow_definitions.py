@@ -105,6 +105,13 @@ class WorkflowDefinitionTests(unittest.TestCase):
         self.assertFalse(editor.cleanup_checkbox.isVisible())
         editor.close()
 
+    def test_component_id_is_checked_when_registering_workflow_page(self):
+        definition = workflow_for_mode(ProjectMode.CLIPART)
+        self.assertEqual(
+            definition.page_for_step(StepId.PROMPTS).component_id,
+            "shared.prompts",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

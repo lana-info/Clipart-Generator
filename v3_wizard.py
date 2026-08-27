@@ -430,6 +430,27 @@ class AppShell(QWidget):
             raise ValueError("Page factory is already registered")
         self._page_factories[key] = factory
 
+    def set_workflow_factory(
+        self,
+        mode: ProjectMode | str,
+        step: StepId | str,
+        factory: Callable[[], QWidget],
+        *,
+        component_id: str | None = None,
+    ) -> None:
+        """Register a page factory against the active definition contract."""
+
+        normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
+        normalized_step = step if isinstance(step, StepId) else StepId(step)
+        expected = self.workflow_definition(normalized_mode).page_for_step(
+            normalized_step
+        ).component_id
+        if component_id is not None and str(component_id).strip() != expected:
+            raise ValueError(
+                f"Component {component_id!r} does not match workflow component {expected!r}"
+            )
+        self.set_step_factory(normalized_mode, normalized_step, factory)
+
     def ensure_step_page(
         self,
         mode: ProjectMode | str,
