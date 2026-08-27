@@ -14,6 +14,56 @@ def friendly_provider_error(message: Any) -> tuple[str, str] | None:
     """Return a stable Russian category/message for known provider failures."""
     text = str(message or "").strip()
     lowered = text.casefold()
+    is_fal = "fal.ai" in lowered or "fal ai" in lowered
+
+    if is_fal and any(marker in lowered for marker in (
+        "402", "insufficient credit", "insufficient balance",
+        "not enough credit", "credit balance is insufficient",
+    )):
+        return (
+            "insufficient_credits",
+            "Недостаточно средств на балансе Fal.ai. Пополните баланс и повторите запуск.",
+        )
+
+    if is_fal and any(marker in lowered for marker in (
+        "401", "unauthorized", "invalid api key", "invalid key",
+    )):
+        return (
+            "authentication",
+            "Fal.ai отклонил API-ключ. Проверьте ключ и его область доступа в настройках API.",
+        )
+
+    if is_fal and any(marker in lowered for marker in (
+        "403", "forbidden", "insufficient permission", "scope",
+    )):
+        return (
+            "authorization",
+            "У ключа Fal.ai недостаточно прав для этой операции. Проверьте область доступа ключа.",
+        )
+
+    if is_fal and any(marker in lowered for marker in (
+        "429", "rate limit", "too many requests",
+    )):
+        return (
+            "rate_limit",
+            "Fal.ai временно ограничил частоту запросов. Подождите и повторите запуск.",
+        )
+
+    if is_fal and any(marker in lowered for marker in (
+        "400", "bad request", "invalid input", "validation",
+    )):
+        return (
+            "invalid_request",
+            "Fal.ai не принял параметры изображения или выбранной модели. Проверьте файл и настройки операции.",
+        )
+
+    if is_fal and any(marker in lowered for marker in (
+        "500", "502", "503", "504", "service unavailable", "server error",
+    )):
+        return (
+            "provider_unavailable",
+            "Fal.ai временно недоступен. Попробуйте повторить позже.",
+        )
 
     if _CODE_402.search(text) or any(
         marker in lowered

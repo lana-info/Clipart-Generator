@@ -275,6 +275,19 @@ class FalClient:
                     raise FalProviderError("Fal.ai response слишком большой")
                 break
             except urllib.error.HTTPError as error:
+                detail = ""
+                try:
+                    error_body = error.read(16 * 1024).decode("utf-8", "replace")
+                    parsed_body = json.loads(error_body)
+                    if isinstance(parsed_body, dict):
+                        detail = str(
+                            parsed_body.get("message")
+                            or parsed_body.get("detail")
+                            or parsed_body.get("error")
+                            or ""
+                        )[:300]
+                except (OSError, UnicodeError, ValueError):
+                    detail = ""
                 if error.code in accepted_http_errors:
                     try:
                         result = json.loads(error.read(256 * 1024).decode("utf-8", "replace"))
@@ -287,7 +300,8 @@ class FalClient:
                     or error.code not in transient_http
                     or attempt >= int(self.config.max_retries)
                 ):
-                    raise FalProviderError("Fal.ai HTTP request failed") from error
+                    suffix = f": {detail}" if detail else ""
+                    raise FalProviderError(f"Fal.ai HTTP {error.code}{suffix}") from error
                 time.sleep(float(self.config.retry_backoff_seconds) * (2**attempt))
             except (urllib.error.URLError, OSError, NetworkSecurityError) as error:
                 if attempt >= int(self.config.max_retries):
