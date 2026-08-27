@@ -1,0 +1,75 @@
+import unittest
+
+from v3_project_state import ProjectMode, StepId
+from workflow_definitions import (
+    WorkflowDefinition,
+    WorkflowPageSpec,
+    WorkflowStepSpec,
+    workflow_for_mode,
+)
+
+
+class WorkflowDefinitionTests(unittest.TestCase):
+    def test_clipart_and_pinterest_have_different_processing_surfaces(self):
+        clipart = workflow_for_mode(ProjectMode.CLIPART)
+        pinterest = workflow_for_mode(ProjectMode.PINTEREST)
+
+        self.assertIn("remove_background", clipart.processing_operations)
+        self.assertIn("trim", clipart.processing_operations)
+        self.assertNotIn("remove_background", pinterest.processing_operations)
+        self.assertNotIn("trim", pinterest.processing_operations)
+        self.assertEqual(clipart.prompt_builder_id, "clipart_structured")
+        self.assertEqual(pinterest.prompt_builder_id, "pinterest_structured")
+
+    def test_workflow_pages_preserve_order_and_allow_custom_builder(self):
+        definition = WorkflowDefinition(
+            workflow_id="trendwatcher",
+            mode=ProjectMode.CLIPART,
+            prompt_builder_id="trendwatcher_prompt_builder",
+            pages=(
+                WorkflowPageSpec(StepId.PROJECT, "shared.project"),
+                WorkflowPageSpec(StepId.PROMPTS, "trendwatcher.prompt_builder"),
+                WorkflowPageSpec(StepId.RESULTS, "shared.results"),
+            ),
+        )
+
+        self.assertEqual(
+            definition.page_steps,
+            (StepId.PROJECT, StepId.PROMPTS, StepId.RESULTS),
+        )
+        self.assertEqual(
+            definition.page_for_step(StepId.PROMPTS).component_id,
+            "trendwatcher.prompt_builder",
+        )
+
+    def test_external_steps_require_confirmation_and_have_artifact_contract(self):
+        step = WorkflowStepSpec(
+            step_id="upload_google_drive",
+            kind="external_delivery",
+            input_artifacts=("png",),
+            output_artifacts=("drive_file",),
+            external_side_effect=True,
+            requires_confirmation=True,
+        )
+        self.assertTrue(step.external_side_effect)
+        self.assertTrue(step.requires_confirmation)
+        self.assertEqual(step.input_artifacts, ("png",))
+
+        with self.assertRaises(ValueError):
+            WorkflowStepSpec(
+                step_id="unsafe_upload",
+                kind="external_delivery",
+                input_artifacts=("png",),
+                output_artifacts=("remote_file",),
+                external_side_effect=True,
+            )
+
+    def test_hidden_operations_are_not_allowed_by_definition(self):
+        pinterest = workflow_for_mode(ProjectMode.PINTEREST)
+        self.assertFalse(pinterest.allows_processing_operation("trim"))
+        self.assertFalse(pinterest.allows_processing_operation("remove_background"))
+        self.assertTrue(pinterest.allows_processing_operation("upscale_before"))
+
+
+if __name__ == "__main__":
+    unittest.main()

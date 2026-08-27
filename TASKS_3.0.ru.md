@@ -1208,7 +1208,7 @@ target-Windows acceptance remain pending.
 
 ### NEXT-TASK-000 — Ввести workflow/module definition layer
 
-Status: Planned — architecture gate before prompt and Fal.ai work
+Status: In progress — contract implemented; UI integration remains
 
 Цель: сделать состав страниц и функций настраиваемым для разных workflow без
 введения коммерческой модульной лицензии.
@@ -1232,6 +1232,27 @@ Likely files: новый модуль workflow definitions, `v3_wizard.py`,
 
 Verification: contract tests на состав страниц и controls для Clipart и
 Pinterest; offscreen smoke на отсутствие нерелевантной функции.
+
+### NEXT-TASK-000B — Подключить workflow definitions к wizard и processing UI
+
+Status: Planned
+
+Зависимость: NEXT-TASK-000.
+
+Acceptance:
+
+- [ ] Wizard строит страницу и её component factory из активного workflow
+  definition.
+- [ ] Processing editor получает разрешённые operations из workflow profile.
+- [ ] Pinterest не показывает controls для transparency/background cleanup,
+  edge shrink и trim, если они не входят в его profile.
+- [ ] Скрытые операции из устаревших settings очищаются или безопасно
+  игнорируются до построения run plan.
+- [ ] Existing Clipart, Pinterest и Processing routes сохраняют свои текущие
+  пользовательские сценарии.
+
+Verification: offscreen UI tests на page composition, hidden controls,
+stale-settings filtering и regression всех трёх режимов.
 
 ### NEXT-TASK-000A — Описать step graph и типы результатов workflow
 
