@@ -1901,7 +1901,7 @@ Verification:
 
 ### Task 73 - Conditional Reference Generation Settings
 
-Status: Source fix verified; integration and packaged Windows acceptance pending
+Status: Integrated and source verified; packaged Windows acceptance pending
 
 - [x] Label the primary generation settings with the number of prompts without
   references.
@@ -1912,10 +1912,12 @@ Status: Source fix verified; integration and packaged Windows acceptance pending
   offscreen test suite.
 - [x] Integrate after owner approval and include the fix in the replacement
   Windows build before publication.
+- [x] Verify the integrated source with the full offscreen suite: 738 passed,
+  1 expected Linux skip, 2 deselected, and 87 subtests passed.
 
 ### Task 74 - Reference Preflight, Friendly KIE Errors and Review Alignment
 
-Status: Source fix verified; integration and packaged Windows acceptance pending
+Status: Integrated and source verified; packaged Windows acceptance pending
 
 - [x] Reject a local reference larger than 10 MB at attachment time and show
   its name, actual size and corrective action.
@@ -1928,3 +1930,5 @@ Status: Source fix verified; integration and packaged Windows acceptance pending
   Python compilation and diff integrity.
 - [x] Integrate after owner approval and include the fix in the replacement
   Windows build before publication.
+- [x] Verify the integrated source with Python compilation, sensitive-artifact
+  scan, diff integrity, and the full offscreen suite.

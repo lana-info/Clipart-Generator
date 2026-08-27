@@ -28,9 +28,12 @@ Updated: 2026-08-27
 
 ## Next task
 
-Build and verify one replacement Windows 3.0.5 installer containing the
-integrated owner-acceptance fixes. The existing artifact from run `33026433664`
-does not contain these changes and must not be published as an update.
+Run and verify one replacement Windows 3.0.5 installer build containing the
+integrated owner-acceptance fixes. The combined source passes 738 tests,
+1 expected Linux skip, 2 deselected and 87 subtests; compilation, tracked
+sensitive-artifact scan and diff integrity also pass. The existing artifact
+from run `33026433664` does not contain these changes and must not be published
+as an update.
 
 ## Generation settings clarity checkpoint — 2026-08-27
 
