@@ -38,6 +38,7 @@ from v3_components import (
 )
 from security_redaction import redact_text
 from provider_diagnostics import build_provider_event
+from provider_error_messages import friendly_provider_error
 from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
@@ -162,6 +163,9 @@ def _stage_update(message: str) -> tuple[str, str] | None:
 
 
 def _failure_reason(message: str) -> tuple[str, str]:
+    classified = friendly_provider_error(message)
+    if classified is not None:
+        return classified
     lowered = str(message).casefold()
     if "timeout" in lowered or "timed out" in lowered:
         return "timeout", "Внешний сервис не ответил вовремя."

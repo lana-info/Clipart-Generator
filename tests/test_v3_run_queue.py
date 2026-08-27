@@ -32,12 +32,28 @@ from v3_run_queue import (
     build_safe_run_report,
     export_safe_run_report,
     format_elapsed_duration,
+    _failure_reason,
 )
 from v3_wizard import AppShell
 
 
 SECRET_PROMPT = "private prompt do not log"
 SECRET_KEY = "secret-api-key-do-not-log"
+
+
+def test_failure_reason_explains_kie_credits_and_oversized_reference():
+    assert _failure_reason(
+        "KIE createTask rejected [errorCode=402; message=Insufficient Credits]"
+    ) == (
+        "insufficient_credits",
+        "Недостаточно средств на балансе KIE. Пополните баланс KIE и повторите запуск.",
+    )
+    assert _failure_reason(
+        "KIE task failed [errorCode=413; message=reference image exceeds 10MB]"
+    ) == (
+        "reference_too_large",
+        "Референс превышает допустимый размер 10 МБ. Уменьшите файл и повторите запуск.",
+    )
 
 
 class FakeWorker(QObject):

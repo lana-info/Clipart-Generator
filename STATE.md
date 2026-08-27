@@ -28,10 +28,9 @@ Updated: 2026-08-27
 
 ## Next task
 
-Review and integrate the conditional generation-settings fix found during
-owner acceptance. The existing Windows 3.0.5 artifact from run `33026433664`
-does not contain this source change; do not publish a revision to the update
-service before the corrected target-machine acceptance.
+Build and verify one replacement Windows 3.0.5 installer containing the
+integrated owner-acceptance fixes. The existing artifact from run `33026433664`
+does not contain these changes and must not be published as an update.
 
 ## Generation settings clarity checkpoint — 2026-08-27
 
@@ -42,6 +41,22 @@ service before the corrected target-machine acceptance.
 - Clipart and Pinterest focused tests pass (67 tests). Full offscreen pytest
   passes: 733 tests, 1 expected Linux skip, 2 deselected and 87 subtests.
   Python compilation passes. No paid API request or build was started.
+
+## Reference preflight and Review layout checkpoint — 2026-08-27
+
+- New local references over 10 MB are rejected at selection time with file
+  name, actual size and corrective action. Saved projects receive the same
+  preflight before worker creation.
+- HTTPS references are not silently downloaded merely to inspect their size;
+  KIE responses for an oversized reference and official `402 Insufficient
+  Credits` are converted to actionable user messages while bounded technical
+  details remain available in diagnostics.
+- The Clipart/Pinterest Review summary starts directly below its description,
+  uses a common left edge and no longer distributes rows vertically.
+- Focused Clipart/Pinterest/Results verification passes: 118 tests and 5
+  subtests. Full offscreen pytest passes: 736 tests, 1 expected Linux skip,
+  2 deselected and 87 subtests. Python compilation passes. No paid request or
+  build was started.
 
 ## Provider-aware parallel stabilization checkpoint — 2026-08-26
 

@@ -31,6 +31,7 @@ from v3_clipart_flow import (
     install_clipart_flow,
     missing_runtime_requirements,
     parse_prompt_csv,
+    _safe_runtime_error,
 )
 from v3_mode_selection import V3ApplicationView
 from v3_project_state import (
@@ -809,6 +810,51 @@ class V3ClipartFlowTests(unittest.TestCase):
             with self.assertRaisesRegex(ClipartFlowError, "Максимум"):
                 build_clipart_run_request(state, {"kie_api_key": "test-key"})
 
+    def test_oversized_local_reference_is_rejected_when_attached(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-reference-size-") as temp:
+            reference_path = Path(temp) / "too-large.png"
+            with reference_path.open("wb") as handle:
+                handle.seek(10 * 1024 * 1024)
+                handle.write(b"x")
+            state = ProjectState(mode=ProjectMode.CLIPART)
+            page = ClipartPromptInputPage(state, lambda: None)
+
+            page._add_paste_references([str(reference_path)])
+
+            self.assertEqual(page._paste_references, [])
+            self.assertIn("не добавлен", page.card.status_label.text())
+            self.assertIn("10 МБ", page.card.status_label.text())
+            self.assertIn("10,0 МБ", page.card.status_label.text())
+
+    def test_oversized_saved_reference_has_specific_preflight_error(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-reference-preflight-") as temp:
+            reference_path = Path(temp) / "too-large.png"
+            with reference_path.open("wb") as handle:
+                handle.seek(10 * 1024 * 1024)
+                handle.write(b"x")
+            state = ProjectState(mode=ProjectMode.CLIPART)
+            state.common.work_dir = temp
+            state.clipart.prompts = [PromptEntry("Fox", [str(reference_path)])]
+
+            with self.assertRaisesRegex(
+                ClipartFlowError,
+                "Референс .* превышает 10 МБ",
+            ):
+                build_clipart_run_request(state, {"kie_api_key": "test-key"})
+
+    def test_runtime_errors_explain_kie_balance_and_reference_size(self):
+        balance = _safe_runtime_error(
+            "KIE createTask rejected [errorCode=402; message=Insufficient Credits]"
+        )
+        oversized = _safe_runtime_error(
+            "KIE task failed [errorCode=413; message=reference image exceeds 10MB]"
+        )
+
+        self.assertIn("Недостаточно средств", balance)
+        self.assertIn("Пополните баланс KIE", balance)
+        self.assertIn("Референс превышает", oversized)
+        self.assertIn("10 МБ", oversized)
+
     def test_runtime_settings_are_allowlisted_and_project_bounds_win(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-runtime-") as temp:
             state = self.make_state(temp)
@@ -1002,6 +1048,32 @@ class V3ClipartFlowTests(unittest.TestCase):
             page.reference_advanced.toggle_button.text(),
             "Промпты с референсами · 2",
         )
+
+    def test_review_summary_is_compact_and_left_aligned(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        review = ClipartReviewRunPage(state)
+        review.resize(980, 700)
+        review.show()
+        self.app.processEvents()
+
+        self.assertTrue(
+            review.card.layout().alignment() & Qt.AlignmentFlag.AlignTop
+        )
+        self.assertTrue(
+            review.card.content_layout.alignment() & Qt.AlignmentFlag.AlignTop
+        )
+        for label in (
+            review.output_label,
+            review.summary_label,
+            review.requests_label,
+            review.cost_breakdown_label,
+            review.pipeline_label,
+        ):
+            self.assertTrue(label.alignment() & Qt.AlignmentFlag.AlignLeft)
+            self.assertTrue(label.alignment() & Qt.AlignmentFlag.AlignTop)
+            self.assertEqual(label.property("v3Status"), True)
+        self.assertLess(review.output_label.geometry().top(), 40)
 
     def test_final_review_separates_generation_and_processing_costs(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

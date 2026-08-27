@@ -1910,5 +1910,21 @@ Status: Source fix verified; integration and packaged Windows acceptance pending
   when references are present.
 - [x] Verify Clipart and Pinterest regressions, Python compilation and the full
   offscreen test suite.
-- [ ] Merge after owner approval; a Windows build requires a separate explicit
-  command and must include this source change before publication.
+- [x] Integrate after owner approval and include the fix in the replacement
+  Windows build before publication.
+
+### Task 74 - Reference Preflight, Friendly KIE Errors and Review Alignment
+
+Status: Source fix verified; integration and packaged Windows acceptance pending
+
+- [x] Reject a local reference larger than 10 MB at attachment time and show
+  its name, actual size and corrective action.
+- [x] Reject oversized references already stored in older projects before any
+  paid provider task is created.
+- [x] Keep HTTPS references free of hidden downloads and classify KIE
+  insufficient-credit and oversized-reference failures for the user.
+- [x] Align the Review summary at the top-left with consistent row spacing.
+- [x] Verify focused Clipart/Pinterest/Results tests, full offscreen pytest,
+  Python compilation and diff integrity.
+- [x] Integrate after owner approval and include the fix in the replacement
+  Windows build before publication.
