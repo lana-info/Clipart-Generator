@@ -25,8 +25,12 @@ endpoint must have its own capability record before appearing in a workflow.
 The REST queue uses `https://queue.fal.run/{model_id}` with
 `Authorization: Key {FAL_KEY}`. Status, result and cancel use the request URL
 returned by the queue contract or its equivalent model/request path. Transport
-is HTTPS-only, response sizes are bounded, and API keys stay in the existing
-protected credential store.
+is HTTPS-only and response sizes are bounded. On Windows, the desktop BYOK
+key is stored separately using Windows DPAPI; KIE/PhotoRoom legacy `.env`
+storage is not reused for Fal. A production gateway remains the preferred
+architecture when the application is distributed beyond a trusted desktop.
+On platforms without a protected local store, persistent Fal BYOK is rejected
+instead of falling back to plaintext.
 
 ## Lifecycle and cancellation
 

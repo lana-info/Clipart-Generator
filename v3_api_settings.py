@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import sys
-import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -20,7 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from v3_components import ButtonVariant, V3Button
-from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS
+from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS, ProviderCredentialStore
 from provider_clients import check_kie_balance, check_photoroom_balance
 from app_identity import APP_NAME
 from runtime_settings import PROVIDER_CONCURRENCY_CHOICES, normalize_provider_concurrency
@@ -36,43 +35,29 @@ def user_env_path() -> Path:
     return directory / ".env"
 
 
+def user_fal_key_path() -> Path:
+    return user_env_path().with_name("fal_api_key.bin")
+
+
 def load_credentials(path: Path | None = None) -> dict[str, str]:
-    source = path or user_env_path()
-    if not source.is_file():
-        return {}
-    values: dict[str, str] = {}
-    for line in source.read_text(encoding="utf-8").splitlines():
-        if "=" not in line or line.lstrip().startswith("#"):
-            continue
-        key, value = line.split("=", 1)
-        values[key.strip()] = value.strip()
-    return values
+    env_path = path or user_env_path()
+    return ProviderCredentialStore(
+        env_path,
+        env_path.with_name("fal_api_key.bin"),
+    ).load()
 
 
 def save_credentials(values: Mapping[str, str], path: Path | None = None) -> Path:
     destination = path or user_env_path()
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    allowed = set(ALL_PROVIDER_CREDENTIAL_KEYS)
-    content = "".join(
-        f"{key}={str(values.get(key) or '').strip()}\n"
-        for key in sorted(allowed)
-        if str(values.get(key) or "").strip()
-    ).encode("utf-8")
-    fd, temporary = tempfile.mkstemp(prefix=".env.", suffix=".tmp", dir=str(destination.parent))
-    try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, destination)
-        if os.name != "nt":
-            os.chmod(destination, 0o600)
-    except Exception:
-        try:
-            os.unlink(temporary)
-        except OSError:
-            pass
-        raise
+    ProviderCredentialStore(
+        destination,
+        destination.with_name("fal_api_key.bin"),
+    ).save(
+        {
+            key: str(values.get(key) or "").strip()
+            for key in ALL_PROVIDER_CREDENTIAL_KEYS
+        }
+    )
     return destination
 
 
@@ -113,7 +98,12 @@ class ApiSettingsDialog(QDialog):
         values = dict(load_credentials())
         values.update(initial or {})
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Ключи хранятся локально в пользовательском .env и не показываются в логах."))
+        layout.addWidget(
+            QLabel(
+                "Ключи KIE/PhotoRoom хранятся локально в пользовательском .env; "
+                "Fal.ai сохраняется в защищённом хранилище Windows и не показывается в логах."
+            )
+        )
         runpod_help = QLabel(
             '<b>RunPod:</b> создайте аккаунт, пополните баланс и Serverless Endpoint; '
             '<a href="https://www.runpod.io/console/user/settings">получить API-ключ</a> · '

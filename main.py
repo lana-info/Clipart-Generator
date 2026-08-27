@@ -66,7 +66,7 @@ from visible_mark_cleanup import (
 )
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
 from output_naming import processed_output_path
-from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
+from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
 from runtime_settings import normalize_kie_concurrency, normalize_provider_concurrency
 from worker_runtime import launch_worker
@@ -5199,7 +5199,10 @@ class MainWindow(QMainWindow):
         self.api_key_locked = True
         self.photoroom_api_key_locked = True
         self.secret_settings = {key: "" for key in SECRET_CONFIG_KEYS}
-        self.credential_store = EnvCredentialStore(ENV_FILE)
+        self.credential_store = ProviderCredentialStore(
+            ENV_FILE,
+            os.path.join(USER_DATA_DIR, "fal_api_key.bin"),
+        )
         self.credential_store_error = ""
         self.is_updating_prompts_table = False
         self.settings_save_timer = QTimer(self)
