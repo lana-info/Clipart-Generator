@@ -39,6 +39,7 @@ from v3_prompt_generator import PromptGeneratorError
 from v3_processing_editor import ProcessingPipelineEditor
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
+from workflow_definitions import workflow_for_mode
 
 
 _PINTEREST_REFERENCE_MODEL_BY_TEXT = {
@@ -174,6 +175,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
             description="Тот же порядок обработки, что и в режимах Clipart и Обработка.",
             include_cleanup=True,
             require_operation=False,
+            allowed_operations=workflow_for_mode(ProjectMode.PINTEREST).processing_operations,
             tokens=tokens,
         )
         # Processing is a separate wizard step shared with the other modes.
@@ -309,6 +311,7 @@ class PinterestProcessingPage(ProcessingPipelineEditor):
             description="Единые настройки обработки изображений для Pinterest.",
             include_cleanup=True,
             require_operation=False,
+            allowed_operations=workflow_for_mode(ProjectMode.PINTEREST).processing_operations,
             tokens=tokens,
         )
 

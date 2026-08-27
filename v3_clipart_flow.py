@@ -93,6 +93,7 @@ from v3_provider_registry import (
     provider_visible_controls,
     upscale_model_preserves_alpha,
 )
+from workflow_definitions import workflow_for_mode
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
 from model_catalog import (
@@ -2964,6 +2965,7 @@ class _SharedClipartProcessingPage(ProcessingPipelineEditor):
             description="Единые настройки обработки изображений для всех режимов.",
             include_cleanup=True,
             require_operation=False,
+            allowed_operations=workflow_for_mode(ProjectMode.CLIPART).processing_operations,
             tokens=tokens,
         )
         self.state = state

@@ -1,5 +1,11 @@
 import unittest
 
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PyQt6.QtWidgets import QApplication
+
 from v3_project_state import ProjectMode, StepId
 from workflow_definitions import (
     WorkflowDefinition,
@@ -7,9 +13,14 @@ from workflow_definitions import (
     WorkflowStepSpec,
     workflow_for_mode,
 )
+from v3_processing_editor import ProcessingPipelineEditor
 
 
 class WorkflowDefinitionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
     def test_clipart_and_pinterest_have_different_processing_surfaces(self):
         clipart = workflow_for_mode(ProjectMode.CLIPART)
         pinterest = workflow_for_mode(ProjectMode.PINTEREST)
@@ -69,6 +80,27 @@ class WorkflowDefinitionTests(unittest.TestCase):
         self.assertFalse(pinterest.allows_processing_operation("trim"))
         self.assertFalse(pinterest.allows_processing_operation("remove_background"))
         self.assertTrue(pinterest.allows_processing_operation("upscale_before"))
+
+    def test_processing_editor_hides_operations_not_in_workflow_profile(self):
+        pinterest = workflow_for_mode(ProjectMode.PINTEREST)
+        owner = type("Owner", (), {})()
+        owner.operations = __import__("v3_project_state").ImageOperationData()
+        editor = ProcessingPipelineEditor(
+            owner,
+            lambda: None,
+            title="Processing",
+            description="Test",
+            include_cleanup=True,
+            allowed_operations=pinterest.processing_operations,
+        )
+        editor.show()
+        self.app.processEvents()
+
+        self.assertTrue(editor.operation_widgets["upscale_before"].isVisible())
+        self.assertFalse(editor.operation_widgets["remove_background"].isVisible())
+        self.assertFalse(editor.operation_widgets["trim"].isVisible())
+        self.assertFalse(editor.cleanup_checkbox.isVisible())
+        editor.close()
 
 
 if __name__ == "__main__":

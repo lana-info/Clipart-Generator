@@ -250,6 +250,7 @@ class ProcessingPipelineEditor(QScrollArea):
         description: str,
         include_cleanup: bool,
         require_operation: bool = True,
+        allowed_operations: Sequence[str] | None = None,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__()
@@ -276,6 +277,9 @@ class ProcessingPipelineEditor(QScrollArea):
         self.changed = changed
         self.include_cleanup = include_cleanup
         self.require_operation = require_operation
+        self.allowed_operations = (
+            None if allowed_operations is None else frozenset(allowed_operations)
+        )
         self.operation_widgets: dict[str, QWidget] = {}
         operations = state_owner.operations
 
@@ -461,6 +465,7 @@ class ProcessingPipelineEditor(QScrollArea):
 
         if include_cleanup:
             cleanup = QGroupBox("Очистка следов ИИ")
+            self.cleanup_group = cleanup
             cleanup_form = QFormLayout(cleanup)
             self.cleanup_checkbox = QCheckBox("Очистить служебные данные")
             self.cleanup_checkbox.setAccessibleName("Очистить служебные данные")
@@ -487,6 +492,7 @@ class ProcessingPipelineEditor(QScrollArea):
             self.cleanup_checkbox.toggled.connect(self._sync)
         else:
             self.cleanup_checkbox = None
+            self.cleanup_group = None
 
         self.pipeline_label = QLabel()
         self.pipeline_label.setWordWrap(True)
@@ -696,7 +702,71 @@ class ProcessingPipelineEditor(QScrollArea):
         }
         for name, visible in visibility.items():
             self._set_control_visible(name, visible)
+        self._apply_workflow_visibility()
         self._refresh_model_compatibility()
+
+    def _apply_workflow_visibility(self) -> None:
+        """Apply the active workflow's operation surface after provider rules."""
+        if self.allowed_operations is None:
+            return
+        operations = self.state_owner.operations
+        operation_names = (
+            "visible_mark_cleanup",
+            "invisible_watermark_cleanup",
+            "upscale_before",
+            "unsharp",
+            "remove_background",
+            "upscale_after",
+            "edge_shrink",
+            "trim",
+            "export_300_dpi",
+            *self._CLEANUP_FIELDS,
+        )
+        for name in operation_names:
+            allowed = name in self.allowed_operations or (
+                name in self._CLEANUP_FIELDS
+                and "metadata_cleanup" in self.allowed_operations
+            )
+            self._set_control_visible(name, allowed)
+            if not allowed and hasattr(operations, name):
+                setattr(operations, name, False)
+
+        operation_for_control = {
+            "upscale_before_provider": "upscale_before",
+            "upscale_after_provider": "upscale_after",
+            "remove_background_provider": "remove_background",
+            "edge_shrink_pixels": "edge_shrink",
+            "trim_mode": "trim",
+            "kie_upscale_model": "upscale_before",
+            "kie_upscale_after_model": "upscale_after",
+            "upscale_factor": "upscale_before",
+            "local_realesrgan_profile": "upscale_before",
+            "local_realesrgan_scale": "upscale_before",
+            "local_realesrgan_after_scale": "upscale_after",
+            "kie_remove_bg_model": "remove_background",
+            "local_rembg_profile": "remove_background",
+            "local_rembg_model": "remove_background",
+            "local_rembg_edge_quality": "remove_background",
+            "local_ben2_refine_foreground": "remove_background",
+            "local_ben2_alpha_threshold": "remove_background",
+            "local_ben2_edge_softness": "remove_background",
+            "local_ben2_corner_radius": "remove_background",
+            "unsharp_amount": "unsharp",
+            "unsharp_radius": "unsharp",
+            "unsharp_threshold": "unsharp",
+        }
+        for control_name, operation_name in operation_for_control.items():
+            provider_visible = self.operation_widgets.get(control_name)
+            self._set_control_visible(
+                control_name,
+                operation_name in self.allowed_operations
+                and (provider_visible is None or not provider_visible.isHidden()),
+            )
+        cleanup_visible = "metadata_cleanup" in self.allowed_operations
+        if self.cleanup_group is not None:
+            self.cleanup_group.setVisible(cleanup_visible)
+        if self.cleanup_checkbox is not None:
+            self.cleanup_checkbox.setVisible(cleanup_visible)
 
     def _refresh_model_compatibility(self) -> None:
         operations = self.state_owner.operations

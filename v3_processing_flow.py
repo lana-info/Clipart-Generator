@@ -64,6 +64,7 @@ from v3_project_state import (
 )
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
+from workflow_definitions import workflow_for_mode
 from config_schema import resolve_output_directory
 from processing_contract import pipeline_steps as _pure_pipeline_steps
 
@@ -1036,6 +1037,7 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
             title="Обработка изображений",
             description="Операции выполняются сверху вниз; рецепт можно полностью изменить.",
             include_cleanup=True,
+            allowed_operations=workflow_for_mode(ProjectMode.PROCESSING).processing_operations,
             tokens=tokens,
         )
         self.project_state = state
