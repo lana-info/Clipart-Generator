@@ -1439,7 +1439,8 @@ Fal adapter, `config_schema.py`, `v3_api_settings.py`.
 
 ### NEXT-TASK-008 — Подключить Fal.ai generation и image-to-image
 
-Status: Planned
+Status: In progress — text-to-image endpoint connected; image-to-image and
+reference upload remain
 
 Зависимость: NEXT-TASK-007.
 

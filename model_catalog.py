@@ -30,6 +30,7 @@ class ModelSpec:
 
 
 _MODEL_ROWS = (
+    ("fal-ai/flux/schnell", "Fal.ai — FLUX Schnell", "text_to_image"),
     ("gpt4o-image", "GPT‑4o Image", "text_to_image"),
     ("gpt-image/1.5-text-to-image", "GPT Image 1.5 (Text→Image)", "text_to_image"),
     ("gpt-image-2", "GPT Image 2", "text_to_image"),
@@ -58,6 +59,9 @@ _MODEL_ROWS = (
 )
 
 _CAPABILITIES = {
+    # Fal pricing and endpoint-specific image-size capabilities are resolved
+    # separately; leaving these fields open prevents fabricated estimates.
+    "fal-ai/flux/schnell": {"reference_compatible_text": False},
     "gpt-image/1.5-text-to-image": {"ratios": {"1:1", "2:3", "3:2"}, "qualities": {"medium", "high"}, "pricing": "4 / 22 credits ($0.02 / $0.11)"},
     "gpt-image/1.5-image-to-image": {"ratios": {"1:1", "2:3", "3:2"}, "qualities": {"medium", "high"}, "pricing": "4 / 22 credits ($0.02 / $0.11)"},
     "gpt-image-2": {"ratios": {"auto", "1:1", "3:2", "2:3", "4:3", "3:4", "5:4", "4:5", "16:9", "9:16", "2:1", "1:2", "3:1", "1:3", "21:9", "9:21"}, "resolutions": {"1K", "2K", "4K"}, "pricing": {"1K": "6 credits / $0.03", "2K": "10 credits / $0.05", "4K": "16 credits / $0.08"}, "reference_compatible_text": True},
@@ -121,7 +125,7 @@ MODEL_SPECS = MappingProxyType({
 GENERATION_MODELS = tuple(MappingProxyType({"id": i, "label": l, "type": t}) for i, l, t in _MODEL_ROWS)
 GENERATION_MODEL_META = MappingProxyType({model_id: next(row for row in GENERATION_MODELS if row["id"] == model_id) for model_id in MODEL_SPECS})
 SUPPORTED_GENERATION_MODEL_IDS = frozenset(row[0] for row in _MODEL_ROWS)
-VISIBLE_GENERATION_MODEL_IDS = frozenset({"gpt-image/1.5-text-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "gpt-image/1.5-image-to-image", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
+VISIBLE_GENERATION_MODEL_IDS = frozenset({"fal-ai/flux/schnell", "gpt-image/1.5-text-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "gpt-image/1.5-image-to-image", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
 REFERENCE_MODEL_SHORTLIST = frozenset({"gpt-image/1.5-image-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
 PROCESSING_PRICING = MappingProxyType({"topaz/image-upscale": "40 credits / $0.20", "recraft/crisp-upscale": "0.5 credits / $0.0025", "recraft/remove-background": "1 credit / $0.005"})
 

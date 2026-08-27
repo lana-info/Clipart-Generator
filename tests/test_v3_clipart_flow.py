@@ -810,6 +810,14 @@ class V3ClipartFlowTests(unittest.TestCase):
             with self.assertRaisesRegex(ClipartFlowError, "Максимум"):
                 build_clipart_run_request(state, {"kie_api_key": "test-key"})
 
+    def test_fal_model_requires_fal_key_instead_of_kie_key(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-fal-guard-") as temp:
+            state = self.make_state(temp)
+            state.clipart.generation.model = "fal-ai/flux/schnell"
+            request = build_clipart_run_request(state, {"kie_api_key": "test-key"})
+
+        self.assertEqual(missing_runtime_requirements(request), ("Fal.ai API Key",))
+
     def test_oversized_local_reference_is_rejected_when_attached(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-reference-size-") as temp:
             reference_path = Path(temp) / "too-large.png"

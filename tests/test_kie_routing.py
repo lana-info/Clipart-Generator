@@ -69,6 +69,42 @@ class KieRoutingTests(unittest.TestCase):
         messages = "\n".join([*progress, *finished])
         self.assertNotIn(DUMMY_KIE_KEY, messages)
 
+    def test_fal_generation_uses_queue_adapter_and_returns_image_url(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                fal_api_key="fal-test-secret",
+                text_generation_model="fal-ai/flux/schnell",
+                reference_generation_model="gpt-image/1.5-image-to-image",
+            ),
+            generated_prompts=[{"prompt": "a fox", "references": []}],
+        )
+        calls = {}
+
+        class FakeFalClient:
+            def __init__(self, config):
+                calls["model"] = config.model_id
+
+            def submit_task(self, request):
+                calls["request"] = request
+                return {"request_id": "fal-request-1"}
+
+            def wait_for_result(self, request_id, **_kwargs):
+                calls["request_id"] = request_id
+                return {
+                    "request_id": request_id,
+                    "result": {"images": [{"url": "https://cdn.example/fox.png"}]},
+                }
+
+        with patch.object(main, "FalClient", FakeFalClient):
+            result = worker._kie_generate_image("a fox")
+
+        self.assertEqual(result, "https://cdn.example/fox.png")
+        self.assertEqual(calls["model"], "fal-ai/flux/schnell")
+        self.assertEqual(calls["request_id"], "fal-request-1")
+        self.assertEqual(calls["request"].provider_id, "fal")
+
     def test_topaz_uses_current_model_and_documented_payload(self):
         worker = main.WorkerThread(
             "mode2_process",

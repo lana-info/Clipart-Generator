@@ -81,6 +81,8 @@ from provider_diagnostics import (
     count_provider_results,
     inspect_image_metadata as inspect_diagnostic_image,
 )
+from fal_provider import FalClient, FalConfig, FalProviderError, fal_image_url
+from provider_contract import ProviderTaskRequest
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
 from network_security import HttpsOnlyRedirectHandler as SharedHttpsOnlyRedirectHandler
@@ -966,6 +968,7 @@ class WorkerThread(QThread):
 
         self.kie_api_key = settings.get("kie_api_key", "").strip()
         self.photoroom_api_key = settings.get("photoroom_api_key", "").strip()
+        self.fal_api_key = settings.get("fal_api_key", "").strip()
         self.kie_upload_path = settings.get("kie_upload_path", "clipart-generator")
         self.text_generation_model = settings.get(
             "text_generation_model",
@@ -989,6 +992,9 @@ class WorkerThread(QThread):
         self.photoroom_concurrency = normalize_provider_concurrency(
             settings.get("photoroom_concurrency")
         )
+        self.fal_concurrency = normalize_provider_concurrency(
+            settings.get("fal_concurrency"),
+        )
         # Compatibility name for the generation-only executor. The same value
         # now governs every KIE operation in the run.
         self.generation_concurrency = self.kie_concurrency
@@ -996,6 +1002,7 @@ class WorkerThread(QThread):
         self._photoroom_slots = threading.BoundedSemaphore(
             self.photoroom_concurrency
         )
+        self._fal_slots = threading.BoundedSemaphore(self.fal_concurrency)
         try:
             configured_interval = float(settings.get("generation_launch_interval", 1.0))
         except (TypeError, ValueError):
@@ -1168,6 +1175,7 @@ class WorkerThread(QThread):
         slots = {
             "kie": self._kie_slots,
             "photoroom": self._photoroom_slots,
+            "fal": self._fal_slots,
         }[provider_name]
         acquired = False
         try:
@@ -1314,7 +1322,10 @@ class WorkerThread(QThread):
     def _mode1_generate(self, process_generated, emit_final=True):
         self.progress.emit("Mode 1: Генерация из промптов")
         self.progress.emit(f"Рабочая папка: {self.work_dir}")
-        if not self.kie_api_key:
+        if self._uses_fal_generation():
+            if not self.fal_api_key:
+                raise ValueError("Не указан Fal.ai API Key")
+        if self._uses_kie_generation() and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
         if process_generated and self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
             raise ValueError("Не указан PhotoRoom API Key")
@@ -3952,9 +3963,19 @@ class WorkerThread(QThread):
         return urls
 
     def _kie_generate_image(self, prompt, references=None):
+        reference_items = split_references(references or [])
+        normalized_model = self._select_generation_model(reference_items)
+        if normalized_model.startswith("fal-ai/"):
+            with self._provider_lease("fal"):
+                self._set_provider_diagnostic_context(
+                    "generation", "fal", normalized_model
+                )
+                if reference_items:
+                    raise RuntimeError(
+                        "Выбранный Fal.ai generation endpoint пока не поддерживает локальные референсы"
+                    )
+                return self._fal_generate_image(prompt, normalized_model)
         with self._provider_lease("kie"):
-            reference_items = split_references(references or [])
-            normalized_model = self._select_generation_model(reference_items)
             self._set_provider_diagnostic_context(
                 "generation",
                 "kie",
@@ -3992,6 +4013,58 @@ class WorkerThread(QThread):
                 prompt,
                 reference_urls=reference_urls,
             )
+
+    def _uses_fal_generation(self):
+        return any(model.startswith("fal-ai/") for model in self._generation_models_in_use())
+
+    def _uses_kie_generation(self):
+        return any(not model.startswith("fal-ai/") for model in self._generation_models_in_use())
+
+    def _generation_models_in_use(self):
+        entries = self.generated_prompts or []
+        if not entries:
+            return {str(self.text_generation_model or "").strip()}
+        models = set()
+        for entry in entries:
+            references = split_references(entry.get("references", [])) if isinstance(entry, dict) else []
+            model = self.reference_generation_model if references else self.text_generation_model
+            models.add(str(model or "").strip())
+        return models
+
+    def _fal_generate_image(self, prompt, model_id):
+        client = FalClient(
+            FalConfig(
+                api_key=self.fal_api_key,
+                model_id=model_id,
+                timeout_seconds=max(10.0, float(self.timeout)),
+            )
+        )
+        request = ProviderTaskRequest(
+            provider_id="fal",
+            operation="generation",
+            model_id=model_id,
+            input_payload={"prompt": str(prompt or "")},
+        )
+        submitted = client.submit_task(request)
+        request_id = str(submitted.get("request_id") or "").strip()
+        self.progress.emit(f"  Fal.ai Request ID: {request_id}")
+        self._emit_diagnostic(
+            "provider_task_submitted",
+            provider="fal",
+            model=model_id,
+            task=request_id,
+            provider_state="queued",
+        )
+        completed = client.wait_for_result(
+            request_id,
+            timeout_seconds=float(self.generation_wait_timeout),
+            poll_interval_seconds=float(self.status_poll_interval),
+        )
+        self._ensure_running()
+        try:
+            return fal_image_url(completed.get("result"))
+        except FalProviderError:
+            raise
 
     def _normalize_model_ratio(self, model_name, ratio, has_references=False):
         allowed = set(ratios_for_mode(model_name, has_references))
@@ -4160,6 +4233,8 @@ class WorkerThread(QThread):
         for entry in GENERATION_MODELS:
             model_id = entry.get("id")
             if model_id not in VISIBLE_GENERATION_MODEL_IDS:
+                continue
+            if str(model_id).startswith("fal-ai/"):
                 continue
             if entry.get("type") == required_type and model_id in SUPPORTED_GENERATION_MODEL_IDS:
                 return model_id
@@ -5287,6 +5362,7 @@ class MainWindow(QMainWindow):
             "generation_concurrency": 3,
             "kie_concurrency": 3,
             "photoroom_concurrency": 3,
+            "fal_concurrency": 1,
             "generation_launch_interval": 1.0,
             "generation_wait_timeout": 300,
             "status_poll_interval": 20,

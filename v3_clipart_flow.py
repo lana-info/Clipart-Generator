@@ -805,8 +805,21 @@ def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
             seen.add(label)
             missing.append(label)
 
-    if request.generated_prompts and not str(request.settings.get("kie_api_key") or "").strip():
-        add_missing("KIE API Key")
+    if request.generated_prompts:
+        generation_models: set[str] = set()
+        for entry in request.generated_prompts:
+            model_key = (
+                "reference_generation_model"
+                if entry.get("references")
+                else "text_generation_model"
+            )
+            generation_models.add(str(request.settings.get(model_key) or "").strip())
+        if any(model.startswith("fal-ai/") for model in generation_models):
+            if not str(request.settings.get("fal_api_key") or "").strip():
+                add_missing("Fal.ai API Key")
+        if any(not model.startswith("fal-ai/") for model in generation_models):
+            if not str(request.settings.get("kie_api_key") or "").strip():
+                add_missing("KIE API Key")
 
     for enabled_field, provider_field in (
         ("upscale", "upscale_provider"),
