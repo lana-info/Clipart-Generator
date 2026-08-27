@@ -528,7 +528,12 @@ def _worker_settings(
     source = runtime_settings or {}
     settings = {
         name: value
-        for name in ("kie_api_key", "photoroom_api_key", "local_realesrgan_dir")
+        for name in (
+            "kie_api_key",
+            "photoroom_api_key",
+            "fal_api_key",
+            "local_realesrgan_dir",
+        )
         if isinstance((value := source.get(name)), str)
     }
     settings.update(RuntimeData.from_dict(state.runtime.to_dict()).to_dict())

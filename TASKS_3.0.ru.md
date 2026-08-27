@@ -1397,7 +1397,7 @@ Verification: contract tests и review границы между run plan, adapt
 ### NEXT-TASK-006 — Проверить официальный Fal.ai API и выбрать модели
 
 Status: In progress — official queue contract and initial endpoint profiles
-recorded; pricing/live validation remains
+recorded; pricing/live validation remains. Profiles are not enabled by default
 
 Acceptance:
 
