@@ -968,6 +968,41 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertNotIn("ориентировочно", visible_copy)
         self.assertNotIn("стоимость", visible_copy)
 
+    def test_generation_page_hides_reference_settings_without_references(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
+
+        page = ClipartGenerationPage(state, lambda: None)
+
+        self.assertEqual(
+            page.primary_scope_label.text(),
+            "Промпты без референсов · 2",
+        )
+        self.assertTrue(page.reference_advanced.isHidden())
+        self.assertFalse(page.reference_advanced.is_expanded)
+
+    def test_generation_page_labels_and_shows_reference_settings_when_needed(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [
+            PromptEntry("Fox"),
+            PromptEntry("Bear", ["D:/references/bear.png"]),
+            PromptEntry("Rabbit", ["D:/references/rabbit.png"]),
+        ]
+
+        page = ClipartGenerationPage(state, lambda: None)
+
+        self.assertEqual(
+            page.primary_scope_label.text(),
+            "Промпты без референсов · 1",
+        )
+        self.assertFalse(page.reference_advanced.isHidden())
+        self.assertTrue(page.reference_advanced.is_expanded)
+        self.assertFalse(page.reference_advanced.toggle_button.isHidden())
+        self.assertEqual(
+            page.reference_advanced.toggle_button.text(),
+            "Промпты с референсами · 2",
+        )
+
     def test_final_review_separates_generation_and_processing_costs(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry(f"Prompt {index}") for index in range(80)]

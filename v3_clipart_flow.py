@@ -2262,6 +2262,10 @@ class ClipartGenerationPage(_ScrollableStepPage):
             include_shared_reference_text=self.allow_shared_text_models,
         )
         self.reference_options = generation_model_options(references=True)
+        self.primary_scope_label = QLabel()
+        self.primary_scope_label.setProperty("v3Selection", True)
+        self.primary_scope_label.setAccessibleName("Промпты без референсов")
+        self.add_widget(self.primary_scope_label)
         form = QFormLayout()
         self.model_combo = QComboBox()
         self.ratio_combo = QComboBox()
@@ -2283,9 +2287,8 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.model_capability_label.setProperty("v3Small", True)
         self.add_widget(self.model_capability_label)
 
-        advanced = AdvancedSection("Генерация по референсам", tokens=tokens)
+        advanced = AdvancedSection("Промпты с референсами", tokens=tokens)
         self.reference_advanced = advanced
-        advanced.toggle_button.setVisible(False)
         advanced.set_expanded(True)
         self.reference_capability_label = QLabel()
         self.reference_capability_label.setWordWrap(True)
@@ -2427,11 +2430,24 @@ class ClipartGenerationPage(_ScrollableStepPage):
             self.changed()
 
     def refresh_from_state(self) -> None:
-        has_references = any(
-            entry.references for entry in getattr(self.state.clipart, "prompts", [])
+        prompts = getattr(self.state.clipart, "prompts", [])
+        reference_count = sum(bool(entry.references) for entry in prompts)
+        text_count = len(prompts) - reference_count
+        has_references = reference_count > 0
+        self.primary_scope_label.setText(
+            f"Промпты без референсов · {text_count}"
+        )
+        self.primary_scope_label.setAccessibleDescription(
+            f"Настройки применяются к промптам без референсов: {text_count}"
+        )
+        self.reference_advanced.toggle_button.setText(
+            f"Промпты с референсами · {reference_count}"
+        )
+        self.reference_advanced.toggle_button.setAccessibleName(
+            f"Промпты с референсами: {reference_count}"
         )
         self.reference_advanced.set_expanded(has_references)
-        self.reference_advanced.setVisible(True)
+        self.reference_advanced.setVisible(has_references)
         current = self._option_for_combo(self.model_combo)
         self.model_capability_label.setText(_capability_summary(current))
         self._sync(mark=False)
