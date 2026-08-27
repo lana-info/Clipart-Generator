@@ -4,6 +4,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -23,6 +24,119 @@ from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS, ProviderCredentialStor
 from provider_clients import check_kie_balance, check_photoroom_balance
 from app_identity import APP_NAME
 from runtime_settings import PROVIDER_CONCURRENCY_CHOICES, normalize_provider_concurrency
+
+
+def _fal_platform_request(
+    api_key: str,
+    path: str,
+    *,
+    method: str = "GET",
+    params: Mapping[str, str] | None = None,
+    payload: Mapping[str, Any] | None = None,
+    timeout: float = 15.0,
+) -> dict[str, Any]:
+    key = str(api_key or "").strip()
+    if not key:
+        raise ValueError("Введите Fal.ai API Key")
+    url = f"https://api.fal.ai/v1/{path.lstrip('/')}"
+    if params:
+        from urllib.parse import urlencode
+
+        url += "?" + urlencode(params)
+    body = None if payload is None else json.dumps(dict(payload)).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Authorization": f"Key {key}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        method=method,
+    )
+    try:
+        opener = urllib.request.build_opener()
+        with opener.open(request, timeout=timeout) as response:
+            raw = response.read(512 * 1024).decode("utf-8", "replace")
+    except urllib.error.HTTPError as error:
+        if error.code in {401, 403}:
+            raise RuntimeError("Fal.ai отклонил ключ или у ключа недостаточно прав") from error
+        if error.code == 429:
+            raise RuntimeError("Fal.ai временно ограничил частоту запросов") from error
+        raise RuntimeError(f"Fal.ai не вернул данные ({error.code})") from error
+    except (urllib.error.URLError, OSError) as error:
+        raise RuntimeError("Не удалось обратиться к Fal.ai") from error
+    try:
+        result = json.loads(raw)
+    except (UnicodeError, ValueError) as error:
+        raise RuntimeError("Fal.ai вернул неподдерживаемый ответ") from error
+    if not isinstance(result, dict):
+        raise RuntimeError("Fal.ai вернул неожиданный формат ответа")
+    return result
+
+
+def check_fal_balance(api_key: str, timeout: float = 15.0) -> str:
+    payload = _fal_platform_request(
+        api_key,
+        "account/billing",
+        params={"expand": "credits"},
+        timeout=timeout,
+    )
+    credits = payload.get("credits")
+    if not isinstance(credits, Mapping) or "current_balance" not in credits:
+        raise RuntimeError("Fal.ai вернул баланс в неподдерживаемом формате")
+    currency = str(credits.get("currency") or "USD").upper()
+    return f"Баланс Fal.ai: {credits['current_balance']} {currency}"
+
+
+def fetch_fal_pricing(
+    api_key: str,
+    endpoint_ids: str | list[str] | tuple[str, ...],
+    timeout: float = 15.0,
+) -> tuple[dict[str, Any], ...]:
+    if isinstance(endpoint_ids, str):
+        endpoint_ids = (endpoint_ids,)
+    normalized = tuple(str(endpoint).strip() for endpoint in endpoint_ids if str(endpoint).strip())
+    if not normalized or len(normalized) > 50:
+        raise ValueError("Укажите от 1 до 50 Fal.ai endpoint ID")
+    payload = _fal_platform_request(
+        api_key,
+        "models/pricing",
+        params={"endpoint_id": ",".join(normalized)},
+        timeout=timeout,
+    )
+    prices = payload.get("prices")
+    if not isinstance(prices, list):
+        raise RuntimeError("Fal.ai вернул цены в неподдерживаемом формате")
+    return tuple(item for item in prices if isinstance(item, dict))
+
+
+def estimate_fal_cost(
+    api_key: str,
+    endpoint_quantities: Mapping[str, int],
+    timeout: float = 15.0,
+) -> tuple[float, str]:
+    quantities = {
+        str(endpoint).strip(): int(quantity)
+        for endpoint, quantity in endpoint_quantities.items()
+        if str(endpoint).strip() and int(quantity) > 0
+    }
+    if not quantities:
+        raise ValueError("Укажите количество Fal.ai вызовов")
+    payload = _fal_platform_request(
+        api_key,
+        "models/pricing/estimate",
+        method="POST",
+        payload={
+            "estimate_type": "historical_api_price",
+            "endpoints": {endpoint: {"call_quantity": quantity} for endpoint, quantity in quantities.items()},
+        },
+        timeout=timeout,
+    )
+    try:
+        return float(payload["total_cost"]), str(payload.get("currency") or "USD").upper()
+    except (KeyError, TypeError, ValueError) as error:
+        raise RuntimeError("Fal.ai вернул оценку стоимости в неподдерживаемом формате") from error
 
 
 def user_env_path() -> Path:
@@ -144,7 +258,12 @@ class ApiSettingsDialog(QDialog):
         self.photo_balance_button.clicked.connect(self._check_photoroom_balance)
         photo_row.addWidget(self.photo_balance_button)
         form.addRow("PhotoRoom API Key", photo_row)
-        form.addRow("Fal.ai API Key", self.fal_edit)
+        fal_row = QHBoxLayout()
+        fal_row.addWidget(self.fal_edit)
+        self.fal_balance_button = V3Button("Проверить баланс", ButtonVariant.SECONDARY)
+        self.fal_balance_button.clicked.connect(self._check_fal_balance)
+        fal_row.addWidget(self.fal_balance_button)
+        form.addRow("Fal.ai API Key", fal_row)
         form.addRow("RunPod API Key", self.runpod_key_edit)
         form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
         self.kie_concurrency_combo = QComboBox()
@@ -189,6 +308,12 @@ class ApiSettingsDialog(QDialog):
     def _check_photoroom_balance(self) -> None:
         try:
             self.status.setText(check_photoroom_balance(self.photo_edit.text()))
+        except (RuntimeError, ValueError) as error:
+            self.status.setText(str(error))
+
+    def _check_fal_balance(self) -> None:
+        try:
+            self.status.setText(check_fal_balance(self.fal_edit.text()))
         except (RuntimeError, ValueError) as error:
             self.status.setText(str(error))
 
