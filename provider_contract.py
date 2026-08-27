@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 
-MAX_PROVIDER_PAYLOAD_BYTES = 1_000_000
+MAX_PROVIDER_PAYLOAD_BYTES = 16 * 1024 * 1024
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
 
 

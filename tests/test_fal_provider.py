@@ -1,4 +1,5 @@
 import json
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ from fal_provider import (
     FalConfig,
     FalProviderError,
     fal_image_input,
+    fal_image_data_uri,
     fal_image_url,
     fal_status_kind,
 )
@@ -73,6 +75,18 @@ class FalProviderTests(unittest.TestCase):
         )
         with self.assertRaises(FalProviderError):
             fal_image_url({"images": [{"url": "http://cdn.example/image.png"}]})
+
+    def test_local_image_data_uri_is_bounded_and_uses_image_mime_type(self):
+        with tempfile.NamedTemporaryFile(suffix=".png") as handle:
+            handle.write(b"png-bytes")
+            handle.flush()
+            uri = fal_image_data_uri(handle.name)
+        self.assertTrue(uri.startswith("data:image/png;base64,"))
+        with tempfile.NamedTemporaryFile(suffix=".txt") as handle:
+            handle.write(b"text")
+            handle.flush()
+            with self.assertRaises(FalProviderError):
+                fal_image_data_uri(handle.name)
 
     def test_submit_uses_queue_endpoint_and_key_auth(self):
         opener = _Opener(_Response({"request_id": "req-123", "queue_position": 2}))

@@ -105,6 +105,46 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(calls["request_id"], "fal-request-1")
         self.assertEqual(calls["request"].provider_id, "fal")
 
+    def test_fal_upscale_processing_pass_uses_fal_endpoint_and_downloads_result(self):
+        with tempfile.TemporaryDirectory(prefix="fal-upscale-") as temp:
+            source = Path(temp) / "source.png"
+            create_rgb_source(source)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret", fal_concurrency=1),
+            )
+            calls = {}
+            worker._fal_process_image = types.MethodType(
+                lambda _self, image_url, **kwargs: calls.update(
+                    {"image_url": image_url, **kwargs}
+                ) or "https://cdn.example/upscaled.png",
+                worker,
+            )
+            worker._download_file = types.MethodType(
+                lambda _self, _url, output_path: Path(output_path).write_bytes(b"result"),
+                worker,
+            )
+
+            output_path, output_url, local_result = worker._run_upscale_pass(
+                str(source),
+                None,
+                temp,
+                1,
+                "gen",
+                "upscaled_before",
+                "fal",
+                2,
+                "ignored",
+            )
+
+        self.assertEqual(calls["operation"], "upscale")
+        self.assertEqual(calls["model_id"], "fal-ai/esrgan")
+        self.assertEqual(calls["scale"], 2)
+        self.assertTrue(output_path.endswith(".png"))
+        self.assertEqual(output_url, "https://cdn.example/upscaled.png")
+        self.assertFalse(local_result)
+
     def test_topaz_uses_current_model_and_documented_payload(self):
         worker = main.WorkerThread(
             "mode2_process",

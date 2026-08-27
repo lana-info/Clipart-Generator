@@ -360,10 +360,13 @@ def generation_model_options(
     *,
     references: bool,
     include_shared_reference_text: bool = False,
+    include_fal_models: bool = True,
 ) -> tuple[GenerationModelOption, ...]:
     options, _ = _legacy_catalog()
     result: list[GenerationModelOption] = []
     for option in options.values():
+        if not include_fal_models and option.model_id.startswith("fal-ai/"):
+            continue
         if references:
             allowed = option.model_type in {"image_to_image", "edit"}
             allowed = allowed or option.reference_compatible_text
@@ -829,10 +832,20 @@ def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
         if not request.settings.get(enabled_field):
             continue
         provider_id = str(request.settings.get(provider_field) or "")
-        api_key_name = "photoroom_api_key" if provider_id == "photoroom" else "kie_api_key"
+        api_key_name = (
+            "photoroom_api_key"
+            if provider_id == "photoroom"
+            else "fal_api_key"
+            if provider_id == "fal"
+            else "kie_api_key"
+        )
         if provider_requires_api_key(provider_id) and not str(request.settings.get(api_key_name) or "").strip():
             add_missing(
-                "KIE API Key" if api_key_name == "kie_api_key" else "PhotoRoom API Key"
+                "KIE API Key"
+                if api_key_name == "kie_api_key"
+                else "PhotoRoom API Key"
+                if api_key_name == "photoroom_api_key"
+                else "Fal.ai API Key"
             )
     local_upscale = (
         request.settings.get("upscale")
@@ -2331,6 +2344,7 @@ class PromptWorkspacePage(_ScrollableStepPage):
 
 class ClipartGenerationPage(_ScrollableStepPage):
     allow_shared_text_models = True
+    allow_fal_models = True
     def __init__(
         self,
         state: ProjectState,
@@ -2348,8 +2362,12 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.text_options = generation_model_options(
             references=False,
             include_shared_reference_text=self.allow_shared_text_models,
+            include_fal_models=self.allow_fal_models,
         )
-        self.reference_options = generation_model_options(references=True)
+        self.reference_options = generation_model_options(
+            references=True,
+            include_fal_models=self.allow_fal_models,
+        )
         self.primary_scope_label = QLabel()
         self.primary_scope_label.setProperty("v3Selection", True)
         self.primary_scope_label.setAccessibleName("Промпты без референсов")

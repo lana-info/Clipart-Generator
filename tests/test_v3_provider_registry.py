@@ -25,7 +25,7 @@ class ProviderRegistryTests(unittest.TestCase):
     def test_known_provider_ids_and_specs(self) -> None:
         self.assertEqual(
             known_provider_ids(),
-            ("kie", "photoroom", "local_rembg", "local_ben2", "local_realesrgan"),
+            ("fal", "kie", "photoroom", "local_rembg", "local_ben2", "local_realesrgan"),
         )
         self.assertEqual(provider_label("kie"), "KIE")
         self.assertEqual(provider_label("photoroom"), "PhotoRoom")
@@ -53,12 +53,13 @@ class ProviderRegistryTests(unittest.TestCase):
     def test_field_options_are_shared_and_deterministic(self) -> None:
         self.assertEqual(
             processing_provider_options("upscale_before_provider"),
-            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            (("KIE", "kie"), ("Fal.ai", "fal"), ("Local Real-ESRGAN", "local_realesrgan")),
         )
         self.assertEqual(
             processing_provider_options("remove_background_provider"),
             (
                 ("KIE", "kie"),
+                ("Fal.ai", "fal"),
                 ("PhotoRoom", "photoroom"),
                 ("Local rembg", "local_rembg"),
             ),

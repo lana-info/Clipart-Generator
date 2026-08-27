@@ -122,6 +122,10 @@ class PinterestPromptInputPage(ClipartPromptInputPage):
 
 class PinterestFormatModelPage(ClipartGenerationPage):
     allow_shared_text_models = True
+    # Fal.ai generation is introduced for Clipart first; Pinterest remains
+    # on its deterministic reference-compatible catalog until its own module
+    # contract is implemented.
+    allow_fal_models = False
 
     def __init__(
         self,

@@ -81,7 +81,13 @@ from provider_diagnostics import (
     count_provider_results,
     inspect_image_metadata as inspect_diagnostic_image,
 )
-from fal_provider import FalClient, FalConfig, FalProviderError, fal_image_url
+from fal_provider import (
+    FalClient,
+    FalConfig,
+    FalProviderError,
+    fal_image_data_uri,
+    fal_image_url,
+)
 from provider_contract import ProviderTaskRequest
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
@@ -1751,6 +1757,8 @@ class WorkerThread(QThread):
 
         if (self._uses_any_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
+        if (self._uses_any_fal_upscale() or self._uses_fal_remove_bg()) and not self.fal_api_key:
+            raise ValueError("Не указан Fal.ai API Key")
         if self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
             raise ValueError("Не указан PhotoRoom API Key")
 
@@ -2135,16 +2143,25 @@ class WorkerThread(QThread):
         return self.upscale and self.upscale_provider == "local_realesrgan"
 
     def _uses_kie_upscale(self):
-        return self.upscale and not self._uses_local_upscale()
+        return self.upscale and self.upscale_provider == "kie"
+
+    def _uses_fal_upscale(self):
+        return self.upscale and self.upscale_provider == "fal"
 
     def _uses_local_upscale_after(self):
         return self.upscale_after and self.upscale_after_provider == "local_realesrgan"
 
     def _uses_kie_upscale_after(self):
-        return self.upscale_after and not self._uses_local_upscale_after()
+        return self.upscale_after and self.upscale_after_provider == "kie"
+
+    def _uses_fal_upscale_after(self):
+        return self.upscale_after and self.upscale_after_provider == "fal"
 
     def _uses_any_kie_upscale(self):
         return self._uses_kie_upscale() or self._uses_kie_upscale_after()
+
+    def _uses_any_fal_upscale(self):
+        return self._uses_fal_upscale() or self._uses_fal_upscale_after()
 
     def _upscale_pass_factor(self, provider, local_scale, kie_model):
         if provider == "local_realesrgan":
@@ -2184,7 +2201,10 @@ class WorkerThread(QThread):
         return self._uses_local_rembg_remove_bg() or self._uses_local_ben2_remove_bg()
 
     def _uses_kie_remove_bg(self):
-        return self.remove_bg and not self._uses_local_remove_bg() and not self._uses_photoroom_remove_bg()
+        return self.remove_bg and self.remove_bg_provider == "kie"
+
+    def _uses_fal_remove_bg(self):
+        return self.remove_bg and self.remove_bg_provider == "fal"
 
     def _remote_worker_limit(
         self,
@@ -2197,11 +2217,16 @@ class WorkerThread(QThread):
             and (self._uses_any_kie_upscale() or self._uses_kie_remove_bg())
         )
         uses_photoroom = include_processing and self._uses_photoroom_remove_bg()
+        uses_fal = include_processing and (
+            self._uses_any_fal_upscale() or self._uses_fal_remove_bg()
+        )
         limit = 0
         if uses_kie:
             limit += self.kie_concurrency
         if uses_photoroom:
             limit += self.photoroom_concurrency
+        if uses_fal:
+            limit += self.fal_concurrency
         return max(1, min(MAX_REMOTE_CONCURRENCY, limit))
 
     def _can_use_legacy_kie_processing_pipeline(self):
@@ -2395,6 +2420,8 @@ class WorkerThread(QThread):
                 if self._uses_photoroom_remove_bg()
                 else self.kie_remove_bg_model
             )
+            if self._uses_fal_remove_bg():
+                remove_model = "fal-ai/bria/background/remove"
             self._diagnostic_context.provider = remove_provider
             self._diagnostic_context.model = remove_model
             self._emit_diagnostic(
@@ -2433,6 +2460,18 @@ class WorkerThread(QThread):
                     current_path = nobg_path
                     current_url = None
                     local_result = True
+                elif self._uses_fal_remove_bg():
+                    current_url = self._fal_source_url(current_path, current_url)
+                    with self._provider_lease("fal"):
+                        current_url = self._fal_process_image(
+                            current_url,
+                            operation="remove_background",
+                            model_id="fal-ai/bria/background/remove",
+                        )
+                    nobg_path = os.path.join(raw_dir, f"{prefix}_fal_nobg_{idx:03d}_{self.run_stamp}.png")
+                    self._download_file(current_url, nobg_path)
+                    current_path = nobg_path
+                    local_result = False
                 else:
                     if (
                         self.kie_remove_bg_model == "recraft/remove-background"
@@ -2585,12 +2624,16 @@ class WorkerThread(QThread):
         self._diagnostic_context.stage = stage
         upscale_started = time.monotonic()
         upscale_model = (
-            "realesrgan-ncnn-vulkan" if provider == "local_realesrgan" else kie_model
+            "realesrgan-ncnn-vulkan"
+            if provider == "local_realesrgan"
+            else "fal-ai/esrgan"
+            if provider == "fal"
+            else kie_model
         )
         self._set_provider_diagnostic_context(stage, provider, upscale_model)
         upscale_parameters = {
             "scale": local_scale
-            if provider == "local_realesrgan"
+            if provider in {"local_realesrgan", "fal"}
             else self._resolve_upscale_factor(kie_model)
         }
         self._emit_diagnostic(
@@ -2601,6 +2644,30 @@ class WorkerThread(QThread):
             outcome="started",
         )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
+        if provider == "fal":
+            current_url = self._fal_source_url(current_path, current_url)
+            with self._provider_lease("fal"):
+                current_url = self._fal_process_image(
+                    current_url,
+                    operation="upscale",
+                    model_id="fal-ai/esrgan",
+                    scale=local_scale,
+                )
+            current_path = os.path.join(
+                raw_dir, f"{prefix}_{step_name}_fal_{idx:03d}_{self.run_stamp}.png"
+            )
+            self._download_file(current_url, current_path)
+            self.progress.emit(f"  Промежуточный Fal.ai апскейл: {current_path}")
+            self.progress.emit(f"  Этап обработки: {stage}; status=complete")
+            self._emit_diagnostic(
+                "stage_finished",
+                provider="fal",
+                model=upscale_model,
+                outcome="succeeded",
+                elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
+                **inspect_diagnostic_image(current_path),
+            )
+            return current_path, current_url, False
         if provider == "local_realesrgan":
             with self._local_operation_lock:
                 current_path = self._ensure_local_path(
@@ -2666,6 +2733,24 @@ class WorkerThread(QThread):
             elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
         )
         return current_path, current_url, False
+
+    def _fal_source_url(self, current_path, current_url):
+        if current_url and str(current_url).startswith("https://"):
+            return str(current_url)
+        return fal_image_data_uri(current_path)
+
+    def _fal_process_image(self, image_url, *, operation, model_id, scale=2):
+        client = FalClient(
+            FalConfig(
+                api_key=self.fal_api_key,
+                model_id=model_id,
+                timeout_seconds=max(10.0, float(self.timeout)),
+            )
+        )
+        self.progress.emit(f"  Fal.ai операция: {operation}; модель={model_id}")
+        completed = client.run_image_operation(operation, image_url, scale=scale)
+        self._ensure_running()
+        return fal_image_url(completed.get("result"))
 
     def _validate_topaz_source_file(self, source_path, upscale_factor):
         file_size = os.path.getsize(source_path)
@@ -5273,6 +5358,7 @@ class MainWindow(QMainWindow):
         self.stop_pending = False
         self.api_key_locked = True
         self.photoroom_api_key_locked = True
+        self.fal_api_key_locked = True
         self.secret_settings = {key: "" for key in SECRET_CONFIG_KEYS}
         self.credential_store = ProviderCredentialStore(
             ENV_FILE,
@@ -5898,6 +5984,17 @@ class MainWindow(QMainWindow):
         )
         self.kie_api_key_input.setReadOnly(True)
 
+        self.fal_api_key_input = QLineEdit()
+        self.fal_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.fal_api_key_input.setText(
+            self.secret_settings.get("fal_api_key", self.config.get("fal_api_key", ""))
+        )
+        self.fal_api_key_input.setReadOnly(True)
+        self.btn_fal_api_key_lock = QPushButton("🔒")
+        self.btn_fal_api_key_lock.setFixedSize(40, 32)
+        self.btn_fal_api_key_lock.setToolTip("Ключ заблокирован")
+        self.btn_fal_api_key_lock.clicked.connect(self.toggle_fal_api_key_lock)
+
         self.btn_api_key_lock = QPushButton("🔒")
         self.btn_api_key_lock.setFixedSize(40, 32)
         self.btn_api_key_lock.setToolTip("Ключ заблокирован")
@@ -5948,6 +6045,7 @@ class MainWindow(QMainWindow):
 
         settings_field_width = 220
         self.kie_api_key_input.setFixedSize(settings_field_width, 32)
+        self.fal_api_key_input.setFixedSize(settings_field_width, 32)
         self.text_generation_model_combo.setFixedSize(settings_field_width, 32)
         self.reference_generation_model_combo.setFixedSize(settings_field_width, 32)
         self.text_ratio_combo.setFixedSize(110, 32)
@@ -5957,6 +6055,8 @@ class MainWindow(QMainWindow):
 
         lbl_api_key = QLabel("KIE API Key:")
         lbl_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        lbl_fal_api_key = QLabel("Fal.ai API Key:")
+        lbl_fal_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_text_model = QLabel("Для текстовых промптов:")
         lbl_text_model.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         lbl_reference_model = QLabel("Для промптов с референсами:")
@@ -6004,14 +6104,23 @@ class MainWindow(QMainWindow):
         kie_layout.addWidget(lbl_api_key, 0, 0)
         kie_layout.addWidget(self.kie_api_key_input, 0, 1)
         kie_layout.addWidget(self.api_key_buttons_widget, 0, 2)
-        kie_layout.addWidget(lbl_text_model, 1, 0)
-        kie_layout.addWidget(text_model_widget, 1, 1, 1, 3)
-        kie_layout.addWidget(lbl_text_options, 2, 0)
-        kie_layout.addWidget(text_options_widget, 2, 1)
-        kie_layout.addWidget(lbl_reference_model, 3, 0)
-        kie_layout.addWidget(reference_model_widget, 3, 1, 1, 3)
-        kie_layout.addWidget(lbl_reference_options, 4, 0)
-        kie_layout.addWidget(reference_options_widget, 4, 1)
+        fal_access_widget = QWidget()
+        fal_access_layout = QHBoxLayout(fal_access_widget)
+        fal_access_layout.setContentsMargins(0, 0, 0, 0)
+        fal_access_layout.setSpacing(6)
+        fal_access_layout.addWidget(self.fal_api_key_input)
+        fal_access_layout.addWidget(self.btn_fal_api_key_lock)
+        fal_access_layout.addWidget(QLabel("очередь · стоимость зависит от модели"))
+        kie_layout.addWidget(lbl_fal_api_key, 1, 0)
+        kie_layout.addWidget(fal_access_widget, 1, 1, 1, 3)
+        kie_layout.addWidget(lbl_text_model, 2, 0)
+        kie_layout.addWidget(text_model_widget, 2, 1, 1, 3)
+        kie_layout.addWidget(lbl_text_options, 3, 0)
+        kie_layout.addWidget(text_options_widget, 3, 1)
+        kie_layout.addWidget(lbl_reference_model, 4, 0)
+        kie_layout.addWidget(reference_model_widget, 4, 1, 1, 3)
+        kie_layout.addWidget(lbl_reference_options, 5, 0)
+        kie_layout.addWidget(reference_options_widget, 5, 1)
         kie_group.setLayout(kie_layout)
         settings_tab_layout.addWidget(kie_group, alignment=Qt.AlignmentFlag.AlignHCenter)
 
@@ -6045,8 +6154,8 @@ class MainWindow(QMainWindow):
         photoroom_access_layout.addStretch()
         lbl_photoroom_api_key = QLabel("PhotoRoom API Key:")
         lbl_photoroom_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        kie_layout.addWidget(lbl_photoroom_api_key, 5, 0)
-        kie_layout.addWidget(photoroom_access_widget, 5, 1, 1, 3)
+        kie_layout.addWidget(lbl_photoroom_api_key, 6, 0)
+        kie_layout.addWidget(photoroom_access_widget, 6, 1, 1, 3)
 
         self.btn_next_to_processing = QPushButton("Далее: обработка →")
         self.btn_next_to_processing.setFixedSize(190, 36)
@@ -6062,6 +6171,7 @@ class MainWindow(QMainWindow):
 
         self.upscale_provider_combo = QComboBox()
         self.upscale_provider_combo.addItem("KIE", "kie")
+        self.upscale_provider_combo.addItem("Fal.ai", "fal")
         self.upscale_provider_combo.addItem("Local Real-ESRGAN", "local_realesrgan")
         upscale_provider = str(self.config.get("upscale_provider", "kie") or "kie")
         upscale_provider_index = self.upscale_provider_combo.findData(upscale_provider)
@@ -6069,6 +6179,7 @@ class MainWindow(QMainWindow):
 
         self.upscale_after_provider_combo = QComboBox()
         self.upscale_after_provider_combo.addItem("KIE", "kie")
+        self.upscale_after_provider_combo.addItem("Fal.ai", "fal")
         self.upscale_after_provider_combo.addItem("Local Real-ESRGAN", "local_realesrgan")
         upscale_after_provider = str(
             self.config.get("upscale_after_provider", "local_realesrgan") or "local_realesrgan"
@@ -6135,6 +6246,7 @@ class MainWindow(QMainWindow):
 
         self.remove_bg_provider_combo = QComboBox()
         self.remove_bg_provider_combo.addItem("KIE", "kie")
+        self.remove_bg_provider_combo.addItem("Fal.ai", "fal")
         self.remove_bg_provider_combo.addItem("PhotoRoom Standard", "photoroom")
         self.remove_bg_provider_combo.addItem("Local rembg", "local_rembg")
         self.remove_bg_provider_combo.addItem("Local BEN2", "local_ben2")
@@ -6634,6 +6746,7 @@ class MainWindow(QMainWindow):
     def setup_settings_autosave_connections(self):
         self.kie_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.kie_api_key_input.textChanged.connect(self.on_api_key_changed)
+        self.fal_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.photoroom_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.text_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.reference_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
@@ -7388,9 +7501,15 @@ class MainWindow(QMainWindow):
     ):
         selected_model = self._normalize_generation_model_id(preferred_model_id)
         fallback_model = self._normalize_generation_model_id(fallback_model_id)
+        if selected_model.startswith("fal-ai/"):
+            # Fal queue requests are paid; availability is checked only by the
+            # explicit user-confirmed run, never by an implicit probe.
+            self._select_combo_model_id(combo_box, selected_model)
+            return True
         probe_settings = dict(runtime_settings or self.config)
         probe_settings["kie_api_key"] = self.secret_settings.get("kie_api_key", "").strip()
         probe_settings["photoroom_api_key"] = self.secret_settings.get("photoroom_api_key", "").strip()
+        probe_settings["fal_api_key"] = self.secret_settings.get("fal_api_key", "").strip()
         probe_worker = WorkerThread(
             "mode1_generate_only",
             self.work_dir or os.getcwd(),
@@ -7527,13 +7646,22 @@ class MainWindow(QMainWindow):
         self.persist_ui_settings()
         current_api_key = self.secret_settings.get("kie_api_key", "").strip()
         current_photoroom_api_key = self.secret_settings.get("photoroom_api_key", "").strip()
+        current_fal_api_key = self.secret_settings.get("fal_api_key", "").strip()
+        selected_generation_models = {
+            self.get_selected_generation_model_id(self.text_generation_model_combo),
+            self.get_selected_generation_model_id(self.reference_generation_model_combo),
+        }
+        will_process = self.radio_run_process.isChecked() or self.radio_run_both.isChecked()
 
         needs_kie_api = (
-            not self.radio_run_process.isChecked()
-            or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() != "local_realesrgan")
+            (
+                not self.radio_run_process.isChecked()
+                and any(not model.startswith("fal-ai/") for model in selected_generation_models)
+            )
+            or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() == "kie")
             or (
                 self.chk_upscale_after.isChecked()
-                and self.upscale_after_provider_combo.currentData() != "local_realesrgan"
+                and self.upscale_after_provider_combo.currentData() == "kie"
             )
             or (
                 self.chk_remove_bg.isChecked()
@@ -7544,7 +7672,27 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка", "Укажите KIE API Key на вкладке «Настройки»")
             return
 
-        will_process = self.radio_run_process.isChecked() or self.radio_run_both.isChecked()
+        needs_fal_api = (
+            not self.radio_run_process.isChecked()
+            and any(model.startswith("fal-ai/") for model in selected_generation_models)
+        ) or (
+            will_process
+            and (
+                (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() == "fal")
+                or (
+                    self.chk_upscale_after.isChecked()
+                    and self.upscale_after_provider_combo.currentData() == "fal"
+                )
+                or (
+                    self.chk_remove_bg.isChecked()
+                    and self.remove_bg_provider_combo.currentData() == "fal"
+                )
+            )
+        )
+        if needs_fal_api and not current_fal_api_key:
+            QMessageBox.warning(self, "Ошибка", "Укажите Fal.ai API Key на вкладке «Настройки»")
+            return
+
         needs_photoroom_api = (
             will_process
             and self.chk_remove_bg.isChecked()
@@ -7553,7 +7701,7 @@ class MainWindow(QMainWindow):
         if needs_photoroom_api and not current_photoroom_api_key:
             QMessageBox.warning(self, "Ошибка", "Укажите PhotoRoom API Key на вкладке «Настройки»")
             return
-        if self.credential_store_error and (needs_kie_api or needs_photoroom_api):
+        if self.credential_store_error and (needs_kie_api or needs_photoroom_api or needs_fal_api):
             QMessageBox.warning(
                 self,
                 "Ошибка",
@@ -7786,6 +7934,8 @@ class MainWindow(QMainWindow):
     def enforce_api_key_hidden(self):
         if self.api_key_locked:
             self.kie_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        if self.fal_api_key_locked:
+            self.fal_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
 
     def toggle_api_key_lock(self):
         self.api_key_locked = not self.api_key_locked
@@ -7802,6 +7952,21 @@ class MainWindow(QMainWindow):
         self.btn_api_key_lock.setText("🔓")
         self.btn_api_key_lock.setToolTip("Ключ разблокирован")
         self.log("KIE API Key разблокирован: можно смотреть и редактировать")
+
+    def toggle_fal_api_key_lock(self):
+        self.fal_api_key_locked = not self.fal_api_key_locked
+        if self.fal_api_key_locked:
+            self.fal_api_key_input.setReadOnly(True)
+            self.fal_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+            self.btn_fal_api_key_lock.setText("🔒")
+            self.btn_fal_api_key_lock.setToolTip("Ключ заблокирован")
+            self.log("Fal.ai API Key заблокирован")
+            return
+        self.fal_api_key_input.setReadOnly(False)
+        self.fal_api_key_input.setEchoMode(QLineEdit.EchoMode.Normal)
+        self.btn_fal_api_key_lock.setText("🔓")
+        self.btn_fal_api_key_lock.setToolTip("Ключ разблокирован")
+        self.log("Fal.ai API Key разблокирован: можно смотреть и редактировать")
 
     def toggle_photoroom_api_key_lock(self):
         self.photoroom_api_key_locked = not self.photoroom_api_key_locked
@@ -8346,6 +8511,7 @@ class MainWindow(QMainWindow):
         self.config["overwrite_existing"] = self.chk_overwrite_existing.isChecked()
         self.secret_settings["kie_api_key"] = self.config["kie_api_key"] = self.kie_api_key_input.text().strip()
         self.secret_settings["photoroom_api_key"] = self.config["photoroom_api_key"] = self.photoroom_api_key_input.text().strip()
+        self.secret_settings["fal_api_key"] = self.config["fal_api_key"] = self.fal_api_key_input.text().strip()
         self.config["text_generation_model"] = self.get_selected_generation_model_id(self.text_generation_model_combo)
         self.config["reference_generation_model"] = self.get_selected_generation_model_id(
             self.reference_generation_model_combo

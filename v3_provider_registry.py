@@ -45,6 +45,16 @@ class ProviderSpec:
 
 
 PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
+    "fal": ProviderSpec(
+        provider_id="fal",
+        label="Fal.ai",
+        operations=("upscale_before", "upscale_after", "remove_background"),
+        requires_network=True,
+        requires_cost=True,
+        preserves_alpha=False,
+        requires_api_key=True,
+        visible_controls=(),
+    ),
     "kie": ProviderSpec(
         provider_id="kie",
         label="KIE",
@@ -116,14 +126,17 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
 PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
     "upscale_before_provider": (
         ("KIE", "kie"),
+        ("Fal.ai", "fal"),
         ("Local Real-ESRGAN", "local_realesrgan"),
     ),
     "upscale_after_provider": (
         ("KIE", "kie"),
+        ("Fal.ai", "fal"),
         ("Local Real-ESRGAN", "local_realesrgan"),
     ),
     "remove_background_provider": (
         ("KIE", "kie"),
+        ("Fal.ai", "fal"),
         ("PhotoRoom", "photoroom"),
         ("Local rembg", "local_rembg"),
     ),

@@ -8,6 +8,8 @@ selection, cost estimates and user confirmation later.
 from __future__ import annotations
 
 import json
+import base64
+import mimetypes
 import re
 import time
 import urllib.error
@@ -61,9 +63,34 @@ def fal_status_kind(payload: Mapping[str, Any] | None) -> str:
 
 def fal_image_input(image_url: str) -> dict[str, str]:
     value = str(image_url or "").strip()
-    if not value.startswith("https://") or "\n" in value or "\r" in value:
+    allowed_data_uri = value.startswith(
+        ("data:image/png;base64,", "data:image/jpeg;base64,", "data:image/webp;base64,")
+    )
+    if (not value.startswith("https://") and not allowed_data_uri) or "\n" in value or "\r" in value:
         raise FalProviderError("Fal.ai принимает изображение только по HTTPS URL")
     return {"image_url": value}
+
+
+def fal_image_data_uri(path: str, *, max_bytes: int = 8 * 1024 * 1024) -> str:
+    """Encode a bounded local image for Fal file inputs without uploading silently."""
+
+    source = str(path or "").strip()
+    if not source:
+        raise FalProviderError("Не указан локальный файл для Fal.ai")
+    try:
+        size = __import__("os").path.getsize(source)
+        if size > max_bytes:
+            raise FalProviderError("Локальное изображение слишком велико для Fal.ai")
+        with open(source, "rb") as handle:
+            data = handle.read(max_bytes + 1)
+    except OSError as error:
+        raise FalProviderError("Не удалось прочитать локальное изображение для Fal.ai") from error
+    if len(data) > max_bytes:
+        raise FalProviderError("Локальное изображение слишком велико для Fal.ai")
+    content_type = mimetypes.guess_type(source)[0] or "image/png"
+    if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+        raise FalProviderError("Fal.ai поддерживает для этой операции PNG, JPEG или WebP")
+    return f"data:{content_type};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 def fal_image_url(payload: Mapping[str, Any] | None) -> str:
@@ -163,6 +190,41 @@ class FalClient:
             raise FalProviderError("Provider task не соответствует Fal.ai client")
         return self.submit(request.input_payload)
 
+    def run_image_operation(
+        self,
+        operation: str,
+        image_url: str,
+        *,
+        scale: int = 2,
+    ) -> dict[str, Any]:
+        model_by_operation = {
+            "remove_background": "fal-ai/bria/background/remove",
+            "upscale": "fal-ai/esrgan",
+        }
+        try:
+            model_id = model_by_operation[operation]
+        except KeyError as error:
+            raise FalProviderError(f"Fal.ai operation не поддерживается: {operation}") from error
+        if self.model_id != model_id:
+            raise FalProviderError("Fal.ai client model не соответствует операции")
+        arguments = fal_image_input(image_url)
+        if operation == "upscale":
+            arguments["scale"] = str(max(2, min(int(scale), 4)))
+            arguments["output_format"] = "png"
+        request = ProviderTaskRequest(
+            provider_id="fal",
+            operation=operation,
+            model_id=model_id,
+            input_payload=arguments,
+        )
+        submitted = self.submit_task(request)
+        request_id = str(submitted["request_id"])
+        return self.wait_for_result(
+            request_id,
+            timeout_seconds=300.0,
+            poll_interval_seconds=2.0,
+        )
+
     def status(self, request_id: str) -> dict[str, Any]:
         request_id = str(request_id or "").strip()
         if not _REQUEST_RE.fullmatch(request_id):
@@ -226,6 +288,7 @@ __all__ = [
     "FalConfig",
     "FalProviderError",
     "fal_image_input",
+    "fal_image_data_uri",
     "fal_image_url",
     "fal_status_kind",
 ]
