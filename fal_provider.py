@@ -327,6 +327,8 @@ class FalClient:
         image_url: str,
         *,
         scale: int = 2,
+        model_id: str | None = None,
+        parameters: dict[str, Any] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
         on_submitted: Callable[[str], None] | None = None,
         on_status: Callable[[str], None] | None = None,
@@ -336,19 +338,21 @@ class FalClient:
             "upscale": "fal-ai/esrgan",
         }
         try:
-            model_id = model_by_operation[operation]
+            selected_model_id = model_id or model_by_operation[operation]
         except KeyError as error:
             raise FalProviderError(f"Fal.ai operation не поддерживается: {operation}") from error
-        if self.model_id != model_id:
+        if self.model_id != selected_model_id:
             raise FalProviderError("Fal.ai client model не соответствует операции")
         arguments = fal_image_input(image_url)
+        if parameters:
+            arguments.update(parameters)
         if operation == "upscale":
             arguments["scale"] = str(max(2, min(int(scale), 4)))
             arguments["output_format"] = "png"
         request = ProviderTaskRequest(
             provider_id="fal",
             operation=operation,
-            model_id=model_id,
+            model_id=selected_model_id,
             input_payload=arguments,
         )
         submitted = self.submit_task(request)

@@ -1459,8 +1459,9 @@ Acceptance:
 
 ### NEXT-TASK-009 — Подключить Fal.ai background removal и upscale
 
-Status: In progress — Fal.ai endpoint paths connected; live output/alpha
-validation and privacy confirmation remain
+Status: In progress — добавлены профили Bria RMBG, BiRefNet и rembg с
+разными настройками; live output/alpha validation и privacy confirmation
+остаются
 
 Зависимость: NEXT-TASK-007 и подтверждённые endpoint profiles.
 
@@ -1468,6 +1469,10 @@ Acceptance:
 
 - [ ] Удаление фона и upscale реализованы только для endpoint profiles с
   проверенными output format и alpha behavior.
+- [x] Для удаления фона доступны отдельные Fal.ai profiles Bria RMBG,
+  BiRefNet и rembg; настройки передаются только выбранной модели.
+- [x] Восстановлены Local rembg и Local BEN2; для KIE исправлен список
+  моделей удаления фона (Recraft вместо моделей апскейла).
 - [ ] Ошибки, неполные outputs и истёкшие result URLs не публикуются как
   успешные результаты.
 - [ ] Каждая операция имеет отдельную capability, cost и privacy policy.

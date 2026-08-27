@@ -14,6 +14,7 @@ class FalEndpointProfile:
     preserves_alpha: bool | None
     output_formats: tuple[str, ...]
     price_note: str
+    parameter_names: tuple[str, ...] = ()
 
 
 FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
@@ -32,6 +33,32 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         preserves_alpha=True,
         output_formats=("png",),
         price_note="model pricing must be refreshed before live use",
+        parameter_names=("sync_mode",),
+    ),
+    FalEndpointProfile(
+        model_id="fal-ai/birefnet",
+        operation="remove_background",
+        supports_references=True,
+        preserves_alpha=True,
+        output_formats=("png", "webp", "gif"),
+        price_note="model pricing must be refreshed before live use",
+        parameter_names=(
+            "model",
+            "operating_resolution",
+            "refine_foreground",
+            "output_mask",
+            "output_format",
+            "sync_mode",
+        ),
+    ),
+    FalEndpointProfile(
+        model_id="fal-ai/imageutils/rembg",
+        operation="remove_background",
+        supports_references=True,
+        preserves_alpha=True,
+        output_formats=("png",),
+        price_note="model pricing must be refreshed before live use",
+        parameter_names=("crop_to_bbox", "sync_mode"),
     ),
     FalEndpointProfile(
         model_id="fal-ai/esrgan",

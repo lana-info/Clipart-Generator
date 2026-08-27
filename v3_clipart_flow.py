@@ -86,7 +86,11 @@ from v3_prompt_generator import (
     replace_project_prompts,
 )
 from v3_provider_registry import (
+    FAL_BIREFNET_MODEL_OPTIONS,
+    FAL_BIREFNET_RESOLUTION_OPTIONS,
+    FAL_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
+    KIE_REMOVE_BG_MODEL_OPTIONS,
     processing_provider_options,
     provider_requires_api_key,
     provider_supports_operation,
@@ -573,6 +577,11 @@ def _worker_settings(
             "remove_bg": operations.remove_background,
             "remove_bg_provider": operations.remove_background_provider,
             "kie_remove_bg_model": operations.kie_remove_bg_model,
+            "fal_remove_bg_model": operations.fal_remove_bg_model,
+            "fal_birefnet_model": operations.fal_birefnet_model,
+            "fal_birefnet_resolution": operations.fal_birefnet_resolution,
+            "fal_birefnet_refine_foreground": operations.fal_birefnet_refine_foreground,
+            "fal_rembg_crop_to_bbox": operations.fal_rembg_crop_to_bbox,
             "local_rembg_profile": operations.local_rembg_profile,
             "local_rembg_model": operations.local_rembg_model,
             "local_rembg_edge_quality": operations.local_rembg_edge_quality,
@@ -2567,6 +2576,8 @@ class ClipartProcessingPage(_ScrollableStepPage):
         "upscale_before": "Апскейл до удаления фона",
         "upscale_after": "Апскейл после удаления фона",
         "remove_background": "Удалить фон",
+        "fal_birefnet_refine_foreground": "Fal.ai BiRefNet: уточнить foreground",
+        "fal_rembg_crop_to_bbox": "Fal.ai rembg: обрезать по объекту",
         "local_ben2_refine_foreground": "BEN2: уточнить foreground",
         "unsharp": "Unsharp Mask",
         "edge_shrink": "Очистить край alpha",
@@ -2601,7 +2612,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
         operations = state.clipart.operations
         self.operations = operations
         upscale_models = KIE_MODEL_OPTIONS
-        remove_bg_models = KIE_MODEL_OPTIONS
+        remove_bg_models = KIE_REMOVE_BG_MODEL_OPTIONS
 
         recipe = QLabel(
             "Рекомендуемый рецепт: апскейл → удаление фона → экспорт PNG."
@@ -2686,6 +2697,29 @@ class ClipartProcessingPage(_ScrollableStepPage):
             remove_bg_models,
             operations,
         )
+        self._add_combo(
+            advanced_form,
+            "fal_remove_bg_model",
+            "Fal.ai модель удаления фона",
+            FAL_REMOVE_BG_MODEL_OPTIONS,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "fal_birefnet_model",
+            "Fal.ai BiRefNet вариант",
+            FAL_BIREFNET_MODEL_OPTIONS,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "fal_birefnet_resolution",
+            "Fal.ai BiRefNet разрешение",
+            FAL_BIREFNET_RESOLUTION_OPTIONS,
+            operations,
+        )
+        self._add_bool(advanced_form, "fal_birefnet_refine_foreground", operations)
+        self._add_bool(advanced_form, "fal_rembg_crop_to_bbox", operations)
         self._add_combo(
             advanced_form,
             "local_realesrgan_profile",

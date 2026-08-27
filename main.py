@@ -1061,6 +1061,11 @@ class WorkerThread(QThread):
             settings.get("kie_upscale_after_model", self.kie_upscale_model)
         )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
+        self.fal_remove_bg_model = settings.get("fal_remove_bg_model", "fal-ai/bria/background/remove")
+        self.fal_birefnet_model = settings.get("fal_birefnet_model", "General Use (Light)")
+        self.fal_birefnet_resolution = settings.get("fal_birefnet_resolution", "1024x1024")
+        self.fal_birefnet_refine_foreground = bool(settings.get("fal_birefnet_refine_foreground", True))
+        self.fal_rembg_crop_to_bbox = bool(settings.get("fal_rembg_crop_to_bbox", False))
         self.upscale_factor = normalize_topaz_upscale_factor(
             settings.get("upscale_factor", 4)
         )
@@ -2425,7 +2430,7 @@ class WorkerThread(QThread):
                 else self.kie_remove_bg_model
             )
             if self._uses_fal_remove_bg():
-                remove_model = "fal-ai/bria/background/remove"
+                remove_model = self.fal_remove_bg_model
             self._diagnostic_context.provider = remove_provider
             self._diagnostic_context.model = remove_model
             self._emit_diagnostic(
@@ -2470,7 +2475,8 @@ class WorkerThread(QThread):
                         current_url = self._fal_process_image(
                             current_url,
                             operation="remove_background",
-                            model_id="fal-ai/bria/background/remove",
+                            model_id=self.fal_remove_bg_model,
+                            parameters=self._fal_remove_bg_parameters(),
                         )
                     nobg_path = os.path.join(raw_dir, f"{prefix}_fal_nobg_{idx:03d}_{self.run_stamp}.png")
                     self._download_file(current_url, nobg_path)
@@ -2743,7 +2749,19 @@ class WorkerThread(QThread):
             return str(current_url)
         return fal_image_data_uri(current_path)
 
-    def _fal_process_image(self, image_url, *, operation, model_id, scale=2):
+    def _fal_remove_bg_parameters(self):
+        if self.fal_remove_bg_model == "fal-ai/birefnet":
+            return {
+                "model": self.fal_birefnet_model,
+                "operating_resolution": self.fal_birefnet_resolution,
+                "refine_foreground": self.fal_birefnet_refine_foreground,
+                "output_format": "png",
+            }
+        if self.fal_remove_bg_model == "fal-ai/imageutils/rembg":
+            return {"crop_to_bbox": self.fal_rembg_crop_to_bbox}
+        return {}
+
+    def _fal_process_image(self, image_url, *, operation, model_id, scale=2, parameters=None):
         self._ensure_fal_cost_confirmed()
         client = FalClient(
             FalConfig(
@@ -2763,6 +2781,8 @@ class WorkerThread(QThread):
             operation,
             image_url,
             scale=scale,
+            model_id=model_id,
+            parameters=parameters,
             is_cancelled=lambda: not self.is_running,
             on_submitted=record_submission,
             on_status=lambda status: self._record_fal_task(

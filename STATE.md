@@ -28,6 +28,10 @@ Updated: 2026-08-27
 
 ## Next task
 
+Добавить и проверить Fal.ai background-removal profiles в рабочем UI. До
+появления ключа и средств ограничиться локальными тестами; после этого
+выполнить небольшой controlled live smoke с подтверждением стоимости.
+
 Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
 Actions run `33032049521`. Do not publish it as an update before this
 target-machine acceptance.

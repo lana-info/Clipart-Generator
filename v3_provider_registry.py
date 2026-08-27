@@ -53,7 +53,13 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
         requires_cost=True,
         preserves_alpha=False,
         requires_api_key=True,
-        visible_controls=(),
+        visible_controls=(
+            "fal_remove_bg_model",
+            "fal_birefnet_model",
+            "fal_birefnet_resolution",
+            "fal_birefnet_refine_foreground",
+            "fal_rembg_crop_to_bbox",
+        ),
     ),
     "kie": ProviderSpec(
         provider_id="kie",
@@ -139,6 +145,7 @@ PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
         ("Fal.ai", "fal"),
         ("PhotoRoom", "photoroom"),
         ("Local rembg", "local_rembg"),
+        ("Local BEN2", "local_ben2"),
     ),
 }
 
@@ -148,6 +155,22 @@ KIE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
 )
 KIE_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Recraft Remove Background", "recraft/remove-background"),
+)
+FAL_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("Bria RMBG 2.0", "fal-ai/bria/background/remove"),
+    ("BiRefNet", "fal-ai/birefnet"),
+    ("rembg", "fal-ai/imageutils/rembg"),
+)
+FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("Общая — Light", "General Use (Light)"),
+    ("Общая — Heavy", "General Use (Heavy)"),
+    ("Портрет", "Portrait"),
+    ("Общая — Dynamic", "General Use (Dynamic)"),
+)
+FAL_BIREFNET_RESOLUTION_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("1024×1024", "1024x1024"),
+    ("2048×2048", "2048x2048"),
+    ("2304×2304 (Dynamic)", "2304x2304"),
 )
 LOCAL_REMBG_PROFILE_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Клипарт", "clipart"),

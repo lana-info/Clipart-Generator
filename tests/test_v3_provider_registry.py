@@ -62,6 +62,7 @@ class ProviderRegistryTests(unittest.TestCase):
                 ("Fal.ai", "fal"),
                 ("PhotoRoom", "photoroom"),
                 ("Local rembg", "local_rembg"),
+                ("Local BEN2", "local_ben2"),
             ),
         )
         self.assertEqual(KIE_MODEL_OPTIONS, (("Topaz", "topaz/image-upscale"), ("Recraft Crisp", "recraft/crisp-upscale")))

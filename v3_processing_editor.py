@@ -21,6 +21,9 @@ from PyQt6.QtWidgets import (
 
 from v3_components import DEFAULT_TOKENS, V3DesignTokens
 from v3_provider_registry import (
+    FAL_BIREFNET_MODEL_OPTIONS,
+    FAL_BIREFNET_RESOLUTION_OPTIONS,
+    FAL_REMOVE_BG_MODEL_OPTIONS,
     KIE_TOPAZ_MODEL_ID,
     KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
@@ -222,6 +225,8 @@ class ProcessingPipelineEditor(QScrollArea):
         "upscale_before": "Апскейл до удаления фона",
         "upscale_after": "Апскейл после удаления фона",
         "remove_background": "Удалить фон",
+        "fal_birefnet_refine_foreground": "Fal.ai BiRefNet: уточнить foreground",
+        "fal_rembg_crop_to_bbox": "Fal.ai rembg: обрезать по объекту",
         "local_ben2_refine_foreground": "BEN2: уточнить foreground",
         "unsharp": "Unsharp Mask",
         "edge_shrink": "Очистить край alpha",
@@ -366,6 +371,11 @@ class ProcessingPipelineEditor(QScrollArea):
             KIE_REMOVE_BG_MODEL_OPTIONS,
             operations,
         )
+        self._add_combo(advanced_form, "fal_remove_bg_model", "Fal.ai модель удаления фона", FAL_REMOVE_BG_MODEL_OPTIONS, operations)
+        self._add_combo(advanced_form, "fal_birefnet_model", "Fal.ai BiRefNet вариант", FAL_BIREFNET_MODEL_OPTIONS, operations)
+        self._add_combo(advanced_form, "fal_birefnet_resolution", "Fal.ai BiRefNet разрешение", FAL_BIREFNET_RESOLUTION_OPTIONS, operations)
+        self._add_bool(advanced_form, "fal_birefnet_refine_foreground", operations)
+        self._add_bool(advanced_form, "fal_rembg_crop_to_bbox", operations)
         self._add_combo(
             advanced_form,
             "local_realesrgan_profile",
@@ -682,6 +692,16 @@ class ProcessingPipelineEditor(QScrollArea):
             and "local_realesrgan_after_scale" in after_controls,
             "kie_remove_bg_model": operations.remove_background
             and "kie_remove_bg_model" in remove_controls,
+            "fal_remove_bg_model": operations.remove_background
+            and "fal_remove_bg_model" in remove_controls,
+            "fal_birefnet_model": operations.remove_background
+            and "fal_birefnet_model" in remove_controls,
+            "fal_birefnet_resolution": operations.remove_background
+            and "fal_birefnet_resolution" in remove_controls,
+            "fal_birefnet_refine_foreground": operations.remove_background
+            and "fal_birefnet_refine_foreground" in remove_controls,
+            "fal_rembg_crop_to_bbox": operations.remove_background
+            and "fal_rembg_crop_to_bbox" in remove_controls,
             "local_rembg_profile": operations.remove_background
             and "local_rembg_profile" in remove_controls,
             "local_rembg_model": operations.remove_background
@@ -744,6 +764,11 @@ class ProcessingPipelineEditor(QScrollArea):
             "local_realesrgan_scale": "upscale_before",
             "local_realesrgan_after_scale": "upscale_after",
             "kie_remove_bg_model": "remove_background",
+            "fal_remove_bg_model": "remove_background",
+            "fal_birefnet_model": "remove_background",
+            "fal_birefnet_resolution": "remove_background",
+            "fal_birefnet_refine_foreground": "remove_background",
+            "fal_rembg_crop_to_bbox": "remove_background",
             "local_rembg_profile": "remove_background",
             "local_rembg_model": "remove_background",
             "local_rembg_edge_quality": "remove_background",
