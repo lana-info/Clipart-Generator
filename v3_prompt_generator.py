@@ -19,6 +19,10 @@ from v3_project_state import (
     pinterest_prompt_generator_defaults,
 )
 from clipart_prompt_schema import ClipartPromptFields, render_clipart_prompt
+from prompt_translation import (
+    PromptTranslationBackend,
+    translate_prompt_fields,
+)
 
 
 class PromptGeneratorError(ValueError):
@@ -138,6 +142,9 @@ def _prompt_language_for_clipart(data: PromptGeneratorData) -> str:
 def generate_prompt_series(
     mode: ProjectMode | str,
     data: PromptGeneratorData,
+    *,
+    translation_backend: PromptTranslationBackend | None = None,
+    provider_language: str | None = None,
 ) -> list[PromptEntry]:
     normalized_mode = (
         mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
@@ -165,19 +172,36 @@ def generate_prompt_series(
     for subject in subjects:
         for variation in variations:
             if normalized_mode is ProjectMode.CLIPART:
+                clipart_fields = ClipartPromptFields(
+                    object=subject,
+                    scene=normalized.theme,
+                    style=normalized.style,
+                    palette=normalized.palette,
+                    composition=normalized.composition,
+                    background=normalized.background,
+                    details=variation,
+                    restrictions=tuple(normalized.restrictions),
+                    technical_requirements=normalized.consistency,
+                )
+                source_language = _prompt_language_for_clipart(normalized)
+                target_language = provider_language or source_language
+                translation = translate_prompt_fields(
+                    clipart_fields.to_dict(),
+                    source_language=source_language,
+                    target_language=target_language,
+                    backend=translation_backend,
+                )
+                if translation.translated:
+                    translated_fields = dict(translation.fields)
+                    translated_fields["restrictions"] = tuple(
+                        translated_fields.get("restrictions", ())
+                    )
+                    clipart_fields = ClipartPromptFields(
+                        **translated_fields,
+                    )
                 prompt = render_clipart_prompt(
-                    ClipartPromptFields(
-                        object=subject,
-                        scene=normalized.theme,
-                        style=normalized.style,
-                        palette=normalized.palette,
-                        composition=normalized.composition,
-                        background=normalized.background,
-                        details=variation,
-                        restrictions=tuple(normalized.restrictions),
-                        technical_requirements=normalized.consistency,
-                    ),
-                    language=_prompt_language_for_clipart(normalized),
+                    clipart_fields,
+                    language=target_language if translation.translated else source_language,
                 )
             else:
                 prompt_parts = (

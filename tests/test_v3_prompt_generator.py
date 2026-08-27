@@ -27,6 +27,7 @@ from v3_prompt_generator import (
     prompt_generator_defaults,
     replace_project_prompts,
 )
+from prompt_translation import PromptTranslationResult
 
 
 class V3PromptGeneratorTests(unittest.TestCase):
@@ -42,6 +43,31 @@ class V3PromptGeneratorTests(unittest.TestCase):
             consistency="same visual language and scale",
             restrictions=["no text", "no scary expression"],
         )
+
+    def test_optional_translation_backend_is_used_for_provider_prompt(self):
+        class FakeTranslator:
+            backend_id = "test-translator"
+
+            def translate_fields(self, fields, *, source_language, target_language):
+                translated = dict(fields)
+                translated["object"] = "fox"
+                return PromptTranslationResult(
+                    source_language=source_language,
+                    target_language=target_language,
+                    translated=True,
+                    fields=translated,
+                    backend_id=self.backend_id,
+                )
+
+        prompts = generate_prompt_series(
+            ProjectMode.CLIPART,
+            PromptGeneratorData(subjects=["лиса"]),
+            translation_backend=FakeTranslator(),
+            provider_language="en",
+        )
+
+        self.assertIn("Object: fox.", prompts[0].prompt)
+        self.assertNotIn("Объект:", prompts[0].prompt)
 
     def test_same_input_produces_the_same_ordered_series(self):
         first = generate_prompt_series(ProjectMode.CLIPART, self.sample_data())
