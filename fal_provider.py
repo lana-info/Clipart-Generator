@@ -415,17 +415,23 @@ class FalClient:
                 try:
                     cancel_response = self.cancel(request_id)
                 except FalProviderError as error:
+                    if on_status is not None:
+                        on_status("cancel_failed")
                     raise FalProviderError(
                         "Fal.ai cancel_failed; request ID сохранён для проверки статуса"
                     ) from error
                 cancel_kind = fal_status_kind(cancel_response)
                 if cancel_kind == "already_completed":
+                    if on_status is not None:
+                        on_status("completed_after_cancel")
                     result = self.result(request_id)
                     return {
                         "request_id": str(request_id),
                         "status": "completed_after_cancel",
                         "result": result,
                     }
+                if on_status is not None:
+                    on_status(cancel_kind or "cancel_requested")
                 cancellation_requested = True
             status = self.status(request_id)
             kind = fal_status_kind(status)
