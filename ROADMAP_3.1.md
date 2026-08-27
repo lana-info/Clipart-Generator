@@ -127,3 +127,19 @@ SynthID — невидимый сигнал происхождения, кото
   the main preview singular.
 - **R31-10 — Run performance details:** expose per-file duration and throughput
   in the details/log view, not in the primary completion summary.
+
+## Next product phase after 3.1 acceptance
+
+The detailed execution source of truth is the `NEXT-TASK-*` section in
+`TASKS_3.0.ru.md`, with requirements in the `Next Product Phase` section of
+`PRD.md`. This phase is not a replacement for the P0 architecture work above.
+The initial workflow and prompt-foundation tasks may start after the current
+product acceptance tasks; Fal.ai integration additionally requires the
+provider-neutral lifecycle gate.
+
+Its order is: workflow/page definition layer, structured prompt and
+localization foundation, translation-backend decision, Clipart prompt
+generator, provider-neutral generation/lifecycle contract, Fal.ai
+model/provider integration, controlled acceptance, and only then a separate
+Pinterest prompt generator. Patterns, mockups,
+Invitations/Canva, and commercial module licensing remain future scope.

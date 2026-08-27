@@ -1199,3 +1199,301 @@ target-Windows acceptance remain pending.
 - [ ] Режим Patterns с проверкой бесшовности, плиткой и экспортом.
 - [ ] Модульная продажа дополнительных режимов через расширяемые права
   существующей единой лицензии.
+
+## Следующий этап — качество генерации и Fal.ai
+
+Эти задачи начинаются только после закрытия обязательных acceptance-проверок
+текущего этапа. Они не включают Patterns, mockups, приглашения или модульную
+систему продаж.
+
+### NEXT-TASK-000 — Ввести workflow/module definition layer
+
+Status: Planned — architecture gate before prompt and Fal.ai work
+
+Цель: сделать состав страниц и функций настраиваемым для разных workflow без
+введения коммерческой модульной лицензии.
+
+Acceptance:
+
+- [ ] Описан workflow definition с ordered pages, prompt schema, processing
+  operations, provider controls, validation, exports и copy.
+- [ ] Общие страницы могут переиспользоваться, а отдельный workflow может
+  подключить собственный prompt builder, например TrendWatcher-подобный.
+- [ ] Ненужные функции отсутствуют в UI, а не отображаются отключёнными
+  контролами.
+- [ ] Скрытые operations не попадают в run plan, validation, defaults,
+  accessibility traversal и диагностику даже при наличии старых settings.
+- [ ] Clipart и Pinterest имеют независимые workflow profiles при общем run
+  engine и provider contract.
+
+Likely files: новый модуль workflow definitions, `v3_wizard.py`,
+`v3_clipart_flow.py`, `v3_pinterest_flow.py`, `v3_processing_editor.py`,
+`v3_project_state.py`.
+
+Verification: contract tests на состав страниц и controls для Clipart и
+Pinterest; offscreen smoke на отсутствие нерелевантной функции.
+
+### NEXT-TASK-000A — Описать step graph и типы результатов workflow
+
+Status: Planned — architecture gate for PDF, Canva and external delivery
+
+Зависимость: NEXT-TASK-000.
+
+Цель: позволить разным workflow добавлять собственные локальные и внешние
+шаги после генерации или обработки, не смешивая их с базовым pipeline.
+
+Acceptance:
+
+- [ ] Шаг объявляет input artifacts, output artifacts, порядок, validation,
+  retry/cancel behavior и side-effect policy.
+- [ ] Различаются core processing, local export/package creation, review gate
+  и external delivery.
+- [ ] PDF и Canva-compatible package описаны как локальные outputs с отдельным
+  контрактом результата.
+- [ ] Google Drive и другие connectors требуют явного подтверждения,
+  destination/account и показывают upload status.
+- [ ] Ошибка внешней доставки не удаляет и не портит успешный локальный
+  результат; повтор не создаёт дубликаты без явного решения пользователя.
+- [ ] Preview, ordinary save и генерация не запускают external delivery.
+
+Verification: contract tests для PNG → PDF, PNG → package и delivery failure;
+offscreen test на confirmation gate.
+
+### NEXT-TASK-001 — Зафиксировать контракт структурированного prompt
+
+Status: Planned
+
+Цель: отделить данные prompt от итогового текста и определить единый контракт
+для клипарта, UI preview, сохранения и provider payload.
+
+Acceptance:
+
+- [ ] Описаны clipart-specific поля Object, Scene, Style, Color palette, Composition,
+  Background, Details, Restrictions и Technical requirements.
+- [ ] Пустые и слишком длинные значения нормализуются предсказуемо.
+- [ ] Старые общие `PromptGeneratorData` и сохранённые состояния читаются через
+  migration adapter без изменения Pinterest-контракта.
+- [ ] Определено, что structured data является source of truth; обратный разбор
+  произвольно отредактированной строки не обещается.
+- [ ] Отдельно зафиксированы translation operation и creative rewrite operation.
+
+Verification: focused unit tests для модели, нормализации и миграции.
+
+### NEXT-TASK-002 — Подготовить локализацию русского и английского UI
+
+Status: Planned
+
+Acceptance:
+
+- [ ] Переводимые строки имеют стабильные ключи или Qt translation keys.
+- [ ] Русский остаётся языком по умолчанию; English foundation можно выбрать и
+  сохранить между запусками на новых и затронутых экранах.
+- [ ] UI locale не смешан с языком prompt, model IDs и внутренними статусами.
+- [ ] Ошибки, accessibility labels, диагностика и подсказки готовы к переводу.
+- [ ] Составлен отдельный backlog полного перевода legacy-поверхностей; он не
+  блокирует текущий этап.
+
+Likely files: `v3_components.py`, `v3_wizard.py`, `v3_clipart_flow.py`,
+`v3_pinterest_flow.py`, `v3_api_settings.py`, `v3_project_state.py`.
+
+Verification: offscreen tests на переключение языка и сохранение настроек.
+
+### NEXT-TASK-002A — Выбрать translation backend для prompt
+
+Status: Planned — gate before English output for arbitrary Russian field text
+
+Зависимость: NEXT-TASK-001, NEXT-TASK-002.
+
+Acceptance:
+
+- [ ] Выбран backend: локальный, gateway или разрешённый provider API.
+- [ ] Описаны privacy, стоимость, offline behavior, timeout, fallback и
+  ограничение длины.
+- [ ] Перевод и creative rewrite определены как разные операции.
+- [ ] Приложение не обещает английский результат, если перевод недоступен.
+
+Verification: decision record и network-free contract tests на success,
+failure, timeout и no-network fallback.
+
+### NEXT-TASK-003 — Переработать генератор prompt для клипартов
+
+Status: Planned
+
+Зависимость: NEXT-TASK-000, NEXT-TASK-001, NEXT-TASK-002 и NEXT-TASK-002A.
+
+Acceptance:
+
+- [ ] Пользователь заполняет структурированные поля на русском; свободный
+  русский текст не обещает автоматический semantic parse без отдельной функции.
+- [ ] Выбранный translation backend явно переводит поля в английский либо
+  приложение показывает понятное ограничение и не скрывает непереведённый
+  текст.
+- [ ] Итоговый provider prompt по умолчанию собирается на английском после
+  успешного перевода.
+- [ ] Preview показывает понятную структуру и позволяет редактировать
+  отдельный результат до добавления в список.
+- [ ] Серия сохраняет общую стилистику, палитру и композиционные правила, но
+  получает различающиеся варианты.
+- [ ] Генератор не делает обязательный дополнительный AI-запрос.
+
+Likely files: `v3_prompt_generator.py`, `v3_clipart_flow.py`,
+`v3_project_state.py`, `tests/test_v3_prompt_generator.py`.
+
+Verification: unit tests, offscreen UI tests, ручная проверка русских вводов и
+серии из 4–10 вариантов.
+
+### NEXT-TASK-004 — Убрать обязательное AI-улучшение из основного маршрута
+
+Status: Decision recorded; optional feature deferred until after NEXT-TASK-012
+
+Acceptance:
+
+- [x] Базовый маршрут не делает дополнительный AI-запрос автоматически.
+- [ ] Отдельное улучшение запускается только отдельной кнопкой пользователя.
+- [ ] Translation и creative rewrite показываются как разные операции.
+
+### NEXT-TASK-005 — Зафиксировать provider-neutral generation и lifecycle contract
+
+Status: Planned
+
+Acceptance:
+
+- [ ] Определены provider-neutral request, operation, model profile, task ID,
+  status, result, error и cost estimate.
+- [ ] Описаны idempotency, request persistence/recovery и защита от повторной
+  платной отправки.
+- [ ] Описаны cancellation states: `cancel_requested`,
+  `cancelled_before_start`, `completed_after_cancel`, `already_completed`,
+  `cancel_failed`.
+- [ ] V3 run path не получает новую прямую зависимость от legacy
+  `WorkerThread`.
+
+Verification: contract tests и review границы между run plan, adapter и UI.
+
+### NEXT-TASK-006 — Проверить официальный Fal.ai API и выбрать модели
+
+Status: Planned
+
+Acceptance:
+
+- [ ] Зафиксированы официальные контракты authentication, queue/status,
+  cancellation, upload, response и pricing.
+- [ ] Для каждой выбранной модели записаны capability, формат, alpha,
+  references, лимиты, retention, cancellation behavior и стоимость.
+- [ ] Capability записаны на уровне `provider + endpoint/model + operation`, а
+  не только на уровне провайдера.
+- [ ] Принято решение gateway или interim BYOK, включая secret storage,
+  privacy, бюджет и ответственность за оплату.
+- [ ] Платные live-проверки отделены от network-free тестов и требуют явного
+  согласования расходов.
+
+Verification: документированный probe без публикации ключей и артефактов.
+
+### NEXT-TASK-007 — Реализовать базовый lifecycle FalProvider
+
+Status: Planned
+
+Зависимость: NEXT-TASK-000, NEXT-TASK-005, NEXT-TASK-006.
+
+Acceptance:
+
+- [ ] Fal.ai подключён через общий provider contract, а не напрямую из UI.
+- [ ] Есть status polling, cancellation, bounded retry/backoff и понятные
+  ошибки.
+- [ ] Состояния поздней отмены и completed-after-cancel сохраняются без
+  повторной отправки.
+- [ ] Есть bounded retry/backoff, idempotency и отсутствие тихого fallback на
+  другую платную модель.
+- [ ] Request ID и безопасный task metadata сохраняются для восстановления.
+- [ ] Неудачный или неполный ответ не публикует повреждённый результат.
+
+Likely files: `provider_clients.py`, `v3_provider_registry.py`, новый модуль
+Fal adapter, `config_schema.py`, `v3_api_settings.py`.
+
+### NEXT-TASK-008 — Подключить Fal.ai generation и image-to-image
+
+Status: Planned
+
+Зависимость: NEXT-TASK-007.
+
+Acceptance:
+
+- [ ] Поддержаны только подтверждённые generation и image-to-image endpoints.
+- [ ] Fal.ai модели фильтруются по операции, references, alpha, формату,
+  retention и другим ограничениям.
+- [ ] До запуска показываются provider, model и доступная оценка стоимости.
+- [ ] В диагностике сохраняются безопасные provider/model/task status без
+  API-ключей, полных prompt и пользовательских путей.
+- [ ] Старые KIE/local workflows не меняют поведение.
+
+### NEXT-TASK-009 — Подключить Fal.ai background removal и upscale
+
+Status: Planned
+
+Зависимость: NEXT-TASK-007 и подтверждённые endpoint profiles.
+
+Acceptance:
+
+- [ ] Удаление фона и upscale реализованы только для endpoint profiles с
+  проверенными output format и alpha behavior.
+- [ ] Ошибки, неполные outputs и истёкшие result URLs не публикуются как
+  успешные результаты.
+- [ ] Каждая операция имеет отдельную capability, cost и privacy policy.
+
+### NEXT-TASK-010 — Подключить Fal.ai к run plan и диагностике
+
+Status: Planned
+
+Зависимость: NEXT-TASK-008, NEXT-TASK-009.
+
+Acceptance:
+
+- [ ] В диагностике сохраняются безопасные provider/model/task status без
+  API-ключей, полных prompt и пользовательских путей.
+- [ ] Cost estimate содержит timestamp, currency, profile и budget status.
+- [ ] Fal.ai retention, download-before-expiry и deletion limits отражены в
+  пользовательском предупреждении там, где это необходимо.
+- [ ] Старые KIE/local workflows не меняют поведение.
+
+### NEXT-TASK-011 — Провести проверку и controlled live smoke
+
+Status: Planned
+
+Зависимость: NEXT-TASK-003, NEXT-TASK-010.
+
+Acceptance:
+
+- [ ] Network-free test suite покрывает prompts, localization, payloads,
+  lifecycle, errors, retry, cancellation states, cost limits и redaction.
+- [ ] Проходят `python -m py_compile`, focused tests и полный доступный test
+  baseline.
+- [ ] Выполнен небольшой разрешённый live smoke для generation и одной
+  processing-операции; стоимость, model profile и retention policy записаны.
+- [ ] Windows packaged/runtime smoke выполнен, если затронут packaged path.
+
+### NEXT-TASK-012 — Спроектировать Pinterest Prompt Generator
+
+Status: Planned after NEXT-TASK-011
+
+Scope: отдельная модель prompt для вертикального Pinterest-контента с местом
+под текст, читаемой композицией, CTA и вариантами для разных типов пинов.
+
+Acceptance:
+
+- [ ] Определены поля для темы, объекта, background, text-safe area, headline,
+  CTA, aspect ratio, branding и visual hierarchy.
+- [ ] Pinterest schema не меняет clipart schema и старые сохранённые данные.
+- [ ] Есть preview, редактирование, серия вариантов и provider renderer.
+
+Verification: отдельный PRD/contract, focused unit/UI tests и ручная проверка
+вертикальной серии.
+
+### Будущие модули после стабилизации генерации
+
+- Patterns: seamless tile, grid-preview, проверка стыков, selective
+  regeneration, JPEG/PNG export.
+- Mockups: генерация сцен товаров и экспорт демонстрационных изображений.
+- Invitations: изображение, структурирование слоёв и последующая Canva
+  интеграция.
+- Module licensing: отдельные entitlements, покупки и загрузка ресурсов или
+  модулей — только после подтверждения архитектуры основного продукта.

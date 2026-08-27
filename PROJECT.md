@@ -73,3 +73,53 @@ approved three-stage Polar dark installer for version `3.0.5` from merged
 installed the finished package and verified the application artwork and prompt
 screens from the installed copy. The installer SHA-256 is
 `fceb6abfb44c2feb93ce8f2e2142987dc551fa47b0ddf1d7667341b6f12e8fef`.
+
+## Next product phase — generation quality and provider expansion
+
+After the current product acceptance tasks (`CG3-TASK-034`, `CG3-TASK-035`,
+`61A`, `62A`, `64`, and `65`) are closed, the next implementation phase is not
+the modular store or new product modes. The single source of truth for this
+phase is the `Next Product Phase` section in `PRD.md` and the `NEXT-TASK-*`
+section in `TASKS_3.0.ru.md`. The full R31-01/R31-07 architecture roadmap is
+not a prerequisite for the first prompt foundation tasks; Fal.ai integration
+does require the provider-neutral contract described below. The phase is a
+focused improvement of the existing generation workflow:
+
+1. establish workflow composition and a structured clipart prompt contract;
+2. prepare localization infrastructure for Russian and English versions
+   without coupling UI language to prompt language;
+3. choose the translation backend and make the clipart prompt generator produce
+   coherent prompts from structured Russian fields;
+4. establish a provider-neutral generation/lifecycle contract before adding a
+   new provider;
+5. add Fal.ai through the provider abstraction for confirmed operations;
+6. validate the complete clipart workflow before designing the Pinterest prompt
+   generator.
+
+The default policy is to build prompts deterministically from structured fields
+(`Object`, `Scene`, `Style`, `Color palette`, `Composition`, `Background`,
+`Details`, `Restrictions`, and technical requirements). Optional AI prompt
+rewriting may be added later, but it must be explicit, previewable, bounded by
+cost and length, and must not silently change the user's intent.
+
+The application should store clipart prompt data structurally and render it
+separately for the UI and for providers. Free-form Russian-to-English
+translation is an explicit architecture decision and must not be faked by
+merely adding English section labels around Russian text. An English UI will
+reuse the same data model and provider contracts. Patterns, mockups,
+invitations/Canva, and module-based licensing are intentionally deferred until
+the core clipart and Pinterest workflows are stable.
+
+The phase also introduces a workflow-definition layer before new page-specific
+features are added. A workflow can reuse shared pages, provide its own prompt
+builder, and decide which processing operations and provider controls are
+relevant. A capability with no user value must be omitted from that workflow,
+not shown as a disabled checkbox. This is internal product architecture; it is
+not yet commercial module licensing.
+
+Workflow definitions may also add ordered post-processing and delivery steps.
+One workflow may end with a PNG, while another may create a PDF, prepare a
+Canva-compatible package, or upload an approved result to Google Drive. Local
+file creation and external delivery are separate step types; external actions
+require an explicit confirmation and a visible destination before execution.
+>>>>>>> 5e09b1b (docs: define next generation product phase)

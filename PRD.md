@@ -143,3 +143,167 @@ Structured hidden-marker result contract: [`PIXEL_WATERMARK_STATUS_CONTRACT.md`]
 - [`CHANGELOG.md`](./CHANGELOG.md)
 - [`TEST_CHECKLIST.md`](./TEST_CHECKLIST.md)
 - [`TASK50_CLEANUP_ACCEPTANCE.md`](./TASK50_CLEANUP_ACCEPTANCE.md)
+
+## Next Product Phase: Prompt Quality, Localization, and Fal.ai
+
+This section defines the next implementation phase after the current 3.0
+stabilization. It does not expand the current release promise and does not
+authorize Patterns, mockups, invitations, Canva export, or modular licensing.
+
+### Objective
+
+Improve the existing clipart generation workflow so a Russian-speaking author
+can describe an idea naturally, review a clear structured prompt, generate a
+coherent series, and use Fal.ai operations where the selected model and
+provider capabilities allow it.
+
+### Workflow and page composition
+
+The application must not force every workflow to use the same pages, prompt
+builder, or processing controls. Before commercial module licensing exists, it
+will use workflow definitions that compose shared and workflow-specific pages.
+
+A workflow definition may specify ordered pages, prompt schema, prompt-builder
+behavior, allowed operations, visible provider controls, validation, exports,
+and explanatory copy. Shared infrastructure remains common, while a future
+TrendWatcher-like prompt builder can be added as a separate workflow-specific
+page without forking the whole application.
+
+It may also define an ordered step graph after generation or processing. Steps
+can include core processing, local export, document/package creation, review
+gates, and external delivery. For example, a workflow can finish with a PNG,
+continue to PDF creation, prepare a Canva-compatible package, or upload an
+approved artifact to Google Drive. Each step must declare its input artifact
+types, output artifact types, validation, retry/cancel behavior, and whether it
+has an external side effect.
+
+Local exports and external delivery are different contracts. PDF/Canva
+creation may run locally after the user confirms the result. Google Drive or
+another connector requires explicit user confirmation, an identified account
+and destination, a visible upload status, safe retry behavior, and no upload on
+preview or ordinary save. A failed delivery must not invalidate or overwrite a
+successfully created local artifact.
+
+Visibility is workflow- and capability-driven. A function with no user value is
+omitted completely rather than shown disabled. For example, transparency and
+background cleanup can be offered in Clipart, while being absent from Pinterest
+if that workflow does not need them. Hidden operations must also be excluded
+from run-plan validation, saved defaults, accessibility traversal, and
+diagnostics summaries, including when stale settings are loaded.
+
+### Decisions and gates before implementation
+
+- The first clipart generator accepts structured fields. Reliable parsing of a
+  single free-form Russian sentence and creative rewriting are separate future
+  actions; they are not implied by the base template.
+- The clipart structured data is the source of truth. The rendered UI/provider
+  prompt is derived from it. Editing a rendered string does not promise a
+  reverse parse back into fields.
+- Translation is a separate operation from creative prompt improvement. The
+  implementation must choose and document a translation backend, its privacy,
+  cost, offline behavior, and failure fallback before promising English output
+  for arbitrary Russian text.
+- Localization work in this phase means infrastructure plus all new or touched
+  surfaces. A complete English translation of every legacy screen is a later
+  release task.
+- A provider-neutral generation and run-lifecycle contract must exist before
+  Fal.ai is connected. Fal.ai must not deepen direct V3-to-`WorkerThread`
+  coupling.
+- A workflow-definition contract must exist before adding module-specific pages
+  or Pinterest behavior. Clipart and Pinterest may share infrastructure but
+  must not be forced into one prompt schema or one processing-control list.
+- A step/output contract must distinguish generated artifacts, derived local
+  exports, and external side effects. External delivery is never implicit in a
+  generation or save action.
+- The Fal.ai secret boundary is a release gate. The preferred production design
+  is a server gateway that keeps Fal credentials off the desktop. Direct BYOK
+  is allowed only as an explicitly documented interim mode with a clear risk
+  decision and protected local storage; a plaintext `.env` is not an acceptable
+  final design.
+
+### Prompt requirements
+
+- Accept Russian structured field input in the first implementation. Free-form
+  Russian semantic parsing is a separate explicitly scoped feature.
+- Store prompt data as structured fields, not only as one rendered string.
+- Render a readable prompt with these sections: Object, Scene, Style, Color
+  palette, Composition, Background, Details, Restrictions, and Technical
+  requirements.
+- Produce English provider prompts by default while keeping Russian UI labels
+  and preview text available.
+- Keep one visual direction across a series while varying pose, arrangement,
+  or secondary details.
+- Never silently invent a new subject, remove a restriction, or alter a user
+  reference.
+- Show the generated prompt before it enters the run plan and allow editing of
+  individual prompts.
+- Keep optional AI rewriting out of the mandatory path. If added later, it
+  requires explicit user action, a visible before/after preview, bounded input
+  and output, and a cost/privacy warning where applicable.
+
+### Localization requirements
+
+- Support Russian and English UI locales through a single translation layer.
+- Keep UI locale, prompt language, provider model IDs, and internal status codes
+  as separate concerns.
+- Persist the selected UI locale and migrate missing locale settings safely.
+- Use stable message IDs or Qt translation keys rather than scattering language
+  decisions through workflow logic.
+- Ensure provider errors, validation messages, diagnostics, and accessibility
+  labels are localizable.
+
+### Fal.ai requirements
+
+- Integrate Fal.ai behind the existing provider abstraction and capability
+  registry; the UI must not depend directly on Fal.ai endpoints.
+- Verify the current official Fal.ai API contract before implementation,
+  including authentication, queue/status behavior, cancellation, uploads,
+  model identifiers, response formats, and pricing.
+- Initially cover generation, image-to-image, background removal, upscaling,
+  status polling, cancellation, retries, and cost estimation where the chosen
+  models expose those capabilities.
+- Keep model selection capability-aware: references, transparency, size,
+  output format, and operation support must be validated before a paid run.
+- Store no secrets in logs, prompts exported for support, tests, or release
+  artifacts. Real provider tests require explicit cost approval.
+- Treat provider profiles as `provider + endpoint/model + operation`, because
+  alpha, input types, output format, limits, retention, and price can differ
+  between Fal.ai endpoints.
+- Define Fal.ai input retention and CDN handling before uploading user files;
+  prefer no-store/short-retention settings where supported, download results
+  before expiry, and document deletion limits.
+- Record cost as a timestamped estimate with currency, model/profile, and a
+  user-configurable maximum budget. An estimate is not a billing guarantee.
+- Do not silently retry onto another paid model or fallback endpoint. Automatic
+  retries must be bounded and idempotency/request identity must prevent a
+  duplicate paid submission.
+- Model cancellation honestly: distinguish `cancel_requested`,
+  `cancelled_before_start`, `completed_after_cancel`, `already_completed`, and
+  `cancel_failed`; a late result must remain traceable and no refund is implied.
+
+### Out of scope for this phase
+
+- Patterns and seamless-tile validation.
+- Mockup generation.
+- Invitation decomposition into layers.
+- Canva integration or editable Canva templates.
+- Module downloads, module purchases, and entitlement-based licensing.
+- A mandatory AI prompt-rewriting request for every generation.
+
+### Phase acceptance criteria
+
+- A Russian user can create, inspect, edit, and save a structured clipart
+  prompt series whose provider rendering is in English by default.
+- Switching UI locale does not change the underlying prompt data or break old
+  saved settings.
+- Fal.ai models appear only for operations they support and are routed through
+  one provider contract.
+- Network-free tests cover prompt rendering, localization, provider payloads,
+  errors, cancellation, retry behavior, cost boundaries, and secret redaction.
+- A small approved live smoke test confirms at least one generation path and
+  one processing path without turning paid calls into the test suite.
+- Fal request IDs, late results, cancellation outcomes, and retry decisions are
+  recoverable without resubmitting a paid task.
+- Workflow-specific additional steps can consume validated artifacts and create
+  PDF/Canva outputs or explicitly confirmed external deliveries without
+  changing the core PNG pipeline.
