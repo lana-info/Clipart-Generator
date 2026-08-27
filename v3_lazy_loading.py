@@ -9,7 +9,7 @@ from typing import Any
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QProgressDialog, QWidget
 
-from v3_project_state import ProjectMode, StepId, route_for_mode
+from v3_project_state import ProjectMode, StepId
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +67,7 @@ class LazyPageRegistry(MutableMapping[StepId, QWidget]):
             return page
 
         self._factories[step] = materialize
-        if step in route_for_mode(self.mode):
+        if step in self.shell.workflow_definition(self.mode).page_steps:
             set_factory = getattr(self.shell, "set_workflow_factory", None)
             if callable(set_factory):
                 set_factory(self.mode, step, materialize)
@@ -82,7 +82,7 @@ class LazyPageRegistry(MutableMapping[StepId, QWidget]):
 
     def __getitem__(self, step: StepId) -> QWidget:
         if step not in self._materialized:
-            if step in route_for_mode(self.mode):
+            if step in self.shell.workflow_definition(self.mode).page_steps:
                 page = self.shell.ensure_step_page(self.mode, step)
                 if step not in self._materialized:
                     return page

@@ -2783,6 +2783,30 @@ class WorkerThread(QThread):
             # provider result into a false failure.
             return
 
+    def recover_pending_fal_tasks(self):
+        """Resume polling recorded tasks without submitting them again."""
+
+        recovered = []
+        for task in self.fal_task_journal.pending():
+            client = FalClient(
+                FalConfig(
+                    api_key=self.fal_api_key,
+                    model_id=task.model_id,
+                    timeout_seconds=max(10.0, float(self.timeout)),
+                )
+            )
+            result = client.wait_for_result(
+                task.request_id,
+                timeout_seconds=float(self.generation_wait_timeout),
+                poll_interval_seconds=float(self.status_poll_interval),
+                is_cancelled=lambda: not self.is_running,
+                on_status=lambda status, task=task: self._record_fal_task(
+                    task.request_id, task.operation, task.model_id, status
+                ),
+            )
+            recovered.append(result)
+        return tuple(recovered)
+
     def _validate_topaz_source_file(self, source_path, upscale_factor):
         file_size = os.path.getsize(source_path)
         if file_size > TOPAZ_MAX_FILE_BYTES:

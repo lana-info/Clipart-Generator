@@ -14,6 +14,7 @@ from workflow_definitions import (
     workflow_for_mode,
 )
 from v3_processing_editor import ProcessingPipelineEditor
+from v3_wizard import AppShell
 
 
 class WorkflowDefinitionTests(unittest.TestCase):
@@ -111,6 +112,24 @@ class WorkflowDefinitionTests(unittest.TestCase):
             definition.page_for_step(StepId.PROMPTS).component_id,
             "shared.prompts",
         )
+
+    def test_custom_definition_controls_navigation_route(self):
+        custom = WorkflowDefinition(
+            workflow_id="short_clipart",
+            mode=ProjectMode.CLIPART,
+            prompt_builder_id="custom_prompt_builder",
+            pages=(
+                WorkflowPageSpec(StepId.PROJECT, "shared.project"),
+                WorkflowPageSpec(StepId.RESULTS, "shared.results"),
+            ),
+        )
+        state = __import__("v3_project_state").ProjectState(mode=ProjectMode.CLIPART)
+        state.common.work_dir = "."
+        shell = AppShell(state, workflow_definitions={ProjectMode.CLIPART: custom})
+
+        self.assertEqual(shell.state.route, (StepId.PROJECT, StepId.RESULTS))
+        self.assertEqual(shell.go_next(), StepId.RESULTS)
+        shell.close()
 
 
 if __name__ == "__main__":

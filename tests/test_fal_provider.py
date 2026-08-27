@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 from fal_provider import (
@@ -108,6 +109,30 @@ class FalProviderTests(unittest.TestCase):
             with self.assertRaises(FalProviderError):
                 client.submit({"prompt": "a fox"})
 
+    def test_paid_submit_is_not_retried_after_transient_http_failure(self):
+        class FailingOpener:
+            calls = 0
+
+            def open(self, _request, timeout):
+                self.calls += 1
+                raise urllib.error.HTTPError(
+                    "https://queue.fal.run", 503, "busy", {}, None
+                )
+
+        opener = FailingOpener()
+        client = FalClient(
+            FalConfig(
+                api_key="fal-secret",
+                model_id="fal-ai/flux/schnell",
+                max_retries=2,
+                retry_backoff_seconds=0,
+            )
+        )
+        with patch("fal_provider.urllib.request.build_opener", return_value=opener):
+            with self.assertRaises(FalProviderError):
+                client.submit({"prompt": "a fox"})
+        self.assertEqual(opener.calls, 1)
+
     def test_wait_for_result_polls_by_request_id_without_resubmitting(self):
         client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
         statuses = iter([
@@ -126,8 +151,9 @@ class FalProviderTests(unittest.TestCase):
     def test_wait_for_result_requests_cancellation_without_resubmitting(self):
         client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
         client.cancel = lambda _request_id: {"status": "CANCELLATION_REQUESTED"}
+        client.status = lambda _request_id: {"status": "CANCELLATION_REQUESTED"}
 
-        with self.assertRaisesRegex(FalProviderError, "cancellation requested"):
+        with self.assertRaisesRegex(FalProviderError, "cancel_requested"):
             client.wait_for_result(
                 "req-123",
                 timeout_seconds=10,
@@ -144,6 +170,24 @@ class FalProviderTests(unittest.TestCase):
 
     def test_cancelled_status_is_not_reported_as_success(self):
         self.assertEqual(fal_status_kind({"status": "CANCELLED"}), "cancelled")
+
+    def test_late_completion_after_cancel_remains_traceable(self):
+        client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
+        client.cancel = lambda _request_id: {"status": "CANCELLATION_REQUESTED"}
+        client.status = lambda _request_id: {"status": "COMPLETED"}
+        client.result = lambda _request_id: {
+            "images": [{"url": "https://cdn.example/late.png"}]
+        }
+
+        result = client.wait_for_result(
+            "req-123",
+            timeout_seconds=10,
+            poll_interval_seconds=0,
+            is_cancelled=lambda: True,
+        )
+
+        self.assertEqual(result["status"], "completed_after_cancel")
+        self.assertEqual(result["request_id"], "req-123")
 
     def test_config_bounds_retry_policy(self):
         with self.assertRaises(FalProviderError):

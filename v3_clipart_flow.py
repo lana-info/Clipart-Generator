@@ -539,6 +539,8 @@ def _worker_settings(
         )
         if isinstance((value := source.get(name)), str)
     }
+    if "fal_cost_confirmed" in source:
+        settings["fal_cost_confirmed"] = bool(source.get("fal_cost_confirmed"))
     settings.update(RuntimeData.from_dict(state.runtime.to_dict()).to_dict())
     generation = state.clipart.generation
     operations = state.clipart.operations
@@ -3045,6 +3047,12 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.run_status_label = QLabel()
         self.run_status_label.setWordWrap(True)
         self.run_status_label.setProperty("v3Small", True)
+        self.fal_cost_confirmation = QCheckBox(
+            "Я проверила актуальную цену Fal.ai и подтверждаю запуск"
+        )
+        self.fal_cost_confirmation.setAccessibleName(
+            "Подтверждение актуальной цены Fal.ai"
+        )
         for widget in (
             self.output_label,
             self.summary_label,
@@ -3055,6 +3063,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
             self.run_status_label,
         ):
             self.add_widget(widget)
+        self.add_widget(self.fal_cost_confirmation)
         self.card.layout().setAlignment(Qt.AlignmentFlag.AlignTop)
         self.card.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.card.content.setSizePolicy(
@@ -3080,6 +3089,25 @@ class ClipartReviewRunPage(_ScrollableStepPage):
                 QSizePolicy.Policy.Maximum,
             )
         self.refresh_from_state()
+
+    def _fal_selected(self) -> bool:
+        generation = self.state.clipart.generation
+        operations = self.state.clipart.operations
+        return (
+            str(generation.model).startswith("fal-ai/")
+            or str(generation.reference_model).startswith("fal-ai/")
+            or (operations.upscale_before and operations.upscale_before_provider == "fal")
+            or (operations.upscale_after and operations.upscale_after_provider == "fal")
+            or (operations.remove_background and operations.remove_background_provider == "fal")
+        )
+
+    def validation_issues(self) -> tuple[str, ...]:
+        if self._fal_selected() and not self.fal_cost_confirmation.isChecked():
+            return ("fal_cost_confirmation_required",)
+        return ()
+
+    def fal_cost_confirmed(self) -> bool:
+        return self.fal_cost_confirmation.isChecked()
 
     def refresh_from_state(self) -> None:
         output_dir = self.state.output_dir_for_mode(ProjectMode.CLIPART)
@@ -3321,6 +3349,8 @@ class ClipartFlowController(QObject):
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError("Настройки запуска повреждены")
+            runtime_settings = dict(runtime_settings)
+            runtime_settings["fal_cost_confirmed"] = self.review_page.fal_cost_confirmed()
             request = build_clipart_run_request(
                 self.shell.state,
                 runtime_settings,
@@ -3359,6 +3389,8 @@ class ClipartFlowController(QObject):
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError("Настройки запуска повреждены")
+            runtime_settings = dict(runtime_settings)
+            runtime_settings["fal_cost_confirmed"] = self.review_page.fal_cost_confirmed()
             request = build_clipart_run_request(
                 self.shell.state,
                 runtime_settings,

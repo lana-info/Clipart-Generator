@@ -84,6 +84,7 @@ VALIDATION_MESSAGES: dict[str, str] = {
     "confirmed_area_unavailable": "Ручная область метки пока недоступна в этом интерфейсе.",
     "full_image_change_consent_required": "Подтвердите операцию, меняющую всё изображение.",
     "external_transfer_consent_required": "Подтвердите передачу файлов выбранному внешнему сервису.",
+    "fal_cost_confirmation_required": "Подтвердите актуальную цену Fal.ai перед запуском.",
 }
 
 
@@ -140,6 +141,9 @@ class AppShell(QWidget):
         self._workflow_definitions = dict(workflow_definitions or {})
         for mode in ProjectMode:
             self._workflow_definitions.setdefault(mode, workflow_for_mode(mode))
+            self.state.set_workflow_route(
+                mode, self._workflow_definitions[mode].page_steps
+            )
         self._dirty = False
         self._pending_mode: ProjectMode | None = None
         self._invalid_key: tuple[ProjectMode, StepId] | None = None

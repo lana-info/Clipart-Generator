@@ -281,7 +281,11 @@ class FalClient:
                         raise FalProviderError("Fal.ai вернул некорректный ответ отмены") from parse_error
                     if isinstance(result, dict):
                         return result
-                if error.code not in transient_http or attempt >= int(self.config.max_retries):
+                if (
+                    request.method.upper() not in {"GET", "HEAD"}
+                    or error.code not in transient_http
+                    or attempt >= int(self.config.max_retries)
+                ):
                     raise FalProviderError("Fal.ai HTTP request failed") from error
                 time.sleep(float(self.config.retry_backoff_seconds) * (2**attempt))
             except (urllib.error.URLError, OSError, NetworkSecurityError) as error:
@@ -401,12 +405,28 @@ class FalClient:
         if timeout_seconds <= 0 or poll_interval_seconds < 0:
             raise ValueError("timeout and poll interval must be non-negative")
         started = time.monotonic()
+        cancellation_requested = False
         while True:
-            if is_cancelled is not None and is_cancelled():
-                self.cancel(request_id)
-                raise FalProviderError(
-                    "Fal.ai cancellation requested; request remains traceable by request ID"
-                )
+            if (
+                is_cancelled is not None
+                and is_cancelled()
+                and not cancellation_requested
+            ):
+                try:
+                    cancel_response = self.cancel(request_id)
+                except FalProviderError as error:
+                    raise FalProviderError(
+                        "Fal.ai cancel_failed; request ID сохранён для проверки статуса"
+                    ) from error
+                cancel_kind = fal_status_kind(cancel_response)
+                if cancel_kind == "already_completed":
+                    result = self.result(request_id)
+                    return {
+                        "request_id": str(request_id),
+                        "status": "completed_after_cancel",
+                        "result": result,
+                    }
+                cancellation_requested = True
             status = self.status(request_id)
             kind = fal_status_kind(status)
             if on_status is not None:
@@ -415,7 +435,7 @@ class FalClient:
                 result = self.result(request_id)
                 return {
                     "request_id": str(request_id),
-                    "status": kind,
+                    "status": "completed_after_cancel" if cancellation_requested else kind,
                     "result": result,
                 }
             if kind in {

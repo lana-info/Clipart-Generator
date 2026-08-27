@@ -1244,6 +1244,11 @@ class ProjectState:
     current_step_by_mode: dict[ProjectMode, StepId] = field(
         default_factory=_initial_steps
     )
+    workflow_routes: dict[ProjectMode, tuple[StepId, ...]] = field(
+        default_factory=dict,
+        repr=False,
+        compare=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.mode, ProjectMode):
@@ -1262,10 +1267,40 @@ class ProjectState:
             if normalized_step in ROUTES[normalized_mode]:
                 normalized_steps[normalized_mode] = normalized_step
         self.current_step_by_mode = normalized_steps
+        normalized_routes: dict[ProjectMode, tuple[StepId, ...]] = dict(ROUTES)
+        for mode, route in dict(self.workflow_routes).items():
+            try:
+                normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
+                normalized_route = tuple(
+                    step if isinstance(step, StepId) else StepId(step)
+                    for step in route
+                )
+            except (TypeError, ValueError):
+                continue
+            if normalized_route and len(normalized_route) == len(set(normalized_route)):
+                normalized_routes[normalized_mode] = normalized_route
+                if self.current_step_by_mode[normalized_mode] not in normalized_route:
+                    self.current_step_by_mode[normalized_mode] = normalized_route[0]
+        self.workflow_routes = normalized_routes
 
     @property
     def route(self) -> tuple[StepId, ...]:
-        return ROUTES[self.mode]
+        return self.workflow_routes[self.mode]
+
+    def set_workflow_route(
+        self,
+        mode: ProjectMode | str,
+        route: tuple[StepId, ...] | list[StepId],
+    ) -> None:
+        normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
+        normalized_route = tuple(
+            step if isinstance(step, StepId) else StepId(step) for step in route
+        )
+        if not normalized_route or len(normalized_route) != len(set(normalized_route)):
+            raise ProjectStateError("Workflow route must contain unique steps")
+        self.workflow_routes[normalized_mode] = normalized_route
+        if self.current_step_by_mode[normalized_mode] not in normalized_route:
+            self.current_step_by_mode[normalized_mode] = normalized_route[0]
 
     @property
     def current_step(self) -> StepId:
