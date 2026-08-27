@@ -229,13 +229,77 @@ class V3RunQueueTests(unittest.TestCase):
                 }
             )
             worker.progress.emit("[1/2] Генерация")
+            worker.progress_value.emit(95)
             self.app.processEvents()
 
             session = controller.run_queue.session
             self.assertIs(session.items[0].status, RunItemStatus.PENDING)
+            self.assertEqual(session.progress_percent, 0)
             self.assertIs(session.items[1].status, RunItemStatus.RUNNING)
             shell.close()
             shell.deleteLater()
+
+    def test_structured_cancel_terminal_closes_all_parallel_rows(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-parallel-cancel-") as temp:
+            session = RunQueueSession(
+                generation_request(temp, count=4),
+                ProjectMode.CLIPART,
+            )
+            for index in range(1, 4):
+                session.handle_item_progress(
+                    {
+                        "item_index": index,
+                        "total_items": 4,
+                        "stage": "generation",
+                        "status": "running",
+                    }
+                )
+            native = Mock()
+            self.assertTrue(
+                session.request_stop_after_current(
+                    immediate_stop=Mock(),
+                    native_after_current=native,
+                )
+            )
+            session.handle_diagnostic(
+                {
+                    "event": "run_finished",
+                    "outcome": "cancelled",
+                    "status": "cancelled",
+                    "item_index": 1,
+                }
+            )
+
+            native.assert_called_once_with()
+            self.assertFalse(session.running)
+            self.assertTrue(
+                all(item.status is RunItemStatus.CANCELLED for item in session.items)
+            )
+
+    def test_retry_diagnostic_maps_local_index_to_original_item(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-retry-diagnostic-") as temp:
+            journal = Mock()
+            session = RunQueueSession(
+                generation_request(temp, count=5),
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+            session.active_order = [2, 4]
+            session.items[2].attempts = 2
+            session.items[4].attempts = 3
+
+            session.handle_diagnostic(
+                {
+                    "event": "provider_task_polled",
+                    "provider": "kie",
+                    "task": "retry-task",
+                    "item_index": 1,
+                }
+            )
+
+            event = journal.record_structured.call_args.args[0]
+            self.assertEqual(event["item_index"], 3)
+            self.assertEqual(event["attempt"], 2)
 
     def test_malformed_structured_diagnostic_never_breaks_run(self):
         with tempfile.TemporaryDirectory(prefix="v3-malformed-diagnostic-") as temp:

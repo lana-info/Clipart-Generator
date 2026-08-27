@@ -193,6 +193,34 @@ class AppShell(QWidget):
         self._create_default_pages()
         self.refresh()
 
+    def active_run_controller(self) -> object | None:
+        """Return the one application controller that still owns an active run."""
+        for attribute in (
+            "clipart_flow_controller",
+            "pinterest_flow_controller",
+            "processing_flow_controller",
+        ):
+            controller = getattr(self, attribute, None)
+            if controller is None:
+                continue
+            worker = getattr(controller, "worker", None)
+            adapter = getattr(controller, "runtime_adapter", None)
+            is_running = getattr(adapter, "is_running", None)
+            if worker is not None and callable(is_running):
+                try:
+                    if bool(is_running(worker)):
+                        return controller
+                except (RuntimeError, TypeError):
+                    pass
+            session = getattr(getattr(controller, "run_queue", None), "session", None)
+            if session is not None and bool(getattr(session, "running", False)):
+                return controller
+        return None
+
+    def another_run_is_active(self, controller: object) -> bool:
+        active = self.active_run_controller()
+        return active is not None and active is not controller
+
     @property
     def is_dirty(self) -> bool:
         return self._dirty

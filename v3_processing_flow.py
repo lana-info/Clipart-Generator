@@ -1390,6 +1390,11 @@ class ProcessingFlowController(QObject):
             self.start()
 
     def start(self) -> ClipartRunRequest | None:
+        if self.shell.another_run_is_active(self):
+            message = "Сначала завершите текущее задание в другом режиме"
+            self.review_page.set_run_status(message, error=True)
+            self.error.emit(message)
+            return None
         if self.worker is not None and self.runtime_adapter.is_running(self.worker):
             self.review_page.set_run_status("Запуск уже выполняется", error=True)
             return None

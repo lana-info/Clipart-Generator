@@ -74,7 +74,7 @@ from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
 from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from release_contract import resolve_release_version
-from security_redaction import redact_text
+from security_redaction import redact_absolute_paths, redact_text
 from provider_diagnostics import (
     build_provider_event,
     count_provider_results,
@@ -911,49 +911,7 @@ def _item_error_known_paths(error, operation_args, max_paths=64):
 
 
 def sanitize_item_error_paths(value, known_paths=(), limit=500):
-    def replacement(raw_path):
-        is_windows = PureWindowsPath(raw_path).is_absolute()
-        basename = (
-            PureWindowsPath(raw_path).name
-            if is_windows
-            else PurePosixPath(raw_path).name
-        )
-        separator = "\\" if is_windows else "/"
-        return f"<path>{separator}{basename}" if basename else "<path>"
-
-    text = str(value or "")
-    for raw_path in sorted(
-        {str(path) for path in known_paths if str(path or "")},
-        key=len,
-        reverse=True,
-    ):
-        variants = {raw_path, repr(raw_path)[1:-1]}
-        for variant in sorted(variants, key=len, reverse=True):
-            text = text.replace(variant, replacement(raw_path))
-    text = _QUOTED_ABSOLUTE_PATH.sub(
-        lambda match: (
-            f"{match.group('quote')}{replacement(match.group('path'))}"
-            f"{match.group('quote')}"
-        ),
-        text,
-    )
-    text = _WINDOWS_ABSOLUTE_FILE_PATH.sub(
-        lambda match: replacement(match.group(0)),
-        text,
-    )
-    text = _POSIX_ABSOLUTE_FILE_PATH.sub(
-        lambda match: replacement(match.group(0)),
-        text,
-    )
-    text = _WINDOWS_ABSOLUTE_PATH.sub(
-        lambda match: replacement(match.group(0)),
-        text,
-    )
-    text = _POSIX_ABSOLUTE_PATH.sub(
-        lambda match: replacement(match.group(0)),
-        text,
-    )
-    return text[: max(0, int(limit))]
+    return redact_absolute_paths(value, tuple(known_paths), limit=limit)
 
 
 def is_schema_required_error_message(message):
@@ -984,6 +942,7 @@ class WorkerThread(QThread):
         self.generated_prompts = generated_prompts or []
         self.is_running = True
         self.stop_after_current_requested = False
+        self._paid_submission_open = True
         self._publish_lock = threading.Lock()
         self._local_operation_lock = threading.Lock()
         self._shared_state_lock = threading.Lock()
@@ -1150,10 +1109,12 @@ class WorkerThread(QThread):
     def stop(self):
         with self._publish_lock:
             self.is_running = False
+            self._paid_submission_open = False
 
     def request_stop_after_current(self):
         with self._publish_lock:
             self.stop_after_current_requested = True
+            self._paid_submission_open = False
 
     def _stop_after_current_if_requested(self):
         with self._publish_lock:
@@ -1169,10 +1130,23 @@ class WorkerThread(QThread):
 
     def _ensure_provider_submission_allowed(self):
         with self._publish_lock:
-            if not self.is_running:
+            if not self.is_running or not self._paid_submission_open:
                 raise ProcessingCancelled("Остановлено пользователем")
             if self.stop_after_current_requested:
                 raise ProcessingCancelled("Остановлено после текущего файла")
+
+    def _admit_paid_submission(self, provider: str, method: str) -> None:
+        """Atomically admit one paid POST attempt immediately before send."""
+        if not provider or str(method or "").upper() != "POST":
+            return
+        with self._publish_lock:
+            if not self.is_running or not self._paid_submission_open:
+                message = (
+                    "Остановлено после текущего файла"
+                    if self.stop_after_current_requested
+                    else "Остановлено пользователем"
+                )
+                raise ProcessingCancelled(message)
 
     @contextmanager
     def _provider_lease(self, provider):
@@ -1273,6 +1247,13 @@ class WorkerThread(QThread):
             if key in values and values[key] not in (None, ""):
                 event[key] = values[key]
         self.item_progress.emit(event)
+
+    def _emit_cancelled_run_terminal(self) -> None:
+        self._emit_diagnostic(
+            "run_finished",
+            outcome="cancelled",
+            status="cancelled",
+        )
 
     def _execute_item_entry(self, operation, *args):
         try:
@@ -1452,7 +1433,7 @@ class WorkerThread(QThread):
 
     def _wait_for_generation_launch_slot(self) -> None:
         while True:
-            self._ensure_running()
+            self._ensure_provider_submission_allowed()
             with self._generation_launch_lock:
                 now = time.monotonic()
                 if now >= self._next_generation_launch_at:
@@ -1465,7 +1446,7 @@ class WorkerThread(QThread):
 
     def _wait_for_photoroom_launch(self) -> None:
         while True:
-            self._ensure_running()
+            self._ensure_provider_submission_allowed()
             with self._photoroom_launch_lock:
                 now = time.monotonic()
                 in_initial_burst = (
@@ -1686,9 +1667,11 @@ class WorkerThread(QThread):
 
         if not self.is_running:
             self.progress.emit("Остановлено пользователем")
+            self._emit_cancelled_run_terminal()
             return
         if self.stop_after_current_requested:
             self.progress.emit("Остановлено после текущего файла")
+            self._emit_cancelled_run_terminal()
             return
         self.progress_value.emit(100)
         if emit_final:
@@ -2106,9 +2089,11 @@ class WorkerThread(QThread):
 
         if not self.is_running:
             self.progress.emit("Остановлено пользователем")
+            self._emit_cancelled_run_terminal()
             return
         if self.stop_after_current_requested:
             self.progress.emit("Остановлено после текущего файла")
+            self._emit_cancelled_run_terminal()
             return
         self.progress_value.emit(100)
         if emit_final:
@@ -3596,6 +3581,7 @@ class WorkerThread(QThread):
                 with self._network_attempt_lease(provider):
                     if provider == "photoroom":
                         self._wait_for_photoroom_launch()
+                    self._admit_paid_submission(provider, method)
                     with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
                         response_status = getattr(resp, "status", None)
                         response_getcode = getattr(resp, "getcode", None)

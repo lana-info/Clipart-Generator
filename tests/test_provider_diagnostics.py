@@ -90,6 +90,18 @@ class ProviderDiagnosticsTests(unittest.TestCase):
         self.assertNotIn("C:\\Users\\Owner", message)
         self.assertIn("KIE failed", message)
 
+    def test_provider_message_redacts_unc_and_posix_paths_with_spaces(self):
+        message = safe_provider_message(
+            "failed at /home/Jane Doe/Customer A/input.png; "
+            r"mirror \\server\private share\Customer A\input.png"
+        )
+
+        self.assertNotIn("Jane Doe", message)
+        self.assertNotIn("Customer A", message)
+        self.assertNotIn("private share", message)
+        self.assertNotIn("server", message)
+        self.assertIn("input.png", message)
+
     def test_result_counter_understands_kie_json_without_returning_urls(self):
         result_json = json.dumps(
             {"resultUrls": [SIGNED_URL, "https://files.example/second.png?sig=secret"]}

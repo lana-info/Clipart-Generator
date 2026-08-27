@@ -10,7 +10,7 @@ from typing import Any
 
 from PIL import Image
 
-from security_redaction import redact_text
+from security_redaction import redact_absolute_paths, redact_text
 
 
 _EVENTS = frozenset(
@@ -123,8 +123,6 @@ _INTEGER_FIELDS = frozenset(
     }
 )
 _URL = re.compile(r"(?i)\b(?:https?|ftp)://[^\s,;]+")
-_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^\r\n,;]+")
-_POSIX_PATH = re.compile(r"(?<![:/])/(?:[^/\s]+/)+[^/\s]+")
 
 
 def _safe_filename(value: Any) -> str:
@@ -137,9 +135,7 @@ def safe_provider_message(value: Any) -> str:
     """Return a bounded provider message with secrets, paths and URLs removed."""
     text = redact_text(value, limit=500)
     text = _URL.sub("<url>", text)
-    text = _WINDOWS_PATH.sub("<path>", text)
-    text = _POSIX_PATH.sub("<path>", text)
-    return text[:500]
+    return redact_absolute_paths(text, limit=500)
 
 
 def inspect_image_metadata(path: str | Path) -> dict[str, object]:

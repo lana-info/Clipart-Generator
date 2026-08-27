@@ -1,18 +1,19 @@
 # Project state
 
-Updated: 2026-08-26
+Updated: 2026-08-27
 
 ## Operating model
 
 - VDS is the primary development environment.
 - Windows is the environment for Windows-specific behavior and visual verification.
-- GitHub is the source-code handoff point between environments; release
-  artifacts are built and published by Azure Pipelines.
+- GitHub is the source-code handoff point between environments. The current
+  Windows 3.0.5 installer must be built by the manual GitHub Actions workflow;
+  Azure remains historical/fallback infrastructure and is not queued here.
 - Only one side edits the active branch at a time.
 - Before changing sides, the active side runs relevant checks, commits, and pushes.
 - The receiving side uses `git fetch` and `git pull --ff-only`.
 - Windows-only tasks do not block independent Linux-safe work.
-- Azure release pipelines are manual. Start a build only after a separate,
+- Release pipelines are manual. Start a build only after a separate,
   explicit owner request and only for the platform named in that request;
   ordinary fixes, commits, and pushes must not start Windows or macOS builds.
 
@@ -27,10 +28,10 @@ Updated: 2026-08-26
 
 ## Next task
 
-Review the verified `codex/fix-windows-acceptance-ux-3.0.5` provider-aware
-source checkpoint. Merge and start a Windows-only build only after a separate
-owner command; do not publish a revision to the update service before
-target-machine acceptance.
+Merge the audited `codex/fix-windows-acceptance-ux-3.0.5` source checkpoint
+into `develop/3.0` and run the explicitly approved Windows-only GitHub Actions
+workflow. Do not publish a revision to the update service before target-machine
+acceptance.
 
 ## Provider-aware parallel stabilization checkpoint — 2026-08-26
 
@@ -53,6 +54,21 @@ target-machine acceptance.
   pytest passes: 724 tests, 1 expected Linux skip, 2 deselected and 87 subtests.
   Python compilation, tracked sensitive-artifact scan and `git diff --check`
   pass. No paid request, build, merge, push or server publication ran.
+
+## Final concurrency audit — 2026-08-27
+
+- Stop atomically closes admission at every paid provider POST boundary,
+  including nested KIE work and PhotoRoom 429 retries. Already admitted tasks
+  may settle; no new paid submission is admitted afterward.
+- Mode switching and starts in another mode are blocked while any application
+  controller owns an active run, preserving the application-wide remote cap.
+- Structured cancellation closes every active/pending Results row; legacy
+  aggregate progress no longer overwrites indexed progress, and retry
+  diagnostics map back to the original item.
+- Drive, UNC and POSIX paths with spaces share one redaction implementation in
+  item errors, provider events and exported diagnostic archives.
+- Full source verification: 731 passed, 1 expected Linux skip, 2 deselected,
+  87 subtests; compile and diff checks passed. No paid call or build was made.
 
 ## Windows acceptance UX checkpoint — 2026-08-26
 

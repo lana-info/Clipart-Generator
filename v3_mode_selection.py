@@ -503,6 +503,16 @@ class V3ApplicationView(QWidget):
         if self.shell is None:
             self.show_new_project()
             return
+        if self.shell.active_run_controller() is not None:
+            self.shell.set_save_error(
+                "Сначала остановите текущее задание или дождитесь его завершения."
+            )
+            self._diagnostic_event(
+                "mode_switch_blocked",
+                "Смена режима заблокирована во время выполнения задания.",
+                screen="wizard",
+            )
+            return
         self._selection_intent = SelectionIntent.SWITCH_MODE
         self.mode_selection.reset_selection()
         self.mode_selection.set_mode_switch_context(True)
@@ -536,6 +546,13 @@ class V3ApplicationView(QWidget):
             self._selection_intent is SelectionIntent.SWITCH_MODE
             and self.shell is not None
         ):
+            if self.shell.active_run_controller() is not None:
+                self._set_application_screen(
+                    self.shell,
+                    "wizard",
+                    "workflow_still_running",
+                )
+                return
             controller = self._ensure_mode_controller(self.shell, mode)
             if self.shell.state.mode is not mode:
                 self.shell.request_mode_switch(mode)

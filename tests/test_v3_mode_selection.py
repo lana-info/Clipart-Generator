@@ -3,7 +3,7 @@ import tempfile
 import unittest
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -79,6 +79,23 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertTrue(view.cancel_mode_switch())
         self.app.processEvents()
         self.assertEqual((view.width(), view.height()), expected)
+
+    def test_mode_switch_is_blocked_while_any_run_is_active(self):
+        view = V3ApplicationView()
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        self.app.processEvents()
+        controller = view.shell.clipart_flow_controller
+        controller.worker = Mock()
+        controller.runtime_adapter.is_running = Mock(return_value=True)
+
+        view.show_mode_switcher()
+        self.app.processEvents()
+
+        self.assertIs(view.stack.currentWidget(), view.shell)
+        self.assertFalse(view.shell.save_error_label.isHidden())
+        self.assertIn("текущее задание", view.shell.save_error_label.text())
+        view.close()
+        view.deleteLater()
 
     def test_window_size_is_stable_across_every_mode_route(self):
         for mode in ProjectMode:

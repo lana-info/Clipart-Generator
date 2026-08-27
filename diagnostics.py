@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Mapping
 
-from security_redaction import redact_text
+from security_redaction import redact_absolute_paths, redact_text
 from provider_diagnostics import build_provider_event
 
 
@@ -82,8 +82,6 @@ _SECRET_PATTERNS = (
     re.compile(r"\bCG-[A-Z2-7]{8,}\b", re.IGNORECASE),
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._~-]{8,}"),
 )
-_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^\r\n,;]+")
-_POSIX_PATH = re.compile(r"(?<![:/])/(?:[^/\s]+/)+([^/\s]+)")
 
 
 def _utc_now() -> datetime:
@@ -97,9 +95,7 @@ def _safe_text(value: Any, limit: int = 512) -> str:
     home = str(Path.home())
     if home and home not in {"/", "."}:
         text = text.replace(home, "<путь>")
-    text = _WINDOWS_PATH.sub("<путь>", text)
-    text = _POSIX_PATH.sub(lambda match: f"<путь>/{match.group(1)}", text)
-    return text[:limit]
+    return redact_absolute_paths(text, limit=limit).replace("<path>", "<путь>")
 
 
 def _safe_filename(value: Any) -> str:

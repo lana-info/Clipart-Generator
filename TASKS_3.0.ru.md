@@ -28,6 +28,11 @@ RunPod UX и SynthID research остаются DEFERRED/BLOCKED и не вход
 | RunPod UX | DEFERRED | endpoint/billing integration не подтверждены реальным аккаунтом |
 | SynthID M1/M2/M3 | BLOCKED/DEFERRED | отсутствуют official evidence/CUDA/cloud run |
 
+Текущий релизный статус 2026-08-27: финальный аудит параллельных очередей
+закрыт регрессионными тестами; версия источника синхронизирована как 3.0.5.
+Следующее действие — объединение с `develop/3.0` и только Windows-сборка в
+GitHub Actions. Публикация на сервер до проверки установленной сборки запрещена.
+
 ## Task 1: Зафиксировать контракты состояния проекта и маршрутов
 
 Key: `CG3-TASK-001`

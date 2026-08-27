@@ -509,14 +509,20 @@ class RunQueueSession(QObject):
             safe.pop("summary", None)
 
             try:
-                requested_index = int(safe.get("item_index", 0) or 0)
+                local_index = int(safe.get("item_index", 0) or 0)
             except (TypeError, ValueError, OverflowError):
-                requested_index = 0
-            if not 1 <= requested_index <= len(self.items):
+                local_index = 0
+            active_item = self._active_item(local_index)
+            if active_item is not None:
+                requested_index = active_item.index
+            else:
                 requested_index = (
                     self.current_index + 1 if self.current_index is not None else 1
                 )
-            requested_index = min(max(1, requested_index), max(1, len(self.items)))
+                requested_index = min(
+                    max(1, requested_index),
+                    max(1, len(self.items)),
+                )
             safe["item_index"] = requested_index
             safe["item_total"] = len(self.items)
             if self.items:
@@ -530,6 +536,11 @@ class RunQueueSession(QObject):
                         {"event": safe_name, **safe},
                         operation_id=self.operation_id,
                     )
+            if (
+                safe_name == "run_finished"
+                and str(safe.get("outcome") or "").lower() == "cancelled"
+            ):
+                self.handle_cancelled_terminal()
         except Exception:
             self._event(
                 "diagnostic_parse_failed",
@@ -974,13 +985,10 @@ class RunQueueSession(QObject):
             return False
         self.stop_after_current_requested = True
         self._event("stop_after_current_requested")
-        current = (
-            self.items[self.current_index]
-            if self.current_index is not None
-            and 0 <= self.current_index < len(self.items)
-            else None
-        )
-        if current is not None and current.status is RunItemStatus.RUNNING:
+        active_items = [
+            item for item in self.items if item.status is RunItemStatus.RUNNING
+        ]
+        if active_items:
             if native_after_current is not None:
                 native_after_current()
             else:
@@ -999,16 +1007,11 @@ class RunQueueSession(QObject):
         if not self.running:
             return False
         self._event("immediate_stop_requested")
-        current = (
-            self.items[self.current_index]
-            if self.current_index is not None
-            and 0 <= self.current_index < len(self.items)
-            else None
-        )
-        if current is not None and current.status is RunItemStatus.RUNNING:
-            self._close_running_stages(current, "cancelled")
-            current.status = RunItemStatus.CANCELLED
-            current.short_message = "Операция прервана пользователем."
+        for item in self.items:
+            if item.status is RunItemStatus.RUNNING:
+                self._close_running_stages(item, "cancelled")
+                item.status = RunItemStatus.CANCELLED
+                item.short_message = "Операция прервана пользователем."
         self._cancel_pending()
         self.running = False
         self.finished_at = time.monotonic()
@@ -1016,6 +1019,21 @@ class RunQueueSession(QObject):
         self.changed.emit()
         immediate_stop()
         return True
+
+    def handle_cancelled_terminal(self) -> None:
+        """Close every still-active row after a structured worker cancellation."""
+        if not self.running and self.finished_at is not None:
+            return
+        for item in self.items:
+            if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
+                self._close_running_stages(item, "cancelled")
+                item.status = RunItemStatus.CANCELLED
+                item.short_message = "Не выполнялся после остановки."
+        self.current_index = None
+        self.running = False
+        self.finished_at = time.monotonic()
+        self._record_run_cancelled()
+        self.changed.emit()
 
     def handle_finished(self) -> None:
         if not self.running and self.finished_at is not None:
@@ -2006,6 +2024,9 @@ class RunQueueSupport:
             return
         if self.session is None:
             self.controller.progress_value.emit(0)
+            return
+        if self._structured_progress_generation == generation:
+            self.controller.progress_value.emit(self.session.progress_percent)
             return
         total_items = max(len(self.session.items), 1)
         current_index = self.session.current_index

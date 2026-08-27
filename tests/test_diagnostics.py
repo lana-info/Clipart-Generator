@@ -130,6 +130,28 @@ class DiagnosticJournalTests(unittest.TestCase):
             self.assertIn("update_available", exported)
             self.assertNotIn(str(Path.home()), exported)
 
+    def test_export_redacts_posix_and_unc_paths_with_spaces(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.0.5")
+            journal.record(
+                "provider_failed",
+                "failed at /home/Jane Doe/Customer A/input.png; "
+                r"mirror \\server\private share\Customer A\input.png",
+                details={"provider": "kie"},
+            )
+            destination = Path(temp) / "diagnostics.zip"
+            journal.export_zip(destination)
+            with zipfile.ZipFile(destination) as archive:
+                exported = "\n".join(
+                    archive.read(name).decode("utf-8")
+                    for name in archive.namelist()
+                )
+
+            self.assertNotIn("Jane Doe", exported)
+            self.assertNotIn("Customer A", exported)
+            self.assertNotIn("private share", exported)
+            self.assertNotIn("server", exported)
+
 
 if __name__ == "__main__":
     unittest.main()

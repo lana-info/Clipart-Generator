@@ -44,7 +44,7 @@ class ReleaseContractTests(unittest.TestCase):
         version = resolve_release_version(Path("release"))
         self.assertEqual(
             expected_installer_name(version),
-            "VibixImages-Setup-3.0.3.exe",
+            "VibixImages-Setup-3.0.5.exe",
         )
         with tempfile.TemporaryDirectory() as root:
             installer_name = expected_installer_name(version)

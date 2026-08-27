@@ -562,6 +562,56 @@ class ParallelGenerationTests(unittest.TestCase):
 
             self.assertEqual(network_calls, 1)
 
+    def test_stop_closes_paid_kie_submission_even_inside_a_nested_provider_lease(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            {"kie_api_key": "test-key", "generation_launch_interval": 0},
+        )
+        worker._provider_lease_context.depths = {"kie": 1}
+        worker.request_stop_after_current()
+        req = main.request.Request(
+            "https://api.kie.ai/api/v1/jobs/createTask",
+            data=b"{}",
+            method="POST",
+        )
+
+        with patch.object(main, "open_url_secure") as opener:
+            with self.assertRaises(main.ProcessingCancelled):
+                worker._request_with_retries(req)
+
+        opener.assert_not_called()
+
+    def test_stop_prevents_photoroom_429_retry_inside_nested_provider_lease(self):
+        worker = main.WorkerThread(
+            "mode2_process",
+            ".",
+            {"photoroom_api_key": "photo-key", "retries": 2},
+        )
+        worker._provider_lease_context.depths = {"photoroom": 1}
+        worker._photoroom_launch_interval = 0.0
+        req = main.request.Request(
+            main.PHOTOROOM_SEGMENT_URL,
+            data=b"image",
+            method="POST",
+        )
+
+        def reject_once(*args, **kwargs):
+            worker.request_stop_after_current()
+            raise main.urlerror.HTTPError(
+                req.full_url,
+                429,
+                "rate limited",
+                {},
+                None,
+            )
+
+        with patch.object(main, "open_url_secure", side_effect=reject_once) as opener:
+            with self.assertRaises(main.ProcessingCancelled):
+                worker._request_with_retries(req)
+
+        self.assertEqual(opener.call_count, 1)
+
     def test_kie_provider_slot_is_reused_after_upload_failure(self):
         with tempfile.TemporaryDirectory(prefix="parallel-kie-reuse-") as temp_dir:
             first_path, second_path = create_inputs(temp_dir, 2)
