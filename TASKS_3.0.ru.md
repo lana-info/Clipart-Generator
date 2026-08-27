@@ -1396,7 +1396,8 @@ Verification: contract tests и review границы между run plan, adapt
 
 ### NEXT-TASK-006 — Проверить официальный Fal.ai API и выбрать модели
 
-Status: Planned
+Status: In progress — official queue contract and initial endpoint profiles
+recorded; pricing/live validation remains
 
 Acceptance:
 
@@ -1415,7 +1416,8 @@ Verification: документированный probe без публикаци
 
 ### NEXT-TASK-007 — Реализовать базовый lifecycle FalProvider
 
-Status: Planned
+Status: In progress — dependency-free REST queue adapter implemented; common
+run contract, polling policy and recovery remain
 
 Зависимость: NEXT-TASK-000, NEXT-TASK-005, NEXT-TASK-006.
 

@@ -137,9 +137,10 @@ class ApiSettingsDialog(QDialog):
         form = QFormLayout()
         self.kie_edit = QLineEdit(values.get("kie_api_key", ""))
         self.photo_edit = QLineEdit(values.get("photoroom_api_key", ""))
+        self.fal_edit = QLineEdit(values.get("fal_api_key", ""))
         self.runpod_key_edit = QLineEdit(values.get("runpod_api_key", ""))
         self.runpod_endpoint_edit = QLineEdit(values.get("runpod_endpoint_id", ""))
-        for edit in (self.kie_edit, self.photo_edit, self.runpod_key_edit):
+        for edit in (self.kie_edit, self.photo_edit, self.fal_edit, self.runpod_key_edit):
             edit.setEchoMode(QLineEdit.EchoMode.Password)
         kie_row = QHBoxLayout()
         kie_row.addWidget(self.kie_edit)
@@ -153,6 +154,7 @@ class ApiSettingsDialog(QDialog):
         self.photo_balance_button.clicked.connect(self._check_photoroom_balance)
         photo_row.addWidget(self.photo_balance_button)
         form.addRow("PhotoRoom API Key", photo_row)
+        form.addRow("Fal.ai API Key", self.fal_edit)
         form.addRow("RunPod API Key", self.runpod_key_edit)
         form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
         self.kie_concurrency_combo = QComboBox()
@@ -204,6 +206,7 @@ class ApiSettingsDialog(QDialog):
         self.settings = {
             "kie_api_key": self.kie_edit.text().strip(),
             "photoroom_api_key": self.photo_edit.text().strip(),
+            "fal_api_key": self.fal_edit.text().strip(),
             "runpod_api_key": self.runpod_key_edit.text().strip(),
             "runpod_endpoint_id": self.runpod_endpoint_edit.text().strip(),
             "kie_concurrency": normalize_provider_concurrency(

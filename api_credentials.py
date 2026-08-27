@@ -4,7 +4,7 @@ import ast
 import os
 import tempfile
 
-SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key")
+SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key", "fal_api_key")
 ALL_PROVIDER_CREDENTIAL_KEYS = SECRET_CONFIG_KEYS + ("runpod_api_key", "runpod_endpoint_id")
 
 
