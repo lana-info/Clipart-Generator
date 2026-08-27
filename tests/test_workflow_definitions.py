@@ -31,6 +31,9 @@ class WorkflowDefinitionTests(unittest.TestCase):
         self.assertNotIn("trim", pinterest.processing_operations)
         self.assertEqual(clipart.prompt_builder_id, "clipart_structured")
         self.assertEqual(pinterest.prompt_builder_id, "pinterest_structured")
+        self.assertTrue(clipart.supports_provider_control("generation_model"))
+        self.assertTrue(clipart.supports_export("png"))
+        self.assertEqual(pinterest.validation_id, "pinterest_default")
 
     def test_workflow_pages_preserve_order_and_allow_custom_builder(self):
         definition = WorkflowDefinition(

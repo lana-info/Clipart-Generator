@@ -14,6 +14,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 from urllib.parse import quote
@@ -38,6 +39,8 @@ class FalConfig:
     api_key: str = field(repr=False)
     model_id: str
     timeout_seconds: float = 30.0
+    max_retries: int = 2
+    retry_backoff_seconds: float = 0.5
 
     def validate(self) -> None:
         if not str(self.api_key or "").strip():
@@ -47,6 +50,10 @@ class FalConfig:
             raise FalProviderError("Не указан корректный Fal.ai model ID")
         if not 1 <= float(self.timeout_seconds) <= 120:
             raise FalProviderError("Недопустимый timeout Fal.ai")
+        if not 0 <= int(self.max_retries) <= 3:
+            raise FalProviderError("Недопустимое число повторов Fal.ai")
+        if not 0 <= float(self.retry_backoff_seconds) <= 10:
+            raise FalProviderError("Недопустимая задержка повторов Fal.ai")
 
 
 def fal_status_kind(payload: Mapping[str, Any] | None) -> str:
@@ -57,6 +64,8 @@ def fal_status_kind(payload: Mapping[str, Any] | None) -> str:
         "COMPLETED": "completed",
         "CANCELLATION_REQUESTED": "cancel_requested",
         "ALREADY_COMPLETED": "already_completed",
+        "CANCELLED": "cancelled",
+        "CANCELED": "cancelled",
         "NOT_FOUND": "not_found",
     }.get(status, "unknown")
 
@@ -144,23 +153,30 @@ class FalClient:
             },
             method=method,
         )
-        try:
-            opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
-            with opener.open(request, timeout=self.config.timeout_seconds) as response:
-                raw = response.read(MAX_FAL_RESPONSE_BYTES + 1)
-            if len(raw) > MAX_FAL_RESPONSE_BYTES:
-                raise FalProviderError("Fal.ai response слишком большой")
-        except urllib.error.HTTPError as error:
-            if error.code in accepted_http_errors:
-                try:
-                    result = json.loads(error.read(256 * 1024).decode("utf-8", "replace"))
-                except (OSError, UnicodeError, ValueError) as parse_error:
-                    raise FalProviderError("Fal.ai вернул некорректный ответ отмены") from parse_error
-                if isinstance(result, dict):
-                    return result
-            raise FalProviderError("Fal.ai HTTP request failed") from error
-        except (urllib.error.URLError, OSError, NetworkSecurityError) as error:
-            raise FalProviderError("Не удалось обратиться к Fal.ai") from error
+        transient_http = {408, 409, 425, 429, 500, 502, 503, 504}
+        for attempt in range(int(self.config.max_retries) + 1):
+            try:
+                opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
+                with opener.open(request, timeout=self.config.timeout_seconds) as response:
+                    raw = response.read(MAX_FAL_RESPONSE_BYTES + 1)
+                if len(raw) > MAX_FAL_RESPONSE_BYTES:
+                    raise FalProviderError("Fal.ai response слишком большой")
+                break
+            except urllib.error.HTTPError as error:
+                if error.code in accepted_http_errors:
+                    try:
+                        result = json.loads(error.read(256 * 1024).decode("utf-8", "replace"))
+                    except (OSError, UnicodeError, ValueError) as parse_error:
+                        raise FalProviderError("Fal.ai вернул некорректный ответ отмены") from parse_error
+                    if isinstance(result, dict):
+                        return result
+                if error.code not in transient_http or attempt >= int(self.config.max_retries):
+                    raise FalProviderError("Fal.ai HTTP request failed") from error
+                time.sleep(float(self.config.retry_backoff_seconds) * (2**attempt))
+            except (urllib.error.URLError, OSError, NetworkSecurityError) as error:
+                if attempt >= int(self.config.max_retries):
+                    raise FalProviderError("Не удалось обратиться к Fal.ai") from error
+                time.sleep(float(self.config.retry_backoff_seconds) * (2**attempt))
         try:
             result = json.loads(raw.decode("utf-8", "replace"))
         except (UnicodeError, ValueError) as error:
@@ -196,6 +212,7 @@ class FalClient:
         image_url: str,
         *,
         scale: int = 2,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         model_by_operation = {
             "remove_background": "fal-ai/bria/background/remove",
@@ -223,6 +240,7 @@ class FalClient:
             request_id,
             timeout_seconds=300.0,
             poll_interval_seconds=2.0,
+            is_cancelled=is_cancelled,
         )
 
     def status(self, request_id: str) -> dict[str, Any]:
@@ -254,6 +272,7 @@ class FalClient:
         timeout_seconds: float = 300.0,
         poll_interval_seconds: float = 2.0,
         sleep=time.sleep,
+        is_cancelled: Callable[[], bool] | None = None,
     ) -> dict[str, Any]:
         """Poll one already-submitted request and fetch its final result.
 
@@ -266,6 +285,11 @@ class FalClient:
             raise ValueError("timeout and poll interval must be non-negative")
         started = time.monotonic()
         while True:
+            if is_cancelled is not None and is_cancelled():
+                self.cancel(request_id)
+                raise FalProviderError(
+                    "Fal.ai cancellation requested; request remains traceable by request ID"
+                )
             status = self.status(request_id)
             kind = fal_status_kind(status)
             if kind == "completed":
@@ -275,7 +299,13 @@ class FalClient:
                     "status": kind,
                     "result": result,
                 }
-            if kind in {"unknown", "not_found"}:
+            if kind in {
+                "cancel_requested",
+                "cancelled",
+                "already_completed",
+                "unknown",
+                "not_found",
+            }:
                 raise FalProviderError(f"Fal.ai request завершён с состоянием {kind}")
             if time.monotonic() - started >= timeout_seconds:
                 raise TimeoutError("Превышено время ожидания результата Fal.ai")

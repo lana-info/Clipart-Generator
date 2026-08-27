@@ -105,6 +105,20 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(calls["request_id"], "fal-request-1")
         self.assertEqual(calls["request"].provider_id, "fal")
 
+    def test_fal_generation_honors_explicit_unconfirmed_cost_gate(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                fal_api_key="fal-test-secret",
+                fal_cost_confirmed=False,
+                text_generation_model="fal-ai/flux/schnell",
+            ),
+            generated_prompts=[{"prompt": "a fox", "references": []}],
+        )
+        with self.assertRaisesRegex(RuntimeError, "подтвердите актуальную цену"):
+            worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
+
     def test_fal_upscale_processing_pass_uses_fal_endpoint_and_downloads_result(self):
         with tempfile.TemporaryDirectory(prefix="fal-upscale-") as temp:
             source = Path(temp) / "source.png"

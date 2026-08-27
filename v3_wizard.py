@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
@@ -30,6 +30,7 @@ from v3_project_state import (
     StepId,
     route_for_mode,
 )
+from workflow_definitions import WorkflowDefinition, workflow_for_mode
 
 
 MODE_TITLES: dict[ProjectMode, str] = {
@@ -94,6 +95,7 @@ class WizardStepPage(FormCard):
         parent: QWidget | None = None,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        workflow_definitions: Mapping[ProjectMode, WorkflowDefinition] | None = None,
     ) -> None:
         super().__init__(
             STEP_TITLES[step],
@@ -130,10 +132,14 @@ class AppShell(QWidget):
         parent: QWidget | None = None,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        workflow_definitions: Mapping[ProjectMode, WorkflowDefinition] | None = None,
     ) -> None:
         super().__init__(parent)
         self.state = state if state is not None else ProjectState()
         self.tokens = tokens
+        self._workflow_definitions = dict(workflow_definitions or {})
+        for mode in ProjectMode:
+            self._workflow_definitions.setdefault(mode, workflow_for_mode(mode))
         self._dirty = False
         self._pending_mode: ProjectMode | None = None
         self._invalid_key: tuple[ProjectMode, StepId] | None = None
@@ -232,6 +238,10 @@ class AppShell(QWidget):
     @property
     def current_page(self) -> QWidget:
         return self.ensure_step_page(self.state.mode, self.state.current_step)
+
+    def workflow_definition(self, mode: ProjectMode | str | None = None) -> WorkflowDefinition:
+        normalized = mode if isinstance(mode, ProjectMode) else ProjectMode(mode or self.state.mode)
+        return self._workflow_definitions[normalized]
 
     def _card_frame(self) -> QFrame:
         frame = QFrame()
@@ -371,7 +381,7 @@ class AppShell(QWidget):
 
     def _create_default_pages(self) -> None:
         for mode in ProjectMode:
-            for step in route_for_mode(mode):
+            for step in self.workflow_definition(mode).page_steps:
                 page = WizardStepPage(mode, step, tokens=self.tokens)
                 self._pages[(mode, step)] = page
                 self.page_stack.addWidget(page)
@@ -386,7 +396,7 @@ class AppShell(QWidget):
             mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
         )
         normalized_step = step if isinstance(step, StepId) else StepId(step)
-        if normalized_step not in route_for_mode(normalized_mode):
+        if normalized_step not in self.workflow_definition(normalized_mode).page_steps:
             raise ValueError(
                 f"Step {normalized_step.value!r} is outside "
                 f"{normalized_mode.value!r} route"
@@ -414,7 +424,7 @@ class AppShell(QWidget):
         normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
         normalized_step = step if isinstance(step, StepId) else StepId(step)
         key = (normalized_mode, normalized_step)
-        if normalized_step not in route_for_mode(normalized_mode):
+        if normalized_step not in self.workflow_definition(normalized_mode).page_steps:
             raise ValueError("Page factory step is outside the mode route")
         if key in self._page_factories:
             raise ValueError("Page factory is already registered")
@@ -666,7 +676,7 @@ class AppShell(QWidget):
             # Results are terminal for the previous run.  Reusing that step
             # after switching mode makes the new mode open on the old results
             # page, with no way to start a fresh workflow.
-            self.state.set_step(route_for_mode(mode)[0])
+            self.state.set_step(self.workflow_definition(mode).page_steps[0])
         self._invalid_key = None
         self.validation_label.clear()
         self.validation_label.hide()

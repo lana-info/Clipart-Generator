@@ -2740,6 +2740,7 @@ class WorkerThread(QThread):
         return fal_image_data_uri(current_path)
 
     def _fal_process_image(self, image_url, *, operation, model_id, scale=2):
+        self._ensure_fal_cost_confirmed()
         client = FalClient(
             FalConfig(
                 api_key=self.fal_api_key,
@@ -2748,7 +2749,12 @@ class WorkerThread(QThread):
             )
         )
         self.progress.emit(f"  Fal.ai операция: {operation}; модель={model_id}")
-        completed = client.run_image_operation(operation, image_url, scale=scale)
+        completed = client.run_image_operation(
+            operation,
+            image_url,
+            scale=scale,
+            is_cancelled=lambda: not self.is_running,
+        )
         self._ensure_running()
         return fal_image_url(completed.get("result"))
 
@@ -4117,6 +4123,7 @@ class WorkerThread(QThread):
         return models
 
     def _fal_generate_image(self, prompt, model_id):
+        self._ensure_fal_cost_confirmed()
         client = FalClient(
             FalConfig(
                 api_key=self.fal_api_key,
@@ -4144,12 +4151,23 @@ class WorkerThread(QThread):
             request_id,
             timeout_seconds=float(self.generation_wait_timeout),
             poll_interval_seconds=float(self.status_poll_interval),
+            is_cancelled=lambda: not self.is_running,
         )
         self._ensure_running()
         try:
             return fal_image_url(completed.get("result"))
         except FalProviderError:
             raise
+
+    def _ensure_fal_cost_confirmed(self):
+        # Legacy test/runtime entry points may omit this field. The main UI
+        # adds it only after the user confirms the current Fal.ai price.
+        if "fal_cost_confirmed" in self.settings and not bool(
+            self.settings.get("fal_cost_confirmed")
+        ):
+            raise RuntimeError(
+                "Запуск Fal.ai остановлен: подтвердите актуальную цену модели перед запуском"
+            )
 
     def _normalize_model_ratio(self, model_name, ratio, has_references=False):
         allowed = set(ratios_for_mode(model_name, has_references))
@@ -7692,6 +7710,20 @@ class MainWindow(QMainWindow):
         if needs_fal_api and not current_fal_api_key:
             QMessageBox.warning(self, "Ошибка", "Укажите Fal.ai API Key на вкладке «Настройки»")
             return
+        fal_cost_confirmed = False
+        if needs_fal_api:
+            answer = QMessageBox.question(
+                self,
+                "Подтвердите запуск Fal.ai",
+                "Для выбранной модели Fal.ai актуальная цена не загружена в приложение. "
+                "Сервис может списать средства по своему текущему тарифу. "
+                "Продолжить только если вы проверили цену в Fal.ai?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            fal_cost_confirmed = True
 
         needs_photoroom_api = (
             will_process
@@ -7710,6 +7742,7 @@ class MainWindow(QMainWindow):
             return
 
         runtime_settings = build_runtime_settings(self.config, self.secret_settings)
+        runtime_settings["fal_cost_confirmed"] = fal_cost_confirmed
         self.has_generated_output_in_run = False
         active_prompts = []
         visible_mark_confirmed_regions = {}

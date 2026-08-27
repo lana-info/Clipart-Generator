@@ -59,6 +59,10 @@ class WorkflowDefinition:
     pages: tuple[WorkflowPageSpec, ...]
     processing_operations: tuple[str, ...] = ()
     post_steps: tuple[WorkflowStepSpec, ...] = ()
+    provider_controls: tuple[str, ...] = ()
+    validation_id: str = "default"
+    export_ids: tuple[str, ...] = ()
+    copy_enabled: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.workflow_id, str) or not self.workflow_id.strip():
@@ -67,6 +71,8 @@ class WorkflowDefinition:
             raise TypeError("mode must be a ProjectMode")
         if not isinstance(self.prompt_builder_id, str) or not self.prompt_builder_id.strip():
             raise ValueError("prompt_builder_id must be a non-empty string")
+        if not isinstance(self.validation_id, str) or not self.validation_id.strip():
+            raise ValueError("validation_id must be a non-empty string")
         if not self.pages:
             raise ValueError("a workflow must define at least one page")
         page_steps = [page.step for page in self.pages]
@@ -75,6 +81,9 @@ class WorkflowDefinition:
         for operation in self.processing_operations:
             if not isinstance(operation, str) or not operation.strip():
                 raise ValueError("processing operations must be non-empty strings")
+        for name in (*self.provider_controls, *self.export_ids):
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError("workflow controls and exports must be non-empty strings")
         step_ids = [step.step_id for step in self.post_steps]
         if len(step_ids) != len(set(step_ids)):
             raise ValueError("workflow post steps must have unique IDs")
@@ -91,6 +100,12 @@ class WorkflowDefinition:
 
     def allows_processing_operation(self, operation: str) -> bool:
         return operation in self.processing_operations
+
+    def supports_provider_control(self, control: str) -> bool:
+        return control in self.provider_controls
+
+    def supports_export(self, export_id: str) -> bool:
+        return export_id in self.export_ids
 
 
 def _default_pages(mode: ProjectMode) -> tuple[WorkflowPageSpec, ...]:
@@ -125,6 +140,9 @@ _WORKFLOWS: Final[dict[ProjectMode, WorkflowDefinition]] = {
         prompt_builder_id="clipart_structured",
         pages=_default_pages(ProjectMode.CLIPART),
         processing_operations=_CLIPART_OPERATIONS,
+        provider_controls=("generation_model", "reference_model", "processing_providers"),
+        validation_id="clipart_default",
+        export_ids=("png", "jpeg"),
         post_steps=(
             WorkflowStepSpec(
                 "save_png",
@@ -140,6 +158,9 @@ _WORKFLOWS: Final[dict[ProjectMode, WorkflowDefinition]] = {
         prompt_builder_id="pinterest_structured",
         pages=_default_pages(ProjectMode.PINTEREST),
         processing_operations=_PINTEREST_OPERATIONS,
+        provider_controls=("generation_model", "reference_model", "processing_providers"),
+        validation_id="pinterest_default",
+        export_ids=("png", "jpeg"),
         post_steps=(
             WorkflowStepSpec(
                 "save_png",
@@ -155,6 +176,9 @@ _WORKFLOWS: Final[dict[ProjectMode, WorkflowDefinition]] = {
         prompt_builder_id="none",
         pages=_default_pages(ProjectMode.PROCESSING),
         processing_operations=_CLIPART_OPERATIONS,
+        provider_controls=("processing_providers",),
+        validation_id="processing_default",
+        export_ids=("png", "jpeg"),
         post_steps=(
             WorkflowStepSpec(
                 "save_png",
