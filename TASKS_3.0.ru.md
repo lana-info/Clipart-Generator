@@ -1235,8 +1235,7 @@ Pinterest; offscreen smoke на отсутствие нерелевантной 
 
 ### NEXT-TASK-000B — Подключить workflow definitions к wizard и processing UI
 
-Status: In progress — schema, normalization and renderer implemented; migration/UI
-integration remains
+Status: Planned
 
 Зависимость: NEXT-TASK-000.
 
