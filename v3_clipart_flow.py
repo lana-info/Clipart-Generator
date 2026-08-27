@@ -49,6 +49,7 @@ from PyQt6.QtWidgets import (
 )
 
 from license_client import LicenseError
+from provider_error_messages import friendly_provider_error
 
 from v3_components import (
     AdvancedSection,
@@ -107,6 +108,7 @@ from model_catalog import (
 
 MAX_CSV_BYTES = 2 * 1024 * 1024
 MAX_CLIPART_REQUESTS = 5000
+MAX_REFERENCE_FILE_BYTES = 10 * 1024 * 1024
 _DOLLAR_PATTERN = re.compile(r"\$(\d+(?:\.\d+)?)")
 
 
@@ -616,6 +618,12 @@ def _validate_prompt_references(prompts: Sequence[PromptEntry]) -> None:
             if not path.is_file():
                 name = path.name or "референс"
                 raise ClipartFlowError(f"Файл референса не найден: {name}")
+            size_error = _reference_file_size_error(
+                str(path),
+                attachment=False,
+            )
+            if size_error:
+                raise ClipartFlowError(size_error)
             try:
                 main.validate_local_image_input(path)
             except (OSError, ValueError) as error:
@@ -934,6 +942,31 @@ def _supported_local_reference(path: str) -> bool:
     }
 
 
+def _reference_file_size_error(
+    reference: str,
+    *,
+    attachment: bool = True,
+) -> str:
+    path = Path(reference).expanduser()
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return ""
+    if size <= MAX_REFERENCE_FILE_BYTES:
+        return ""
+    size_mb = f"{size / (1024 * 1024):.1f}".replace(".", ",")
+    name = path.name or "файл"
+    if not attachment:
+        return (
+            f"Референс «{name}» превышает 10 МБ (размер: {size_mb} МБ). "
+            "Уменьшите файл и повторите запуск."
+        )
+    return (
+        f"Референс «{name}» не добавлен: {size_mb} МБ. "
+        "Максимальный размер — 10 МБ. Выберите файл меньшего размера."
+    )
+
+
 def _reference_icon(path: str) -> QIcon:
     if _supported_local_reference(path):
         pixmap = QPixmap(path)
@@ -1135,6 +1168,12 @@ class PromptReferenceEditorDialog(QDialog):
         layout.addWidget(self._prompt_edit)
         layout.addWidget(QLabel("Референсы"))
         layout.addWidget(self._references, 1)
+        self.reference_status_label = QLabel("")
+        self.reference_status_label.setWordWrap(True)
+        self.reference_status_label.setProperty("v3Status", True)
+        self.reference_status_label.setProperty("state", "error")
+        self.reference_status_label.hide()
+        layout.addWidget(self.reference_status_label)
 
         buttons = QHBoxLayout()
         self.add_files_button = V3Button("Добавить файлы", ButtonVariant.SECONDARY)
@@ -1174,6 +1213,7 @@ class PromptReferenceEditorDialog(QDialog):
 
     def add_references(self, references: Sequence[str]) -> None:
         existing = [self._references.item(index).data(Qt.ItemDataRole.UserRole) for index in range(self._references.count())]
+        errors: list[str] = []
         for reference in references:
             normalized = str(Path(reference))
             if (
@@ -1182,6 +1222,10 @@ class PromptReferenceEditorDialog(QDialog):
                 or not _supported_local_reference(normalized)
             ):
                 continue
+            size_error = _reference_file_size_error(normalized)
+            if size_error:
+                errors.append(size_error)
+                continue
             if len(existing) >= MAX_REFERENCES_PER_PROMPT:
                 break
             item = QListWidgetItem(_reference_icon(normalized), _reference_label(normalized))
@@ -1189,6 +1233,12 @@ class PromptReferenceEditorDialog(QDialog):
             item.setToolTip(normalized)
             self._references.addItem(item)
             existing.append(normalized)
+        if errors:
+            self.reference_status_label.setText(errors[0])
+            self.reference_status_label.show()
+        else:
+            self.reference_status_label.clear()
+            self.reference_status_label.hide()
 
     def _remove_selected(self) -> None:
         for item in list(self._references.selectedItems()):
@@ -1646,14 +1696,21 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self._add_paste_references(selected)
 
     def _add_paste_references(self, references: Sequence[str]) -> None:
+        errors: list[str] = []
         for reference in references:
             normalized = str(Path(reference))
             if normalized in self._paste_references or not _supported_local_reference(normalized):
+                continue
+            size_error = _reference_file_size_error(normalized)
+            if size_error:
+                errors.append(size_error)
                 continue
             if len(self._paste_references) >= MAX_REFERENCES_PER_PROMPT:
                 break
             self._paste_references.append(normalized)
         self._refresh_paste_references()
+        if errors:
+            self.card.set_state("error", errors[0])
 
     def _clear_paste_references(self) -> None:
         self._paste_references = []
@@ -1982,7 +2039,19 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             "Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff)",
         )
         files = [str(Path(path)) for path in selected if path]
-        return [path for path in files if _supported_local_reference(path)]
+        accepted: list[str] = []
+        errors: list[str] = []
+        for path in files:
+            if not _supported_local_reference(path):
+                continue
+            size_error = _reference_file_size_error(path)
+            if size_error:
+                errors.append(size_error)
+                continue
+            accepted.append(path)
+        if errors:
+            self.card.set_state("error", errors[0])
+        return accepted
 
     def _apply_references(
         self,
@@ -2915,6 +2984,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.cost_breakdown_label.setProperty("v3Status", True)
         self.pipeline_label = QLabel()
         self.pipeline_label.setWordWrap(True)
+        self.pipeline_label.setProperty("v3Status", True)
         self.requirements_label = QLabel()
         self.requirements_label.setWordWrap(True)
         self.requirements_label.setProperty("v3Status", True)
@@ -2931,6 +3001,30 @@ class ClipartReviewRunPage(_ScrollableStepPage):
             self.run_status_label,
         ):
             self.add_widget(widget)
+        self.card.layout().setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.card.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.card.content.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+        for label in (
+            self.card.title_label,
+            self.card.description_label,
+            self.output_label,
+            self.summary_label,
+            self.requests_label,
+            self.cost_breakdown_label,
+            self.pipeline_label,
+            self.requirements_label,
+            self.run_status_label,
+        ):
+            label.setAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+            )
+            label.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Maximum,
+            )
         self.refresh_from_state()
 
     def refresh_from_state(self) -> None:
@@ -3033,7 +3127,9 @@ def _safe_runtime_error(
         for name in ("kie_api_key", "photoroom_api_key")
         if isinstance(source.get(name), str)
     )
-    return main.safe_error_text(error, secrets=secrets, limit=500)
+    safe_message = main.safe_error_text(error, secrets=secrets, limit=500)
+    classified = friendly_provider_error(safe_message)
+    return classified[1] if classified is not None else safe_message
 
 
 def _legacy_worker_factory(**kwargs: Any) -> Any:

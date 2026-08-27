@@ -28,9 +28,25 @@ Updated: 2026-08-27
 
 ## Next task
 
-Run owner acceptance on the Windows 3.0.5 installer produced by GitHub Actions
-run `33026433664`. Do not publish a revision to the update service before this
-target-machine acceptance.
+Review and integrate the current owner-acceptance fixes before requesting one
+replacement Windows build. The existing installer from run `33026433664` does
+not contain these source changes and must not be published as an update.
+
+## Reference preflight and Review layout checkpoint — 2026-08-27
+
+- New local references over 10 MB are rejected at selection time with file
+  name, actual size and corrective action. Saved projects receive the same
+  preflight before worker creation.
+- HTTPS references are not silently downloaded merely to inspect their size;
+  KIE responses for an oversized reference and official `402 Insufficient
+  Credits` are converted to actionable user messages while bounded technical
+  details remain available in diagnostics.
+- The Clipart/Pinterest Review summary starts directly below its description,
+  uses a common left edge and no longer distributes rows vertically.
+- Focused Clipart/Pinterest/Results verification passes: 118 tests and 5
+  subtests. Full offscreen pytest passes: 736 tests, 1 expected Linux skip,
+  2 deselected and 87 subtests. Python compilation passes. No paid request or
+  build was started.
 
 ## Provider-aware parallel stabilization checkpoint — 2026-08-26
 

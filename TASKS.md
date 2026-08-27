@@ -1898,3 +1898,19 @@ Verification:
 - [x] No paid provider request, build, merge, server publication, or push ran.
 - [ ] Obtain review, then separately approve a Windows-only build and
   target-Windows acceptance before any server revision publication.
+
+### Task 74 - Reference Preflight, Friendly KIE Errors and Review Alignment
+
+Status: Source fix verified; integration and packaged Windows acceptance pending
+
+- [x] Reject a local reference larger than 10 MB at attachment time and show
+  its name, actual size and corrective action.
+- [x] Reject oversized references already stored in older projects before any
+  paid provider task is created.
+- [x] Keep HTTPS references free of hidden downloads and classify KIE
+  insufficient-credit and oversized-reference failures for the user.
+- [x] Align the Review summary at the top-left with consistent row spacing.
+- [x] Verify focused Clipart/Pinterest/Results tests, full offscreen pytest,
+  Python compilation and diff integrity.
+- [ ] Integrate after owner approval and include the fix in the next separately
+  approved Windows build.
