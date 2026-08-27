@@ -122,4 +122,3 @@ One workflow may end with a PNG, while another may create a PDF, prepare a
 Canva-compatible package, or upload an approved result to Google Drive. Local
 file creation and external delivery are separate step types; external actions
 require an explicit confirmation and a visible destination before execution.
->>>>>>> 5e09b1b (docs: define next generation product phase)

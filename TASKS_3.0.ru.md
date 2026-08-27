@@ -1378,7 +1378,8 @@ Acceptance:
 
 ### NEXT-TASK-005 — Зафиксировать provider-neutral generation и lifecycle contract
 
-Status: Planned
+Status: In progress — shared request/result contract implemented; persistence,
+idempotency and cancellation policy remain
 
 Acceptance:
 

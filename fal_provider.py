@@ -12,11 +12,15 @@ import re
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 from urllib.parse import quote
 
 from network_security import HttpsOnlyRedirectHandler, NetworkSecurityError
+from provider_contract import MAX_PROVIDER_PAYLOAD_BYTES, ProviderTaskRequest
+
+
+MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class FalProviderError(RuntimeError):
@@ -29,7 +33,7 @@ _REQUEST_RE = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
 
 @dataclass(frozen=True, slots=True)
 class FalConfig:
-    api_key: str
+    api_key: str = field(repr=False)
     model_id: str
     timeout_seconds: float = 30.0
 
@@ -98,8 +102,11 @@ class FalClient:
         *,
         method: str = "GET",
         payload: Mapping[str, Any] | None = None,
+        accepted_http_errors: tuple[int, ...] = (),
     ) -> dict[str, Any]:
         body = None if payload is None else json.dumps(dict(payload)).encode("utf-8")
+        if body is not None and len(body) > MAX_PROVIDER_PAYLOAD_BYTES:
+            raise FalProviderError("Fal.ai payload слишком большой")
         request = urllib.request.Request(
             url,
             data=body,
@@ -113,7 +120,18 @@ class FalClient:
         try:
             opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
             with opener.open(request, timeout=self.config.timeout_seconds) as response:
-                raw = response.read(2 * 1024 * 1024)
+                raw = response.read(MAX_FAL_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_FAL_RESPONSE_BYTES:
+                raise FalProviderError("Fal.ai response слишком большой")
+        except urllib.error.HTTPError as error:
+            if error.code in accepted_http_errors:
+                try:
+                    result = json.loads(error.read(256 * 1024).decode("utf-8", "replace"))
+                except (OSError, UnicodeError, ValueError) as parse_error:
+                    raise FalProviderError("Fal.ai вернул некорректный ответ отмены") from parse_error
+                if isinstance(result, dict):
+                    return result
+            raise FalProviderError("Fal.ai HTTP request failed") from error
         except (urllib.error.URLError, OSError, NetworkSecurityError) as error:
             raise FalProviderError("Не удалось обратиться к Fal.ai") from error
         try:
@@ -130,7 +148,20 @@ class FalClient:
     def submit(self, arguments: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(arguments, Mapping):
             raise TypeError("arguments должен быть объектом")
-        return self._request(self._request_url(), method="POST", payload=arguments)
+        result = self._request(self._request_url(), method="POST", payload=arguments)
+        if not str(result.get("request_id") or "").strip():
+            raise FalProviderError("Fal.ai не вернул request_id")
+        return result
+
+    def submit_task(self, request: ProviderTaskRequest) -> dict[str, Any]:
+        """Submit through the shared contract, without creating a new fallback."""
+
+        if not isinstance(request, ProviderTaskRequest):
+            raise TypeError("request должен быть ProviderTaskRequest")
+        request.validate()
+        if request.provider_id != "fal" or request.model_id != self.model_id:
+            raise FalProviderError("Provider task не соответствует Fal.ai client")
+        return self.submit(request.input_payload)
 
     def status(self, request_id: str) -> dict[str, Any]:
         request_id = str(request_id or "").strip()
@@ -151,6 +182,7 @@ class FalClient:
         return self._request(
             self._request_url(f"/requests/{request_id}/cancel"),
             method="PUT",
+            accepted_http_errors=(400, 404),
         )
 
     def wait_for_result(
@@ -189,6 +221,7 @@ class FalClient:
 
 
 __all__ = [
+    "MAX_FAL_RESPONSE_BYTES",
     "FalClient",
     "FalConfig",
     "FalProviderError",

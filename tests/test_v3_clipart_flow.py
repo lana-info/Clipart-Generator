@@ -969,6 +969,28 @@ class V3ClipartFlowTests(unittest.TestCase):
             self.assertNotIn(secret, errors[-1])
             self.assertNotIn("bearer abc", errors[-1].lower())
 
+    def test_fal_runtime_secret_is_redacted_from_worker_error(self):
+        secret = "FAL-TEST-SECRET"
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-fal-redact-") as temp:
+            state = self.make_state(temp)
+            state.set_step(StepId.REVIEW_RUN)
+            shell = AppShell(state)
+            controller = install_clipart_flow(
+                shell,
+                runtime_settings_provider=lambda: {"fal_api_key": secret},
+                worker_factory=lambda **_kwargs: (_ for _ in ()).throw(
+                    ValueError(f"Fal rejected {secret}")
+                ),
+                authorization_provider=lambda: None,
+            )
+
+            controller.start()
+            errors = []
+            controller.error.connect(errors.append)
+            controller._error(f"worker failed with {secret}")
+
+            self.assertNotIn(secret, errors[-1])
+
     def test_csv_and_table_reject_oversized_input_without_truncation(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-limits-") as temp:
             csv_path = Path(temp) / "too-many.csv"

@@ -11,7 +11,7 @@ class FalEndpointProfile:
     model_id: str
     operation: str
     supports_references: bool
-    preserves_alpha: bool
+    preserves_alpha: bool | None
     output_formats: tuple[str, ...]
     price_note: str
 
@@ -37,7 +37,7 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         model_id="fal-ai/esrgan",
         operation="upscale",
         supports_references=True,
-        preserves_alpha=True,
+        preserves_alpha=None,
         output_formats=("png", "jpeg"),
         price_note="model pricing must be refreshed before live use",
     ),

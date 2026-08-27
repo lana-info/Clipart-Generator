@@ -73,10 +73,10 @@ class V3PromptGeneratorTests(unittest.TestCase):
             ),
         )
 
-        self.assertIn("Object:", prompts[0].prompt)
-        self.assertIn("Scene:", prompts[0].prompt)
-        self.assertIn("Color palette:", prompts[0].prompt)
-        self.assertIn("Restrictions:", prompts[0].prompt)
+        self.assertIn("Объект:", prompts[0].prompt)
+        self.assertIn("Сцена:", prompts[0].prompt)
+        self.assertIn("Цветовая палитра:", prompts[0].prompt)
+        self.assertIn("Ограничения:", prompts[0].prompt)
         self.assertIn("с букетом", prompts[0].prompt)
         self.assertIn("с корзинкой", prompts[1].prompt)
 

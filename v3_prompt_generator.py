@@ -113,6 +113,28 @@ def _prompt_sentence(value: str) -> str:
     return normalized
 
 
+def _prompt_language_for_clipart(data: PromptGeneratorData) -> str:
+    """Keep section labels in the same language as entered field values.
+
+    This is intentionally language detection, not translation. A future
+    translation backend must transform values explicitly before rendering an
+    English provider prompt.
+    """
+
+    values = (
+        data.theme,
+        *data.subjects,
+        *data.variations,
+        data.style,
+        data.palette,
+        data.composition,
+        data.background,
+        data.consistency,
+        *data.restrictions,
+    )
+    return "ru" if any(any("а" <= character.casefold() <= "я" for character in value) for value in values) else "en"
+
+
 def generate_prompt_series(
     mode: ProjectMode | str,
     data: PromptGeneratorData,
@@ -155,7 +177,7 @@ def generate_prompt_series(
                         restrictions=tuple(normalized.restrictions),
                         technical_requirements=normalized.consistency,
                     ),
-                    language="en",
+                    language=_prompt_language_for_clipart(normalized),
                 )
             else:
                 prompt_parts = (

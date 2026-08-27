@@ -3147,7 +3147,7 @@ def _safe_runtime_error(
     source = runtime_settings or {}
     secrets = tuple(
         source.get(name)
-        for name in ("kie_api_key", "photoroom_api_key")
+        for name in ("kie_api_key", "photoroom_api_key", "fal_api_key")
         if isinstance(source.get(name), str)
     )
     safe_message = main.safe_error_text(error, secrets=secrets, limit=500)

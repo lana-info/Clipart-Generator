@@ -17,6 +17,7 @@ class FalModelCatalogTests(unittest.TestCase):
             fal_endpoint_profile("fal-ai/bria/background/remove", "remove_background").output_formats,
             ("png",),
         )
+        self.assertIsNone(fal_endpoint_profile("fal-ai/esrgan", "upscale").preserves_alpha)
 
     def test_profiles_can_be_filtered_without_exposing_unknown_models(self):
         self.assertEqual(

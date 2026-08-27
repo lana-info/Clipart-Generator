@@ -10,6 +10,7 @@ from fal_provider import (
     fal_image_url,
     fal_status_kind,
 )
+from provider_contract import ProviderTaskRequest
 
 
 class _Response:
@@ -44,6 +45,10 @@ class FalProviderTests(unittest.TestCase):
             FalConfig(api_key="", model_id="fal-ai/flux/schnell").validate()
         with self.assertRaises(FalProviderError):
             FalConfig(api_key="secret", model_id="https://evil.example/model").validate()
+        self.assertNotIn(
+            "fal-secret",
+            repr(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell")),
+        )
 
     def test_status_kind_maps_queue_lifecycle_and_cancel_states(self):
         self.assertEqual(fal_status_kind({"status": "IN_QUEUE"}), "queued")
@@ -81,6 +86,13 @@ class FalProviderTests(unittest.TestCase):
         self.assertEqual(opener.request.get_header("Authorization"), "Key fal-secret")
         self.assertEqual(json.loads(opener.request.data), {"prompt": "a fox"})
 
+    def test_submit_requires_request_id(self):
+        opener = _Opener(_Response({"queue_position": 2}))
+        client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
+        with patch("fal_provider.urllib.request.build_opener", return_value=opener):
+            with self.assertRaises(FalProviderError):
+                client.submit({"prompt": "a fox"})
+
     def test_wait_for_result_polls_by_request_id_without_resubmitting(self):
         client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
         statuses = iter([
@@ -95,6 +107,13 @@ class FalProviderTests(unittest.TestCase):
 
         self.assertEqual(result["request_id"], "req-123")
         self.assertEqual(result["result"]["images"][0]["url"], "https://cdn.example/a.png")
+
+    def test_submit_task_uses_shared_provider_contract(self):
+        client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
+        request = ProviderTaskRequest("fal", "generation", "fal-ai/flux/schnell", {"prompt": "a fox"})
+        client.submit = lambda arguments: {"request_id": "req-123", "arguments": dict(arguments)}
+
+        self.assertEqual(client.submit_task(request)["request_id"], "req-123")
 
 
 if __name__ == "__main__":
