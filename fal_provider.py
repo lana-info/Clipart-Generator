@@ -10,7 +10,9 @@ from __future__ import annotations
 import json
 import base64
 import mimetypes
+import os
 import re
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -18,6 +20,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 from urllib.parse import quote
+from datetime import datetime, timezone
+from pathlib import Path
 
 from network_security import HttpsOnlyRedirectHandler, NetworkSecurityError
 from provider_contract import MAX_PROVIDER_PAYLOAD_BYTES, ProviderTaskRequest
@@ -28,6 +32,113 @@ MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
 
 class FalProviderError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class FalTaskRecord:
+    """Secret-free metadata needed to resume polling after a restart."""
+
+    request_id: str
+    operation: str
+    model_id: str
+    status: str = "queued"
+    created_at: str = ""
+    updated_at: str = ""
+
+    def __post_init__(self) -> None:
+        if not _REQUEST_RE.fullmatch(str(self.request_id or "")):
+            raise FalProviderError("Некорректный Fal.ai request ID в журнале")
+        if not _MODEL_RE.fullmatch(str(self.model_id or "")):
+            raise FalProviderError("Некорректная модель Fal.ai в журнале")
+        if not str(self.operation or "").strip():
+            raise FalProviderError("Не указана операция Fal.ai в журнале")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "request_id": self.request_id,
+            "operation": self.operation,
+            "model_id": self.model_id,
+            "status": self.status,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+class FalTaskJournal:
+    """Small atomic JSON journal for resumable, non-secret Fal task metadata."""
+
+    def __init__(self, path: str | os.PathLike[str]) -> None:
+        self.path = Path(path)
+
+    def _read(self) -> dict[str, FalTaskRecord]:
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValueError):
+            return {}
+        entries = raw.get("tasks", []) if isinstance(raw, Mapping) else []
+        result: dict[str, FalTaskRecord] = {}
+        if isinstance(entries, list):
+            for entry in entries[:1000]:
+                if not isinstance(entry, Mapping):
+                    continue
+                try:
+                    record = FalTaskRecord(
+                        request_id=str(entry.get("request_id") or ""),
+                        operation=str(entry.get("operation") or ""),
+                        model_id=str(entry.get("model_id") or ""),
+                        status=str(entry.get("status") or "unknown"),
+                        created_at=str(entry.get("created_at") or ""),
+                        updated_at=str(entry.get("updated_at") or ""),
+                    )
+                except FalProviderError:
+                    continue
+                result[record.request_id] = record
+        return result
+
+    def _write(self, records: Mapping[str, FalTaskRecord]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(
+            {"tasks": [record.to_dict() for record in records.values()]},
+            ensure_ascii=False,
+            indent=2,
+        ).encode("utf-8")
+        fd, temporary = tempfile.mkstemp(
+            prefix=f".{self.path.name}.", suffix=".tmp", dir=str(self.path.parent)
+        )
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.path)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+
+    def upsert(self, request_id: str, operation: str, model_id: str, status: str) -> FalTaskRecord:
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        records = self._read()
+        previous = records.get(str(request_id))
+        record = FalTaskRecord(
+            request_id=str(request_id),
+            operation=str(operation),
+            model_id=str(model_id),
+            status=str(status),
+            created_at=previous.created_at if previous else now,
+            updated_at=now,
+        )
+        records[record.request_id] = record
+        self._write(records)
+        return record
+
+    def pending(self) -> tuple[FalTaskRecord, ...]:
+        return tuple(
+            record
+            for record in self._read().values()
+            if record.status not in {"completed", "cancelled", "failed"}
+        )
 
 
 _MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$")
@@ -213,6 +324,8 @@ class FalClient:
         *,
         scale: int = 2,
         is_cancelled: Callable[[], bool] | None = None,
+        on_submitted: Callable[[str], None] | None = None,
+        on_status: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         model_by_operation = {
             "remove_background": "fal-ai/bria/background/remove",
@@ -236,11 +349,14 @@ class FalClient:
         )
         submitted = self.submit_task(request)
         request_id = str(submitted["request_id"])
+        if on_submitted is not None:
+            on_submitted(request_id)
         return self.wait_for_result(
             request_id,
             timeout_seconds=300.0,
             poll_interval_seconds=2.0,
             is_cancelled=is_cancelled,
+            on_status=on_status,
         )
 
     def status(self, request_id: str) -> dict[str, Any]:
@@ -273,6 +389,7 @@ class FalClient:
         poll_interval_seconds: float = 2.0,
         sleep=time.sleep,
         is_cancelled: Callable[[], bool] | None = None,
+        on_status: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         """Poll one already-submitted request and fetch its final result.
 
@@ -292,6 +409,8 @@ class FalClient:
                 )
             status = self.status(request_id)
             kind = fal_status_kind(status)
+            if on_status is not None:
+                on_status(kind)
             if kind == "completed":
                 result = self.result(request_id)
                 return {
@@ -317,6 +436,8 @@ __all__ = [
     "FalClient",
     "FalConfig",
     "FalProviderError",
+    "FalTaskJournal",
+    "FalTaskRecord",
     "fal_image_input",
     "fal_image_data_uri",
     "fal_image_url",

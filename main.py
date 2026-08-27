@@ -85,6 +85,7 @@ from fal_provider import (
     FalClient,
     FalConfig,
     FalProviderError,
+    FalTaskJournal,
     fal_image_data_uri,
     fal_image_url,
 )
@@ -960,6 +961,9 @@ class WorkerThread(QThread):
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         self._diagnostic_context = threading.local()
         self._provider_lease_context = threading.local()
+        self.fal_task_journal = FalTaskJournal(
+            os.path.join(self.work_dir, ".vibix_fal_tasks.json")
+        )
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
         self._secret_values = tuple(
@@ -2749,14 +2753,35 @@ class WorkerThread(QThread):
             )
         )
         self.progress.emit(f"  Fal.ai операция: {operation}; модель={model_id}")
+        task = {"request_id": ""}
+
+        def record_submission(request_id):
+            task["request_id"] = str(request_id or "")
+            self._record_fal_task(task["request_id"], operation, model_id, "queued")
+
         completed = client.run_image_operation(
             operation,
             image_url,
             scale=scale,
             is_cancelled=lambda: not self.is_running,
+            on_submitted=record_submission,
+            on_status=lambda status: self._record_fal_task(
+                task["request_id"], operation, model_id, status
+            ),
         )
         self._ensure_running()
         return fal_image_url(completed.get("result"))
+
+    def _record_fal_task(self, request_id, operation, model_id, status):
+        request_id = str(request_id or "").strip()
+        if not request_id:
+            return
+        try:
+            self.fal_task_journal.upsert(request_id, operation, model_id, status)
+        except (OSError, ValueError, FalProviderError):
+            # A journal failure must not expose secrets or turn a successful
+            # provider result into a false failure.
+            return
 
     def _validate_topaz_source_file(self, source_path, upscale_factor):
         file_size = os.path.getsize(source_path)
@@ -4139,6 +4164,7 @@ class WorkerThread(QThread):
         )
         submitted = client.submit_task(request)
         request_id = str(submitted.get("request_id") or "").strip()
+        self._record_fal_task(request_id, "generation", model_id, "queued")
         self.progress.emit(f"  Fal.ai Request ID: {request_id}")
         self._emit_diagnostic(
             "provider_task_submitted",
@@ -4152,6 +4178,9 @@ class WorkerThread(QThread):
             timeout_seconds=float(self.generation_wait_timeout),
             poll_interval_seconds=float(self.status_poll_interval),
             is_cancelled=lambda: not self.is_running,
+            on_status=lambda status: self._record_fal_task(
+                request_id, "generation", model_id, status
+            ),
         )
         self._ensure_running()
         try:

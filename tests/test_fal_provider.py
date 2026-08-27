@@ -7,6 +7,7 @@ from fal_provider import (
     FalClient,
     FalConfig,
     FalProviderError,
+    FalTaskJournal,
     fal_image_input,
     fal_image_data_uri,
     fal_image_url,
@@ -151,6 +152,16 @@ class FalProviderTests(unittest.TestCase):
                 model_id="fal-ai/flux/schnell",
                 max_retries=4,
             ).validate()
+
+    def test_task_journal_persists_only_resumable_metadata(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = FalTaskJournal(f"{temp}/fal-tasks.json")
+            journal.upsert("req-123", "generation", "fal-ai/flux/schnell", "queued")
+            journal.upsert("req-123", "generation", "fal-ai/flux/schnell", "completed")
+            self.assertEqual(journal.pending(), ())
+            payload = open(f"{temp}/fal-tasks.json", encoding="utf-8").read()
+            self.assertNotIn("secret", payload.lower())
+            self.assertIn("req-123", payload)
 
 
 if __name__ == "__main__":

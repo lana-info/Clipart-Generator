@@ -1325,7 +1325,8 @@ Verification: offscreen tests на переключение языка и сох
 
 ### NEXT-TASK-002A — Выбрать translation backend для prompt
 
-Status: Planned — gate before English output for arbitrary Russian field text
+Status: In progress — explicit translation boundary and safe no-op backend
+prepared; production backend decision remains
 
 Зависимость: NEXT-TASK-001, NEXT-TASK-002.
 
