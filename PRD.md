@@ -252,6 +252,20 @@ diagnostics summaries, including when stale settings are loaded.
 - Ensure provider errors, validation messages, diagnostics, and accessibility
   labels are localizable.
 
+### Pinterest prompt generator — next implementation stage
+
+Pinterest is intentionally a separate stage after Clipart and Fal.ai
+acceptance. Its prompt schema is independent from Clipart and is prepared in
+`pinterest_prompt_schema.py`. The schema is designed for vertical pins and
+includes topic, object, background, text-safe area, headline, CTA, aspect
+ratio, branding, visual hierarchy, style, and restrictions. It has its own
+Russian/English renderer; it does not reinterpret or migrate Clipart fields.
+
+The next implementation must add a Pinterest-specific input/preview page,
+editable prompt entries, deterministic series generation, and capability-aware
+provider rendering. The initial Pinterest workflow must not show Clipart-only
+transparency or background-cleanup controls.
+
 ### Fal.ai requirements
 
 - Integrate Fal.ai behind the existing provider abstraction and capability

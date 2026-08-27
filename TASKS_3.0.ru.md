@@ -1208,7 +1208,8 @@ target-Windows acceptance remain pending.
 
 ### NEXT-TASK-000 — Ввести workflow/module definition layer
 
-Status: In progress — contract implemented; UI integration remains
+Status: In progress — contract and processing integration implemented;
+dynamic page composition remains
 
 Цель: сделать состав страниц и функций настраиваемым для разных workflow без
 введения коммерческой модульной лицензии.
@@ -1235,7 +1236,8 @@ Pinterest; offscreen smoke на отсутствие нерелевантной 
 
 ### NEXT-TASK-000B — Подключить workflow definitions к wizard и processing UI
 
-Status: Planned
+Status: In progress — processing visibility and stale-settings filtering
+implemented; dynamic wizard page factories remain
 
 Зависимость: NEXT-TASK-000.
 
@@ -1456,7 +1458,8 @@ Acceptance:
 
 ### NEXT-TASK-009 — Подключить Fal.ai background removal и upscale
 
-Status: Planned
+Status: In progress — Fal.ai endpoint paths connected; live output/alpha
+validation and privacy confirmation remain
 
 Зависимость: NEXT-TASK-007 и подтверждённые endpoint profiles.
 
@@ -1470,7 +1473,8 @@ Acceptance:
 
 ### NEXT-TASK-010 — Подключить Fal.ai к run plan и диагностике
 
-Status: Planned
+Status: In progress — Fal.ai run routing and diagnostics connected; cost and
+retention UX remain
 
 Зависимость: NEXT-TASK-008, NEXT-TASK-009.
 
@@ -1501,17 +1505,19 @@ Acceptance:
 
 ### NEXT-TASK-012 — Спроектировать Pinterest Prompt Generator
 
-Status: Planned after NEXT-TASK-011
+Status: In progress — independent schema and provider renderer prepared;
+workflow UI, series generation and acceptance remain
 
 Scope: отдельная модель prompt для вертикального Pinterest-контента с местом
 под текст, читаемой композицией, CTA и вариантами для разных типов пинов.
 
 Acceptance:
 
-- [ ] Определены поля для темы, объекта, background, text-safe area, headline,
+- [x] Определены поля для темы, объекта, background, text-safe area, headline,
   CTA, aspect ratio, branding и visual hierarchy.
-- [ ] Pinterest schema не меняет clipart schema и старые сохранённые данные.
-- [ ] Есть preview, редактирование, серия вариантов и provider renderer.
+- [x] Pinterest schema не меняет clipart schema и старые сохранённые данные.
+- [x] Есть отдельный provider renderer для структурированной схемы.
+- [ ] Есть preview, редактирование и серия вариантов.
 
 Verification: отдельный PRD/contract, focused unit/UI tests и ручная проверка
 вертикальной серии.
