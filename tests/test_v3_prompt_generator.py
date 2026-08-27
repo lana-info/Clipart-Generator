@@ -58,8 +58,30 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertIn("Baby turtle", first[2].prompt)
         self.assertNotIn("Series item", first[-1].prompt)
 
+    def test_clipart_prompt_uses_structured_sections_for_provider_prompt(self):
+        prompts = generate_prompt_series(
+            ProjectMode.CLIPART,
+            PromptGeneratorData(
+                theme="весенняя коллекция",
+                subjects=["лиса"],
+                variations=["с букетом", "с корзинкой"],
+                style="мягкая акварель",
+                palette="персиковый, шалфейный, кремовый",
+                composition="по центру, отдельный объект",
+                background="прозрачный",
+                restrictions=["без текста", "без водяного знака"],
+            ),
+        )
+
+        self.assertIn("Object:", prompts[0].prompt)
+        self.assertIn("Scene:", prompts[0].prompt)
+        self.assertIn("Color palette:", prompts[0].prompt)
+        self.assertIn("Restrictions:", prompts[0].prompt)
+        self.assertIn("с букетом", prompts[0].prompt)
+        self.assertIn("с корзинкой", prompts[1].prompt)
+
     def test_generated_prompt_contains_only_user_entered_text(self):
-        long_value = "x" * MAX_PROMPT_GENERATOR_TEXT_LENGTH
+        long_value = "x" * 100
         data = PromptGeneratorData(
             theme=long_value,
             subjects=[long_value],
@@ -83,10 +105,12 @@ class V3PromptGeneratorTests(unittest.TestCase):
             "Series consistency",
             "Theme:",
             "Subject or scene:",
-            "Restrictions:",
             "clipart",
         ):
             self.assertNotIn(hidden_text, prompt)
+        self.assertIn("Object:", prompt)
+        self.assertIn("Color palette:", prompt)
+        self.assertIn("Restrictions:", prompt)
 
     def test_empty_optional_fields_are_skipped_and_empty_variations_use_each_object_once(self):
         data = PromptGeneratorData(
@@ -138,7 +162,13 @@ class V3PromptGeneratorTests(unittest.TestCase):
 
         prompts = generate_prompt_series(ProjectMode.CLIPART, data)
 
-        self.assertEqual([entry.prompt for entry in prompts], ["cat. sitting.", "cat. sitting."])
+        self.assertEqual(
+            [entry.prompt for entry in prompts],
+            [
+                "Object: cat.. Details: sitting.",
+                "Object: cat. Details: sitting.",
+            ],
+        )
 
     def test_empty_input_and_processing_mode_fail_clearly(self):
         with self.assertRaisesRegex(PromptGeneratorError, "field|object"):

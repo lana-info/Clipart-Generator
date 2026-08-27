@@ -1235,7 +1235,8 @@ Pinterest; offscreen smoke на отсутствие нерелевантной 
 
 ### NEXT-TASK-000B — Подключить workflow definitions к wizard и processing UI
 
-Status: Planned
+Status: In progress — schema, normalization and renderer implemented; migration/UI
+integration remains
 
 Зависимость: NEXT-TASK-000.
 
@@ -1282,7 +1283,8 @@ offscreen test на confirmation gate.
 
 ### NEXT-TASK-001 — Зафиксировать контракт структурированного prompt
 
-Status: Planned
+Status: In progress — schema, normalization and renderer implemented; migration/UI
+integration remains
 
 Цель: отделить данные prompt от итогового текста и определить единый контракт
 для клипарта, UI preview, сохранения и provider payload.
@@ -1338,7 +1340,8 @@ failure, timeout и no-network fallback.
 
 ### NEXT-TASK-003 — Переработать генератор prompt для клипартов
 
-Status: Planned
+Status: In progress — structured renderer connected; translation and UI preview
+refinement remain
 
 Зависимость: NEXT-TASK-000, NEXT-TASK-001, NEXT-TASK-002 и NEXT-TASK-002A.
 

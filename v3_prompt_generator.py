@@ -18,6 +18,7 @@ from v3_project_state import (
     clipart_prompt_generator_defaults,
     pinterest_prompt_generator_defaults,
 )
+from clipart_prompt_schema import ClipartPromptFields, render_clipart_prompt
 
 
 class PromptGeneratorError(ValueError):
@@ -141,22 +142,38 @@ def generate_prompt_series(
     prompts: list[PromptEntry] = []
     for subject in subjects:
         for variation in variations:
-            prompt_parts = (
-                normalized.theme,
-                subject,
-                variation,
-                normalized.style,
-                normalized.palette,
-                normalized.composition,
-                normalized.background,
-                normalized.consistency,
-                *normalized.restrictions,
-            )
-            prompt = " ".join(
-                sentence
-                for part in prompt_parts
-                if (sentence := _prompt_sentence(part))
-            )
+            if normalized_mode is ProjectMode.CLIPART:
+                prompt = render_clipart_prompt(
+                    ClipartPromptFields(
+                        object=subject,
+                        scene=normalized.theme,
+                        style=normalized.style,
+                        palette=normalized.palette,
+                        composition=normalized.composition,
+                        background=normalized.background,
+                        details=variation,
+                        restrictions=tuple(normalized.restrictions),
+                        technical_requirements=normalized.consistency,
+                    ),
+                    language="en",
+                )
+            else:
+                prompt_parts = (
+                    normalized.theme,
+                    subject,
+                    variation,
+                    normalized.style,
+                    normalized.palette,
+                    normalized.composition,
+                    normalized.background,
+                    normalized.consistency,
+                    *normalized.restrictions,
+                )
+                prompt = " ".join(
+                    sentence
+                    for part in prompt_parts
+                    if (sentence := _prompt_sentence(part))
+                )
             prompts.append(PromptEntry(prompt=prompt))
     return normalize_prompt_entries(
         prompts,
