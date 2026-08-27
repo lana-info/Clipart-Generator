@@ -25,6 +25,7 @@ from pathlib import Path
 
 from network_security import HttpsOnlyRedirectHandler, NetworkSecurityError
 from provider_contract import MAX_PROVIDER_PAYLOAD_BYTES, ProviderTaskRequest
+from fal_model_catalog import fal_endpoint_profile
 
 
 MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -343,8 +344,20 @@ class FalClient:
             raise FalProviderError(f"Fal.ai operation не поддерживается: {operation}") from error
         if self.model_id != selected_model_id:
             raise FalProviderError("Fal.ai client model не соответствует операции")
+        try:
+            profile = fal_endpoint_profile(selected_model_id, operation)
+        except KeyError as error:
+            raise FalProviderError(
+                f"Неизвестный Fal.ai endpoint profile: {selected_model_id}/{operation}"
+            ) from error
         arguments = fal_image_input(image_url)
         if parameters:
+            unknown_parameters = set(parameters) - set(profile.parameter_names)
+            if unknown_parameters:
+                raise FalProviderError(
+                    "Параметры не разрешены для выбранного Fal.ai профиля: "
+                    + ", ".join(sorted(unknown_parameters))
+                )
             arguments.update(parameters)
         if operation == "upscale":
             arguments["scale"] = str(max(2, min(int(scale), 4)))
