@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Run owner acceptance on the Windows 3.0.5 installer from
-GitHub Actions run `33026433664`. Do not upload a server revision before this
-target-Windows acceptance.**
+Current next task: **Run owner acceptance on the replacement Windows 3.0.5
+installer from GitHub Actions run `33032049521`. Do not upload a server revision
+before this target-Windows acceptance.**
 
 ## Phase 1 - Preparation
 
@@ -1901,7 +1901,7 @@ Verification:
 
 ### Task 73 - Conditional Reference Generation Settings
 
-Status: Integrated and source verified; packaged Windows acceptance pending
+Status: Integrated, source verified and packaged; owner acceptance pending
 
 - [x] Label the primary generation settings with the number of prompts without
   references.
@@ -1914,10 +1914,11 @@ Status: Integrated and source verified; packaged Windows acceptance pending
   Windows build before publication.
 - [x] Verify the integrated source with the full offscreen suite: 738 passed,
   1 expected Linux skip, 2 deselected, and 87 subtests passed.
+- [x] Build and install-check Windows 3.0.5 in GitHub Actions run `33032049521`.
 
 ### Task 74 - Reference Preflight, Friendly KIE Errors and Review Alignment
 
-Status: Integrated and source verified; packaged Windows acceptance pending
+Status: Integrated, source verified and packaged; owner acceptance pending
 
 - [x] Reject a local reference larger than 10 MB at attachment time and show
   its name, actual size and corrective action.
@@ -1932,3 +1933,5 @@ Status: Integrated and source verified; packaged Windows acceptance pending
   Windows build before publication.
 - [x] Verify the integrated source with Python compilation, sensitive-artifact
   scan, diff integrity, and the full offscreen suite.
+- [x] Include the fix in the installed-artifact checks and uploaded installer
+  from GitHub Actions run `33032049521`.

@@ -28,12 +28,23 @@ Updated: 2026-08-27
 
 ## Next task
 
-Run and verify one replacement Windows 3.0.5 installer build containing the
-integrated owner-acceptance fixes. The combined source passes 738 tests,
-1 expected Linux skip, 2 deselected and 87 subtests; compilation, tracked
-sensitive-artifact scan and diff integrity also pass. The existing artifact
-from run `33026433664` does not contain these changes and must not be published
-as an update.
+Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
+Actions run `33032049521`. Do not publish it as an update before this
+target-machine acceptance.
+
+## Replacement Windows 3.0.5 build — 2026-08-27
+
+- All approved owner-acceptance source branches were integrated into
+  `develop/3.0` and pushed as commit `02e03d0d666f58fe924c638ad994a8ba0700915a`.
+- The combined source passes 738 tests, 1 expected Linux skip, 2 deselected and
+  87 subtests; compilation, tracked sensitive-artifact scan and diff integrity
+  pass.
+- GitHub Actions run `33032049521` built only Windows 3.0.5, installed the
+  resulting setup in a clean location, passed packaged startup, artwork,
+  prompt-screen and release-contract checks, and uploaded the artifact.
+- `VibixImages-Setup-3.0.5.exe` is 191,623,601 bytes. SHA-256:
+  `5ab70b1df4eeab98f394b6a1bedde6f1915ae6a0d10325f8777b51327a4eda77`.
+- macOS, Azure and update-service publication were not started.
 
 ## Generation settings clarity checkpoint — 2026-08-27
 
