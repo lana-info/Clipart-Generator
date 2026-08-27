@@ -7,6 +7,7 @@ from fal_provider import (
     FalConfig,
     FalProviderError,
     fal_image_input,
+    fal_image_url,
     fal_status_kind,
 )
 
@@ -60,6 +61,14 @@ class FalProviderTests(unittest.TestCase):
         with self.assertRaises(FalProviderError):
             fal_image_input("C:/Users/user/image.png")
 
+    def test_image_url_accepts_known_result_shapes_and_rejects_non_https(self):
+        self.assertEqual(
+            fal_image_url({"images": [{"url": "https://cdn.example/image.png"}]}),
+            "https://cdn.example/image.png",
+        )
+        with self.assertRaises(FalProviderError):
+            fal_image_url({"images": [{"url": "http://cdn.example/image.png"}]})
+
     def test_submit_uses_queue_endpoint_and_key_auth(self):
         opener = _Opener(_Response({"request_id": "req-123", "queue_position": 2}))
         client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
@@ -71,6 +80,21 @@ class FalProviderTests(unittest.TestCase):
         self.assertEqual(opener.request.full_url, "https://queue.fal.run/fal-ai/flux/schnell")
         self.assertEqual(opener.request.get_header("Authorization"), "Key fal-secret")
         self.assertEqual(json.loads(opener.request.data), {"prompt": "a fox"})
+
+    def test_wait_for_result_polls_by_request_id_without_resubmitting(self):
+        client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
+        statuses = iter([
+            {"status": "IN_QUEUE", "request_id": "req-123"},
+            {"status": "IN_PROGRESS", "request_id": "req-123"},
+            {"status": "COMPLETED", "request_id": "req-123"},
+        ])
+        client.status = lambda _request_id: next(statuses)
+        client.result = lambda _request_id: {"images": [{"url": "https://cdn.example/a.png"}]}
+
+        result = client.wait_for_result("req-123", poll_interval_seconds=0, sleep=lambda _seconds: None)
+
+        self.assertEqual(result["request_id"], "req-123")
+        self.assertEqual(result["result"]["images"][0]["url"], "https://cdn.example/a.png")
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -59,6 +60,27 @@ def fal_image_input(image_url: str) -> dict[str, str]:
     if not value.startswith("https://") or "\n" in value or "\r" in value:
         raise FalProviderError("Fal.ai принимает изображение только по HTTPS URL")
     return {"image_url": value}
+
+
+def fal_image_url(payload: Mapping[str, Any] | None) -> str:
+    """Extract one HTTPS image result without accepting arbitrary payload URLs."""
+
+    source = payload if isinstance(payload, Mapping) else {}
+    candidates: list[Any] = []
+    image = source.get("image")
+    if isinstance(image, Mapping):
+        candidates.append(image.get("url"))
+    images = source.get("images")
+    if isinstance(images, list):
+        candidates.extend(
+            item.get("url") for item in images[:16] if isinstance(item, Mapping)
+        )
+    candidates.append(source.get("image_url"))
+    for candidate in candidates:
+        value = str(candidate or "").strip()
+        if value.startswith("https://") and "\n" not in value and "\r" not in value:
+            return value
+    raise FalProviderError("Fal.ai не вернул HTTPS URL изображения")
 
 
 class FalClient:
@@ -131,11 +153,46 @@ class FalClient:
             method="PUT",
         )
 
+    def wait_for_result(
+        self,
+        request_id: str,
+        *,
+        timeout_seconds: float = 300.0,
+        poll_interval_seconds: float = 2.0,
+        sleep=time.sleep,
+    ) -> dict[str, Any]:
+        """Poll one already-submitted request and fetch its final result.
+
+        The caller owns the worker thread and cancellation policy. No retry or
+        new submit is performed here, so a timeout can safely be resumed by
+        request ID later.
+        """
+
+        if timeout_seconds <= 0 or poll_interval_seconds < 0:
+            raise ValueError("timeout and poll interval must be non-negative")
+        started = time.monotonic()
+        while True:
+            status = self.status(request_id)
+            kind = fal_status_kind(status)
+            if kind == "completed":
+                result = self.result(request_id)
+                return {
+                    "request_id": str(request_id),
+                    "status": kind,
+                    "result": result,
+                }
+            if kind in {"unknown", "not_found"}:
+                raise FalProviderError(f"Fal.ai request завершён с состоянием {kind}")
+            if time.monotonic() - started >= timeout_seconds:
+                raise TimeoutError("Превышено время ожидания результата Fal.ai")
+            sleep(min(poll_interval_seconds, max(0.0, timeout_seconds)))
+
 
 __all__ = [
     "FalClient",
     "FalConfig",
     "FalProviderError",
     "fal_image_input",
+    "fal_image_url",
     "fal_status_kind",
 ]
