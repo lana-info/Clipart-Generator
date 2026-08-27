@@ -28,10 +28,9 @@ Updated: 2026-08-27
 
 ## Next task
 
-Merge the audited `codex/fix-windows-acceptance-ux-3.0.5` source checkpoint
-into `develop/3.0` and run the explicitly approved Windows-only GitHub Actions
-workflow. Do not publish a revision to the update service before target-machine
-acceptance.
+Run owner acceptance on the Windows 3.0.5 installer produced by GitHub Actions
+run `33026433664`. Do not publish a revision to the update service before this
+target-machine acceptance.
 
 ## Provider-aware parallel stabilization checkpoint — 2026-08-26
 
@@ -69,6 +68,13 @@ acceptance.
   item errors, provider events and exported diagnostic archives.
 - Full source verification: 731 passed, 1 expected Linux skip, 2 deselected,
   87 subtests; compile and diff checks passed. No paid call or build was made.
+- The audited branch was fast-forwarded into `develop/3.0` and the exact merged
+  commit `8aae4801718d1a33a427c886ded02a73fb284af6` passed the same full suite.
+- GitHub Actions run `33026433664` built only Windows 3.0.5, installed the setup
+  in a clean location, passed packaged startup/artwork and release-contract
+  checks, and uploaded `VibixImages-Setup-3.0.5.exe` (191,609,853 bytes).
+  SHA-256: `3e2efe15b4c35ab2163957715021297c3234e44ec613c989cc941f3e6242c7a7`.
+  macOS, Azure and update-service publication were not started.
 
 ## Windows acceptance UX checkpoint — 2026-08-26
 

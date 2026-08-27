@@ -6,9 +6,9 @@ Rule: take the next open task in order. Keep code changes narrow and do not refa
 
 For each task: explain the plan, implement only that task, verify it, update `TASKS.md` and `CHANGELOG.md`, then commit and push. Ordinary pushes must not start a build or release workflow. Build, tag, publish, release, and manual GitHub Actions runs are allowed only after an explicit user command that the application is ready.
 
-Current next task: **Merge the audited Windows 3.0.5 source checkpoint into
-`develop/3.0`, then run the explicitly approved Windows-only GitHub Actions
-build. Do not upload a server revision before target-Windows acceptance.**
+Current next task: **Run owner acceptance on the Windows 3.0.5 installer from
+GitHub Actions run `33026433664`. Do not upload a server revision before this
+target-Windows acceptance.**
 
 ## Phase 1 - Preparation
 

@@ -23,6 +23,12 @@
 - Источник и defaults синхронизированы на 3.0.5. По решению владельца финальный
   Windows installer собирается только ручным GitHub Actions workflow; Azure и
   macOS не запускаются, server revision до acceptance не публикуется.
+- Windows-only GitHub Actions run `33026433664` успешно собрал commit
+  `8aae4801718d1a33a427c886ded02a73fb284af6`, установил пакет в чистую папку и
+  проверил startup, три утверждённых изображения, prompt screens и release
+  contract. Артефакт `VibixImages-Setup-3.0.5.exe` имеет размер 191,609,853
+  bytes и SHA-256
+  `3e2efe15b4c35ab2163957715021297c3234e44ec613c989cc941f3e6242c7a7`.
 
 - Добавлены независимые лимиты параллельности KIE и PhotoRoom: только 1/2/3
   активные задачи, по умолчанию 3 для каждого провайдера, с фиксированным
