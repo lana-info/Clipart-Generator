@@ -28,6 +28,10 @@ Updated: 2026-08-27
 
 ## Next task
 
+Подготовить эталонный набор изображений и после пополнения Fal.ai провести
+контролируемое сравнение BiRefNet v2, BEN v2, Ideogram, Bria и rembg. До этого
+зафиксировать endpoint `fal-ai/birefnet/v2` и режимы Matting/Portrait/Heavy.
+
 Добавить и проверить Fal.ai background-removal profiles в рабочем UI. До
 появления ключа и средств ограничиться локальными тестами; после этого
 выполнить небольшой controlled live smoke с подтверждением стоимости.
