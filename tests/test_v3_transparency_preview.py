@@ -30,6 +30,18 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
         self.assertFalse(widget.preview.pixmap().isNull())
         self.assertNotEqual(first, second)
 
+    def test_brush_changes_mask_and_reset_restores_source_alpha(self):
+        widget = ClipartTransparencyPreview()
+        widget.set_image(Image.new("RGBA", (20, 20), (10, 20, 30, 255)))
+        widget.action_combo.setCurrentText("Стереть область")
+        widget.radius_spin.setValue(2)
+
+        widget.apply_stroke((10, 10))
+
+        self.assertEqual(widget._mask.getpixel((10, 10)), 0)
+        widget.reset_button.click()
+        self.assertEqual(widget._mask.getpixel((10, 10)), 255)
+
 
 if __name__ == "__main__":
     unittest.main()
