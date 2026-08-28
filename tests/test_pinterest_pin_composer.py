@@ -292,3 +292,36 @@ def test_save_pin_exports_png_and_jpeg_with_a_white_matte(tmp_path):
     with pytest.raises(module.PinExportError, match="unsupported"):
         module.save_pin(image, str(unsafe_path), format="TIFF")
     assert not unsafe_path.exists()
+
+
+@pytest.mark.parametrize("setup_step", ("resolve", "mkdir", "mkstemp", "close"))
+def test_save_pin_sanitizes_filesystem_setup_failures(tmp_path, monkeypatch, setup_step):
+    module = _require_composer()
+    image = Image.new("RGBA", (1000, 1500), (12, 34, 56, 128))
+    private_message = "/private/output/secret-product.png; provider_message=secret-value"
+
+    def failing_setup(*args, **kwargs):
+        raise OSError(private_message)
+
+    if setup_step == "resolve":
+        monkeypatch.setattr(module.Path, "resolve", failing_setup)
+    elif setup_step == "mkdir":
+        monkeypatch.setattr(module.Path, "mkdir", failing_setup)
+    elif setup_step == "mkstemp":
+        monkeypatch.setattr(module.tempfile, "mkstemp", failing_setup)
+    else:
+        original_close = module.os.close
+
+        def close_then_fail(descriptor):
+            original_close(descriptor)
+            raise OSError(private_message)
+
+        monkeypatch.setattr(module.os, "close", close_then_fail)
+
+    with pytest.raises(module.PinExportError) as error:
+        module.save_pin(image, str(tmp_path / "result.png"), format="PNG")
+
+    assert str(error.value) == "Pinterest pin export failed"
+    assert private_message not in str(error.value)
+    assert error.value.__cause__ is None
+    assert error.value.__suppress_context__ is True

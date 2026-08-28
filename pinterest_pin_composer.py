@@ -233,7 +233,7 @@ def assert_product_pixels_preserved(
     *,
     product_box: tuple[int, int, int, int],
 ) -> None:
-    """Check opaque protected pixels without exposing source image data."""
+    """Check RGB and alpha integrity for every transformed product alpha pixel."""
 
     left, top, right, bottom = _validate_product_box(product_box)
     if result.size != PIN_SIZE:
@@ -277,13 +277,16 @@ def save_pin(image: Image.Image, path: str, *, format: str) -> str:
     if image.size != PIN_SIZE:
         raise PinExportError("Pinterest pin export must be 1000×1500 pixels")
 
-    target = Path(path).resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
-    )
-    os.close(descriptor)
+    descriptor: int | None = None
+    temporary_name: str | None = None
     try:
+        target = Path(path).resolve()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
+        )
+        os.close(descriptor)
+        descriptor = None
         rgba = image.convert("RGBA")
         if export_format == "JPEG":
             flattened = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
@@ -307,13 +310,17 @@ def save_pin(image: Image.Image, path: str, *, format: str) -> str:
         os.replace(temporary_name, target)
     except PinExportError:
         raise
-    except (OSError, ValueError):
+    except (OSError, RuntimeError, ValueError):
         raise PinExportError("Pinterest pin export failed") from None
     finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
         try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-        except OSError:
+            if temporary_name is not None:
+                os.unlink(temporary_name)
+        except (FileNotFoundError, OSError):
             pass
     return str(target)

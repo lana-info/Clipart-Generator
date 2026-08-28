@@ -63,3 +63,17 @@
   evidence записывал digest resize-layer вместо protected source. Поток был
   проверен отдельным digest probe; исправлено место записи evidence.
 - GREEN: `15 passed` в focused composer suite.
+
+## Scoped re-review remediation — 2026-08-28
+
+- Весь filesystem setup/export `save_pin` — `Path.resolve`, создание каталога,
+  `mkstemp`, `os.close`, запись, verification и `os.replace` — теперь находится
+  внутри одного safe error boundary. `OSError`, `RuntimeError` и `ValueError`
+  преобразуются в `PinExportError` без cause и без пути/сырого сообщения.
+- Docstring `assert_product_pixels_preserved` уточнён: guard проверяет RGB и
+  alpha каждого transformed product pixel с non-zero alpha, включая partial alpha.
+- RED: параметризованный тест внедрил private filesystem error на `resolve`,
+  `mkdir`, `mkstemp` и `close`; до исправления — `4 failed, 15 passed` с raw
+  `OSError`.
+- GREEN: эти четыре setup paths возвращают только safe domain error; focused
+  suite — `19 passed`.
