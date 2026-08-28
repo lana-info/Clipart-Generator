@@ -4,16 +4,17 @@
 
 **Goal:** Реализовать отдельный Pinterest Pins workflow, который создаёт три безопасных шаблонных пина и три AI-сцены из фото товара, сохраняя исходный товар и его точный рисунок.
 
-**Architecture:** Pinterest Pins получает собственный draft с фото товара, текстом и параметрами серии. Шаблонный renderer и AI-scene renderer производят независимые артефакты размера 1000×1500; исходный товар хранится как защищённый слой и композитится поверх фона. Существующие очередь, локализация, provider registry, экспорт и сохранение проекта переиспользуются через тонкие адаптеры, а Pinterest не получает clipart-only controls.
+**Architecture:** Pinterest Pins получает собственный draft с фото товара, текстом и параметрами серии. Шаблонный renderer и AI-scene renderer производят независимые артефакты размера 1000×1500; исходный товар хранится как защищённый слой и композитится поверх фона. Для запуска используется отдельный `PinterestPinRunRequest`/orchestrator и отдельный worker-adapter, подключённые к существующей очереди, но не `ClipartRunRequest`. Локализация, provider registry, экспорт и сохранение проекта переиспользуются через тонкие адаптеры, а Pinterest не получает clipart-only controls.
 
-**Tech Stack:** Python 3.11+, PyQt6, Pillow, существующие `ProjectState`, `ClipartRunRequest`/worker adapter, provider registry, pytest/offscreen Qt tests.
+**Tech Stack:** Python 3.11+, PyQt6, Pillow, существующие `ProjectState`, queue/worker infrastructure и provider registry, pytest/offscreen Qt tests.
 
 **Spec:** `docs/superpowers/specs/2026-08-28-pinterest-pins-design.md`
 
 ## Global Constraints
 
 - Вертикальный формат: 2:3, по умолчанию 1000×1500 px.
-- Один запуск создаёт ровно 6 вариантов: 3 template и 3 AI-scene.
+- Один запуск создаёт шесть слотов: 3 template и 3 AI-scene. При ошибке AI-сцены слот сохраняется со статусом `failed`/`retryable`, а пользователь получает частичный результат и может перегенерировать только этот слот; число успешно экспортируемых файлов может быть меньше шести.
+- В MVP формат 2:3, canvas 1000×1500 и количество слотов 3+3 — фиксированный контракт, а не настройки пользователя.
 - Исходный товар остаётся защищённым source layer; AI не перерисовывает его по умолчанию.
 - Сохраняются цвет, материал, текстура, пропорции, логотипы, надписи и точный паттерн товара.
 - Перегенерация может менять только фон, сцену или layout, но не source product layer.
@@ -32,7 +33,8 @@
 - Create: `pinterest_pin_templates.py` — deterministic template layouts and text-safe placement contracts.
 - Create: `pinterest_pin_composer.py` — protected product-layer compositing, alpha/mask handling, canvas export, and fidelity guards.
 - Modify: `v3_pinterest_flow.py` — Pinterest-specific input, preview, generation orchestration, selective scene regeneration, and folder export.
-- Modify: `v3_clipart_flow.py` or shared worker adapter only where a provider-neutral request hook is required; do not fork the Clipart pipeline.
+- Modify: shared queue/worker adapter only where a provider-neutral request hook is required; do not route Pinterest through `ClipartRunRequest` and do not fork the Clipart pipeline.
+- Modify: the concrete queue/worker request registry and its tests — register and execute `PinterestPinRunRequest` through the existing queue without changing Clipart behavior.
 - Modify: `workflow_definitions.py` — explicitly describe Pinterest Pins pages and allowed operations.
 - Modify: `v3_provider_registry.py` only if a capability flag is needed for scene/background generation; do not expose Clipart-only processing controls.
 - Test: `tests/test_pinterest_prompt_schema.py`, `tests/test_pinterest_pin_templates.py`, `tests/test_pinterest_pin_composer.py`, `tests/test_v3_pinterest_flow.py`, and relevant state/workflow tests.
@@ -67,6 +69,7 @@ color_palette: str = ""
 ```
 
 - Result metadata must include `variant_id`, `variant_kind`, `source_product_path`, `output_path`, and `accepted` without storing image bytes in project JSON.
+- Result metadata must also include `status` (`pending`, `success`, `failed`), `retryable`, `product_layer_digest`, and `export_status`; errors contain only a localized safe message and a stable error code.
 
 - [ ] Step 1: Add failing round-trip tests for defaults, bounds, old Pinterest projects, and rejection of invalid dimensions/counts.
 - [ ] Step 2: Run `pytest tests/test_v3_project_state.py tests/test_pinterest_prompt_schema.py -q`; confirm the new tests fail for missing fields.
@@ -149,9 +152,9 @@ def assert_product_pixels_preserved(
 def save_pin(image: Image.Image, path: str, *, format: str) -> str: ...
 ```
 
-- [ ] Step 1: Write tests that prove source RGB pixels inside the product mask remain unchanged after compositing, alpha remains present, output is 1000×1500, and unsafe output formats are rejected.
+- [ ] Step 1: Write tests that prove the original file digest is unchanged, RGB pixels selected by the alpha mask are copied from the original product layer into the expected transformed box, alpha remains present, output is 1000×1500, and unsafe output formats are rejected. Compare against a deterministic resize/composite reference, not raw unscaled coordinates.
 - [ ] Step 2: Run `pytest tests/test_pinterest_pin_composer.py -q`; confirm FAIL.
-- [ ] Step 3: Implement source loading, local/provider-neutral alpha-mask acquisition, protected RGBA compositing, optional shadow outside the mask, and atomic export.
+- [ ] Step 3: Implement source loading and alpha-mask acquisition. Preserve original RGB pixels and let local rembg/BEN2 or an external remover return only an alpha mask; support an already-transparent source, unavailable provider, malformed mask, and safe fallback/error states without replacing product RGB data.
 - [ ] Step 4: Ensure resize uses the product layer as the source and never runs a generative image-to-image transformation on it.
 - [ ] Step 5: Implement fidelity guard diagnostics with counts/locations only; do not log image bytes, prompts, secrets, or full private paths.
 - [ ] Step 6: Run the focused tests and confirm PASS.
@@ -167,7 +170,7 @@ def save_pin(image: Image.Image, path: str, *, format: str) -> str: ...
 
 **Interfaces:**
 
-- Add `PinterestProductInputPage` for product files, title/subtitle/CTA, style, scene description, and output folder.
+- Add `PinterestProductInputPage` for product files, selected product, title/subtitle/CTA, style, scene description, and output folder. In MVP six slots use only the selected product; additional uploaded photos remain selectable and do not multiply the series.
 - Add `PinterestPinPreviewPage` with a six-item result grid and controls:
 
 ```python
@@ -179,6 +182,7 @@ def export_accepted(self) -> tuple[str, ...]: ...
 - [ ] Step 1: Add offscreen tests asserting Pinterest shows product upload, text fields, preview/export controls, and does not show Clipart transparency/background-cleanup controls.
 - [ ] Step 2: Run `pytest tests/test_v3_pinterest_flow.py -q`; confirm FAIL.
 - [ ] Step 3: Implement input binding to the Pinterest draft with localized labels and existing folder selection patterns.
+- [ ] Step 3a: Define localized copy-suggestion service/interface for title/subtitle/CTA. Suggestions may use only user-provided product facts and must never invent materials, dimensions, colors, or product features; manual text remains fully supported.
 - [ ] Step 4: Implement preview cards with source/variant labels, acceptance state, and a visible fidelity warning when the result is not composited from the protected layer.
 - [ ] Step 5: Implement text-only edits without regenerating product pixels.
 - [ ] Step 6: Run focused UI tests and confirm PASS.
@@ -203,14 +207,14 @@ def build_pinterest_pin_series(
 ) -> tuple[PinVariant, ...]: ...
 ```
 
-`PinVariant` must contain `variant_id`, `variant_kind` (`template` or `ai_scene`), `image`, `source_product_path`, and `scene_prompt` without embedding secrets.
+`PinVariant` must contain `variant_id`, `variant_kind` (`template` or `ai_scene`), `image`, `source_product_path`, `scene_prompt`, `status`, `retryable`, `product_layer_digest`, and a safe error code/message without embedding secrets.
 
-- [ ] Step 1: Add tests with a fake background generator asserting six outputs, exactly three of each kind, stable IDs, and no network calls.
+- [ ] Step 1: Add tests with a fake background generator asserting six stable slots, exactly three of each kind, successful template results when AI scenes fail, retryable scene statuses, and no network calls.
 - [ ] Step 2: Run the focused tests; confirm FAIL.
 - [ ] Step 3: Implement template generation through `pinterest_pin_templates.py`.
-- [ ] Step 4: Implement AI-scene prompts that describe only background/environment and reserve a product placement area; do not pass the product through unconstrained image-to-image regeneration.
+- [ ] Step 4: Define a provider-neutral `BackgroundGenerator` contract that returns a background artifact only (never a rewritten product). Implement AI-scene prompts that describe only background/environment and reserve a product placement area; do not pass the product through unconstrained image-to-image regeneration.
 - [ ] Step 5: Composite each returned background with the same protected `ProductLayer` and run the fidelity guard before marking it previewable.
-- [ ] Step 6: Add bounded cancellation and failure handling: a failed scene leaves the three template results available and does not erase successful files.
+- [ ] Step 6: Add bounded cancellation and failure handling: a failed scene keeps its slot and safe diagnostic, leaves the three template results available, and does not erase successful files.
 - [ ] Step 7: Run focused tests and confirm PASS.
 - [ ] Step 8: Commit `feat: generate protected Pinterest pin series`.
 
@@ -251,9 +255,10 @@ def export_accepted(self) -> tuple[str, ...]:
 
 - [ ] Step 1: Add tests for the Pinterest Pins route and localized Russian/English labels, validation errors, accessibility names, and absent Clipart-only controls.
 - [ ] Step 2: Run focused tests; confirm FAIL.
-- [ ] Step 3: Register the Pinterest Pins pages and allowed operations without exposing transparency cleanup, clipart processing controls, or content-plan fields.
+- [ ] Step 3: Replace the inherited Clipart input/generation/processing/review path with explicit Pinterest Pins pages: product input → copy/layout input → generation → six-slot preview → export. Register a `PinterestPinRunRequest` in the queue/worker and ensure hidden Clipart controls are absent from both UI and serialized run state.
 - [ ] Step 4: Route provider selection through capabilities; if a provider cannot produce a background artifact or protect the product, use the safe template path and show an actionable message.
 - [ ] Step 5: Add localized messages for missing product photo, unsupported output folder, failed scene generation, and partial export.
+- [ ] Step 5a: Route every new visible label, validation error, accessibility name, status and provider error through the existing locale/message registry; add Russian and English keys and tests for both locales. No new Pinterest user-facing strings may be hard-coded in the flow.
 - [ ] Step 6: Run focused tests and confirm PASS.
 - [ ] Step 7: Commit `feat: wire Pinterest Pins workflow and localization`.
 
@@ -265,10 +270,10 @@ def export_accepted(self) -> tuple[str, ...]:
 - Modify: `STATE.md`
 - Test: all relevant test files
 
-- [ ] Step 1: Run `pytest tests/test_pinterest_prompt_schema.py tests/test_pinterest_pin_templates.py tests/test_pinterest_pin_composer.py tests/test_v3_pinterest_flow.py tests/test_v3_project_state.py tests/test_workflow_definitions.py -q`.
+- [ ] Step 1: Run the focused Pinterest/state/workflow tests plus the queue/worker tests added for `PinterestPinRunRequest`.
 - [ ] Step 2: Run `/root/projects/Clipart\\ Generator/commit-worktree/.venv/bin/python -m py_compile main.py v3_pinterest_flow.py pinterest_prompt_schema.py pinterest_pin_templates.py pinterest_pin_composer.py`.
 - [ ] Step 3: Run the full `/root/projects/Clipart\\ Generator/commit-worktree/.venv/bin/python -m pytest -q` suite and record expected platform skips separately.
-- [ ] Step 4: Perform an offscreen UI smoke test that creates a six-item fake series and checks output dimensions, files, acceptance states, and no product-pixel mutation.
+- [ ] Step 4: Perform an offscreen UI smoke test that creates six fixed slots (including failed/retryable AI slots), checks output dimensions, accepted-file export, and no product-layer mutation.
 - [ ] Step 5: Update task status and state with exact test counts, remaining limitations, and no claim of live provider quality before a controlled run.
 - [ ] Step 6: Run `git diff --check`, inspect changed files and diff, then create a final checkpoint commit `test: verify Pinterest Pins workflow`.
 
@@ -279,4 +284,3 @@ def export_accepted(self) -> tuple[str, ...]:
 - Canva-compatible editable designs.
 - Freeform layer editor.
 - Claiming pixel-perfect fidelity for an unconstrained AI-generated product image.
-
