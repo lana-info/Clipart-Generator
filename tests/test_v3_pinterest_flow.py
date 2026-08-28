@@ -1,5 +1,6 @@
 import ast
 import os
+import re
 import tempfile
 import threading
 import time
@@ -15,6 +16,7 @@ from PIL import Image
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QAbstractButton, QLabel
 
+import v3_localization
 import v3_pinterest_flow
 from v3_mode_selection import V3ApplicationView
 from v3_pinterest_flow import (
@@ -33,7 +35,7 @@ from v3_pinterest_flow import (
     install_pinterest_flow,
 )
 from pinterest_pin_composer import ProductLayer, assert_product_pixels_preserved
-from v3_clipart_flow import ClipartPromptReviewPage
+from v3_clipart_flow import ClipartFlowError, ClipartPromptReviewPage, ClipartReviewRunPage
 from v3_project_state import (
     PinterestPinData,
     ProjectMode,
@@ -44,6 +46,7 @@ from v3_project_state import (
 )
 from v3_wizard import AppShell
 from v3_run_queue import RunItemStatus, RunQueueSession
+from workflow_definitions import workflow_for_mode
 
 
 class UnexpectedPinterestOrchestrator:
@@ -632,28 +635,97 @@ class V3PinterestFlowTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
-                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
-                StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
             ),
-        )
-        self.assertIsInstance(
-            controller.pages[StepId.PROCESSING_OPTIONS],
-            v3_pinterest_flow.PinterestProcessingPage,
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
             PinterestProductInputPage,
         )
         self.assertIsInstance(
-            controller.pages[StepId.PROMPT_REVIEW],
-            ClipartPromptReviewPage,
-        )
-        self.assertIsInstance(
             controller.pages[StepId.PIN_FORMAT_MODEL],
             PinterestFormatModelPage,
+        )
+
+    def test_pinterest_route_has_no_clipart_review_or_processing_page(self):
+        """Clipart prompt/content and cleanup pages must not leak into Pinterest."""
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+
+        self.assertEqual(
+            state.route,
+            (
+                StepId.PROJECT,
+                StepId.PROMPTS,
+                StepId.PIN_FORMAT_MODEL,
+                StepId.REVIEW_RUN,
+                StepId.RESULTS,
+            ),
+        )
+        self.assertNotIn(StepId.PROMPT_REVIEW, controller.pages)
+        self.assertNotIn(StepId.PROCESSING_OPTIONS, controller.pages)
+        self.assertNotIsInstance(controller.pages[StepId.REVIEW_RUN], ClipartReviewRunPage)
+
+    def test_missing_product_and_unsupported_folder_use_localized_registry_messages(self):
+        """Hard-coded validation text leaves the English Pinterest route untranslated."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-localized-errors-") as temp:
+            state = ProjectState(mode=ProjectMode.PINTEREST)
+            state.common.work_dir = temp
+
+            for locale in ("ru", "en-US"):
+                with self.subTest(locale=locale):
+                    with self.assertRaisesRegex(
+                        ClipartFlowError,
+                        re.escape(v3_localization.message_for("pinterest.error.missing_product", locale=locale)),
+                    ):
+                        build_pinterest_run_request(state, locale=locale)
+
+            state.pinterest.pin.product_paths = [str(Path(temp) / "product.png")]
+            Image.new("RGBA", (8, 10), "white").save(state.pinterest.pin.product_paths[0])
+            state.set_output_dir_for_mode(str(Path(temp) / "not-a-folder"), ProjectMode.PINTEREST)
+            with patch.object(Path, "mkdir", side_effect=OSError("blocked")):
+                with self.assertRaisesRegex(
+                    ClipartFlowError,
+                    re.escape(v3_localization.message_for("pinterest.error.output_folder", locale="en")),
+                ):
+                    build_pinterest_run_request(state, locale="en")
+
+    def test_unavailable_scene_provider_uses_safe_template_fallback_and_localized_status(self):
+        """An unsupported provider must never submit the product to an unsafe scene call."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-provider-fallback-") as temp:
+            product_path = Path(temp) / "product.png"
+            Image.new("RGBA", (8, 10), "white").save(product_path)
+            state = ProjectState(mode=ProjectMode.PINTEREST)
+            state.common.work_dir = temp
+            state.pinterest.pin.product_paths = [str(product_path)]
+            request = build_pinterest_run_request(
+                state,
+                locale="en",
+                provider_capabilities={"background_generation": False, "protected_product": False},
+            )
+
+        self.assertEqual(request.scene_strategy, "safe_template")
+        self.assertEqual(
+            request.status_message,
+            v3_localization.message_for("pinterest.status.safe_template_fallback", locale="en"),
+        )
+
+    def test_failed_scene_and_partial_export_use_localized_registry_messages(self):
+        """Scene and export failures need actionable language in both supported locales."""
+        self.assertEqual(
+            v3_pinterest_flow.scene_failure_message(locale="ru"),
+            v3_localization.message_for("pinterest.error.scene_failed", locale="ru"),
+        )
+        self.assertEqual(
+            v3_pinterest_flow.scene_failure_message(locale="en"),
+            v3_localization.message_for("pinterest.error.scene_failed", locale="en"),
+        )
+        self.assertEqual(
+            v3_pinterest_flow.partial_export_message(2, locale="en"),
+            v3_localization.message_for("pinterest.status.partial_export", locale="en", count=2),
         )
 
     def test_product_input_binds_selected_photo_copy_scene_and_output_folder(self):
@@ -701,7 +773,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             lambda: None,
             locale="en-US",
         )
-        self.assertEqual(localized_page.card.title_label.text(), "Product and pin copy")
+        self.assertEqual(localized_page.card.title_label.text(), "Product photo")
 
     def test_install_propagates_locale_to_real_pinterest_pages(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
@@ -714,7 +786,7 @@ class V3PinterestFlowTests(unittest.TestCase):
 
         self.assertEqual(
             controller.pages[StepId.PROMPTS].card.title_label.text(),
-            "Product and pin copy",
+            "Product photo",
         )
         self.assertEqual(
             controller.pages[StepId.RESULTS].card.title_label.text(),
@@ -722,15 +794,12 @@ class V3PinterestFlowTests(unittest.TestCase):
         )
         self.assertEqual(
             controller.pages[StepId.PIN_FORMAT_MODEL].card.title_label.text(),
-            "Format and model",
+            "Pinterest pin generation",
         )
-        self.assertEqual(
-            controller.pages[StepId.PROCESSING_OPTIONS].accessibleName(),
-            "Image processing",
-        )
+        self.assertNotIn(StepId.PROCESSING_OPTIONS, controller.pages)
         self.assertEqual(
             controller.pages[StepId.REVIEW_RUN].card.description_label.text(),
-            "Review the image package and cost before explicitly starting it.",
+            "Check the six slots before explicitly starting generation.",
         )
 
     def test_legacy_cleanup_draft_does_not_reach_pinterest_diagnostics(self):
@@ -1198,11 +1267,12 @@ class V3PinterestFlowTests(unittest.TestCase):
         shell = AppShell(state)
         controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
         pages = (
+            controller.pages[StepId.PROJECT],
             controller.pages[StepId.PROMPTS],
-            controller.pages[StepId.PROCESSING_OPTIONS],
+            controller.pages[StepId.PIN_FORMAT_MODEL],
             controller.pages[StepId.RESULTS],
         )
-        state.set_step(StepId.PROCESSING_OPTIONS)
+        state.set_step(StepId.PIN_FORMAT_MODEL)
         shell.refresh()
         shell.show()
         self.app.processEvents()
@@ -1236,23 +1306,11 @@ class V3PinterestFlowTests(unittest.TestCase):
             PinterestReviewRunPage,
         )
 
-    def test_prompt_review_deletes_selected_pinterest_prompt(self):
+    def test_pinterest_route_omits_legacy_prompt_review_page(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
-        state.pinterest.prompts = [
-            PromptEntry("First pin"),
-            PromptEntry("Second pin"),
-        ]
         shell = AppShell(state)
         controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROMPT_REVIEW]
-        page.table.selectRow(0)
-
-        page.delete_button.click()
-
-        self.assertEqual(
-            [entry.prompt for entry in state.pinterest.prompts],
-            ["Second pin"],
-        )
+        self.assertNotIn(StepId.PROMPT_REVIEW, controller.pages)
 
     def test_reference_models_expand_and_report_incompatibility(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-ref-") as temp:
@@ -1330,7 +1388,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         self.assertEqual(request.mode, "pinterest_pins")
         self.assertEqual(len(request.queue_items), 6)
         self.assertIn(
-            "16:9",
+            "2:3 1000×1500",
             controller.pages[StepId.REVIEW_RUN].summary_label.text(),
         )
 
@@ -1413,34 +1471,16 @@ class V3PinterestFlowTests(unittest.TestCase):
         self.assertEqual(estimate.request_count, 4)
         self.assertEqual(estimate.estimated_usd, Decimal("0.120"))
 
-    def test_pinterest_processing_can_be_skipped(self):
-        state = ProjectState(mode=ProjectMode.PINTEREST)
-        state.pinterest.operations.upscale_before = False
-        adapter = v3_pinterest_flow._pinterest_project_adapter(state)
-        page = v3_pinterest_flow.PinterestProcessingPage(adapter, lambda: None)
+    def test_pinterest_processing_is_not_part_of_the_route(self):
+        self.assertFalse(
+            workflow_for_mode(ProjectMode.PINTEREST).processing_operations
+        )
 
-        self.assertNotIn("processing_operation_required", page.validation_issues())
-
-    def test_pinterest_processing_edits_persist_allowed_operations_and_provider(self):
-        """Dropping the adapter assignment must leave the persisted fields unchanged."""
+    def test_pinterest_state_does_not_expose_processing_page(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
         controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROCESSING_OPTIONS]
-
-        page.operation_widgets["upscale_before"].setChecked(True)
-        provider = page.operation_widgets["upscale_before_provider"]
-        provider.setCurrentIndex(provider.findData("local_realesrgan"))
-        page.operation_widgets["local_realesrgan_scale"].setCurrentIndex(
-            page.operation_widgets["local_realesrgan_scale"].findData(2)
-        )
-        page.operation_widgets["unsharp"].setChecked(True)
-
-        persisted = ProjectState.from_dict(state.to_dict()).pinterest.operations
-        self.assertTrue(persisted.upscale_before)
-        self.assertEqual(persisted.upscale_before_provider, "local_realesrgan")
-        self.assertEqual(persisted.local_realesrgan_scale, 2)
-        self.assertTrue(persisted.unsharp)
+        self.assertNotIn(StepId.PROCESSING_OPTIONS, controller.pages)
 
     def test_successful_new_run_clears_stale_result_acceptance_and_metadata(self):
         """Starting another run must not retain acceptance or evidence from an old file."""
@@ -1512,17 +1552,14 @@ class V3PinterestFlowTests(unittest.TestCase):
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=WorkerFactory(),
             )
-            project = controller.pages[StepId.PROJECT]
-            project.work_dir_edit.setText(temp)
+            state.common.work_dir = temp
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
             prompts = controller.pages[StepId.PROMPTS]
             prompts.title_edit.setText("Kitchen collection")
-            self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_next(), StepId.PIN_FORMAT_MODEL)
             format_page = controller.pages[StepId.PIN_FORMAT_MODEL]
             format_page.variants_spin.setValue(3)
             selected_ratio = format_page.ratio_combo.currentText()
-            self.assertEqual(shell.go_back(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_back(), StepId.PROMPTS)
 
         self.assertEqual(state.common.project_name, "")
@@ -1547,10 +1584,6 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
 
             self.assertEqual(factory.workers, [])
-            self.assertIn(
-                "Пакетный экспорт PNG",
-                controller.review_page.pipeline_label.text(),
-            )
             review_copy = " ".join(
                 label.text()
                 for label in controller.review_page.findChildren(QLabel)
@@ -1573,10 +1606,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 runtime_settings_provider=lambda: {},
                 worker_factory=factory,
             )
-            self.assertIn(
-                "фотографию товара",
-                controller.review_page.requirements_label.text(),
-            )
+            self.assertIn("фотографию товара", controller.review_page.preflight_status_label.text())
             shell.go_next()
             self.assertEqual(factory.workers, [])
 

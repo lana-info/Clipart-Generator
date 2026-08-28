@@ -82,7 +82,7 @@ from v3_prompt_generator import PromptGeneratorError
 from v3_processing_editor import ProcessingPipelineEditor
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
-from v3_localization import normalize_locale
+from v3_localization import message_for, normalize_locale
 from workflow_definitions import workflow_for_mode
 
 
@@ -189,8 +189,15 @@ _PINTEREST_UI_TEXT = {
 
 
 def _pinterest_text(key: str, *, locale: str = "ru", **values: object) -> str:
-    language = normalize_locale(locale)
-    return _PINTEREST_UI_TEXT[language][key].format(**values)
+    return message_for(f"pinterest.{key}", locale=locale, **values)
+
+
+def scene_failure_message(*, locale: str = "ru") -> str:
+    return message_for("pinterest.error.scene_failed", locale=locale)
+
+
+def partial_export_message(count: int, *, locale: str = "ru") -> str:
+    return message_for("pinterest.status.partial_export", locale=locale, count=count)
 
 
 @dataclass(frozen=True)
@@ -258,7 +265,7 @@ def _failed_scene_variant(
         retryable=True,
         product_layer_digest=product_layer_digest(product),
         error_code="background_generation_failed",
-        error_message="Не удалось создать фон. Повторите попытку.",
+        error_message=scene_failure_message(),
         product_box=product_box,
     )
 
@@ -452,6 +459,8 @@ class PinterestPinRunRequest:
     pin: PinterestPinData
     settings: dict[str, Any] = field(repr=False)
     queue_items: tuple[dict[str, str], ...]
+    scene_strategy: str = "ai_scene"
+    status_message: str = ""
     mode: str = "pinterest_pins"
     generate_background: BackgroundGenerator | None = field(
         default=None,
@@ -489,7 +498,15 @@ class PinterestPinOrchestrator:
             if isinstance(item, Mapping)
         }
         generate_background = request.generate_background
-        if generate_background is not None:
+        if request.scene_strategy == "safe_template":
+            def generate_requested_background(_: str, slot_index: int) -> Image.Image:
+                return render_template_background(
+                    title=request.pin.pin_title,
+                    subtitle=request.pin.pin_subtitle,
+                    cta=request.pin.pin_cta,
+                    template_id=pinterest_template_specs()[slot_index - 1].template_id,
+                )
+        elif generate_background is not None:
             def generate_requested_background(prompt: str, slot_index: int) -> Image.Image:
                 if f"ai-scene-{slot_index:02d}" not in requested_ids:
                     raise ValueError("AI scene is not selected for this run")
@@ -653,23 +670,24 @@ class PinterestPinWorkerAdapter(QThread):
 def build_pinterest_run_request(
     state: ProjectState,
     runtime_settings: Mapping[str, Any] | None = None,
+    *,
+    locale: str = "ru",
+    provider_capabilities: Mapping[str, object] | None = None,
 ) -> PinterestPinRunRequest:
     del runtime_settings
     if not isinstance(state, ProjectState):
         raise TypeError("state must be a ProjectState")
     if state.mode is not ProjectMode.PINTEREST:
-        raise ClipartFlowError(
-            "Запуск Pinterest-пинов доступен только в режиме pinterest"
-        )
+        raise ClipartFlowError(message_for("pinterest.error.run_wrong_mode", locale=locale))
     work_dir = Path(state.common.work_dir).expanduser()
     if not work_dir.is_dir():
-        raise ClipartFlowError("Рабочая папка не существует или недоступна для записи")
+        raise ClipartFlowError(message_for("pinterest.error.work_folder", locale=locale))
     pin = PinterestPinData.from_dict(state.pinterest.pin.to_dict())
     if not pin.product_paths:
-        raise ClipartFlowError("Добавьте фотографию товара")
+        raise ClipartFlowError(message_for("pinterest.error.missing_product", locale=locale))
     product_path = Path(pin.product_paths[pin.selected_product_index]).expanduser()
     if not product_path.is_file():
-        raise ClipartFlowError("Фотография товара недоступна")
+        raise ClipartFlowError(message_for("pinterest.error.product_unavailable", locale=locale))
     output_dir = state.output_dir_for_mode(ProjectMode.PINTEREST)
     if not output_dir:
         output_dir = str(work_dir / "output")
@@ -678,7 +696,16 @@ def build_pinterest_run_request(
     try:
         output_path.mkdir(parents=True, exist_ok=True)
     except OSError:
-        raise ClipartFlowError("Папка результата не существует или недоступна для записи")
+        raise ClipartFlowError(message_for("pinterest.error.output_folder", locale=locale))
+    capabilities = provider_capabilities if isinstance(provider_capabilities, Mapping) else {}
+    supports_scene = bool(capabilities.get("background_generation", True))
+    protects_product = bool(capabilities.get("protected_product", True))
+    scene_strategy = "ai_scene" if supports_scene and protects_product else "safe_template"
+    status_message = (
+        ""
+        if scene_strategy == "ai_scene"
+        else message_for("pinterest.status.safe_template_fallback", locale=locale)
+    )
     queue_items = tuple(
         {
             "variant_id": f"template-{index:02d}",
@@ -698,6 +725,8 @@ def build_pinterest_run_request(
         pin=pin,
         settings={"output_dir": str(output_path)},
         queue_items=queue_items,
+        scene_strategy=scene_strategy,
+        status_message=status_message,
     )
 
 
@@ -940,6 +969,10 @@ class PinterestProductInputPage(_ScrollableStepPage):
 
 class PinterestPromptInputPage(PinterestProductInputPage):
     """Compatibility alias for callers that imported the former page name."""
+
+
+class PinterestCopyLayoutPage(PinterestProductInputPage):
+    """Pinterest-only copy/layout page; it never exposes Clipart prompt fields."""
 
 
 class PinterestProjectPage(ClipartProjectPage):
@@ -1216,14 +1249,15 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
                     result.export_status = "failed"
                 else:
                     result.export_status = "exported"
-        self.export_status_label.setText(
-            _pinterest_text(
-                "export_summary",
-                locale=self.locale,
-                count=len(exported),
-                folder=str(Path(output_dir).expanduser()) if output_dir else "—",
-            )
+        summary = _pinterest_text(
+            "export_summary",
+            locale=self.locale,
+            count=len(exported),
+            folder=str(Path(output_dir).expanduser()) if output_dir else "—",
         )
+        if any(result.export_status == "failed" for result in self.results):
+            summary = f"{partial_export_message(len(exported), locale=self.locale)} {summary}"
+        self.export_status_label.setText(summary)
         self.changed()
         self.refresh_from_state()
         return tuple(exported)
@@ -1438,7 +1472,7 @@ class PinterestProcessingPage(ProcessingPipelineEditor):
         )
 
 
-class PinterestReviewRunPage(ClipartReviewRunPage):
+class PinterestReviewRunPage(_ScrollableStepPage):
     def __init__(
         self,
         state: ProjectState,
@@ -1447,24 +1481,39 @@ class PinterestReviewRunPage(ClipartReviewRunPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         self.locale = normalize_locale(locale)
-        super().__init__(state, tokens=tokens)
         title = _pinterest_text("review_title", locale=self.locale)
-        self.card.title_label.setText(title)
-        self.setAccessibleName(title)
-        self.card.description_label.setText(
-            _pinterest_text("review_description", locale=self.locale)
-        )
-        self.setAccessibleDescription(
-            _pinterest_text("review_description", locale=self.locale)
-        )
+        description = _pinterest_text("review_description", locale=self.locale)
+        super().__init__(title, description, tokens=tokens)
+        self.state = state
+        self.summary_label = QLabel()
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setProperty("v3Small", True)
+        self.add_widget(self.summary_label)
+        self.preflight_status_label = QLabel()
+        self.preflight_status_label.setWordWrap(True)
+        self.preflight_status_label.setProperty("v3Status", True)
+        self.add_widget(self.preflight_status_label)
+        self.run_status_label = QLabel()
+        self.run_status_label.setWordWrap(True)
+        self.run_status_label.setProperty("v3Status", True)
+        self.add_widget(self.run_status_label)
+        self.refresh_from_state()
+
+    def set_preflight_status(self, message: str, *, ready: bool) -> None:
+        self.preflight_status_label.setText(message)
+        self.preflight_status_label.setProperty("state", "success" if ready else "error")
+
+    def set_run_status(self, message: str, *, error: bool = False) -> None:
+        self.run_status_label.setText(("✕ " if error else "✓ ") + message)
+        self.run_status_label.setProperty("state", "error" if error else "success")
+
+    def validation_issues(self) -> tuple[str, ...]:
+        return ()
 
     def refresh_from_state(self) -> None:
-        super().refresh_from_state()
-        self.pipeline_label.setText(
-            self.pipeline_label.text().replace(
-                "Экспорт PNG",
-                "Пакетный экспорт PNG",
-            )
+        generation = self.state.clipart.generation
+        self.summary_label.setText(
+            f"{generation.model}; reference: {generation.reference_model}; 2:3 1000×1500"
         )
 
 
@@ -1525,15 +1574,6 @@ class PinterestFlowController(QObject):
         changed = self.shell.mark_dirty
         self.pages.register(
             StepId.PROJECT,
-            lambda: PinterestProjectPage(
-                self.adapter_state,
-                changed,
-                locale=self.locale,
-                tokens=self.shell.tokens,
-            ),
-        )
-        self.pages.register(
-            StepId.PROMPTS,
             lambda: PinterestProductInputPage(
                 self.adapter_state,
                 changed,
@@ -1542,8 +1582,8 @@ class PinterestFlowController(QObject):
             ),
         )
         self.pages.register(
-            StepId.PROMPT_REVIEW,
-            lambda: PinterestPromptReviewPage(
+            StepId.PROMPTS,
+            lambda: PinterestCopyLayoutPage(
                 self.adapter_state,
                 changed,
                 locale=self.locale,
@@ -1553,15 +1593,6 @@ class PinterestFlowController(QObject):
         self.pages.register(
             StepId.PIN_FORMAT_MODEL,
             lambda: PinterestFormatModelPage(
-                self.adapter_state,
-                changed,
-                locale=self.locale,
-                tokens=self.shell.tokens,
-            ),
-        )
-        self.pages.register(
-            StepId.PROCESSING_OPTIONS,
-            lambda: PinterestProcessingPage(
                 self.adapter_state,
                 changed,
                 locale=self.locale,

@@ -83,7 +83,35 @@ class WorkflowDefinitionTests(unittest.TestCase):
         pinterest = workflow_for_mode(ProjectMode.PINTEREST)
         self.assertFalse(pinterest.allows_processing_operation("trim"))
         self.assertFalse(pinterest.allows_processing_operation("remove_background"))
-        self.assertTrue(pinterest.allows_processing_operation("upscale_before"))
+        self.assertFalse(pinterest.allows_processing_operation("upscale_before"))
+
+    def test_pinterest_declares_only_its_explicit_pin_pages_and_operations(self):
+        """Reusing Clipart review/processing pages would expose forbidden controls."""
+        pinterest = workflow_for_mode(ProjectMode.PINTEREST)
+
+        self.assertEqual(
+            pinterest.page_steps,
+            (
+                StepId.PROJECT,
+                StepId.PROMPTS,
+                StepId.PIN_FORMAT_MODEL,
+                StepId.REVIEW_RUN,
+                StepId.RESULTS,
+            ),
+        )
+        self.assertEqual(
+            tuple(page.component_id for page in pinterest.pages),
+            (
+                "pinterest.product_input",
+                "pinterest.copy_layout",
+                "pinterest.generation",
+                "pinterest.preview",
+                "pinterest.export",
+            ),
+        )
+        self.assertEqual(pinterest.processing_operations, ())
+        self.assertFalse(pinterest.supports_provider_control("processing_providers"))
+        self.assertFalse(pinterest.supports_provider_control("reference_model"))
 
     def test_processing_editor_hides_operations_not_in_workflow_profile(self):
         pinterest = workflow_for_mode(ProjectMode.PINTEREST)
@@ -100,7 +128,7 @@ class WorkflowDefinitionTests(unittest.TestCase):
         editor.show()
         self.app.processEvents()
 
-        self.assertTrue(editor.operation_widgets["upscale_before"].isVisible())
+        self.assertFalse(editor.operation_widgets["upscale_before"].isVisible())
         self.assertFalse(editor.operation_widgets["remove_background"].isVisible())
         self.assertFalse(editor.operation_widgets["trim"].isVisible())
         self.assertFalse(editor.cleanup_checkbox.isVisible())

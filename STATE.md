@@ -58,6 +58,21 @@ target-machine acceptance.
   `product_ai-scene_01.jpg`; a failed export preserves earlier files and shows
   the saved count and folder.
 
+## Pinterest Pins Task 7 checkpoint — 2026-08-28
+
+- The unmerged feature branch now declares an explicit Pinterest-only route:
+  product photo, copy/layout, generation, six-slot preview, and export.
+  Clipart prompt-review, cleanup and processing pages are no longer reachable
+  in this workflow, and their operations are not allowed by its definition.
+- New Pinterest visible strings, errors, statuses and accessibility names use
+  the shared RU/EN message registry. Missing product, unavailable output folder,
+  failed scene and partial export are covered for both locales.
+- Provider capability rejection takes the no-network safe-template fallback;
+  the source product remains protected. No Fal client, live API request, paid
+  call or release build was added.
+- Focused offscreen tests (68) and Python compilation pass locally; the branch
+  remains unmerged into `develop/3.0`.
+
 ## Replacement Windows 3.0.5 build — 2026-08-27
 
 - All approved owner-acceptance source branches were integrated into

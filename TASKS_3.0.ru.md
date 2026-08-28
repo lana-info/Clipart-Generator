@@ -252,6 +252,15 @@ Verification:
 - [x] `python -m unittest tests.test_v3_pinterest_flow -v`
 
 Notes:
+- Продолжение Pinterest Pins (Task 7, 2026-08-28): workflow definition теперь
+  явно задаёт маршрут «фото товара → copy/layout → generation → preview →
+  export» без Clipart prompt-review, обработки, cleanup и transparency
+  controls. Недоступные или небезопасные provider capabilities переключают
+  AI-сцены на локальный безопасный template fallback; сетевой/Fal API не
+  добавлялся. Все новые Pinterest labels, статусы, validation/provider ошибки
+  и accessibility names берутся из общего RU/EN registry. Focused offscreen
+  проверки `tests.test_workflow_definitions` и
+  `tests.test_v3_pinterest_flow` проходят (68 tests); compile проходит.
 - Реализованы B1–B5 в `v3_pinterest_flow.py` с переиспользованием импорта,
   prompt generator, model catalog, preflight и существующего `WorkerThread`.
 - Безопасный default — `gpt-image-2 / 9:16 / 1K`; миграция 2.0 не переносит
