@@ -847,6 +847,11 @@ class PinterestPinData:
 _PINTEREST_VARIANT_KINDS = frozenset({"template", "ai_scene"})
 _PINTEREST_RESULT_STATUSES = frozenset({"pending", "success", "failed"})
 _PINTEREST_EXPORT_STATUSES = frozenset({"not_exported", "exported", "failed"})
+_PINTEREST_ERROR_MESSAGES = {
+    "": "",
+    "background_generation_failed": "Не удалось создать фон. Повторите попытку.",
+    "pin_generation_failed": "Не удалось создать вариант пина. Повторите попытку.",
+}
 
 
 @dataclass
@@ -880,7 +885,9 @@ class PinterestPinResultData:
         if self.export_status not in _PINTEREST_EXPORT_STATUSES:
             self.export_status = "not_exported"
         self.error_code = _text(self.error_code, limit=100)
-        self.error_message = _text(self.error_message, limit=1000)
+        if self.error_code not in _PINTEREST_ERROR_MESSAGES:
+            self.error_code = "pin_generation_failed"
+        self.error_message = _PINTEREST_ERROR_MESSAGES[self.error_code]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1383,6 +1390,14 @@ def _validate_pinterest_results(pinterest: Mapping[str, Any]) -> None:
         if result["export_status"] not in _PINTEREST_EXPORT_STATUSES:
             raise ProjectStateError(
                 f"Project draft field {name}.export_status is unsupported"
+            )
+        if result["error_code"] not in _PINTEREST_ERROR_MESSAGES:
+            raise ProjectStateError(
+                f"Project draft field {name}.error_code is unsupported"
+            )
+        if result["error_message"] != _PINTEREST_ERROR_MESSAGES[result["error_code"]]:
+            raise ProjectStateError(
+                f"Project draft field {name}.error_message is unsafe"
             )
 
 

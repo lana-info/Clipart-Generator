@@ -75,3 +75,30 @@
 - Error metadata deliberately stores only `error_code` and a bounded
   `error_message`; creating localized messages from provider failures belongs to
   the later flow/localization task.
+
+## Review follow-up — safe Pinterest error metadata
+
+- Added a fixed Pinterest error-code table. `background_generation_failed` and
+  `pin_generation_failed` map to canonical localized safe messages; an empty
+  code maps to an empty message.
+- Unknown in-memory codes normalize to `pin_generation_failed`, replacing any
+  provider response text. Persisted JSON rejects unknown codes and messages
+  that are not the canonical message for their code.
+- Regression coverage:
+  - `test_pinterest_result_replaces_raw_provider_error_with_safe_fallback`
+    proves a provider-like message containing `api_key=demo-provider-token` is
+    not retained in serialized metadata.
+  - `test_project_draft_rejects_unknown_pinterest_error_code_and_raw_message`
+    proves an externally mutated persisted result cannot inject an unknown code
+    or raw provider message.
+
+Verification command and output:
+
+```text
+python3 -m unittest tests.test_v3_project_state tests.test_pinterest_prompt_schema -v
+Ran 29 tests
+OK
+
+python3 -m py_compile v3_project_state.py pinterest_prompt_schema.py
+git diff --check
+```

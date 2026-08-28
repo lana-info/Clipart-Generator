@@ -219,6 +219,49 @@ class ProjectSerializationTests(unittest.TestCase):
             "background_generation_failed",
         )
 
+    def test_pinterest_result_replaces_raw_provider_error_with_safe_fallback(self):
+        result = PinterestPinResultData(
+            status="failed",
+            error_code="provider_http_502",
+            error_message="Fal.ai HTTP 502; api_key=demo-provider-token",
+        )
+
+        metadata = result.to_dict()
+
+        self.assertEqual(metadata["error_code"], "pin_generation_failed")
+        self.assertEqual(
+            metadata["error_message"],
+            "Не удалось создать вариант пина. Повторите попытку.",
+        )
+        self.assertNotIn("demo-provider-token", metadata["error_message"])
+
+    def test_project_draft_rejects_unknown_pinterest_error_code_and_raw_message(self):
+        for error_code, error_message in (
+            ("provider_http_502", ""),
+            (
+                "background_generation_failed",
+                "Fal.ai HTTP 502; api_key=demo-provider-token",
+            ),
+        ):
+            with self.subTest(error_code=error_code):
+                payload = ProjectState(
+                    mode=ProjectMode.PINTEREST,
+                    pinterest=PinterestModeData(
+                        results=[
+                            PinterestPinResultData(
+                                status="failed",
+                                error_code="background_generation_failed",
+                            )
+                        ]
+                    ),
+                ).to_dict()
+                result = payload["pinterest"]["results"][0]
+                result["error_code"] = error_code
+                result["error_message"] = error_message
+
+                with self.assertRaises(ProjectStateError):
+                    ProjectState.from_dict(payload)
+
     def test_old_pinterest_project_loads_with_new_pin_defaults(self):
         payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
         del payload["pinterest"]["pin"]
