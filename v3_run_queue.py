@@ -1126,8 +1126,17 @@ class RunQueueSession(QObject):
             if isinstance(item.payload, dict):
                 item.source_path = ""
             item.attempts += 1
+        queue_items = tuple(getattr(self.request, "queue_items", ()) or ())
         generated = list(getattr(self.request, "generated_prompts", []) or [])
-        if generated:
+        if queue_items:
+            retry_request = replace(
+                self.request,
+                queue_items=tuple(
+                    dict(self.items[index].payload)
+                    for index in failed
+                ),
+            )
+        elif generated:
             retry_request = replace(
                 self.request,
                 generated_prompts=[

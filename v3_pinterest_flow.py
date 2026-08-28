@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -7,7 +8,7 @@ from typing import Any
 
 from PIL import Image
 
-from PyQt6.QtCore import QObject, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -27,7 +28,6 @@ from license_client import LicenseError
 
 from pinterest_pin_composer import (
     ProductLayer,
-    ProductLayerError,
     assert_product_pixels_preserved,
     composite_product,
     load_product_layer,
@@ -453,12 +453,33 @@ class PinterestPinOrchestrator:
         cancelled: Callable[[], bool] | None = None,
     ) -> tuple[PinVariant, ...]:
         product = load_product_layer(request.product_path)
-        return build_pinterest_pin_series(
+        requested_ids = {
+            str(item.get("variant_id") or "").strip()
+            for item in request.queue_items
+            if isinstance(item, Mapping)
+        }
+        generate_background = request.generate_background
+        if generate_background is not None:
+            def generate_requested_background(prompt: str, slot_index: int) -> Image.Image:
+                if f"ai-scene-{slot_index:02d}" not in requested_ids:
+                    raise ValueError("AI scene is not selected for this run")
+                return generate_background(prompt, slot_index)
+        else:
+            generate_requested_background = None
+        variants = build_pinterest_pin_series(
             request.pin,
             product=product,
-            generate_background=request.generate_background,
+            generate_background=generate_requested_background,
             cancelled=cancelled,
         )
+        variants_by_id = {variant.variant_id: variant for variant in variants}
+        try:
+            return tuple(
+                variants_by_id[str(item["variant_id"])]
+                for item in request.queue_items
+            )
+        except (KeyError, TypeError) as error:
+            raise ValueError("Pinterest queue item is invalid") from error
 
     @staticmethod
     def output_path(request: PinterestPinRunRequest, variant: PinVariant) -> Path:
@@ -466,7 +487,7 @@ class PinterestPinOrchestrator:
         return output_dir / f"pinterest-{variant.variant_id}.png"
 
 
-class PinterestPinWorkerAdapter(QObject):
+class PinterestPinWorkerAdapter(QThread):
     """Expose Pinterest orchestration through the existing worker signal contract."""
 
     progress = pyqtSignal(str)
@@ -486,31 +507,35 @@ class PinterestPinWorkerAdapter(QObject):
         self.orchestrator = orchestrator or PinterestPinOrchestrator()
         self.variants: tuple[PinVariant, ...] = ()
         self.output_paths: dict[str, str] = {}
-        self._running = False
-        self._cancelled = False
-
-    def isRunning(self) -> bool:
-        return self._running
+        self._cancelled = threading.Event()
 
     def stop(self) -> None:
-        self._cancelled = True
+        self._cancelled.set()
 
     def request_stop_after_current(self) -> None:
-        self._cancelled = True
+        self._cancelled.set()
 
-    def start(self) -> None:
-        if self._running:
-            return
-        self._running = True
-        QTimer.singleShot(0, self._run)
+    def run(self) -> None:
+        self._run()
 
     def _run(self) -> None:
         try:
             self.variants = self.orchestrator.build(
                 self.request,
-                cancelled=lambda: self._cancelled,
+                cancelled=self._cancelled.is_set,
             )
             for index, variant in enumerate(self.variants, start=1):
+                if self._cancelled.is_set():
+                    self.item_progress.emit(
+                        {
+                            "item_index": index,
+                            "total_items": len(self.variants),
+                            "stage": "pinterest_pin",
+                            "status": "cancelled",
+                            "message": "Pinterest pin generation cancelled",
+                        }
+                    )
+                    continue
                 self.item_progress.emit(
                     {
                         "item_index": index,
@@ -560,8 +585,9 @@ class PinterestPinWorkerAdapter(QObject):
                         }
                     )
                 self.progress_value.emit(round(index * 100 / len(self.variants)))
-        except (ProductLayerError, OSError, ValueError):
+        except Exception:
             self.variants = ()
+            self.output_paths.clear()
             for index, _ in enumerate(self.request.queue_items, start=1):
                 self.item_progress.emit(
                     {
@@ -572,9 +598,9 @@ class PinterestPinWorkerAdapter(QObject):
                         "message": "Pinterest product could not be prepared",
                     }
                 )
+            self.error.emit("Не удалось создать Pinterest-пины.")
         finally:
-            self._running = False
-        self.finished.emit("Pinterest pin series completed")
+            self.finished.emit("Pinterest pin series completed")
 
 
 def build_pinterest_run_request(
@@ -1551,14 +1577,20 @@ class PinterestFlowController(QObject):
             if isinstance(self.worker, PinterestPinWorkerAdapter)
             else ()
         )
+        variants_by_id = {variant.variant_id: variant for variant in variants}
         output_paths = (
             self.worker.output_paths
             if isinstance(self.worker, PinterestPinWorkerAdapter)
             else {}
         )
-        for index, result in enumerate(preview.results):
-            item = session.items[index] if index < len(session.items) else None
-            variant = variants[index] if index < len(variants) else None
+        items_by_variant_id = {
+            str(item.payload.get("variant_id") or ""): item
+            for item in session.items
+            if isinstance(item.payload, dict)
+        }
+        for result in preview.results:
+            item = items_by_variant_id.get(result.variant_id)
+            variant = variants_by_id.get(result.variant_id)
             if variant is not None:
                 result.variant_id = variant.variant_id
                 result.variant_kind = variant.variant_kind

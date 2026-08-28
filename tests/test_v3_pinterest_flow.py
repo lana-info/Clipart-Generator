@@ -1,6 +1,8 @@
 import ast
 import os
 import tempfile
+import threading
+import time
 import unittest
 from decimal import Decimal
 from pathlib import Path
@@ -9,7 +11,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QAbstractButton, QLabel
 
 import v3_pinterest_flow
@@ -40,7 +42,29 @@ from v3_project_state import (
     migrate_v2_config,
 )
 from v3_wizard import AppShell
-from v3_run_queue import RunQueueSession
+from v3_run_queue import RunItemStatus, RunQueueSession
+
+
+class UnexpectedPinterestOrchestrator:
+    def build(self, request, *, cancelled):
+        del request, cancelled
+        raise RuntimeError("background provider api_key=do-not-disclose")
+
+
+class CancellationAwarePinterestOrchestrator:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.released = threading.Event()
+        self.cancelled: bool | None = None
+        self.thread_id: int | None = None
+
+    def build(self, request, *, cancelled):
+        del request
+        self.thread_id = threading.get_ident()
+        self.started.set()
+        self.released.wait(timeout=1)
+        self.cancelled = cancelled()
+        return ()
 
 
 class FakeWorker(QObject):
@@ -78,6 +102,15 @@ class V3PinterestFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
+
+    @classmethod
+    def wait_for_worker(cls, worker: QThread, timeout: float = 5.0) -> bool:
+        deadline = time.monotonic() + timeout
+        while worker.isRunning() and time.monotonic() < deadline:
+            cls.app.processEvents()
+            time.sleep(0.01)
+        cls.app.processEvents()
+        return not worker.isRunning()
 
     def make_state(self, work_dir):
         state = ProjectState(mode=ProjectMode.PINTEREST)
@@ -233,6 +266,75 @@ class V3PinterestFlowTests(unittest.TestCase):
                 ["template", "template", "template", "ai_scene", "ai_scene", "ai_scene"],
             )
 
+    def test_pinterest_retry_request_contains_only_the_failed_ai_slot(self):
+        """Treating a Pinterest retry as clipart would raise TypeError or regenerate every slot."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-retry-") as temp:
+            state = self.make_state(temp)
+            request = build_pinterest_run_request(state)
+            session = RunQueueSession(request, ProjectMode.PINTEREST)
+            session.items[4].status = RunItemStatus.FAILED
+            session.running = False
+
+            retry = session.prepare_retry()
+
+        self.assertIsInstance(retry, PinterestPinRunRequest)
+        self.assertEqual(
+            retry.queue_items,
+            ({"variant_id": "ai-scene-02", "variant_kind": "ai_scene"},),
+        )
+        self.assertEqual(session.active_order, [4])
+        self.assertEqual(session.items[4].attempts, 2)
+
+    def test_pinterest_worker_reports_unexpected_exception_and_finishes(self):
+        """An uncaught orchestration error would leave the shared run queue running forever."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-worker-error-") as temp:
+            request = PinterestPinRunRequest(
+                work_dir=temp,
+                product_path=str(Path(temp) / "product.png"),
+                pin=PinterestPinData(product_paths=["product.png"]),
+                settings={"output_dir": temp},
+                queue_items=({"variant_id": "template-01", "variant_kind": "template"},),
+            )
+            worker = PinterestPinWorkerAdapter(
+                request,
+                orchestrator=UnexpectedPinterestOrchestrator(),
+            )
+            errors: list[str] = []
+            completions: list[str] = []
+            worker.error.connect(errors.append)
+            worker.finished.connect(completions.append)
+
+            worker.start()
+            self.assertTrue(worker.wait(1_000))
+            self.app.processEvents()
+
+        self.assertEqual(errors, ["Не удалось создать Pinterest-пины."])
+        self.assertEqual(completions, ["Pinterest pin series completed"])
+
+    def test_pinterest_worker_runs_off_gui_thread_and_stop_is_observable(self):
+        """Running orchestration from QTimer would block the GUI and hide cancellation."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-worker-thread-") as temp:
+            request = PinterestPinRunRequest(
+                work_dir=temp,
+                product_path=str(Path(temp) / "product.png"),
+                pin=PinterestPinData(product_paths=["product.png"]),
+                settings={"output_dir": temp},
+                queue_items=({"variant_id": "template-01", "variant_kind": "template"},),
+            )
+            orchestrator = CancellationAwarePinterestOrchestrator()
+            worker = PinterestPinWorkerAdapter(request, orchestrator=orchestrator)
+
+            self.assertIsInstance(worker, QThread)
+            worker.start()
+            self.assertTrue(orchestrator.started.wait(timeout=1))
+            worker.stop()
+            orchestrator.released.set()
+            self.assertTrue(worker.wait(1_000))
+            self.app.processEvents()
+
+        self.assertNotEqual(orchestrator.thread_id, threading.get_ident())
+        self.assertTrue(orchestrator.cancelled)
+
     def test_real_pinterest_start_routes_orchestrated_variants_to_all_six_slots(self):
         """Replacing the adapter with the legacy worker would omit protected pin metadata."""
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-orchestrator-") as temp:
@@ -256,7 +358,7 @@ class V3PinterestFlowTests(unittest.TestCase):
 
             shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
             request = controller.start()
-            self.app.processEvents()
+            self.assertTrue(self.wait_for_worker(controller.worker))
 
             self.assertIsInstance(request, PinterestPinRunRequest)
             self.assertIsInstance(controller.worker, PinterestPinWorkerAdapter)
@@ -493,7 +595,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
 
             shell.go_next()
-            self.app.processEvents()
+            self.assertTrue(self.wait_for_worker(controller.worker))
 
             self.assertEqual(
                 [result.status for result in state.pinterest.results],
@@ -874,7 +976,7 @@ class V3PinterestFlowTests(unittest.TestCase):
 
             shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
             controller.start()
-            self.app.processEvents()
+            self.assertTrue(self.wait_for_worker(controller.worker))
 
             result = next(
                 item

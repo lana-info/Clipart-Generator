@@ -56,3 +56,38 @@ provider-neutral and has no Fal client or live network call.
   tests/test_v3_run_queue.py -q` — 135 passed, 5 subtests passed.
 - `.venv/bin/python -m py_compile v3_pinterest_flow.py v3_run_queue.py` and
   `git diff --check` pass. No Fal request, paid provider call, or build ran.
+
+## Critical follow-up fixes — queue retry and worker lifecycle
+
+- `RunQueueSession.prepare_retry()` now preserves the dedicated Pinterest
+  request contract: it retries only failed `queue_items` and never passes
+  clipart-only `generated_prompts` or `selected_files` to
+  `PinterestPinRunRequest`.
+- `PinterestPinOrchestrator` limits a retry to the selected variant IDs, so a
+  future background generator is not asked to recreate other AI-scene slots.
+  Preview synchronization now also matches variants by stable ID rather than
+  their retry-local position.
+- `PinterestPinWorkerAdapter` now runs on `QThread`; cancellation uses a
+  thread-safe event passed into orchestration and checked before output work.
+  Unexpected exceptions mark every queued Pinterest slot failed, emit a safe
+  `error`, and always emit `finished`, so the shared queue reaches a terminal
+  state.
+- Regression tests cover retrying exactly `ai-scene-02`, unexpected
+  orchestration failure (`error` plus `finished`), and off-GUI-thread
+  orchestration with observable cancellation.
+
+### Verification
+
+- TDD red: the three new regression tests failed before implementation with
+  the Pinterest `TypeError` and missing `QThread` worker API.
+- Green: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
+  tests/test_v3_clipart_flow.py tests/test_v3_pinterest_flow.py
+  tests/test_v3_run_queue.py -q` — 138 passed, 5 subtests passed.
+- No Fal request, paid provider call, build, or external deployment ran.
+
+### Remaining boundary
+
+Cancellation prevents new scene admission and further local export work. A
+future synchronous background-provider call cannot be force-interrupted after
+it has started; its provider adapter must accept the existing cancellation
+callback when one is introduced.
