@@ -634,13 +634,9 @@ class V3ApplicationView(QWidget):
             operations = data.get("operations")
             if isinstance(operations, dict):
                 state.processing.operations = state.processing.operations.from_dict(operations)
-        elif isinstance(data.get("operations"), dict):
-            target = state.clipart.operations if mode is ProjectMode.CLIPART else state.pinterest.operations
-            restored = target.__class__.from_dict(data["operations"])
-            if mode is ProjectMode.CLIPART:
-                state.clipart.operations = restored
-            else:
-                state.pinterest.operations = restored
+        elif mode is ProjectMode.CLIPART and isinstance(data.get("operations"), dict):
+            restored = state.clipart.operations.__class__.from_dict(data["operations"])
+            state.clipart.operations = restored
         if mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}:
             output_dir = str(work_path / "output")
         else:
@@ -672,7 +668,9 @@ class V3ApplicationView(QWidget):
         elif state.mode is ProjectMode.CLIPART:
             payload = {"output_dir": state.output_dir_for_mode(state.mode), "operations": state.clipart.operations.to_dict()}
         else:
-            payload = {"output_dir": state.output_dir_for_mode(state.mode), "operations": state.pinterest.operations.to_dict()}
+            # Pinterest Pins has its own generation/pin schema and no legacy
+            # processing operations. Keep only the shared folder preference.
+            payload = {"output_dir": state.output_dir_for_mode(state.mode)}
         self._preferences[state.mode.value] = payload
         try:
             save_preferences_atomic(path, self._preferences)
