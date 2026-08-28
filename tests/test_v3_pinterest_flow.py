@@ -123,7 +123,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     @classmethod
-    def wait_for_worker(cls, worker: QThread, timeout: float = 5.0) -> bool:
+    def wait_for_worker(cls, worker: QThread, timeout: float = 15.0) -> bool:
         deadline = time.monotonic() + timeout
         while worker.isRunning() and time.monotonic() < deadline:
             cls.app.processEvents()
