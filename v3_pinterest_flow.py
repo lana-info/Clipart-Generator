@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -27,9 +27,12 @@ from license_client import LicenseError
 
 from pinterest_pin_composer import (
     ProductLayer,
+    ProductLayerError,
     assert_product_pixels_preserved,
     composite_product,
+    load_product_layer,
     product_layer_digest,
+    save_pin,
 )
 from pinterest_pin_templates import (
     pinterest_template_specs,
@@ -423,19 +426,206 @@ def estimate_pinterest_cost(state: ProjectState):
     return estimate_clipart_cost(_pinterest_project_adapter(state))
 
 
+@dataclass(frozen=True, slots=True)
+class PinterestPinRunRequest:
+    """Pinterest-only run contract consumed by the shared queue."""
+
+    work_dir: str
+    product_path: str
+    pin: PinterestPinData
+    settings: dict[str, Any] = field(repr=False)
+    queue_items: tuple[dict[str, str], ...]
+    mode: str = "pinterest_pins"
+    generate_background: BackgroundGenerator | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
+
+
+class PinterestPinOrchestrator:
+    """Build protected Pinterest variants without a provider-specific client."""
+
+    def build(
+        self,
+        request: PinterestPinRunRequest,
+        *,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> tuple[PinVariant, ...]:
+        product = load_product_layer(request.product_path)
+        return build_pinterest_pin_series(
+            request.pin,
+            product=product,
+            generate_background=request.generate_background,
+            cancelled=cancelled,
+        )
+
+    @staticmethod
+    def output_path(request: PinterestPinRunRequest, variant: PinVariant) -> Path:
+        output_dir = Path(str(request.settings["output_dir"])).resolve(strict=False)
+        return output_dir / f"pinterest-{variant.variant_id}.png"
+
+
+class PinterestPinWorkerAdapter(QObject):
+    """Expose Pinterest orchestration through the existing worker signal contract."""
+
+    progress = pyqtSignal(str)
+    item_progress = pyqtSignal(object)
+    progress_value = pyqtSignal(int)
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(
+        self,
+        request: PinterestPinRunRequest,
+        *,
+        orchestrator: PinterestPinOrchestrator | None = None,
+    ) -> None:
+        super().__init__()
+        self.request = request
+        self.orchestrator = orchestrator or PinterestPinOrchestrator()
+        self.variants: tuple[PinVariant, ...] = ()
+        self.output_paths: dict[str, str] = {}
+        self._running = False
+        self._cancelled = False
+
+    def isRunning(self) -> bool:
+        return self._running
+
+    def stop(self) -> None:
+        self._cancelled = True
+
+    def request_stop_after_current(self) -> None:
+        self._cancelled = True
+
+    def start(self) -> None:
+        if self._running:
+            return
+        self._running = True
+        QTimer.singleShot(0, self._run)
+
+    def _run(self) -> None:
+        try:
+            self.variants = self.orchestrator.build(
+                self.request,
+                cancelled=lambda: self._cancelled,
+            )
+            for index, variant in enumerate(self.variants, start=1):
+                self.item_progress.emit(
+                    {
+                        "item_index": index,
+                        "total_items": len(self.variants),
+                        "stage": "pinterest_pin",
+                        "status": "running",
+                        "percent": 0,
+                    }
+                )
+                if variant.status == "success" and variant.image is not None:
+                    try:
+                        output_path = save_pin(
+                            variant.image,
+                            str(self.orchestrator.output_path(self.request, variant)),
+                            format="PNG",
+                        )
+                    except Exception:
+                        self.item_progress.emit(
+                            {
+                                "item_index": index,
+                                "total_items": len(self.variants),
+                                "stage": "export",
+                                "status": "failed",
+                                "message": "Pinterest pin export failed",
+                            }
+                        )
+                    else:
+                        self.output_paths[variant.variant_id] = output_path
+                        self.item_progress.emit(
+                            {
+                                "item_index": index,
+                                "total_items": len(self.variants),
+                                "stage": "export",
+                                "status": "succeeded",
+                                "output_path": output_path,
+                                "percent": 100,
+                            }
+                        )
+                else:
+                    self.item_progress.emit(
+                        {
+                            "item_index": index,
+                            "total_items": len(self.variants),
+                            "stage": "background_generation",
+                            "status": "failed",
+                            "message": variant.error_message,
+                        }
+                    )
+                self.progress_value.emit(round(index * 100 / len(self.variants)))
+        except (ProductLayerError, OSError, ValueError):
+            self.variants = ()
+            for index, _ in enumerate(self.request.queue_items, start=1):
+                self.item_progress.emit(
+                    {
+                        "item_index": index,
+                        "total_items": len(self.request.queue_items),
+                        "stage": "pinterest_pin",
+                        "status": "failed",
+                        "message": "Pinterest product could not be prepared",
+                    }
+                )
+        finally:
+            self._running = False
+        self.finished.emit("Pinterest pin series completed")
+
+
 def build_pinterest_run_request(
     state: ProjectState,
     runtime_settings: Mapping[str, Any] | None = None,
-) -> ClipartRunRequest:
+) -> PinterestPinRunRequest:
+    del runtime_settings
+    if not isinstance(state, ProjectState):
+        raise TypeError("state must be a ProjectState")
     if state.mode is not ProjectMode.PINTEREST:
         raise ClipartFlowError(
             "Запуск Pinterest-пинов доступен только в режиме pinterest"
         )
-    request = build_clipart_run_request(
-        _pinterest_project_adapter(state),
-        runtime_settings,
+    work_dir = Path(state.common.work_dir).expanduser()
+    if not work_dir.is_dir():
+        raise ClipartFlowError("Рабочая папка не существует или недоступна для записи")
+    pin = PinterestPinData.from_dict(state.pinterest.pin.to_dict())
+    if not pin.product_paths:
+        raise ClipartFlowError("Добавьте фотографию товара")
+    product_path = Path(pin.product_paths[pin.selected_product_index]).expanduser()
+    if not product_path.is_file():
+        raise ClipartFlowError("Фотография товара недоступна")
+    output_dir = state.output_dir_for_mode(ProjectMode.PINTEREST)
+    if not output_dir:
+        output_dir = str(work_dir / "output")
+        state.set_output_dir_for_mode(output_dir, ProjectMode.PINTEREST)
+    output_path = Path(output_dir).expanduser()
+    try:
+        output_path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        raise ClipartFlowError("Папка результата не существует или недоступна для записи")
+    queue_items = tuple(
+        {
+            "variant_id": f"template-{index:02d}",
+            "variant_kind": "template",
+        }
+        for index in range(1, PINTEREST_TEMPLATE_COUNT + 1)
+    ) + tuple(
+        {
+            "variant_id": f"ai-scene-{index:02d}",
+            "variant_kind": "ai_scene",
+        }
+        for index in range(1, PINTEREST_AI_SCENE_COUNT + 1)
     )
-    return request
+    return PinterestPinRunRequest(
+        work_dir=str(work_dir),
+        product_path=str(product_path),
+        pin=pin,
+        settings={"output_dir": str(output_path)},
+        queue_items=queue_items,
+    )
 
 
 class PinterestProductInputPage(_ScrollableStepPage):
@@ -1261,26 +1451,27 @@ class PinterestFlowController(QObject):
                 self.shell.state,
                 runtime_settings,
             )
-            missing = missing_runtime_requirements(request)
         except (ClipartFlowError, OSError, TypeError, ValueError) as error:
             self.review_page.set_preflight_status(str(error)[:500], ready=False)
             return
-        if missing:
-            self.review_page.set_preflight_status(
-                "Укажите в настройках: " + ", ".join(missing),
-                ready=False,
-            )
-        else:
-            self.review_page.set_preflight_status(
-                "Пакет готов к генерации после нажатия «Запустить».",
-                ready=True,
-            )
+        self.review_page.set_preflight_status(
+            "Пакет готов к генерации после нажатия «Запустить».",
+            ready=True,
+        )
 
     def _run_requested(self, mode: str) -> None:
         if mode == ProjectMode.PINTEREST.value:
             self.start()
 
-    def start(self) -> ClipartRunRequest | None:
+    def create_worker_for_request(
+        self,
+        request: PinterestPinRunRequest,
+    ) -> PinterestPinWorkerAdapter:
+        if not isinstance(request, PinterestPinRunRequest):
+            raise TypeError("Pinterest flow requires a PinterestPinRunRequest")
+        return PinterestPinWorkerAdapter(request)
+
+    def start(self) -> PinterestPinRunRequest | None:
         if self.shell.another_run_is_active(self):
             message = "Сначала завершите текущее задание в другом режиме"
             self.review_page.set_run_status(message, error=True)
@@ -1300,13 +1491,8 @@ class PinterestFlowController(QObject):
                 runtime_settings,
             )
             self._runtime_settings = runtime_settings
-            missing = missing_runtime_requirements(request)
-            if missing:
-                raise ClipartFlowError(
-                    "Укажите в настройках: " + ", ".join(missing)
-                )
             self.authorization_provider()
-            worker = self.worker_factory(**request.worker_kwargs())
+            worker = self.create_worker_for_request(request)
         except (ClipartFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             message = _safe_runtime_error(
                 error,
@@ -1323,7 +1509,7 @@ class PinterestFlowController(QObject):
         self.runtime_adapter.start(worker)
         self.shell.show_results()
         self.review_page.set_run_status(
-            "Пакет передан существующей генерации 2.0"
+            "Запущена защищённая серия Pinterest-пинов"
         )
         self.started.emit(request)
         return request
@@ -1350,12 +1536,7 @@ class PinterestFlowController(QObject):
             self.runtime_adapter.stop(self.worker)
 
     def _sync_preview_results_from_queue(self) -> None:
-        """Project the completed legacy queue into the fixed Pinterest slots.
-
-        This is deliberately a completion bridge only: it neither creates a
-        Pinterest request nor starts another worker. The dedicated Pinterest
-        orchestrator remains the next task.
-        """
+        """Project the dedicated Pinterest queue into its fixed result slots."""
         session = self.run_queue.session
         if session is None:
             return
@@ -1365,11 +1546,32 @@ class PinterestFlowController(QObject):
         preview.refresh_from_state()
         from v3_run_queue import RunItemStatus
 
+        variants = (
+            self.worker.variants
+            if isinstance(self.worker, PinterestPinWorkerAdapter)
+            else ()
+        )
+        output_paths = (
+            self.worker.output_paths
+            if isinstance(self.worker, PinterestPinWorkerAdapter)
+            else {}
+        )
         for index, result in enumerate(preview.results):
             item = session.items[index] if index < len(session.items) else None
-            if item is not None and item.status is RunItemStatus.SUCCEEDED:
+            variant = variants[index] if index < len(variants) else None
+            if variant is not None:
+                result.variant_id = variant.variant_id
+                result.variant_kind = variant.variant_kind
+                result.source_product_path = variant.source_product_path
+                result.product_layer_digest = variant.product_layer_digest
+            if (
+                item is not None
+                and item.status is RunItemStatus.SUCCEEDED
+                and variant is not None
+                and variant.status == "success"
+            ):
                 result.status = "success"
-                result.output_path = item.output_path
+                result.output_path = output_paths.get(variant.variant_id, item.output_path)
                 result.retryable = False
                 result.export_status = "not_exported"
                 result.error_code = ""
@@ -1377,14 +1579,15 @@ class PinterestFlowController(QObject):
                 continue
             result.status = "failed"
             result.output_path = ""
-            result.product_layer_digest = ""
             result.accepted = False
             result.retryable = True
             result.export_status = "not_exported"
-            result.error_code = "pin_generation_failed"
-            result.error_message = PinterestPinResultData(
-                error_code=result.error_code
-            ).error_message
+            result.error_code = (
+                variant.error_code
+                if variant is not None and variant.error_code
+                else "pin_generation_failed"
+            )
+            result.error_message = PinterestPinResultData(error_code=result.error_code).error_message
         preview.refresh_from_state()
         self.shell.mark_dirty()
 

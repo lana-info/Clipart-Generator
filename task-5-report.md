@@ -33,3 +33,26 @@ provider-neutral and has no Fal client or live network call.
   tests/test_v3_pinterest_flow.py -q` — 61 passed, 3 subtests passed.
 - The test doubles generate local Pillow backgrounds only; no network or paid
   provider operation is used.
+
+## Critical Task 5 follow-up — dedicated queue runtime
+
+- `PinterestPinRunRequest` now owns the fixed six-slot contract and is accepted
+  by the existing `RunQueueSession` through its `queue_items` registry. It is
+  not a `ClipartRunRequest` and carries no provider credentials.
+- `PinterestPinOrchestrator` and `PinterestPinWorkerAdapter` execute the real
+  Pinterest path. The adapter calls `build_pinterest_pin_series`, writes only
+  protected template outputs locally, and routes all six stable slots through
+  the shared queue. Until an explicitly approved background provider is added,
+  the three AI-scene slots remain safe, retryable failures with no network call.
+- The controller no longer creates the legacy `WorkerThread` for Pinterest;
+  Clipart keeps its existing request and worker path unchanged.
+
+### Verification
+
+- TDD red: `tests/test_v3_pinterest_flow.py` failed at collection because the
+  dedicated Pinterest request and worker adapter did not exist.
+- Green: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
+  tests/test_v3_clipart_flow.py tests/test_v3_pinterest_flow.py
+  tests/test_v3_run_queue.py -q` — 135 passed, 5 subtests passed.
+- `.venv/bin/python -m py_compile v3_pinterest_flow.py v3_run_queue.py` and
+  `git diff --check` pass. No Fal request, paid provider call, or build ran.

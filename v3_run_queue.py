@@ -316,6 +316,25 @@ def _provider_model_routes(
 
 
 def _request_items(request: Any, mode: ProjectMode) -> list[RunItem]:
+    queue_items = tuple(getattr(request, "queue_items", ()) or ())
+    if queue_items:
+        if len(queue_items) > MAX_RUN_ITEMS:
+            raise RunQueueError("Run queue exceeds the supported item limit")
+        items: list[RunItem] = []
+        for index, payload in enumerate(queue_items, start=1):
+            if not isinstance(payload, dict):
+                raise RunQueueError("Run queue item has an invalid payload")
+            variant_id = str(payload.get("variant_id") or "").strip()
+            if not variant_id:
+                raise RunQueueError("Run queue item has no identifier")
+            items.append(
+                RunItem(
+                    index=index,
+                    display_name=variant_id,
+                    payload=dict(payload),
+                )
+            )
+        return items
     generated = list(getattr(request, "generated_prompts", []) or [])
     selected = list(getattr(request, "selected_files", []) or [])
     if generated:
@@ -2141,7 +2160,12 @@ class RunQueueSupport:
         if request is None:
             return None
         try:
-            worker = self.controller.worker_factory(**request.worker_kwargs())
+            create_worker = getattr(self.controller, "create_worker_for_request", None)
+            worker = (
+                create_worker(request)
+                if callable(create_worker)
+                else self.controller.worker_factory(**request.worker_kwargs())
+            )
         except Exception as error:
             self.controller._error(str(error))
             return None
