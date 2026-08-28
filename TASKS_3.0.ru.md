@@ -1542,13 +1542,14 @@ Acceptance:
   processing-операции; стоимость, model profile и retention policy записаны.
 - [ ] Windows packaged/runtime smoke выполнен, если затронут packaged path.
 
-### NEXT-TASK-012 — Спроектировать Pinterest Prompt Generator
+### NEXT-TASK-012 — Реализовать Pinterest Pins
 
-Status: In progress — independent schema and provider renderer prepared;
-workflow UI, series generation and acceptance remain
+Status: Design approved — implementation plan follows after user review of the
+design document
 
-Scope: отдельная модель prompt для вертикального Pinterest-контента с местом
-под текст, читаемой композицией, CTA и вариантами для разных типов пинов.
+Scope: отдельный Pinterest Pins-модуль для создания пинов из фото товара.
+Контент-план, SEO, расписание, аналитика и публикация отложены в отдельный
+будущий Pinterest Content-модуль.
 
 Acceptance:
 
@@ -1556,10 +1557,14 @@ Acceptance:
   CTA, aspect ratio, branding и visual hierarchy.
 - [x] Pinterest schema не меняет clipart schema и старые сохранённые данные.
 - [x] Есть отдельный provider renderer для структурированной схемы.
-- [ ] Есть preview, редактирование и серия вариантов.
+- [x] Утверждены три template и три AI-scene варианта в формате 2:3.
+- [x] Утверждено сохранение исходного товара отдельным защищённым слоем.
+- [ ] Есть input фото товара, preview, редактирование текста и серия вариантов.
+- [ ] Есть selective regeneration только фона/сцены.
+- [ ] Все принятые пины сохраняются в выбранную папку.
 
-Verification: отдельный PRD/contract, focused unit/UI tests и ручная проверка
-вертикальной серии.
+Verification: [docs/superpowers/specs/2026-08-28-pinterest-pins-design.md](docs/superpowers/specs/2026-08-28-pinterest-pins-design.md),
+focused unit/UI tests и ручная проверка вертикальной серии.
 
 ### Будущие модули после стабилизации генерации
 

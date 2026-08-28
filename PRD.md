@@ -252,19 +252,26 @@ diagnostics summaries, including when stale settings are loaded.
 - Ensure provider errors, validation messages, diagnostics, and accessibility
   labels are localizable.
 
-### Pinterest prompt generator — next implementation stage
+### Pinterest Pins — next implementation stage
 
 Pinterest is intentionally a separate stage after Clipart and Fal.ai
-acceptance. Its prompt schema is independent from Clipart and is prepared in
-`pinterest_prompt_schema.py`. The schema is designed for vertical pins and
-includes topic, object, background, text-safe area, headline, CTA, aspect
-ratio, branding, visual hierarchy, style, and restrictions. It has its own
-Russian/English renderer; it does not reinterpret or migrate Clipart fields.
+acceptance. The first Pinterest module is Pinterest Pins: users upload product
+photos and receive three safe template pins plus three AI-scene variations in
+the standard vertical 2:3 format. Its prompt schema is independent from
+Clipart and is prepared in `pinterest_prompt_schema.py`.
 
-The next implementation must add a Pinterest-specific input/preview page,
-editable prompt entries, deterministic series generation, and capability-aware
-provider rendering. The initial Pinterest workflow must not show Clipart-only
-transparency or background-cleanup controls.
+Product fidelity is a hard requirement: the original product remains a
+protected source layer, preserving color, material, texture, proportions,
+logos, text, and exact patterns. AI creates backgrounds and environments; it
+must not freely redraw the product by default. The module has its own
+Russian/English renderer and does not reinterpret or migrate Clipart fields.
+
+The next implementation must add Pinterest-specific product input, template and
+AI-scene generation, preview, editable text, selective scene regeneration,
+folder export, deterministic series generation, and capability-aware provider
+rendering. The initial Pinterest workflow must not show Clipart-only
+transparency or background-cleanup controls. Content planning, SEO, scheduling,
+analytics, and Pinterest publishing are out of scope for this stage.
 
 ### Fal.ai requirements
 
