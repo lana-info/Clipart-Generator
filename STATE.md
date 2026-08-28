@@ -73,6 +73,18 @@ target-machine acceptance.
 - Focused offscreen tests (68) and Python compilation pass locally; the branch
   remains unmerged into `develop/3.0`.
 
+## Pinterest Pins Task 7 findings follow-up — 2026-08-28
+
+- Follow-up commit `9c5e94d` removes legacy prompt/content-plan and processing
+  fields from the canonical Pinterest state and route. Existing drafts retain
+  those inputs only in the isolated `pinterest_legacy` migration archive, which
+  is excluded from Pinterest requests and queue diagnostics.
+- Product/folder and copy/layout now have distinct pages. The live Pinterest
+  controller consumes capabilities, takes the safe local-template fallback when
+  no AI-scene provider is installed, and shows the localized status.
+- Focused workflow/state/Pinterest tests, compilation and `git diff --check`
+  passed; no live provider call, paid request, build, merge or deployment ran.
+
 ## Replacement Windows 3.0.5 build — 2026-08-27
 
 - All approved owner-acceptance source branches were integrated into
