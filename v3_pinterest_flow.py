@@ -1,11 +1,24 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from license_client import LicenseError
 
@@ -18,7 +31,10 @@ from v3_clipart_flow import (
     ClipartPromptReviewPage,
     ClipartReviewRunPage,
     ClipartRunRequest,
+    ButtonVariant,
     V3DesignTokens,
+    V3Button,
+    _ScrollableStepPage,
     _safe_runtime_error,
     build_clipart_run_request,
     estimate_clipart_cost,
@@ -29,7 +45,11 @@ from v3_clipart_flow import (
 from v3_project_state import (
     GenerationData,
     ImageOperationData,
+    MAX_SELECTED_FILES,
+    PINTEREST_AI_SCENE_COUNT,
+    PINTEREST_TEMPLATE_COUNT,
     PinterestModeData,
+    PinterestPinResultData,
     ProjectMode,
     ProjectState,
     PromptGeneratorData,
@@ -39,6 +59,7 @@ from v3_prompt_generator import PromptGeneratorError
 from v3_processing_editor import ProcessingPipelineEditor
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
+from v3_localization import normalize_locale
 from workflow_definitions import workflow_for_mode
 
 
@@ -51,6 +72,95 @@ _PINTEREST_REFERENCE_MODEL_BY_TEXT = {
     "nano-banana-pro": "nano-banana-pro",
     "qwen-image-2": "qwen-image-2",
 }
+
+_PINTEREST_UI_TEXT = {
+    "ru": {
+        "product_input_title": "Товар и текст пина",
+        "product_input_description": "Загрузите товар, выберите один источник для серии и задайте текст пина.",
+        "products": "Фотографии товара",
+        "add_products": "Добавить фотографии",
+        "selected_product": "Товар для серии",
+        "title": "Заголовок",
+        "subtitle": "Подзаголовок",
+        "cta": "Призыв к действию",
+        "style": "Стиль",
+        "scene": "Описание сцены",
+        "output_folder": "Папка результата",
+        "choose": "Выбрать",
+        "suggest_copy": "Подставить введённый текст",
+        "no_products": "Фотографии товара не выбраны.",
+        "preview_title": "Предпросмотр Pinterest-пинов",
+        "preview_description": "Шесть фиксированных слотов: три шаблона и три AI-сцены.",
+        "export": "Экспортировать принятые",
+        "accept": "Принять вариант",
+        "regenerate": "Перегенерировать",
+        "source": "Источник",
+        "variant": "Вариант",
+        "fidelity_warning": "Предупреждение: точность товара не подтверждена защищённым слоем.",
+        "export_ready": "К экспорту выбрано: {count}",
+        "status_pending": "Ожидает генерации",
+        "status_success": "Готов",
+        "status_failed": "Не удалось создать",
+    },
+    "en": {
+        "product_input_title": "Product and pin copy",
+        "product_input_description": "Upload product photos, select one source for the series, and set the pin copy.",
+        "products": "Product photos",
+        "add_products": "Add photos",
+        "selected_product": "Product for this series",
+        "title": "Title",
+        "subtitle": "Subtitle",
+        "cta": "Call to action",
+        "style": "Style",
+        "scene": "Scene description",
+        "output_folder": "Output folder",
+        "choose": "Choose",
+        "suggest_copy": "Use entered copy",
+        "no_products": "No product photos selected.",
+        "preview_title": "Pinterest pin preview",
+        "preview_description": "Six fixed slots: three templates and three AI scenes.",
+        "export": "Export accepted",
+        "accept": "Accept variant",
+        "regenerate": "Regenerate",
+        "source": "Source",
+        "variant": "Variant",
+        "fidelity_warning": "Warning: product fidelity is not confirmed by a protected layer.",
+        "export_ready": "Ready to export: {count}",
+        "status_pending": "Waiting for generation",
+        "status_success": "Ready",
+        "status_failed": "Could not generate",
+    },
+}
+
+
+def _pinterest_text(key: str, *, locale: str = "ru", **values: object) -> str:
+    language = normalize_locale(locale)
+    return _PINTEREST_UI_TEXT[language][key].format(**values)
+
+
+@dataclass(frozen=True)
+class PinterestCopySuggestions:
+    title: str = ""
+    subtitle: str = ""
+    cta: str = ""
+
+
+class PinterestCopySuggestionService:
+    """Return only entered facts; product features are never inferred."""
+
+    def suggest(
+        self,
+        product_facts: Mapping[str, object],
+        *,
+        locale: str = "ru",
+    ) -> PinterestCopySuggestions:
+        del locale
+        facts = product_facts if isinstance(product_facts, Mapping) else {}
+        return PinterestCopySuggestions(
+            title=str(facts.get("title") or "").strip(),
+            subtitle=str(facts.get("subtitle") or "").strip(),
+            cta=str(facts.get("cta") or "").strip(),
+        )
 
 
 class _PinterestDataAdapter:
@@ -81,6 +191,18 @@ class _PinterestDataAdapter:
     @generation.setter
     def generation(self, value: GenerationData) -> None:
         self.data.generation = value
+
+    @property
+    def pin(self):
+        return self.data.pin
+
+    @property
+    def results(self):
+        return self.data.results
+
+    @results.setter
+    def results(self, value) -> None:
+        self.data.results = value
 
 
 def _pinterest_project_adapter(state: ProjectState) -> ProjectState:
@@ -116,8 +238,369 @@ def build_pinterest_run_request(
     return request
 
 
-class PinterestPromptInputPage(ClipartPromptInputPage):
-    generator_mode = ProjectMode.PINTEREST
+class PinterestProductInputPage(_ScrollableStepPage):
+    """Pinterest-only product/copy input without Clipart prompt controls."""
+
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        locale: str = "ru",
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        self.locale = normalize_locale(locale)
+        super().__init__(
+            _pinterest_text("product_input_title", locale=self.locale),
+            _pinterest_text("product_input_description", locale=self.locale),
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        self.copy_suggestions = PinterestCopySuggestionService()
+        self._syncing = False
+
+        form = QFormLayout()
+        product_widget = QWidget()
+        product_layout = QHBoxLayout(product_widget)
+        product_layout.setContentsMargins(0, 0, 0, 0)
+        self.products_label = QLabel()
+        self.products_label.setWordWrap(True)
+        self.products_label.setProperty("v3Small", True)
+        self.add_products_button = V3Button(
+            _pinterest_text("add_products", locale=self.locale),
+            ButtonVariant.SECONDARY,
+        )
+        self.add_products_button.clicked.connect(self._browse_products)
+        product_layout.addWidget(self.products_label, 1)
+        product_layout.addWidget(self.add_products_button)
+        form.addRow(_pinterest_text("products", locale=self.locale), product_widget)
+
+        self.selected_product_combo = QComboBox()
+        self.selected_product_combo.setAccessibleName(
+            _pinterest_text("selected_product", locale=self.locale)
+        )
+        form.addRow(
+            _pinterest_text("selected_product", locale=self.locale),
+            self.selected_product_combo,
+        )
+        self.title_edit = QLineEdit()
+        self.subtitle_edit = QLineEdit()
+        self.cta_edit = QLineEdit()
+        self.style_edit = QLineEdit()
+        self.scene_edit = QLineEdit()
+        for key, control in (
+            ("title", self.title_edit),
+            ("subtitle", self.subtitle_edit),
+            ("cta", self.cta_edit),
+            ("style", self.style_edit),
+            ("scene", self.scene_edit),
+        ):
+            label = _pinterest_text(key, locale=self.locale)
+            control.setAccessibleName(label)
+            form.addRow(label, control)
+
+        output_widget = QWidget()
+        output_layout = QHBoxLayout(output_widget)
+        output_layout.setContentsMargins(0, 0, 0, 0)
+        self.output_dir_edit = QLineEdit()
+        self.output_dir_edit.setAccessibleName(
+            _pinterest_text("output_folder", locale=self.locale)
+        )
+        self.output_browse_button = V3Button(
+            _pinterest_text("choose", locale=self.locale), ButtonVariant.SECONDARY
+        )
+        self.output_browse_button.clicked.connect(self._browse_output_folder)
+        output_layout.addWidget(self.output_dir_edit, 1)
+        output_layout.addWidget(self.output_browse_button)
+        form.addRow(_pinterest_text("output_folder", locale=self.locale), output_widget)
+
+        container = QWidget()
+        container.setLayout(form)
+        self.add_widget(container)
+        self.suggest_copy_button = V3Button(
+            _pinterest_text("suggest_copy", locale=self.locale),
+            ButtonVariant.GHOST,
+        )
+        self.suggest_copy_button.clicked.connect(self._apply_copy_suggestions)
+        self.add_widget(self.suggest_copy_button)
+
+        for control in (
+            self.title_edit,
+            self.subtitle_edit,
+            self.cta_edit,
+            self.style_edit,
+            self.scene_edit,
+            self.output_dir_edit,
+        ):
+            control.textChanged.connect(self._sync)
+        self.selected_product_combo.currentIndexChanged.connect(self._sync)
+        self.refresh_from_state()
+
+    @property
+    def pin(self):
+        return self.state.clipart.pin
+
+    def set_product_paths(self, paths: tuple[str, ...] | list[str]) -> None:
+        normalized: list[str] = []
+        for raw_path in paths:
+            path = str(Path(raw_path))
+            if path and path not in normalized:
+                normalized.append(path)
+            if len(normalized) >= MAX_SELECTED_FILES:
+                break
+        self.pin.product_paths = normalized
+        self.pin.selected_product_index = min(
+            self.pin.selected_product_index,
+            max(0, len(normalized) - 1),
+        )
+        self.refresh_from_state()
+        self.changed()
+
+    def _browse_products(self) -> None:
+        selected, _ = QFileDialog.getOpenFileNames(
+            self,
+            _pinterest_text("products", locale=self.locale),
+            self.output_dir_edit.text() or str(Path.cwd()),
+            "Images (*.png *.jpg *.jpeg *.webp);;All files (*)",
+        )
+        if selected:
+            self.set_product_paths([*self.pin.product_paths, *selected])
+
+    def _browse_output_folder(self) -> None:
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            _pinterest_text("output_folder", locale=self.locale),
+            self.output_dir_edit.text() or str(Path.cwd()),
+        )
+        if selected:
+            self.output_dir_edit.setText(selected)
+
+    def _apply_copy_suggestions(self) -> None:
+        suggestions = self.copy_suggestions.suggest(
+            {
+                "title": self.title_edit.text(),
+                "subtitle": self.subtitle_edit.text(),
+                "cta": self.cta_edit.text(),
+            },
+            locale=self.locale,
+        )
+        self.title_edit.setText(suggestions.title)
+        self.subtitle_edit.setText(suggestions.subtitle)
+        self.cta_edit.setText(suggestions.cta)
+
+    def _sync(self, *_: object) -> None:
+        if self._syncing:
+            return
+        self.pin.selected_product_index = max(0, self.selected_product_combo.currentIndex())
+        self.pin.pin_title = self.title_edit.text()
+        self.pin.pin_subtitle = self.subtitle_edit.text()
+        self.pin.pin_cta = self.cta_edit.text()
+        self.pin.style = self.style_edit.text()
+        self.pin.background_description = self.scene_edit.text()
+        self.state.set_output_dir_for_mode(
+            self.output_dir_edit.text().strip(), ProjectMode.PINTEREST
+        )
+        self.changed()
+
+    def refresh_from_state(self) -> None:
+        self._syncing = True
+        try:
+            self.selected_product_combo.clear()
+            for path in self.pin.product_paths:
+                self.selected_product_combo.addItem(Path(path).name, path)
+            if self.pin.product_paths:
+                self.selected_product_combo.setCurrentIndex(self.pin.selected_product_index)
+                self.products_label.setText(str(len(self.pin.product_paths)))
+            else:
+                self.products_label.setText(
+                    _pinterest_text("no_products", locale=self.locale)
+                )
+            self.title_edit.setText(self.pin.pin_title)
+            self.subtitle_edit.setText(self.pin.pin_subtitle)
+            self.cta_edit.setText(self.pin.pin_cta)
+            self.style_edit.setText(self.pin.style)
+            self.scene_edit.setText(self.pin.background_description)
+            self.output_dir_edit.setText(
+                self.state.output_dir_for_mode(ProjectMode.PINTEREST)
+            )
+        finally:
+            self._syncing = False
+
+
+class PinterestPromptInputPage(PinterestProductInputPage):
+    """Compatibility alias for callers that imported the former page name."""
+
+
+class PinterestPinPreviewPage(_ScrollableStepPage):
+    """Local preview state; generation and file export are wired by later tasks."""
+
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        locale: str = "ru",
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        self.locale = normalize_locale(locale)
+        super().__init__(
+            _pinterest_text("preview_title", locale=self.locale),
+            _pinterest_text("preview_description", locale=self.locale),
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        self.variant_cards: dict[str, QFrame] = {}
+        self.grid_widget = QWidget()
+        self.grid = QGridLayout(self.grid_widget)
+        self.grid.setContentsMargins(0, 0, 0, 0)
+        self.grid.setSpacing(tokens.space_3)
+        self.add_widget(self.grid_widget)
+        self.export_button = V3Button(
+            _pinterest_text("export", locale=self.locale), ButtonVariant.PRIMARY
+        )
+        self.export_button.clicked.connect(self._show_export_selection)
+        self.add_widget(self.export_button)
+        self.export_status_label = QLabel()
+        self.export_status_label.setProperty("v3Small", True)
+        self.add_widget(self.export_status_label)
+        self.refresh_from_state()
+
+    @property
+    def pin(self):
+        return self.state.clipart.pin
+
+    @property
+    def results(self) -> list[PinterestPinResultData]:
+        return self.state.clipart.results
+
+    def _selected_product_path(self) -> str:
+        if not self.pin.product_paths:
+            return ""
+        index = min(
+            max(0, self.pin.selected_product_index), len(self.pin.product_paths) - 1
+        )
+        return self.pin.product_paths[index]
+
+    def _ensure_six_slots(self) -> None:
+        selected_product = self._selected_product_path()
+        existing = {result.variant_id: result for result in self.results}
+        slots: list[PinterestPinResultData] = []
+        for kind, count in (
+            ("template", PINTEREST_TEMPLATE_COUNT),
+            ("ai_scene", PINTEREST_AI_SCENE_COUNT),
+        ):
+            for index in range(1, count + 1):
+                variant_id = f"{kind.replace('_', '-')}-{index:02d}"
+                result = existing.get(variant_id)
+                if result is None:
+                    result = PinterestPinResultData(
+                        variant_id=variant_id,
+                        variant_kind=kind,
+                        source_product_path=selected_product,
+                    )
+                elif result.source_product_path != selected_product:
+                    result.source_product_path = selected_product
+                slots.append(result)
+        self.state.clipart.results = slots
+
+    def _clear_grid(self) -> None:
+        while self.grid.count():
+            item = self.grid.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _status_text(self, status: str) -> str:
+        return _pinterest_text(f"status_{status}", locale=self.locale)
+
+    def _rebuild_cards(self) -> None:
+        self._clear_grid()
+        self.variant_cards = {}
+        for index, result in enumerate(self.results):
+            card = QFrame()
+            card.setProperty("v3Card", True)
+            layout = QVBoxLayout(card)
+            variant_label = QLabel(
+                f"{_pinterest_text('variant', locale=self.locale)}: {result.variant_id}"
+            )
+            variant_label.setProperty("v3Title", True)
+            source_name = Path(result.source_product_path).name if result.source_product_path else "—"
+            source_label = QLabel(
+                f"{_pinterest_text('source', locale=self.locale)}: {source_name}"
+            )
+            status_label = QLabel(self._status_text(result.status))
+            status_label.setProperty("v3Small", True)
+            layout.addWidget(variant_label)
+            layout.addWidget(source_label)
+            layout.addWidget(status_label)
+            if result.status == "success" and not result.product_layer_digest:
+                warning = QLabel(
+                    _pinterest_text("fidelity_warning", locale=self.locale)
+                )
+                warning.setWordWrap(True)
+                warning.setProperty("v3Status", True)
+                warning.setProperty("state", "warning")
+                layout.addWidget(warning)
+            accepted = QCheckBox(_pinterest_text("accept", locale=self.locale))
+            accepted.setChecked(result.accepted)
+            accepted.toggled.connect(
+                lambda checked, variant_id=result.variant_id: self.set_variant_accepted(
+                    variant_id, checked
+                )
+            )
+            regenerate = V3Button(
+                _pinterest_text("regenerate", locale=self.locale),
+                ButtonVariant.SECONDARY,
+            )
+            regenerate.clicked.connect(
+                lambda checked=False, variant_id=result.variant_id: self.regenerate_variant(
+                    variant_id
+                )
+            )
+            layout.addWidget(accepted)
+            layout.addWidget(regenerate)
+            self.grid.addWidget(card, index // 2, index % 2)
+            self.variant_cards[result.variant_id] = card
+
+    def _find_result(self, variant_id: str) -> PinterestPinResultData:
+        for result in self.results:
+            if result.variant_id == variant_id:
+                return result
+        raise ValueError(f"Unknown Pinterest variant: {variant_id}")
+
+    def regenerate_variant(self, variant_id: str) -> None:
+        """Mark one slot for later regeneration without starting a worker."""
+        result = self._find_result(variant_id)
+        result.status = "pending"
+        result.retryable = True
+        result.accepted = False
+        self.changed()
+        self.refresh_from_state()
+
+    def set_variant_accepted(self, variant_id: str, accepted: bool) -> None:
+        self._find_result(variant_id).accepted = bool(accepted)
+        self.changed()
+        self.refresh_from_state()
+
+    def export_accepted(self) -> tuple[str, ...]:
+        """Return accepted existing paths; writing files belongs to Task 6."""
+        return tuple(
+            result.output_path
+            for result in self.results
+            if result.accepted and result.status == "success" and result.output_path
+        )
+
+    def _show_export_selection(self) -> None:
+        paths = self.export_accepted()
+        self.export_status_label.setText(
+            _pinterest_text("export_ready", locale=self.locale, count=len(paths))
+        )
+
+    def refresh_from_state(self) -> None:
+        self._ensure_six_slots()
+        self._rebuild_cards()
 
 
 class PinterestFormatModelPage(ClipartGenerationPage):
@@ -177,7 +660,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
             changed,
             title="Обработка",
             description="Тот же порядок обработки, что и в режимах Clipart и Обработка.",
-            include_cleanup=True,
+            include_cleanup=False,
             require_operation=False,
             allowed_operations=workflow_for_mode(ProjectMode.PINTEREST).processing_operations,
             tokens=tokens,
@@ -313,7 +796,7 @@ class PinterestProcessingPage(ProcessingPipelineEditor):
             changed,
             title="Обработка изображений",
             description="Единые настройки обработки изображений для Pinterest.",
-            include_cleanup=True,
+            include_cleanup=False,
             require_operation=False,
             allowed_operations=workflow_for_mode(ProjectMode.PINTEREST).processing_operations,
             tokens=tokens,
@@ -404,10 +887,9 @@ class PinterestFlowController(QObject):
         )
         self.pages.register(
             StepId.PROMPTS,
-            lambda: PinterestPromptInputPage(
+            lambda: PinterestProductInputPage(
                 self.adapter_state,
                 changed,
-                advance=self.shell.go_next,
                 tokens=self.shell.tokens,
             ),
         )
@@ -442,7 +924,14 @@ class PinterestFlowController(QObject):
                 tokens=self.shell.tokens,
             ),
         )
-        self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
+        self.pages.register(
+            StepId.RESULTS,
+            lambda: PinterestPinPreviewPage(
+                self.adapter_state,
+                changed,
+                tokens=self.shell.tokens,
+            ),
+        )
         if self.shell.state.mode is ProjectMode.PINTEREST:
             self.pages[self.shell.state.current_step]
         self.shell.refresh()

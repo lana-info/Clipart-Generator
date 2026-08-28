@@ -10,12 +10,15 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QLabel
+from PyQt6.QtWidgets import QApplication, QAbstractButton, QLabel
 
 import v3_pinterest_flow
 from v3_mode_selection import V3ApplicationView
 from v3_pinterest_flow import (
+    PinterestCopySuggestionService,
     PinterestFormatModelPage,
+    PinterestPinPreviewPage,
+    PinterestProductInputPage,
     PinterestPromptInputPage,
     PinterestReviewRunPage,
     build_pinterest_run_request,
@@ -108,7 +111,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPTS],
-            PinterestPromptInputPage,
+            PinterestProductInputPage,
         )
         self.assertIsInstance(
             controller.pages[StepId.PROMPT_REVIEW],
@@ -118,6 +121,184 @@ class V3PinterestFlowTests(unittest.TestCase):
             controller.pages[StepId.PIN_FORMAT_MODEL],
             PinterestFormatModelPage,
         )
+
+    def test_product_input_binds_selected_photo_copy_scene_and_output_folder(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-product-input-") as temp:
+            first_product = Path(temp) / "first.png"
+            second_product = Path(temp) / "second.png"
+            Image.new("RGBA", (8, 10), "white").save(first_product)
+            Image.new("RGBA", (8, 10), "black").save(second_product)
+            state = ProjectState(mode=ProjectMode.PINTEREST)
+            shell = AppShell(state)
+            controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+            page = controller.pages[StepId.PROMPTS]
+
+            page.set_product_paths((str(first_product), str(second_product)))
+            page.selected_product_combo.setCurrentIndex(1)
+            page.title_edit.setText("Summer tote")
+            page.subtitle_edit.setText("For weekend markets")
+            page.cta_edit.setText("See details")
+            page.style_edit.setText("Clean editorial")
+            page.scene_edit.setText("Sunlit market table")
+            page.output_dir_edit.setText(temp)
+
+            self.assertEqual(state.pinterest.pin.product_paths, [str(first_product), str(second_product)])
+            self.assertEqual(state.pinterest.pin.selected_product_index, 1)
+            self.assertEqual(state.pinterest.pin.pin_title, "Summer tote")
+            self.assertEqual(state.pinterest.pin.pin_subtitle, "For weekend markets")
+            self.assertEqual(state.pinterest.pin.pin_cta, "See details")
+            self.assertEqual(state.pinterest.pin.style, "Clean editorial")
+            self.assertEqual(state.pinterest.pin.background_description, "Sunlit market table")
+            self.assertEqual(state.output_dir_for_mode(ProjectMode.PINTEREST), temp)
+
+    def test_copy_suggestions_preserve_only_user_provided_facts(self):
+        suggestions = PinterestCopySuggestionService().suggest(
+            {"title": "Linen apron", "subtitle": "Adjustable fit", "cta": "Shop now"},
+            locale="en",
+        )
+
+        self.assertEqual(suggestions.title, "Linen apron")
+        self.assertEqual(suggestions.subtitle, "Adjustable fit")
+        self.assertEqual(suggestions.cta, "Shop now")
+        localized_page = PinterestProductInputPage(
+            v3_pinterest_flow._pinterest_project_adapter(
+                ProjectState(mode=ProjectMode.PINTEREST)
+            ),
+            lambda: None,
+            locale="en-US",
+        )
+        self.assertEqual(localized_page.card.title_label.text(), "Product and pin copy")
+
+    def test_preview_has_six_selected_product_slots_and_local_acceptance_apis(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-preview-") as temp:
+            first_product = Path(temp) / "first.png"
+            second_product = Path(temp) / "second.png"
+            Image.new("RGBA", (8, 10), "white").save(first_product)
+            Image.new("RGBA", (8, 10), "black").save(second_product)
+            state = ProjectState(mode=ProjectMode.PINTEREST)
+            state.pinterest.pin.product_paths = [str(first_product), str(second_product)]
+            state.pinterest.pin.selected_product_index = 1
+            state.pinterest.results = [
+                v3_pinterest_flow.PinterestPinResultData(
+                    variant_id="template-01",
+                    variant_kind="template",
+                    source_product_path=str(second_product),
+                    output_path=str(Path(temp) / "accepted.png"),
+                    accepted=True,
+                    status="success",
+                    product_layer_digest="protected-digest",
+                )
+            ]
+            factory = WorkerFactory()
+            shell = AppShell(state)
+            controller = install_pinterest_flow(shell, worker_factory=factory)
+            page = controller.pages[StepId.RESULTS]
+
+            self.assertEqual(len(page.variant_cards), 6)
+            self.assertEqual(
+                [result.source_product_path for result in state.pinterest.results],
+                [str(second_product)] * 6,
+            )
+            self.assertEqual(page.export_accepted(), (str(Path(temp) / "accepted.png"),))
+
+            page.set_variant_accepted("ai-scene-01", True)
+            page.regenerate_variant("ai-scene-01")
+
+            retried = next(
+                result for result in state.pinterest.results if result.variant_id == "ai-scene-01"
+            )
+            self.assertFalse(retried.accepted)
+            self.assertEqual(retried.status, "pending")
+            self.assertTrue(retried.retryable)
+            self.assertEqual(factory.workers, [])
+
+    def test_preview_rebinds_existing_slots_to_the_selected_product(self):
+        """A source switch must not turn the fixed six-slot series into two products."""
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.pin.product_paths = ["first.png", "selected.png"]
+        state.pinterest.pin.selected_product_index = 1
+        state.pinterest.results = [
+            v3_pinterest_flow.PinterestPinResultData(
+                variant_id="template-01",
+                variant_kind="template",
+                source_product_path="first.png",
+            )
+        ]
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+
+        controller.pages[StepId.RESULTS]
+
+        self.assertEqual(
+            [result.source_product_path for result in state.pinterest.results],
+            ["selected.png"] * 6,
+        )
+
+    def test_text_only_edits_keep_existing_product_fidelity_evidence(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.results = [
+            v3_pinterest_flow.PinterestPinResultData(
+                variant_id="template-01",
+                source_product_path="product.png",
+                output_path="result.png",
+                accepted=True,
+                status="success",
+                product_layer_digest="protected-digest",
+            )
+        ]
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PROMPTS]
+
+        page.title_edit.setText("Text-only revision")
+
+        result = state.pinterest.results[0]
+        self.assertEqual(result.output_path, "result.png")
+        self.assertEqual(result.product_layer_digest, "protected-digest")
+
+    def test_preview_warns_when_successful_result_has_no_protected_layer_evidence(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.results = [
+            v3_pinterest_flow.PinterestPinResultData(
+                variant_id="template-01",
+                source_product_path="product.png",
+                output_path="result.png",
+                status="success",
+            )
+        ]
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.RESULTS]
+
+        warning_copy = " ".join(
+            label.text() for label in page.findChildren(QLabel)
+        )
+        self.assertIn("точность товара", warning_copy.casefold())
+
+    def test_pinterest_pages_omit_clipart_transparency_and_background_cleanup_controls(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+        pages = (
+            controller.pages[StepId.PROMPTS],
+            controller.pages[StepId.PROCESSING_OPTIONS],
+            controller.pages[StepId.RESULTS],
+        )
+        state.set_step(StepId.PROCESSING_OPTIONS)
+        shell.refresh()
+        shell.show()
+        self.app.processEvents()
+
+        visible_copy = " ".join(
+            widget.text()
+            for page in pages
+            for widget in (*page.findChildren(QLabel), *page.findChildren(QAbstractButton))
+            if widget.isVisible()
+        ).casefold()
+        shell.close()
+        self.assertNotIn("прозрач", visible_copy)
+        self.assertNotIn("удалить фон", visible_copy)
+        self.assertNotIn("очистить служебные", visible_copy)
 
     def test_process_more_starts_clean_pinterest_workflow_at_first_step(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
@@ -135,29 +316,6 @@ class V3PinterestFlowTests(unittest.TestCase):
         self.assertIsInstance(
             controller.pages[StepId.REVIEW_RUN],
             PinterestReviewRunPage,
-        )
-
-    def test_generator_uses_pinterest_defaults_and_creates_editable_series(self):
-        state = ProjectState(mode=ProjectMode.PINTEREST)
-        shell = AppShell(state)
-        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROMPTS]
-
-        self.assertEqual(page.composition_edit.text(), "")
-        page.theme_edit.setText("Small balcony ideas")
-        page.subjects_edit.setPlainText("Herb garden\nReading corner")
-        page.variations_edit.setPlainText("Morning light\nEvening light")
-        page.composition_edit.setText("Vertical composition with safe zones")
-        page.create_series_button.click()
-
-        self.assertEqual(len(state.pinterest.prompts), 4)
-        self.assertTrue(
-            all("vertical" in entry.prompt.lower() for entry in state.pinterest.prompts)
-        )
-        state.pinterest.prompts[0].prompt = "Manual Pinterest edit"
-        self.assertEqual(
-            state.pinterest.prompts[0].prompt,
-            "Manual Pinterest edit",
         )
 
     def test_prompt_review_deletes_selected_pinterest_prompt(self):
@@ -380,6 +538,10 @@ class V3PinterestFlowTests(unittest.TestCase):
     def test_navigation_preserves_project_prompts_and_format(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-nav-") as temp:
             state = ProjectState(mode=ProjectMode.PINTEREST)
+            state.pinterest.prompts = [
+                PromptEntry("Kitchen idea"),
+                PromptEntry("Garden idea"),
+            ]
             shell = AppShell(state)
             controller = install_pinterest_flow(
                 shell,
@@ -390,10 +552,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             project.work_dir_edit.setText(temp)
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
             prompts = controller.pages[StepId.PROMPTS]
-            prompts.paste_edit.setPlainText("Kitchen idea")
-            prompts.add_prompt_button.click()
-            prompts.paste_edit.setPlainText("Garden idea")
-            prompts.add_prompt_button.click()
+            prompts.title_edit.setText("Kitchen collection")
             self.assertEqual(shell.go_next(), StepId.PROMPT_REVIEW)
             self.assertEqual(shell.go_next(), StepId.PIN_FORMAT_MODEL)
             format_page = controller.pages[StepId.PIN_FORMAT_MODEL]
