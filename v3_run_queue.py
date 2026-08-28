@@ -42,6 +42,7 @@ from provider_error_messages import friendly_provider_error
 from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
+from v3_transparency_preview import ClipartTransparencyPreview
 
 
 MAX_RUN_ITEMS = 10_000
@@ -1428,6 +1429,8 @@ class RunResultsPage(QWidget):
         self.queue.currentRowChanged.connect(self._selection_changed)
         self.viewer = BeforeAfterViewer()
         self.viewer.hide()
+        self.transparency_preview = ClipartTransparencyPreview()
+        self.transparency_preview.hide()
         self.preview_popup = QLabel(self, flags=Qt.WindowType.ToolTip)
         self.preview_popup.setWindowTitle("Предпросмотр")
         self.preview_popup.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1543,6 +1546,7 @@ class RunResultsPage(QWidget):
             self.progress_bar,
             self.current_label,
             self.queue,
+            self.transparency_preview,
             self.processing_label,
             self.stages_label,
             self.file_hints_label,
@@ -1668,6 +1672,7 @@ class RunResultsPage(QWidget):
         item = self._selected_item(row)
         if item is None:
             self.preview_popup.hide()
+            self.transparency_preview.hide()
             self._set_status_label(
                 self.processing_label,
                 "Ожидание запуска",
@@ -1679,6 +1684,16 @@ class RunResultsPage(QWidget):
             self.handoff_label.setText("Передача на проверку: не выполнялась")
             return
         self.preview_popup.hide()
+        if self.state.mode is ProjectMode.CLIPART:
+            preview_path = (
+                item.output_path
+                if item.status is RunItemStatus.SUCCEEDED
+                else item.source_path
+            )
+            self.transparency_preview.set_path(preview_path)
+            self.transparency_preview.show()
+        else:
+            self.transparency_preview.hide()
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
