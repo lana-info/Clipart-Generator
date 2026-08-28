@@ -235,6 +235,40 @@ def fal_image_url(payload: Mapping[str, Any] | None) -> str:
     raise FalProviderError("Fal.ai не вернул HTTPS URL изображения")
 
 
+def validate_fal_image_result(
+    payload: Mapping[str, Any] | None,
+    *,
+    operation: str,
+    model_id: str,
+) -> str:
+    """Validate a provider image result before passing its URL downstream."""
+    try:
+        profile = fal_endpoint_profile(model_id, operation)
+    except KeyError as error:
+        raise FalProviderError("Неизвестный Fal.ai профиль результата") from error
+    source = payload if isinstance(payload, Mapping) else {}
+    image_records: list[Mapping[str, Any]] = []
+    image = source.get("image")
+    if isinstance(image, Mapping):
+        image_records.append(image)
+    images = source.get("images")
+    if isinstance(images, list):
+        image_records.extend(item for item in images[:16] if isinstance(item, Mapping))
+    if not image_records:
+        raise FalProviderError("Fal.ai не вернул файл изображения")
+    for record in image_records:
+        content_type = str(record.get("content_type") or "").strip().lower()
+        if content_type and not content_type.startswith("image/"):
+            raise FalProviderError("Fal.ai вернул результат не в формате изображения")
+        if operation == "remove_background" and content_type:
+            allowed = {f"image/{fmt}" for fmt in profile.output_formats}
+            if content_type not in allowed:
+                raise FalProviderError(
+                    "Fal.ai вернул неподдерживаемый формат результата удаления фона"
+                )
+    return fal_image_url(source)
+
+
 class FalClient:
     def __init__(self, config: FalConfig) -> None:
         config.validate()
@@ -386,13 +420,19 @@ class FalClient:
         request_id = str(submitted["request_id"])
         if on_submitted is not None:
             on_submitted(request_id)
-        return self.wait_for_result(
+        completed = self.wait_for_result(
             request_id,
             timeout_seconds=300.0,
             poll_interval_seconds=2.0,
             is_cancelled=is_cancelled,
             on_status=on_status,
         )
+        validate_fal_image_result(
+            completed.get("result"),
+            operation=operation,
+            model_id=selected_model_id,
+        )
+        return completed
 
     def status(self, request_id: str) -> dict[str, Any]:
         request_id = str(request_id or "").strip()
@@ -498,5 +538,6 @@ __all__ = [
     "fal_image_input",
     "fal_image_data_uri",
     "fal_image_url",
+    "validate_fal_image_result",
     "fal_status_kind",
 ]

@@ -59,9 +59,8 @@ def apply_mask_to_image(image: Image.Image, mask: Image.Image) -> Image.Image:
 
 def has_usable_alpha(image: Image.Image) -> bool:
     """Return whether an image contains at least one transparent pixel."""
-    if "A" not in image.getbands():
-        return False
-    return image.getchannel("A").getextrema()[0] < 255
+    rgba = image.convert("RGBA")
+    return rgba.getchannel("A").getextrema()[0] < 255
 
 
 def save_mask_png(mask: Image.Image, path: str | Path) -> None:

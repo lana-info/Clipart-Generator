@@ -2534,6 +2534,24 @@ class WorkerThread(QThread):
                 )
                 self.progress.emit("  Этап обработки: background_removal; status=failed")
                 raise
+            try:
+                if not current_path or not os.path.isfile(current_path):
+                    raise RuntimeError("Fal.ai не создал локальный файл результата")
+                with Image.open(current_path) as output_image:
+                    if not has_usable_alpha(output_image):
+                        raise RuntimeError(
+                            "Провайдер удаления фона вернул изображение без прозрачности"
+                        )
+            except (OSError, UnidentifiedImageError, RuntimeError) as error:
+                self._emit_diagnostic(
+                    "stage_finished",
+                    provider=remove_provider,
+                    model=remove_model,
+                    outcome="failed",
+                    elapsed_ms=round((time.monotonic() - remove_started) * 1000),
+                )
+                self.progress.emit("  Этап обработки: background_removal; status=failed")
+                raise RuntimeError(str(error)) from error
             self.progress.emit("  Этап обработки: background_removal; status=complete")
             self._emit_diagnostic(
                 "stage_finished",

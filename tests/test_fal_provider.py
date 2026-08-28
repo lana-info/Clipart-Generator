@@ -13,6 +13,7 @@ from fal_provider import (
     fal_image_data_uri,
     fal_image_url,
     fal_status_kind,
+    validate_fal_image_result,
 )
 from provider_contract import ProviderTaskRequest
 
@@ -77,6 +78,28 @@ class FalProviderTests(unittest.TestCase):
         )
         with self.assertRaises(FalProviderError):
             fal_image_url({"images": [{"url": "http://cdn.example/image.png"}]})
+
+    def test_image_result_requires_an_image_and_allowed_content_type(self):
+        self.assertEqual(
+            validate_fal_image_result(
+                {"image": {"url": "https://cdn.example/image.png", "content_type": "image/png"}},
+                operation="remove_background",
+                model_id="fal-ai/bria/background/remove",
+            ),
+            "https://cdn.example/image.png",
+        )
+        with self.assertRaisesRegex(FalProviderError, "файл изображения"):
+            validate_fal_image_result(
+                {},
+                operation="remove_background",
+                model_id="fal-ai/bria/background/remove",
+            )
+        with self.assertRaisesRegex(FalProviderError, "неподдерживаемый формат"):
+            validate_fal_image_result(
+                {"image": {"url": "https://cdn.example/image.jpg", "content_type": "image/jpeg"}},
+                operation="remove_background",
+                model_id="fal-ai/bria/background/remove",
+            )
 
     def test_local_image_data_uri_is_bounded_and_uses_image_mime_type(self):
         with tempfile.NamedTemporaryFile(suffix=".png") as handle:
