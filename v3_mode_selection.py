@@ -36,6 +36,7 @@ from v3_project_state import ProjectStateError, load_project_draft, save_project
 from v3_clipart_flow import install_clipart_flow
 from v3_pinterest_flow import install_pinterest_flow
 from v3_processing_flow import install_processing_flow
+from v3_localization import app_locale_from_settings
 from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
@@ -732,15 +733,20 @@ class V3ApplicationView(QWidget):
             ProjectMode.PINTEREST: install_pinterest_flow,
             ProjectMode.PROCESSING: install_processing_flow,
         }
-        controller = installer_by_mode[mode](
-            shell,
-            runtime_settings_provider=self._runtime_settings,
-            worker_factory=self._worker_factory,
-            authorization_provider=(
+        installer_kwargs = {
+            "runtime_settings_provider": self._runtime_settings,
+            "worker_factory": self._worker_factory,
+            "authorization_provider": (
                 self._license_gate.authorize_run
                 if self._license_gate is not None
                 else None
             ),
+        }
+        if mode is ProjectMode.PINTEREST:
+            installer_kwargs["locale"] = app_locale_from_settings(self._preferences)
+        controller = installer_by_mode[mode](
+            shell,
+            **installer_kwargs,
         )
         return controller
 

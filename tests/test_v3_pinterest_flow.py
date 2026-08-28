@@ -661,6 +661,64 @@ class V3PinterestFlowTests(unittest.TestCase):
 
         self.assertNotIn("processing_operation_required", page.validation_issues())
 
+    def test_pinterest_processing_edits_persist_allowed_operations_and_provider(self):
+        """Dropping the adapter assignment must leave the persisted fields unchanged."""
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PROCESSING_OPTIONS]
+
+        page.operation_widgets["upscale_before"].setChecked(True)
+        provider = page.operation_widgets["upscale_before_provider"]
+        provider.setCurrentIndex(provider.findData("local_realesrgan"))
+        page.operation_widgets["local_realesrgan_scale"].setCurrentIndex(
+            page.operation_widgets["local_realesrgan_scale"].findData(2)
+        )
+        page.operation_widgets["unsharp"].setChecked(True)
+
+        persisted = ProjectState.from_dict(state.to_dict()).pinterest.operations
+        self.assertTrue(persisted.upscale_before)
+        self.assertEqual(persisted.upscale_before_provider, "local_realesrgan")
+        self.assertEqual(persisted.local_realesrgan_scale, 2)
+        self.assertTrue(persisted.unsharp)
+
+    def test_successful_new_run_clears_stale_result_acceptance_and_metadata(self):
+        """Starting another run must not retain acceptance or evidence from an old file."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-new-run-") as temp:
+            state = self.make_state(temp)
+            state.set_step(StepId.REVIEW_RUN)
+            state.pinterest.results = [
+                v3_pinterest_flow.PinterestPinResultData(
+                    variant_id="template-01",
+                    source_product_path="product.png",
+                    output_path="old-result.png",
+                    accepted=True,
+                    status="success",
+                    product_layer_digest="old-protected-digest",
+                    export_status="exported",
+                )
+            ]
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
+                worker_factory=WorkerFactory(),
+                authorization_provider=lambda: None,
+            )
+
+            shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
+            controller.start()
+
+            result = next(
+                item
+                for item in state.pinterest.results
+                if item.variant_id == "template-01"
+            )
+            self.assertEqual(result.status, "pending")
+            self.assertFalse(result.accepted)
+            self.assertEqual(result.product_layer_digest, "")
+            self.assertEqual(result.export_status, "not_exported")
+
     def test_reference_prompt_remains_vertical_and_is_preflighted(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-reference-") as temp:
             image_path = Path(temp) / "reference.png"

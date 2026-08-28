@@ -635,6 +635,7 @@ class ProcessingPipelineEditor(QScrollArea):
         operations = self.state_owner.operations
         for name, value in current.items():
             setattr(operations, name, value)
+        self.state_owner.operations = operations
         if hasattr(self.state_owner, "recipe"):
             self.state_owner.recipe = "custom"
         self._refresh_control_visibility()

@@ -204,6 +204,32 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.close()
             view.deleteLater()
 
+    def test_pinterest_flow_uses_current_application_locale_for_inherited_pages(self):
+        """Omitting the locale at the real installer call must make this fail."""
+        with tempfile.TemporaryDirectory(prefix="clipart-pinterest-locale-") as temp:
+            draft_path = Path(temp) / "project_state.json"
+            preferences_path = Path(temp) / "preferences.json"
+            preferences_path.write_text(
+                json.dumps({"app_language": "en-US"}),
+                encoding="utf-8",
+            )
+
+            view = V3ApplicationView(draft_path=draft_path)
+            view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
+            self.app.processEvents()
+
+            controller = view.shell.pinterest_flow_controller
+            self.assertEqual(
+                controller.pages[StepId.PROJECT].card.title_label.text(),
+                "Work folder",
+            )
+            self.assertEqual(
+                controller.pages[StepId.PROMPTS].card.title_label.text(),
+                "Product and pin copy",
+            )
+            view.close()
+            view.deleteLater()
+
     def test_new_project_defaults_to_pictures_instead_of_process_directory(self):
         with tempfile.TemporaryDirectory(prefix="clipart-default-folder-") as temp:
             default_folder = Path(temp) / "Pictures" / "Vibix Images"

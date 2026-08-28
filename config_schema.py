@@ -8,12 +8,15 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
+from v3_localization import normalize_locale
+
 
 PREFERENCES_SCHEMA_VERSION = 1
 PREFERENCES_DEFAULTS: dict[str, Any] = {
     "schema_version": PREFERENCES_SCHEMA_VERSION,
     "last_work_dir": "",
     "last_output_dir": "",
+    "app_language": "ru",
     "clipart": {},
     "pinterest": {},
     "processing": {},
@@ -59,6 +62,7 @@ def migrate_preferences(value: Any) -> dict[str, Any]:
             source[current_key] = source[legacy_key]
     result["last_work_dir"] = source.get("last_work_dir", "") if isinstance(source.get("last_work_dir", ""), str) else ""
     result["last_output_dir"] = source.get("last_output_dir", "") if isinstance(source.get("last_output_dir", ""), str) else ""
+    result["app_language"] = normalize_locale(source.get("app_language"))
     for key in ("kie_concurrency", "photoroom_concurrency"):
         if key in source:
             result[key] = source[key]

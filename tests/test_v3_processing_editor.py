@@ -13,6 +13,7 @@ from v3_processing_editor import (
     apply_processing_recipe,
     processing_pipeline_steps,
 )
+from v3_pinterest_flow import PinterestProcessingPage, _pinterest_project_adapter
 from v3_project_state import ProjectMode, ProjectState
 
 
@@ -125,20 +126,23 @@ class ProcessingEditorTests(unittest.TestCase):
             ),
         )
 
-    def test_pinterest_uses_persistent_shared_recipe_state(self) -> None:
+    def test_pinterest_editor_persists_only_its_allowed_operation_state(self) -> None:
         state = ProjectState(mode=ProjectMode.PINTEREST)
-        editor = ProcessingPipelineEditor(
-            state.pinterest,
+        editor = PinterestProcessingPage(
+            _pinterest_project_adapter(state),
             lambda: None,
-            title="Pipeline",
-            description="Common pipeline",
-            include_cleanup=True,
         )
-        editor.operation_widgets["trim"].setChecked(True)
-        editor.cleanup_checkbox.setChecked(True)
-        self.assertTrue(state.pinterest.operations.trim)
-        self.assertTrue(state.pinterest.operations.remove_exif)
-        self.assertIn("Trim", editor.pipeline_label.text())
+        editor.operation_widgets["upscale_before"].setChecked(True)
+        provider = editor.operation_widgets["upscale_before_provider"]
+        provider.setCurrentIndex(provider.findData("local_realesrgan"))
+
+        self.assertTrue(state.pinterest.operations.upscale_before)
+        self.assertEqual(
+            state.pinterest.operations.upscale_before_provider,
+            "local_realesrgan",
+        )
+        self.assertFalse(hasattr(state.pinterest.operations, "remove_background"))
+        self.assertFalse(hasattr(state.pinterest.operations, "remove_exif"))
 
     def test_operation_requirement_can_be_disabled_for_generation_modes(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)

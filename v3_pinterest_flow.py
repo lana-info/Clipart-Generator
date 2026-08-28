@@ -110,6 +110,11 @@ _PINTEREST_UI_TEXT = {
         "processing_title": "Обработка изображений",
         "processing_description": "Единые настройки обработки изображений для Pinterest.",
         "review_description": "Проверьте пакет изображений и стоимость перед явным запуском.",
+        "project_title": "Рабочая папка",
+        "project_description": "Выберите папку для записи результатов.",
+        "prompt_review_title": "Проверка промптов",
+        "prompt_review_description": "Проверьте и при необходимости исправьте промпты перед генерацией.",
+        "review_title": "Проверка и запуск",
     },
     "en": {
         "product_input_title": "Product and pin copy",
@@ -145,6 +150,11 @@ _PINTEREST_UI_TEXT = {
         "processing_title": "Image processing",
         "processing_description": "Shared image-processing settings for Pinterest.",
         "review_description": "Review the image package and cost before explicitly starting it.",
+        "project_title": "Work folder",
+        "project_description": "Choose a folder for saving results.",
+        "prompt_review_title": "Prompt review",
+        "prompt_review_description": "Review and edit prompts before generation if needed.",
+        "review_title": "Review and run",
     },
 }
 
@@ -455,6 +465,56 @@ class PinterestProductInputPage(_ScrollableStepPage):
 
 class PinterestPromptInputPage(PinterestProductInputPage):
     """Compatibility alias for callers that imported the former page name."""
+
+
+class PinterestProjectPage(ClipartProjectPage):
+    """Pinterest-localized shell for the shared project-folder editor."""
+
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        locale: str = "ru",
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        self.locale = normalize_locale(locale)
+        super().__init__(state, changed, tokens=tokens)
+        self._set_pinterest_copy()
+
+    def _set_pinterest_copy(self) -> None:
+        title = _pinterest_text("project_title", locale=self.locale)
+        description = _pinterest_text("project_description", locale=self.locale)
+        self.card.title_label.setText(title)
+        self.card.description_label.setText(description)
+        self.setAccessibleName(title)
+        self.setAccessibleDescription(description)
+        self.work_dir_edit.setAccessibleName(title)
+        self.browse_button.setText(_pinterest_text("choose", locale=self.locale))
+        self.browse_button.setAccessibleName(
+            _pinterest_text("choose", locale=self.locale)
+        )
+
+
+class PinterestPromptReviewPage(ClipartPromptReviewPage):
+    """Pinterest-localized shell for the shared prompt-review editor."""
+
+    def __init__(
+        self,
+        state: ProjectState,
+        changed: Callable[[], None],
+        *,
+        locale: str = "ru",
+        tokens: V3DesignTokens = DEFAULT_TOKENS,
+    ) -> None:
+        self.locale = normalize_locale(locale)
+        super().__init__(state, changed, tokens=tokens)
+        title = _pinterest_text("prompt_review_title", locale=self.locale)
+        description = _pinterest_text("prompt_review_description", locale=self.locale)
+        self.card.title_label.setText(title)
+        self.card.description_label.setText(description)
+        self.setAccessibleName(title)
+        self.setAccessibleDescription(description)
 
 
 class PinterestPinPreviewPage(_ScrollableStepPage):
@@ -870,7 +930,13 @@ class PinterestReviewRunPage(ClipartReviewRunPage):
     ) -> None:
         self.locale = normalize_locale(locale)
         super().__init__(state, tokens=tokens)
+        title = _pinterest_text("review_title", locale=self.locale)
+        self.card.title_label.setText(title)
+        self.setAccessibleName(title)
         self.card.description_label.setText(
+            _pinterest_text("review_description", locale=self.locale)
+        )
+        self.setAccessibleDescription(
             _pinterest_text("review_description", locale=self.locale)
         )
 
@@ -940,9 +1006,10 @@ class PinterestFlowController(QObject):
         changed = self.shell.mark_dirty
         self.pages.register(
             StepId.PROJECT,
-            lambda: ClipartProjectPage(
+            lambda: PinterestProjectPage(
                 self.adapter_state,
                 changed,
+                locale=self.locale,
                 tokens=self.shell.tokens,
             ),
         )
@@ -957,9 +1024,10 @@ class PinterestFlowController(QObject):
         )
         self.pages.register(
             StepId.PROMPT_REVIEW,
-            lambda: ClipartPromptReviewPage(
+            lambda: PinterestPromptReviewPage(
                 self.adapter_state,
                 changed,
+                locale=self.locale,
                 tokens=self.shell.tokens,
             ),
         )
@@ -1084,6 +1152,7 @@ class PinterestFlowController(QObject):
             return None
 
         self.worker = worker
+        self._reset_preview_results_for_new_run()
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
         self.runtime_adapter.start(worker)
@@ -1093,6 +1162,23 @@ class PinterestFlowController(QObject):
         )
         self.started.emit(request)
         return request
+
+    def _reset_preview_results_for_new_run(self) -> None:
+        """Discard result-bound state only after a replacement run can start."""
+        preview = self.pages[StepId.RESULTS]
+        if not isinstance(preview, PinterestPinPreviewPage):
+            raise RuntimeError("Pinterest preview page is not installed")
+        preview.refresh_from_state()
+        for result in preview.results:
+            result.status = "pending"
+            result.retryable = False
+            result.accepted = False
+            result.output_path = ""
+            result.product_layer_digest = ""
+            result.export_status = "not_exported"
+            result.error_code = ""
+            result.error_message = ""
+        preview.refresh_from_state()
 
     def stop(self) -> None:
         if self.worker is not None:
