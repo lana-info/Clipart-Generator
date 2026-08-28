@@ -1471,6 +1471,8 @@ Acceptance:
   проверенными output format и alpha behavior.
 - [x] Для удаления фона доступны отдельные Fal.ai profiles Bria RMBG,
   BiRefNet и rembg; настройки передаются только выбранной модели.
+- [x] BiRefNet переведён на официальный endpoint `fal-ai/birefnet/v2` с
+  совместимой миграцией старого сохранённого ID.
 - [x] Восстановлены Local rembg и Local BEN2; для KIE исправлен список
   моделей удаления фона (Recraft вместо моделей апскейла).
 - [ ] Ошибки, неполные outputs и истёкшие result URLs не публикуются как
@@ -1506,8 +1508,9 @@ Status: Planned — решение утверждено, выполнение н
 
 ### NEXT-TASK-010 — Подключить Fal.ai к run plan и диагностике
 
-Status: In progress — Fal.ai run routing and diagnostics connected; cost and
-retention UX remain
+Status: In progress — run routing, diagnostics and ручное обновление
+предварительной стоимости подключены; фактический usage после запуска и
+retention UX остаются
 
 Зависимость: NEXT-TASK-008, NEXT-TASK-009.
 
@@ -1516,6 +1519,9 @@ Acceptance:
 - [ ] В диагностике сохраняются безопасные provider/model/task status без
   API-ключей, полных prompt и пользовательских путей.
 - [ ] Cost estimate содержит timestamp, currency, profile и budget status.
+- [x] На экране проверки запуска можно вручную запросить предварительную
+  оценку Fal.ai по текущему числу endpoint-вызовов; отображается предупреждение
+  о возможном отличии фактической суммы.
 - [ ] Fal.ai retention, download-before-expiry и deletion limits отражены в
   пользовательском предупреждении там, где это необходимо.
 - [ ] Старые KIE/local workflows не меняют поведение.

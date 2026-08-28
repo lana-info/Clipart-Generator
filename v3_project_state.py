@@ -521,6 +521,8 @@ class ImageOperationData:
         if self.kie_remove_bg_model != "recraft/remove-background":
             self.kie_remove_bg_model = "recraft/remove-background"
         self.fal_remove_bg_model = _text(self.fal_remove_bg_model, limit=200) or "fal-ai/bria/background/remove"
+        if self.fal_remove_bg_model == "fal-ai/birefnet":
+            self.fal_remove_bg_model = "fal-ai/birefnet/v2"
         self.fal_birefnet_model = _text(self.fal_birefnet_model, limit=100) or "General Use (Light)"
         self.fal_birefnet_resolution = _text(self.fal_birefnet_resolution, limit=30) or "1024x1024"
         self.local_rembg_profile = _text(self.local_rembg_profile, limit=100) or "clipart"
@@ -641,7 +643,11 @@ class ImageOperationData:
                 "kie_remove_bg_model",
                 "recraft/remove-background",
             ),
-            fal_remove_bg_model=config.get("fal_remove_bg_model", "fal-ai/bria/background/remove"),
+            fal_remove_bg_model=(
+                "fal-ai/birefnet/v2"
+                if config.get("fal_remove_bg_model") == "fal-ai/birefnet"
+                else config.get("fal_remove_bg_model", "fal-ai/bria/background/remove")
+            ),
             fal_birefnet_model=config.get("fal_birefnet_model", "General Use (Light)"),
             fal_birefnet_resolution=config.get("fal_birefnet_resolution", "1024x1024"),
             fal_birefnet_refine_foreground=_boolean(config.get("fal_birefnet_refine_foreground"), default=True),

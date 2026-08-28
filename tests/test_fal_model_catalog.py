@@ -33,7 +33,7 @@ class FalModelCatalogTests(unittest.TestCase):
             [profile.model_id for profile in profiles],
             [
                 "fal-ai/bria/background/remove",
-                "fal-ai/birefnet",
+                "fal-ai/birefnet/v2",
                 "fal-ai/imageutils/rembg",
             ],
         )

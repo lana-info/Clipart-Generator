@@ -1062,6 +1062,8 @@ class WorkerThread(QThread):
         )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.fal_remove_bg_model = settings.get("fal_remove_bg_model", "fal-ai/bria/background/remove")
+        if self.fal_remove_bg_model == "fal-ai/birefnet":
+            self.fal_remove_bg_model = "fal-ai/birefnet/v2"
         self.fal_birefnet_model = settings.get("fal_birefnet_model", "General Use (Light)")
         self.fal_birefnet_resolution = settings.get("fal_birefnet_resolution", "1024x1024")
         self.fal_birefnet_refine_foreground = bool(settings.get("fal_birefnet_refine_foreground", True))
@@ -2750,7 +2752,7 @@ class WorkerThread(QThread):
         return fal_image_data_uri(current_path)
 
     def _fal_remove_bg_parameters(self):
-        if self.fal_remove_bg_model == "fal-ai/birefnet":
+        if self.fal_remove_bg_model == "fal-ai/birefnet/v2":
             return {
                 "model": self.fal_birefnet_model,
                 "operating_resolution": self.fal_birefnet_resolution,

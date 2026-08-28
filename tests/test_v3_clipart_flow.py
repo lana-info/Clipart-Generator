@@ -27,6 +27,7 @@ from v3_clipart_flow import (
     build_clipart_run_request,
     clipart_pipeline_steps,
     estimate_clipart_cost,
+    fal_endpoint_quantities,
     generation_model_options,
     install_clipart_flow,
     missing_runtime_requirements,
@@ -674,6 +675,26 @@ class V3ClipartFlowTests(unittest.TestCase):
             reference.ratios,
             ("1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"),
         )
+
+    def test_fal_endpoint_quantities_count_generation_and_processing(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry(prompt="one"), PromptEntry(prompt="two")]
+        state.clipart.generation.model = "fal-ai/flux/schnell"
+        state.clipart.generation.variants = 2
+        operations = state.clipart.operations
+        operations.upscale_before = True
+        operations.upscale_before_provider = "fal"
+        operations.remove_background = True
+        operations.remove_background_provider = "fal"
+        operations.fal_remove_bg_model = "fal-ai/birefnet/v2"
+        operations.upscale_after = True
+        operations.upscale_after_provider = "fal"
+
+        assert fal_endpoint_quantities(state) == {
+            "fal-ai/flux/schnell": 4,
+            "fal-ai/esrgan": 8,
+            "fal-ai/birefnet/v2": 4,
+        }
 
     def test_gpt_image_two_exposes_all_documented_ratios(self):
         primary = next(

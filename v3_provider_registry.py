@@ -158,7 +158,7 @@ KIE_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
 )
 FAL_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Bria RMBG 2.0", "fal-ai/bria/background/remove"),
-    ("BiRefNet", "fal-ai/birefnet"),
+    ("BiRefNet v2", "fal-ai/birefnet/v2"),
     ("rembg", "fal-ai/imageutils/rembg"),
 )
 FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (

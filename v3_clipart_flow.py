@@ -50,6 +50,7 @@ from PyQt6.QtWidgets import (
 
 from license_client import LicenseError
 from provider_error_messages import friendly_provider_error
+from v3_api_settings import estimate_fal_cost
 
 from v3_components import (
     AdvancedSection,
@@ -3047,12 +3048,38 @@ class _SharedClipartProcessingPage(ProcessingPipelineEditor):
 ClipartProcessingPage = _SharedClipartProcessingPage
 
 
+def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
+    """Return paid Fal.ai call counts for the current clipart run."""
+    if not isinstance(state, ProjectState):
+        raise TypeError("state must be a ProjectState")
+    generation = state.clipart.generation
+    variants = max(1, int(generation.variants))
+    quantities: dict[str, int] = {}
+
+    def add(model_id: str, count: int) -> None:
+        if str(model_id).startswith("fal-ai/") and count > 0:
+            quantities[model_id] = quantities.get(model_id, 0) + count
+
+    for entry in state.clipart.prompts:
+        add(generation.reference_model if entry.references else generation.model, variants)
+    operations = state.clipart.operations
+    output_count = len(state.clipart.prompts) * variants
+    if operations.upscale_before and operations.upscale_before_provider == "fal":
+        add("fal-ai/esrgan", output_count)
+    if operations.remove_background and operations.remove_background_provider == "fal":
+        add(operations.fal_remove_bg_model, output_count)
+    if operations.upscale_after and operations.upscale_after_provider == "fal":
+        add("fal-ai/esrgan", output_count)
+    return quantities
+
+
 class ClipartReviewRunPage(_ScrollableStepPage):
     def __init__(
         self,
         state: ProjectState,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        fal_cost_refresh: Callable[[], tuple[float, str]] | None = None,
     ) -> None:
         super().__init__(
             "Проверка и запуск",
@@ -3060,6 +3087,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
             tokens=tokens,
         )
         self.state = state
+        self.fal_cost_refresh = fal_cost_refresh
         self.output_label = QLabel()
         self.output_label.setWordWrap(True)
         self.output_label.setProperty("v3Status", True)
@@ -3084,6 +3112,10 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.fal_cost_confirmation = QCheckBox(
             "Я проверила актуальную цену Fal.ai и подтверждаю запуск"
         )
+        self.fal_cost_refresh_button = V3Button(
+            "Обновить оценку Fal.ai", ButtonVariant.SECONDARY
+        )
+        self.fal_cost_refresh_button.clicked.connect(self.refresh_fal_cost)
         self.fal_cost_confirmation.setAccessibleName(
             "Подтверждение актуальной цены Fal.ai"
         )
@@ -3098,6 +3130,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         ):
             self.add_widget(widget)
         self.add_widget(self.fal_cost_confirmation)
+        self.add_widget(self.fal_cost_refresh_button)
         self.card.layout().setAlignment(Qt.AlignmentFlag.AlignTop)
         self.card.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.card.content.setSizePolicy(
@@ -3189,6 +3222,27 @@ class ClipartReviewRunPage(_ScrollableStepPage):
             + " → ".join(
                 clipart_pipeline_steps(self.state.clipart.operations)
             )
+        )
+        has_fal = self._fal_selected()
+        self.fal_cost_refresh_button.setVisible(has_fal)
+        self.fal_cost_confirmation.setVisible(has_fal)
+
+    def refresh_fal_cost(self) -> None:
+        if self.fal_cost_refresh is None:
+            self.cost_breakdown_label.setText(
+                "Оценка Fal.ai недоступна: добавьте API-ключ в настройках."
+            )
+            return
+        try:
+            amount, currency = self.fal_cost_refresh()
+        except (RuntimeError, ValueError, TypeError) as error:
+            self.cost_breakdown_label.setText(
+                f"Не удалось обновить оценку Fal.ai: {error}"
+            )
+            return
+        self.cost_breakdown_label.setText(
+            f"Ориентировочная стоимость Fal.ai: {amount:.3f} {currency}. "
+            "Фактическая сумма может отличаться."
         )
 
     def set_preflight_status(self, text: str, *, ready: bool) -> None:
@@ -3354,6 +3408,7 @@ class ClipartFlowController(QObject):
             lambda: ClipartReviewRunPage(
                 self.shell.state,
                 tokens=self.shell.tokens,
+                fal_cost_refresh=self._refresh_fal_cost,
             ),
         )
         self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
@@ -3407,6 +3462,18 @@ class ClipartFlowController(QObject):
     def _run_requested(self, mode: str) -> None:
         if mode == ProjectMode.CLIPART.value:
             self.start()
+
+    def _refresh_fal_cost(self) -> tuple[float, str]:
+        runtime_settings = self.runtime_settings_provider()
+        if not isinstance(runtime_settings, Mapping):
+            raise ClipartFlowError("Настройки запуска повреждены")
+        api_key = str(runtime_settings.get("fal_api_key") or "").strip()
+        if not api_key:
+            raise ClipartFlowError("Добавьте Fal.ai API Key в настройках API")
+        quantities = fal_endpoint_quantities(self.shell.state)
+        if not quantities:
+            raise ClipartFlowError("В текущем запуске нет операций Fal.ai")
+        return estimate_fal_cost(api_key, quantities)
 
     def start(self) -> ClipartRunRequest | None:
         if self.shell.another_run_is_active(self):

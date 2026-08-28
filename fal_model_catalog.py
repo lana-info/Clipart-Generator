@@ -36,7 +36,7 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         parameter_names=("sync_mode",),
     ),
     FalEndpointProfile(
-        model_id="fal-ai/birefnet",
+        model_id="fal-ai/birefnet/v2",
         operation="remove_background",
         supports_references=True,
         preserves_alpha=True,
