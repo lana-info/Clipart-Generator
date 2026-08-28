@@ -325,3 +325,48 @@ def test_save_pin_sanitizes_filesystem_setup_failures(tmp_path, monkeypatch, set
     assert private_message not in str(error.value)
     assert error.value.__cause__ is None
     assert error.value.__suppress_context__ is True
+
+
+@pytest.mark.parametrize("cleanup_error", (RuntimeError, ValueError))
+def test_save_pin_sanitizes_close_cleanup_failures(tmp_path, monkeypatch, cleanup_error):
+    module = _require_composer()
+    image = Image.new("RGBA", (1000, 1500), (12, 34, 56, 128))
+    private_message = "/private/output/secret-product.png; cleanup_message=secret-value"
+    original_close = module.os.close
+    close_calls = 0
+
+    def fail_setup_then_cleanup(descriptor):
+        nonlocal close_calls
+        close_calls += 1
+        if close_calls == 1:
+            raise OSError("setup close failure")
+        original_close(descriptor)
+        raise cleanup_error(private_message)
+
+    monkeypatch.setattr(module.os, "close", fail_setup_then_cleanup)
+
+    with pytest.raises(module.PinExportError) as error:
+        module.save_pin(image, str(tmp_path / "result.png"), format="PNG")
+
+    assert str(error.value) == "Pinterest pin export failed"
+    assert private_message not in str(error.value)
+    assert error.value.__cause__ is None
+    assert error.value.__suppress_context__ is True
+
+
+@pytest.mark.parametrize("cleanup_error", (RuntimeError, ValueError))
+def test_save_pin_ignores_unlink_cleanup_failures_after_atomic_export(tmp_path, monkeypatch, cleanup_error):
+    module = _require_composer()
+    image = Image.new("RGBA", (1000, 1500), (12, 34, 56, 128))
+    output = tmp_path / "result.png"
+    private_message = "/private/output/secret-product.png; cleanup_message=secret-value"
+
+    def failing_unlink(path):
+        raise cleanup_error(private_message)
+
+    monkeypatch.setattr(module.os, "unlink", failing_unlink)
+
+    saved_path = module.save_pin(image, str(output), format="PNG")
+
+    assert Path(saved_path) == output.resolve()
+    assert output.is_file()

@@ -316,11 +316,11 @@ def save_pin(image: Image.Image, path: str, *, format: str) -> str:
         if descriptor is not None:
             try:
                 os.close(descriptor)
-            except OSError:
+            except (OSError, RuntimeError, ValueError):
                 pass
         try:
             if temporary_name is not None:
                 os.unlink(temporary_name)
-        except (FileNotFoundError, OSError):
+        except (FileNotFoundError, OSError, RuntimeError, ValueError):
             pass
     return str(target)

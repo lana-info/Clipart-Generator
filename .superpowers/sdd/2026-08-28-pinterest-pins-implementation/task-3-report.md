@@ -77,3 +77,13 @@
   `OSError`.
 - GREEN: эти четыре setup paths возвращают только safe domain error; focused
   suite — `19 passed`.
+
+## Cleanup re-review remediation — 2026-08-28
+
+- Best-effort cleanup `os.close` и `os.unlink` теперь также подавляет
+  `RuntimeError` и `ValueError`, как и `OSError`; сырые cleanup сообщения или
+  private paths не могут перекрыть уже безопасный export result/error.
+- RED: cleanup injection для каждого `RuntimeError`/`ValueError` дала
+  `4 failed, 19 passed`: raw exception выходил из `finally`.
+- GREEN: close-cleanup сохраняет safe `PinExportError`, unlink-cleanup после
+  атомарного export не меняет успешный результат; focused suite — `23 passed`.
