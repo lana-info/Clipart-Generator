@@ -378,6 +378,16 @@ class ProcessingPipelineEditor(QScrollArea):
         self._add_bool(advanced_form, "fal_rembg_crop_to_bbox", operations)
         self._add_combo(
             advanced_form,
+            "chroma_key_color",
+            "Chroma Key цвет",
+            (("Синий", "blue"), ("Красный", "red"), ("Зелёный", "green"), ("Свой оттенок", "custom")),
+            operations,
+        )
+        self._add_text(advanced_form, "chroma_key_custom_color", "Свой оттенок #RRGGBB", operations)
+        self._add_int(advanced_form, "chroma_key_tolerance", "Chroma Key допуск", 0, 255, operations)
+        self._add_int(advanced_form, "chroma_key_softness", "Chroma Key мягкость края", 0, 255, operations)
+        self._add_combo(
+            advanced_form,
             "local_realesrgan_profile",
             "Real-ESRGAN профиль",
             (("Клипарт", "clipart"), ("Фото", "photo")),
@@ -717,6 +727,15 @@ class ProcessingPipelineEditor(QScrollArea):
             and "local_ben2_edge_softness" in remove_controls,
             "local_ben2_corner_radius": operations.remove_background
             and "local_ben2_corner_radius" in remove_controls,
+            "chroma_key_color": operations.remove_background
+            and "chroma_key_color" in remove_controls,
+            "chroma_key_custom_color": operations.remove_background
+            and "chroma_key_custom_color" in remove_controls
+            and operations.chroma_key_color == "custom",
+            "chroma_key_tolerance": operations.remove_background
+            and "chroma_key_tolerance" in remove_controls,
+            "chroma_key_softness": operations.remove_background
+            and "chroma_key_softness" in remove_controls,
             "unsharp_amount": operations.unsharp,
             "unsharp_radius": operations.unsharp,
             "unsharp_threshold": operations.unsharp,
@@ -777,6 +796,10 @@ class ProcessingPipelineEditor(QScrollArea):
             "local_ben2_alpha_threshold": "remove_background",
             "local_ben2_edge_softness": "remove_background",
             "local_ben2_corner_radius": "remove_background",
+            "chroma_key_color": "remove_background",
+            "chroma_key_custom_color": "remove_background",
+            "chroma_key_tolerance": "remove_background",
+            "chroma_key_softness": "remove_background",
             "unsharp_amount": "unsharp",
             "unsharp_radius": "unsharp",
             "unsharp_threshold": "unsharp",

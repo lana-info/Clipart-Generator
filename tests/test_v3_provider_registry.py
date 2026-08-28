@@ -25,7 +25,7 @@ class ProviderRegistryTests(unittest.TestCase):
     def test_known_provider_ids_and_specs(self) -> None:
         self.assertEqual(
             known_provider_ids(),
-            ("fal", "kie", "photoroom", "local_rembg", "local_ben2", "local_realesrgan"),
+            ("fal", "kie", "photoroom", "local_rembg", "local_ben2", "local_chroma_key", "local_realesrgan"),
         )
         self.assertEqual(provider_label("kie"), "KIE")
         self.assertEqual(provider_label("photoroom"), "PhotoRoom")
@@ -63,6 +63,7 @@ class ProviderRegistryTests(unittest.TestCase):
                 ("PhotoRoom", "photoroom"),
                 ("Local rembg", "local_rembg"),
                 ("Local BEN2", "local_ben2"),
+                ("Local Chroma Key", "local_chroma_key"),
             ),
         )
         self.assertEqual(KIE_MODEL_OPTIONS, (("Topaz", "topaz/image-upscale"), ("Recraft Crisp", "recraft/crisp-upscale")))

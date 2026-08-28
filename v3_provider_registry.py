@@ -113,6 +113,21 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
             "local_ben2_corner_radius",
         ),
     ),
+    "local_chroma_key": ProviderSpec(
+        provider_id="local_chroma_key",
+        label="Local Chroma Key",
+        operations=("remove_background",),
+        requires_network=False,
+        requires_cost=False,
+        preserves_alpha=True,
+        requires_api_key=False,
+        visible_controls=(
+            "chroma_key_color",
+            "chroma_key_custom_color",
+            "chroma_key_tolerance",
+            "chroma_key_softness",
+        ),
+    ),
     "local_realesrgan": ProviderSpec(
         provider_id="local_realesrgan",
         label="Local Real-ESRGAN",
@@ -146,6 +161,7 @@ PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
         ("PhotoRoom", "photoroom"),
         ("Local rembg", "local_rembg"),
         ("Local BEN2", "local_ben2"),
+        ("Local Chroma Key", "local_chroma_key"),
     ),
 }
 

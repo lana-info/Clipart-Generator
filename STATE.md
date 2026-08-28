@@ -45,6 +45,12 @@ Preview, zoom, add/remove кисть, reset, атомарный экспорт �
 появления ключа и средств ограничиться локальными тестами; после этого
 выполнить небольшой controlled live smoke с подтверждением стоимости.
 
+Локальный chroma-key для Clipart теперь добавлен как отдельная CPU-only
+стратегия: prompt generator умеет добавлять инструкции для ровного ключевого
+фона, а processing pipeline удаляет синий/красный/зелёный цвет по tolerance и
+softness без AI и без сетевых расходов. Нужно выполнить ручной UI smoke на
+сложных сериях; Pinterest этим режимом не пользуется.
+
 Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
 Actions run `33032049521`. Do not publish it as an update before this
 target-machine acceptance.

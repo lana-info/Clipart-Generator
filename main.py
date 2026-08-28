@@ -49,6 +49,7 @@ ensure_gui_standard_streams()
 
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
+from chroma_key import remove_chroma_key
 from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from ai_watermark_backend import (
@@ -1069,6 +1070,11 @@ class WorkerThread(QThread):
         self.fal_birefnet_resolution = settings.get("fal_birefnet_resolution", "1024x1024")
         self.fal_birefnet_refine_foreground = bool(settings.get("fal_birefnet_refine_foreground", True))
         self.fal_rembg_crop_to_bbox = bool(settings.get("fal_rembg_crop_to_bbox", False))
+        self.chroma_key_color = settings.get("chroma_key_color", "blue")
+        if self.chroma_key_color == "custom":
+            self.chroma_key_color = settings.get("chroma_key_custom_color", "#0000FF")
+        self.chroma_key_tolerance = max(0, min(255, int(settings.get("chroma_key_tolerance", 32))))
+        self.chroma_key_softness = max(0, min(255, int(settings.get("chroma_key_softness", 8))))
         self.upscale_factor = normalize_topaz_upscale_factor(
             settings.get("upscale_factor", 4)
         )
@@ -2207,11 +2213,18 @@ class WorkerThread(QThread):
     def _uses_local_ben2_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_ben2"
 
+    def _uses_local_chroma_key_remove_bg(self):
+        return self.remove_bg and self.remove_bg_provider == "local_chroma_key"
+
     def _uses_photoroom_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "photoroom"
 
     def _uses_local_remove_bg(self):
-        return self._uses_local_rembg_remove_bg() or self._uses_local_ben2_remove_bg()
+        return (
+            self._uses_local_rembg_remove_bg()
+            or self._uses_local_ben2_remove_bg()
+            or self._uses_local_chroma_key_remove_bg()
+        )
 
     def _uses_kie_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "kie"
@@ -2429,6 +2442,8 @@ class WorkerThread(QThread):
                 if self._uses_local_rembg_remove_bg()
                 else "ben2"
                 if self._uses_local_ben2_remove_bg()
+                else "chroma-key"
+                if self._uses_local_chroma_key_remove_bg()
                 else "remove-background-v1"
                 if self._uses_photoroom_remove_bg()
                 else self.kie_remove_bg_model
@@ -2482,6 +2497,27 @@ class WorkerThread(QThread):
                         nobg_path = os.path.join(raw_dir, f"{prefix}_ben2_nobg_{idx:03d}_{self.run_stamp}.png")
                         self._run_local_ben2(current_path, nobg_path)
                     self.progress.emit(f"  Промежуточный BEN2 без фона: {nobg_path}")
+                    current_path = nobg_path
+                    current_url = None
+                    local_result = True
+                elif self._uses_local_chroma_key_remove_bg():
+                    with self._local_operation_lock:
+                        current_path = self._ensure_local_path(
+                            current_path, current_url, raw_dir, idx, prefix, "chroma_key_source"
+                        )
+                        nobg_path = os.path.join(
+                            raw_dir, f"{prefix}_chroma_key_nobg_{idx:03d}_{self.run_stamp}.png"
+                        )
+                        validate_local_image_input(current_path)
+                        with Image.open(current_path) as source_image:
+                            result = remove_chroma_key(
+                                source_image,
+                                self.chroma_key_color,
+                                tolerance=self.chroma_key_tolerance,
+                                softness=self.chroma_key_softness,
+                            )
+                            self._save_image_object_as_png(result, nobg_path)
+                    self.progress.emit(f"  Локальный Chroma Key без фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
                     local_result = True

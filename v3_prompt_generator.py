@@ -19,6 +19,7 @@ from v3_project_state import (
     pinterest_prompt_generator_defaults,
 )
 from clipart_prompt_schema import ClipartPromptFields, render_clipart_prompt
+from chroma_key import chroma_key_prompt_block
 from prompt_translation import (
     PromptTranslationBackend,
     translate_prompt_fields,
@@ -104,6 +105,9 @@ def normalize_generator_data(
         background=normalize_prompt_text(data.background, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
         consistency=normalize_prompt_text(data.consistency, limit=MAX_PROMPT_GENERATOR_TEXT_LENGTH),
         restrictions=restrictions,
+        chroma_key_enabled=bool(data.chroma_key_enabled),
+        chroma_key_color=normalize_prompt_text(data.chroma_key_color, limit=20) or "blue",
+        chroma_key_custom_color=normalize_prompt_text(data.chroma_key_custom_color, limit=20) or "#0000FF",
         count=data.count,
     )
 
@@ -203,6 +207,20 @@ def generate_prompt_series(
                     clipart_fields,
                     language=target_language if translation.translated else source_language,
                 )
+                if normalized.chroma_key_enabled:
+                    try:
+                        key_block = chroma_key_prompt_block(
+                            normalized.chroma_key_color,
+                            watercolor="watercolor" in " ".join(
+                                (normalized.style, normalized.theme)
+                            ).casefold()
+                            or "акварел" in " ".join(
+                                (normalized.style, normalized.theme)
+                            ).casefold(),
+                        )
+                    except ValueError as error:
+                        raise PromptGeneratorError(str(error)) from error
+                    prompt += "\n" + key_block
             else:
                 prompt_parts = (
                     normalized.theme,

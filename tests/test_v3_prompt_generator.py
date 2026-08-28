@@ -106,6 +106,38 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertIn("с букетом", prompts[0].prompt)
         self.assertIn("с корзинкой", prompts[1].prompt)
 
+    def test_clipart_prompt_can_add_local_chroma_key_instructions(self):
+        prompts = generate_prompt_series(
+            ProjectMode.CLIPART,
+            PromptGeneratorData(
+                subjects=["winter wreath"],
+                style="watercolor",
+                chroma_key_enabled=True,
+                chroma_key_color="blue",
+            ),
+        )
+
+        self.assertIn("#0000FF", prompts[0].prompt)
+        self.assertIn("no paper texture", prompts[0].prompt)
+
+    def test_chroma_key_generator_settings_survive_project_draft(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompt_generator.chroma_key_enabled = True
+        state.clipart.prompt_generator.chroma_key_color = "red"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "draft.json"
+            save_project_draft(state, path)
+            restored = load_project_draft(path)
+        self.assertTrue(restored.clipart.prompt_generator.chroma_key_enabled)
+        self.assertEqual(restored.clipart.prompt_generator.chroma_key_color, "red")
+
+    def test_invalid_chroma_key_color_is_rejected_from_project_draft(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompt_generator.chroma_key_color = "not-a-color"
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(ProjectStateError):
+                save_project_draft(state, Path(directory) / "draft.json")
+
     def test_generated_prompt_contains_only_user_entered_text(self):
         long_value = "x" * 100
         data = PromptGeneratorData(

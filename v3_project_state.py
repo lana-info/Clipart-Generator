@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from dataclasses import dataclass, field, fields as dataclass_fields
 from enum import Enum
@@ -29,6 +30,7 @@ PINTEREST_CANVAS_HEIGHT = 1500
 PINTEREST_TEMPLATE_COUNT = 3
 PINTEREST_AI_SCENE_COUNT = 3
 MAX_PIN_RESULTS = PINTEREST_TEMPLATE_COUNT + PINTEREST_AI_SCENE_COUNT
+_CHROMA_KEY_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 class ProjectStateError(ValueError):
@@ -196,6 +198,9 @@ class PromptGeneratorData:
     background: str = ""
     consistency: str = ""
     restrictions: list[str] = field(default_factory=list)
+    chroma_key_enabled: bool = False
+    chroma_key_color: str = "blue"
+    chroma_key_custom_color: str = "#0000FF"
     # Kept in the draft schema for backward compatibility with 3.0.5 files.
     # New prompt series use the object × variation combinations instead.
     count: int = 12
@@ -227,6 +232,9 @@ class PromptGeneratorData:
             self.restrictions,
             limit=MAX_PROMPT_GENERATOR_ITEMS,
         )
+        self.chroma_key_enabled = _boolean(self.chroma_key_enabled, default=False)
+        self.chroma_key_color = _text(self.chroma_key_color, limit=20) or "blue"
+        self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         self.count = _bounded_int(
             self.count,
             default=12,
@@ -245,6 +253,9 @@ class PromptGeneratorData:
             "background": self.background,
             "consistency": self.consistency,
             "restrictions": list(self.restrictions),
+            "chroma_key_enabled": self.chroma_key_enabled,
+            "chroma_key_color": self.chroma_key_color,
+            "chroma_key_custom_color": self.chroma_key_custom_color,
             "count": self.count,
         }
 
@@ -267,6 +278,9 @@ class PromptGeneratorData:
             background=data.get("background", base.background),
             consistency=data.get("consistency", base.consistency),
             restrictions=data.get("restrictions", base.restrictions),
+            chroma_key_enabled=data.get("chroma_key_enabled", base.chroma_key_enabled),
+            chroma_key_color=data.get("chroma_key_color", base.chroma_key_color),
+            chroma_key_custom_color=data.get("chroma_key_custom_color", base.chroma_key_custom_color),
             count=data.get("count", base.count),
         )
 
@@ -462,6 +476,10 @@ class ImageOperationData:
     local_ben2_alpha_threshold: int = 24
     local_ben2_edge_softness: int = 0
     local_ben2_corner_radius: int = 0
+    chroma_key_color: str = "blue"
+    chroma_key_custom_color: str = "#0000FF"
+    chroma_key_tolerance: int = 32
+    chroma_key_softness: int = 8
     unsharp: bool = False
     unsharp_amount: int = 30
     unsharp_radius: float = 100.0
@@ -554,6 +572,14 @@ class ImageOperationData:
             default=0,
             minimum=0,
             maximum=3,
+        )
+        self.chroma_key_color = _text(self.chroma_key_color, limit=20) or "blue"
+        self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
+        self.chroma_key_tolerance = _bounded_int(
+            self.chroma_key_tolerance, default=32, minimum=0, maximum=255
+        )
+        self.chroma_key_softness = _bounded_int(
+            self.chroma_key_softness, default=8, minimum=0, maximum=255
         )
         self.unsharp_amount = _bounded_int(
             self.unsharp_amount,
@@ -668,6 +694,10 @@ class ImageOperationData:
             local_ben2_alpha_threshold=config.get("local_ben2_alpha_threshold", 24),
             local_ben2_edge_softness=config.get("local_ben2_edge_softness", 0),
             local_ben2_corner_radius=config.get("local_ben2_corner_radius", 0),
+            chroma_key_color=config.get("chroma_key_color", "blue"),
+            chroma_key_custom_color=config.get("chroma_key_custom_color", "#0000FF"),
+            chroma_key_tolerance=config.get("chroma_key_tolerance", 32),
+            chroma_key_softness=config.get("chroma_key_softness", 8),
             unsharp=_boolean(config.get("unsharp_enabled"), default=False),
             unsharp_amount=config.get("unsharp_amount", 30),
             unsharp_radius=config.get("unsharp_radius", 100),
@@ -1214,13 +1244,21 @@ def _draft_object(container: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     return value
 
 
-def _validate_scalar_fields(section: Mapping[str, Any], model: Any, name: str) -> None:
+def _validate_scalar_fields(
+    section: Mapping[str, Any],
+    model: Any,
+    name: str,
+    *,
+    allow_missing: bool = False,
+) -> None:
     defaults = model()
     definitions = dataclass_fields(defaults)
     _reject_unknown_fields(section, [item.name for item in definitions], name)
     for definition in definitions:
         field_name = definition.name
         if field_name not in section:
+            if allow_missing:
+                continue
             raise ProjectStateError(
                 f"Project draft field {name}.{field_name} is required"
             )
@@ -1277,6 +1315,9 @@ def _validate_prompt_generator_section(
             "consistency",
             "restrictions",
             "count",
+            "chroma_key_enabled",
+            "chroma_key_color",
+            "chroma_key_custom_color",
         ),
         name,
     )
@@ -1325,6 +1366,23 @@ def _validate_prompt_generator_section(
     if not 1 <= count <= MAX_PROMPT_SERIES_COUNT:
         raise ProjectStateError(
             f"Project draft field {name}.count is out of range"
+        )
+    if type(section.get("chroma_key_enabled", False)) is not bool:
+        raise ProjectStateError(
+            f"Project draft field {name}.chroma_key_enabled must be a boolean"
+        )
+    key_color = section.get("chroma_key_color", "blue")
+    if not isinstance(key_color, str) or len(key_color) > 20 or not (
+        key_color.casefold() in {"blue", "red", "green"}
+        or _CHROMA_KEY_COLOR_PATTERN.fullmatch(key_color.strip())
+    ):
+        raise ProjectStateError(
+            f"Project draft field {name}.chroma_key_color is invalid"
+        )
+    custom_color = section.get("chroma_key_custom_color", "#0000FF")
+    if not isinstance(custom_color, str) or not _CHROMA_KEY_COLOR_PATTERN.fullmatch(custom_color.strip()):
+        raise ProjectStateError(
+            f"Project draft field {name}.chroma_key_custom_color is invalid"
         )
 
 
@@ -1582,6 +1640,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         _draft_object(clipart, "operations"),
         ImageOperationData,
         "clipart.operations",
+        allow_missing=True,
     )
 
     pinterest = _draft_object(value, "pinterest")
@@ -1649,6 +1708,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         _draft_object(processing, "operations"),
         ImageOperationData,
         "processing.operations",
+        allow_missing=True,
     )
 
     steps = _draft_object(value, "current_step_by_mode")

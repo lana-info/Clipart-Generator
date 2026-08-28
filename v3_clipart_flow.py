@@ -595,6 +595,10 @@ def _worker_settings(
             ),
             "local_ben2_edge_softness": operations.local_ben2_edge_softness,
             "local_ben2_corner_radius": operations.local_ben2_corner_radius,
+            "chroma_key_color": operations.chroma_key_color,
+            "chroma_key_custom_color": operations.chroma_key_custom_color,
+            "chroma_key_tolerance": operations.chroma_key_tolerance,
+            "chroma_key_softness": operations.chroma_key_softness,
             "unsharp_enabled": operations.unsharp,
             "unsharp_amount": operations.unsharp_amount,
             "unsharp_radius": operations.unsharp_radius,
@@ -1581,6 +1585,39 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             form.addRow(label, control)
         layout.addWidget(fixed_group)
 
+        key_group = QGroupBox("Подготовить изображение для лёгкого удаления фона")
+        key_form = QFormLayout(key_group)
+        self.chroma_key_enabled = QCheckBox(
+            "Генерировать на однотонном chroma-key фоне"
+        )
+        self.chroma_key_enabled.setChecked(draft.chroma_key_enabled)
+        self.chroma_key_enabled.setAccessibleName(
+            "Генерировать на chroma-key фоне"
+        )
+        self.chroma_key_color = QComboBox()
+        for label, value in (
+            ("Синий — основной вариант", "blue"),
+            ("Красный — для синих и фиолетовых объектов", "red"),
+            ("Зелёный — только если в объекте нет зелени", "green"),
+            ("Свой оттенок (#RRGGBB)", "custom"),
+        ):
+            self.chroma_key_color.addItem(label, value)
+        selected_color = "custom" if str(draft.chroma_key_color).startswith("#") else draft.chroma_key_color
+        index = self.chroma_key_color.findData(selected_color)
+        self.chroma_key_color.setCurrentIndex(index if index >= 0 else 0)
+        self.chroma_key_color.setAccessibleName("Цвет chroma-key фона")
+        self.chroma_key_custom_color = QLineEdit(
+            draft.chroma_key_color if selected_color == "custom" else draft.chroma_key_custom_color
+        )
+        self.chroma_key_custom_color.setPlaceholderText("Например, #7B2CBF")
+        self.chroma_key_custom_color.setMaxLength(7)
+        self.chroma_key_custom_color.setAccessibleName("Свой цвет chroma-key фона")
+        key_form.addRow(self.chroma_key_enabled)
+        key_form.addRow("Цвет фона для удаления", self.chroma_key_color)
+        key_form.addRow("Свой оттенок", self.chroma_key_custom_color)
+        self.chroma_key_custom_color.setVisible(selected_color == "custom")
+        layout.addWidget(key_group)
+
         self.preview_label = QLabel("Пример итогового промпта появится здесь.")
         self.preview_label.setWordWrap(True)
         self.preview_label.setProperty("v3Status", True)
@@ -1604,10 +1641,21 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.subjects_edit.textChanged.connect(self._generator_changed)
         self.variations_edit.textChanged.connect(self._generator_changed)
         self.restrictions_edit.textChanged.connect(self._generator_changed)
+        self.chroma_key_enabled.toggled.connect(self._generator_changed)
+        self.chroma_key_color.currentIndexChanged.connect(self._generator_changed)
+        self.chroma_key_color.currentIndexChanged.connect(
+            lambda *_: self.chroma_key_custom_color.setVisible(
+                self.chroma_key_color.currentData() == "custom"
+            )
+        )
+        self.chroma_key_custom_color.textChanged.connect(self._generator_changed)
         self._preview()
         return widget
 
     def _generator_data(self) -> PromptGeneratorData:
+        key_color = self.chroma_key_color.currentData()
+        if key_color == "custom":
+            key_color = self.chroma_key_custom_color.text().strip()
         return PromptGeneratorData(
             theme=self.theme_edit.text(),
             subjects=self.subjects_edit.toPlainText().splitlines(),
@@ -1618,10 +1666,20 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             background=self.background_edit.text(),
             consistency=self.consistency_edit.text(),
             restrictions=self.restrictions_edit.toPlainText().splitlines(),
+            chroma_key_enabled=self.chroma_key_enabled.isChecked(),
+            chroma_key_color=key_color,
         )
 
     def _generator_changed(self, *_: Any) -> None:
-        self.state.clipart.prompt_generator = self._generator_data()
+        data = self._generator_data()
+        self.state.clipart.prompt_generator = data
+        if data.chroma_key_enabled:
+            self.state.clipart.operations.remove_background_provider = "local_chroma_key"
+            self.state.clipart.operations.chroma_key_color = data.chroma_key_color
+        elif self.state.clipart.operations.remove_background_provider == "local_chroma_key":
+            # Turning off chroma-key generation must not leave the pipeline
+            # silently removing an ordinary generated background by color.
+            self.state.clipart.operations.remove_background_provider = "kie"
         self._preview()
         self.changed()
 
@@ -2724,6 +2782,16 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self._add_bool(advanced_form, "fal_rembg_crop_to_bbox", operations)
         self._add_combo(
             advanced_form,
+            "chroma_key_color",
+            "Chroma Key цвет",
+            (("Синий", "blue"), ("Красный", "red"), ("Зелёный", "green"), ("Свой оттенок", "custom")),
+            operations,
+        )
+        self._add_text(advanced_form, "chroma_key_custom_color", "Свой оттенок #RRGGBB", operations)
+        self._add_int(advanced_form, "chroma_key_tolerance", "Chroma Key допуск", 0, 255, operations)
+        self._add_int(advanced_form, "chroma_key_softness", "Chroma Key мягкость края", 0, 255, operations)
+        self._add_combo(
+            advanced_form,
             "local_realesrgan_profile",
             "Real-ESRGAN профиль",
             (("Клипарт", "clipart"), ("Фото", "photo")),
@@ -3010,6 +3078,15 @@ class ClipartProcessingPage(_ScrollableStepPage):
             and "local_ben2_edge_softness" in remove_controls,
             "local_ben2_corner_radius": operations.remove_background
             and "local_ben2_corner_radius" in remove_controls,
+            "chroma_key_color": operations.remove_background
+            and "chroma_key_color" in remove_controls,
+            "chroma_key_custom_color": operations.remove_background
+            and "chroma_key_custom_color" in remove_controls
+            and operations.chroma_key_color == "custom",
+            "chroma_key_tolerance": operations.remove_background
+            and "chroma_key_tolerance" in remove_controls,
+            "chroma_key_softness": operations.remove_background
+            and "chroma_key_softness" in remove_controls,
             "unsharp_amount": operations.unsharp,
             "unsharp_radius": operations.unsharp,
             "unsharp_threshold": operations.unsharp,
