@@ -24,6 +24,11 @@ MAX_PROMPT_GENERATOR_TEXT_LENGTH = 4000
 MAX_PROMPT_SERIES_COUNT = 500
 MAX_SELECTED_FILES = 10000
 MAX_TEXT_LENGTH = 20000
+PINTEREST_CANVAS_WIDTH = 1000
+PINTEREST_CANVAS_HEIGHT = 1500
+PINTEREST_TEMPLATE_COUNT = 3
+PINTEREST_AI_SCENE_COUNT = 3
+MAX_PIN_RESULTS = PINTEREST_TEMPLATE_COUNT + PINTEREST_AI_SCENE_COUNT
 
 
 class ProjectStateError(ValueError):
@@ -748,6 +753,172 @@ class ClipartModeData:
 
 
 @dataclass
+class PinterestPinData:
+    canvas_width: int = PINTEREST_CANVAS_WIDTH
+    canvas_height: int = PINTEREST_CANVAS_HEIGHT
+    template_count: int = PINTEREST_TEMPLATE_COUNT
+    ai_scene_count: int = PINTEREST_AI_SCENE_COUNT
+    product_paths: list[str] = field(default_factory=list)
+    selected_product_index: int = 0
+    pin_title: str = ""
+    pin_subtitle: str = ""
+    pin_cta: str = ""
+    style: str = ""
+    background_description: str = ""
+    color_palette: str = ""
+
+    def __post_init__(self) -> None:
+        self.canvas_width = _bounded_int(
+            self.canvas_width,
+            default=PINTEREST_CANVAS_WIDTH,
+            minimum=PINTEREST_CANVAS_WIDTH,
+            maximum=PINTEREST_CANVAS_WIDTH,
+        )
+        self.canvas_height = _bounded_int(
+            self.canvas_height,
+            default=PINTEREST_CANVAS_HEIGHT,
+            minimum=PINTEREST_CANVAS_HEIGHT,
+            maximum=PINTEREST_CANVAS_HEIGHT,
+        )
+        self.template_count = _bounded_int(
+            self.template_count,
+            default=PINTEREST_TEMPLATE_COUNT,
+            minimum=PINTEREST_TEMPLATE_COUNT,
+            maximum=PINTEREST_TEMPLATE_COUNT,
+        )
+        self.ai_scene_count = _bounded_int(
+            self.ai_scene_count,
+            default=PINTEREST_AI_SCENE_COUNT,
+            minimum=PINTEREST_AI_SCENE_COUNT,
+            maximum=PINTEREST_AI_SCENE_COUNT,
+        )
+        self.product_paths = _string_list(self.product_paths, limit=MAX_SELECTED_FILES)
+        self.selected_product_index = _bounded_int(
+            self.selected_product_index,
+            default=0,
+            minimum=0,
+            maximum=max(0, len(self.product_paths) - 1),
+        )
+        for name in (
+            "pin_title",
+            "pin_subtitle",
+            "pin_cta",
+            "style",
+            "background_description",
+            "color_palette",
+        ):
+            setattr(self, name, _text(getattr(self, name)))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "canvas_width": self.canvas_width,
+            "canvas_height": self.canvas_height,
+            "template_count": self.template_count,
+            "ai_scene_count": self.ai_scene_count,
+            "product_paths": list(self.product_paths),
+            "selected_product_index": self.selected_product_index,
+            "pin_title": self.pin_title,
+            "pin_subtitle": self.pin_subtitle,
+            "pin_cta": self.pin_cta,
+            "style": self.style,
+            "background_description": self.background_description,
+            "color_palette": self.color_palette,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Any) -> PinterestPinData:
+        data = value if isinstance(value, Mapping) else {}
+        return cls(
+            canvas_width=data.get("canvas_width", PINTEREST_CANVAS_WIDTH),
+            canvas_height=data.get("canvas_height", PINTEREST_CANVAS_HEIGHT),
+            template_count=data.get("template_count", PINTEREST_TEMPLATE_COUNT),
+            ai_scene_count=data.get("ai_scene_count", PINTEREST_AI_SCENE_COUNT),
+            product_paths=data.get("product_paths", []),
+            selected_product_index=data.get("selected_product_index", 0),
+            pin_title=data.get("pin_title", ""),
+            pin_subtitle=data.get("pin_subtitle", ""),
+            pin_cta=data.get("pin_cta", ""),
+            style=data.get("style", ""),
+            background_description=data.get("background_description", ""),
+            color_palette=data.get("color_palette", ""),
+        )
+
+
+_PINTEREST_VARIANT_KINDS = frozenset({"template", "ai_scene"})
+_PINTEREST_RESULT_STATUSES = frozenset({"pending", "success", "failed"})
+_PINTEREST_EXPORT_STATUSES = frozenset({"not_exported", "exported", "failed"})
+
+
+@dataclass
+class PinterestPinResultData:
+    variant_id: str = ""
+    variant_kind: str = "template"
+    source_product_path: str = ""
+    output_path: str = ""
+    accepted: bool = False
+    status: str = "pending"
+    retryable: bool = False
+    product_layer_digest: str = ""
+    export_status: str = "not_exported"
+    error_code: str = ""
+    error_message: str = ""
+
+    def __post_init__(self) -> None:
+        self.variant_id = _text(self.variant_id, limit=200)
+        self.variant_kind = _text(self.variant_kind, limit=30)
+        if self.variant_kind not in _PINTEREST_VARIANT_KINDS:
+            self.variant_kind = "template"
+        self.source_product_path = _text(self.source_product_path)
+        self.output_path = _text(self.output_path)
+        self.accepted = _boolean(self.accepted, default=False)
+        self.status = _text(self.status, limit=30)
+        if self.status not in _PINTEREST_RESULT_STATUSES:
+            self.status = "pending"
+        self.retryable = _boolean(self.retryable, default=False)
+        self.product_layer_digest = _text(self.product_layer_digest, limit=200)
+        self.export_status = _text(self.export_status, limit=30)
+        if self.export_status not in _PINTEREST_EXPORT_STATUSES:
+            self.export_status = "not_exported"
+        self.error_code = _text(self.error_code, limit=100)
+        self.error_message = _text(self.error_message, limit=1000)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "variant_id": self.variant_id,
+            "variant_kind": self.variant_kind,
+            "source_product_path": self.source_product_path,
+            "output_path": self.output_path,
+            "accepted": self.accepted,
+            "status": self.status,
+            "retryable": self.retryable,
+            "product_layer_digest": self.product_layer_digest,
+            "export_status": self.export_status,
+            "error_code": self.error_code,
+            "error_message": self.error_message,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Any) -> PinterestPinResultData:
+        data = value if isinstance(value, Mapping) else {}
+        return cls(
+            **{
+                item.name: data.get(item.name, item.default)
+                for item in dataclass_fields(cls)
+            }
+        )
+
+
+def _pinterest_pin_results(value: Any) -> list[PinterestPinResultData]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        return []
+    return [
+        PinterestPinResultData.from_dict(item)
+        for item in value[:MAX_PIN_RESULTS]
+        if isinstance(item, Mapping)
+    ]
+
+
+@dataclass
 class PinterestModeData:
     prompts: list[PromptEntry] = field(default_factory=list)
     prompt_generator: PromptGeneratorData = field(
@@ -769,6 +940,8 @@ class PinterestModeData:
             remove_background=False,
         )
     )
+    pin: PinterestPinData = field(default_factory=PinterestPinData)
+    results: list[PinterestPinResultData] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -776,6 +949,8 @@ class PinterestModeData:
             "prompt_generator": self.prompt_generator.to_dict(),
             "generation": self.generation.to_dict(),
             "operations": self.operations.to_dict(),
+            "pin": self.pin.to_dict(),
+            "results": [result.to_dict() for result in self.results],
         }
 
     @classmethod
@@ -803,6 +978,8 @@ class PinterestModeData:
                 if isinstance(data.get("operations"), Mapping)
                 else {}
             ),
+            pin=PinterestPinData.from_dict(data.get("pin", {})),
+            results=_pinterest_pin_results(data.get("results", [])),
         )
 
 
@@ -1105,6 +1282,110 @@ def _validate_verification_records(processing: Mapping[str, Any]) -> None:
                     f"Project draft field {name} has an inconsistent evidence stage"
                 )
 
+
+def _validate_pinterest_pin_data(pinterest: Mapping[str, Any]) -> None:
+    if "pin" not in pinterest:
+        return
+    pin = _draft_object(pinterest, "pin")
+    allowed = tuple(item.name for item in dataclass_fields(PinterestPinData))
+    _reject_unknown_fields(pin, allowed, "pinterest.pin")
+    if set(pin) != set(allowed):
+        raise ProjectStateError("Project draft field pinterest.pin is incomplete")
+    for key in (
+        "canvas_width",
+        "canvas_height",
+        "template_count",
+        "ai_scene_count",
+        "selected_product_index",
+    ):
+        if type(pin[key]) is not int:
+            raise ProjectStateError(
+                f"Project draft field pinterest.pin.{key} must be an integer"
+            )
+    for key in (
+        "pin_title",
+        "pin_subtitle",
+        "pin_cta",
+        "style",
+        "background_description",
+        "color_palette",
+    ):
+        if not isinstance(pin[key], str):
+            raise ProjectStateError(
+                f"Project draft field pinterest.pin.{key} must be a string"
+            )
+    if not isinstance(pin["product_paths"], list) or not all(
+        isinstance(path, str) for path in pin["product_paths"]
+    ):
+        raise ProjectStateError(
+            "Project draft field pinterest.pin.product_paths must be a string list"
+        )
+    if len(pin["product_paths"]) > MAX_SELECTED_FILES:
+        raise ProjectStateError(
+            "Project draft field pinterest.pin.product_paths has too many items"
+        )
+    if pin["canvas_width"] != PINTEREST_CANVAS_WIDTH:
+        raise ProjectStateError(
+            "Project draft field pinterest.pin.canvas_width is unsupported"
+        )
+    if pin["canvas_height"] != PINTEREST_CANVAS_HEIGHT:
+        raise ProjectStateError(
+            "Project draft field pinterest.pin.canvas_height is unsupported"
+        )
+    if pin["template_count"] != PINTEREST_TEMPLATE_COUNT:
+        raise ProjectStateError(
+            "Project draft field pinterest.pin.template_count is unsupported"
+        )
+    if pin["ai_scene_count"] != PINTEREST_AI_SCENE_COUNT:
+        raise ProjectStateError(
+            "Project draft field pinterest.pin.ai_scene_count is unsupported"
+        )
+    if not 0 <= pin["selected_product_index"] < max(1, len(pin["product_paths"])):
+        raise ProjectStateError(
+            "Project draft field pinterest.pin.selected_product_index is out of range"
+        )
+
+
+def _validate_pinterest_results(pinterest: Mapping[str, Any]) -> None:
+    if "results" not in pinterest:
+        return
+    results = pinterest["results"]
+    if not isinstance(results, list) or len(results) > MAX_PIN_RESULTS:
+        raise ProjectStateError(
+            "Project draft field pinterest.results must be a bounded list"
+        )
+    allowed = tuple(item.name for item in dataclass_fields(PinterestPinResultData))
+    for index, result in enumerate(results):
+        name = f"pinterest.results[{index}]"
+        if not isinstance(result, Mapping):
+            raise ProjectStateError(f"Project draft field {name} must be an object")
+        _reject_unknown_fields(result, allowed, name)
+        if set(result) != set(allowed):
+            raise ProjectStateError(f"Project draft field {name} is incomplete")
+        for key in ("accepted", "retryable"):
+            if not isinstance(result[key], bool):
+                raise ProjectStateError(
+                    f"Project draft field {name}.{key} must be boolean"
+                )
+        for key in set(allowed) - {"accepted", "retryable"}:
+            if not isinstance(result[key], str):
+                raise ProjectStateError(
+                    f"Project draft field {name}.{key} must be a string"
+                )
+        if result["variant_kind"] not in _PINTEREST_VARIANT_KINDS:
+            raise ProjectStateError(
+                f"Project draft field {name}.variant_kind is unsupported"
+            )
+        if result["status"] not in _PINTEREST_RESULT_STATUSES:
+            raise ProjectStateError(
+                f"Project draft field {name}.status is unsupported"
+            )
+        if result["export_status"] not in _PINTEREST_EXPORT_STATUSES:
+            raise ProjectStateError(
+                f"Project draft field {name}.export_status is unsupported"
+            )
+
+
 def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     _reject_unknown_fields(
         value,
@@ -1171,7 +1452,14 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     pinterest = _draft_object(value, "pinterest")
     _reject_unknown_fields(
         pinterest,
-        ("prompts", "prompt_generator", "generation", "operations"),
+        (
+            "prompts",
+            "prompt_generator",
+            "generation",
+            "operations",
+            "pin",
+            "results",
+        ),
         "pinterest",
     )
     _validate_prompt_section(pinterest, "pinterest")
@@ -1190,6 +1478,8 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         ImageOperationData,
         "pinterest.operations",
     )
+    _validate_pinterest_pin_data(pinterest)
+    _validate_pinterest_results(pinterest)
 
     processing = _draft_object(value, "processing")
     _reject_unknown_fields(

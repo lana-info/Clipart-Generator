@@ -18,6 +18,9 @@ _FIELD_LABELS: Final[dict[str, dict[str, str]]] = {
         "branding": "Branding",
         "visual_hierarchy": "Visual hierarchy",
         "style": "Style",
+        "scene": "Scene",
+        "layout": "Layout",
+        "text": "Text",
         "restrictions": "Restrictions",
     },
     "ru": {
@@ -31,6 +34,9 @@ _FIELD_LABELS: Final[dict[str, dict[str, str]]] = {
         "branding": "Брендинг",
         "visual_hierarchy": "Визуальная иерархия",
         "style": "Стиль",
+        "scene": "Сцена",
+        "layout": "Макет",
+        "text": "Текст",
         "restrictions": "Ограничения",
     },
 }
@@ -64,6 +70,9 @@ class PinterestPromptFields:
     branding: str = ""
     visual_hierarchy: str = ""
     style: str = ""
+    scene: str = ""
+    layout: str = ""
+    text: str = ""
     restrictions: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -78,6 +87,9 @@ class PinterestPromptFields:
             "branding",
             "visual_hierarchy",
             "style",
+            "scene",
+            "layout",
+            "text",
         ):
             object.__setattr__(self, name, _text(getattr(self, name)))
         object.__setattr__(self, "restrictions", _unique(tuple(self.restrictions)))
@@ -94,6 +106,9 @@ class PinterestPromptFields:
             "branding": self.branding,
             "visual_hierarchy": self.visual_hierarchy,
             "style": self.style,
+            "scene": self.scene,
+            "layout": self.layout,
+            "text": self.text,
             "restrictions": list(self.restrictions),
         }
 
@@ -122,6 +137,9 @@ def render_pinterest_prompt(
         "branding",
         "visual_hierarchy",
         "style",
+        "scene",
+        "layout",
+        "text",
         "restrictions",
     ):
         value = fields.to_dict()[name]

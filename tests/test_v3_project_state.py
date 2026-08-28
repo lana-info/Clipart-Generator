@@ -11,6 +11,8 @@ from v3_project_state import (
     CommonProjectData,
     GenerationData,
     ImageOperationData,
+    PinterestPinData,
+    PinterestPinResultData,
     PinterestModeData,
     ProcessingModeData,
     ProjectMode,
@@ -136,6 +138,111 @@ class ProjectRoutesTests(unittest.TestCase):
 
 
 class ProjectSerializationTests(unittest.TestCase):
+    def test_pinterest_pin_draft_defaults_are_serializable(self):
+        draft = PinterestPinData()
+
+        self.assertEqual(draft.canvas_width, 1000)
+        self.assertEqual(draft.canvas_height, 1500)
+        self.assertEqual(draft.template_count, 3)
+        self.assertEqual(draft.ai_scene_count, 3)
+        self.assertEqual(draft.product_paths, [])
+        self.assertEqual(draft.selected_product_index, 0)
+        self.assertEqual(draft.pin_title, "")
+        self.assertEqual(draft.pin_subtitle, "")
+        self.assertEqual(draft.pin_cta, "")
+        self.assertEqual(draft.style, "")
+        self.assertEqual(draft.background_description, "")
+        self.assertEqual(draft.color_palette, "")
+        self.assertEqual(
+            PinterestPinData.from_dict(draft.to_dict()).to_dict(),
+            draft.to_dict(),
+        )
+
+    def test_pinterest_pin_draft_normalizes_bounds_and_selected_product(self):
+        draft = PinterestPinData(
+            canvas_width=0,
+            canvas_height=99999,
+            template_count=0,
+            ai_scene_count=99,
+            product_paths=["  D:/one.png  ", "", "D:/two.png"],
+            selected_product_index=99,
+        )
+
+        self.assertEqual(draft.canvas_width, 1000)
+        self.assertEqual(draft.canvas_height, 1500)
+        self.assertEqual(draft.template_count, 3)
+        self.assertEqual(draft.ai_scene_count, 3)
+        self.assertEqual(draft.product_paths, ["D:/one.png", "D:/two.png"])
+        self.assertEqual(draft.selected_product_index, 1)
+
+    def test_pinterest_pin_results_round_trip_as_metadata_without_image_bytes(self):
+        state = ProjectState(
+            mode=ProjectMode.PINTEREST,
+            pinterest=PinterestModeData(
+                pin=PinterestPinData(
+                    product_paths=["D:/product.png"],
+                    pin_title="Summer collection",
+                ),
+                results=[
+                    PinterestPinResultData(
+                        variant_id="template-1",
+                        variant_kind="template",
+                        source_product_path="D:/product.png",
+                        output_path="D:/output/template-1.png",
+                        accepted=True,
+                        status="success",
+                        retryable=False,
+                        product_layer_digest="abc123",
+                        export_status="exported",
+                    ),
+                    PinterestPinResultData(
+                        variant_id="scene-1",
+                        variant_kind="ai_scene",
+                        source_product_path="D:/product.png",
+                        status="failed",
+                        retryable=True,
+                        product_layer_digest="abc123",
+                        error_code="background_generation_failed",
+                        error_message="Не удалось создать фон. Повторите попытку.",
+                    ),
+                ],
+            ),
+        )
+
+        payload = state.to_dict()
+        restored = ProjectState.from_dict(payload)
+
+        self.assertEqual(restored.to_dict(), payload)
+        self.assertNotIn("image", payload["pinterest"]["results"][0])
+        self.assertEqual(
+            restored.pinterest.results[1].error_code,
+            "background_generation_failed",
+        )
+
+    def test_old_pinterest_project_loads_with_new_pin_defaults(self):
+        payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
+        del payload["pinterest"]["pin"]
+        del payload["pinterest"]["results"]
+
+        restored = ProjectState.from_dict(payload)
+
+        self.assertEqual(restored.pinterest.pin, PinterestPinData())
+        self.assertEqual(restored.pinterest.results, [])
+
+    def test_project_draft_rejects_invalid_pinterest_dimensions_and_counts(self):
+        for field, invalid_value in (
+            ("canvas_width", 999),
+            ("canvas_height", 1499),
+            ("template_count", 2),
+            ("ai_scene_count", 4),
+        ):
+            with self.subTest(field=field):
+                payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
+                payload["pinterest"]["pin"][field] = invalid_value
+
+                with self.assertRaises(ProjectStateError):
+                    ProjectState.from_dict(payload)
+
     def complete_state(self):
         return ProjectState(
             mode=ProjectMode.PINTEREST,

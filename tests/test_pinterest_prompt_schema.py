@@ -70,9 +70,30 @@ class PinterestPromptSchemaTests(unittest.TestCase):
                 "branding",
                 "visual_hierarchy",
                 "style",
+                "scene",
+                "layout",
+                "text",
                 "restrictions",
             },
         )
+
+    def test_renderer_includes_scene_layout_and_text_with_localized_labels(self):
+        fields = PinterestPromptFields(
+            scene="sunlit studio shelf",
+            layout="product on the lower right",
+            text="Handmade ceramic vase",
+            restrictions=("do not redraw the product",),
+        )
+
+        english = render_pinterest_prompt(fields, language="en")
+        russian = render_pinterest_prompt(fields, language="ru")
+
+        self.assertIn("Scene: sunlit studio shelf.", english)
+        self.assertIn("Layout: product on the lower right.", english)
+        self.assertIn("Text: Handmade ceramic vase.", english)
+        self.assertIn("Сцена: sunlit studio shelf.", russian)
+        self.assertIn("Макет: product on the lower right.", russian)
+        self.assertIn("Текст: Handmade ceramic vase.", russian)
 
 
 if __name__ == "__main__":
