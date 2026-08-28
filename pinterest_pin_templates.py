@@ -138,8 +138,12 @@ def _wrap_text(
     return lines
 
 
-def _line_height(draw: ImageDraw.ImageDraw, font: ImageFont.ImageFont) -> int:
-    bbox = draw.textbbox((0, 0), "Ag", font=font, anchor="lt")
+def _line_height(
+    draw: ImageDraw.ImageDraw,
+    font: ImageFont.ImageFont,
+    text: str = "Ag",
+) -> int:
+    bbox = draw.textbbox((0, 0), text or "Ag", font=font, anchor="lt")
     return max(1, bbox[3] - bbox[1])
 
 
@@ -156,16 +160,16 @@ def _draw_text(
     left, top, right, bottom = box
     max_width = max(1, right - left)
     max_height = max(1, bottom - top)
-    title_max = max(16, round(72 * scale))
-    title_min = max(10, round(28 * scale))
-    subtitle_size = max(12, round(27 * scale))
-    cta_size = max(12, round(24 * scale))
+    title_max = max(1, round(72 * scale))
+    subtitle_size = max(1, round(27 * scale))
+    cta_size = max(1, round(24 * scale))
+    gap = min(12, max_height // 20)
 
     selected: tuple[ImageFont.ImageFont, list[str], ImageFont.ImageFont, list[str], ImageFont.ImageFont, list[str]] | None = None
-    for title_size in range(title_max, title_min - 1, -2):
+    for title_size in range(title_max, 0, -1):
         title_font = _font(title_size, bold=True)
-        subtitle_font = _font(min(subtitle_size, max(title_size // 2, 12)), bold=False)
-        cta_font = _font(min(cta_size, max(title_size // 2, 12)), bold=True)
+        subtitle_font = _font(min(subtitle_size, max(title_size // 2, 1)), bold=False)
+        cta_font = _font(min(cta_size, max(title_size // 2, 1)), bold=True)
         title_lines = _wrap_text(draw, title, title_font, max_width=max_width, max_lines=3)
         subtitle_lines = _wrap_text(
             draw,
@@ -176,11 +180,11 @@ def _draw_text(
         )
         cta_lines = _wrap_text(draw, cta, cta_font, max_width=max_width, max_lines=1)
         heights = [
-            _line_height(draw, title_font) * len(title_lines),
-            _line_height(draw, subtitle_font) * len(subtitle_lines),
-            _line_height(draw, cta_font) * len(cta_lines),
+            sum(_line_height(draw, title_font, line) for line in title_lines),
+            sum(_line_height(draw, subtitle_font, line) for line in subtitle_lines),
+            sum(_line_height(draw, cta_font, line) for line in cta_lines),
         ]
-        gaps = 12 * sum(bool(lines) for lines in (title_lines, subtitle_lines, cta_lines))
+        gaps = gap * sum(bool(lines) for lines in (title_lines, subtitle_lines, cta_lines))
         if sum(heights) + gaps <= max_height:
             selected = (
                 title_font,
@@ -193,17 +197,7 @@ def _draw_text(
             break
 
     if selected is None:
-        title_font = _font(title_min, bold=True)
-        subtitle_font = _font(max(10, round(18 * scale)), bold=False)
-        cta_font = _font(max(10, round(17 * scale)), bold=True)
-        selected = (
-            title_font,
-            _wrap_text(draw, title, title_font, max_width=max_width, max_lines=2),
-            subtitle_font,
-            _wrap_text(draw, subtitle, subtitle_font, max_width=max_width, max_lines=2),
-            cta_font,
-            _wrap_text(draw, cta, cta_font, max_width=max_width, max_lines=1),
-        )
+        return
 
     cursor_y = top
     for font, lines in (
@@ -219,9 +213,9 @@ def _draw_text(
                 fill=(34, 43, 51, 255),
                 anchor="lt",
             )
-            cursor_y += _line_height(draw, font)
+            cursor_y += _line_height(draw, font, line)
         if lines:
-            cursor_y += 12
+            cursor_y += gap
 
 
 def _draw_background(

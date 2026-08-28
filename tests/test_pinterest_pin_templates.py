@@ -85,6 +85,41 @@ class PinterestPinTemplatesTests(unittest.TestCase):
 
         self.assertEqual(product.tobytes(), before)
 
+    def test_long_text_ink_is_contained_in_text_box_on_small_canvas(self):
+        product = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
+        long_text = "A very long Pinterest title subtitle and call to action " * 8
+        width, height = 300, 450
+
+        for spec in pinterest_template_specs():
+            with self.subTest(template_id=spec.template_id):
+                result = render_template_pin(
+                    product,
+                    title=long_text,
+                    subtitle=long_text,
+                    cta=long_text,
+                    template_id=spec.template_id,
+                    width=width,
+                    height=height,
+                )
+                text_box = tuple(
+                    round(value * (width / 1000 if index % 2 == 0 else height / 1500))
+                    for index, value in enumerate(spec.text_box)
+                )
+                ink = Image.new("1", result.size, 0)
+                result_pixels = result.load()
+                ink_pixels = ink.load()
+                for y in range(height):
+                    for x in range(width):
+                        red, green, blue, alpha = result_pixels[x, y]
+                        ink_pixels[x, y] = alpha > 0 and max(red, green, blue) < 120
+
+                ink_box = ink.getbbox()
+                self.assertIsNotNone(ink_box)
+                self.assertGreaterEqual(ink_box[0], text_box[0])
+                self.assertGreaterEqual(ink_box[1], text_box[1])
+                self.assertLessEqual(ink_box[2], text_box[2])
+                self.assertLessEqual(ink_box[3], text_box[3])
+
 
 if __name__ == "__main__":
     unittest.main()
