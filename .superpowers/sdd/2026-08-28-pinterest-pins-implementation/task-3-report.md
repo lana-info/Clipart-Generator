@@ -37,3 +37,29 @@
 - Реальные rembg/BEN2 inference не запускались: это могло бы скачать модель или
   занять ресурсы. Их alpha-only boundary проверен изолированными adapter-тестами;
   контролируемый интеграционный прогон остаётся задачей следующей стадии.
+
+## Review remediation — 2026-08-28
+
+- `ProductLayer` теперь сохраняет normalised RGB и alpha как immutable bytes и
+  возвращает defensive Pillow copies. Внешняя мутация `rgba` или `alpha_mask`
+  больше не изменяет digest либо композитинг.
+- Shadow строится на полном canvas и вырезается по финальной области любого
+  product alpha `> 0`, поэтому не меняет RGB или alpha даже полупрозрачного
+  товара.
+- Fidelity guard использует сохранённый только в памяти детерминированный
+  reference product region, проверяет RGB и alpha всех transformed pixels с
+  alpha `> 0`, а сообщения содержат лишь count и максимум пять координат.
+- Export теперь принимает PNG, JPG и JPEG. JPEG детерминированно flatten’ится
+  на белую подложку в RGB; TIFF и остальные неподдерживаемые форматы отклоняются.
+- Provider/load/export error paths больше не chain’ят сырые причины с путями,
+  сообщениями provider’а или секретами; наружу выдаются только safe domain errors.
+
+### Regression evidence
+
+- RED: после добавления review-тестов — `6 failed, 9 passed`: raw provider
+  cause, mutation `ProductLayer`, shadow overlap, two partial-alpha guard cases
+  и JPG export.
+- После минимальной реализации временно оставалось четыре guard failure:
+  evidence записывал digest resize-layer вместо protected source. Поток был
+  проверен отдельным digest probe; исправлено место записи evidence.
+- GREEN: `15 passed` в focused composer suite.

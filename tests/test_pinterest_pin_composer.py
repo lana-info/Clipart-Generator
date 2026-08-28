@@ -31,6 +31,12 @@ def _hard_alpha(size: tuple[int, int]) -> Image.Image:
     return alpha
 
 
+def _semi_alpha(size: tuple[int, int]) -> Image.Image:
+    alpha = Image.new("L", size, 0)
+    alpha.paste(128, (1, 1, size[0] - 1, size[1] - 1))
+    return alpha
+
+
 def _product_layer(source: Image.Image, alpha: Image.Image):
     module = _require_composer()
     rgba = source.convert("RGBA")
@@ -100,6 +106,24 @@ def test_load_rejects_malformed_provider_mask_without_changing_product_rgb(tmp_p
         assert unchanged.convert("RGB").tobytes() == source.tobytes()
 
 
+def test_provider_failure_is_a_sanitized_domain_error_without_a_raw_cause(tmp_path, monkeypatch):
+    module = _require_composer()
+    source_path = tmp_path / "private-product.png"
+    _rgb_fixture().save(source_path, format="PNG")
+
+    def failing_provider(image):
+        raise RuntimeError("provider failure at /private/product.png; api_key=secret-value")
+
+    monkeypatch.setitem(module._BACKGROUND_MASK_PROVIDERS, "external", failing_provider)
+
+    with pytest.raises(module.ProductLayerError) as error:
+        module.load_product_layer(str(source_path), background_provider="external")
+
+    assert str(error.value) == "background removal provider failed"
+    assert error.value.__cause__ is None
+    assert error.value.__suppress_context__ is True
+
+
 @pytest.mark.parametrize(
     ("provider_name", "adapter_name"),
     (("local_rembg", "_alpha_with_local_rembg"), ("local_ben2", "_alpha_with_local_ben2")),
@@ -139,6 +163,27 @@ def test_product_layer_digest_is_stable_and_includes_source_rgb_and_alpha():
     assert module.product_layer_digest(_product_layer(source, changed_alpha)) != expected
 
 
+def test_product_layer_defensive_copies_prevent_external_pillow_mutation():
+    module = _require_composer()
+    source = _rgb_fixture()
+    alpha = _hard_alpha(source.size)
+    product = _product_layer(source, alpha)
+    box = (220, 350, 780, 1100)
+    expected = module.composite_product(
+        Image.new("RGBA", (1000, 1500), (21, 37, 53, 255)), product, box=box, add_shadow=False
+    )
+    digest = module.product_layer_digest(product)
+
+    product.rgba.putpixel((3, 2), (255, 0, 255, 0))
+    product.alpha_mask.putpixel((3, 2), 0)
+
+    actual = module.composite_product(
+        Image.new("RGBA", (1000, 1500), (21, 37, 53, 255)), product, box=box, add_shadow=False
+    )
+    assert module.product_layer_digest(product) == digest
+    assert actual.tobytes() == expected.tobytes()
+
+
 def test_composite_matches_deterministic_resize_reference_and_preserves_product_pixels():
     module = _require_composer()
     source = _rgb_fixture((8, 6))
@@ -155,6 +200,22 @@ def test_composite_matches_deterministic_resize_reference_and_preserves_product_
     assert "A" in result.getbands()
     assert result.tobytes() == reference.tobytes()
     module.assert_product_pixels_preserved(product.rgba, result, product_box=box)
+
+
+def test_shadow_never_changes_any_alpha_bearing_product_pixel():
+    module = _require_composer()
+    source = _rgb_fixture((8, 6))
+    product = _product_layer(source, _semi_alpha(source.size))
+    box = (220, 350, 780, 1100)
+    background = Image.new("RGBA", (1000, 1500), (21, 37, 53, 255))
+    without_shadow = module.composite_product(background, product, box=box, add_shadow=False)
+    with_shadow = module.composite_product(background, product, box=box, add_shadow=True)
+    transformed_alpha = product.alpha_mask.resize((560, 750), Image.Resampling.LANCZOS)
+
+    for y in range(transformed_alpha.height):
+        for x in range(transformed_alpha.width):
+            if transformed_alpha.getpixel((x, y)) > 0:
+                assert with_shadow.getpixel((box[0] + x, box[1] + y)) == without_shadow.getpixel((box[0] + x, box[1] + y))
 
 
 def test_fidelity_guard_reports_only_mismatch_count_and_locations():
@@ -175,7 +236,32 @@ def test_fidelity_guard_reports_only_mismatch_count_and_locations():
     assert "(450, 650)" in message
 
 
-def test_save_pin_exports_atomically_with_alpha_and_rejects_jpeg(tmp_path):
+def test_fidelity_guard_detects_rgb_change_inside_a_semitransparent_product_pixel():
+    module = _require_composer()
+    source = _rgb_fixture((8, 6))
+    product = _product_layer(source, _semi_alpha(source.size))
+    box = (220, 350, 780, 1100)
+    result = module.composite_product(Image.new("RGBA", (1000, 1500)), product, box=box, add_shadow=False)
+    result.putpixel((450, 650), (0, 0, 0, 128))
+
+    with pytest.raises(module.ProductFidelityError, match="mismatched pixels"):
+        module.assert_product_pixels_preserved(product.rgba, result, product_box=box)
+
+
+def test_fidelity_guard_detects_alpha_change_inside_a_semitransparent_product_pixel():
+    module = _require_composer()
+    source = _rgb_fixture((8, 6))
+    product = _product_layer(source, _semi_alpha(source.size))
+    box = (220, 350, 780, 1100)
+    result = module.composite_product(Image.new("RGBA", (1000, 1500)), product, box=box, add_shadow=False)
+    original = result.getpixel((450, 650))
+    result.putpixel((450, 650), (*original[:3], original[3] - 1))
+
+    with pytest.raises(module.ProductFidelityError, match="mismatched pixels"):
+        module.assert_product_pixels_preserved(product.rgba, result, product_box=box)
+
+
+def test_save_pin_exports_png_and_jpeg_with_a_white_matte(tmp_path):
     module = _require_composer()
     image = Image.new("RGBA", (1000, 1500), (12, 34, 56, 128))
     output = tmp_path / "result.png"
@@ -190,7 +276,19 @@ def test_save_pin_exports_atomically_with_alpha_and_rejects_jpeg(tmp_path):
         assert saved.getchannel("A").getextrema() == (128, 128)
     assert not list(tmp_path.glob(".result.png.*.tmp"))
 
-    unsafe_path = tmp_path / "unsafe.jpg"
-    with pytest.raises(module.PinExportError, match="does not preserve alpha"):
-        module.save_pin(image, str(unsafe_path), format="JPEG")
+    jpeg_path = tmp_path / "result.jpg"
+    module.save_pin(image, str(jpeg_path), format="JPG")
+    with Image.open(jpeg_path) as saved_jpeg:
+        saved_jpeg.load()
+        assert saved_jpeg.mode == "RGB"
+        assert saved_jpeg.size == (1000, 1500)
+        expected_rgb = Image.alpha_composite(
+            Image.new("RGBA", image.size, (255, 255, 255, 255)), image
+        ).convert("RGB").getpixel((0, 0))
+        actual_rgb = saved_jpeg.getpixel((0, 0))
+        assert all(abs(actual - expected) <= 1 for actual, expected in zip(actual_rgb, expected_rgb))
+
+    unsafe_path = tmp_path / "unsafe.tiff"
+    with pytest.raises(module.PinExportError, match="unsupported"):
+        module.save_pin(image, str(unsafe_path), format="TIFF")
     assert not unsafe_path.exists()
