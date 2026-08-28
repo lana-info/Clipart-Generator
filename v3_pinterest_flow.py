@@ -521,6 +521,16 @@ class PinterestPinWorkerAdapter(QThread):
 
     def _run(self) -> None:
         try:
+            self.item_progress.emit(
+                {
+                    "item_index": 1,
+                    "total_items": len(self.request.queue_items),
+                    "stage": "pinterest_orchestration",
+                    "status": "running",
+                    "percent": 0,
+                    "indeterminate": True,
+                }
+            )
             self.variants = self.orchestrator.build(
                 self.request,
                 cancelled=self._cancelled.is_set,

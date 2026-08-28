@@ -63,7 +63,7 @@ class CancellationAwarePinterestOrchestrator:
         del request
         self.thread_id = threading.get_ident()
         self.started.set()
-        self.released.wait(timeout=1)
+        self.released.wait(timeout=5)
         self.cancelled = cancelled()
         return self.variants
 
@@ -381,6 +381,75 @@ class V3PinterestFlowTests(unittest.TestCase):
 
         self.assertFalse(orchestrator.cancelled)
         self.assertIn("ai-scene-01", worker.output_paths)
+
+    def test_queue_stop_after_current_keeps_active_pinterest_variant(self):
+        """Missing pre-build RUNNING makes shared deferred stop cancel the active slot."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-queue-stop-") as temp:
+            state = self.make_state(temp)
+            state.set_step(StepId.REVIEW_RUN)
+            variants = tuple(
+                PinVariant(
+                    variant_id=variant_id,
+                    variant_kind=variant_kind,
+                    image=Image.new("RGBA", (1000, 1500), "white"),
+                    source_product_path="product.png",
+                    scene_prompt="",
+                    status="success",
+                    retryable=False,
+                    product_layer_digest="protected-digest",
+                )
+                for variant_id, variant_kind in (
+                    ("template-01", "template"),
+                    ("template-02", "template"),
+                    ("template-03", "template"),
+                    ("ai-scene-01", "ai_scene"),
+                    ("ai-scene-02", "ai_scene"),
+                    ("ai-scene-03", "ai_scene"),
+                )
+            )
+            orchestrator = CancellationAwarePinterestOrchestrator(variants)
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                authorization_provider=lambda: None,
+            )
+            workers: list[PinterestPinWorkerAdapter] = []
+
+            def create_worker(request):
+                worker = PinterestPinWorkerAdapter(
+                    request,
+                    orchestrator=orchestrator,
+                )
+                workers.append(worker)
+                return worker
+
+            controller.create_worker_for_request = create_worker  # type: ignore[method-assign]
+            shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
+            self.assertIsNotNone(controller.start())
+            worker = workers[0]
+            self.assertTrue(orchestrator.started.wait(timeout=1))
+            deadline = time.monotonic() + 1
+            while (
+                controller.run_queue.session.items[0].status is not RunItemStatus.RUNNING
+                and time.monotonic() < deadline
+            ):
+                self.app.processEvents()
+                time.sleep(0.01)
+
+            self.assertIs(
+                controller.run_queue.session.items[0].status,
+                RunItemStatus.RUNNING,
+            )
+            self.assertTrue(controller.run_queue.stop_after_current())
+            orchestrator.released.set()
+            self.assertTrue(self.wait_for_worker(worker))
+
+        session = controller.run_queue.session
+        self.assertIs(session.items[0].status, RunItemStatus.SUCCEEDED)
+        self.assertTrue(
+            all(item.status is RunItemStatus.CANCELLED for item in session.items[1:])
+        )
+        self.assertFalse(orchestrator.cancelled)
 
     def test_pinterest_retry_sync_preserves_successful_slots_outside_retry_request(self):
         """Missing retry-local variants must not overwrite prior successful Pinterest slots."""

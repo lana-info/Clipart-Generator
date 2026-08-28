@@ -114,3 +114,28 @@ callback when one is introduced.
 - `.venv/bin/python -m py_compile v3_pinterest_flow.py v3_run_queue.py` —
   passed.
 - No Fal request, paid provider call, build, or external deployment ran.
+
+## Important Task 5 follow-up — deferred queue stop during orchestration
+
+- `PinterestPinWorkerAdapter` now emits an indexed `RUNNING` lifecycle event
+  for the first active Pinterest slot before the potentially long
+  `orchestrator.build()` call. The common `RunQueueSupport.stop_after_current()`
+  therefore uses the worker's native deferred-stop boundary instead of calling
+  immediate cancellation while orchestration is still running.
+- A regression test exercises the actual shared queue path: the active variant
+  completes after deferred stop, while all following Pinterest slots are
+  cancelled. It keeps the orchestration blocked until the queue receives the
+  stop request, preventing a timing-dependent false positive.
+- Retry selection, unexpected-exception `error` plus `finished` lifecycle, and
+  the separate Clipart worker path are unchanged.
+
+### Verification
+
+- TDD red: `tests/test_v3_pinterest_flow.py::V3PinterestFlowTests::test_queue_stop_after_current_keeps_active_pinterest_variant`
+  failed with the first slot still `PENDING` during `orchestrator.build()`.
+- Green: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
+  tests/test_v3_clipart_flow.py tests/test_v3_pinterest_flow.py
+  tests/test_v3_run_queue.py -q` — 141 passed, 5 subtests passed.
+- `.venv/bin/python -m py_compile v3_pinterest_flow.py v3_run_queue.py` and
+  `git diff --check` — passed. No Fal request, paid provider call, build, or
+  external deployment ran.
