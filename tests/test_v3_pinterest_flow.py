@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -34,6 +34,7 @@ from v3_project_state import (
     migrate_v2_config,
 )
 from v3_wizard import AppShell
+from v3_run_queue import RunQueueSession
 
 
 class FakeWorker(QObject):
@@ -169,6 +170,61 @@ class V3PinterestFlowTests(unittest.TestCase):
         )
         self.assertEqual(localized_page.card.title_label.text(), "Product and pin copy")
 
+    def test_install_propagates_locale_to_real_pinterest_pages(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        shell = AppShell(state)
+        controller = install_pinterest_flow(
+            shell,
+            worker_factory=WorkerFactory(),
+            locale="en-US",
+        )
+
+        self.assertEqual(
+            controller.pages[StepId.PROMPTS].card.title_label.text(),
+            "Product and pin copy",
+        )
+        self.assertEqual(
+            controller.pages[StepId.RESULTS].card.title_label.text(),
+            "Pinterest pin preview",
+        )
+        self.assertEqual(
+            controller.pages[StepId.PIN_FORMAT_MODEL].card.title_label.text(),
+            "Format and model",
+        )
+        self.assertEqual(
+            controller.pages[StepId.PROCESSING_OPTIONS].accessibleName(),
+            "Image processing",
+        )
+        self.assertEqual(
+            controller.pages[StepId.REVIEW_RUN].card.description_label.text(),
+            "Review the image package and cost before explicitly starting it.",
+        )
+
+    def test_legacy_cleanup_draft_does_not_reach_pinterest_diagnostics(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-diagnostics-") as temp:
+            state = self.make_state(temp)
+            payload = state.to_dict()
+            payload["pinterest"]["operations"].update(
+                {"remove_background": True, "remove_exif": True, "trim": True}
+            )
+            restored = ProjectState.from_dict(payload)
+            journal = Mock()
+            request = build_pinterest_run_request(
+                restored,
+                {"kie_api_key": "test-key"},
+            )
+
+            RunQueueSession(
+                request,
+                ProjectMode.PINTEREST,
+                diagnostic_journal=journal,
+            )
+
+            details = journal.record.call_args.kwargs["details"]
+            self.assertNotIn("background_removal", details["enabled_stages"])
+            self.assertNotIn("metadata_cleanup", details["enabled_stages"])
+            self.assertNotIn("trim", details["enabled_stages"])
+
     def test_preview_has_six_selected_product_slots_and_local_acceptance_apis(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-preview-") as temp:
             first_product = Path(temp) / "first.png"
@@ -211,6 +267,97 @@ class V3PinterestFlowTests(unittest.TestCase):
             self.assertEqual(retried.status, "pending")
             self.assertTrue(retried.retryable)
             self.assertEqual(factory.workers, [])
+
+    def test_regeneration_clears_stale_export_and_fidelity_metadata(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.pinterest.results = [
+            v3_pinterest_flow.PinterestPinResultData(
+                variant_id="template-01",
+                output_path="old-result.png",
+                accepted=True,
+                status="success",
+                product_layer_digest="protected-digest",
+                export_status="exported",
+            )
+        ]
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+
+        controller.pages[StepId.RESULTS].regenerate_variant("template-01")
+
+        result = state.pinterest.results[0]
+        self.assertEqual(result.status, "pending")
+        self.assertEqual(result.output_path, "")
+        self.assertEqual(result.product_layer_digest, "")
+        self.assertEqual(result.export_status, "not_exported")
+
+    def test_worker_completion_populates_preview_slots_from_existing_queue(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-completion-") as temp:
+            output_dir = Path(temp) / "output"
+            output_dir.mkdir()
+            state = self.make_state(temp)
+            state.pinterest.prompts = [PromptEntry(f"Pin {index}") for index in range(1, 7)]
+            state.pinterest.generation.variants = 1
+            state.set_output_dir_for_mode(str(output_dir), ProjectMode.PINTEREST)
+            state.set_step(StepId.REVIEW_RUN)
+            factory = WorkerFactory()
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
+                worker_factory=factory,
+                authorization_provider=lambda: None,
+            )
+
+            shell.go_next()
+            worker = factory.workers[0]
+            for index in range(1, 7):
+                result_path = output_dir / f"pin-{index}.png"
+                Image.new("RGB", (4, 6), "white").save(result_path)
+                worker.progress.emit(f"[{index}/6] Генерация")
+                worker.progress.emit(f"Итог сохранён: {result_path}")
+            worker.started = False
+            worker.finished.emit("Готово (6/6)")
+            self.app.processEvents()
+
+            self.assertEqual(
+                [result.status for result in state.pinterest.results],
+                ["success"] * 6,
+            )
+            self.assertEqual(
+                [Path(result.output_path).name for result in state.pinterest.results],
+                [f"pin-{index}.png" for index in range(1, 7)],
+            )
+            card = controller.pages[StepId.RESULTS].variant_cards["template-01"]
+            self.assertIn("template-01", card.accessibleName())
+            self.assertTrue(
+                any(
+                    label.pixmap() is not None and not label.pixmap().isNull()
+                    for label in card.findChildren(QLabel)
+                )
+            )
+
+    def test_worker_error_marks_all_preview_slots_failed(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-worker-error-") as temp:
+            state = self.make_state(temp)
+            state.set_step(StepId.REVIEW_RUN)
+            factory = WorkerFactory()
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
+                worker_factory=factory,
+                authorization_provider=lambda: None,
+            )
+
+            shell.go_next()
+            factory.workers[0].error.emit("provider failed")
+            self.app.processEvents()
+
+            self.assertEqual(
+                [result.status for result in state.pinterest.results],
+                ["failed"] * 6,
+            )
 
     def test_preview_rebinds_existing_slots_to_the_selected_product(self):
         """A source switch must not turn the fixed six-slot series into two products."""
@@ -509,7 +656,6 @@ class V3PinterestFlowTests(unittest.TestCase):
     def test_pinterest_processing_can_be_skipped(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         state.pinterest.operations.upscale_before = False
-        state.pinterest.operations.remove_background = False
         adapter = v3_pinterest_flow._pinterest_project_adapter(state)
         page = v3_pinterest_flow.PinterestProcessingPage(adapter, lambda: None)
 

@@ -704,6 +704,86 @@ class ImageOperationData:
         )
 
 
+@dataclass(slots=True)
+class PinterestOperationData:
+    """Persist only operations that the Pinterest workflow can expose."""
+
+    upscale_before: bool = False
+    upscale_before_provider: str = "kie"
+    upscale_after: bool = False
+    upscale_after_provider: str = "local_realesrgan"
+    upscale_factor: int = 4
+    kie_upscale_model: str = KIE_TOPAZ_MODEL_ID
+    kie_upscale_after_model: str = KIE_TOPAZ_MODEL_ID
+    local_realesrgan_profile: str = "clipart"
+    local_realesrgan_scale: int = 4
+    local_realesrgan_after_scale: int = 4
+    unsharp: bool = False
+    unsharp_amount: int = 30
+    unsharp_radius: float = 100.0
+    unsharp_threshold: int = 0
+
+    def __post_init__(self) -> None:
+        normalized = ImageOperationData(
+            upscale_before=self.upscale_before,
+            upscale_before_provider=self.upscale_before_provider,
+            upscale_after=self.upscale_after,
+            upscale_after_provider=self.upscale_after_provider,
+            upscale_factor=self.upscale_factor,
+            kie_upscale_model=self.kie_upscale_model,
+            kie_upscale_after_model=self.kie_upscale_after_model,
+            local_realesrgan_profile=self.local_realesrgan_profile,
+            local_realesrgan_scale=self.local_realesrgan_scale,
+            local_realesrgan_after_scale=self.local_realesrgan_after_scale,
+            unsharp=self.unsharp,
+            unsharp_amount=self.unsharp_amount,
+            unsharp_radius=self.unsharp_radius,
+            unsharp_threshold=self.unsharp_threshold,
+            remove_background=False,
+        )
+        for definition in dataclass_fields(self):
+            setattr(self, definition.name, getattr(normalized, definition.name))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            definition.name: getattr(self, definition.name)
+            for definition in dataclass_fields(self)
+        }
+
+    @classmethod
+    def from_dict(cls, value: Any) -> PinterestOperationData:
+        source = value if isinstance(value, Mapping) else {}
+        return cls(**{
+            definition.name: source.get(definition.name, definition.default)
+            for definition in dataclass_fields(cls)
+        })
+
+    @classmethod
+    def from_image_operations(cls, value: ImageOperationData) -> PinterestOperationData:
+        return cls(**{
+            definition.name: getattr(value, definition.name)
+            for definition in dataclass_fields(cls)
+        })
+
+    def as_image_operations(self) -> ImageOperationData:
+        return ImageOperationData(
+            **self.to_dict(),
+            remove_background=False,
+            visible_mark_cleanup=False,
+            invisible_watermark_cleanup=False,
+            edge_shrink=False,
+            trim=False,
+            export_300_dpi=False,
+            remove_exif=False,
+            remove_xmp=False,
+            remove_iptc=False,
+            remove_comments_text=False,
+            remove_embedded_thumbnail=False,
+            remove_generator_fields=False,
+            remove_embedded_c2pa=False,
+        )
+
+
 def clipart_operation_defaults() -> ImageOperationData:
     return ImageOperationData(
         upscale_before=True,
@@ -941,12 +1021,7 @@ class PinterestModeData:
             reference_resolution="1K",
         )
     )
-    operations: ImageOperationData = field(
-        default_factory=lambda: ImageOperationData(
-            upscale_before=False,
-            remove_background=False,
-        )
-    )
+    operations: PinterestOperationData = field(default_factory=PinterestOperationData)
     pin: PinterestPinData = field(default_factory=PinterestPinData)
     results: list[PinterestPinResultData] = field(default_factory=list)
 
@@ -980,11 +1055,7 @@ class PinterestModeData:
                 },
                 default_ratio="9:16",
             ),
-            operations=ImageOperationData.from_dict(
-                data.get("operations", {})
-                if isinstance(data.get("operations"), Mapping)
-                else {}
-            ),
+            operations=PinterestOperationData.from_dict(data.get("operations", {})),
             pin=PinterestPinData.from_dict(data.get("pin", {})),
             results=_pinterest_pin_results(data.get("results", [])),
         )
@@ -1488,9 +1559,25 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         GenerationData,
         "pinterest.generation",
     )
+    pinterest_operations = _draft_object(pinterest, "operations")
+    pinterest_operation_fields = tuple(
+        definition.name for definition in dataclass_fields(PinterestOperationData)
+    )
+    legacy_operation_fields = tuple(
+        definition.name for definition in dataclass_fields(ImageOperationData)
+    )
+    _reject_unknown_fields(
+        pinterest_operations,
+        (*pinterest_operation_fields, *legacy_operation_fields),
+        "pinterest.operations",
+    )
+    normalized_pinterest_operations = {
+        name: pinterest_operations.get(name, getattr(PinterestOperationData(), name))
+        for name in pinterest_operation_fields
+    }
     _validate_scalar_fields(
-        _draft_object(pinterest, "operations"),
-        ImageOperationData,
+        normalized_pinterest_operations,
+        PinterestOperationData,
         "pinterest.operations",
     )
     _validate_pinterest_pin_data(pinterest)

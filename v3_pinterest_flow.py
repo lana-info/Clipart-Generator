@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -48,6 +49,7 @@ from v3_project_state import (
     MAX_SELECTED_FILES,
     PINTEREST_AI_SCENE_COUNT,
     PINTEREST_TEMPLATE_COUNT,
+    PinterestOperationData,
     PinterestModeData,
     PinterestPinResultData,
     ProjectMode,
@@ -101,6 +103,13 @@ _PINTEREST_UI_TEXT = {
         "status_pending": "Ожидает генерации",
         "status_success": "Готов",
         "status_failed": "Не удалось создать",
+        "image_unavailable": "Предпросмотр изображения недоступен",
+        "format_title": "Формат и модель",
+        "format_accessible": "Формат и модель Pinterest-пинов",
+        "format_recommendation": "Рекомендуемый вертикальный формат — 9:16. Можно выбрать любую пропорцию, поддерживаемую моделью.",
+        "processing_title": "Обработка изображений",
+        "processing_description": "Единые настройки обработки изображений для Pinterest.",
+        "review_description": "Проверьте пакет изображений и стоимость перед явным запуском.",
     },
     "en": {
         "product_input_title": "Product and pin copy",
@@ -129,6 +138,13 @@ _PINTEREST_UI_TEXT = {
         "status_pending": "Waiting for generation",
         "status_success": "Ready",
         "status_failed": "Could not generate",
+        "image_unavailable": "Image preview is unavailable",
+        "format_title": "Format and model",
+        "format_accessible": "Pinterest pin format and model",
+        "format_recommendation": "The recommended vertical format is 9:16. You can choose any ratio supported by the model.",
+        "processing_title": "Image processing",
+        "processing_description": "Shared image-processing settings for Pinterest.",
+        "review_description": "Review the image package and cost before explicitly starting it.",
     },
 }
 
@@ -166,7 +182,16 @@ class PinterestCopySuggestionService:
 class _PinterestDataAdapter:
     def __init__(self, data: PinterestModeData) -> None:
         self.data = data
-        self.operations = data.operations
+
+    @property
+    def operations(self) -> ImageOperationData:
+        return self.data.operations.as_image_operations()
+
+    @operations.setter
+    def operations(self, value: ImageOperationData) -> None:
+        if not isinstance(value, ImageOperationData):
+            raise TypeError("Pinterest operations must be ImageOperationData")
+        self.data.operations = PinterestOperationData.from_image_operations(value)
 
     @property
     def prompts(self):
@@ -530,11 +555,36 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
             source_label = QLabel(
                 f"{_pinterest_text('source', locale=self.locale)}: {source_name}"
             )
-            status_label = QLabel(self._status_text(result.status))
+            status = self._status_text(result.status)
+            status_label = QLabel(status)
             status_label.setProperty("v3Small", True)
+            card_description = "; ".join(
+                (variant_label.text(), source_label.text(), status)
+            )
+            card.setAccessibleName(card_description)
+            card.setAccessibleDescription(card_description)
             layout.addWidget(variant_label)
             layout.addWidget(source_label)
             layout.addWidget(status_label)
+            if result.status == "success" and result.output_path:
+                image_preview = QLabel()
+                image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                pixmap = QPixmap(result.output_path)
+                if pixmap.isNull():
+                    image_preview.setText(
+                        _pinterest_text("image_unavailable", locale=self.locale)
+                    )
+                else:
+                    image_preview.setPixmap(
+                        pixmap.scaled(
+                            220,
+                            280,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                    )
+                image_preview.setAccessibleName(card_description)
+                layout.addWidget(image_preview)
             if result.status == "success" and not result.product_layer_digest:
                 warning = QLabel(
                     _pinterest_text("fidelity_warning", locale=self.locale)
@@ -576,6 +626,11 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
         result.status = "pending"
         result.retryable = True
         result.accepted = False
+        result.output_path = ""
+        result.product_layer_digest = ""
+        result.export_status = "not_exported"
+        result.error_code = ""
+        result.error_message = ""
         self.changed()
         self.refresh_from_state()
 
@@ -615,8 +670,10 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         state: ProjectState,
         changed: Callable[[], None],
         *,
+        locale: str = "ru",
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
+        self.locale = normalize_locale(locale)
         requested_model = state.clipart.generation.model
         requested_reference_model = state.clipart.generation.reference_model
         super().__init__(state, changed, tokens=tokens)
@@ -634,11 +691,10 @@ class PinterestFormatModelPage(ClipartGenerationPage):
                 self.reference_model_combo.findData(requested_reference_model)
             )
             state.clipart.generation.reference_model = requested_reference_model
-        self.card.title_label.setText("Формат и модель")
-        self.setAccessibleName("Формат и модель Pinterest-пинов")
+        self.card.title_label.setText(_pinterest_text("format_title", locale=self.locale))
+        self.setAccessibleName(_pinterest_text("format_accessible", locale=self.locale))
         self.recommendation_label = QLabel(
-            "Рекомендуемый вертикальный формат — 9:16. "
-            "Можно выбрать любую пропорцию, поддерживаемую моделью."
+            _pinterest_text("format_recommendation", locale=self.locale)
         )
         self.recommendation_label.setWordWrap(True)
         self.recommendation_label.setProperty("v3Status", True)
@@ -790,12 +846,13 @@ class PinterestFormatModelPage(ClipartGenerationPage):
 
 
 class PinterestProcessingPage(ProcessingPipelineEditor):
-    def __init__(self, state: ProjectState, changed: Callable[[], None], *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
+    def __init__(self, state: ProjectState, changed: Callable[[], None], *, locale: str = "ru", tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
+        self.locale = normalize_locale(locale)
         super().__init__(
             state.clipart,
             changed,
-            title="Обработка изображений",
-            description="Единые настройки обработки изображений для Pinterest.",
+            title=_pinterest_text("processing_title", locale=self.locale),
+            description=_pinterest_text("processing_description", locale=self.locale),
             include_cleanup=False,
             require_operation=False,
             allowed_operations=workflow_for_mode(ProjectMode.PINTEREST).processing_operations,
@@ -808,11 +865,13 @@ class PinterestReviewRunPage(ClipartReviewRunPage):
         self,
         state: ProjectState,
         *,
+        locale: str = "ru",
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
+        self.locale = normalize_locale(locale)
         super().__init__(state, tokens=tokens)
         self.card.description_label.setText(
-            "Проверьте пакет изображений и стоимость перед явным запуском."
+            _pinterest_text("review_description", locale=self.locale)
         )
 
     def refresh_from_state(self) -> None:
@@ -839,9 +898,11 @@ class PinterestFlowController(QObject):
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
         authorization_provider: Callable[[], Any] | None = None,
+        locale: str = "ru",
     ) -> None:
         super().__init__(shell)
         self.shell = shell
+        self.locale = normalize_locale(locale)
         from v3_runtime_adapter import runtime_adapter_for
 
         self.runtime_adapter = runtime_adapter_for(
@@ -890,6 +951,7 @@ class PinterestFlowController(QObject):
             lambda: PinterestProductInputPage(
                 self.adapter_state,
                 changed,
+                locale=self.locale,
                 tokens=self.shell.tokens,
             ),
         )
@@ -906,6 +968,7 @@ class PinterestFlowController(QObject):
             lambda: PinterestFormatModelPage(
                 self.adapter_state,
                 changed,
+                locale=self.locale,
                 tokens=self.shell.tokens,
             ),
         )
@@ -914,6 +977,7 @@ class PinterestFlowController(QObject):
             lambda: PinterestProcessingPage(
                 self.adapter_state,
                 changed,
+                locale=self.locale,
                 tokens=self.shell.tokens,
             ),
         )
@@ -921,6 +985,7 @@ class PinterestFlowController(QObject):
             StepId.REVIEW_RUN,
             lambda: PinterestReviewRunPage(
                 self.adapter_state,
+                locale=self.locale,
                 tokens=self.shell.tokens,
             ),
         )
@@ -929,6 +994,7 @@ class PinterestFlowController(QObject):
             lambda: PinterestPinPreviewPage(
                 self.adapter_state,
                 changed,
+                locale=self.locale,
                 tokens=self.shell.tokens,
             ),
         )
@@ -1032,14 +1098,55 @@ class PinterestFlowController(QObject):
         if self.worker is not None:
             self.runtime_adapter.stop(self.worker)
 
+    def _sync_preview_results_from_queue(self) -> None:
+        """Project the completed legacy queue into the fixed Pinterest slots.
+
+        This is deliberately a completion bridge only: it neither creates a
+        Pinterest request nor starts another worker. The dedicated Pinterest
+        orchestrator remains the next task.
+        """
+        session = self.run_queue.session
+        if session is None:
+            return
+        preview = self.pages[StepId.RESULTS]
+        if not isinstance(preview, PinterestPinPreviewPage):
+            raise RuntimeError("Pinterest preview page is not installed")
+        preview.refresh_from_state()
+        from v3_run_queue import RunItemStatus
+
+        for index, result in enumerate(preview.results):
+            item = session.items[index] if index < len(session.items) else None
+            if item is not None and item.status is RunItemStatus.SUCCEEDED:
+                result.status = "success"
+                result.output_path = item.output_path
+                result.retryable = False
+                result.export_status = "not_exported"
+                result.error_code = ""
+                result.error_message = ""
+                continue
+            result.status = "failed"
+            result.output_path = ""
+            result.product_layer_digest = ""
+            result.accepted = False
+            result.retryable = True
+            result.export_status = "not_exported"
+            result.error_code = "pin_generation_failed"
+            result.error_message = PinterestPinResultData(
+                error_code=result.error_code
+            ).error_message
+        preview.refresh_from_state()
+        self.shell.mark_dirty()
+
     def _finished(self, message: str) -> None:
         self.run_queue.finished()
+        self._sync_preview_results_from_queue()
         safe_message = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe_message)
         self.finished.emit(safe_message)
 
     def _error(self, message: str) -> None:
         self.run_queue.fatal_error(message)
+        self._sync_preview_results_from_queue()
         safe_message = _safe_runtime_error(message, self._runtime_settings)
         self.review_page.set_run_status(safe_message, error=True)
         self.error.emit(safe_message)
@@ -1051,6 +1158,7 @@ def install_pinterest_flow(
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
     authorization_provider: Callable[[], Any] | None = None,
+    locale: str = "ru",
 ) -> PinterestFlowController:
     if not isinstance(shell, AppShell):
         raise TypeError("shell must be an AppShell")
@@ -1062,6 +1170,7 @@ def install_pinterest_flow(
         runtime_settings_provider=runtime_settings_provider,
         worker_factory=worker_factory,
         authorization_provider=authorization_provider,
+        locale=locale,
     )
     shell.pinterest_flow_controller = controller
     return controller

@@ -296,6 +296,27 @@ class ProjectSerializationTests(unittest.TestCase):
         self.assertEqual(restored.pinterest.pin, PinterestPinData())
         self.assertEqual(restored.pinterest.results, [])
 
+    def test_pinterest_draft_discards_legacy_cleanup_and_background_fields(self):
+        payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
+        payload["pinterest"]["operations"].update(
+            {
+                "remove_background": True,
+                "remove_background_provider": "local_rembg",
+                "trim": True,
+                "remove_exif": True,
+                "visible_mark_cleanup": True,
+            }
+        )
+
+        restored = ProjectState.from_dict(payload)
+        operations = restored.to_dict()["pinterest"]["operations"]
+
+        self.assertNotIn("remove_background", operations)
+        self.assertNotIn("remove_background_provider", operations)
+        self.assertNotIn("trim", operations)
+        self.assertNotIn("remove_exif", operations)
+        self.assertNotIn("visible_mark_cleanup", operations)
+
     def test_project_draft_rejects_invalid_pinterest_dimensions_and_counts(self):
         for field, invalid_value in (
             ("canvas_width", 999),
