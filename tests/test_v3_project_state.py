@@ -262,6 +262,30 @@ class ProjectSerializationTests(unittest.TestCase):
                 with self.assertRaises(ProjectStateError):
                     ProjectState.from_dict(payload)
 
+    def test_save_project_draft_rejects_mutated_unsafe_pinterest_error(self):
+        state = ProjectState(
+            mode=ProjectMode.PINTEREST,
+            pinterest=PinterestModeData(
+                results=[
+                    PinterestPinResultData(
+                        status="failed",
+                        error_code="background_generation_failed",
+                    )
+                ]
+            ),
+        )
+        result = state.pinterest.results[0]
+        result.error_code = "provider_http_502"
+        result.error_message = "Fal.ai HTTP 502; api_key=demo-provider-token"
+
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-unsafe-save-") as temp_dir:
+            path = Path(temp_dir) / "project.json"
+
+            with self.assertRaises(ProjectStateError):
+                save_project_draft(state, path)
+
+            self.assertFalse(path.exists())
+
     def test_old_pinterest_project_loads_with_new_pin_defaults(self):
         payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
         del payload["pinterest"]["pin"]

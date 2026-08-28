@@ -1848,8 +1848,10 @@ def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> Non
     if not parent.is_dir():
         raise ProjectStateError("Project draft directory does not exist")
 
+    draft = state.to_dict()
+    _validate_project_draft_shape(draft)
     payload = json.dumps(
-        state.to_dict(),
+        draft,
         ensure_ascii=False,
         indent=2,
         sort_keys=True,

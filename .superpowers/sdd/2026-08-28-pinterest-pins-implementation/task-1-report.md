@@ -102,3 +102,34 @@ OK
 python3 -m py_compile v3_project_state.py pinterest_prompt_schema.py
 git diff --check
 ```
+
+## Re-review follow-up — safe write boundary
+
+- Root cause: `save_project_draft()` serialized `state.to_dict()` directly and
+  did not call `_validate_project_draft_shape()`. Direct post-construction
+  mutation of a `PinterestPinResultData` instance could therefore bypass the
+  safe error-metadata validation applied on load.
+- Fix: the write path now validates the complete serialized draft before JSON
+  encoding or temporary-file creation. This reuses the existing strict contract
+  for all modes, while old Pinterest drafts remain load-compatible because
+  missing `pin` and `results` fields are still handled by the read path.
+- Regression test:
+  `test_save_project_draft_rejects_mutated_unsafe_pinterest_error` mutates a
+  result after construction with a provider-like error and secret-like token,
+  asserts `save_project_draft()` raises `ProjectStateError`, and confirms no
+  project JSON file is created.
+
+Verification command and output:
+
+```text
+python3 -m unittest tests.test_v3_project_state.ProjectSerializationTests.test_save_project_draft_rejects_mutated_unsafe_pinterest_error -v
+Ran 1 test
+OK
+
+python3 -m unittest tests.test_v3_project_state tests.test_pinterest_prompt_schema -v
+Ran 30 tests
+OK
+
+python3 -m py_compile v3_project_state.py pinterest_prompt_schema.py
+git diff --check
+```
