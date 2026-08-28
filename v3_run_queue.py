@@ -1522,6 +1522,12 @@ class RunResultsPage(QWidget):
         )
         self.save_corrected_button.clicked.connect(self._save_corrected_png)
         self.save_corrected_button.hide()
+        self.save_mask_button = V3Button(
+            "Сохранить alpha-маску",
+            ButtonVariant.SECONDARY,
+        )
+        self.save_mask_button.clicked.connect(self._save_mask)
+        self.save_mask_button.hide()
         self.log_button = V3Button(
             "Диагностика",
             ButtonVariant.GHOST,
@@ -1538,6 +1544,7 @@ class RunResultsPage(QWidget):
         workflow_layout.addStretch()
         utility_primary_layout.addWidget(self.open_folder_button)
         utility_primary_layout.addWidget(self.save_corrected_button)
+        utility_primary_layout.addWidget(self.save_mask_button)
         utility_primary_layout.addStretch()
         utility_secondary_layout.addWidget(self.log_button)
         utility_secondary_layout.addStretch()
@@ -1584,6 +1591,7 @@ class RunResultsPage(QWidget):
             self.finish_button.hide()
             self.open_folder_button.setEnabled(False)
             self.save_corrected_button.hide()
+            self.save_mask_button.hide()
             self.log_button.setEnabled(False)
             self._selection_changed(-1)
             return
@@ -1705,9 +1713,14 @@ class RunResultsPage(QWidget):
                 item.status is RunItemStatus.SUCCEEDED
                 and bool(item.output_path)
             )
+            self.save_mask_button.setVisible(
+                item.status is RunItemStatus.SUCCEEDED
+                and bool(item.output_path)
+            )
         else:
             self.transparency_preview.hide()
             self.save_corrected_button.hide()
+            self.save_mask_button.hide()
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
@@ -1885,6 +1898,30 @@ class RunResultsPage(QWidget):
             )
         except (OSError, ValueError) as error:
             self.summary_label.setText(f"Не удалось сохранить PNG: {error}")
+
+    def _save_mask(self) -> None:
+        if self.session is None or self.state.mode is not ProjectMode.CLIPART:
+            return
+        item = self._selected_item(self.queue.currentRow())
+        if item is None or item.status is not RunItemStatus.SUCCEEDED:
+            return
+        source = Path(item.output_path)
+        default = self.session.output_dir / f"{source.stem}_mask.png"
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить alpha-маску",
+            str(default),
+            "PNG (*.png)",
+        )
+        if not destination:
+            return
+        try:
+            self.transparency_preview.save_mask(destination)
+            self.summary_label.setText(
+                f"Alpha-маска сохранена: {Path(destination).name}"
+            )
+        except (OSError, ValueError) as error:
+            self.summary_label.setText(f"Не удалось сохранить alpha-маску: {error}")
 
     def _show_log(self) -> None:
         if self.session is None:
