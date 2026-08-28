@@ -802,9 +802,9 @@ class V3PinterestFlowTests(unittest.TestCase):
             retried = next(
                 result for result in state.pinterest.results if result.variant_id == "ai-scene-01"
             )
-            self.assertFalse(retried.accepted)
+            self.assertTrue(retried.accepted)
             self.assertEqual(retried.status, "pending")
-            self.assertTrue(retried.retryable)
+            self.assertFalse(retried.retryable)
             self.assertEqual(factory.workers, [])
 
     def test_preview_regeneration_starts_only_the_selected_slot(self):
@@ -910,28 +910,171 @@ class V3PinterestFlowTests(unittest.TestCase):
             self.assertIn("2", page.export_status_label.text())
             self.assertIn(str(export_folder), page.export_status_label.text())
 
-    def test_regeneration_clears_stale_export_and_fidelity_metadata(self):
-        state = ProjectState(mode=ProjectMode.PINTEREST)
-        state.pinterest.results = [
-            v3_pinterest_flow.PinterestPinResultData(
+    def test_export_target_reserves_distinct_names_for_parallel_exports(self):
+        """Concurrent exports must not receive the same path and overwrite one another."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-export-reservation-") as temp:
+            folder = Path(temp) / "exports"
+            barrier = threading.Barrier(4)
+            targets: list[Path] = []
+            failures: list[BaseException] = []
+
+            def reserve_target() -> None:
+                try:
+                    barrier.wait()
+                    targets.append(
+                        v3_pinterest_flow._pinterest_export_target(
+                            folder,
+                            product_path="product image.png",
+                            variant_id="template-01",
+                            suffix=".png",
+                        )
+                    )
+                except BaseException as error:  # pragma: no cover - assertion below reports it
+                    failures.append(error)
+
+            threads = [threading.Thread(target=reserve_target) for _ in range(4)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+            self.assertEqual(failures, [])
+            self.assertEqual(len({target.name for target in targets}), 4)
+            self.assertEqual(
+                {target.name for target in targets},
+                {
+                    "product_image_template_01.png",
+                    "product_image_template_01-02.png",
+                    "product_image_template_01-03.png",
+                    "product_image_template_01-04.png",
+                },
+            )
+            self.assertTrue(all(target.is_file() for target in targets))
+
+    def test_regeneration_keeps_successful_result_when_preflight_fails(self):
+        """A preflight rejection must not discard an accepted exportable result."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-regeneration-preflight-") as temp:
+            state = self.make_state(temp)
+            previous = v3_pinterest_flow.PinterestPinResultData(
                 variant_id="template-01",
+                variant_kind="template",
+                source_product_path=state.pinterest.pin.product_paths[0],
                 output_path="old-result.png",
                 accepted=True,
                 status="success",
                 product_layer_digest="protected-digest",
                 export_status="exported",
             )
-        ]
-        shell = AppShell(state)
-        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+            state.pinterest.results = [previous]
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                runtime_settings_provider=lambda: (),
+                authorization_provider=lambda: None,
+            )
 
-        controller.pages[StepId.RESULTS].regenerate_variant("template-01")
+            self.assertIsNone(controller.regenerate_variant("template-01"))
 
-        result = state.pinterest.results[0]
-        self.assertEqual(result.status, "pending")
-        self.assertEqual(result.output_path, "")
-        self.assertEqual(result.product_layer_digest, "")
-        self.assertEqual(result.export_status, "not_exported")
+        self.assertEqual(previous.status, "success")
+        self.assertEqual(previous.output_path, "old-result.png")
+        self.assertTrue(previous.accepted)
+        self.assertEqual(previous.product_layer_digest, "protected-digest")
+        self.assertEqual(previous.export_status, "exported")
+
+    def test_regeneration_keeps_successful_result_when_authorization_fails(self):
+        """A failed authorization must not discard an accepted exportable result."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-regeneration-authorization-") as temp:
+            state = self.make_state(temp)
+            previous = v3_pinterest_flow.PinterestPinResultData(
+                variant_id="template-01",
+                variant_kind="template",
+                source_product_path=state.pinterest.pin.product_paths[0],
+                output_path="old-result.png",
+                accepted=True,
+                status="success",
+                product_layer_digest="protected-digest",
+                export_status="exported",
+            )
+            state.pinterest.results = [previous]
+            shell = AppShell(state)
+
+            def reject_authorization() -> None:
+                raise v3_pinterest_flow.LicenseError("authorization failed")
+
+            controller = install_pinterest_flow(
+                shell,
+                authorization_provider=reject_authorization,
+            )
+
+            self.assertIsNone(controller.regenerate_variant("template-01"))
+
+        self.assertEqual(previous.status, "success")
+        self.assertEqual(previous.output_path, "old-result.png")
+        self.assertTrue(previous.accepted)
+        self.assertEqual(previous.product_layer_digest, "protected-digest")
+        self.assertEqual(previous.export_status, "exported")
+
+    def test_regeneration_keeps_successful_result_when_worker_creation_fails(self):
+        """A worker-construction failure must not discard an accepted exportable result."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-regeneration-worker-") as temp:
+            state = self.make_state(temp)
+            previous = v3_pinterest_flow.PinterestPinResultData(
+                variant_id="template-01",
+                variant_kind="template",
+                source_product_path=state.pinterest.pin.product_paths[0],
+                output_path="old-result.png",
+                accepted=True,
+                status="success",
+                product_layer_digest="protected-digest",
+                export_status="exported",
+            )
+            state.pinterest.results = [previous]
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                authorization_provider=lambda: None,
+            )
+
+            def fail_worker_creation(_: PinterestPinRunRequest) -> PinterestPinWorkerAdapter:
+                raise OSError("worker creation failed")
+
+            controller.create_worker_for_request = fail_worker_creation  # type: ignore[method-assign]
+
+            self.assertIsNone(controller.regenerate_variant("template-01"))
+
+        self.assertEqual(previous.status, "success")
+        self.assertEqual(previous.output_path, "old-result.png")
+        self.assertTrue(previous.accepted)
+        self.assertEqual(previous.product_layer_digest, "protected-digest")
+        self.assertEqual(previous.export_status, "exported")
+
+    def test_regeneration_controller_uses_english_registry_status(self):
+        """Hard-coded Russian regeneration status would leave the English flow untranslated."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-regeneration-locale-") as temp:
+            state = self.make_state(temp)
+            state.pinterest.results = [
+                v3_pinterest_flow.PinterestPinResultData(
+                    variant_id="template-01",
+                    variant_kind="template",
+                    source_product_path=state.pinterest.pin.product_paths[0],
+                )
+            ]
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                authorization_provider=lambda: None,
+                locale="en",
+            )
+            controller.create_worker_for_request = (  # type: ignore[method-assign]
+                lambda _: FakeWorker()
+            )
+
+            self.assertIsNotNone(controller.regenerate_variant("template-01"))
+
+        self.assertEqual(
+            controller.review_page.run_status_label.text(),
+            "✓ Regenerating selected Pinterest variant.",
+        )
 
     def test_worker_adapter_completion_populates_preview_slots_from_shared_queue(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-completion-") as temp:

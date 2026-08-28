@@ -41,3 +41,28 @@
 AI-scene regeneration remains provider-neutral. Without a separately approved
 background provider, it produces the existing safe retryable scene failure;
 template regeneration and local export continue to work without a live call.
+
+## Review findings follow-up
+
+- Selective regeneration now keeps the previous successful slot intact until
+  preflight, authorization, and worker creation have all succeeded. A rejected
+  preflight, authorization, or worker construction therefore preserves the
+  prior output path, protected-layer digest, acceptance, and export status.
+- Export target selection atomically reserves a new file with exclusive
+  creation before image writing. Parallel exports receive distinct suffixes;
+  a reservation is removed if the export itself fails.
+- Regeneration controller messages now use the existing Pinterest RU/EN
+  registry, including the active-run, already-running, and started statuses.
+
+### TDD and verification
+
+- RED: `tests/test_v3_pinterest_flow.py` exposed the premature state reset in
+  all three pre-start failure paths, duplicate names from parallel export
+  reservations, and a Russian regeneration status in the English flow.
+- GREEN: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
+  tests/test_v3_pinterest_flow.py -q` — 48 passed.
+- Related Task 5 and Clipart boundary: `QT_QPA_PLATFORM=offscreen .venv/bin/python
+  -m pytest tests/test_pinterest_pin_templates.py tests/test_pinterest_pin_composer.py
+  tests/test_v3_clipart_flow.py tests/test_v3_pinterest_flow.py
+  tests/test_v3_run_queue.py -q` — 176 passed, 8 subtests passed.
+- `.venv/bin/python -m py_compile v3_pinterest_flow.py v3_run_queue.py` — passed.

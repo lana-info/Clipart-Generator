@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import re
 from collections.abc import Callable, Mapping
@@ -121,6 +122,9 @@ _PINTEREST_UI_TEXT = {
         "fidelity_warning": "Предупреждение: точность товара не подтверждена защищённым слоем.",
         "export_ready": "К экспорту выбрано: {count}",
         "export_summary": "Сохранено: {count}; папка: {folder}",
+        "regeneration_another_run_active": "Сначала завершите текущее задание в другом режиме",
+        "regeneration_already_running": "Запуск уже выполняется",
+        "regeneration_started": "Перегенерируется выбранный Pinterest-вариант",
         "status_pending": "Ожидает генерации",
         "status_success": "Готов",
         "status_failed": "Не удалось создать",
@@ -162,6 +166,9 @@ _PINTEREST_UI_TEXT = {
         "fidelity_warning": "Warning: product fidelity is not confirmed by a protected layer.",
         "export_ready": "Ready to export: {count}",
         "export_summary": "Saved: {count}; folder: {folder}",
+        "regeneration_another_run_active": "Finish the current task in the other mode first.",
+        "regeneration_already_running": "Generation is already running.",
+        "regeneration_started": "Regenerating selected Pinterest variant.",
         "status_pending": "Waiting for generation",
         "status_success": "Ready",
         "status_failed": "Could not generate",
@@ -719,10 +726,26 @@ def _pinterest_export_target(
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / f"{safe_product}_{safe_variant}{suffix}"
     collision_index = 2
-    while target.exists():
-        target = folder / f"{safe_product}_{safe_variant}-{collision_index:02d}{suffix}"
-        collision_index += 1
-    return target
+    while True:
+        try:
+            descriptor = os.open(
+                target,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+        except FileExistsError:
+            target = folder / f"{safe_product}_{safe_variant}-{collision_index:02d}{suffix}"
+            collision_index += 1
+            continue
+        try:
+            os.close(descriptor)
+        except OSError:
+            try:
+                target.unlink()
+            except OSError:
+                pass
+            raise
+        return target
 
 
 class PinterestProductInputPage(_ScrollableStepPage):
@@ -1172,6 +1195,7 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
                     and result.output_path
                 ):
                     continue
+                target: Path | None = None
                 try:
                     format_name, suffix = _pinterest_export_format(result.output_path)
                     target = _pinterest_export_target(
@@ -1184,6 +1208,11 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
                         source.load()
                         exported.append(save_pin(source, str(target), format=format_name))
                 except (OSError, RuntimeError, ValueError):
+                    if target is not None:
+                        try:
+                            target.unlink()
+                        except OSError:
+                            pass
                     result.export_status = "failed"
                 else:
                     result.export_status = "exported"
@@ -1653,16 +1682,25 @@ class PinterestFlowController(QObject):
     def regenerate_variant(self, variant_id: str) -> PinterestPinRunRequest | None:
         """Start one selected Pinterest slot without resetting the six-slot preview."""
         if self.shell.another_run_is_active(self):
-            self.error.emit("Сначала завершите текущее задание в другом режиме")
+            self.error.emit(
+                _pinterest_text(
+                    "regeneration_another_run_active",
+                    locale=self.locale,
+                )
+            )
             return None
         if self.worker is not None and self.runtime_adapter.is_running(self.worker):
-            self.error.emit("Запуск уже выполняется")
+            self.error.emit(
+                _pinterest_text(
+                    "regeneration_already_running",
+                    locale=self.locale,
+                )
+            )
             return None
         preview = self.pages[StepId.RESULTS]
         if not isinstance(preview, PinterestPinPreviewPage):
             raise RuntimeError("Pinterest preview page is not installed")
         result = preview._find_result(variant_id)
-        preview._mark_variant_for_regeneration(variant_id)
         try:
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
@@ -1688,11 +1726,14 @@ class PinterestFlowController(QObject):
             self.error.emit(_safe_runtime_error(error, locals().get("runtime_settings")))
             return None
 
+        preview._mark_variant_for_regeneration(variant_id)
         self.worker = worker
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
         self.runtime_adapter.start(worker)
-        self.review_page.set_run_status("Перегенерируется выбранный Pinterest-вариант")
+        self.review_page.set_run_status(
+            _pinterest_text("regeneration_started", locale=self.locale)
+        )
         self.started.emit(request)
         return request
 
