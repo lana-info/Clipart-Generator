@@ -1544,8 +1544,8 @@ Acceptance:
 
 ### NEXT-TASK-012 — Реализовать Pinterest Pins
 
-Status: Design approved — implementation plan follows after user review of the
-design document
+Status: Design approved — implementation plan готов и ожидает выбора способа
+выполнения
 
 Scope: отдельный Pinterest Pins-модуль для создания пинов из фото товара.
 Контент-план, SEO, расписание, аналитика и публикация отложены в отдельный
@@ -1564,6 +1564,7 @@ Acceptance:
 - [ ] Все принятые пины сохраняются в выбранную папку.
 
 Verification: [docs/superpowers/specs/2026-08-28-pinterest-pins-design.md](docs/superpowers/specs/2026-08-28-pinterest-pins-design.md),
+[docs/superpowers/plans/2026-08-28-pinterest-pins-implementation.md](docs/superpowers/plans/2026-08-28-pinterest-pins-implementation.md),
 focused unit/UI tests и ручная проверка вертикальной серии.
 
 ### Будущие модули после стабилизации генерации
