@@ -75,9 +75,7 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
-                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
-                StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
             ),
@@ -113,7 +111,7 @@ class ProjectRoutesTests(unittest.TestCase):
         state = ProjectState(
             common=CommonProjectData(work_dir="D:/work"),
             clipart=ClipartModeData(prompts=[PromptEntry("fox")]),
-            pinterest=PinterestModeData(prompts=[PromptEntry("vertical fox pin")]),
+            pinterest=PinterestModeData(),
             processing=ProcessingModeData(selected_files=["D:/input.png"]),
         )
         state.next_step()
@@ -156,6 +154,58 @@ class ProjectSerializationTests(unittest.TestCase):
         self.assertEqual(
             PinterestPinData.from_dict(draft.to_dict()).to_dict(),
             draft.to_dict(),
+        )
+
+    def test_clean_pinterest_project_uses_only_canonical_pin_state_and_route(self):
+        """A new Pinterest project must not require the removed prompt/content-plan state."""
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        payload = state.to_dict()
+
+        self.assertEqual(
+            state.route,
+            (
+                StepId.PROJECT,
+                StepId.PROMPTS,
+                StepId.PIN_FORMAT_MODEL,
+                StepId.REVIEW_RUN,
+                StepId.RESULTS,
+            ),
+        )
+        self.assertEqual(
+            set(payload["pinterest"]),
+            {"generation", "pin", "results"},
+        )
+        self.assertNotIn("pinterest_legacy", payload)
+
+    def test_legacy_pinterest_content_plan_migrates_outside_canonical_state(self):
+        """Old drafts retain their source data without letting it reach the Pinterest run state."""
+        payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
+        payload["pinterest"].update(
+            {
+                "prompts": [{"prompt": "legacy summer pin", "references": []}],
+                "prompt_generator": {
+                    "theme": "summer",
+                    "subjects": ["bag"],
+                    "variations": ["bright"],
+                    "style": "editorial",
+                    "palette": "warm",
+                    "composition": "vertical",
+                    "background": "studio",
+                    "consistency": "",
+                    "restrictions": [],
+                    "count": 1,
+                },
+            }
+        )
+
+        restored = ProjectState.from_dict(payload)
+        migrated = restored.to_dict()
+
+        self.assertNotIn("prompts", migrated["pinterest"])
+        self.assertNotIn("prompt_generator", migrated["pinterest"])
+        self.assertEqual(
+            migrated["pinterest_legacy"]["prompts"],
+            [{"prompt": "legacy summer pin", "references": []}],
         )
 
     def test_pinterest_pin_draft_normalizes_bounds_and_selected_product(self):
@@ -298,7 +348,7 @@ class ProjectSerializationTests(unittest.TestCase):
 
     def test_pinterest_draft_discards_legacy_cleanup_and_background_fields(self):
         payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
-        payload["pinterest"]["operations"].update(
+        payload["pinterest"]["operations"] = (
             {
                 "remove_background": True,
                 "remove_background_provider": "local_rembg",
@@ -309,13 +359,11 @@ class ProjectSerializationTests(unittest.TestCase):
         )
 
         restored = ProjectState.from_dict(payload)
-        operations = restored.to_dict()["pinterest"]["operations"]
-
-        self.assertNotIn("remove_background", operations)
-        self.assertNotIn("remove_background_provider", operations)
-        self.assertNotIn("trim", operations)
-        self.assertNotIn("remove_exif", operations)
-        self.assertNotIn("visible_mark_cleanup", operations)
+        self.assertNotIn("operations", restored.to_dict()["pinterest"])
+        self.assertEqual(
+            restored.to_dict()["pinterest_legacy"]["operations"],
+            payload["pinterest"]["operations"],
+        )
 
     def test_project_draft_rejects_invalid_pinterest_dimensions_and_counts(self):
         for field, invalid_value in (
@@ -349,7 +397,6 @@ class ProjectSerializationTests(unittest.TestCase):
                 ),
             ),
             pinterest=PinterestModeData(
-                prompts=[PromptEntry("vertical summer pin")],
                 generation=GenerationData(
                     model="nano-banana-2",
                     ratio="9:16",

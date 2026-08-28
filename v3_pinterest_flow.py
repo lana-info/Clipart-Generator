@@ -52,6 +52,7 @@ from v3_clipart_flow import (
     ClipartPromptReviewPage,
     ClipartReviewRunPage,
     ClipartRunRequest,
+    CostEstimate,
     ButtonVariant,
     V3DesignTokens,
     V3Button,
@@ -254,6 +255,7 @@ def _failed_scene_variant(
     product: ProductLayer,
     prompt: str,
     product_box: tuple[int, int, int, int],
+    locale: str = "ru",
 ) -> PinVariant:
     return PinVariant(
         variant_id=variant_id,
@@ -265,7 +267,7 @@ def _failed_scene_variant(
         retryable=True,
         product_layer_digest=product_layer_digest(product),
         error_code="background_generation_failed",
-        error_message=scene_failure_message(),
+        error_message=scene_failure_message(locale=locale),
         product_box=product_box,
     )
 
@@ -277,6 +279,7 @@ def build_pinterest_pin_series(
     generate_background: BackgroundGenerator | None = None,
     cancelled: Callable[[], bool] | None = None,
     variant_ids: set[str] | frozenset[str] | None = None,
+    locale: str = "ru",
 ) -> tuple[PinVariant, ...]:
     """Build the fixed template/AI-scene series without giving product pixels to AI."""
 
@@ -328,6 +331,7 @@ def build_pinterest_pin_series(
                     product=product,
                     prompt=prompt,
                     product_box=product_box,
+                    locale=locale,
                 )
             )
             continue
@@ -386,32 +390,6 @@ class _PinterestDataAdapter:
         self.data = data
 
     @property
-    def operations(self) -> ImageOperationData:
-        return self.data.operations.as_image_operations()
-
-    @operations.setter
-    def operations(self, value: ImageOperationData) -> None:
-        if not isinstance(value, ImageOperationData):
-            raise TypeError("Pinterest operations must be ImageOperationData")
-        self.data.operations = PinterestOperationData.from_image_operations(value)
-
-    @property
-    def prompts(self):
-        return self.data.prompts
-
-    @prompts.setter
-    def prompts(self, value):
-        self.data.prompts = value
-
-    @property
-    def prompt_generator(self) -> PromptGeneratorData:
-        return self.data.prompt_generator
-
-    @prompt_generator.setter
-    def prompt_generator(self, value: PromptGeneratorData) -> None:
-        self.data.prompt_generator = value
-
-    @property
     def generation(self) -> GenerationData:
         return self.data.generation
 
@@ -447,7 +425,16 @@ def _pinterest_project_adapter(state: ProjectState) -> ProjectState:
 
 
 def estimate_pinterest_cost(state: ProjectState):
-    return estimate_clipart_cost(_pinterest_project_adapter(state))
+    del state
+    return CostEstimate(
+        request_count=0,
+        estimated_usd=0,
+        complete=True,
+        generation_request_count=0,
+        processing_request_count=0,
+        generation_usd=0,
+        processing_usd=0,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -461,6 +448,7 @@ class PinterestPinRunRequest:
     queue_items: tuple[dict[str, str], ...]
     scene_strategy: str = "ai_scene"
     status_message: str = ""
+    locale: str = "ru"
     mode: str = "pinterest_pins"
     generate_background: BackgroundGenerator | None = field(
         default=None,
@@ -519,6 +507,7 @@ class PinterestPinOrchestrator:
             generate_background=generate_requested_background,
             cancelled=cancelled,
             variant_ids=requested_ids,
+            locale=request.locale,
         )
         variants_by_id = {variant.variant_id: variant for variant in variants}
         try:
@@ -594,7 +583,7 @@ class PinterestPinWorkerAdapter(QThread):
                             "total_items": len(self.variants),
                             "stage": "pinterest_pin",
                             "status": "cancelled",
-                            "message": "Pinterest pin generation cancelled",
+                            "message": message_for("pinterest.status.run_cancelled", locale=self.request.locale),
                         }
                     )
                     continue
@@ -621,7 +610,7 @@ class PinterestPinWorkerAdapter(QThread):
                                 "total_items": len(self.variants),
                                 "stage": "export",
                                 "status": "failed",
-                                "message": "Pinterest pin export failed",
+                                "message": message_for("pinterest.error.pin_export_failed", locale=self.request.locale),
                             }
                         )
                     else:
@@ -659,12 +648,12 @@ class PinterestPinWorkerAdapter(QThread):
                         "total_items": len(self.request.queue_items),
                         "stage": "pinterest_pin",
                         "status": "failed",
-                        "message": "Pinterest product could not be prepared",
+                        "message": message_for("pinterest.error.pin_prepare_failed", locale=self.request.locale),
                     }
                 )
-            self.error.emit("Не удалось создать Pinterest-пины.")
+            self.error.emit(message_for("pinterest.error.pin_prepare_failed", locale=self.request.locale))
         finally:
-            self.finished.emit("Pinterest pin series completed")
+            self.finished.emit(message_for("pinterest.status.run_finished", locale=self.request.locale))
 
 
 def build_pinterest_run_request(
@@ -727,6 +716,7 @@ def build_pinterest_run_request(
         queue_items=queue_items,
         scene_strategy=scene_strategy,
         status_message=status_message,
+        locale=normalize_locale(locale),
     )
 
 
@@ -778,7 +768,7 @@ def _pinterest_export_target(
 
 
 class PinterestProductInputPage(_ScrollableStepPage):
-    """Pinterest-only product/copy input without Clipart prompt controls."""
+    """Pinterest product and destination input, separate from pin copy."""
 
     def __init__(
         self,
@@ -796,7 +786,6 @@ class PinterestProductInputPage(_ScrollableStepPage):
         )
         self.state = state
         self.changed = changed
-        self.copy_suggestions = PinterestCopySuggestionService()
         self._syncing = False
 
         form = QFormLayout()
@@ -823,22 +812,6 @@ class PinterestProductInputPage(_ScrollableStepPage):
             _pinterest_text("selected_product", locale=self.locale),
             self.selected_product_combo,
         )
-        self.title_edit = QLineEdit()
-        self.subtitle_edit = QLineEdit()
-        self.cta_edit = QLineEdit()
-        self.style_edit = QLineEdit()
-        self.scene_edit = QLineEdit()
-        for key, control in (
-            ("title", self.title_edit),
-            ("subtitle", self.subtitle_edit),
-            ("cta", self.cta_edit),
-            ("style", self.style_edit),
-            ("scene", self.scene_edit),
-        ):
-            label = _pinterest_text(key, locale=self.locale)
-            control.setAccessibleName(label)
-            form.addRow(label, control)
-
         output_widget = QWidget()
         output_layout = QHBoxLayout(output_widget)
         output_layout.setContentsMargins(0, 0, 0, 0)
@@ -857,22 +830,7 @@ class PinterestProductInputPage(_ScrollableStepPage):
         container = QWidget()
         container.setLayout(form)
         self.add_widget(container)
-        self.suggest_copy_button = V3Button(
-            _pinterest_text("suggest_copy", locale=self.locale),
-            ButtonVariant.GHOST,
-        )
-        self.suggest_copy_button.clicked.connect(self._apply_copy_suggestions)
-        self.add_widget(self.suggest_copy_button)
-
-        for control in (
-            self.title_edit,
-            self.subtitle_edit,
-            self.cta_edit,
-            self.style_edit,
-            self.scene_edit,
-            self.output_dir_edit,
-        ):
-            control.textChanged.connect(self._sync)
+        self.output_dir_edit.textChanged.connect(self._sync)
         self.selected_product_combo.currentIndexChanged.connect(self._sync)
         self.refresh_from_state()
 
@@ -915,28 +873,10 @@ class PinterestProductInputPage(_ScrollableStepPage):
         if selected:
             self.output_dir_edit.setText(selected)
 
-    def _apply_copy_suggestions(self) -> None:
-        suggestions = self.copy_suggestions.suggest(
-            {
-                "title": self.title_edit.text(),
-                "subtitle": self.subtitle_edit.text(),
-                "cta": self.cta_edit.text(),
-            },
-            locale=self.locale,
-        )
-        self.title_edit.setText(suggestions.title)
-        self.subtitle_edit.setText(suggestions.subtitle)
-        self.cta_edit.setText(suggestions.cta)
-
     def _sync(self, *_: object) -> None:
         if self._syncing:
             return
         self.pin.selected_product_index = max(0, self.selected_product_combo.currentIndex())
-        self.pin.pin_title = self.title_edit.text()
-        self.pin.pin_subtitle = self.subtitle_edit.text()
-        self.pin.pin_cta = self.cta_edit.text()
-        self.pin.style = self.style_edit.text()
-        self.pin.background_description = self.scene_edit.text()
         self.state.set_output_dir_for_mode(
             self.output_dir_edit.text().strip(), ProjectMode.PINTEREST
         )
@@ -955,11 +895,6 @@ class PinterestProductInputPage(_ScrollableStepPage):
                 self.products_label.setText(
                     _pinterest_text("no_products", locale=self.locale)
                 )
-            self.title_edit.setText(self.pin.pin_title)
-            self.subtitle_edit.setText(self.pin.pin_subtitle)
-            self.cta_edit.setText(self.pin.pin_cta)
-            self.style_edit.setText(self.pin.style)
-            self.scene_edit.setText(self.pin.background_description)
             self.output_dir_edit.setText(
                 self.state.output_dir_for_mode(ProjectMode.PINTEREST)
             )
@@ -967,12 +902,76 @@ class PinterestProductInputPage(_ScrollableStepPage):
             self._syncing = False
 
 
-class PinterestPromptInputPage(PinterestProductInputPage):
-    """Compatibility alias for callers that imported the former page name."""
+class PinterestCopyLayoutPage(_ScrollableStepPage):
+    """Pinterest copy and layout input; product and destination stay on step one."""
+
+    def __init__(self, state: ProjectState, changed: Callable[[], None], *, locale: str = "ru", tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
+        self.locale = normalize_locale(locale)
+        super().__init__(
+            _pinterest_text("copy_layout_title", locale=self.locale),
+            _pinterest_text("copy_layout_description", locale=self.locale),
+            tokens=tokens,
+        )
+        self.state = state
+        self.changed = changed
+        self.copy_suggestions = PinterestCopySuggestionService()
+        self._syncing = False
+        form = QFormLayout()
+        self.title_edit = QLineEdit()
+        self.subtitle_edit = QLineEdit()
+        self.cta_edit = QLineEdit()
+        self.style_edit = QLineEdit()
+        self.scene_edit = QLineEdit()
+        self.palette_edit = QLineEdit()
+        for key, control in (("title", self.title_edit), ("subtitle", self.subtitle_edit), ("cta", self.cta_edit), ("style", self.style_edit), ("scene", self.scene_edit), ("palette", self.palette_edit)):
+            label = _pinterest_text(key, locale=self.locale)
+            control.setAccessibleName(label)
+            form.addRow(label, control)
+            control.textChanged.connect(self._sync)
+        container = QWidget()
+        container.setLayout(form)
+        self.add_widget(container)
+        self.suggest_copy_button = V3Button(_pinterest_text("suggest_copy", locale=self.locale), ButtonVariant.GHOST)
+        self.suggest_copy_button.clicked.connect(self._apply_copy_suggestions)
+        self.add_widget(self.suggest_copy_button)
+        self.refresh_from_state()
+
+    @property
+    def pin(self) -> PinterestPinData:
+        return self.state.clipart.pin
+
+    def _apply_copy_suggestions(self) -> None:
+        suggestion = self.copy_suggestions.suggest({"title": self.title_edit.text(), "subtitle": self.subtitle_edit.text(), "cta": self.cta_edit.text()}, locale=self.locale)
+        self.title_edit.setText(suggestion.title)
+        self.subtitle_edit.setText(suggestion.subtitle)
+        self.cta_edit.setText(suggestion.cta)
+
+    def _sync(self, *_: object) -> None:
+        if self._syncing:
+            return
+        self.pin.pin_title = self.title_edit.text()
+        self.pin.pin_subtitle = self.subtitle_edit.text()
+        self.pin.pin_cta = self.cta_edit.text()
+        self.pin.style = self.style_edit.text()
+        self.pin.background_description = self.scene_edit.text()
+        self.pin.color_palette = self.palette_edit.text()
+        self.changed()
+
+    def refresh_from_state(self) -> None:
+        self._syncing = True
+        try:
+            self.title_edit.setText(self.pin.pin_title)
+            self.subtitle_edit.setText(self.pin.pin_subtitle)
+            self.cta_edit.setText(self.pin.pin_cta)
+            self.style_edit.setText(self.pin.style)
+            self.scene_edit.setText(self.pin.background_description)
+            self.palette_edit.setText(self.pin.color_palette)
+        finally:
+            self._syncing = False
 
 
-class PinterestCopyLayoutPage(PinterestProductInputPage):
-    """Pinterest-only copy/layout page; it never exposes Clipart prompt fields."""
+class PinterestPromptInputPage(PinterestCopyLayoutPage):
+    """Compatibility name for the former copy input page."""
 
 
 class PinterestProjectPage(ClipartProjectPage):
@@ -1304,7 +1303,37 @@ class PinterestFormatModelPage(ClipartGenerationPage):
             )
             state.clipart.generation.reference_model = requested_reference_model
         self.card.title_label.setText(_pinterest_text("format_title", locale=self.locale))
+        self.card.description_label.setText(
+            _pinterest_text("generation_description", locale=self.locale)
+        )
         self.setAccessibleName(_pinterest_text("format_accessible", locale=self.locale))
+        self.setAccessibleDescription(
+            _pinterest_text("generation_description", locale=self.locale)
+        )
+        labels = (
+            (_pinterest_text("generation_model", locale=self.locale), self.model_combo),
+            (_pinterest_text("generation_ratio", locale=self.locale), self.ratio_combo),
+            (_pinterest_text("generation_resolution", locale=self.locale), self.resolution_combo),
+            (_pinterest_text("generation_variants", locale=self.locale), self.variants_spin),
+        )
+        for label, control in labels:
+            control.setAccessibleName(label)
+        for label in self.findChildren(QLabel):
+            replacement = {
+                "Модель": _pinterest_text("generation_model", locale=self.locale),
+                "Пропорция": _pinterest_text("generation_ratio", locale=self.locale),
+                "Разрешение": _pinterest_text("generation_resolution", locale=self.locale),
+                "Вариантов на промпт": _pinterest_text("generation_variants", locale=self.locale),
+            }.get(label.text())
+            if replacement:
+                label.setText(replacement)
+        self.primary_scope_label.setText(
+            _pinterest_text("generation_scope", locale=self.locale)
+        )
+        self.primary_scope_label.setAccessibleName(
+            _pinterest_text("generation_scope", locale=self.locale)
+        )
+        self.model_capability_label.hide()
         self.recommendation_label = QLabel(
             _pinterest_text("format_recommendation", locale=self.locale)
         )
@@ -1323,18 +1352,6 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         self.reference_status_label.setWordWrap(True)
         self.reference_status_label.setProperty("v3Small", True)
         self.add_widget(self.reference_status_label)
-        self.processing_editor = ProcessingPipelineEditor(
-            state.clipart,
-            changed,
-            title="Обработка",
-            description="Тот же порядок обработки, что и в режимах Clipart и Обработка.",
-            include_cleanup=False,
-            require_operation=False,
-            allowed_operations=workflow_for_mode(ProjectMode.PINTEREST).processing_operations,
-            tokens=tokens,
-        )
-        # Processing is a separate wizard step shared with the other modes.
-        self.processing_editor.setParent(None)
         self._format_syncing = False
         self._format_issue = ""
         self.model_combo.currentIndexChanged.connect(self._enforce_single_format)
@@ -1353,12 +1370,13 @@ class PinterestFormatModelPage(ClipartGenerationPage):
 
     def refresh_from_state(self) -> None:
         super().refresh_from_state()
-        has_references = any(
-            entry.references for entry in getattr(self.state.clipart, "prompts", [])
+        self.primary_scope_label.setText(
+            _pinterest_text("generation_scope", locale=self.locale)
         )
-        visible = has_references or bool(self._format_issue)
-        self.reference_advanced.setVisible(visible)
-        self.reference_advanced.set_expanded(visible)
+        self.primary_scope_label.setAccessibleName(
+            _pinterest_text("generation_scope", locale=self.locale)
+        )
+        self.reference_advanced.setVisible(False)
         self._enforce_single_format()
 
     def _enforce_single_format(self, *_: Any) -> None:
@@ -1382,10 +1400,8 @@ class PinterestFormatModelPage(ClipartGenerationPage):
                 )
             ]
             if not compatible:
-                self._format_issue = (
-                    "Нет парной reference-модели для "
-                    f"{primary_model}, {ratio} / {resolution}. "
-                    "Выберите другую модель или другой формат."
+                self._format_issue = _pinterest_text(
+                    "error.reference_incompatible", locale=self.locale
                 )
                 self.reference_status_label.setText(self._format_issue)
                 self.reference_advanced.setVisible(True)
@@ -1393,7 +1409,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
                 self.reference_model_combo.blockSignals(True)
                 self.reference_model_combo.clear()
                 self.reference_model_combo.addItem(
-                    "Нет совместимой reference-модели", primary_model
+                    _pinterest_text("error.reference_incompatible", locale=self.locale), primary_model
                 )
                 self.reference_model_combo.setEnabled(False)
                 self.reference_ratio_combo.setEnabled(False)
@@ -1405,7 +1421,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
 
             self._format_issue = ""
             self.reference_status_label.setText(
-                "Reference-mode готов: выбранная модель и формат совместимы."
+                _pinterest_text("status.reference_ready", locale=self.locale)
             )
             current_model = compatible[0].model_id
             self.reference_model_combo.blockSignals(True)
@@ -1531,6 +1547,7 @@ class PinterestFlowController(QObject):
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
         authorization_provider: Callable[[], Any] | None = None,
+        provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
         locale: str = "ru",
     ) -> None:
         super().__init__(shell)
@@ -1546,6 +1563,9 @@ class PinterestFlowController(QObject):
         )
         self.worker_factory = worker_factory or self.runtime_adapter.create_worker
         self.authorization_provider = authorization_provider or self._missing_authorization
+        self.provider_capabilities_provider = (
+            provider_capabilities_provider or self._safe_template_capabilities
+        )
         self.worker: Any | None = None
         self._product_layer: ProductLayer | None = None
         self._runtime_settings: Mapping[str, Any] = {}
@@ -1562,10 +1582,25 @@ class PinterestFlowController(QObject):
 
     @staticmethod
     def _missing_authorization() -> None:
-        raise LicenseError("Лицензионный сервис не настроен")
+        raise LicenseError(message_for("pinterest.error.authorization_unavailable"))
+
+    @staticmethod
+    def _safe_template_capabilities() -> Mapping[str, object]:
+        """No Pinterest AI-scene provider is installed, so protect the product locally."""
+        return {"background_generation": False, "protected_product": True}
+
+    def _request(self, runtime_settings: Mapping[str, Any]) -> PinterestPinRunRequest:
+        capabilities = self.provider_capabilities_provider()
+        if not isinstance(capabilities, Mapping):
+            capabilities = self._safe_template_capabilities()
+        return build_pinterest_run_request(
+            self.shell.state,
+            runtime_settings,
+            locale=self.locale,
+            provider_capabilities=capabilities,
+        )
 
     def start_processing_again(self) -> None:
-        self.shell.state.pinterest.prompts.clear()
         self.shell.state.set_step(StepId.PROJECT)
         self.pages[StepId.PROJECT].refresh_from_state()
         self.shell.mark_dirty()
@@ -1642,16 +1677,13 @@ class PinterestFlowController(QObject):
         try:
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError("Настройки запуска повреждены")
-            request = build_pinterest_run_request(
-                self.shell.state,
-                runtime_settings,
-            )
+                raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
+            request = self._request(runtime_settings)
         except (ClipartFlowError, OSError, TypeError, ValueError) as error:
             self.review_page.set_preflight_status(str(error)[:500], ready=False)
             return
         self.review_page.set_preflight_status(
-            "Пакет готов к генерации после нажатия «Запустить».",
+            _pinterest_text("status.preflight_ready", locale=self.locale),
             ready=True,
         )
 
@@ -1669,23 +1701,20 @@ class PinterestFlowController(QObject):
 
     def start(self) -> PinterestPinRunRequest | None:
         if self.shell.another_run_is_active(self):
-            message = "Сначала завершите текущее задание в другом режиме"
+            message = _pinterest_text("regeneration_another_run_active", locale=self.locale)
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
             return None
         if self.worker is not None and self.runtime_adapter.is_running(self.worker):
-            message = "Запуск уже выполняется"
+            message = _pinterest_text("regeneration_already_running", locale=self.locale)
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
             return None
         try:
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError("Настройки запуска повреждены")
-            request = build_pinterest_run_request(
-                self.shell.state,
-                runtime_settings,
-            )
+                raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
+            request = self._request(runtime_settings)
             self._runtime_settings = runtime_settings
             self.authorization_provider()
             worker = self.create_worker_for_request(request)
@@ -1704,9 +1733,8 @@ class PinterestFlowController(QObject):
         self.run_queue.connect_worker(worker)
         self.runtime_adapter.start(worker)
         self.shell.show_results()
-        self.review_page.set_run_status(
-            "Запущена защищённая серия Pinterest-пинов"
-        )
+        message = request.status_message or _pinterest_text("status.run_started", locale=self.locale)
+        self.review_page.set_run_status(message)
         self.started.emit(request)
         return request
 
@@ -1735,8 +1763,8 @@ class PinterestFlowController(QObject):
         try:
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError("Настройки запуска повреждены")
-            request = build_pinterest_run_request(self.shell.state, runtime_settings)
+                raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
+            request = self._request(runtime_settings)
             cached_product = self._product_layer
             if cached_product is not None and cached_product.source_path != request.product_path:
                 cached_product = None
@@ -1887,6 +1915,7 @@ def install_pinterest_flow(
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
     authorization_provider: Callable[[], Any] | None = None,
+    provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
     locale: str = "ru",
 ) -> PinterestFlowController:
     if not isinstance(shell, AppShell):
@@ -1899,6 +1928,7 @@ def install_pinterest_flow(
         runtime_settings_provider=runtime_settings_provider,
         worker_factory=worker_factory,
         authorization_provider=authorization_provider,
+        provider_capabilities_provider=provider_capabilities_provider,
         locale=locale,
     )
     shell.pinterest_flow_controller = controller

@@ -73,9 +73,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
     ProjectMode.PINTEREST: (
         StepId.PROJECT,
         StepId.PROMPTS,
-        StepId.PROMPT_REVIEW,
         StepId.PIN_FORMAT_MODEL,
-        StepId.PROCESSING_OPTIONS,
         StepId.REVIEW_RUN,
         StepId.RESULTS,
     ),
@@ -1007,10 +1005,6 @@ def _pinterest_pin_results(value: Any) -> list[PinterestPinResultData]:
 
 @dataclass
 class PinterestModeData:
-    prompts: list[PromptEntry] = field(default_factory=list)
-    prompt_generator: PromptGeneratorData = field(
-        default_factory=pinterest_prompt_generator_defaults
-    )
     generation: GenerationData = field(
         default_factory=lambda: GenerationData(
             model="gpt-image-2",
@@ -1021,16 +1015,12 @@ class PinterestModeData:
             reference_resolution="1K",
         )
     )
-    operations: PinterestOperationData = field(default_factory=PinterestOperationData)
     pin: PinterestPinData = field(default_factory=PinterestPinData)
     results: list[PinterestPinResultData] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "prompts": [entry.to_dict() for entry in self.prompts],
-            "prompt_generator": self.prompt_generator.to_dict(),
             "generation": self.generation.to_dict(),
-            "operations": self.operations.to_dict(),
             "pin": self.pin.to_dict(),
             "results": [result.to_dict() for result in self.results],
         }
@@ -1039,11 +1029,6 @@ class PinterestModeData:
     def from_dict(cls, value: Any) -> PinterestModeData:
         data = value if isinstance(value, Mapping) else {}
         return cls(
-            prompts=_prompt_entries(data.get("prompts", [])),
-            prompt_generator=PromptGeneratorData.from_dict(
-                data.get("prompt_generator", {}),
-                defaults=pinterest_prompt_generator_defaults(),
-            ),
             generation=GenerationData.from_dict(
                 {
                     **cls().generation.to_dict(),
@@ -1055,9 +1040,39 @@ class PinterestModeData:
                 },
                 default_ratio="9:16",
             ),
-            operations=PinterestOperationData.from_dict(data.get("operations", {})),
             pin=PinterestPinData.from_dict(data.get("pin", {})),
             results=_pinterest_pin_results(data.get("results", [])),
+        )
+
+
+@dataclass
+class PinterestLegacyData:
+    """Read-only archive of pre-Task-7 Pinterest fields during draft migration."""
+
+    prompts: list[PromptEntry] = field(default_factory=list)
+    prompt_generator: PromptGeneratorData = field(
+        default_factory=pinterest_prompt_generator_defaults
+    )
+    operations: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "prompts": [entry.to_dict() for entry in self.prompts],
+            "prompt_generator": self.prompt_generator.to_dict(),
+            "operations": dict(self.operations),
+        }
+
+    @classmethod
+    def from_dict(cls, value: Any) -> PinterestLegacyData:
+        data = value if isinstance(value, Mapping) else {}
+        operations = data.get("operations", {})
+        return cls(
+            prompts=_prompt_entries(data.get("prompts", [])),
+            prompt_generator=PromptGeneratorData.from_dict(
+                data.get("prompt_generator", {}),
+                defaults=pinterest_prompt_generator_defaults(),
+            ),
+            operations=dict(operations) if isinstance(operations, Mapping) else {},
         )
 
 
@@ -1472,6 +1487,39 @@ def _validate_pinterest_results(pinterest: Mapping[str, Any]) -> None:
             )
 
 
+def _validate_pinterest_legacy_data(
+    legacy: Mapping[str, Any],
+    *,
+    name: str,
+) -> None:
+    _reject_unknown_fields(
+        legacy,
+        ("prompts", "prompt_generator", "operations"),
+        name,
+    )
+    if "prompts" in legacy:
+        _validate_prompt_section(legacy, name)
+    if "prompt_generator" in legacy:
+        _validate_prompt_generator_section(
+            _draft_object(legacy, "prompt_generator"),
+            f"{name}.prompt_generator",
+        )
+    if "operations" not in legacy:
+        return
+    pinterest_operations = _draft_object(legacy, "operations")
+    pinterest_operation_fields = tuple(
+        definition.name for definition in dataclass_fields(PinterestOperationData)
+    )
+    legacy_operation_fields = tuple(
+        definition.name for definition in dataclass_fields(ImageOperationData)
+    )
+    _reject_unknown_fields(
+        pinterest_operations,
+        (*pinterest_operation_fields, *legacy_operation_fields),
+        f"{name}.operations",
+    )
+
+
 def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     _reject_unknown_fields(
         value,
@@ -1482,6 +1530,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
             "runtime",
             "clipart",
             "pinterest",
+            "pinterest_legacy",
             "processing",
             "current_step_by_mode",
         ),
@@ -1539,49 +1588,37 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     _reject_unknown_fields(
         pinterest,
         (
-            "prompts",
-            "prompt_generator",
             "generation",
-            "operations",
             "pin",
             "results",
+            "prompts",
+            "prompt_generator",
+            "operations",
         ),
         "pinterest",
     )
-    _validate_prompt_section(pinterest, "pinterest")
-    if "prompt_generator" in pinterest:
-        _validate_prompt_generator_section(
-            _draft_object(pinterest, "prompt_generator"),
-            "pinterest.prompt_generator",
-        )
     _validate_scalar_fields(
         _draft_object(pinterest, "generation"),
         GenerationData,
         "pinterest.generation",
     )
-    pinterest_operations = _draft_object(pinterest, "operations")
-    pinterest_operation_fields = tuple(
-        definition.name for definition in dataclass_fields(PinterestOperationData)
-    )
-    legacy_operation_fields = tuple(
-        definition.name for definition in dataclass_fields(ImageOperationData)
-    )
-    _reject_unknown_fields(
-        pinterest_operations,
-        (*pinterest_operation_fields, *legacy_operation_fields),
-        "pinterest.operations",
-    )
-    normalized_pinterest_operations = {
-        name: pinterest_operations.get(name, getattr(PinterestOperationData(), name))
-        for name in pinterest_operation_fields
+    legacy_pinterest_fields = {
+        key: pinterest[key]
+        for key in ("prompts", "prompt_generator", "operations")
+        if key in pinterest
     }
-    _validate_scalar_fields(
-        normalized_pinterest_operations,
-        PinterestOperationData,
-        "pinterest.operations",
-    )
+    if legacy_pinterest_fields:
+        _validate_pinterest_legacy_data(
+            legacy_pinterest_fields,
+            name="pinterest",
+        )
     _validate_pinterest_pin_data(pinterest)
     _validate_pinterest_results(pinterest)
+    if "pinterest_legacy" in value:
+        _validate_pinterest_legacy_data(
+            _draft_object(value, "pinterest_legacy"),
+            name="pinterest_legacy",
+        )
 
     processing = _draft_object(value, "processing")
     _reject_unknown_fields(
@@ -1651,6 +1688,11 @@ class ProjectState:
     runtime: RuntimeData = field(default_factory=RuntimeData)
     clipart: ClipartModeData = field(default_factory=ClipartModeData)
     pinterest: PinterestModeData = field(default_factory=PinterestModeData)
+    pinterest_legacy: PinterestLegacyData | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
     processing: ProcessingModeData = field(default_factory=ProcessingModeData)
     current_step_by_mode: dict[ProjectMode, StepId] = field(
         default_factory=_initial_steps
@@ -1667,6 +1709,10 @@ class ProjectState:
                 self.mode = ProjectMode(self.mode)
             except (TypeError, ValueError) as error:
                 raise ProjectStateError(f"Unsupported project mode: {self.mode!r}") from error
+        if self.pinterest_legacy is not None and not isinstance(
+            self.pinterest_legacy, PinterestLegacyData
+        ):
+            self.pinterest_legacy = PinterestLegacyData.from_dict(self.pinterest_legacy)
 
         normalized_steps = _initial_steps()
         for mode, step in dict(self.current_step_by_mode).items():
@@ -1675,6 +1721,16 @@ class ProjectState:
                 normalized_step = step if isinstance(step, StepId) else StepId(step)
             except (TypeError, ValueError):
                 continue
+            if (
+                normalized_mode is ProjectMode.PINTEREST
+                and normalized_step is StepId.PROMPT_REVIEW
+            ):
+                normalized_step = StepId.PIN_FORMAT_MODEL
+            elif (
+                normalized_mode is ProjectMode.PINTEREST
+                and normalized_step is StepId.PROCESSING_OPTIONS
+            ):
+                normalized_step = StepId.REVIEW_RUN
             if normalized_step in ROUTES[normalized_mode]:
                 normalized_steps[normalized_mode] = normalized_step
         self.current_step_by_mode = normalized_steps
@@ -1753,25 +1809,13 @@ class ProjectState:
 
         issues: list[str] = []
         if self.mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}:
-            prompts = (
-                self.clipart.prompts
-                if self.mode is ProjectMode.CLIPART
-                else self.pinterest.prompts
-            )
-            generation = (
-                self.clipart.generation
-                if self.mode is ProjectMode.CLIPART
-                else self.pinterest.generation
-            )
+            generation = self.clipart.generation if self.mode is ProjectMode.CLIPART else self.pinterest.generation
             if target in {StepId.PROJECT, StepId.REVIEW_RUN} and not self.common.work_dir:
                 issues.append("work_dir_required")
-            if target in {
-                StepId.PROMPTS,
-                StepId.PROMPT_REVIEW,
-                StepId.REVIEW_RUN,
-            }:
-                if not prompts:
-                    issues.append("prompts_required")
+            if self.mode is ProjectMode.CLIPART and target in {StepId.PROMPTS, StepId.PROMPT_REVIEW, StepId.REVIEW_RUN} and not self.clipart.prompts:
+                issues.append("prompts_required")
+            if self.mode is ProjectMode.PINTEREST and target is StepId.REVIEW_RUN and not self.pinterest.pin.product_paths:
+                issues.append("product_required")
             if target in {
                 StepId.GENERATION,
                 StepId.PIN_FORMAT_MODEL,
@@ -1807,7 +1851,7 @@ class ProjectState:
         return self.current_step
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "schema_version": PROJECT_STATE_SCHEMA_VERSION,
             "mode": self.mode.value,
             "common": self.common.to_dict(),
@@ -1819,6 +1863,9 @@ class ProjectState:
                 mode.value: self.current_step_by_mode[mode].value for mode in ProjectMode
             },
         }
+        if self.pinterest_legacy is not None:
+            result["pinterest_legacy"] = self.pinterest_legacy.to_dict()
+        return result
 
     @classmethod
     def from_dict(cls, value: Any) -> ProjectState:
@@ -1830,12 +1877,26 @@ class ProjectState:
         _validate_project_draft_shape(value)
         raw_steps = value.get("current_step_by_mode", {})
         steps = dict(raw_steps) if isinstance(raw_steps, Mapping) else {}
+        pinterest_data = value.get("pinterest", {})
+        legacy_source = value.get("pinterest_legacy")
+        if legacy_source is None and isinstance(pinterest_data, Mapping):
+            legacy_fields = {
+                key: pinterest_data[key]
+                for key in ("prompts", "prompt_generator", "operations")
+                if key in pinterest_data
+            }
+            legacy_source = legacy_fields or None
         return cls(
             mode=value.get("mode", ProjectMode.CLIPART.value),
             common=CommonProjectData.from_dict(value.get("common", {})),
             runtime=RuntimeData.from_dict(value.get("runtime", {})),
             clipart=ClipartModeData.from_dict(value.get("clipart", {})),
-            pinterest=PinterestModeData.from_dict(value.get("pinterest", {})),
+            pinterest=PinterestModeData.from_dict(pinterest_data),
+            pinterest_legacy=(
+                PinterestLegacyData.from_dict(legacy_source)
+                if legacy_source is not None
+                else None
+            ),
             processing=ProcessingModeData.from_dict(value.get("processing", {})),
             current_step_by_mode=steps,
         )
