@@ -576,6 +576,7 @@ def _worker_settings(
                 operations.local_realesrgan_after_scale
             ),
             "remove_bg": operations.remove_background,
+            "skip_remover_for_alpha": True,
             "remove_bg_provider": operations.remove_background_provider,
             "kie_remove_bg_model": operations.kie_remove_bg_model,
             "fal_remove_bg_model": operations.fal_remove_bg_model,

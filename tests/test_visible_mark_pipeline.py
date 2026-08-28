@@ -395,6 +395,34 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                 self.assertEqual(final_image.size, (100, 80))
                 self.assertEqual(final_image.mode, "RGBA")
 
+    def test_existing_alpha_bypasses_remover_when_enabled(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-alpha-reuse-") as temp_dir:
+            temp_path = Path(temp_dir)
+            raw_dir = temp_path / "raw"
+            raw_dir.mkdir()
+            source = temp_path / "source.png"
+            Image.new("RGBA", (8, 8), (20, 30, 40, 0)).save(source, format="PNG")
+            worker = main.WorkerThread(
+                "mode2_process",
+                str(temp_path),
+                worker_settings(
+                    remove_bg=True,
+                    remove_bg_provider="local_rembg",
+                    skip_remover_for_alpha=True,
+                ),
+            )
+            worker._run_local_rembg = lambda *_args: self.fail(
+                "remover must not run for an existing alpha mask"
+            )
+
+            result_path = worker._run_processing_pipeline(
+                str(source), None, str(raw_dir), 1, "file"
+            )
+
+            with Image.open(result_path) as result:
+                self.assertEqual(result.mode, "RGBA")
+                self.assertEqual(result.getpixel((0, 0)), (20, 30, 40, 0))
+
     def test_ui_passes_confirmed_regions_only_to_current_run(self):
         with tempfile.TemporaryDirectory(prefix="clipart-visible-ui-run-") as temp_dir:
             temp_path = Path(temp_dir)

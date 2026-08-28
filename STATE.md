@@ -28,9 +28,10 @@ Updated: 2026-08-27
 
 ## Next task
 
-Проверить сохранённую alpha-маску в полном Clipart pipeline и обеспечить её
-повторное применение к итоговому PNG без платного remover. Preview, zoom,
-add/remove кисть, reset и атомарный экспорт уже подключены. Затем
+Проверить сценарий повторного запуска с прозрачным PNG на реальных выбранных
+файлах и затем перейти к контролируемой оценке provider profiles. Preview,
+zoom, add/remove кисть, reset, атомарный экспорт и skip remover для уже
+прозрачного PNG уже подключены. Затем
 подготовить эталонный набор изображений и после пополнения Fal.ai провести
 контролируемое сравнение BiRefNet v2, BEN v2, Ideogram, Bria и rembg. До этого
 зафиксировать endpoint `fal-ai/birefnet/v2` и режимы Matting/Portrait/Heavy.

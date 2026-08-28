@@ -48,6 +48,7 @@ def ensure_gui_standard_streams():
 ensure_gui_standard_streams()
 
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
+from background_mask import has_usable_alpha
 from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from ai_watermark_backend import (
@@ -1084,6 +1085,7 @@ class WorkerThread(QThread):
             settings.get("local_realesrgan_after_scale", self.local_realesrgan_scale)
         )
         self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
+        self.skip_remover_for_alpha = bool(settings.get("skip_remover_for_alpha", False))
         self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
         self.local_rembg_model = settings.get("local_rembg_model", "birefnet-general")
         self.local_rembg_edge_quality = normalize_local_rembg_edge_quality(
@@ -2443,7 +2445,29 @@ class WorkerThread(QThread):
             )
             self.progress.emit("  Этап обработки: background_removal; status=running")
             try:
-                if self._uses_local_rembg_remove_bg():
+                reuse_alpha = False
+                if (
+                    self.skip_remover_for_alpha
+                    and not current_url
+                    and current_path
+                    and os.path.isfile(current_path)
+                ):
+                    with Image.open(current_path) as source_image:
+                        reuse_alpha = has_usable_alpha(source_image)
+                if reuse_alpha:
+                    nobg_path = os.path.join(
+                        raw_dir,
+                        f"{prefix}_existing_alpha_{idx:03d}_{self.run_stamp}.png",
+                    )
+                    with Image.open(current_path) as source_image:
+                        source_image.convert("RGBA").save(nobg_path, format="PNG")
+                    self.progress.emit(
+                        "  Использована сохранённая alpha-маска; remover не вызывается"
+                    )
+                    current_path = nobg_path
+                    current_url = None
+                    local_result = True
+                elif self._uses_local_rembg_remove_bg():
                     with self._local_operation_lock:
                         current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
                         nobg_path = os.path.join(raw_dir, f"{prefix}_nobg_{idx:03d}_{self.run_stamp}.png")

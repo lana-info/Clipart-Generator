@@ -1227,6 +1227,7 @@ def build_processing_run_request(
     settings["run_mode"] = "process_only"
     settings["output_dir"] = str(configured_output)
     settings["overwrite_existing"] = state.processing.overwrite_existing
+    settings["skip_remover_for_alpha"] = True
     return ClipartRunRequest(
         mode="mode2_process",
         work_dir=str(work_dir),

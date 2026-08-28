@@ -5,6 +5,7 @@ from PIL import Image
 from background_mask import (
     apply_mask_stroke,
     apply_mask_to_image,
+    has_usable_alpha,
     mask_for_image,
     save_mask_png,
 )
@@ -24,6 +25,11 @@ class BackgroundMaskTests(unittest.TestCase):
         mask = mask_for_image(Image.new("RGB", (5, 3), "red"))
 
         self.assertEqual(mask.getextrema(), (255, 255))
+
+    def test_usable_alpha_detects_real_transparency_only(self):
+        self.assertFalse(has_usable_alpha(Image.new("RGB", (2, 2), "red")))
+        self.assertFalse(has_usable_alpha(Image.new("RGBA", (2, 2), (1, 2, 3, 255))))
+        self.assertTrue(has_usable_alpha(Image.new("RGBA", (2, 2), (1, 2, 3, 0))))
 
     def test_add_and_remove_strokes_change_only_mask(self):
         mask = Image.new("L", (9, 9), 0)
