@@ -508,12 +508,13 @@ class PinterestPinWorkerAdapter(QThread):
         self.variants: tuple[PinVariant, ...] = ()
         self.output_paths: dict[str, str] = {}
         self._cancelled = threading.Event()
+        self._stop_after_current = threading.Event()
 
     def stop(self) -> None:
         self._cancelled.set()
 
     def request_stop_after_current(self) -> None:
-        self._cancelled.set()
+        self._stop_after_current.set()
 
     def run(self) -> None:
         self._run()
@@ -524,8 +525,9 @@ class PinterestPinWorkerAdapter(QThread):
                 self.request,
                 cancelled=self._cancelled.is_set,
             )
+            cancel_remaining = False
             for index, variant in enumerate(self.variants, start=1):
-                if self._cancelled.is_set():
+                if self._cancelled.is_set() or cancel_remaining:
                     self.item_progress.emit(
                         {
                             "item_index": index,
@@ -585,6 +587,8 @@ class PinterestPinWorkerAdapter(QThread):
                         }
                     )
                 self.progress_value.emit(round(index * 100 / len(self.variants)))
+                if self._stop_after_current.is_set():
+                    cancel_remaining = True
         except Exception:
             self.variants = ()
             self.output_paths.clear()
@@ -1578,6 +1582,15 @@ class PinterestFlowController(QObject):
             else ()
         )
         variants_by_id = {variant.variant_id: variant for variant in variants}
+        requested_variant_ids = {
+            str(item.get("variant_id") or "").strip()
+            for item in (
+                self.worker.request.queue_items
+                if isinstance(self.worker, PinterestPinWorkerAdapter)
+                else ()
+            )
+            if isinstance(item, Mapping)
+        }
         output_paths = (
             self.worker.output_paths
             if isinstance(self.worker, PinterestPinWorkerAdapter)
@@ -1589,6 +1602,8 @@ class PinterestFlowController(QObject):
             if isinstance(item.payload, dict)
         }
         for result in preview.results:
+            if result.variant_id not in requested_variant_ids:
+                continue
             item = items_by_variant_id.get(result.variant_id)
             variant = variants_by_id.get(result.variant_id)
             if variant is not None:

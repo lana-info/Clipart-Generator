@@ -52,9 +52,10 @@ class UnexpectedPinterestOrchestrator:
 
 
 class CancellationAwarePinterestOrchestrator:
-    def __init__(self) -> None:
+    def __init__(self, variants=()) -> None:
         self.started = threading.Event()
         self.released = threading.Event()
+        self.variants = tuple(variants)
         self.cancelled: bool | None = None
         self.thread_id: int | None = None
 
@@ -64,7 +65,20 @@ class CancellationAwarePinterestOrchestrator:
         self.started.set()
         self.released.wait(timeout=1)
         self.cancelled = cancelled()
-        return ()
+        return self.variants
+
+    @staticmethod
+    def output_path(request, variant) -> Path:
+        return Path(request.settings["output_dir"]) / f"pinterest-{variant.variant_id}.png"
+
+
+class StaticPinterestOrchestrator:
+    def __init__(self, variants) -> None:
+        self.variants = tuple(variants)
+
+    def build(self, request, *, cancelled):
+        del request, cancelled
+        return self.variants
 
 
 class FakeWorker(QObject):
@@ -334,6 +348,121 @@ class V3PinterestFlowTests(unittest.TestCase):
 
         self.assertNotEqual(orchestrator.thread_id, threading.get_ident())
         self.assertTrue(orchestrator.cancelled)
+
+    def test_pinterest_worker_defers_stop_after_current_until_orchestration_returns(self):
+        """Treating deferred stop as immediate would cancel the current Pinterest slot."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-deferred-stop-") as temp:
+            request = PinterestPinRunRequest(
+                work_dir=temp,
+                product_path=str(Path(temp) / "product.png"),
+                pin=PinterestPinData(product_paths=["product.png"]),
+                settings={"output_dir": temp},
+                queue_items=({"variant_id": "ai-scene-01", "variant_kind": "ai_scene"},),
+            )
+            current_variant = PinVariant(
+                variant_id="ai-scene-01",
+                variant_kind="ai_scene",
+                image=Image.new("RGBA", (1000, 1500), "white"),
+                source_product_path="product.png",
+                scene_prompt="",
+                status="success",
+                retryable=False,
+                product_layer_digest="protected-digest",
+            )
+            orchestrator = CancellationAwarePinterestOrchestrator((current_variant,))
+            worker = PinterestPinWorkerAdapter(request, orchestrator=orchestrator)
+
+            worker.start()
+            self.assertTrue(orchestrator.started.wait(timeout=1))
+            worker.request_stop_after_current()
+            orchestrator.released.set()
+            self.assertTrue(worker.wait(1_000))
+            self.app.processEvents()
+
+        self.assertFalse(orchestrator.cancelled)
+        self.assertIn("ai-scene-01", worker.output_paths)
+
+    def test_pinterest_retry_sync_preserves_successful_slots_outside_retry_request(self):
+        """Missing retry-local variants must not overwrite prior successful Pinterest slots."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-retry-sync-") as temp:
+            state = self.make_state(temp)
+            state.pinterest.results = [
+                v3_pinterest_flow.PinterestPinResultData(
+                    variant_id=variant_id,
+                    variant_kind=variant_kind,
+                    source_product_path="product.png",
+                    output_path=f"old-{variant_id}.png",
+                    status="failed" if variant_id == "ai-scene-02" else "success",
+                    retryable=variant_id == "ai-scene-02",
+                    product_layer_digest="prior-digest",
+                )
+                for variant_id, variant_kind in (
+                    ("template-01", "template"),
+                    ("template-02", "template"),
+                    ("template-03", "template"),
+                    ("ai-scene-01", "ai_scene"),
+                    ("ai-scene-02", "ai_scene"),
+                    ("ai-scene-03", "ai_scene"),
+                )
+            ]
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                authorization_provider=lambda: None,
+            )
+            request = build_pinterest_run_request(state)
+            session = RunQueueSession(request, ProjectMode.PINTEREST)
+            for item in session.items:
+                item.status = (
+                    RunItemStatus.FAILED
+                    if item.payload["variant_id"] == "ai-scene-02"
+                    else RunItemStatus.SUCCEEDED
+                )
+            session.running = False
+            retry = session.prepare_retry()
+            retry_output = Path(temp) / "pinterest-ai-scene-02.png"
+            Image.new("RGBA", (10, 15), "white").save(retry_output)
+            retry_variant = PinVariant(
+                variant_id="ai-scene-02",
+                variant_kind="ai_scene",
+                image=Image.new("RGBA", (1000, 1500), "white"),
+                source_product_path="product.png",
+                scene_prompt="",
+                status="success",
+                retryable=False,
+                product_layer_digest="retry-digest",
+            )
+            worker = PinterestPinWorkerAdapter(
+                retry,
+                orchestrator=StaticPinterestOrchestrator((retry_variant,)),
+            )
+            worker.variants = (retry_variant,)
+            worker.output_paths = {"ai-scene-02": str(retry_output)}
+            controller.worker = worker
+            controller.run_queue.session = session
+            session.handle_item_progress(
+                {
+                    "item_index": 1,
+                    "total_items": 1,
+                    "stage": "export",
+                    "status": "succeeded",
+                    "output_path": str(retry_output),
+                }
+            )
+
+            controller._sync_preview_results_from_queue()
+
+        results = {result.variant_id: result for result in state.pinterest.results}
+        self.assertTrue(all(
+            results[variant_id].status == "success"
+            for variant_id in (
+                "template-01", "template-02", "template-03",
+                "ai-scene-01", "ai-scene-02", "ai-scene-03",
+            )
+        ))
+        self.assertEqual(results["template-01"].output_path, "old-template-01.png")
+        self.assertEqual(results["ai-scene-02"].output_path, str(retry_output))
+        self.assertEqual(results["ai-scene-02"].product_layer_digest, "retry-digest")
 
     def test_real_pinterest_start_routes_orchestrated_variants_to_all_six_slots(self):
         """Replacing the adapter with the legacy worker would omit protected pin metadata."""

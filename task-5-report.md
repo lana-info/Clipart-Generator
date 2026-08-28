@@ -91,3 +91,26 @@ Cancellation prevents new scene admission and further local export work. A
 future synchronous background-provider call cannot be force-interrupted after
 it has started; its provider adapter must accept the existing cancellation
 callback when one is introduced.
+
+## Scoped review follow-up — retry merge and deferred stop
+
+- Preview synchronization now changes only the Pinterest slot IDs present in
+  the active request. Retrying one failed AI scene therefore merges that new
+  variant into the existing six-slot series and retains successful templates
+  and unrelated AI scenes.
+- `PinterestPinWorkerAdapter` separates immediate cancellation from
+  `request_stop_after_current()`. The deferred request allows the current
+  orchestration/output variant to complete, then emits cancellation for later
+  queued variants; immediate stop retains its existing interrupt behavior.
+- Regression coverage verifies both that retrying `ai-scene-02` preserves all
+  previous successes and that a deferred stop does not cancel the in-flight
+  Pinterest variant.
+
+### Verification
+
+- `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest
+  tests/test_v3_clipart_flow.py tests/test_v3_pinterest_flow.py
+  tests/test_v3_run_queue.py -q` — 140 passed, 5 subtests passed.
+- `.venv/bin/python -m py_compile v3_pinterest_flow.py v3_run_queue.py` —
+  passed.
+- No Fal request, paid provider call, build, or external deployment ran.
