@@ -1,0 +1,42 @@
+"""Provider-independent alpha-mask editing primitives for Clipart."""
+
+from __future__ import annotations
+
+from PIL import Image, ImageDraw
+
+
+def mask_for_image(image: Image.Image) -> Image.Image:
+    """Return a writable L-mode mask, reusing an existing image alpha channel."""
+    if not isinstance(image, Image.Image):
+        raise TypeError("Ожидается изображение PIL")
+    if "A" in image.getbands():
+        return image.getchannel("A").copy()
+    return Image.new("L", image.size, 255)
+
+
+def apply_mask_stroke(
+    mask: Image.Image,
+    center: tuple[int, int],
+    *,
+    radius: int,
+    action: str,
+) -> Image.Image:
+    """Apply one hard-edged add/remove brush stroke to a defensive mask copy."""
+    if mask.mode != "L":
+        raise ValueError("Маска должна быть в режиме L")
+    if radius < 1:
+        raise ValueError("Радиус кисти должен быть положительным")
+    if action not in {"add", "remove"}:
+        raise ValueError("Действие кисти должно быть add или remove")
+    result = mask.copy()
+    value = 255 if action == "add" else 0
+    ImageDraw.Draw(result).ellipse(
+        (
+            center[0] - radius,
+            center[1] - radius,
+            center[0] + radius,
+            center[1] + radius,
+        ),
+        fill=value,
+    )
+    return result
