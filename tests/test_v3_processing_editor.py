@@ -126,24 +126,6 @@ class ProcessingEditorTests(unittest.TestCase):
             ),
         )
 
-    def test_pinterest_editor_persists_only_its_allowed_operation_state(self) -> None:
-        state = ProjectState(mode=ProjectMode.PINTEREST)
-        editor = PinterestProcessingPage(
-            _pinterest_project_adapter(state),
-            lambda: None,
-        )
-        editor.operation_widgets["upscale_before"].setChecked(True)
-        provider = editor.operation_widgets["upscale_before_provider"]
-        provider.setCurrentIndex(provider.findData("local_realesrgan"))
-
-        self.assertTrue(state.pinterest.operations.upscale_before)
-        self.assertEqual(
-            state.pinterest.operations.upscale_before_provider,
-            "local_realesrgan",
-        )
-        self.assertFalse(hasattr(state.pinterest.operations, "remove_background"))
-        self.assertFalse(hasattr(state.pinterest.operations, "remove_exif"))
-
     def test_operation_requirement_can_be_disabled_for_generation_modes(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations

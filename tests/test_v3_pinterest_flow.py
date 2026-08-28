@@ -1213,9 +1213,8 @@ class V3PinterestFlowTests(unittest.TestCase):
                 [result.status for result in state.pinterest.results],
                 ["success"] * 6,
             )
-            self.assertEqual(
-                [result.output_path for result in state.pinterest.results[3:]],
-                ["", "", ""],
+            self.assertTrue(
+                all(result.output_path for result in state.pinterest.results)
             )
             self.assertEqual(
                 [Path(result.output_path).name for result in state.pinterest.results[:3]],

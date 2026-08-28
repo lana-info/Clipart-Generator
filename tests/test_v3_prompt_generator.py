@@ -251,10 +251,10 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertEqual([entry.prompt for entry in result], ["Same prompt", "same prompt"])
 
     def test_generator_fields_and_manual_edits_survive_project_draft(self):
-        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state = ProjectState(mode=ProjectMode.CLIPART)
         data = self.sample_data()
-        generate_into_project(state, ProjectMode.PINTEREST, data)
-        state.pinterest.prompts[0].prompt = "Edited after generation"
+        generate_into_project(state, ProjectMode.CLIPART, data)
+        state.clipart.prompts[0].prompt = "Edited after generation"
 
         with tempfile.TemporaryDirectory(prefix="clipart-v3-generator-") as temp:
             path = Path(temp) / "project.clipart.json"
@@ -262,26 +262,24 @@ class V3PromptGeneratorTests(unittest.TestCase):
             restored = load_project_draft(path)
 
         self.assertEqual(
-            restored.pinterest.prompt_generator.to_dict(),
+            restored.clipart.prompt_generator.to_dict(),
             normalize_generator_data(
-                ProjectMode.PINTEREST,
+                ProjectMode.CLIPART,
                 data,
             ).to_dict(),
         )
         self.assertEqual(
-            restored.pinterest.prompts[0].prompt,
+            restored.clipart.prompts[0].prompt,
             "Edited after generation",
         )
 
     def test_old_project_draft_without_generator_section_uses_defaults(self):
         payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
         payload["clipart"].pop("prompt_generator")
-        payload["pinterest"].pop("prompt_generator")
 
         restored = ProjectState.from_dict(payload)
 
         self.assertEqual(restored.clipart.prompt_generator, PromptGeneratorData())
-        self.assertEqual(restored.pinterest.prompt_generator, PromptGeneratorData())
 
     def test_invalid_generator_draft_shape_fails_closed(self):
         corruptions = (
@@ -303,10 +301,6 @@ class V3PromptGeneratorTests(unittest.TestCase):
                 with self.assertRaises(ProjectStateError):
                     ProjectState.from_dict(payload)
 
-        payload = ProjectState().to_dict()
-        payload["pinterest"]["prompt_generator"]["future"] = True
-        with self.assertRaises(ProjectStateError):
-            ProjectState.from_dict(payload)
 
     def test_generator_module_has_no_network_client_imports(self):
         source = Path(v3_prompt_generator.__file__).read_text(encoding="utf-8")

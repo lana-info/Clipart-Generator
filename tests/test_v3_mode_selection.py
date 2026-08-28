@@ -21,6 +21,7 @@ from v3_mode_selection import (
 )
 from v3_project_state import (
     CommonProjectData,
+    PinterestPinData,
     PinterestModeData,
     ProjectMode,
     ProjectState,
@@ -221,11 +222,11 @@ class V3ModeSelectionTests(unittest.TestCase):
             controller = view.shell.pinterest_flow_controller
             self.assertEqual(
                 controller.pages[StepId.PROJECT].card.title_label.text(),
-                "Work folder",
+                "Product photo",
             )
             self.assertEqual(
                 controller.pages[StepId.PROMPTS].card.title_label.text(),
-                "Product and pin copy",
+                "Pin copy and layout",
             )
             view.close()
             view.deleteLater()
@@ -321,16 +322,16 @@ class V3ModeSelectionTests(unittest.TestCase):
         pinterest_state = view.project_state
         self.assertIsNot(pinterest_state, clipart_state)
         self.assertEqual(pinterest_state.clipart.prompts, [])
-        self.assertEqual(pinterest_state.pinterest.prompts, [])
+        self.assertEqual(pinterest_state.pinterest.pin.product_paths, [])
         self.assertEqual(pinterest_state.processing.selected_files, [])
-        pinterest_state.pinterest.prompts.append(PromptEntry("vertical pin"))
+        pinterest_state.pinterest.pin.pin_title = "vertical pin"
 
         view.show_new_project()
         view.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
         processing_state = view.project_state
         self.assertIsNot(processing_state, pinterest_state)
         self.assertEqual(processing_state.clipart.prompts, [])
-        self.assertEqual(processing_state.pinterest.prompts, [])
+        self.assertEqual(processing_state.pinterest.pin.product_paths, [])
         self.assertEqual(processing_state.processing.selected_files, [])
         view.close()
         view.deleteLater()
@@ -340,7 +341,7 @@ class V3ModeSelectionTests(unittest.TestCase):
             mode=ProjectMode.PINTEREST,
             common=CommonProjectData(project_name="Summer Pins"),
             pinterest=PinterestModeData(
-                prompts=[PromptEntry("vertical beach pin")],
+                pin=PinterestPinData(pin_title="vertical beach pin"),
             ),
         )
         recent.set_step(StepId.PROMPTS)
@@ -354,13 +355,13 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.mode_selection.continue_button.accessibleDescription(),
         )
 
-        recent.pinterest.prompts[0].prompt = "mutated outside"
+        recent.pinterest.pin.pin_title = "mutated outside"
         view.mode_selection.continue_button.click()
         state = view.project_state
         self.assertEqual(state.mode, ProjectMode.PINTEREST)
         self.assertEqual(state.current_step, StepId.PROMPTS)
         self.assertEqual(
-            state.pinterest.prompts[0].prompt,
+            state.pinterest.pin.pin_title,
             "vertical beach pin",
         )
         self.assertEqual(continued, [ProjectMode.PINTEREST.value])
@@ -375,7 +376,7 @@ class V3ModeSelectionTests(unittest.TestCase):
             state = view.project_state
             state.common.work_dir = temp
             state.clipart.prompts.append(PromptEntry("restored clipart prompt"))
-            state.pinterest.prompts.append(PromptEntry("restored pinterest prompt"))
+            state.pinterest.pin.pin_title = "restored pinterest prompt"
             view.shell.mark_dirty()
             view.close()
             view.deleteLater()
@@ -392,7 +393,7 @@ class V3ModeSelectionTests(unittest.TestCase):
                 "restored clipart prompt",
             )
             self.assertEqual(
-                restored_state.pinterest.prompts[0].prompt,
+                restored_state.pinterest.pin.pin_title,
                 "restored pinterest prompt",
             )
             restored.close()

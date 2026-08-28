@@ -12,6 +12,7 @@ from v3_project_state import (
     ClipartModeData,
     CommonProjectData,
     GenerationData,
+    PinterestPinData,
     PinterestModeData,
     ProcessingModeData,
     ProjectMode,
@@ -35,7 +36,7 @@ def complete_state(mode: ProjectMode) -> ProjectState:
             ),
         ),
         pinterest=PinterestModeData(
-            prompts=[PromptEntry("vertical summer pin")],
+            pin=PinterestPinData(product_paths=["D:/product.png"]),
             generation=GenerationData(
                 model="nano-banana-2",
                 ratio="9:16",

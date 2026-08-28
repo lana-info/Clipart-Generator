@@ -54,7 +54,8 @@ class LicenseFlowGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="pinterest-license-gate-") as temp:
             state = ProjectState(mode=ProjectMode.PINTEREST)
             state.common.work_dir = temp
-            state.pinterest.prompts = [PromptEntry("Test pin")]
+            state.pinterest.pin.product_paths = [os.path.join(temp, "product.png")]
+            Image.new("RGB", (12, 8), (120, 80, 30)).save(state.pinterest.pin.product_paths[0])
             state.set_step(StepId.REVIEW_RUN)
             factory = PinterestFactory()
             authorize = Mock(side_effect=self.denied)
