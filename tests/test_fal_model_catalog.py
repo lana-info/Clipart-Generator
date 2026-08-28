@@ -35,6 +35,8 @@ class FalModelCatalogTests(unittest.TestCase):
                 "fal-ai/bria/background/remove",
                 "fal-ai/birefnet/v2",
                 "fal-ai/imageutils/rembg",
+                "fal-ai/ideogram/remove-background",
+                "fal-ai/pixelcut/background-removal",
             ],
         )
         self.assertIn("refine_foreground", profiles[1].parameter_names)

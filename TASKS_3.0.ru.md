@@ -1479,7 +1479,8 @@ Acceptance:
 - [ ] Удаление фона и upscale реализованы только для endpoint profiles с
   проверенными output format и alpha behavior.
 - [x] Для удаления фона доступны отдельные Fal.ai profiles Bria RMBG,
-  BiRefNet и rembg; настройки передаются только выбранной модели.
+  BiRefNet, Ideogram, Pixelcut и rembg; настройки передаются только выбранной
+  модели.
 - [x] BiRefNet переведён на официальный endpoint `fal-ai/birefnet/v2` с
   совместимой миграцией старого сохранённого ID.
 - [x] Восстановлены Local rembg и Local BEN2; для KIE исправлен список
@@ -1498,7 +1499,7 @@ Status: Planned — решение утверждено, выполнение н
 
 Кандидаты:
 
-- BiRefNet v2: Matting, Portrait, Heavy, Dynamic;
+- BiRefNet v2: Light, Light 2K, Matting, Portrait, Heavy, Dynamic;
 - BEN v2;
 - Ideogram Remove Background;
 - Bria RMBG 2.0;

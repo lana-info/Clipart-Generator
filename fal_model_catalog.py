@@ -61,6 +61,22 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         parameter_names=("crop_to_bbox", "sync_mode"),
     ),
     FalEndpointProfile(
+        model_id="fal-ai/ideogram/remove-background",
+        operation="remove_background",
+        supports_references=True,
+        preserves_alpha=True,
+        output_formats=("png",),
+        price_note="model pricing must be refreshed before live use",
+    ),
+    FalEndpointProfile(
+        model_id="fal-ai/pixelcut/background-removal",
+        operation="remove_background",
+        supports_references=True,
+        preserves_alpha=True,
+        output_formats=("png",),
+        price_note="model pricing must be refreshed before live use",
+    ),
+    FalEndpointProfile(
         model_id="fal-ai/esrgan",
         operation="upscale",
         supports_references=True,
