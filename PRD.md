@@ -302,6 +302,30 @@ analytics, and Pinterest publishing are out of scope for this stage.
   `cancelled_before_start`, `completed_after_cancel`, `already_completed`, and
   `cancel_failed`; a late result must remain traceable and no refund is implied.
 
+### Background removal UX for Clipart
+
+Background removal is a shared provider capability, but its presentation is
+workflow-specific. In Clipart it is a quality-critical operation and must
+produce a transparent PNG while preserving the source object's RGB pixels,
+texture, pattern, and proportions wherever the alpha mask allows them.
+
+The Clipart review surface must provide:
+
+- model/profile selection when more than one compatible remover is available;
+- a preview background selector with checkerboard, black, white, green, bright
+  pink, and light blue backgrounds;
+- zoomed edge inspection before export;
+- a manual mask correction mode with add/remove brush actions;
+- a saved corrected mask that can be reused for subsequent processing;
+- a clear distinction between the source image, the generated alpha mask, and
+  the final transparent export.
+
+The preview colors are inspection aids only and must never be baked into the
+transparent output. A source PNG that already has a usable alpha channel should
+not be sent through a remover by default. Pinterest may reuse the low-level
+mask/compositing infrastructure, but its Pins MVP must not show the full
+Clipart mask editor.
+
 ### Out of scope for this phase
 
 - Patterns and seamless-tile validation.
