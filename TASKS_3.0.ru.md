@@ -1544,8 +1544,7 @@ Acceptance:
 
 ### NEXT-TASK-012 — Реализовать Pinterest Pins
 
-Status: Design approved — implementation plan готов и ожидает выбора способа
-выполнения
+Status: Реализация Tasks 1–6 завершена в feature-ветке; ожидает интеграции
 
 Scope: отдельный Pinterest Pins-модуль для создания пинов из фото товара.
 Контент-план, SEO, расписание, аналитика и публикация отложены в отдельный
@@ -1559,9 +1558,9 @@ Acceptance:
 - [x] Есть отдельный provider renderer для структурированной схемы.
 - [x] Утверждены три template и три AI-scene варианта в формате 2:3.
 - [x] Утверждено сохранение исходного товара отдельным защищённым слоем.
-- [ ] Есть input фото товара, preview, редактирование текста и серия вариантов.
-- [ ] Есть selective regeneration только фона/сцены.
-- [ ] Все принятые пины сохраняются в выбранную папку.
+- [x] Есть input фото товара, preview, редактирование текста и серия вариантов.
+- [x] Есть selective regeneration только фона/сцены.
+- [x] Все принятые пины сохраняются в выбранную папку.
 
 Verification: [docs/superpowers/specs/2026-08-28-pinterest-pins-design.md](docs/superpowers/specs/2026-08-28-pinterest-pins-design.md),
 [docs/superpowers/plans/2026-08-28-pinterest-pins-implementation.md](docs/superpowers/plans/2026-08-28-pinterest-pins-implementation.md),

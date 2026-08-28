@@ -45,6 +45,19 @@ Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
 Actions run `33032049521`. Do not publish it as an update before this
 target-machine acceptance.
 
+## Pinterest Pins Task 6 checkpoint — 2026-08-28
+
+- Feature branch `codex/feature-generation-fal-localization` implements
+  selective one-slot regeneration and accepted-pin folder export; it is not
+  merged into `develop/3.0` yet.
+- Regeneration uses the original immutable `ProductLayer` when it is available,
+  keeps its digest, and submits only the selected template or AI-scene slot to
+  the existing Pinterest queue. No Fal client or live provider was added.
+- Accepted successful variants export to the selected folder as JPG or PNG with
+  collision-safe names such as `product_template_01.jpg` and
+  `product_ai-scene_01.jpg`; a failed export preserves earlier files and shows
+  the saved count and folder.
+
 ## Replacement Windows 3.0.5 build — 2026-08-27
 
 - All approved owner-acceptance source branches were integrated into

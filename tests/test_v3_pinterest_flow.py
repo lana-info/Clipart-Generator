@@ -4,6 +4,7 @@ import tempfile
 import threading
 import time
 import unittest
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -298,6 +299,47 @@ class V3PinterestFlowTests(unittest.TestCase):
         )
         self.assertEqual(session.active_order, [4])
         self.assertEqual(session.items[4].attempts, 2)
+
+    def test_orchestrator_regenerates_only_selected_scene_with_cached_product_layer(self):
+        """Reloading product pixels or recreating every slot would break selective regeneration."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-selective-regeneration-") as temp:
+            state = self.make_state(temp)
+            request = build_pinterest_run_request(state)
+            background_calls: list[int] = []
+
+            def fake_background(_: str, slot_index: int) -> Image.Image:
+                background_calls.append(slot_index)
+                return Image.new("RGBA", (1000, 1500), (slot_index, 20, 30, 255))
+
+            request = replace(request, generate_background=fake_background)
+            orchestrator = v3_pinterest_flow.PinterestPinOrchestrator()
+            with patch.object(
+                v3_pinterest_flow,
+                "load_product_layer",
+                wraps=v3_pinterest_flow.load_product_layer,
+            ) as load_product:
+                first_series = orchestrator.build(request)
+                background_calls.clear()
+                regenerated = orchestrator.build(
+                    replace(
+                        request,
+                        queue_items=(
+                            {"variant_id": "ai-scene-02", "variant_kind": "ai_scene"},
+                        ),
+                    )
+                )
+
+        self.assertEqual(load_product.call_count, 1)
+        self.assertEqual(background_calls, [2])
+        self.assertEqual([variant.variant_id for variant in regenerated], ["ai-scene-02"])
+        first_scene = next(
+            variant for variant in first_series if variant.variant_id == "ai-scene-02"
+        )
+        self.assertEqual(regenerated[0].source_product_path, first_scene.source_product_path)
+        self.assertEqual(
+            regenerated[0].product_layer_digest,
+            first_scene.product_layer_digest,
+        )
 
     def test_pinterest_worker_reports_unexpected_exception_and_finishes(self):
         """An uncaught orchestration error would leave the shared run queue running forever."""
@@ -720,17 +762,20 @@ class V3PinterestFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-preview-") as temp:
             first_product = Path(temp) / "first.png"
             second_product = Path(temp) / "second.png"
+            accepted_source = Path(temp) / "accepted.png"
             Image.new("RGBA", (8, 10), "white").save(first_product)
             Image.new("RGBA", (8, 10), "black").save(second_product)
+            Image.new("RGBA", (1000, 1500), "white").save(accepted_source)
             state = ProjectState(mode=ProjectMode.PINTEREST)
             state.pinterest.pin.product_paths = [str(first_product), str(second_product)]
             state.pinterest.pin.selected_product_index = 1
+            state.set_output_dir_for_mode(temp, ProjectMode.PINTEREST)
             state.pinterest.results = [
                 v3_pinterest_flow.PinterestPinResultData(
                     variant_id="template-01",
                     variant_kind="template",
                     source_product_path=str(second_product),
-                    output_path=str(Path(temp) / "accepted.png"),
+                    output_path=str(accepted_source),
                     accepted=True,
                     status="success",
                     product_layer_digest="protected-digest",
@@ -746,7 +791,10 @@ class V3PinterestFlowTests(unittest.TestCase):
                 [result.source_product_path for result in state.pinterest.results],
                 [str(second_product)] * 6,
             )
-            self.assertEqual(page.export_accepted(), (str(Path(temp) / "accepted.png"),))
+            self.assertEqual(
+                page.export_accepted(),
+                (str(Path(temp) / "second_template_01.png"),),
+            )
 
             page.set_variant_accepted("ai-scene-01", True)
             page.regenerate_variant("ai-scene-01")
@@ -758,6 +806,109 @@ class V3PinterestFlowTests(unittest.TestCase):
             self.assertEqual(retried.status, "pending")
             self.assertTrue(retried.retryable)
             self.assertEqual(factory.workers, [])
+
+    def test_preview_regeneration_starts_only_the_selected_slot(self):
+        """Restarting the full six-slot series would replace unrelated accepted pins."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-preview-regeneration-") as temp:
+            state = self.make_state(temp)
+            state.set_step(StepId.REVIEW_RUN)
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                shell,
+                authorization_provider=lambda: None,
+            )
+            shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
+            self.assertIsNotNone(controller.start())
+            self.assertTrue(self.wait_for_worker(controller.worker))
+            initial_worker = controller.worker
+            initial_product_layer = initial_worker.product_layer
+            self.assertIsNotNone(initial_product_layer)
+            page = controller.pages[StepId.RESULTS]
+            preserved = next(
+                result for result in state.pinterest.results if result.variant_id == "template-02"
+            )
+            preserved.status = "success"
+            preserved.accepted = True
+            preserved.output_path = "preserved-template.png"
+            preserved.product_layer_digest = "preserved-digest"
+
+            page.regenerate_variant("template-01")
+
+            self.assertIsInstance(controller.worker, PinterestPinWorkerAdapter)
+            self.assertIsNot(controller.worker, initial_worker)
+            self.assertIs(controller.worker.request.product_layer, initial_product_layer)
+            self.assertEqual(
+                controller.worker.request.queue_items,
+                ({"variant_id": "template-01", "variant_kind": "template"},),
+            )
+            self.assertTrue(self.wait_for_worker(controller.worker))
+
+        self.assertEqual(preserved.status, "success")
+        self.assertTrue(preserved.accepted)
+        self.assertEqual(preserved.output_path, "preserved-template.png")
+        self.assertEqual(preserved.product_layer_digest, "preserved-digest")
+
+    def test_export_accepted_writes_collision_safe_files_and_keeps_partial_successes(self):
+        """Overwriting an existing pin or discarding an earlier export after one failure is unsafe."""
+        with tempfile.TemporaryDirectory(prefix="pinterest-v3-export-") as temp:
+            root = Path(temp)
+            export_folder = root / "selected export"
+            product_path = root / "product image.png"
+            Image.new("RGBA", (8, 10), (20, 40, 60, 0)).save(product_path)
+            jpg_source = root / "template.jpg"
+            png_source = root / "scene.png"
+            Image.new("RGB", (1000, 1500), "white").save(jpg_source, format="JPEG")
+            Image.new("RGBA", (1000, 1500), "black").save(png_source, format="PNG")
+            export_folder.mkdir()
+            existing = export_folder / "product_image_template_01.jpg"
+            existing.write_bytes(b"keep-existing-export")
+            state = ProjectState(mode=ProjectMode.PINTEREST)
+            state.set_output_dir_for_mode(str(export_folder), ProjectMode.PINTEREST)
+            state.pinterest.pin.product_paths = [str(product_path)]
+            state.pinterest.results = [
+                v3_pinterest_flow.PinterestPinResultData(
+                    variant_id="template-01",
+                    variant_kind="template",
+                    source_product_path=str(product_path),
+                    output_path=str(jpg_source),
+                    accepted=True,
+                    status="success",
+                ),
+                v3_pinterest_flow.PinterestPinResultData(
+                    variant_id="ai-scene-01",
+                    variant_kind="ai_scene",
+                    source_product_path=str(product_path),
+                    output_path=str(png_source),
+                    accepted=True,
+                    status="success",
+                ),
+                v3_pinterest_flow.PinterestPinResultData(
+                    variant_id="template-02",
+                    variant_kind="template",
+                    source_product_path=str(product_path),
+                    output_path=str(root / "missing.png"),
+                    accepted=True,
+                    status="success",
+                ),
+            ]
+            shell = AppShell(state)
+            controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+            page = controller.pages[StepId.RESULTS]
+
+            exported = page.export_accepted()
+
+            self.assertEqual(
+                tuple(Path(path).name for path in exported),
+                ("product_image_template_01-02.jpg", "product_image_ai-scene_01.png"),
+            )
+            self.assertTrue(all(Path(path).is_file() for path in exported))
+            self.assertEqual(existing.read_bytes(), b"keep-existing-export")
+            results = {result.variant_id: result for result in state.pinterest.results}
+            self.assertEqual(results["template-01"].export_status, "exported")
+            self.assertEqual(results["ai-scene-01"].export_status, "exported")
+            self.assertEqual(results["template-02"].export_status, "failed")
+            self.assertIn("2", page.export_status_label.text())
+            self.assertIn(str(export_folder), page.export_status_label.text())
 
     def test_regeneration_clears_stale_export_and_fidelity_metadata(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)

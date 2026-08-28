@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import threading
+import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -119,6 +120,7 @@ _PINTEREST_UI_TEXT = {
         "variant": "Вариант",
         "fidelity_warning": "Предупреждение: точность товара не подтверждена защищённым слоем.",
         "export_ready": "К экспорту выбрано: {count}",
+        "export_summary": "Сохранено: {count}; папка: {folder}",
         "status_pending": "Ожидает генерации",
         "status_success": "Готов",
         "status_failed": "Не удалось создать",
@@ -159,6 +161,7 @@ _PINTEREST_UI_TEXT = {
         "variant": "Variant",
         "fidelity_warning": "Warning: product fidelity is not confirmed by a protected layer.",
         "export_ready": "Ready to export: {count}",
+        "export_summary": "Saved: {count}; folder: {folder}",
         "status_pending": "Waiting for generation",
         "status_success": "Ready",
         "status_failed": "Could not generate",
@@ -259,6 +262,7 @@ def build_pinterest_pin_series(
     product: ProductLayer,
     generate_background: BackgroundGenerator | None = None,
     cancelled: Callable[[], bool] | None = None,
+    variant_ids: set[str] | frozenset[str] | None = None,
 ) -> tuple[PinVariant, ...]:
     """Build the fixed template/AI-scene series without giving product pixels to AI."""
 
@@ -267,9 +271,13 @@ def build_pinterest_pin_series(
     if not isinstance(product, ProductLayer):
         raise TypeError("product must be a ProductLayer")
 
+    requested_ids = frozenset(variant_ids) if variant_ids is not None else None
     variants: list[PinVariant] = []
     digest = product_layer_digest(product)
     for index, spec in enumerate(pinterest_template_specs(), start=1):
+        variant_id = f"template-{index:02d}"
+        if requested_ids is not None and variant_id not in requested_ids:
+            continue
         product_box = template_product_box(spec.template_id)
         background = render_template_background(
             title=draft.pin_title,
@@ -281,7 +289,7 @@ def build_pinterest_pin_series(
         assert_product_pixels_preserved(product.rgba, image, product_box=product_box)
         variants.append(
             PinVariant(
-                variant_id=f"template-{index:02d}",
+                variant_id=variant_id,
                 variant_kind="template",
                 image=image,
                 source_product_path=product.source_path,
@@ -296,6 +304,8 @@ def build_pinterest_pin_series(
     scene_boxes = tuple(template_product_box(spec.template_id) for spec in pinterest_template_specs())
     for index, product_box in enumerate(scene_boxes, start=1):
         variant_id = f"ai-scene-{index:02d}"
+        if requested_ids is not None and variant_id not in requested_ids:
+            continue
         prompt = _scene_prompt(draft, product_box)
         if generate_background is None or (cancelled is not None and cancelled()):
             variants.append(
@@ -441,10 +451,19 @@ class PinterestPinRunRequest:
         repr=False,
         compare=False,
     )
+    product_layer: ProductLayer | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
 
 class PinterestPinOrchestrator:
     """Build protected Pinterest variants without a provider-specific client."""
+
+    def __init__(self) -> None:
+        self._product_layers: dict[str, ProductLayer] = {}
+        self.product_layer: ProductLayer | None = None
 
     def build(
         self,
@@ -452,7 +471,11 @@ class PinterestPinOrchestrator:
         *,
         cancelled: Callable[[], bool] | None = None,
     ) -> tuple[PinVariant, ...]:
-        product = load_product_layer(request.product_path)
+        product = request.product_layer or self._product_layers.get(request.product_path)
+        if product is None:
+            product = load_product_layer(request.product_path)
+        self._product_layers[request.product_path] = product
+        self.product_layer = product
         requested_ids = {
             str(item.get("variant_id") or "").strip()
             for item in request.queue_items
@@ -471,6 +494,7 @@ class PinterestPinOrchestrator:
             product=product,
             generate_background=generate_requested_background,
             cancelled=cancelled,
+            variant_ids=requested_ids,
         )
         variants_by_id = {variant.variant_id: variant for variant in variants}
         try:
@@ -507,6 +531,7 @@ class PinterestPinWorkerAdapter(QThread):
         self.orchestrator = orchestrator or PinterestPinOrchestrator()
         self.variants: tuple[PinVariant, ...] = ()
         self.output_paths: dict[str, str] = {}
+        self.product_layer: ProductLayer | None = None
         self._cancelled = threading.Event()
         self._stop_after_current = threading.Event()
 
@@ -535,6 +560,7 @@ class PinterestPinWorkerAdapter(QThread):
                 self.request,
                 cancelled=self._cancelled.is_set,
             )
+            self.product_layer = getattr(self.orchestrator, "product_layer", None)
             cancel_remaining = False
             for index, variant in enumerate(self.variants, start=1):
                 if self._cancelled.is_set() or cancel_remaining:
@@ -666,6 +692,37 @@ def build_pinterest_run_request(
         settings={"output_dir": str(output_path)},
         queue_items=queue_items,
     )
+
+
+def _pinterest_export_format(source_path: str) -> tuple[str, str]:
+    suffix = Path(source_path).suffix.lower()
+    if suffix in {".jpg", ".jpeg"}:
+        return "JPG", ".jpg"
+    if suffix == ".png":
+        return "PNG", ".png"
+    raise ValueError("Pinterest export source must be JPG or PNG")
+
+
+def _pinterest_export_target(
+    folder: Path,
+    *,
+    product_path: str,
+    variant_id: str,
+    suffix: str,
+) -> Path:
+    product_stem = re.sub(r"[^A-Za-z0-9]+", "_", Path(product_path).stem).strip("_")
+    safe_product = product_stem or "product"
+    variant_prefix, separator, variant_number = variant_id.rpartition("-")
+    if not separator or not variant_prefix or not variant_number.isdigit():
+        raise ValueError("Pinterest variant has an invalid export name")
+    safe_variant = f"{variant_prefix}_{variant_number}"
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{safe_product}_{safe_variant}{suffix}"
+    collision_index = 2
+    while target.exists():
+        target = folder / f"{safe_product}_{safe_variant}-{collision_index:02d}{suffix}"
+        collision_index += 1
+    return target
 
 
 class PinterestProductInputPage(_ScrollableStepPage):
@@ -913,7 +970,7 @@ class PinterestPromptReviewPage(ClipartPromptReviewPage):
 
 
 class PinterestPinPreviewPage(_ScrollableStepPage):
-    """Local preview state; generation and file export are wired by later tasks."""
+    """Preview fixed Pinterest slots and delegate selective regeneration."""
 
     def __init__(
         self,
@@ -922,6 +979,7 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
         *,
         locale: str = "ru",
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        regenerate_handler: Callable[[str], None] | None = None,
     ) -> None:
         self.locale = normalize_locale(locale)
         super().__init__(
@@ -931,6 +989,7 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
         )
         self.state = state
         self.changed = changed
+        self._regenerate_handler = regenerate_handler
         self.variant_cards: dict[str, QFrame] = {}
         self.grid_widget = QWidget()
         self.grid = QGridLayout(self.grid_widget)
@@ -1076,7 +1135,13 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
         raise ValueError(f"Unknown Pinterest variant: {variant_id}")
 
     def regenerate_variant(self, variant_id: str) -> None:
-        """Mark one slot for later regeneration without starting a worker."""
+        """Regenerate one fixed slot through the owning Pinterest controller."""
+        if self._regenerate_handler is not None:
+            self._regenerate_handler(variant_id)
+            return
+        self._mark_variant_for_regeneration(variant_id)
+
+    def _mark_variant_for_regeneration(self, variant_id: str) -> None:
         result = self._find_result(variant_id)
         result.status = "pending"
         result.retryable = True
@@ -1095,18 +1160,47 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
         self.refresh_from_state()
 
     def export_accepted(self) -> tuple[str, ...]:
-        """Return accepted existing paths; writing files belongs to Task 6."""
-        return tuple(
-            result.output_path
-            for result in self.results
-            if result.accepted and result.status == "success" and result.output_path
+        """Save accepted successful variants in the selected Pinterest folder."""
+        output_dir = self.state.output_dir_for_mode(ProjectMode.PINTEREST)
+        exported: list[str] = []
+        if output_dir:
+            folder = Path(output_dir).expanduser()
+            for result in self.results:
+                if not (
+                    result.accepted
+                    and result.status == "success"
+                    and result.output_path
+                ):
+                    continue
+                try:
+                    format_name, suffix = _pinterest_export_format(result.output_path)
+                    target = _pinterest_export_target(
+                        folder,
+                        product_path=result.source_product_path,
+                        variant_id=result.variant_id,
+                        suffix=suffix,
+                    )
+                    with Image.open(result.output_path) as source:
+                        source.load()
+                        exported.append(save_pin(source, str(target), format=format_name))
+                except (OSError, RuntimeError, ValueError):
+                    result.export_status = "failed"
+                else:
+                    result.export_status = "exported"
+        self.export_status_label.setText(
+            _pinterest_text(
+                "export_summary",
+                locale=self.locale,
+                count=len(exported),
+                folder=str(Path(output_dir).expanduser()) if output_dir else "—",
+            )
         )
+        self.changed()
+        self.refresh_from_state()
+        return tuple(exported)
 
     def _show_export_selection(self) -> None:
-        paths = self.export_accepted()
-        self.export_status_label.setText(
-            _pinterest_text("export_ready", locale=self.locale, count=len(paths))
-        )
+        self.export_accepted()
 
     def refresh_from_state(self) -> None:
         self._ensure_six_slots()
@@ -1375,6 +1469,7 @@ class PinterestFlowController(QObject):
         self.worker_factory = worker_factory or self.runtime_adapter.create_worker
         self.authorization_provider = authorization_provider or self._missing_authorization
         self.worker: Any | None = None
+        self._product_layer: ProductLayer | None = None
         self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
 
@@ -1459,6 +1554,7 @@ class PinterestFlowController(QObject):
                 changed,
                 locale=self.locale,
                 tokens=self.shell.tokens,
+                regenerate_handler=self.regenerate_variant,
             ),
         )
         if self.shell.state.mode is ProjectMode.PINTEREST:
@@ -1554,6 +1650,52 @@ class PinterestFlowController(QObject):
         self.started.emit(request)
         return request
 
+    def regenerate_variant(self, variant_id: str) -> PinterestPinRunRequest | None:
+        """Start one selected Pinterest slot without resetting the six-slot preview."""
+        if self.shell.another_run_is_active(self):
+            self.error.emit("Сначала завершите текущее задание в другом режиме")
+            return None
+        if self.worker is not None and self.runtime_adapter.is_running(self.worker):
+            self.error.emit("Запуск уже выполняется")
+            return None
+        preview = self.pages[StepId.RESULTS]
+        if not isinstance(preview, PinterestPinPreviewPage):
+            raise RuntimeError("Pinterest preview page is not installed")
+        result = preview._find_result(variant_id)
+        preview._mark_variant_for_regeneration(variant_id)
+        try:
+            runtime_settings = self.runtime_settings_provider()
+            if not isinstance(runtime_settings, Mapping):
+                raise ClipartFlowError("Настройки запуска повреждены")
+            request = build_pinterest_run_request(self.shell.state, runtime_settings)
+            cached_product = self._product_layer
+            if cached_product is not None and cached_product.source_path != request.product_path:
+                cached_product = None
+            request = replace(
+                request,
+                queue_items=(
+                    {
+                        "variant_id": result.variant_id,
+                        "variant_kind": result.variant_kind,
+                    },
+                ),
+                product_layer=cached_product,
+            )
+            self._runtime_settings = runtime_settings
+            self.authorization_provider()
+            worker = self.create_worker_for_request(request)
+        except (ClipartFlowError, LicenseError, OSError, TypeError, ValueError) as error:
+            self.error.emit(_safe_runtime_error(error, locals().get("runtime_settings")))
+            return None
+
+        self.worker = worker
+        self.run_queue.start_new(request)
+        self.run_queue.connect_worker(worker)
+        self.runtime_adapter.start(worker)
+        self.review_page.set_run_status("Перегенерируется выбранный Pinterest-вариант")
+        self.started.emit(request)
+        return request
+
     def _reset_preview_results_for_new_run(self) -> None:
         """Discard result-bound state only after a replacement run can start."""
         preview = self.pages[StepId.RESULTS]
@@ -1591,6 +1733,10 @@ class PinterestFlowController(QObject):
             if isinstance(self.worker, PinterestPinWorkerAdapter)
             else ()
         )
+        if isinstance(self.worker, PinterestPinWorkerAdapter):
+            product_layer = self.worker.product_layer
+            if product_layer is not None:
+                self._product_layer = product_layer
         variants_by_id = {variant.variant_id: variant for variant in variants}
         requested_variant_ids = {
             str(item.get("variant_id") or "").strip()
