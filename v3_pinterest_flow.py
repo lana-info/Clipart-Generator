@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from PIL import Image
+
 from PyQt6.QtCore import QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
@@ -22,6 +24,19 @@ from PyQt6.QtWidgets import (
 )
 
 from license_client import LicenseError
+
+from pinterest_pin_composer import (
+    ProductLayer,
+    assert_product_pixels_preserved,
+    composite_product,
+    product_layer_digest,
+)
+from pinterest_pin_templates import (
+    pinterest_template_specs,
+    render_template_background,
+    template_product_box,
+)
+from security_redaction import redact_text
 
 from v3_clipart_flow import (
     DEFAULT_TOKENS,
@@ -49,6 +64,7 @@ from v3_project_state import (
     MAX_SELECTED_FILES,
     PINTEREST_AI_SCENE_COUNT,
     PINTEREST_TEMPLATE_COUNT,
+    PinterestPinData,
     PinterestOperationData,
     PinterestModeData,
     PinterestPinResultData,
@@ -169,6 +185,155 @@ class PinterestCopySuggestions:
     title: str = ""
     subtitle: str = ""
     cta: str = ""
+
+
+BackgroundGenerator = Callable[[str, int], Image.Image]
+
+
+@dataclass(frozen=True, slots=True)
+class PinVariant:
+    """One fixed Pinterest slot, with a protected product composed locally."""
+
+    variant_id: str
+    variant_kind: str
+    image: Image.Image | None
+    source_product_path: str
+    scene_prompt: str
+    status: str
+    retryable: bool
+    product_layer_digest: str
+    error_code: str = ""
+    error_message: str = ""
+    product_box: tuple[int, int, int, int] = (0, 0, 1, 1)
+
+
+def _safe_scene_detail(value: object) -> str:
+    return redact_text(str(value or "").strip(), limit=300)
+
+
+def _scene_prompt(draft: PinterestPinData, product_box: tuple[int, int, int, int]) -> str:
+    details = [
+        "Create only a Pinterest pin background and environment.",
+        f"Reserve the empty product placement area {product_box}.",
+        "Do not render any product, packaging, labels, logos, people, or text.",
+    ]
+    for label, value in (
+        ("Environment", draft.background_description),
+        ("Style", draft.style),
+        ("Palette", draft.color_palette),
+    ):
+        safe_value = _safe_scene_detail(value)
+        if safe_value:
+            details.append(f"{label}: {safe_value}.")
+    return " ".join(details)
+
+
+def _failed_scene_variant(
+    *,
+    variant_id: str,
+    product: ProductLayer,
+    prompt: str,
+    product_box: tuple[int, int, int, int],
+) -> PinVariant:
+    return PinVariant(
+        variant_id=variant_id,
+        variant_kind="ai_scene",
+        image=None,
+        source_product_path=product.source_path,
+        scene_prompt=prompt,
+        status="failed",
+        retryable=True,
+        product_layer_digest=product_layer_digest(product),
+        error_code="background_generation_failed",
+        error_message="Не удалось создать фон. Повторите попытку.",
+        product_box=product_box,
+    )
+
+
+def build_pinterest_pin_series(
+    draft: PinterestPinData,
+    *,
+    product: ProductLayer,
+    generate_background: BackgroundGenerator | None = None,
+    cancelled: Callable[[], bool] | None = None,
+) -> tuple[PinVariant, ...]:
+    """Build the fixed template/AI-scene series without giving product pixels to AI."""
+
+    if not isinstance(draft, PinterestPinData):
+        raise TypeError("draft must be a PinterestPinData")
+    if not isinstance(product, ProductLayer):
+        raise TypeError("product must be a ProductLayer")
+
+    variants: list[PinVariant] = []
+    digest = product_layer_digest(product)
+    for index, spec in enumerate(pinterest_template_specs(), start=1):
+        product_box = template_product_box(spec.template_id)
+        background = render_template_background(
+            title=draft.pin_title,
+            subtitle=draft.pin_subtitle,
+            cta=draft.pin_cta,
+            template_id=spec.template_id,
+        )
+        image = composite_product(background, product, box=product_box)
+        assert_product_pixels_preserved(product.rgba, image, product_box=product_box)
+        variants.append(
+            PinVariant(
+                variant_id=f"template-{index:02d}",
+                variant_kind="template",
+                image=image,
+                source_product_path=product.source_path,
+                scene_prompt="",
+                status="success",
+                retryable=False,
+                product_layer_digest=digest,
+                product_box=product_box,
+            )
+        )
+
+    scene_boxes = tuple(template_product_box(spec.template_id) for spec in pinterest_template_specs())
+    for index, product_box in enumerate(scene_boxes, start=1):
+        variant_id = f"ai-scene-{index:02d}"
+        prompt = _scene_prompt(draft, product_box)
+        if generate_background is None or (cancelled is not None and cancelled()):
+            variants.append(
+                _failed_scene_variant(
+                    variant_id=variant_id,
+                    product=product,
+                    prompt=prompt,
+                    product_box=product_box,
+                )
+            )
+            continue
+        try:
+            background = generate_background(prompt, index)
+            if not isinstance(background, Image.Image) or background.size != (1000, 1500):
+                raise ValueError("background artifact has an invalid canvas")
+            image = composite_product(background, product, box=product_box)
+            assert_product_pixels_preserved(product.rgba, image, product_box=product_box)
+        except Exception:
+            variants.append(
+                _failed_scene_variant(
+                    variant_id=variant_id,
+                    product=product,
+                    prompt=prompt,
+                    product_box=product_box,
+                )
+            )
+            continue
+        variants.append(
+            PinVariant(
+                variant_id=variant_id,
+                variant_kind="ai_scene",
+                image=image,
+                source_product_path=product.source_path,
+                scene_prompt=prompt,
+                status="success",
+                retryable=False,
+                product_layer_digest=digest,
+                product_box=product_box,
+            )
+        )
+    return tuple(variants)
 
 
 class PinterestCopySuggestionService:

@@ -15,18 +15,22 @@ from PyQt6.QtWidgets import QApplication, QAbstractButton, QLabel
 import v3_pinterest_flow
 from v3_mode_selection import V3ApplicationView
 from v3_pinterest_flow import (
+    PinVariant,
     PinterestCopySuggestionService,
     PinterestFormatModelPage,
     PinterestPinPreviewPage,
     PinterestProductInputPage,
     PinterestPromptInputPage,
     PinterestReviewRunPage,
+    build_pinterest_pin_series,
     build_pinterest_run_request,
     estimate_pinterest_cost,
     install_pinterest_flow,
 )
+from pinterest_pin_composer import ProductLayer, assert_product_pixels_preserved
 from v3_clipart_flow import ClipartPromptReviewPage
 from v3_project_state import (
+    PinterestPinData,
     ProjectMode,
     ProjectState,
     PromptEntry,
@@ -83,6 +87,118 @@ class V3PinterestFlowTests(unittest.TestCase):
         ]
         state.pinterest.generation.variants = 2
         return state
+
+    @staticmethod
+    def protected_product() -> ProductLayer:
+        rgba = Image.new("RGBA", (24, 32), (23, 67, 121, 0))
+        for x in range(5, 19):
+            for y in range(4, 29):
+                rgba.putpixel((x, y), (23, 67, 121, 255))
+        return ProductLayer(
+            "product.png",
+            rgba=rgba,
+            alpha_mask=rgba.getchannel("A"),
+        )
+
+    def test_pin_series_has_six_stable_slots_and_protects_product_pixels(self):
+        """Removing a template/scene or bypassing protected composition must fail."""
+        draft = PinterestPinData(
+            product_paths=["product.png"],
+            pin_title="Summer tote",
+            pin_subtitle="For weekends",
+            pin_cta="See details",
+            style="clean editorial",
+            background_description="sunlit market table",
+        )
+        calls: list[tuple[str, int]] = []
+
+        def fake_background(prompt: str, slot_index: int) -> Image.Image:
+            calls.append((prompt, slot_index))
+            return Image.new("RGBA", (1000, 1500), (241, 228, 210, 255))
+
+        variants = build_pinterest_pin_series(
+            draft,
+            product=self.protected_product(),
+            generate_background=fake_background,
+        )
+
+        self.assertEqual(
+            [variant.variant_id for variant in variants],
+            [
+                "template-01", "template-02", "template-03",
+                "ai-scene-01", "ai-scene-02", "ai-scene-03",
+            ],
+        )
+        self.assertEqual(
+            [variant.variant_kind for variant in variants],
+            ["template", "template", "template", "ai_scene", "ai_scene", "ai_scene"],
+        )
+        self.assertEqual([index for _, index in calls], [1, 2, 3])
+        self.assertTrue(all(variant.status == "success" for variant in variants))
+        self.assertTrue(all(not variant.retryable for variant in variants))
+        self.assertTrue(all(variant.image is not None for variant in variants))
+        for variant in variants:
+            self.assertEqual(variant.source_product_path, "product.png")
+            self.assertTrue(variant.product_layer_digest)
+            self.assertNotIn("product.png", variant.scene_prompt)
+            assert_product_pixels_preserved(
+                self.protected_product().rgba,
+                variant.image,
+                product_box=variant.product_box,
+            )
+
+    def test_pin_series_keeps_templates_and_retryable_failed_scene_slots_offline(self):
+        """Replacing a failed scene with a missing slot or raw provider error must fail."""
+        draft = PinterestPinData(
+            product_paths=["product.png"],
+            background_description="secret api_key=not-for-metadata",
+        )
+        calls = 0
+
+        def fake_background(_: str, __: int) -> Image.Image:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("provider failure api_key=not-for-metadata")
+            return Image.new("RGBA", (1000, 1500), "white")
+
+        variants = build_pinterest_pin_series(
+            draft,
+            product=self.protected_product(),
+            generate_background=fake_background,
+        )
+
+        self.assertEqual(len(variants), 6)
+        self.assertTrue(all(item.status == "success" for item in variants[:3]))
+        failed = variants[4]
+        self.assertEqual(failed.variant_id, "ai-scene-02")
+        self.assertEqual(failed.status, "failed")
+        self.assertTrue(failed.retryable)
+        self.assertIsNone(failed.image)
+        self.assertEqual(failed.error_code, "background_generation_failed")
+        self.assertNotIn("not-for-metadata", failed.error_message)
+        self.assertNotIn("not-for-metadata", failed.scene_prompt)
+        self.assertEqual(variants[5].status, "success")
+
+    def test_pin_series_stops_admitting_scene_backgrounds_after_cancellation(self):
+        """Ignoring cancellation would continue provider work after the first scene."""
+        calls: list[int] = []
+
+        def fake_background(_: str, slot_index: int) -> Image.Image:
+            calls.append(slot_index)
+            return Image.new("RGBA", (1000, 1500), "white")
+
+        variants = build_pinterest_pin_series(
+            PinterestPinData(product_paths=["product.png"]),
+            product=self.protected_product(),
+            generate_background=fake_background,
+            cancelled=lambda: len(calls) >= 1,
+        )
+
+        self.assertEqual(calls, [1])
+        self.assertTrue(all(item.status == "success" for item in variants[:4]))
+        self.assertTrue(all(item.status == "failed" for item in variants[4:]))
+        self.assertTrue(all(item.retryable for item in variants[4:]))
 
     def test_application_view_installs_exact_b1_to_b6_route(self):
         view = V3ApplicationView(

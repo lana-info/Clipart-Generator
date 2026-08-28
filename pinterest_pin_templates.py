@@ -283,6 +283,58 @@ def _place_product(
     canvas.alpha_composite(product, position)
 
 
+def template_product_box(
+    template_id: str,
+    *,
+    width: int = 1000,
+    height: int = 1500,
+) -> tuple[int, int, int, int]:
+    """Return the stable product placement area for one deterministic template."""
+
+    try:
+        spec = _SPECS_BY_ID[template_id]
+    except KeyError as error:
+        raise ValueError(f"unknown Pinterest template: {template_id}") from error
+    return _scaled_box(spec.product_box, width=width, height=height)
+
+
+def render_template_background(
+    *,
+    title: str,
+    subtitle: str,
+    cta: str,
+    template_id: str,
+    width: int = 1000,
+    height: int = 1500,
+) -> Image.Image:
+    """Render a deterministic template without product pixels for protected composition."""
+
+    if width <= 0 or height <= 0:
+        raise ValueError("width and height must be positive")
+    try:
+        spec = _SPECS_BY_ID[template_id]
+    except KeyError as error:
+        raise ValueError(f"unknown Pinterest template: {template_id}") from error
+    product_box = template_product_box(template_id, width=width, height=height)
+    text_box = _scaled_box(spec.text_box, width=width, height=height)
+    canvas = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+    _draw_background(
+        canvas,
+        background_kind=spec.background_kind,
+        product_box=product_box,
+        text_box=text_box,
+    )
+    _draw_text(
+        canvas,
+        text_box,
+        title=title,
+        subtitle=subtitle,
+        cta=cta,
+        scale=min(width / _BASE_WIDTH, height / _BASE_HEIGHT),
+    )
+    return canvas
+
+
 def render_template_pin(
     product_rgba: Image.Image,
     *,
@@ -297,36 +349,23 @@ def render_template_pin(
 
     if not isinstance(product_rgba, Image.Image):
         raise TypeError("product_rgba must be a PIL Image")
-    if width <= 0 or height <= 0:
-        raise ValueError("width and height must be positive")
-    try:
-        spec = _SPECS_BY_ID[template_id]
-    except KeyError as error:
-        raise ValueError(f"unknown Pinterest template: {template_id}") from error
-
-    product_box = _scaled_box(spec.product_box, width=width, height=height)
-    text_box = _scaled_box(spec.text_box, width=width, height=height)
-    canvas = Image.new("RGBA", (width, height), (255, 255, 255, 255))
-    _draw_background(
-        canvas,
-        background_kind=spec.background_kind,
-        product_box=product_box,
-        text_box=text_box,
-    )
-    _place_product(canvas, product_rgba, product_box)
-    _draw_text(
-        canvas,
-        text_box,
+    canvas = render_template_background(
         title=title,
         subtitle=subtitle,
         cta=cta,
-        scale=min(width / _BASE_WIDTH, height / _BASE_HEIGHT),
+        template_id=template_id,
+        width=width,
+        height=height,
     )
+    product_box = template_product_box(template_id, width=width, height=height)
+    _place_product(canvas, product_rgba, product_box)
     return canvas
 
 
 __all__ = [
     "PinTemplateSpec",
     "pinterest_template_specs",
+    "render_template_background",
     "render_template_pin",
+    "template_product_box",
 ]
