@@ -2,7 +2,12 @@ import unittest
 
 from PIL import Image
 
-from background_mask import apply_mask_stroke, mask_for_image
+from background_mask import (
+    apply_mask_stroke,
+    apply_mask_to_image,
+    mask_for_image,
+    save_mask_png,
+)
 
 
 class BackgroundMaskTests(unittest.TestCase):
@@ -40,6 +45,29 @@ class BackgroundMaskTests(unittest.TestCase):
             apply_mask_stroke(mask, (1, 1), radius=0, action="add")
         with self.assertRaises(ValueError):
             apply_mask_stroke(mask, (1, 1), radius=1, action="paint")
+
+    def test_apply_mask_preserves_source_rgb_and_rejects_size_mismatch(self):
+        source = Image.new("RGBA", (2, 1), (10, 20, 30, 255))
+        mask = Image.new("L", (2, 1), 0)
+
+        result = apply_mask_to_image(source, mask)
+
+        self.assertEqual(result.getpixel((0, 0)), (10, 20, 30, 0))
+        self.assertEqual(source.getpixel((0, 0)), (10, 20, 30, 255))
+        with self.assertRaises(ValueError):
+            apply_mask_to_image(source, Image.new("L", (1, 1), 255))
+
+    def test_mask_png_save_is_atomic_and_transparent(self):
+        with self.subTest("save"):
+            import tempfile
+            from pathlib import Path
+
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "mask.png"
+                save_mask_png(Image.new("L", (2, 2), 128), path)
+                with Image.open(path) as saved:
+                    self.assertEqual(saved.mode, "L")
+                    self.assertEqual(saved.getpixel((0, 0)), 128)
 
 
 if __name__ == "__main__":

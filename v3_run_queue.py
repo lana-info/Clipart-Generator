@@ -1516,6 +1516,12 @@ class RunResultsPage(QWidget):
             ButtonVariant.PRIMARY,
         )
         self.open_folder_button.clicked.connect(self._open_folder)
+        self.save_corrected_button = V3Button(
+            "Сохранить исправленный PNG",
+            ButtonVariant.PRIMARY,
+        )
+        self.save_corrected_button.clicked.connect(self._save_corrected_png)
+        self.save_corrected_button.hide()
         self.log_button = V3Button(
             "Диагностика",
             ButtonVariant.GHOST,
@@ -1531,6 +1537,7 @@ class RunResultsPage(QWidget):
         self.finish_button.hide()
         workflow_layout.addStretch()
         utility_primary_layout.addWidget(self.open_folder_button)
+        utility_primary_layout.addWidget(self.save_corrected_button)
         utility_primary_layout.addStretch()
         utility_secondary_layout.addWidget(self.log_button)
         utility_secondary_layout.addStretch()
@@ -1576,6 +1583,7 @@ class RunResultsPage(QWidget):
             self.process_more_button.hide()
             self.finish_button.hide()
             self.open_folder_button.setEnabled(False)
+            self.save_corrected_button.hide()
             self.log_button.setEnabled(False)
             self._selection_changed(-1)
             return
@@ -1673,6 +1681,7 @@ class RunResultsPage(QWidget):
         if item is None:
             self.preview_popup.hide()
             self.transparency_preview.hide()
+            self.save_corrected_button.hide()
             self._set_status_label(
                 self.processing_label,
                 "Ожидание запуска",
@@ -1692,8 +1701,13 @@ class RunResultsPage(QWidget):
             )
             self.transparency_preview.set_path(preview_path)
             self.transparency_preview.show()
+            self.save_corrected_button.setVisible(
+                item.status is RunItemStatus.SUCCEEDED
+                and bool(item.output_path)
+            )
         else:
             self.transparency_preview.hide()
+            self.save_corrected_button.hide()
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
@@ -1847,6 +1861,30 @@ class RunResultsPage(QWidget):
             QUrl.fromLocalFile(str(self.session.output_dir))
         ):
             self.summary_label.setText("Не удалось открыть папку результата.")
+
+    def _save_corrected_png(self) -> None:
+        if self.session is None or self.state.mode is not ProjectMode.CLIPART:
+            return
+        item = self._selected_item(self.queue.currentRow())
+        if item is None or item.status is not RunItemStatus.SUCCEEDED:
+            return
+        source = Path(item.output_path)
+        default = self.session.output_dir / f"{source.stem}_corrected.png"
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить исправленный PNG",
+            str(default),
+            "PNG (*.png)",
+        )
+        if not destination:
+            return
+        try:
+            self.transparency_preview.save_corrected_png(destination)
+            self.summary_label.setText(
+                f"Исправленный PNG сохранён: {Path(destination).name}"
+            )
+        except (OSError, ValueError) as error:
+            self.summary_label.setText(f"Не удалось сохранить PNG: {error}")
 
     def _show_log(self) -> None:
         if self.session is None:

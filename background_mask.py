@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 from PIL import Image, ImageDraw
 
 
@@ -40,3 +44,35 @@ def apply_mask_stroke(
         fill=value,
     )
     return result
+
+
+def apply_mask_to_image(image: Image.Image, mask: Image.Image) -> Image.Image:
+    """Return an RGBA copy using only ``mask`` as its alpha channel."""
+    if image.size != mask.size:
+        raise ValueError("Размер маски не совпадает с изображением")
+    if mask.mode != "L":
+        raise ValueError("Маска должна быть в режиме L")
+    result = image.convert("RGBA")
+    result.putalpha(mask.copy())
+    return result
+
+
+def save_mask_png(mask: Image.Image, path: str | Path) -> None:
+    """Atomically save an alpha mask as a bounded PNG file."""
+    if mask.mode != "L":
+        raise ValueError("Маска должна быть в режиме L")
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(
+        prefix=f".{destination.stem}.",
+        suffix=".tmp",
+        dir=destination.parent,
+    )
+    os.close(fd)
+    temporary_path = Path(temporary)
+    try:
+        mask.save(temporary_path, format="PNG")
+        os.replace(temporary_path, destination)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise

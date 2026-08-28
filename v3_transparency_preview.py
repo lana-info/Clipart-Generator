@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from io import BytesIO
+import os
+import tempfile
 from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
@@ -18,7 +20,12 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from background_mask import apply_mask_stroke, mask_for_image
+from background_mask import (
+    apply_mask_stroke,
+    apply_mask_to_image,
+    mask_for_image,
+    save_mask_png,
+)
 from background_preview import PREVIEW_BACKGROUND_OPTIONS, composite_on_preview
 
 
@@ -105,6 +112,36 @@ class ClipartTransparencyPreview(QWidget):
             return
         self._mask = mask_for_image(self._image)
         self.refresh_preview()
+
+    def corrected_image(self) -> Image.Image | None:
+        if self._image is None or self._mask is None:
+            return None
+        return apply_mask_to_image(self._image, self._mask)
+
+    def save_corrected_png(self, path: str | Path) -> None:
+        image = self.corrected_image()
+        if image is None:
+            raise ValueError("Нет изображения для сохранения")
+        destination = Path(path)
+        if destination.suffix.casefold() != ".png":
+            raise ValueError("Исправленный результат нужно сохранять в PNG")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(
+            prefix=f".{destination.stem}.", suffix=".tmp", dir=destination.parent
+        )
+        os.close(fd)
+        temporary_path = Path(temporary)
+        try:
+            image.save(temporary_path, format="PNG")
+            os.replace(temporary_path, destination)
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
+
+    def save_mask(self, path: str | Path) -> None:
+        if self._mask is None:
+            raise ValueError("Нет маски для сохранения")
+        save_mask_png(self._mask, path)
 
     def apply_stroke(self, center: tuple[int, int]) -> None:
         if self._mask is None:

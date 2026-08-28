@@ -1,4 +1,6 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 from PIL import Image
 from PyQt6.QtWidgets import QApplication
@@ -41,6 +43,25 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
         self.assertEqual(widget._mask.getpixel((10, 10)), 0)
         widget.reset_button.click()
         self.assertEqual(widget._mask.getpixel((10, 10)), 255)
+
+    def test_corrected_png_keeps_rgb_and_can_save_mask_separately(self):
+        widget = ClipartTransparencyPreview()
+        widget.set_image(Image.new("RGBA", (4, 4), (10, 20, 30, 255)))
+        widget.action_combo.setCurrentText("Стереть область")
+        widget.radius_spin.setValue(1)
+        widget.apply_stroke((2, 2))
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "corrected.png"
+            mask = Path(directory) / "corrected-mask.png"
+            widget.save_corrected_png(output)
+            widget.save_mask(mask)
+            with Image.open(output) as image:
+                self.assertEqual(image.getpixel((0, 0)), (10, 20, 30, 255))
+                self.assertEqual(image.getpixel((2, 2))[-1], 0)
+            with Image.open(mask) as saved_mask:
+                self.assertEqual(saved_mask.mode, "L")
+                self.assertEqual(saved_mask.getpixel((2, 2)), 0)
 
 
 if __name__ == "__main__":
