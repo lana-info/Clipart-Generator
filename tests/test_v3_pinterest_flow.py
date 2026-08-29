@@ -36,7 +36,12 @@ from v3_pinterest_flow import (
     install_pinterest_flow,
 )
 from pinterest_pin_composer import ProductLayer, assert_product_pixels_preserved
-from v3_clipart_flow import ClipartFlowError, ClipartPromptReviewPage, ClipartReviewRunPage
+from v3_clipart_flow import (
+    ClipartFlowError,
+    ClipartGenerationPage,
+    ClipartPromptReviewPage,
+    ClipartReviewRunPage,
+)
 from v3_project_state import (
     PinterestPinData,
     ProjectMode,
@@ -142,6 +147,36 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
                 StepId.RESULTS,
             ),
         )
+
+    def test_pinterest_ready_prompt_omits_clipart_chroma_controls(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        page = PinterestPromptInputPage(state, lambda: None)
+
+        self.assertFalse(hasattr(page, "paste_chroma_enabled"))
+        self.assertTrue(hasattr(page, "add_references_button"))
+        self.assertTrue(hasattr(page, "add_prompt_button"))
+
+    def test_pinterest_reference_model_is_a_plain_conditional_control(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        state.clipart.prompts = [
+            PromptEntry("Text-only pin"),
+            PromptEntry("Pin with reference", ["reference.png"]),
+        ]
+        page = PinterestFormatModelPage(state, lambda: None)
+
+        self.assertFalse(hasattr(page, "reference_advanced"))
+        self.assertFalse(page.primary_scope_label.isVisible())
+        self.assertFalse(page.model_capability_label.isVisible())
+        self.assertFalse(page.card.description_label.isVisible())
+        self.assertFalse(page.reference_model_combo.isHidden())
+        self.assertFalse(page.ratio_preview.isHidden())
+
+    def test_clipart_generation_has_the_same_ratio_preview(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        page = ClipartGenerationPage(state, lambda: None)
+
+        self.assertEqual(page.ratio_preview_label.text(), page.ratio_combo.currentText())
+        self.assertFalse(page.ratio_preview.isHidden())
 
 
 @unittest.skip(
@@ -1389,32 +1424,6 @@ class V3PinterestFlowTests(unittest.TestCase):
         shell = AppShell(state)
         controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
         self.assertNotIn(StepId.PROMPT_REVIEW, controller.pages)
-
-    def test_reference_models_expand_and_report_incompatibility(self):
-        with tempfile.TemporaryDirectory(prefix="pinterest-v3-ref-") as temp:
-            image_path = Path(temp) / "reference.png"
-            Image.new("RGB", (4, 6), "white").save(image_path)
-            state = self.make_state(temp)
-            shell = AppShell(state)
-            controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
-            page = controller.pages[StepId.PIN_FORMAT_MODEL]
-            page.refresh_from_state()
-
-            self.assertFalse(page.reference_advanced.isVisible())
-
-            current_model = str(page.model_combo.currentData())
-            with patch.dict(
-                v3_pinterest_flow._PINTEREST_REFERENCE_MODEL_BY_TEXT,
-                {current_model: "missing-reference-model"},
-                clear=False,
-            ):
-                page._enforce_single_format()
-
-            self.assertEqual(
-                page.reference_status_label.text(),
-                v3_localization.message_for("pinterest.error.reference_incompatible", locale="ru"),
-            )
-            self.assertIn("incompatible_reference_model", page.validation_issues())
 
     def test_vertical_ratio_is_default_and_supported_ratio_can_change(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)

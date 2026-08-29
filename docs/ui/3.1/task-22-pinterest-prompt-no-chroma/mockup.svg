@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="780" viewBox="0 0 1120 780">
+  <style>
+    .bg{fill:#0e1a2b}.panel{fill:#18283e;stroke:#304661;stroke-width:1}.card{fill:#1d2e45;stroke:#304661;stroke-width:1}.text{font-family:Segoe UI,Arial,sans-serif;fill:#f4f7fb}.muted{font-family:Segoe UI,Arial,sans-serif;fill:#9eb0c6}.accent{font-family:Segoe UI,Arial,sans-serif;fill:#28d2c5}.small{font-family:Segoe UI,Arial,sans-serif;fill:#f4f7fb;font-size:13px}.title{font-family:Segoe UI,Arial,sans-serif;fill:#f4f7fb;font-size:23px;font-weight:600}.step{font-family:Segoe UI,Arial,sans-serif;fill:#28d2c5;font-size:14px;font-weight:600}
+  </style>
+  <rect class="bg" width="1120" height="780"/>
+  <rect class="panel" x="24" y="24" width="1072" height="72" rx="10"/>
+  <text class="title" x="46" y="68">Pinterest</text>
+  <text class="small" x="850" y="68">Сменить режим</text><text class="small" x="952" y="68">Настройки API</text>
+  <rect class="panel" x="24" y="118" width="210" height="590" rx="10"/>
+  <text class="title" x="46" y="156" style="font-size:19px">Шаги</text>
+  <text class="accent" x="46" y="194">✓ 1. Рабочая папка</text>
+  <text class="accent" x="46" y="224">• 2. Промпты</text>
+  <text class="muted" x="46" y="254">○ 3. Формат и модель</text>
+  <text class="muted" x="46" y="284">○ 4. Генерация</text>
+  <text class="muted" x="46" y="314">○ 5. Результаты</text>
+  <text class="title" x="270" y="160">Промпты Pinterest</text>
+  <text class="muted" x="270" y="188">Введите готовый промпт с референсами или импортируйте CSV-файл.</text>
+  <text class="step" x="270" y="226">Шаг 1 из 2 · Добавление промптов</text>
+  <rect class="card" x="270" y="248" width="395" height="92" rx="8" stroke="#28d2c5" stroke-width="2"/>
+  <text class="small" x="292" y="300" font-weight="600">Вставить готовый промпт</text>
+  <rect class="card" x="680" y="248" width="392" height="92" rx="8"/>
+  <text class="small" x="702" y="300" font-weight="600">Импортировать CSV</text>
+  <rect class="card" x="270" y="356" width="802" height="190" rx="8"/>
+  <text class="muted" x="292" y="383" style="font-size:13px">Вставьте один готовый промпт. Он может занимать несколько строк.</text>
+  <rect class="card" x="270" y="558" width="148" height="40" rx="7"/>
+  <text class="small" x="289" y="583">Добавить референсы</text>
+  <text class="muted" x="432" y="583" style="font-size:13px">Референсы не выбраны</text>
+  <rect x="270" y="620" width="135" height="43" rx="7" fill="#28cfc3"/>
+  <text class="small" x="294" y="647" fill="#09212a" font-weight="600">Добавить промпт</text>
+  <rect class="panel" x="24" y="724" width="1072" height="38" rx="8"/>
+  <text class="small" x="972" y="749">Далее</text>
+</svg>

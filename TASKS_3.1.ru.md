@@ -567,6 +567,35 @@ Evidence: поле `notes` уже приходит в server-signed manifest и 
 
 Dependencies: existing V3 signed update client. Scope: S.
 
+## Task 22: Упростить Pinterest prompt и выбор генерации
+
+Status: Done in source — макеты утверждены 2026-08-29; ожидает интеграции в
+`develop/3.1`
+
+Goal:
+Убрать из Pinterest не относящийся к нему Chroma Key-helper и сделать выбор
+text/reference generation понятным без технических описаний.
+
+Acceptance:
+
+- [x] На Pinterest-странице готового промпта отсутствует весь Chroma Key-блок;
+  референсы, CSV и добавление промпта не меняются.
+- [x] Pinterest показывает отдельную обычную модель и, только при наличии
+  референсов, отдельную модель с референсом; пропорция, разрешение и число
+  вариантов общие.
+- [x] Нет раскрывающегося блока, описаний «защищённой серии/слоя» и фиксированных
+  пиксельных пояснений.
+- [x] Наглядное превью выбранной пропорции работает одинаково в Pinterest и
+  Clipart.
+
+Verification:
+
+- [x] Active prompt-only offscreen tests: удаление Chroma Key controls,
+  conditional reference model и ratio preview.
+- [x] Existing Clipart/Pinterest focused suite, `py_compile` и `git diff --check`.
+
+Design: `docs/ui/3.1/task-22-pinterest-prompt-no-chroma/`.
+
 ## Task 13: Интегрировать и принять 3.1.0
 
 Status: In progress — source integrated into `develop/3.1`; candidate `3.1.0`

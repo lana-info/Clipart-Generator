@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="780" viewBox="0 0 1120 780">
+  <style>
+    .bg{fill:#0e1a2b}.panel{fill:#18283e;stroke:#304661;stroke-width:1}.control{fill:#1d2e45;stroke:#304661;stroke-width:1}.text{font-family:Segoe UI,Arial,sans-serif;fill:#f4f7fb}.muted{font-family:Segoe UI,Arial,sans-serif;fill:#9eb0c6}.accent{font-family:Segoe UI,Arial,sans-serif;fill:#28d2c5}.small{font-family:Segoe UI,Arial,sans-serif;fill:#f4f7fb;font-size:14px}.title{font-family:Segoe UI,Arial,sans-serif;fill:#f4f7fb;font-size:23px;font-weight:600}
+  </style>
+  <rect class="bg" width="1120" height="780"/>
+  <rect class="panel" x="24" y="24" width="1072" height="72" rx="10"/>
+  <text class="title" x="46" y="68">Pinterest</text>
+  <text class="small" x="850" y="68">Сменить режим</text><text class="small" x="952" y="68">Настройки API</text>
+  <rect class="panel" x="24" y="118" width="210" height="590" rx="10"/>
+  <text class="title" x="46" y="156" style="font-size:19px">Шаги</text>
+  <text class="accent" x="46" y="194">✓ 1. Рабочая папка</text><text class="accent" x="46" y="224">✓ 2. Промпты</text><text class="accent" x="46" y="254">• 3. Генерация</text>
+  <text class="muted" x="46" y="284">○ 4. Проверка и запуск</text><text class="muted" x="46" y="314">○ 5. Результаты</text>
+  <text class="title" x="270" y="156">Генерация Pinterest-пинов</text>
+  <text class="small" x="270" y="220">Модель</text><rect class="control" x="475" y="190" width="597" height="42" rx="7"/><text class="small" x="494" y="216">KIE — GPT Image 2</text><text class="muted" x="1048" y="216">⌄</text>
+  <text class="small" x="270" y="276">Модель с референсом</text><rect class="control" x="475" y="246" width="597" height="42" rx="7"/><text class="small" x="494" y="272">KIE — Nano Banana Pro</text><text class="muted" x="1048" y="272">⌄</text>
+  <text class="small" x="270" y="332">Пропорция</text><rect class="control" x="475" y="302" width="597" height="42" rx="7"/><text class="small" x="494" y="328">2:3</text><text class="muted" x="1048" y="328">⌄</text>
+  <text class="small" x="270" y="388">Разрешение</text><rect class="control" x="475" y="358" width="597" height="42" rx="7"/><text class="small" x="494" y="384">1K</text><text class="muted" x="1048" y="384">⌄</text>
+  <text class="small" x="270" y="444">Вариантов на пин</text><rect class="control" x="475" y="414" width="597" height="42" rx="7"/><text class="small" x="494" y="440">1</text>
+  <rect class="control" x="475" y="480" width="120" height="180" rx="7"/><text class="small" x="520" y="574">2:3</text>
+  <rect class="panel" x="24" y="724" width="1072" height="38" rx="8"/><text class="small" x="914" y="749">Назад</text><rect x="982" y="730" width="90" height="28" rx="7" fill="#28cfc3"/><text class="small" x="1005" y="750" fill="#09212a" font-weight="600">Далее</text>
+</svg>

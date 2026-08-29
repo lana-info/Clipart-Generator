@@ -931,6 +931,7 @@ class PinterestCopyLayoutPage(ClipartPromptInputPage):
     """Pinterest prompt input: ready prompt with references or CSV only."""
 
     generator_mode = ProjectMode.PINTEREST
+    supports_prompt_chroma = False
 
     def __init__(
         self,
@@ -1265,6 +1266,10 @@ class PinterestFormatModelPage(ClipartGenerationPage):
     allow_shared_text_models = True
     allow_fal_models = True
     shared_generation_settings = False
+    shared_reference_format = True
+    reference_controls_compact = True
+    show_primary_scope = False
+    show_model_capabilities = False
 
     def __init__(
         self,
@@ -1275,31 +1280,11 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         self.locale = normalize_locale(locale)
-        requested_model = state.clipart.generation.model
-        requested_reference_model = state.clipart.generation.reference_model
         super().__init__(state, changed, tokens=tokens)
-        for combo, model_id, label in (
-            (self.model_combo, requested_model, "GPT Image 2"),
-            (self.reference_model_combo, requested_reference_model, "GPT Image 2"),
-        ):
-            if model_id == "gpt-image-2" and combo.findData(model_id) < 0:
-                combo.addItem(label, model_id)
-        if requested_model == "gpt-image-2":
-            self.model_combo.setCurrentIndex(self.model_combo.findData(requested_model))
-            state.clipart.generation.model = requested_model
-        if requested_reference_model == "gpt-image-2":
-            self.reference_model_combo.setCurrentIndex(
-                self.reference_model_combo.findData(requested_reference_model)
-            )
-            state.clipart.generation.reference_model = requested_reference_model
         self.card.title_label.setText(_pinterest_text("format_title", locale=self.locale))
-        self.card.description_label.setText(
-            _pinterest_text("generation_description", locale=self.locale)
-        )
+        self.card.description_label.hide()
         self.setAccessibleName(_pinterest_text("format_accessible", locale=self.locale))
-        self.setAccessibleDescription(
-            _pinterest_text("generation_description", locale=self.locale)
-        )
+        self.setAccessibleDescription(_pinterest_text("format_accessible", locale=self.locale))
         labels = (
             (_pinterest_text("generation_model", locale=self.locale), self.model_combo),
             (_pinterest_text("generation_ratio", locale=self.locale), self.ratio_combo),
@@ -1317,150 +1302,10 @@ class PinterestFormatModelPage(ClipartGenerationPage):
             }.get(label.text())
             if replacement:
                 label.setText(replacement)
-        self.primary_scope_label.setText(
-            _pinterest_text("generation_scope", locale=self.locale)
-        )
-        self.primary_scope_label.setAccessibleName(
-            _pinterest_text("generation_scope", locale=self.locale)
-        )
-        self.model_capability_label.hide()
-        self.recommendation_label = QLabel(
-            _pinterest_text("format_recommendation", locale=self.locale)
-        )
-        self.recommendation_label.setWordWrap(True)
-        self.recommendation_label.setProperty("v3Status", True)
-        self.add_widget(self.recommendation_label)
-
-        self.ratio_preview = QFrame()
-        self.ratio_preview.setProperty("v3Card", True)
-        preview_layout = QVBoxLayout(self.ratio_preview)
-        self.ratio_preview_label = QLabel()
-        self.ratio_preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_layout.addWidget(self.ratio_preview_label)
-        self.add_widget(self.ratio_preview)
-        self.reference_status_label = QLabel()
-        self.reference_status_label.setWordWrap(True)
-        self.reference_status_label.setProperty("v3Small", True)
-        self.add_widget(self.reference_status_label)
-        self._format_syncing = False
-        self._format_issue = ""
-        self.model_combo.currentIndexChanged.connect(self._enforce_single_format)
-        self.ratio_combo.currentTextChanged.connect(self._enforce_single_format)
-        self.resolution_combo.currentIndexChanged.connect(
-            self._enforce_single_format
-        )
-        self.reference_model_combo.currentIndexChanged.connect(
-            self._enforce_single_format
-        )
-        self.ratio_combo.currentTextChanged.connect(self._refresh_ratio_preview)
-        self._enforce_single_format()
-        self._refresh_ratio_preview()
-        self.reference_advanced.setVisible(False)
         self.refresh_from_state()
 
     def refresh_from_state(self) -> None:
         super().refresh_from_state()
-        self.primary_scope_label.setText(
-            _pinterest_text("generation_scope", locale=self.locale)
-        )
-        self.primary_scope_label.setAccessibleName(
-            _pinterest_text("generation_scope", locale=self.locale)
-        )
-        self.reference_advanced.setVisible(False)
-        self._enforce_single_format()
-
-    def _enforce_single_format(self, *_: Any) -> None:
-        if self._format_syncing:
-            return
-        self._format_syncing = True
-        try:
-            ratio = self.ratio_combo.currentText()
-            resolution = self._combo_value(self.resolution_combo)
-            primary_model = str(self.model_combo.currentData() or "")
-            reference_model = _PINTEREST_REFERENCE_MODEL_BY_TEXT.get(primary_model)
-            compatible = [
-                option
-                for option in self.reference_options
-                if option.model_id == reference_model
-                and (not option.ratios or ratio in option.ratios)
-                and (
-                    resolution in option.resolutions
-                    if option.resolutions
-                    else resolution == "1K"
-                )
-            ]
-            if not compatible:
-                self._format_issue = _pinterest_text(
-                    "error.reference_incompatible", locale=self.locale
-                )
-                self.reference_status_label.setText(self._format_issue)
-                self.reference_advanced.setVisible(True)
-                self.reference_advanced.set_expanded(True)
-                self.reference_model_combo.blockSignals(True)
-                self.reference_model_combo.clear()
-                self.reference_model_combo.addItem(
-                    _pinterest_text("error.reference_incompatible", locale=self.locale), primary_model
-                )
-                self.reference_model_combo.setEnabled(False)
-                self.reference_ratio_combo.setEnabled(False)
-                self.reference_resolution_combo.setEnabled(False)
-                self.reference_model_combo.blockSignals(False)
-                self.state.clipart.generation.reference_model = primary_model
-                ClipartGenerationPage._sync(self, mark=False)
-                return
-
-            self._format_issue = ""
-            self.reference_status_label.setText(
-                _pinterest_text("status.reference_ready", locale=self.locale)
-            )
-            current_model = compatible[0].model_id
-            self.reference_model_combo.blockSignals(True)
-            self.reference_model_combo.clear()
-            for option in compatible:
-                self.reference_model_combo.addItem(option.label, option.model_id)
-            self._select_model(self.reference_model_combo, current_model)
-            self.reference_model_combo.blockSignals(False)
-            self.reference_model_combo.setEnabled(True)
-
-            self._set_values(
-                self.reference_ratio_combo,
-                (ratio,),
-                ratio,
-            )
-            self.reference_ratio_combo.setEnabled(False)
-            self._set_values(
-                self.reference_resolution_combo,
-                (resolution,),
-                resolution,
-            )
-            self.reference_resolution_combo.setEnabled(False)
-            self.reference_advanced.setVisible(True)
-            self.reference_advanced.set_expanded(True)
-            ClipartGenerationPage._sync(self, mark=False)
-        finally:
-            self._format_syncing = False
-
-    def validation_issues(self) -> tuple[str, ...]:
-        issues = list(super().validation_issues()) if hasattr(super(), "validation_issues") else []
-        if self._format_issue:
-            issues.append("incompatible_reference_model")
-        return tuple(issues)
-
-    def _refresh_ratio_preview(self, *_: Any) -> None:
-        ratio = self.ratio_combo.currentText()
-        try:
-            width_value, height_value = (
-                max(1, int(value)) for value in ratio.split(":", 1)
-            )
-        except (TypeError, ValueError):
-            width_value, height_value = 9, 16
-        scale = 180 / max(width_value, height_value)
-        width = max(20, round(width_value * scale))
-        height = max(20, round(height_value * scale))
-        self.ratio_preview.setFixedSize(width, height)
-        text = ratio
-        self.ratio_preview_label.setText(text)
-        self.ratio_preview.setAccessibleName(text)
 
 
 class PinterestProcessingPage(ProcessingPipelineEditor):

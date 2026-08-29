@@ -2,6 +2,18 @@
 
 Updated: 2026-08-29
 
+## Latest unintegrated checkpoint
+
+Task 22 is implemented on `codex/ui-3.1-pinterest-prompt-chroma-removal`:
+Pinterest готовые промпты больше не показывают Chroma Key-helper; Pinterest
+получает отдельный plain selector модели с референсом только для batch с
+референсами, при общих proportion/resolution/variants; технические пояснения
+скрыты. Наглядный ratio preview добавлен в общий Clipart generation page и
+поэтому доступен также Pinterest. Approved mockups находятся в
+`docs/ui/3.1/task-22-pinterest-prompt-no-chroma/`. Active prompt-only и
+focused Clipart/Pinterest tests прошли; Windows visual acceptance по-прежнему
+не выполнялась.
+
 ## Operating model
 
 - VDS is the primary development environment.

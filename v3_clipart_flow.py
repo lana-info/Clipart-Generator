@@ -1719,6 +1719,7 @@ class ClipartProjectPage(_ScrollableStepPage):
 
 class ClipartPromptInputPage(_ScrollableStepPage):
     generator_mode = ProjectMode.CLIPART
+    supports_prompt_chroma = True
 
     def __init__(
         self,
@@ -2064,7 +2065,8 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         action_layout.addWidget(self.clear_references_button)
         action_layout.addStretch()
         layout.addWidget(actions)
-        self._add_prompt_chroma_controls(layout, "paste")
+        if self.supports_prompt_chroma:
+            self._add_prompt_chroma_controls(layout, "paste")
         self.add_prompt_button = V3Button("Добавить промпт")
         self.add_prompt_button.clicked.connect(self._apply_paste)
         layout.addWidget(self.add_prompt_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -2102,6 +2104,8 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         layout.addWidget(group)
 
     def _prompt_with_chroma(self, prompt: str, prefix: str) -> str:
+        if not self.supports_prompt_chroma:
+            return prompt
         enabled = getattr(self, f"{prefix}_chroma_enabled")
         if not enabled.isChecked():
             return prompt
@@ -2851,6 +2855,11 @@ class ClipartGenerationPage(_ScrollableStepPage):
     allow_shared_text_models = True
     allow_fal_models = True
     shared_generation_settings = True
+    shared_reference_format = False
+    reference_controls_compact = False
+    show_primary_scope = True
+    show_model_capabilities = True
+    show_ratio_preview = True
     def __init__(
         self,
         state: ProjectState,
@@ -2878,6 +2887,8 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.primary_scope_label.setProperty("v3Selection", True)
         self.primary_scope_label.setAccessibleName("Промпты без референсов")
         self.add_widget(self.primary_scope_label)
+        if not self.show_primary_scope:
+            self.primary_scope_label.hide()
         form = QFormLayout()
         self.model_combo = QComboBox()
         self.ratio_combo = QComboBox()
@@ -2894,35 +2905,51 @@ class ClipartGenerationPage(_ScrollableStepPage):
         container.setLayout(form)
         self.add_widget(container)
 
+        if self.show_ratio_preview:
+            self.ratio_preview = QFrame()
+            self.ratio_preview.setProperty("v3Card", True)
+            preview_layout = QVBoxLayout(self.ratio_preview)
+            self.ratio_preview_label = QLabel()
+            self.ratio_preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            preview_layout.addWidget(self.ratio_preview_label)
+            self.add_widget(self.ratio_preview)
+
         self.model_capability_label = QLabel()
         self.model_capability_label.setWordWrap(True)
         self.model_capability_label.setProperty("v3Small", True)
         self.add_widget(self.model_capability_label)
+        if not self.show_model_capabilities:
+            self.model_capability_label.hide()
 
         if not self.shared_generation_settings:
-            advanced = AdvancedSection("Промпты с референсами", tokens=tokens)
-            self.reference_advanced = advanced
-            advanced.set_expanded(True)
-            self.reference_capability_label = QLabel()
-            self.reference_capability_label.setWordWrap(True)
-            self.reference_capability_label.setProperty("v3Small", True)
-            advanced.add_widget(self.reference_capability_label)
             reference_form = QFormLayout()
             self.reference_model_combo = QComboBox()
-            self.reference_ratio_combo = QComboBox()
-            self.reference_resolution_combo = QComboBox()
             for option in self.reference_options:
                 self.reference_model_combo.addItem(option.label, option.model_id)
             reference_form.addRow("Модель с референсом", self.reference_model_combo)
-            reference_form.addRow("Пропорция с референсом", self.reference_ratio_combo)
-            reference_form.addRow(
-                "Разрешение с референсом",
-                self.reference_resolution_combo,
-            )
             reference_widget = QWidget()
             reference_widget.setLayout(reference_form)
-            advanced.add_widget(reference_widget)
-            self.add_widget(advanced)
+            if not self.shared_reference_format:
+                self.reference_ratio_combo = QComboBox()
+                self.reference_resolution_combo = QComboBox()
+                reference_form.addRow("Пропорция с референсом", self.reference_ratio_combo)
+                reference_form.addRow(
+                    "Разрешение с референсом",
+                    self.reference_resolution_combo,
+                )
+            if self.reference_controls_compact:
+                self.reference_controls_container = reference_widget
+                self.add_widget(reference_widget)
+            else:
+                advanced = AdvancedSection("Промпты с референсами", tokens=tokens)
+                self.reference_advanced = advanced
+                advanced.set_expanded(True)
+                self.reference_capability_label = QLabel()
+                self.reference_capability_label.setWordWrap(True)
+                self.reference_capability_label.setProperty("v3Small", True)
+                advanced.add_widget(self.reference_capability_label)
+                advanced.add_widget(reference_widget)
+                self.add_widget(advanced)
 
         for label, control in (
             ("Модель", self.model_combo),
@@ -2930,6 +2957,8 @@ class ClipartGenerationPage(_ScrollableStepPage):
             ("Разрешение", self.resolution_combo),
             ("Вариантов на промпт", self.variants_spin),
             *((
+                ("Модель с референсом", self.reference_model_combo),
+            ) if not self.shared_generation_settings and self.shared_reference_format else (
                 ("Модель с референсом", self.reference_model_combo),
                 ("Пропорция с референсом", self.reference_ratio_combo),
                 ("Разрешение с референсом", self.reference_resolution_combo),
@@ -2944,7 +2973,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
                 state.clipart.generation.reference_model,
             )
         self._refresh_profile_controls(primary=True, sync=False)
-        if not self.shared_generation_settings:
+        if not self.shared_generation_settings and not self.shared_reference_format:
             self._refresh_profile_controls(primary=False, sync=False)
         self.variants_spin.setValue(state.clipart.generation.variants)
         self.model_combo.currentIndexChanged.connect(
@@ -2952,15 +2981,18 @@ class ClipartGenerationPage(_ScrollableStepPage):
         )
         if not self.shared_generation_settings:
             self.reference_model_combo.currentIndexChanged.connect(
-                lambda: self._refresh_profile_controls(primary=False)
+                self._sync if self.shared_reference_format else lambda: self._refresh_profile_controls(primary=False)
             )
         self.ratio_combo.currentTextChanged.connect(self._sync)
         self.resolution_combo.currentIndexChanged.connect(self._sync)
-        if not self.shared_generation_settings:
+        if not self.shared_generation_settings and not self.shared_reference_format:
             self.reference_ratio_combo.currentTextChanged.connect(self._sync)
             self.reference_resolution_combo.currentIndexChanged.connect(self._sync)
         self.variants_spin.valueChanged.connect(self._sync)
         self._sync(mark=False)
+        if self.show_ratio_preview:
+            self.ratio_combo.currentTextChanged.connect(self._refresh_ratio_preview)
+            self._refresh_ratio_preview()
         ClipartGenerationPage.refresh_from_state(self)
 
     def _select_model(self, combo: QComboBox, model_id: str) -> None:
@@ -3033,7 +3065,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
                 generation.resolution,
                 fixed_value="1K",
             )
-        elif not self.shared_generation_settings:
+        elif not self.shared_generation_settings and not self.shared_reference_format:
             option = self._option_for_combo(self.reference_model_combo)
             self.reference_capability_label.setText(_capability_summary(option))
             self._set_values(
@@ -3066,12 +3098,12 @@ class ClipartGenerationPage(_ScrollableStepPage):
             ),
             reference_ratio=(
                 self.ratio_combo.currentText()
-                if self.shared_generation_settings
+                if self.shared_generation_settings or self.shared_reference_format
                 else self.reference_ratio_combo.currentText()
             ),
             reference_resolution=(
                 self._combo_value(self.resolution_combo)
-                if self.shared_generation_settings
+                if self.shared_generation_settings or self.shared_reference_format
                 else self._combo_value(self.reference_resolution_combo)
             ),
             variants=self.variants_spin.value(),
@@ -3101,17 +3133,36 @@ class ClipartGenerationPage(_ScrollableStepPage):
             self.primary_scope_label.setAccessibleDescription(
                 f"Настройки применяются к промптам без референсов: {text_count}"
             )
-            self.reference_advanced.toggle_button.setText(
-                f"Промпты с референсами · {reference_count}"
-            )
-            self.reference_advanced.toggle_button.setAccessibleName(
-                f"Промпты с референсами: {reference_count}"
-            )
-            self.reference_advanced.set_expanded(has_references)
-            self.reference_advanced.setVisible(has_references)
+            if self.reference_controls_compact:
+                self.reference_controls_container.setVisible(has_references)
+            else:
+                self.reference_advanced.toggle_button.setText(
+                    f"Промпты с референсами · {reference_count}"
+                )
+                self.reference_advanced.toggle_button.setAccessibleName(
+                    f"Промпты с референсами: {reference_count}"
+                )
+                self.reference_advanced.set_expanded(has_references)
+                self.reference_advanced.setVisible(has_references)
         current = self._option_for_combo(self.model_combo)
         self.model_capability_label.setText(_capability_summary(current))
         self._sync(mark=False)
+
+    def _refresh_ratio_preview(self, *_: Any) -> None:
+        ratio = self.ratio_combo.currentText()
+        try:
+            width_value, height_value = (
+                max(1, int(value)) for value in ratio.split(":", 1)
+            )
+        except (TypeError, ValueError):
+            width_value, height_value = 1, 1
+        scale = 180 / max(width_value, height_value)
+        self.ratio_preview.setFixedSize(
+            max(20, round(width_value * scale)),
+            max(20, round(height_value * scale)),
+        )
+        self.ratio_preview_label.setText(ratio)
+        self.ratio_preview.setAccessibleName(ratio)
 
 
 class ClipartProcessingPage(_ScrollableStepPage):
