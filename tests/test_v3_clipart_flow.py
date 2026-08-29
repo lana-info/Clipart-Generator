@@ -384,6 +384,23 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("следующем шаге", page.paste_status_label.text())
         self.assertFalse(hasattr(page, "paste_button"))
 
+    def test_series_chroma_controls_offer_only_approved_materials(self):
+        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
+
+        self.assertEqual(
+            [button.text() for button in page.chroma_material_buttons],
+            [
+                "Акварель",
+                "Тонкие листья",
+                "Хвоя",
+                "Металл",
+                "Лента / сатин",
+                "Прозрачные детали",
+                "Снег / лёд",
+            ],
+        )
+        self.assertFalse(hasattr(page, "chroma_key_custom_color"))
+
     def test_csv_source_has_primary_button_and_accepts_csv_drop(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-csv-drop-") as temp:
             csv_path = Path(temp) / "prompts.csv"

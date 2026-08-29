@@ -1596,26 +1596,39 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         )
         self.chroma_key_color = QComboBox()
         for label, value in (
-            ("Синий — основной вариант", "blue"),
-            ("Красный — для синих и фиолетовых объектов", "red"),
-            ("Зелёный — только если в объекте нет зелени", "green"),
-            ("Свой оттенок (#RRGGBB)", "custom"),
+            ("Синий", "blue"),
+            ("Красный", "red"),
+            ("Зелёный", "green"),
         ):
             self.chroma_key_color.addItem(label, value)
-        selected_color = "custom" if str(draft.chroma_key_color).startswith("#") else draft.chroma_key_color
-        index = self.chroma_key_color.findData(selected_color)
+        index = self.chroma_key_color.findData(draft.chroma_key_color)
         self.chroma_key_color.setCurrentIndex(index if index >= 0 else 0)
         self.chroma_key_color.setAccessibleName("Цвет chroma-key фона")
-        self.chroma_key_custom_color = QLineEdit(
-            draft.chroma_key_color if selected_color == "custom" else draft.chroma_key_custom_color
+        materials_widget = QWidget()
+        materials_layout = QHBoxLayout(materials_widget)
+        materials_layout.setContentsMargins(0, 0, 0, 0)
+        materials_layout.setSpacing(self.tokens.space_2)
+        material_options = (
+            ("Акварель", "watercolor"),
+            ("Тонкие листья", "thin_leaves"),
+            ("Хвоя", "conifer_needles"),
+            ("Металл", "metal"),
+            ("Лента / сатин", "ribbon_satin"),
+            ("Прозрачные детали", "transparent_details"),
+            ("Снег / лёд", "snow_ice"),
         )
-        self.chroma_key_custom_color.setPlaceholderText("Например, #7B2CBF")
-        self.chroma_key_custom_color.setMaxLength(7)
-        self.chroma_key_custom_color.setAccessibleName("Свой цвет chroma-key фона")
+        self.chroma_material_buttons: list[QPushButton] = []
+        for label, value in material_options:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setProperty("chromaMaterial", value)
+            button.setChecked(value in draft.chroma_key_materials)
+            self.chroma_material_buttons.append(button)
+            materials_layout.addWidget(button)
+        materials_layout.addStretch(1)
         key_form.addRow(self.chroma_key_enabled)
         key_form.addRow("Цвет фона для удаления", self.chroma_key_color)
-        key_form.addRow("Свой оттенок", self.chroma_key_custom_color)
-        self.chroma_key_custom_color.setVisible(selected_color == "custom")
+        key_form.addRow("Материалы и детали", materials_widget)
         layout.addWidget(key_group)
 
         self.preview_label = QLabel("Пример итогового промпта появится здесь.")
@@ -1643,19 +1656,12 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self.restrictions_edit.textChanged.connect(self._generator_changed)
         self.chroma_key_enabled.toggled.connect(self._generator_changed)
         self.chroma_key_color.currentIndexChanged.connect(self._generator_changed)
-        self.chroma_key_color.currentIndexChanged.connect(
-            lambda *_: self.chroma_key_custom_color.setVisible(
-                self.chroma_key_color.currentData() == "custom"
-            )
-        )
-        self.chroma_key_custom_color.textChanged.connect(self._generator_changed)
+        for button in self.chroma_material_buttons:
+            button.toggled.connect(self._generator_changed)
         self._preview()
         return widget
 
     def _generator_data(self) -> PromptGeneratorData:
-        key_color = self.chroma_key_color.currentData()
-        if key_color == "custom":
-            key_color = self.chroma_key_custom_color.text().strip()
         return PromptGeneratorData(
             theme=self.theme_edit.text(),
             subjects=self.subjects_edit.toPlainText().splitlines(),
@@ -1667,7 +1673,12 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             consistency=self.consistency_edit.text(),
             restrictions=self.restrictions_edit.toPlainText().splitlines(),
             chroma_key_enabled=self.chroma_key_enabled.isChecked(),
-            chroma_key_color=key_color,
+            chroma_key_color=self.chroma_key_color.currentData(),
+            chroma_key_materials=[
+                str(button.property("chromaMaterial"))
+                for button in self.chroma_material_buttons
+                if button.isChecked()
+            ],
         )
 
     def _generator_changed(self, *_: Any) -> None:
