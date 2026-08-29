@@ -148,6 +148,40 @@ class ProcessingEditorTests(unittest.TestCase):
         )
         self.assertTrue(editor.stage_sections["upscale_after"].isHidden())
 
+    def test_fal_controls_show_selected_model_and_only_its_parameters(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        operations = state.processing.operations
+        operations.upscale_before = True
+        operations.upscale_before_provider = "fal"
+        operations.remove_background = True
+        operations.remove_background_provider = "fal"
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+
+        self.assertFalse(editor.operation_widgets["fal_upscale_model"].isHidden())
+        self.assertFalse(editor.operation_widgets["fal_upscale_scale"].isHidden())
+
+        model = editor.operation_widgets["fal_remove_bg_model"]
+        model.setCurrentIndex(model.findData("fal-ai/bria/background/remove"))
+        self.assertTrue(editor.operation_widgets["fal_birefnet_model"].isHidden())
+        self.assertTrue(editor.operation_widgets["fal_birefnet_resolution"].isHidden())
+        self.assertTrue(editor.operation_widgets["fal_rembg_crop_to_bbox"].isHidden())
+
+        model.setCurrentIndex(model.findData("fal-ai/birefnet/v2"))
+        self.assertFalse(editor.operation_widgets["fal_birefnet_model"].isHidden())
+        self.assertFalse(editor.operation_widgets["fal_birefnet_resolution"].isHidden())
+        self.assertFalse(editor.operation_widgets["fal_birefnet_refine_foreground"].isHidden())
+        self.assertTrue(editor.operation_widgets["fal_rembg_crop_to_bbox"].isHidden())
+
+        model.setCurrentIndex(model.findData("fal-ai/imageutils/rembg"))
+        self.assertTrue(editor.operation_widgets["fal_birefnet_model"].isHidden())
+        self.assertFalse(editor.operation_widgets["fal_rembg_crop_to_bbox"].isHidden())
+
     def test_operation_requirement_can_be_disabled_for_generation_modes(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations

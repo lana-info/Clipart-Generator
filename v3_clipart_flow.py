@@ -567,6 +567,10 @@ def _worker_settings(
             "upscale_factor": operations.upscale_factor,
             "kie_upscale_model": operations.kie_upscale_model,
             "kie_upscale_after_model": operations.kie_upscale_after_model,
+            "fal_upscale_model": operations.fal_upscale_model,
+            "fal_upscale_after_model": operations.fal_upscale_after_model,
+            "fal_upscale_scale": operations.fal_upscale_scale,
+            "fal_upscale_after_scale": operations.fal_upscale_after_scale,
             "local_realesrgan_profile": operations.local_realesrgan_profile,
             "local_realesrgan_scale": operations.local_realesrgan_scale,
             "local_realesrgan_after_scale": (
@@ -3225,11 +3229,11 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
     operations = state.clipart.operations
     output_count = len(state.clipart.prompts) * variants
     if operations.upscale_before and operations.upscale_before_provider == "fal":
-        add("fal-ai/esrgan", output_count)
+        add(operations.fal_upscale_model, output_count)
     if operations.remove_background and operations.remove_background_provider == "fal":
         add(operations.fal_remove_bg_model, output_count)
     if operations.upscale_after and operations.upscale_after_provider == "fal":
-        add("fal-ai/esrgan", output_count)
+        add(operations.fal_upscale_after_model, output_count)
     return quantities
 
 

@@ -470,6 +470,10 @@ class ImageOperationData:
     upscale_factor: int = 4
     kie_upscale_model: str = KIE_TOPAZ_MODEL_ID
     kie_upscale_after_model: str = KIE_TOPAZ_MODEL_ID
+    fal_upscale_model: str = "fal-ai/esrgan"
+    fal_upscale_after_model: str = "fal-ai/esrgan"
+    fal_upscale_scale: int = 4
+    fal_upscale_after_scale: int = 4
     local_realesrgan_profile: str = "clipart"
     local_realesrgan_scale: int = 4
     local_realesrgan_after_scale: int = 4
@@ -530,6 +534,12 @@ class ImageOperationData:
         )
         self.kie_upscale_after_model = normalize_kie_upscale_model(
             _text(self.kie_upscale_after_model, limit=200)
+        )
+        self.fal_upscale_model = "fal-ai/esrgan"
+        self.fal_upscale_after_model = "fal-ai/esrgan"
+        self.fal_upscale_scale = self._realesrgan_scale(self.fal_upscale_scale)
+        self.fal_upscale_after_scale = self._realesrgan_scale(
+            self.fal_upscale_after_scale
         )
         self.local_realesrgan_profile = _text(
             self.local_realesrgan_profile,
@@ -669,6 +679,12 @@ class ImageOperationData:
                 "kie_upscale_after_model",
                 config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID),
             ),
+            fal_upscale_model=config.get("fal_upscale_model", "fal-ai/esrgan"),
+            fal_upscale_after_model=config.get(
+                "fal_upscale_after_model", "fal-ai/esrgan"
+            ),
+            fal_upscale_scale=config.get("fal_upscale_scale", 4),
+            fal_upscale_after_scale=config.get("fal_upscale_after_scale", 4),
             local_realesrgan_profile=config.get(
                 "local_realesrgan_profile",
                 "clipart",

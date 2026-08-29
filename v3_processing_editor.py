@@ -25,6 +25,7 @@ from v3_provider_registry import (
     FAL_BIREFNET_MODEL_OPTIONS,
     FAL_BIREFNET_RESOLUTION_OPTIONS,
     FAL_REMOVE_BG_MODEL_OPTIONS,
+    FAL_UPSCALE_MODEL_OPTIONS,
     KIE_TOPAZ_MODEL_ID,
     KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
@@ -370,6 +371,34 @@ class ProcessingPipelineEditor(QScrollArea):
         )
         self._add_combo(
             advanced_form,
+            "fal_upscale_model",
+            "Fal.ai модель апскейла до",
+            FAL_UPSCALE_MODEL_OPTIONS,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "fal_upscale_after_model",
+            "Fal.ai модель апскейла после",
+            FAL_UPSCALE_MODEL_OPTIONS,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "fal_upscale_scale",
+            "Fal.ai масштаб до",
+            (("2×", 2), ("4×", 4)),
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
+            "fal_upscale_after_scale",
+            "Fal.ai масштаб после",
+            (("2×", 2), ("4×", 4)),
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
             "upscale_factor",
             "Topaz масштаб",
             tuple((f"{factor}x", factor) for factor in TOPAZ_UPSCALE_FACTORS),
@@ -562,6 +591,8 @@ class ProcessingPipelineEditor(QScrollArea):
         labels = {
             "upscale_before_provider": "Провайдер",
             "kie_upscale_model": "Модель",
+            "fal_upscale_model": "Модель",
+            "fal_upscale_scale": "Масштаб",
             "upscale_factor": "Масштаб",
             "local_realesrgan_profile": "Профиль",
             "local_realesrgan_scale": "Масштаб",
@@ -585,6 +616,8 @@ class ProcessingPipelineEditor(QScrollArea):
             "local_ben2_corner_radius": "Радиус углов",
             "upscale_after_provider": "Провайдер",
             "kie_upscale_after_model": "Модель",
+            "fal_upscale_after_model": "Модель",
+            "fal_upscale_after_scale": "Масштаб",
             "local_realesrgan_after_scale": "Масштаб",
             "edge_shrink_pixels": "Очистка края, px",
             "trim_mode": "Trim по",
@@ -592,6 +625,7 @@ class ProcessingPipelineEditor(QScrollArea):
         groups = {
             "upscale_before": (
                 "upscale_before_provider", "kie_upscale_model", "upscale_factor",
+                "fal_upscale_model", "fal_upscale_scale",
                 "local_realesrgan_profile", "local_realesrgan_scale",
             ),
             "unsharp": ("unsharp_amount", "unsharp_radius", "unsharp_threshold"),
@@ -608,6 +642,7 @@ class ProcessingPipelineEditor(QScrollArea):
             ),
             "upscale_after": (
                 "upscale_after_provider", "kie_upscale_after_model",
+                "fal_upscale_after_model", "fal_upscale_after_scale",
                 "local_realesrgan_after_scale",
             ),
             "edge_shrink": ("edge_shrink_pixels",),
@@ -829,6 +864,14 @@ class ProcessingPipelineEditor(QScrollArea):
             and "kie_upscale_model" in before_controls,
             "kie_upscale_after_model": operations.upscale_after
             and "kie_upscale_after_model" in after_controls,
+            "fal_upscale_model": operations.upscale_before
+            and "fal_upscale_model" in before_controls,
+            "fal_upscale_after_model": operations.upscale_after
+            and "fal_upscale_after_model" in after_controls,
+            "fal_upscale_scale": operations.upscale_before
+            and operations.upscale_before_provider == "fal",
+            "fal_upscale_after_scale": operations.upscale_after
+            and operations.upscale_after_provider == "fal",
             "upscale_factor": (
                 operations.upscale_before
                 and operations.upscale_before_provider == "kie"
@@ -856,13 +899,17 @@ class ProcessingPipelineEditor(QScrollArea):
             "fal_remove_bg_model": operations.remove_background
             and "fal_remove_bg_model" in remove_controls,
             "fal_birefnet_model": operations.remove_background
-            and "fal_birefnet_model" in remove_controls,
+            and "fal_birefnet_model" in remove_controls
+            and operations.fal_remove_bg_model == "fal-ai/birefnet/v2",
             "fal_birefnet_resolution": operations.remove_background
-            and "fal_birefnet_resolution" in remove_controls,
+            and "fal_birefnet_resolution" in remove_controls
+            and operations.fal_remove_bg_model == "fal-ai/birefnet/v2",
             "fal_birefnet_refine_foreground": operations.remove_background
-            and "fal_birefnet_refine_foreground" in remove_controls,
+            and "fal_birefnet_refine_foreground" in remove_controls
+            and operations.fal_remove_bg_model == "fal-ai/birefnet/v2",
             "fal_rembg_crop_to_bbox": operations.remove_background
-            and "fal_rembg_crop_to_bbox" in remove_controls,
+            and "fal_rembg_crop_to_bbox" in remove_controls
+            and operations.fal_remove_bg_model == "fal-ai/imageutils/rembg",
             "local_rembg_profile": operations.remove_background
             and "local_rembg_profile" in remove_controls,
             "local_rembg_model": operations.remove_background

@@ -54,6 +54,8 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
         preserves_alpha=False,
         requires_api_key=True,
         visible_controls=(
+            "fal_upscale_model",
+            "fal_upscale_after_model",
             "fal_remove_bg_model",
             "fal_birefnet_model",
             "fal_birefnet_resolution",
@@ -178,6 +180,9 @@ FAL_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Ideogram Remove Background", "fal-ai/ideogram/remove-background"),
     ("Pixelcut Background Removal", "fal-ai/pixelcut/background-removal"),
     ("rembg", "fal-ai/imageutils/rembg"),
+)
+FAL_UPSCALE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("ESRGAN", "fal-ai/esrgan"),
 )
 FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Общая — Light", "General Use (Light)"),

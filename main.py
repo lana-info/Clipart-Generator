@@ -1063,6 +1063,16 @@ class WorkerThread(QThread):
         self.kie_upscale_after_model = normalize_kie_upscale_model(
             settings.get("kie_upscale_after_model", self.kie_upscale_model)
         )
+        self.fal_upscale_model = "fal-ai/esrgan"
+        self.fal_upscale_after_model = "fal-ai/esrgan"
+        self._has_fal_upscale_scale = "fal_upscale_scale" in settings
+        self._has_fal_upscale_after_scale = "fal_upscale_after_scale" in settings
+        self.fal_upscale_scale = normalize_local_realesrgan_scale(
+            settings.get("fal_upscale_scale", 4)
+        )
+        self.fal_upscale_after_scale = normalize_local_realesrgan_scale(
+            settings.get("fal_upscale_after_scale", 4)
+        )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.fal_remove_bg_model = settings.get("fal_remove_bg_model", "fal-ai/bria/background/remove")
         if self.fal_remove_bg_model == "fal-ai/birefnet":
@@ -2717,7 +2727,11 @@ class WorkerThread(QThread):
         upscale_model = (
             "realesrgan-ncnn-vulkan"
             if provider == "local_realesrgan"
-            else "fal-ai/esrgan"
+            else (
+                self.fal_upscale_after_model
+                if stage == "upscale_after"
+                else self.fal_upscale_model
+            )
             if provider == "fal"
             else kie_model
         )
@@ -2736,13 +2750,18 @@ class WorkerThread(QThread):
         )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "fal":
+            fal_scale = local_scale
+            if stage == "upscale_after" and self._has_fal_upscale_after_scale:
+                fal_scale = self.fal_upscale_after_scale
+            elif stage != "upscale_after" and self._has_fal_upscale_scale:
+                fal_scale = self.fal_upscale_scale
             current_url = self._fal_source_url(current_path, current_url)
             with self._provider_lease("fal"):
                 current_url = self._fal_process_image(
                     current_url,
                     operation="upscale",
-                    model_id="fal-ai/esrgan",
-                    scale=local_scale,
+                    model_id=upscale_model,
+                    scale=fal_scale,
                 )
             current_path = os.path.join(
                 raw_dir, f"{prefix}_{step_name}_fal_{idx:03d}_{self.run_stamp}.png"
