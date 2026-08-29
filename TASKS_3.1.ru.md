@@ -90,7 +90,8 @@ Dependencies: shared processing contract. Scope: M. Requirements:
 
 ## Task 3: Фильтровать processing controls по endpoint/model
 
-Status: Todo
+Status: In progress — visual approved 2026-08-29; implementation checkpoint
+`677147d`, final screenshot comparison pending
 
 Goal:
 Убрать скрытые defaults и несовместимые настройки Fal.ai/KIE.
