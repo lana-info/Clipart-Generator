@@ -62,6 +62,11 @@ Preview, zoom, add/remove кисть, reset, атомарный экспорт �
 использует около 421 MiB при лимите 448 MiB. Полный offline pytest: 938 passed,
 56 intentional skips, 2 deselected и 123 subtests. Нужен финальный Windows UI
 smoke на пользовательских сериях; Pinterest этим режимом не пользуется.
+После этой проверки отдельно оценить, нужны ли пресеты коррекции chroma-key.
+До появления повторяемых дефектов основной режим остаётся автоматическим и не
+показывает технические ползунки; возможный follow-up ограничен понятными
+пресетами `Бережно` / `Обычно` / `Сильнее` и контекстными действиями для края
+или внутренних просветов.
 
 Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
 Actions run `33032049521`. Do not publish it as an update before this
