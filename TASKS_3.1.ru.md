@@ -349,7 +349,7 @@ Requirements:
 
 ## Task 10: Интегрировать automatic chroma UX
 
-Status: Todo
+Status: Done (VDS checkpoint; Windows series smoke pending)
 
 Goal:
 Сделать `Автоматически` основным понятным режимом без обязательных tolerance и
@@ -361,12 +361,25 @@ Steps:
 - Добавить simple edge profiles только если Task 8/9 benchmark докажет пользу.
 
 Acceptance:
-- [ ] Default run не требует понимания tolerance/softness.
-- [ ] Prompt key color и removal key registry не расходятся.
-- [ ] Existing drafts мигрируют в safe automatic/default behavior.
+- [x] Default run не требует понимания tolerance/softness.
+- [x] Prompt key color и removal key registry не расходятся.
+- [x] Existing drafts мигрируют в safe automatic/default behavior.
 
 Verification:
-- [ ] Unit/UI/worker integration tests и manual Windows series smoke.
+- [x] Unit/UI/worker integration tests.
+- [ ] Manual Windows series smoke.
+
+Implementation evidence: feature commit `33d2544`. Common Clipart/Processing
+run plan передаёт automatic worker только preset `chroma_key_color`; custom,
+tolerance и softness остаются лишь legacy draft fields и не попадают в run.
+Worker также нормализует прямой legacy custom/HEX/unknown input в safe `blue`.
+Все prompt/removal selectors используют один registry `blue/red/green`,
+производный от engine `KEY_COLORS`. Simple edge profiles не добавлены: Task 8/9
+не доказали отдельную измеримую пользу профилей. 162 targeted tests,
+`py_compile`, offscreen UI smoke, `git diff --check` и независимый review прошли.
+Четыре старых output-layout failure воспроизводятся на base `59df0e1` и не
+относятся к Task 10; общий regression gate остаётся открытым до интеграции
+веток и Windows acceptance.
 
 Dependencies: Tasks 5, 7, 9. Scope: M. Requirements: `CG31-FR-041`.
 

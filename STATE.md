@@ -56,9 +56,12 @@ acceptance остаётся manual Windows mouse/pen pass. Task 8 завершё
 канонический baseline `ed0dc4d`, 19 focused tests. Task 9 завершён на ветке
 `codex/feat-3.1-automatic-chroma-engine`: engine `07f84a7`, canonical evidence
 `59df0e1`, mean alpha MAE улучшен на 54.7%, runtime 0.758 s и peak RSS
-421.055 MiB на 2048×2048. Следующий пункт по порядку — Task 10: интегрировать
-automatic engine в common processing plan и утверждённый простой UX без
-обязательных tolerance/softness.
+421.055 MiB на 2048×2048. Task 10 завершён на ветке
+`codex/feat-3.1-automatic-chroma-ux`, commit `33d2544`: automatic engine
+подключён к common Clipart/Processing run plan, UI оставляет только общий preset
+registry blue/red/green, legacy custom/tolerance/softness в worker не попадают.
+Следующий пункт по порядку — Task 11: массовое редактирование prompt через
+`Найти и заменить`, `В начало` и `В конец` с одной reversible operation.
 
 Release 3.0.7 и development 3.1 разделены:
 
