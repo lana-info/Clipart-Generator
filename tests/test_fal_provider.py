@@ -143,6 +143,19 @@ class FalProviderTests(unittest.TestCase):
             with self.assertRaises(FalProviderError):
                 client.submit({"prompt": "a fox"})
 
+    def test_result_fetches_documented_response_route(self):
+        opener = _Opener(_Response({"images": [{"url": "https://cdn.example/a.png"}]}))
+        client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
+
+        with patch("fal_provider.urllib.request.build_opener", return_value=opener):
+            result = client.result("req-123")
+
+        self.assertEqual(result["images"][0]["url"], "https://cdn.example/a.png")
+        self.assertEqual(
+            opener.request.full_url,
+            "https://queue.fal.run/fal-ai/flux/schnell/requests/req-123/response",
+        )
+
     def test_paid_submit_is_not_retried_after_transient_http_failure(self):
         class FailingOpener:
             calls = 0

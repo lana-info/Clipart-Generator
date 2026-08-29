@@ -460,7 +460,7 @@ class FalClient:
         request_id = str(request_id or "").strip()
         if not _REQUEST_RE.fullmatch(request_id):
             raise FalProviderError("Некорректный Fal.ai request ID")
-        return self._request(self._request_url(f"/requests/{request_id}"))
+        return self._request(self._request_url(f"/requests/{request_id}/response"))
 
     def cancel(self, request_id: str) -> dict[str, Any]:
         request_id = str(request_id or "").strip()
