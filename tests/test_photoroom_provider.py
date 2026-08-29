@@ -421,7 +421,7 @@ class PhotoRoomProviderTests(unittest.TestCase):
             ) as cleanup_mock:
                 worker._mode2_process_files(emit_final=False)
 
-            raw_outputs = list((temp_path / "output" / ".run").glob("*_photoroom_nobg_*.png"))
+            raw_outputs = list((temp_path / "rough").glob("*_bg-removed.png"))
             final_outputs = list((temp_path / "output").glob("*.png"))
             self.assertEqual(len(raw_outputs), 1)
             self.assertEqual(len(final_outputs), 1)

@@ -683,7 +683,7 @@ class ParallelGenerationTests(unittest.TestCase):
             self.assertEqual(activity.maximum["kie"], 3)
             self.assertEqual(
                 [name.split("_")[1] for name in sorted(saved)],
-                ["001", "002", "003", "004"],
+                ["01", "02", "03", "04"],
             )
 
     def test_kie_provider_limit_three_and_one_are_enforced_by_real_adapters(self):

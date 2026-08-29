@@ -77,7 +77,7 @@ class V3OutputPathsTests(unittest.TestCase):
             state.processing.selected_files = [str(source)]
             state.processing.operations.upscale_before = False
             state.processing.operations.upscale_after = False
-            state.processing.operations.unsharp = False
+            state.processing.operations.unsharp = True
             state.processing.operations.remove_background = False
             state.processing.operations.trim = True
             state.processing.operations.edge_shrink = False
@@ -93,6 +93,16 @@ class V3OutputPathsTests(unittest.TestCase):
 
             produced = list((workspace_root / "output").glob("source_ready*.png"))
             self.assertTrue(produced)
+            rough_names = [path.name for path in (workspace_root / "rough").glob("*.png")]
+            self.assertTrue(rough_names)
+            self.assertFalse(any(worker.run_stamp in name for name in rough_names))
+            self.assertFalse((workspace_root / ".run").exists())
+            worker._mode2_process_files(emit_final=False)
+            self.assertGreater(
+                len(list((workspace_root / "rough").glob("*.png"))),
+                len(rough_names),
+            )
+            self.assertFalse((workspace_root / ".run").exists())
             self.assertEqual(source.read_bytes(), source_bytes)
 
     def test_processing_intermediates_do_not_use_stale_root_workspace(self) -> None:

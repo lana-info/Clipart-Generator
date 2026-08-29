@@ -682,7 +682,7 @@ class KieRoutingTests(unittest.TestCase):
 
             worker._mode1_generate(process_generated=False)
 
-            raw_outputs = list((Path(temp_dir) / "output" / ".run").glob("*.png"))
+            raw_outputs = list((Path(temp_dir) / "rough").glob("*.png"))
             final_outputs = list((Path(temp_dir) / "output").glob("*.png"))
             self.assertEqual([call[0] for call in calls], ["generate", "download", "download"])
             self.assertEqual(len(raw_outputs), 1)
@@ -766,7 +766,7 @@ class KieRoutingTests(unittest.TestCase):
                     "download_removed",
                 ],
             )
-            raw_outputs = list((temp_path / "output" / ".run").glob("*.png"))
+            raw_outputs = list((temp_path / "rough").glob("*.png"))
             final_outputs = list((temp_path / "output").glob("*.png"))
             self.assertGreaterEqual(len(raw_outputs), 2)
             self.assertEqual(len(final_outputs), 1)

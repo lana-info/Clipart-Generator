@@ -67,7 +67,7 @@ from visible_mark_cleanup import (
     visible_mark_region_key,
 )
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
-from output_naming import processed_output_path
+from output_naming import generated_output_path, processed_output_path
 from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
 from runtime_settings import normalize_kie_concurrency, normalize_provider_concurrency
@@ -1594,7 +1594,7 @@ class WorkerThread(QThread):
             self._emit_file_progress(idx, total, 84)
         else:
             self._emit_file_progress(idx, total, 70)
-        out_path = os.path.join(output_dir, f"result_{idx:03d}_{self.run_stamp}.png")
+        out_path = str(generated_output_path(output_dir, idx))
         self._save_final_output(
             final_url,
             gen_path,
@@ -1714,6 +1714,7 @@ class WorkerThread(QThread):
                         done_count += 1
                     submit_next()
 
+        self._persist_rough_outputs(raw_dir)
         if not self.is_running:
             self.progress.emit("Остановлено пользователем")
             self._emit_cancelled_run_terminal()
@@ -2050,7 +2051,9 @@ class WorkerThread(QThread):
                 if self._stop_after_current_if_requested():
                     break
             if not self.is_running:
+                self._persist_rough_outputs(raw_dir)
                 return
+            self._persist_rough_outputs(raw_dir)
             self.progress_value.emit(100)
             if emit_final:
                 if done_count == 0:
@@ -2138,6 +2141,7 @@ class WorkerThread(QThread):
                         done_count += 1
                     submit_next()
 
+        self._persist_rough_outputs(raw_dir)
         if not self.is_running:
             self.progress.emit("Остановлено пользователем")
             self._emit_cancelled_run_terminal()
@@ -2169,6 +2173,47 @@ class WorkerThread(QThread):
         except OSError:
             pass
         return tempfile.mkdtemp(prefix="clipart-generator-raw-")
+
+    def _persist_rough_outputs(self, raw_dir):
+        """Publish meaningful PNG intermediates with short stable names."""
+        rough_dir = Path(self.workspace_root) / "rough"
+        rough_dir.mkdir(parents=True, exist_ok=True)
+        stage_markers = (
+            ("visible_mark", "visible-mark-cleaned"),
+            ("upscaled_after", "upscaled-after"),
+            ("upscaled", "upscaled-before"),
+            ("edgeshrink", "edge-cleaned"),
+            ("chroma_key_nobg", "bg-removed"),
+            ("photoroom_nobg", "bg-removed"),
+            ("fal_nobg", "bg-removed"),
+            ("nobg", "bg-removed"),
+            ("unsharp", "sharpened"),
+            ("pretrim", "pre-trim"),
+            ("gen", "generated"),
+        )
+        counters = {}
+        for source in sorted(Path(raw_dir).glob("*.png")):
+            lower_name = source.name.casefold()
+            stage = next(
+                (label for marker, label in stage_markers if marker in lower_name),
+                None,
+            )
+            if stage is None:
+                continue
+            counters[stage] = counters.get(stage, 0) + 1
+            target = rough_dir / f"rough_{counters[stage]:02d}_{stage}.png"
+            while target.exists():
+                counters[stage] += 1
+                target = rough_dir / f"rough_{counters[stage]:02d}_{stage}.png"
+            shutil.copy2(source, target)
+        transient = Path(self.workspace_root) / ".run"
+        try:
+            if Path(raw_dir).resolve() == transient.resolve() and transient.is_dir():
+                shutil.rmtree(transient)
+        except OSError:
+            # Results are already published; stale transient data can be retried
+            # on the next terminal run without affecting user files.
+            pass
 
     def _uses_local_upscale(self):
         return self.upscale and self.upscale_provider == "local_realesrgan"

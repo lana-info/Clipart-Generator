@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from output_naming import processed_output_path, workspace_layout
+from output_naming import generated_output_path, processed_output_path, workspace_layout
 
 
 def test_processed_output_uses_stable_name_when_overwriting():
@@ -23,3 +23,9 @@ def test_workspace_layout_migrates_legacy_output_path_to_parent(tmp_path):
     assert layout.output == tmp_path / "output"
     assert layout.rough == tmp_path / "rough"
     assert layout.transient == tmp_path / ".run"
+
+
+def test_generated_output_uses_short_ready_name_and_collision_number(tmp_path):
+    assert generated_output_path(tmp_path, 1) == tmp_path / "clipart_01_ready.png"
+    (tmp_path / "clipart_01_ready.png").touch()
+    assert generated_output_path(tmp_path, 1) == tmp_path / "clipart_01_ready_2.png"

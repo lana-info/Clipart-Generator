@@ -38,3 +38,13 @@ def processed_output_path(output_dir: str | Path, source_path: str | Path, run_s
         if not candidate.exists():
             return candidate
         suffix += 1
+
+
+def generated_output_path(output_dir: str | Path, row_index: int) -> Path:
+    base = f"clipart_{max(1, int(row_index)):02d}_ready"
+    destination = Path(output_dir) / f"{base}.png"
+    suffix = 2
+    while destination.exists():
+        destination = Path(output_dir) / f"{base}_{suffix}.png"
+        suffix += 1
+    return destination
