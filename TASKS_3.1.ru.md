@@ -516,15 +516,16 @@ Requirements: `CG31-FR-060`–`CG31-FR-062`.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: Todo
+Status: In progress — source integrated into `develop/3.1` at `dd01703`; full
+VDS verification passes, Windows acceptance and release preparation remain
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый
 Windows candidate только после полной source acceptance.
 
 Steps:
-- Merge tasks in dependency order with verification after each integration.
-- Run focused, full offline, compile, sensitive-artifact and diff checks.
+- [x] Merge tasks in dependency order with verification after integration.
+- [x] Run focused, full offline, compile, sensitive-artifact and diff checks.
 - Провести manual Windows acceptance; build — только отдельной командой.
 
 Acceptance:
@@ -535,7 +536,14 @@ Acceptance:
 - [ ] Update не публикуется автоматически.
 
 Verification:
-- [ ] History/merge-base audit, full tests and Windows checklist.
+- [ ] History/merge-base audit and full VDS tests pass; Windows checklist
+  remains.
+
+Evidence: `develop/3.1` fast-forwarded from `78f8c63` to `dd01703` without
+conflicts and was pushed to GitHub. Post-integration verification: 950 passed,
+56 intentional skips, 2 deselected, 127 subtests; `py_compile` and tracked
+sensitive-artifact scan pass. No paid request, installer build or publication
+was started.
 
 Dependencies: Tasks 1–12, 14. Scope: M.
 
