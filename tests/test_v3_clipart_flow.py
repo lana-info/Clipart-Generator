@@ -1423,6 +1423,17 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(state.clipart.generation.ratio, state.clipart.generation.reference_ratio)
         self.assertEqual(state.clipart.generation.resolution, state.clipart.generation.reference_resolution)
 
+    def test_nonprefixed_fal_generation_model_requires_fal_key(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        state.clipart.generation.model = "ideogram/v4/fast"
+        state.clipart.operations.upscale_before = False
+        state.clipart.operations.remove_background = False
+
+        request = build_clipart_run_request(state)
+
+        self.assertEqual(missing_runtime_requirements(request), ("Fal.ai API Key",))
+
     def test_review_summary_is_compact_and_left_aligned(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox")]

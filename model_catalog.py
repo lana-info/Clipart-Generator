@@ -33,6 +33,11 @@ _MODEL_ROWS = (
     ("fal-ai/flux/schnell", "Fal.ai — FLUX Schnell", "text_to_image"),
     ("fal-ai/ideogram/v3", "Fal.ai — Ideogram V3", "text_to_image"),
     ("fal-ai/ideogram/v3/generate-transparent", "Fal.ai — Ideogram V3 Transparent", "text_to_image"),
+    ("fal-ai/recraft/v4/text-to-image", "Fal.ai — Recraft V4", "text_to_image"),
+    ("ideogram/v4/fast", "Fal.ai — Ideogram V4 Fast", "text_to_image"),
+    ("fal-ai/flux-2/klein/4b", "Fal.ai — FLUX.2 Klein 4B", "text_to_image"),
+    ("fal-ai/kling-image/o3/text-to-image", "Fal.ai — Kling O3 Image", "text_to_image"),
+    ("bria/fibo-gen-1.5/text-to-image", "Fal.ai — Bria Fibo Gen 1.5", "text_to_image"),
     ("gpt4o-image", "KIE — GPT‑4o Image", "text_to_image"),
     ("gpt-image/1.5-text-to-image", "KIE — GPT Image 1.5 (Text→Image)", "text_to_image"),
     ("gpt-image-2", "KIE — GPT Image 2", "text_to_image"),
@@ -71,6 +76,28 @@ _CAPABILITIES = {
     "fal-ai/ideogram/v3/generate-transparent": {
         "ratios": {"1:1", "3:4", "4:3", "9:16", "16:9"},
         "pricing": "Turbo $0.03 / Balanced $0.06 / Quality $0.09",
+    },
+    "fal-ai/recraft/v4/text-to-image": {
+        "ratios": {"1:1", "3:4", "4:3", "9:16", "16:9"},
+        "pricing": "$0.04 / image",
+    },
+    "ideogram/v4/fast": {
+        "ratios": {"1:1", "3:4", "4:3", "9:16", "16:9"},
+        "pricing": "Turbo $0.00525 / MP; Balanced $0.0105 / MP; Quality $0.0175 / MP",
+    },
+    "fal-ai/flux-2/klein/4b": {
+        "ratios": {"1:1", "3:4", "4:3", "9:16", "16:9"},
+        "pricing": "$0.005 / MP",
+    },
+    "fal-ai/kling-image/o3/text-to-image": {
+        "ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"},
+        "resolutions": {"1K", "2K", "4K"},
+        "pricing": {"1K": "$0.028 / image", "2K": "$0.028 / image", "4K": "$0.056 / image"},
+    },
+    "bria/fibo-gen-1.5/text-to-image": {
+        "ratios": {"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9"},
+        "resolutions": {"1MP", "4MP"},
+        "pricing": "$0.04 / image",
     },
     "gpt-image/1.5-text-to-image": {"ratios": {"1:1", "2:3", "3:2"}, "qualities": {"medium", "high"}, "pricing": "4 / 22 credits ($0.02 / $0.11)"},
     "gpt-image/1.5-image-to-image": {"ratios": {"1:1", "2:3", "3:2"}, "qualities": {"medium", "high"}, "pricing": "4 / 22 credits ($0.02 / $0.11)"},
@@ -135,7 +162,7 @@ MODEL_SPECS = MappingProxyType({
 GENERATION_MODELS = tuple(MappingProxyType({"id": i, "label": l, "type": t}) for i, l, t in _MODEL_ROWS)
 GENERATION_MODEL_META = MappingProxyType({model_id: next(row for row in GENERATION_MODELS if row["id"] == model_id) for model_id in MODEL_SPECS})
 SUPPORTED_GENERATION_MODEL_IDS = frozenset(row[0] for row in _MODEL_ROWS)
-VISIBLE_GENERATION_MODEL_IDS = frozenset({"fal-ai/flux/schnell", "fal-ai/ideogram/v3", "fal-ai/ideogram/v3/generate-transparent", "gpt-image/1.5-text-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "gpt-image/1.5-image-to-image", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
+VISIBLE_GENERATION_MODEL_IDS = frozenset({"fal-ai/flux/schnell", "fal-ai/ideogram/v3", "fal-ai/ideogram/v3/generate-transparent", "fal-ai/recraft/v4/text-to-image", "ideogram/v4/fast", "fal-ai/flux-2/klein/4b", "fal-ai/kling-image/o3/text-to-image", "bria/fibo-gen-1.5/text-to-image", "gpt-image/1.5-text-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-text-to-image", "flux-2/flex-text-to-image", "gpt-image/1.5-image-to-image", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
 REFERENCE_MODEL_SHORTLIST = frozenset({"gpt-image/1.5-image-to-image", "gpt-image-2", "nano-banana-2", "nano-banana-pro", "qwen-image-2", "flux-2/pro-image-to-image", "flux-2/flex-image-to-image"})
 PROCESSING_PRICING = MappingProxyType({"topaz/image-upscale": "40 credits / $0.20", "recraft/crisp-upscale": "0.5 credits / $0.0025", "recraft/remove-background": "1 credit / $0.005"})
 

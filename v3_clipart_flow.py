@@ -66,6 +66,7 @@ from v3_processing_editor import (
     RunPlanBuilder,
 )
 from v3_provider_registry import CHROMA_KEY_COLOR_OPTIONS
+from fal_model_catalog import is_fal_generation_model, is_fal_model_id
 from processing_cleanup import METADATA_CLEANUP_FIELDS
 from output_naming import workspace_layout
 from v3_prompt_csv_import import PromptCsvImportDialog
@@ -403,7 +404,7 @@ def generation_model_options(
     options, _ = _legacy_catalog()
     result: list[GenerationModelOption] = []
     for option in options.values():
-        if not include_fal_models and option.model_id.startswith("fal-ai/"):
+        if not include_fal_models and is_fal_generation_model(option.model_id):
             continue
         if references:
             allowed = option.model_type in {"image_to_image", "edit"}
@@ -852,10 +853,10 @@ def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
         generation_models = {
             str(request.settings.get("text_generation_model") or "").strip()
         }
-        if any(model.startswith("fal-ai/") for model in generation_models):
+        if any(is_fal_generation_model(model) for model in generation_models):
             if not str(request.settings.get("fal_api_key") or "").strip():
                 add_missing("Fal.ai API Key")
-        if any(not model.startswith("fal-ai/") for model in generation_models):
+        if any(not is_fal_generation_model(model) for model in generation_models):
             if not str(request.settings.get("kie_api_key") or "").strip():
                 add_missing("KIE API Key")
 
@@ -3558,7 +3559,7 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
     quantities: dict[str, int] = {}
 
     def add(model_id: str, count: int) -> None:
-        if str(model_id).startswith("fal-ai/") and count > 0:
+        if is_fal_model_id(model_id) and count > 0:
             quantities[model_id] = quantities.get(model_id, 0) + count
 
     for _entry in state.clipart.prompts:
@@ -3662,7 +3663,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         generation = self.state.clipart.generation
         operations = self.state.clipart.operations
         return (
-            str(generation.model).startswith("fal-ai/")
+            is_fal_generation_model(generation.model)
             or (operations.upscale_before and operations.upscale_before_provider == "fal")
             or (operations.upscale_after and operations.upscale_after_provider == "fal")
             or (operations.remove_background and operations.remove_background_provider == "fal")

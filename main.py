@@ -91,7 +91,10 @@ from fal_provider import (
     fal_image_data_uri,
     fal_image_url,
 )
-from fal_model_catalog import fal_endpoint_profile
+from fal_model_catalog import (
+    fal_generation_payload,
+    is_fal_generation_model,
+)
 from provider_contract import ProviderTaskRequest
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
@@ -4273,7 +4276,7 @@ class WorkerThread(QThread):
     def _kie_generate_image(self, prompt, references=None):
         reference_items = split_references(references or [])
         normalized_model = self._select_generation_model(reference_items)
-        if normalized_model.startswith("fal-ai/"):
+        if is_fal_generation_model(normalized_model):
             with self._provider_lease("fal"):
                 self._set_provider_diagnostic_context(
                     "generation", "fal", normalized_model
@@ -4323,10 +4326,10 @@ class WorkerThread(QThread):
             )
 
     def _uses_fal_generation(self):
-        return any(model.startswith("fal-ai/") for model in self._generation_models_in_use())
+        return any(is_fal_generation_model(model) for model in self._generation_models_in_use())
 
     def _uses_kie_generation(self):
-        return any(not model.startswith("fal-ai/") for model in self._generation_models_in_use())
+        return any(not is_fal_generation_model(model) for model in self._generation_models_in_use())
 
     def _generation_models_in_use(self):
         entries = self.generated_prompts or []
@@ -4351,11 +4354,8 @@ class WorkerThread(QThread):
                 ),
             )
         )
-        payload = {"prompt": str(prompt or "")}
-        profile = fal_endpoint_profile(model_id, "generation")
-        if "aspect_ratio" in profile.parameter_names:
-            ratio, _ = self._get_generation_profile(False)
-            payload["aspect_ratio"] = ratio
+        ratio, resolution = self._get_generation_profile(False)
+        payload = fal_generation_payload(model_id, str(prompt or ""), ratio, resolution)
         request = ProviderTaskRequest(
             provider_id="fal",
             operation="generation",
@@ -4566,7 +4566,7 @@ class WorkerThread(QThread):
             model_id = entry.get("id")
             if model_id not in VISIBLE_GENERATION_MODEL_IDS:
                 continue
-            if str(model_id).startswith("fal-ai/"):
+            if is_fal_generation_model(model_id):
                 continue
             if entry.get("type") == required_type and model_id in SUPPORTED_GENERATION_MODEL_IDS:
                 return model_id
@@ -7751,7 +7751,7 @@ class MainWindow(QMainWindow):
     ):
         selected_model = self._normalize_generation_model_id(preferred_model_id)
         fallback_model = self._normalize_generation_model_id(fallback_model_id)
-        if selected_model.startswith("fal-ai/"):
+        if is_fal_generation_model(selected_model):
             # Fal queue requests are paid; availability is checked only by the
             # explicit user-confirmed run, never by an implicit probe.
             self._select_combo_model_id(combo_box, selected_model)
@@ -7906,7 +7906,7 @@ class MainWindow(QMainWindow):
         needs_kie_api = (
             (
                 not self.radio_run_process.isChecked()
-                and any(not model.startswith("fal-ai/") for model in selected_generation_models)
+                and any(not is_fal_generation_model(model) for model in selected_generation_models)
             )
             or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() == "kie")
             or (
@@ -7924,7 +7924,7 @@ class MainWindow(QMainWindow):
 
         needs_fal_api = (
             not self.radio_run_process.isChecked()
-            and any(model.startswith("fal-ai/") for model in selected_generation_models)
+            and any(is_fal_generation_model(model) for model in selected_generation_models)
         ) or (
             will_process
             and (

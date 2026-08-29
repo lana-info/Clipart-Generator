@@ -10,9 +10,24 @@ from model_catalog import (
     resolve_generation_endpoint,
     validate_generation_contract,
 )
+from fal_model_catalog import is_fal_generation_model
 
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_requested_fal_text_models_are_visible_without_references(self):
+        expected = {
+            "fal-ai/recraft/v4/text-to-image": "Fal.ai — Recraft V4",
+            "ideogram/v4/fast": "Fal.ai — Ideogram V4 Fast",
+            "fal-ai/flux-2/klein/4b": "Fal.ai — FLUX.2 Klein 4B",
+            "fal-ai/kling-image/o3/text-to-image": "Fal.ai — Kling O3 Image",
+            "bria/fibo-gen-1.5/text-to-image": "Fal.ai — Bria Fibo Gen 1.5",
+        }
+
+        for model_id, label in expected.items():
+            self.assertIn(model_id, VISIBLE_GENERATION_MODEL_IDS)
+            self.assertEqual(model_spec(model_id).label, label)
+            self.assertNotIn(model_id, REFERENCE_MODEL_SHORTLIST)
+
     def test_ideogram_models_are_visible_fal_generation_choices(self):
         for model_id in ("fal-ai/ideogram/v3", "fal-ai/ideogram/v3/generate-transparent"):
             self.assertIn(model_id, VISIBLE_GENERATION_MODEL_IDS)
@@ -21,12 +36,12 @@ class ModelCatalogTests(unittest.TestCase):
     def test_every_visible_model_has_an_explicit_provider_label(self):
         for model_id in VISIBLE_GENERATION_MODEL_IDS:
             label = model_spec(model_id).label
-            expected_prefix = "Fal.ai — " if model_id.startswith("fal-ai/") else "KIE — "
+            expected_prefix = "Fal.ai — " if is_fal_generation_model(model_id) else "KIE — "
             self.assertTrue(label.startswith(expected_prefix), label)
 
     def test_catalog_is_immutable_and_preserves_visible_snapshot(self):
-        self.assertEqual(len(GENERATION_MODELS), 28)
-        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 13)
+        self.assertEqual(len(GENERATION_MODELS), 33)
+        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 18)
         self.assertEqual(model_spec("gpt-image-2").resolutions, {"1K", "2K", "4K"})
         with self.assertRaises(TypeError):
             MODEL_SPECS["new-model"] = model_spec("gpt-image-2")
