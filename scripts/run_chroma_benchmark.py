@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from chroma_benchmark import BenchmarkManifestError, load_manifest, run_benchmark
-from chroma_key import remove_chroma_key
+from chroma_key import remove_chroma_key, remove_chroma_key_automatic
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -24,16 +24,29 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=PROJECT_ROOT / "benchmarks" / "chroma" / "manifest.json",
     )
+    parser.add_argument(
+        "--algorithm",
+        choices=("baseline", "automatic"),
+        default="baseline",
+    )
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
+
+    algorithm, algorithm_name = {
+        "baseline": (remove_chroma_key, "rgb-distance-baseline"),
+        "automatic": (
+            remove_chroma_key_automatic,
+            "automatic-color-difference-v1",
+        ),
+    }[args.algorithm]
 
     try:
         manifest = load_manifest(args.manifest)
         report = run_benchmark(
             manifest,
-            remove_chroma_key,
+            algorithm,
             args.output_dir,
-            algorithm_name="rgb-distance-baseline",
+            algorithm_name=algorithm_name,
         )
     except (BenchmarkManifestError, OSError, ValueError) as error:
         print(f"Benchmark error: {error}", file=sys.stderr)

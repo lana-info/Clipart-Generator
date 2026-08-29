@@ -19,7 +19,7 @@ from chroma_benchmark import (
     run_benchmark,
     score_result,
 )
-from chroma_key import remove_chroma_key
+from chroma_key import remove_chroma_key, remove_chroma_key_automatic
 
 
 def benchmark_gates():
@@ -78,6 +78,87 @@ def decision_report(cases, *, elapsed_seconds=24.0, peak_memory_mib=250.0):
 
 
 class ChromaBenchmarkTests(unittest.TestCase):
+    def test_experimental_benchmark_output_is_git_ignored(self):
+        completed = subprocess.run(
+            ("git", "check-ignore", ".benchmark/chroma-candidate/report.json"),
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_automatic_engine_clears_the_committed_quality_gates(self):
+        root = Path(__file__).resolve().parents[1] / "benchmarks" / "chroma"
+        manifest = load_manifest(root / "manifest.json")
+        baseline_mae = {
+            "clean-edge-blue": 0.0,
+            "soft-edge-red": 0.07585473358631134,
+            "thin-lines-green": 0.007757807616144419,
+            "openings-blue": 0.008362474851310253,
+            "partial-alpha-red": 0.14512628316879272,
+            "color-spill-green": 0.0038795021828264,
+        }
+        results = []
+        improved = 0
+        for case in manifest["cases"]:
+            fixture = load_golden_fixture(manifest, case)
+            output = remove_chroma_key_automatic(
+                fixture.input_image,
+                fixture.key_color,
+            )
+            metrics = score_result(
+                output,
+                fixture.expected_mask,
+                fixture.expected_foreground,
+            )
+            results.append(metrics)
+            improved += metrics["alpha_mae"] < baseline_mae[fixture.case_id]
+
+        means = {
+            key: sum(result[key] for result in results) / len(results)
+            for key in results[0]
+        }
+        self.assertLessEqual(means["alpha_mae"], 0.03213077352071802)
+        self.assertGreaterEqual(improved, 4)
+        self.assertLessEqual(means["opaque_subject_loss"], 0.005)
+        self.assertLessEqual(means["opaque_rgb_mae"], 0.01415109932248015)
+        self.assertLessEqual(means["partial_rgb_mae"], 0.41179578959941865)
+        self.assertLessEqual(means["background_leakage"], 0.005)
+
+    def test_automatic_engine_does_not_erase_opaque_spill_pixels(self):
+        root = Path(__file__).resolve().parents[1] / "benchmarks" / "chroma"
+        manifest = load_manifest(root / "manifest.json")
+        case = next(
+            item for item in manifest["cases"] if item["id"] == "color-spill-green"
+        )
+        fixture = load_golden_fixture(manifest, case)
+
+        metrics = score_result(
+            remove_chroma_key_automatic(fixture.input_image, fixture.key_color),
+            fixture.expected_mask,
+            fixture.expected_foreground,
+        )
+
+        self.assertLessEqual(metrics["opaque_subject_loss"], 0.005)
+
+    def test_automatic_engine_removes_opaque_key_color_spill(self):
+        root = Path(__file__).resolve().parents[1] / "benchmarks" / "chroma"
+        manifest = load_manifest(root / "manifest.json")
+        case = next(
+            item for item in manifest["cases"] if item["id"] == "color-spill-green"
+        )
+        fixture = load_golden_fixture(manifest, case)
+
+        metrics = score_result(
+            remove_chroma_key_automatic(fixture.input_image, fixture.key_color),
+            fixture.expected_mask,
+            fixture.expected_foreground,
+        )
+
+        self.assertLessEqual(metrics["opaque_rgb_mae"], 0.025)
+
     def test_score_result_uses_hand_checked_alpha_mae_and_iou(self):
         expected_mask = Image.new("L", (2, 1))
         expected_mask.putdata((0, 255))
@@ -402,6 +483,55 @@ class ChromaBenchmarkTests(unittest.TestCase):
             self.assertIn("baseline_metrics.json", completed.stdout)
             self.assertIn("baseline-contact-sheet.png", completed.stdout)
             self.assertTrue((output / "baseline_metrics.json").is_file())
+
+    def test_cli_can_run_the_automatic_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "manifest.json"
+            output = root / "report"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "quality_gates": benchmark_gates(),
+                        "fixture_size": 64,
+                        "performance_size": 64,
+                        "cases": [
+                            {
+                                "id": "clean",
+                                "kind": "clean_edge",
+                                "key_color": "blue",
+                                "risk": "opaque edge damage",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                (
+                    sys.executable,
+                    "scripts/run_chroma_benchmark.py",
+                    "--algorithm",
+                    "automatic",
+                    "--manifest",
+                    str(manifest_path),
+                    "--output-dir",
+                    str(output),
+                ),
+                cwd=Path(__file__).resolve().parents[1],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            report = json.loads(
+                (output / "baseline_metrics.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(report["algorithm"], "automatic-color-difference-v1")
 
     def test_contact_sheet_expected_column_uses_uncontaminated_foreground(self):
         case = {

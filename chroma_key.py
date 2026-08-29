@@ -6,6 +6,8 @@ import re
 from collections.abc import Iterable
 from typing import Final
 
+import cv2
+import numpy as np
 from PIL import Image
 
 
@@ -15,6 +17,7 @@ KEY_COLORS: Final[dict[str, tuple[int, int, int]]] = {
     "green": (0, 255, 0),
 }
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+_MAX_AMBIGUOUS_COMPONENTS: Final[int] = 256
 
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
     "watercolor": (
@@ -46,6 +49,10 @@ MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
         "glitter particles or background-colour glow."
     ),
 }
+
+
+class ChromaKeyAmbiguousError(ValueError):
+    """Raised when the image border is not a safe match for the selected key."""
 
 
 def parse_key_color(value: object) -> tuple[int, int, int]:
@@ -98,6 +105,227 @@ def remove_chroma_key(
     return source
 
 
+def remove_chroma_key_automatic(
+    image: Image.Image,
+    key_color: object = "blue",
+) -> Image.Image:
+    """Remove a generated solid background using its measured border color."""
+    if not isinstance(image, Image.Image):
+        raise TypeError("image must be a PIL image")
+    if image.width < 1 or image.height < 1:
+        raise ValueError("image dimensions must be positive")
+    requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
+    source = image.convert("RGBA")
+    pixels = np.asarray(source, dtype=np.uint8).copy()
+    rgb = pixels[..., :3].astype(np.float32)
+    border = np.concatenate(
+        (rgb[0, :, :], rgb[-1, :, :], rgb[:, 0, :], rgb[:, -1, :]),
+        axis=0,
+    )
+    measured_key = np.median(border, axis=0)
+    key_channel = int(np.argmax(requested_key))
+    other_channels = [index for index in range(3) if index != key_channel]
+    measured_dominance = measured_key[key_channel] - max(
+        measured_key[other_channels[0]],
+        measured_key[other_channels[1]],
+    )
+    border_spread = float(
+        np.percentile(np.linalg.norm(border - measured_key, axis=1), 90)
+    )
+    if (
+        float(np.linalg.norm(measured_key - requested_key)) > 120.0
+        or measured_dominance < 40.0
+        or border_spread > 30.0
+    ):
+        raise ChromaKeyAmbiguousError(
+            "Фон по краям не совпадает с выбранным Chroma Key цветом"
+        )
+    background_dominance = measured_key[key_channel] - max(
+        measured_key[other_channels[0]],
+        measured_key[other_channels[1]],
+    )
+    border_dominance = border[:, key_channel] - np.maximum(
+        border[:, other_channels[0]],
+        border[:, other_channels[1]],
+    )
+    border_residual_alpha = 1.0 - np.clip(
+        border_dominance / background_dominance,
+        0.0,
+        1.0,
+    )
+    if float(np.percentile(border_residual_alpha, 95)) > 0.02:
+        raise ChromaKeyAmbiguousError(
+            "Chroma Key фон неоднородный; нужен ровный однотонный фон"
+        )
+    pixel_dominance = rgb[..., key_channel] - np.maximum(
+        rgb[..., other_channels[0]],
+        rgb[..., other_channels[1]],
+    )
+    background_fraction = np.clip(
+        pixel_dominance / background_dominance,
+        0.0,
+        1.0,
+    )
+    raw_matte = 1.0 - background_fraction
+    distance_from_key = np.linalg.norm(rgb - measured_key, axis=2)
+
+    probable_background = distance_from_key < 120.0
+    _, background_labels = cv2.connectedComponents(
+        probable_background.astype(np.uint8),
+        connectivity=8,
+    )
+    border_labels = np.concatenate(
+        (
+            background_labels[0, :],
+            background_labels[-1, :],
+            background_labels[:, 0],
+            background_labels[:, -1],
+        )
+    )
+    border_label_counts = np.bincount(border_labels)
+    if len(border_label_counts) <= 1:
+        raise ChromaKeyAmbiguousError(
+            "Chroma Key фон неоднородный; нужен ровный однотонный фон"
+        )
+    background_label = int(np.argmax(border_label_counts[1:]) + 1)
+    connected_background = background_labels == background_label
+    nonuniform_fraction = float(
+        np.count_nonzero(connected_background & (raw_matte > 0.02))
+        / max(1, np.count_nonzero(connected_background))
+    )
+    if nonuniform_fraction > 0.30:
+        raise ChromaKeyAmbiguousError(
+            "Chroma Key фон неоднородный; нужен ровный однотонный фон"
+        )
+    del (
+        probable_background,
+        background_labels,
+        border_labels,
+        border_label_counts,
+        background_label,
+        connected_background,
+        nonuniform_fraction,
+    )
+
+    ambiguous_band = (
+        (raw_matte > 0.05)
+        & (raw_matte < 0.95)
+        & (distance_from_key < 200.0)
+    )
+    if np.any(ambiguous_band):
+        component_count, labels, stats, _ = cv2.connectedComponentsWithStats(
+            ambiguous_band.astype(np.uint8),
+            connectivity=8,
+        )
+        if component_count - 1 > _MAX_AMBIGUOUS_COMPONENTS:
+            raise ChromaKeyAmbiguousError(
+                "Chroma Key фон слишком неоднородный; нужен ровный однотонный фон"
+            )
+        hard_background = raw_matte <= 0.02
+        confident_subject = raw_matte >= 0.995
+        distance_to_background = cv2.distanceTransform(
+            (~hard_background).astype(np.uint8),
+            cv2.DIST_L2,
+            3,
+        )
+        kernel = np.ones((3, 3), dtype=np.uint8)
+        for component_id in range(1, component_count):
+            left, top, width, height, _ = stats[component_id]
+            x0 = max(0, left - 1)
+            y0 = max(0, top - 1)
+            x1 = min(image.width, left + width + 1)
+            y1 = min(image.height, top + height + 1)
+            component = labels[y0:y1, x0:x1] == component_id
+            ring = cv2.dilate(component.astype(np.uint8), kernel).astype(bool)
+            ring &= ~component
+            local_subject = confident_subject[y0:y1, x0:x1]
+            local_raw_matte = raw_matte[y0:y1, x0:x1]
+            local_distance = distance_to_background[y0:y1, x0:x1]
+            enclosed = float(np.min(local_distance[component])) > 3.0
+            component_range = float(np.ptp(local_raw_matte[component]))
+            suspicious_edge_detail = (
+                stats[component_id, cv2.CC_STAT_AREA] >= 9
+                and component_range < 0.5
+            )
+            if np.any(local_subject & ring) and (enclosed or suspicious_edge_detail):
+                raise ChromaKeyAmbiguousError(
+                    "Предмет содержит выбранный Chroma Key цвет; выберите другой цвет фона"
+                )
+        del (
+            component_count,
+            labels,
+            stats,
+            hard_background,
+            confident_subject,
+            distance_to_background,
+            kernel,
+            component,
+            ring,
+            local_subject,
+            local_raw_matte,
+            local_distance,
+            component_range,
+            suspicious_edge_detail,
+        )
+    del ambiguous_band
+    matte = raw_matte.copy()
+    matte[distance_from_key >= 200.0] = 1.0
+    visible = matte > (1.0 / 255.0)
+    if np.any(visible):
+        recovered = (
+            rgb[visible]
+            - (1.0 - matte[visible, None]) * measured_key[None, :]
+        ) / matte[visible, None]
+        pixels[visible, :3] = np.rint(np.clip(recovered, 0.0, 255.0)).astype(
+            np.uint8
+        )
+    spill = (distance_from_key >= 200.0) & (raw_matte < 0.995) & (raw_matte > 0.0)
+    core = raw_matte >= 0.995
+    if np.any(spill) and np.any(core):
+        eroded_core = cv2.erode(
+            core.astype(np.uint8),
+            np.ones((3, 3), dtype=np.uint8),
+            iterations=max(1, min(source.size) // 128),
+        ).astype(bool)
+        if np.any(eroded_core):
+            core = eroded_core
+        distance_map, nearest = cv2.distanceTransformWithLabels(
+            (~core).astype(np.uint8),
+            cv2.DIST_L2,
+            5,
+            labelType=cv2.DIST_LABEL_PIXEL,
+        )
+        del distance_map
+        core_labels = nearest[core]
+        spill_labels = nearest[spill]
+        local_foreground = np.empty((int(np.count_nonzero(spill)), 3), dtype=np.float32)
+        for channel in range(3):
+            reference_channel = np.zeros(int(nearest.max()) + 1, dtype=np.float32)
+            reference_channel[core_labels] = rgb[..., channel][core]
+            local_foreground[:, channel] = reference_channel[spill_labels]
+        source_spill = rgb[spill]
+        direction = measured_key[None, :] - local_foreground
+        denominator = np.sum(direction * direction, axis=1)
+        mixture = np.divide(
+            np.sum((source_spill - local_foreground) * direction, axis=1),
+            denominator,
+            out=np.zeros_like(denominator),
+            where=denominator > 1e-6,
+        )
+        mixture = np.clip(mixture, 0.0, 0.95)
+        despilled = (
+            source_spill - mixture[:, None] * measured_key[None, :]
+        ) / (1.0 - mixture[:, None])
+        pixels[spill, :3] = np.rint(np.clip(despilled, 0.0, 255.0)).astype(
+            np.uint8
+        )
+    pixels[..., 3] = np.minimum(
+        pixels[..., 3],
+        np.rint(matte * 255.0).astype(np.uint8),
+    )
+    return Image.fromarray(pixels, mode="RGBA")
+
+
 def chroma_key_prompt_block(
     key_color: object = "blue",
     *,
@@ -128,9 +356,11 @@ def chroma_key_prompt_block(
 
 
 __all__ = [
+    "ChromaKeyAmbiguousError",
     "KEY_COLORS",
     "MATERIAL_PROMPT_CLAUSES",
     "chroma_key_prompt_block",
     "parse_key_color",
     "remove_chroma_key",
+    "remove_chroma_key_automatic",
 ]

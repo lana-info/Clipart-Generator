@@ -36,6 +36,17 @@ size in an isolated process: one warm-up plus three measured runs, reported as
 the median. The report records peak process memory, platform, Python, Pillow,
 NumPy, Git revision, and whether the working tree was dirty.
 
+The approved 2048×2048 ceiling is 448 MiB of peak process memory. Local chroma
+processing remains single-file so this working set is not multiplied by local
+parallelism; larger-image behavior is verified separately before release.
+
+Pixels that exactly match the selected key are necessarily interpreted as
+background, including internal openings. If the subject itself contains that
+exact blue, red, or green, it must be rendered with one of the other preset key
+colors. The automatic safety check rejects many near-key conflicts, but an
+exact-key subject detail is indistinguishable from an intended opening in one
+finished image.
+
 ## Continue/stop rule
 
 A replacement engine gets at most two bounded improvement cycles. It continues

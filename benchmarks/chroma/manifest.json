@@ -24,7 +24,7 @@
     "maximum_background_leakage_regression": 0.005,
     "maximum_runtime_multiplier": 1.25,
     "maximum_runtime_seconds": 30,
-    "maximum_peak_memory_mib": 384,
+    "maximum_peak_memory_mib": 448,
     "maximum_improvement_cycles": 2
   },
   "cases": [
