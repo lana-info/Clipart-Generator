@@ -254,9 +254,10 @@ Steps:
   панели; на Results дать кнопку `Проверить прозрачность`, double click оставить
   shortcut.
 - Реализовать Fit/50/100/150/200/400%, полноэкранный canvas и pan удержанием
-  `Пробел` без отдельного переключателя инструмента.
+  `Пробел` без отдельного переключателя инструмента; во время удержания
+  показывать только иконку ладони.
 - Добавить visible footprint, radius, hardness, continuous stroke, add/remove,
-  undo/redo и reset.
+  undo/redo и reset; максимальный radius кисти — 200 px.
 - Сохранять corrected `_ready` PNG в `output/`, alpha-mask `_alpha-mask` в
   `rough/` согласованной парой с rollback при ошибке, без paid remover и без
   потери 300 DPI.
@@ -267,6 +268,8 @@ Acceptance:
 - [x] File switch изолирует mask; preview background не сохраняется, а
   несохранённые изменения не теряются без предупреждения.
 - [x] `Сохранить PNG` — единственное primary action; `К результатам` — secondary.
+- [x] Пробел срабатывает и после фокуса на панели инструментов, а не только
+  после клика по canvas.
 
 Verification:
 - [x] Unit tests interpolation, hardness, bounded history, mask isolation,

@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QMessageBox, QPushButton
 from v3_components import ButtonVariant
 
@@ -206,6 +207,23 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             Qt.ScrollBarPolicy.ScrollBarAsNeeded,
         )
         self.assertTrue(page.canvas.space_pan_enabled)
+        self.assertEqual(page.radius_slider.maximum(), 200)
+        page.deleteLater()
+
+    def test_space_temporarily_enables_pan_and_hand_indicator_from_editor_controls(self):
+        page = ClipartTransparencyEditorPage()
+
+        QApplication.sendEvent(
+            page.radius_slider,
+            QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier),
+        )
+        self.assertTrue(page.canvas.space_pan_indicator_visible)
+
+        QApplication.sendEvent(
+            page.radius_slider,
+            QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier),
+        )
+        self.assertFalse(page.canvas.space_pan_indicator_visible)
         page.deleteLater()
 
     def test_editor_switches_files_and_saves_mask_automatically_with_png(self):

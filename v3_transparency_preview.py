@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageChops, UnidentifiedImageError
-from PyQt6.QtCore import QPoint, QPointF, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -292,7 +292,7 @@ class ClipartTransparencyPreview(QWidget):
         self.action_combo.addItem("Стереть область", "remove")
         self.action_combo.setAccessibleName("Действие кисти маски")
         self.radius_spin = QSpinBox()
-        self.radius_spin.setRange(1, 500)
+        self.radius_spin.setRange(1, 200)
         self.radius_spin.setValue(24)
         self.radius_spin.setSuffix(" px")
         self.radius_spin.setAccessibleName("Радиус кисти маски")
@@ -468,6 +468,7 @@ class TransparencyCanvas(QGraphicsView):
         self._zoom: int | None = None
         self._painting = False
         self._space_pressed = False
+        self.space_pan_indicator_visible = False
         self._panning = False
         self._last_image_point: tuple[int, int] | None = None
         self._last_view_point = QPoint()
@@ -671,20 +672,33 @@ class TransparencyCanvas(QGraphicsView):
 
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
-            self._space_pressed = True
-            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            self.set_space_pan_active(True)
             event.accept()
             return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
-            self._space_pressed = False
-            if not self._panning:
-                self.setCursor(Qt.CursorShape.ArrowCursor)
+            self.set_space_pan_active(False)
             event.accept()
             return
         super().keyReleaseEvent(event)
+
+    def set_space_pan_active(self, active: bool) -> None:
+        """Temporarily switch the canvas from brush to hand-pan mode."""
+
+        active = bool(active and self.space_pan_enabled)
+        if self._space_pressed == active:
+            return
+        self._space_pressed = active
+        self.space_pan_indicator_visible = active
+        if not self._panning:
+            self.setCursor(
+                Qt.CursorShape.OpenHandCursor
+                if active
+                else Qt.CursorShape.ArrowCursor
+            )
+        self.viewport().update()
 
     def leaveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         self._brush_scene_point = None
@@ -693,7 +707,21 @@ class TransparencyCanvas(QGraphicsView):
 
     def drawForeground(self, painter: QPainter, rect) -> None:  # type: ignore[no-untyped-def]
         super().drawForeground(painter, rect)
-        if self.document is None or self._brush_scene_point is None or self._space_pressed:
+        if self._space_pressed:
+            painter.save()
+            painter.resetTransform()
+            painter.setPen(QPen(QColor("#dce7f4"), 2))
+            painter.setBrush(QColor("#16283f"))
+            painter.drawRoundedRect(10, 10, 34, 34, 8, 8)
+            painter.setBrush(QColor("#dce7f4"))
+            painter.drawEllipse(18, 25, 16, 12)
+            painter.drawLine(21, 26, 21, 18)
+            painter.drawLine(25, 25, 25, 16)
+            painter.drawLine(29, 26, 29, 18)
+            painter.drawLine(33, 28, 33, 21)
+            painter.restore()
+            return
+        if self.document is None or self._brush_scene_point is None:
             return
         pen = QPen(QColor("#ffffff"), 2)
         pen.setCosmetic(True)
@@ -831,7 +859,7 @@ class ClipartTransparencyEditorPage(QWidget):
             tools_layout,
             "Радиус",
             1,
-            500,
+            200,
             24,
             " px",
         )
@@ -906,6 +934,9 @@ class ClipartTransparencyEditorPage(QWidget):
         self.canvas.document_changed.connect(self._refresh_history_buttons)
         QShortcut(QKeySequence.StandardKey.Undo, self, activated=self.undo)
         QShortcut(QKeySequence("Ctrl+Shift+Z"), self, activated=self.redo)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        for widget in self.findChildren(QWidget):
+            widget.installEventFilter(self)
         self._refresh_history_buttons()
         self.setAccessibleName("Проверка и корректировка прозрачности")
 
@@ -1029,6 +1060,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._document = document
         self._loaded_path = path
         self.canvas.set_document(document)
+        self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
         self._refresh_history_buttons()
 
     def _set_zoom(self, value: str | int) -> None:
@@ -1146,8 +1178,29 @@ class ClipartTransparencyEditorPage(QWidget):
             self.toggle_focus_mode()
 
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+            self.canvas.set_space_pan_active(True)
+            event.accept()
+            return
         if event.key() == Qt.Key.Key_Escape and self._focus_mode:
             self.leave_focus_mode()
             event.accept()
             return
         super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+            self.canvas.set_space_pan_active(False)
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    def eventFilter(self, watched, event) -> bool:  # type: ignore[no-untyped-def]
+        if event.type() in {QEvent.Type.KeyPress, QEvent.Type.KeyRelease}:
+            if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
+                self.canvas.set_space_pan_active(
+                    event.type() == QEvent.Type.KeyPress
+                )
+                event.accept()
+                return True
+        return super().eventFilter(watched, event)
