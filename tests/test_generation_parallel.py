@@ -682,7 +682,7 @@ class ParallelGenerationTests(unittest.TestCase):
 
             self.assertEqual(activity.maximum["kie"], 3)
             self.assertEqual(
-                [name.split("_")[1] for name in sorted(saved)],
+                [name.split("_")[-2] for name in sorted(saved)],
                 ["01", "02", "03", "04"],
             )
 

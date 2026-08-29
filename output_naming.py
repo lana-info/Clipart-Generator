@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,8 +41,14 @@ def processed_output_path(output_dir: str | Path, source_path: str | Path, run_s
         suffix += 1
 
 
-def generated_output_path(output_dir: str | Path, row_index: int) -> Path:
-    base = f"clipart_{max(1, int(row_index)):02d}_ready"
+def generated_output_path(
+    output_dir: str | Path,
+    row_index: int,
+    prompt: str = "",
+) -> Path:
+    words = re.findall(r"[^\W_]+", str(prompt).casefold(), flags=re.UNICODE)[:3]
+    prompt_stem = "_".join(words)[:48].strip("_") or "clipart"
+    base = f"{prompt_stem}_{max(1, int(row_index)):02d}_ready"
     destination = Path(output_dir) / f"{base}.png"
     suffix = 2
     while destination.exists():

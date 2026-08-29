@@ -26,6 +26,10 @@ def test_workspace_layout_migrates_legacy_output_path_to_parent(tmp_path):
 
 
 def test_generated_output_uses_short_ready_name_and_collision_number(tmp_path):
-    assert generated_output_path(tmp_path, 1) == tmp_path / "clipart_01_ready.png"
-    (tmp_path / "clipart_01_ready.png").touch()
-    assert generated_output_path(tmp_path, 1) == tmp_path / "clipart_01_ready_2.png"
+    assert generated_output_path(tmp_path, 1, "Blue watercolor flowers") == tmp_path / "blue_watercolor_flowers_01_ready.png"
+    (tmp_path / "blue_watercolor_flowers_01_ready.png").touch()
+    assert generated_output_path(tmp_path, 1, "Blue watercolor flowers") == tmp_path / "blue_watercolor_flowers_01_ready_2.png"
+
+
+def test_generated_output_falls_back_without_manual_filename(tmp_path):
+    assert generated_output_path(tmp_path, 3, "!!!") == tmp_path / "clipart_03_ready.png"

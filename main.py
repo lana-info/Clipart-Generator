@@ -1594,7 +1594,7 @@ class WorkerThread(QThread):
             self._emit_file_progress(idx, total, 84)
         else:
             self._emit_file_progress(idx, total, 70)
-        out_path = str(generated_output_path(output_dir, idx))
+        out_path = str(generated_output_path(output_dir, idx, prompt_text))
         self._save_final_output(
             final_url,
             gen_path,
