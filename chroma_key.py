@@ -401,6 +401,72 @@ def _fill_far_subject_reference(
     np.copyto(reference_weight, far_weight, where=use_far)
 
 
+def _apply_multiscale_subject_ratio(
+    rgb: np.ndarray,
+    subject_mask: np.ndarray,
+    key_channel: int,
+    other_channels: list[int],
+    ratio: np.ndarray,
+) -> None:
+    """Replace edge ratios with the deepest available clean subject samples."""
+    interior_depth = cv2.distanceTransform(
+        subject_mask.astype(np.uint8),
+        cv2.DIST_L2,
+        3,
+    )
+    has_deep_reference = np.zeros(subject_mask.shape, dtype=bool)
+    for depth in (12.0, 6.0, 3.0, 2.0):
+        deep_mask = (interior_depth > depth).astype(np.float32)
+        if not np.any(deep_mask):
+            continue
+        weight = cv2.GaussianBlur(
+            deep_mask,
+            (0, 0),
+            10.0,
+            borderType=cv2.BORDER_REFLECT,
+        )
+        usable = (weight >= 0.005) & ~has_deep_reference
+        if not np.any(usable):
+            continue
+
+        reference_other = np.maximum(
+            rgb[..., other_channels[0]],
+            rgb[..., other_channels[1]],
+        )
+        np.multiply(reference_other, deep_mask, out=reference_other)
+        cv2.GaussianBlur(
+            reference_other,
+            (0, 0),
+            10.0,
+            dst=reference_other,
+            borderType=cv2.BORDER_REFLECT,
+        )
+        np.divide(
+            reference_other,
+            weight,
+            out=reference_other,
+            where=weight > 1e-6,
+        )
+
+        np.multiply(rgb[..., key_channel], deep_mask, out=deep_mask)
+        cv2.GaussianBlur(
+            deep_mask,
+            (0, 0),
+            10.0,
+            dst=deep_mask,
+            borderType=cv2.BORDER_REFLECT,
+        )
+        np.divide(deep_mask, weight, out=deep_mask, where=weight > 1e-6)
+        np.divide(
+            deep_mask,
+            np.maximum(reference_other, 1.0),
+            out=deep_mask,
+        )
+        np.clip(deep_mask, 0.05, 1.2, out=deep_mask)
+        np.copyto(ratio, deep_mask, where=usable)
+        has_deep_reference |= usable
+
+
 def _neutralize_opaque_key_spill(
     source: Image.Image,
     result: Image.Image,
@@ -601,7 +667,6 @@ def _remove_chroma_key_staged(
 
     alpha = np.zeros((height, width), dtype=np.float32)
     alpha[confident_subject] = 1.0
-    del confident_subject
     key_length = float(np.dot(measured_key, measured_key))
     key_separation = max(measured_key[key_channel] - measured_other, 1.0)
     tile_size = 512
@@ -679,6 +744,27 @@ def _remove_chroma_key_staged(
                 )
     del transition, has_reference, reference_weight, dominant, other
 
+    reference_other = np.maximum(
+        reference[..., other_channels[0]],
+        reference[..., other_channels[1]],
+    )
+    edge_reference_ratio = reference[..., key_channel].copy()
+    np.divide(
+        edge_reference_ratio,
+        np.maximum(reference_other, 1.0),
+        out=edge_reference_ratio,
+    )
+    np.clip(edge_reference_ratio, 0.05, 1.2, out=edge_reference_ratio)
+    del reference_other, reference
+    _apply_multiscale_subject_ratio(
+        rgb,
+        confident_subject,
+        key_channel,
+        other_channels,
+        edge_reference_ratio,
+    )
+    del confident_subject
+
     soft_edge = (alpha > 0.0) & (alpha < 0.999)
     edge_ring = cv2.dilate(
         soft_edge.astype(np.uint8),
@@ -694,17 +780,7 @@ def _remove_chroma_key_staged(
             tile_edge = edge_ring[tile]
             if not np.any(tile_edge):
                 continue
-            tile_reference = reference[tile]
-            reference_other = np.maximum(
-                tile_reference[..., other_channels[0]],
-                tile_reference[..., other_channels[1]],
-            )
-            reference_ratio = np.clip(
-                tile_reference[..., key_channel]
-                / np.maximum(reference_other, 1.0),
-                0.05,
-                1.2,
-            )
+            reference_ratio = edge_reference_ratio[tile]
             tile_rgb = rgb[tile]
             current_other = np.maximum(
                 tile_rgb[..., other_channels[0]],
@@ -718,7 +794,7 @@ def _remove_chroma_key_staged(
             tile_rgb[..., key_channel][tile_edge] -= spill[tile_edge]
             for channel in other_channels:
                 tile_rgb[..., channel][tile_edge] += 0.12 * spill[tile_edge]
-    del edge_ring, reference
+    del edge_ring, edge_reference_ratio
 
     alpha = np.where(alpha < 0.025, 0.0, (alpha - 0.025) / 0.975)
     alpha = np.clip(alpha, 0.0, 1.0)

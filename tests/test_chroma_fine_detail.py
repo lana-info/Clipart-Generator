@@ -2,6 +2,7 @@ import math
 import unittest
 from io import BytesIO
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -207,7 +208,71 @@ def _opaque_subject_with_interior_blue_spill() -> tuple[
     return Image.fromarray(input_image, mode="RGB"), expected, spill
 
 
+def _soft_shape_with_blue_edge_spill() -> tuple[Image.Image, Image.Image]:
+    mask = Image.new("L", (SIZE * SUPERSAMPLE, SIZE * SUPERSAMPLE), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse(
+        (_scaled(65), _scaled(55), _scaled(319), _scaled(329)),
+        fill=255,
+    )
+    draw.ellipse(
+        (_scaled(155), _scaled(112), _scaled(270), _scaled(259)),
+        fill=0,
+    )
+    mask = mask.filter(ImageFilter.GaussianBlur(_scaled(1.2)))
+    mask = mask.resize((SIZE, SIZE), Image.Resampling.LANCZOS)
+    alpha = np.asarray(mask, dtype=np.uint8)
+
+    clean_color = np.asarray((218, 184, 108), dtype=np.float32)
+    expected_pixels = np.empty((SIZE, SIZE, 4), dtype=np.uint8)
+    expected_pixels[..., :3] = clean_color.astype(np.uint8)
+    expected_pixels[..., 3] = alpha
+    expected = Image.fromarray(expected_pixels, mode="RGBA")
+
+    inside_distance = cv2.distanceTransform(
+        (alpha > 2).astype(np.uint8),
+        cv2.DIST_L2,
+        3,
+    )
+    spill_strength = np.clip((16.0 - inside_distance) / 16.0, 0.0, 1.0) * 0.25
+    key = np.asarray(KEY_COLORS["blue"], dtype=np.float32)
+    contaminated = (
+        clean_color[None, None, :] * (1.0 - spill_strength[..., None])
+        + key[None, None, :] * spill_strength[..., None]
+    )
+    coverage = alpha.astype(np.float32) / 255.0
+    flattened = np.rint(
+        contaminated * coverage[..., None]
+        + key[None, None, :] * (1.0 - coverage[..., None])
+    ).astype(np.uint8)
+    input_image = _fragment_flat_background(
+        Image.fromarray(flattened, mode="RGB"),
+        expected,
+        "blue",
+    )
+    return input_image, expected
+
+
 class ChromaFineDetailTests(unittest.TestCase):
+    def test_multiscale_reference_cleans_blue_spill_from_soft_edge(self):
+        input_image, expected = _soft_shape_with_blue_edge_spill()
+
+        result = remove_chroma_key_automatic(input_image, "blue")
+        actual = np.asarray(result.convert("RGBA"), dtype=np.float32) / 255.0
+        reference = np.asarray(expected.convert("RGBA"), dtype=np.float32) / 255.0
+        reference_alpha = reference[..., 3]
+        visible_edge = (reference_alpha >= (96.0 / 255.0)) & (
+            reference_alpha < (224.0 / 255.0)
+        )
+        actual_on_black = actual[..., :3] * actual[..., 3, None]
+        expected_on_black = reference[..., :3] * reference_alpha[..., None]
+        channel_error = actual_on_black - expected_on_black
+        blue_bias = channel_error[..., 2] - 0.5 * (
+            channel_error[..., 0] + channel_error[..., 1]
+        )
+
+        self.assertLessEqual(float(np.mean(blue_bias[visible_edge])), 0.08)
+
     def test_opaque_blue_spill_inside_a_light_subject_is_neutralized(self):
         input_image, expected, spill = _opaque_subject_with_interior_blue_spill()
 
