@@ -17,6 +17,10 @@ runs should use `.benchmark/` or another ignored temporary output directory.
 The canonical PNG files are read back and checked against SHA-256 values in the
 manifest; ordinary benchmark runs never regenerate them.
 
+The accepted automatic-engine report and its reviewed contact sheet are stored
+under `automatic-v1/`. That report was generated from the clean implementation
+commit recorded in its `environment.git_commit` field.
+
 Changing the golden set is deliberately separate and explicit:
 
 ```bash
