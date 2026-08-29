@@ -392,6 +392,45 @@ Verification:
 Dependencies: existing Fal provider contract. Scope: M.
 Requirements: `CG31-FR-050`, `CG31-FR-051`.
 
+## Task 14: Сохранить работу при временной недоступности лицензионного сервера
+
+Status: Todo
+
+Goal:
+Не блокировать уже подтверждённого пользователя из-за краткого сбоя сервера или
+сети, сохраняя ограниченную и проверяемую лицензионную границу.
+
+Steps:
+- До source/UI работы согласовать точный offline grace period (рекомендуется 7
+  календарных дней) и простой текст статуса; для нового либо заметно
+  переработанного окна сначала подготовить visual mockup по `CG31-UX-001`–`007`.
+- После успешной signed online authorization атомарно сохранять только нужные
+  проверяемые данные: подписанное подтверждение, device binding, время
+  последней проверки и защищённый маркер времени. Лицензионный ключ не хранить
+  и не показывать.
+- При transport/server outage использовать grace только для ранее
+  подтверждённого состояния; явно отклонённая, отозванная, истёкшая,
+  повреждённая или новая лицензия не получает offline-доступ.
+- Защититься от expiry, clock rollback и повреждения состояния; после grace
+  остановить новые операции с понятной возможностью повторить проверку.
+
+Acceptance:
+- [ ] Уже подтверждённая лицензия работает при timeout/5xx внутри утверждённого
+  grace и показывает дату последней успешной проверки.
+- [ ] Первая активация, 401/403/явный отказ, expired authorization, повреждённое
+  состояние, clock rollback и grace expiry не дают offline-доступ.
+- [ ] Сбой сервера не маскируется как новая успешная активация; ключ лицензии не
+  попадает в state, UI или diagnostic journal.
+
+Verification:
+- [ ] Network-free tests: valid grace, expiry, timeout/5xx, explicit denial,
+  expired signed payload, state tampering и clock rollback.
+- [ ] Manual offline startup/run acceptance с заранее активированной тестовой
+  лицензией; отдельная проверка первого запуска без сети.
+
+Dependencies: existing signed license client and startup gate. Scope: M.
+Requirements: `CG31-FR-060`–`CG31-FR-062`.
+
 ## Task 13: Интегрировать и принять 3.1.0
 
 Status: Todo
@@ -415,7 +454,7 @@ Acceptance:
 Verification:
 - [ ] History/merge-base audit, full tests and Windows checklist.
 
-Dependencies: Tasks 1–12. Scope: M.
+Dependencies: Tasks 1–12, 14. Scope: M.
 
 ## Исторические задачи 3.0
 
