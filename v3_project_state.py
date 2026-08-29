@@ -75,6 +75,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
     ProjectMode.PINTEREST: (
         StepId.PROJECT,
         StepId.PROMPTS,
+        StepId.PROMPT_REVIEW,
         StepId.PIN_FORMAT_MODEL,
         StepId.REVIEW_RUN,
         StepId.RESULTS,
@@ -1035,13 +1036,14 @@ def _pinterest_pin_results(value: Any) -> list[PinterestPinResultData]:
 
 @dataclass
 class PinterestModeData:
+    prompts: list[PromptEntry] = field(default_factory=list)
     generation: GenerationData = field(
         default_factory=lambda: GenerationData(
             model="gpt-image-2",
-            ratio="9:16",
+            ratio="2:3",
             resolution="1K",
             reference_model="gpt-image-2",
-            reference_ratio="9:16",
+            reference_ratio="2:3",
             reference_resolution="1K",
         )
     )
@@ -1050,6 +1052,7 @@ class PinterestModeData:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "prompts": [entry.to_dict() for entry in self.prompts],
             "generation": self.generation.to_dict(),
             "pin": self.pin.to_dict(),
             "results": [result.to_dict() for result in self.results],
@@ -1059,6 +1062,7 @@ class PinterestModeData:
     def from_dict(cls, value: Any) -> PinterestModeData:
         data = value if isinstance(value, Mapping) else {}
         return cls(
+            prompts=_prompt_entries(data.get("prompts", [])),
             generation=GenerationData.from_dict(
                 {
                     **cls().generation.to_dict(),
@@ -1783,11 +1787,6 @@ class ProjectState:
                 continue
             if (
                 normalized_mode is ProjectMode.PINTEREST
-                and normalized_step is StepId.PROMPT_REVIEW
-            ):
-                normalized_step = StepId.PIN_FORMAT_MODEL
-            elif (
-                normalized_mode is ProjectMode.PINTEREST
                 and normalized_step is StepId.PROCESSING_OPTIONS
             ):
                 normalized_step = StepId.REVIEW_RUN
@@ -1874,8 +1873,12 @@ class ProjectState:
                 issues.append("work_dir_required")
             if self.mode is ProjectMode.CLIPART and target in {StepId.PROMPTS, StepId.PROMPT_REVIEW, StepId.REVIEW_RUN} and not self.clipart.prompts:
                 issues.append("prompts_required")
-            if self.mode is ProjectMode.PINTEREST and target is StepId.REVIEW_RUN and not self.pinterest.pin.product_paths:
-                issues.append("product_required")
+            if self.mode is ProjectMode.PINTEREST and target in {
+                StepId.PROMPT_REVIEW,
+                StepId.PIN_FORMAT_MODEL,
+                StepId.REVIEW_RUN,
+            } and not self.pinterest.prompts:
+                issues.append("prompts_required")
             if target in {
                 StepId.GENERATION,
                 StepId.PIN_FORMAT_MODEL,

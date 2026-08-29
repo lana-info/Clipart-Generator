@@ -36,6 +36,7 @@ def complete_state(mode: ProjectMode) -> ProjectState:
             ),
         ),
         pinterest=PinterestModeData(
+            prompts=[PromptEntry("vertical Pinterest pin")],
             pin=PinterestPinData(product_paths=["D:/product.png"]),
             generation=GenerationData(
                 model="nano-banana-2",

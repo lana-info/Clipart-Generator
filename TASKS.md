@@ -1935,3 +1935,17 @@ Status: Integrated, source verified and packaged; owner acceptance pending
   scan, diff integrity, and the full offscreen suite.
 - [x] Include the fix in the installed-artifact checks and uploaded installer
   from GitHub Actions run `33032049521`.
+
+### Task 75 - Pinterest Prompt-Only MVP
+
+Status: Implemented on feature branch; owner acceptance pending
+
+- [x] Replace the active six-template/product flow with ready prompt or CSV
+  input, editable prompt/reference review, model selection and generation.
+- [x] Set Pinterest default to vertical 2:3 and keep image processing hidden.
+- [x] Reuse the shared generation queue, KIE/Fal routing, cost preflight and
+  result folder instead of maintaining a second Pinterest worker contract.
+- [x] Update RU/EN localization, PRD and backlog to match the approved scope.
+- [x] Verify focused offscreen tests, compilation, and `git diff --check`.
+- [ ] Perform manual owner acceptance in the desktop app; do not run paid API
+  calls or publish a build without explicit approval.

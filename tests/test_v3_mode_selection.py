@@ -222,11 +222,11 @@ class V3ModeSelectionTests(unittest.TestCase):
             controller = view.shell.pinterest_flow_controller
             self.assertEqual(
                 controller.pages[StepId.PROJECT].card.title_label.text(),
-                "Product photo",
+                "Work folder",
             )
             self.assertEqual(
                 controller.pages[StepId.PROMPTS].card.title_label.text(),
-                "Pin copy and layout",
+                "Pinterest prompts",
             )
             view.close()
             view.deleteLater()

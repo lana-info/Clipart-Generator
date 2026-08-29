@@ -127,11 +127,12 @@ _CLIPART_OPERATIONS: Final[tuple[str, ...]] = (
 )
 
 _PINTEREST_PAGES: Final[tuple[WorkflowPageSpec, ...]] = (
-    WorkflowPageSpec(StepId.PROJECT, "pinterest.product_input"),
-    WorkflowPageSpec(StepId.PROMPTS, "pinterest.copy_layout"),
+    WorkflowPageSpec(StepId.PROJECT, "pinterest.project"),
+    WorkflowPageSpec(StepId.PROMPTS, "pinterest.prompt_input"),
+    WorkflowPageSpec(StepId.PROMPT_REVIEW, "pinterest.prompt_review"),
     WorkflowPageSpec(StepId.PIN_FORMAT_MODEL, "pinterest.generation"),
-    WorkflowPageSpec(StepId.REVIEW_RUN, "pinterest.preview"),
-    WorkflowPageSpec(StepId.RESULTS, "pinterest.export"),
+    WorkflowPageSpec(StepId.REVIEW_RUN, "pinterest.review_run"),
+    WorkflowPageSpec(StepId.RESULTS, "shared.results"),
 )
 
 
@@ -159,7 +160,7 @@ _WORKFLOWS: Final[dict[ProjectMode, WorkflowDefinition]] = {
         mode=ProjectMode.PINTEREST,
         prompt_builder_id="pinterest_structured",
         pages=_PINTEREST_PAGES,
-        provider_controls=("background_generation",),
+        provider_controls=("generation_model", "reference_model"),
         validation_id="pinterest_default",
         export_ids=("png", "jpeg"),
         post_steps=(

@@ -450,6 +450,17 @@ acceptance are approved.
   the first Vibix Images installation activates a new key through the existing
   online license flow.
 
+## Pinterest Prompt-Only MVP checkpoint — 2026-08-29
+
+- Active Pinterest route now contains work folder, ready prompt or CSV,
+  prompt/reference review, model/format, review/run, and shared results.
+- Default Pinterest generation format is 2:3; the old product upload, six
+  fixed templates, AI scenes and image-processing controls are no longer active.
+- Pinterest reuses the shared Clipart generation request/queue and supports the
+  existing KIE/Fal runtime gates without making live or paid requests.
+- Focused offscreen checks pass: 104 tests plus 11 subtests, and the Pinterest
+  mode suite passes: 24 tests plus 6 subtests. Manual desktop acceptance remains.
+
 ## Prohibited without explicit approval
 
 - Secrets, credentials, `.env` files, and user data in Git.

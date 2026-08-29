@@ -260,23 +260,21 @@ diagnostics summaries, including when stale settings are loaded.
 ### Pinterest Pins — next implementation stage
 
 Pinterest is intentionally a separate stage after Clipart and Fal.ai
-acceptance. The first Pinterest module is Pinterest Pins: users upload product
-photos and receive three safe template pins plus three AI-scene variations in
-the standard vertical 2:3 format. Its prompt schema is independent from
-Clipart and is prepared in `pinterest_prompt_schema.py`.
+acceptance. The first Pinterest MVP is prompt-only image generation: users
+choose a work folder, enter a ready prompt with optional references or import
+the same fields from CSV, review/edit the prompt rows, choose a model and
+vertical format, and save generated images. The default format is 2:3
+(1000×1500 target intent), with other model-compatible formats available.
 
-Product fidelity is a hard requirement: the original product remains a
-protected source layer, preserving color, material, texture, proportions,
-logos, text, and exact patterns. AI creates backgrounds and environments; it
-must not freely redraw the product by default. The module has its own
-Russian/English renderer and does not reinterpret or migrate Clipart fields.
+This MVP deliberately does not upload products, protect product pixels, create
+six fixed templates, generate AI scenes, add text/layout layers, remove
+backgrounds, upscale, or run post-processing. These are future Pinterest
+modules. The active flow reuses the proven Clipart prompt review, model
+catalog, queue, runtime gates and Russian/English localization without
+exposing Clipart-only controls.
 
-The next implementation must add Pinterest-specific product input, template and
-AI-scene generation, preview, editable text, selective scene regeneration,
-folder export, deterministic series generation, and capability-aware provider
-rendering. The initial Pinterest workflow must not show Clipart-only
-transparency or background-cleanup controls. Content planning, SEO, scheduling,
-analytics, and Pinterest publishing are out of scope for this stage.
+Content planning, SEO, scheduling, analytics, Canva templates and Pinterest
+publishing remain out of scope for this stage.
 
 ### Fal.ai requirements
 

@@ -85,8 +85,8 @@ class WorkflowDefinitionTests(unittest.TestCase):
         self.assertFalse(pinterest.allows_processing_operation("remove_background"))
         self.assertFalse(pinterest.allows_processing_operation("upscale_before"))
 
-    def test_pinterest_declares_only_its_explicit_pin_pages_and_operations(self):
-        """Reusing Clipart review/processing pages would expose forbidden controls."""
+    def test_pinterest_declares_prompt_only_generation_pages_and_operations(self):
+        """Pinterest accepts prompts/CSV and shares generation, not processing."""
         pinterest = workflow_for_mode(ProjectMode.PINTEREST)
 
         self.assertEqual(
@@ -94,6 +94,7 @@ class WorkflowDefinitionTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
@@ -102,16 +103,17 @@ class WorkflowDefinitionTests(unittest.TestCase):
         self.assertEqual(
             tuple(page.component_id for page in pinterest.pages),
             (
-                "pinterest.product_input",
-                "pinterest.copy_layout",
+                "pinterest.project",
+                "pinterest.prompt_input",
+                "pinterest.prompt_review",
                 "pinterest.generation",
-                "pinterest.preview",
-                "pinterest.export",
+                "pinterest.review_run",
+                "shared.results",
             ),
         )
         self.assertEqual(pinterest.processing_operations, ())
         self.assertFalse(pinterest.supports_provider_control("processing_providers"))
-        self.assertFalse(pinterest.supports_provider_control("reference_model"))
+        self.assertTrue(pinterest.supports_provider_control("reference_model"))
 
     def test_processing_editor_hides_operations_not_in_workflow_profile(self):
         pinterest = workflow_for_mode(ProjectMode.PINTEREST)
