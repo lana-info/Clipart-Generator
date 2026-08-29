@@ -210,14 +210,14 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(opened, [0])
             page.deleteLater()
 
-    def test_clipart_route_has_a_dedicated_transparency_page_after_results(self):
+    def test_clipart_and_processing_routes_have_a_transparency_page_after_results(self):
         self.assertEqual(
             route_for_mode(ProjectMode.CLIPART)[-2:],
             (StepId.RESULTS, StepId.TRANSPARENCY),
         )
-        self.assertNotIn(
-            StepId.TRANSPARENCY,
-            route_for_mode(ProjectMode.PROCESSING),
+        self.assertEqual(
+            route_for_mode(ProjectMode.PROCESSING)[-2:],
+            (StepId.RESULTS, StepId.TRANSPARENCY),
         )
         self.assertNotIn(
             StepId.TRANSPARENCY,
@@ -255,6 +255,38 @@ class V3RunQueueTests(unittest.TestCase):
             editor.back_button.click()
             self.assertIs(shell.state.current_step, StepId.RESULTS)
             self.assertFalse(shell.sidebar.isHidden())
+            shell.deleteLater()
+
+    def test_processing_controller_opens_the_same_transparency_editor(self):
+        with tempfile.TemporaryDirectory(prefix="v3-processing-alpha-controller-") as temp:
+            root = Path(temp)
+            source = root / "source.png"
+            output = root / "output" / "flowers_ready.png"
+            output.parent.mkdir(parents=True)
+            Image.new("RGB", (20, 20), (10, 20, 30)).save(source)
+            Image.new("RGBA", (20, 20), (10, 20, 30, 128)).save(output)
+            state = ProjectState(
+                mode=ProjectMode.PROCESSING,
+                common=CommonProjectData(work_dir=temp),
+            )
+            shell = AppShell(state)
+            controller = install_processing_flow(shell)
+            session = RunQueueSession(
+                processing_request(temp, [source]), ProjectMode.PROCESSING
+            )
+            session.items[0].status = RunItemStatus.SUCCEEDED
+            session.items[0].output_path = str(output)
+            session.handle_finished()
+            controller.run_queue.session = session
+            controller.run_queue.page.set_session(session)
+
+            controller.run_queue.page.transparency_requested.emit(0)
+
+            editor = controller.pages[StepId.TRANSPARENCY]
+            self.assertIs(shell.current_page, editor)
+            self.assertEqual(editor.current_path, output)
+            editor.back_button.click()
+            self.assertIs(shell.state.current_step, StepId.RESULTS)
             shell.deleteLater()
 
     def test_elapsed_duration_is_human_readable(self):
@@ -455,7 +487,10 @@ class V3RunQueueTests(unittest.TestCase):
         for mode in ProjectMode:
             with self.subTest(mode=mode):
                 self.assertIn(StepId.RESULTS, route_for_mode(mode))
-        self.assertIs(route_for_mode(ProjectMode.PROCESSING)[-1], StepId.RESULTS)
+        self.assertEqual(
+            route_for_mode(ProjectMode.PROCESSING)[-2:],
+            (StepId.RESULTS, StepId.TRANSPARENCY),
+        )
         self.assertIs(route_for_mode(ProjectMode.PINTEREST)[-1], StepId.RESULTS)
 
     def test_processing_item_start_is_not_reported_as_generation(self):

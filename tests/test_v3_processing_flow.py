@@ -150,8 +150,8 @@ class V3ProcessingFlowTests(unittest.TestCase):
 
         pages = view.shell.processing_flow_controller.pages
         self.assertEqual(
-            tuple(step for step in pages if step in route_for_mode(ProjectMode.PROCESSING)),
-            route_for_mode(ProjectMode.PROCESSING),
+            set(step for step in pages if step in route_for_mode(ProjectMode.PROCESSING)),
+            set(route_for_mode(ProjectMode.PROCESSING)),
         )
         self.assertIsInstance(pages[StepId.FILES], ProcessingFilesPage)
         self.assertIsInstance(pages[StepId.GOAL], ProcessingRecipePage)

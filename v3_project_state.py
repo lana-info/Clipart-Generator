@@ -90,6 +90,7 @@ ROUTES: dict[ProjectMode, tuple[StepId, ...]] = {
         StepId.PIPELINE,
         StepId.REVIEW_RUN,
         StepId.RESULTS,
+        StepId.TRANSPARENCY,
     ),
 }
 
@@ -1981,10 +1982,11 @@ class ProjectState:
         _validate_project_draft_shape(value)
         raw_steps = value.get("current_step_by_mode", {})
         steps = dict(raw_steps) if isinstance(raw_steps, Mapping) else {}
-        if steps.get(ProjectMode.CLIPART.value) == StepId.TRANSPARENCY.value:
-            # The editor depends on the live run queue, which is intentionally
-            # not persisted in project drafts. Reopen the durable results page.
-            steps[ProjectMode.CLIPART.value] = StepId.RESULTS.value
+        for mode in (ProjectMode.CLIPART, ProjectMode.PROCESSING):
+            if steps.get(mode.value) == StepId.TRANSPARENCY.value:
+                # The editor depends on the live run queue, which is intentionally
+                # not persisted in project drafts. Reopen the durable results page.
+                steps[mode.value] = StepId.RESULTS.value
         pinterest_data = value.get("pinterest", {})
         legacy_source = value.get("pinterest_legacy")
         if legacy_source is None and isinstance(pinterest_data, Mapping):

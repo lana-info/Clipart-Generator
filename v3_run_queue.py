@@ -1702,7 +1702,7 @@ class RunResultsPage(QWidget):
         return self.session.items[row]
 
     def _open_transparency_item(self, row: QListWidgetItem) -> None:
-        if self.state.mode is not ProjectMode.CLIPART:
+        if self.state.mode not in {ProjectMode.CLIPART, ProjectMode.PROCESSING}:
             return
         item_index = row.data(Qt.ItemDataRole.UserRole)
         item = self._selected_item(item_index)
@@ -1718,7 +1718,7 @@ class RunResultsPage(QWidget):
         row = self.queue.currentRow()
         item = self._selected_item(row)
         if (
-            self.state.mode is not ProjectMode.CLIPART
+            self.state.mode not in {ProjectMode.CLIPART, ProjectMode.PROCESSING}
             or self.session is None
             or self.session.running
             or item is None

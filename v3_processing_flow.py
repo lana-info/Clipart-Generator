@@ -62,6 +62,7 @@ from v3_project_state import (
     StepId,
     route_for_mode,
 )
+from v3_transparency_preview import ClipartTransparencyEditorPage
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
 from workflow_definitions import workflow_for_mode
@@ -1270,6 +1271,7 @@ class ProcessingFlowController(QObject):
         self.run_queue = RunQueueSupport(self, ProjectMode.PROCESSING)
         self.pages = LazyPageRegistry(shell, ProjectMode.PROCESSING)
         self._install_pages()
+        self.run_queue.page.transparency_requested.connect(self._open_transparency_editor)
         shell.step_changed.connect(self._step_changed)
         shell.run_requested.connect(self._run_requested)
 
@@ -1283,6 +1285,61 @@ class ProcessingFlowController(QObject):
         self.shell.state.set_step(StepId.FILES)
         self.files_page.refresh_from_state()
         self.shell.mark_dirty()
+
+    def _create_transparency_page(self) -> ClipartTransparencyEditorPage:
+        page = ClipartTransparencyEditorPage()
+        page.back_requested.connect(self._close_transparency_editor)
+        page.focus_mode_changed.connect(self.shell.set_canvas_focus_mode)
+        return page
+
+    def _open_transparency_editor(self, item_index: int) -> None:
+        session = self.run_queue.session
+        if session is None or session.running:
+            return
+        successful = [
+            item
+            for item in session.items
+            if getattr(item.status, "value", "") == "succeeded" and item.output_path
+        ]
+        selected_item = (
+            session.items[item_index]
+            if 0 <= item_index < len(session.items)
+            else None
+        )
+        paths = [Path(item.output_path) for item in successful]
+        if selected_item is None or not selected_item.output_path or not paths:
+            return
+        selected_path = Path(selected_item.output_path)
+        try:
+            selected = paths.index(selected_path)
+        except ValueError:
+            return
+        page = self.pages[StepId.TRANSPARENCY]
+        if not isinstance(page, ClipartTransparencyEditorPage):
+            return
+        page.set_files(
+            paths,
+            selected_index=selected,
+            rough_dir=workspace_layout(session.output_dir).rough,
+        )
+        self.shell.state.set_step(StepId.TRANSPARENCY)
+        self.shell.mark_dirty()
+        self.shell.step_changed.emit(
+            ProjectMode.PROCESSING.value,
+            StepId.TRANSPARENCY.value,
+        )
+
+    def _close_transparency_editor(self) -> None:
+        page = self.pages.get(StepId.TRANSPARENCY)
+        if isinstance(page, ClipartTransparencyEditorPage):
+            page.leave_focus_mode()
+        self.shell.set_canvas_focus_mode(False)
+        self.shell.state.set_step(StepId.RESULTS)
+        self.shell.mark_dirty()
+        self.shell.step_changed.emit(
+            ProjectMode.PROCESSING.value,
+            StepId.RESULTS.value,
+        )
 
     def _install_pages(self) -> None:
         changed = self.shell.mark_dirty
@@ -1315,6 +1372,10 @@ class ProcessingFlowController(QObject):
             ),
         )
         self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
+        self.pages.register(
+            StepId.TRANSPARENCY,
+            self._create_transparency_page,
+        )
         if self.shell.state.mode is ProjectMode.PROCESSING:
             self.pages[self.shell.state.current_step]
         self.shell.refresh()
