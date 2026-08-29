@@ -418,11 +418,15 @@ Steps:
 - Менять только user-authored text: не редактировать и не дублировать system
   chroma metadata/rendered block. Сохранять references/order и undo одной batch
   operation.
+- Добавить в нижнюю панель проверки промптов экспорт всех строк в совместимый
+  CSV с колонками `Prompt` и `References`.
 
 Acceptance:
 - [x] Работает произвольный selection, включая 15 строк, и весь список.
 - [x] No-match не меняет строку и виден до подтверждения.
 - [x] References/order остаются неизменными.
+- [x] Экспорт CSV можно сразу импортировать обратно без потери промптов и
+  референсов.
 
 Verification:
 - [x] Unit tests каждой операции, Unicode, selection/all/no-match/undo.

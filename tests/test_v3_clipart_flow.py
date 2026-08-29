@@ -35,6 +35,7 @@ from v3_clipart_flow import (
     build_clipart_run_request,
     clipart_pipeline_steps,
     estimate_clipart_cost,
+    export_prompt_csv,
     fal_endpoint_quantities,
     generation_model_options,
     install_clipart_flow,
@@ -784,6 +785,46 @@ class V3ClipartFlowTests(unittest.TestCase):
             ["Existing", "Imported fox"],
         )
         self.assertEqual(advanced, [True])
+
+    def test_exported_prompt_csv_round_trips_prompts_and_references(self):
+        entries = [
+            PromptEntry("Акварельный лис", ["fox.png", "texture.webp"]),
+            PromptEntry("A winter branch", []),
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "prompts.csv"
+            export_prompt_csv(entries, destination)
+
+            self.assertTrue(destination.read_bytes().startswith(b"\xef\xbb\xbf"))
+            self.assertEqual(
+                list(csv.DictReader(destination.read_text(encoding="utf-8-sig").splitlines())),
+                [
+                    {"Prompt": "Акварельный лис", "References": "fox.png|texture.webp"},
+                    {"Prompt": "A winter branch", "References": ""},
+                ],
+            )
+            restored = parse_prompt_csv(destination)
+
+        self.assertEqual(restored, entries)
+
+    def test_prompt_review_exports_all_rows_to_csv(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.common.work_dir = tempfile.gettempdir()
+        state.clipart.prompts = [
+            PromptEntry("First", ["first.png"]),
+            PromptEntry("Second", ["second.png"]),
+        ]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "export.csv"
+            with patch.object(
+                v3_clipart_flow.QFileDialog,
+                "getSaveFileName",
+                return_value=(str(destination), "CSV files (*.csv)"),
+            ):
+                page.export_csv_button.click()
+
+            self.assertEqual(parse_prompt_csv(destination), state.clipart.prompts)
 
     def test_review_search_filters_large_prompt_table_without_changing_data(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

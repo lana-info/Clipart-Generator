@@ -1007,6 +1007,25 @@ def parse_prompt_csv(path: str | os.PathLike[str]) -> list[PromptEntry]:
     return entries
 
 
+def export_prompt_csv(
+    entries: Sequence[PromptEntry],
+    path: str | os.PathLike[str],
+) -> None:
+    """Write the prompt review table in the same format accepted by CSV import."""
+
+    destination = Path(path)
+    with destination.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=("Prompt", "References"))
+        writer.writeheader()
+        for entry in entries:
+            writer.writerow(
+                {
+                    "Prompt": entry.prompt,
+                    "References": "|".join(entry.references),
+                }
+            )
+
+
 class _ScrollableStepPage(QScrollArea):
     def __init__(
         self,
@@ -2349,6 +2368,11 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             self.delete_refs_button,
         ):
             action_layout.addWidget(button)
+        self.export_csv_button = _compact_review_action_button(
+            "prompt_export",
+            "Экспорт CSV",
+        )
+        action_layout.addWidget(self.export_csv_button)
         action_layout.addStretch()
         self.add_widget(prompt_actions)
         self.issues_label = QLabel()
@@ -2365,6 +2389,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.add_refs_button.clicked.connect(self._add_references)
         self.replace_refs_button.clicked.connect(self._replace_references)
         self.delete_refs_button.clicked.connect(self._delete_references)
+        self.export_csv_button.clicked.connect(self._export_csv)
         self.refresh_from_state()
 
     def _open_batch_editor(self) -> None:
@@ -2590,6 +2615,31 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             self.state.clipart.prompts[row].references = []
         self.refresh_from_state()
         self.changed()
+
+    def _export_csv(self) -> None:
+        if not self.state.clipart.prompts:
+            self.card.set_state("error", "Сначала добавьте промпты")
+            return
+        initial_path = str(
+            Path(self.state.common.work_dir or os.getcwd()) / "prompts.csv"
+        )
+        selected, _ = QFileDialog.getSaveFileName(
+            self,
+            "Экспортировать промпты",
+            initial_path,
+            "CSV files (*.csv)",
+        )
+        if not selected:
+            return
+        destination = Path(selected)
+        if destination.suffix.casefold() != ".csv":
+            destination = destination.with_suffix(".csv")
+        try:
+            export_prompt_csv(self.state.clipart.prompts, destination)
+        except OSError:
+            self.card.set_state("error", "Не удалось сохранить CSV")
+            return
+        self.card.set_state("default", f"CSV сохранён: {destination.name}")
 
     # Backward-compatible test and keyboard action name.
     def _delete_all_references(self) -> None:
