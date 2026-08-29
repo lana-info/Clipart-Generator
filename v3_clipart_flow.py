@@ -120,6 +120,9 @@ MAX_CSV_BYTES = 2 * 1024 * 1024
 MAX_CLIPART_REQUESTS = 5000
 MAX_REFERENCE_FILE_BYTES = 10 * 1024 * 1024
 _DOLLAR_PATTERN = re.compile(r"\$(\d+(?:\.\d+)?)")
+_CHROMA_PROMPT_SUFFIX_MARKER = (
+    "\nIsolated on a completely flat, uniform, solid pure "
+)
 
 
 class ClipartFlowError(ValueError):
@@ -883,15 +886,34 @@ def apply_prompt_text_edit(
     result = [PromptEntry(entry.prompt, list(entry.references)) for entry in entries]
     matches = 0
     for row in selected:
+        if action in {"prepend", "append"} and not new_text:
+            continue
         prompt = result[row].prompt
+        editable_prompt, marker, chroma_suffix = prompt.rpartition(
+            _CHROMA_PROMPT_SUFFIX_MARKER
+        )
+        if not marker:
+            editable_prompt, chroma_suffix = prompt, ""
         if action == "replace":
-            if not find_text or find_text not in prompt:
+            if not find_text or find_text not in editable_prompt:
                 continue
-            result[row].prompt = prompt.replace(find_text, new_text)
+            editable_prompt = editable_prompt.replace(find_text, new_text)
         elif action == "prepend":
-            result[row].prompt = " ".join(part for part in (new_text, prompt) if part)
+            editable_prompt = "\n".join(
+                part for part in (new_text, editable_prompt) if part
+            )
         else:
-            result[row].prompt = " ".join(part for part in (prompt, new_text) if part)
+            editable_prompt = "\n".join(
+                part for part in (editable_prompt, new_text) if part
+            )
+        updated_prompt = (
+            editable_prompt + marker + chroma_suffix
+            if marker
+            else editable_prompt
+        )
+        if updated_prompt == prompt:
+            continue
+        result[row].prompt = updated_prompt
         matches += 1
     return result, matches
 
@@ -1366,6 +1388,211 @@ class ReferenceScopeDialog(QDialog):
         if self.selected_radio.isChecked():
             return "selected"
         return "current"
+
+
+class PromptBatchEditDialog(QDialog):
+    """Preview and configure one reversible edit of prompt text."""
+
+    def __init__(
+        self,
+        entries: Sequence[PromptEntry],
+        *,
+        selected_rows: Sequence[int],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Найти и заменить")
+        self.setModal(True)
+        self.setMinimumWidth(620)
+        self._entries = [
+            PromptEntry(entry.prompt, list(entry.references)) for entry in entries
+        ]
+        self._selected_rows = tuple(
+            sorted({row for row in selected_rows if 0 <= row < len(entries)})
+        )
+        self._preview_entries = list(self._entries)
+        self._affected_count = 0
+
+        layout = QVBoxLayout(self)
+
+        scope_row = QHBoxLayout()
+        scope_row.addWidget(QLabel("Изменить:"))
+        self.scope_group = QButtonGroup(self)
+        self.selected_radio = QRadioButton(
+            f"Выбранные ({len(self._selected_rows)})"
+        )
+        self.all_radio = QRadioButton(f"Все ({len(self._entries)})")
+        self.scope_group.addButton(self.selected_radio)
+        self.scope_group.addButton(self.all_radio)
+        self.selected_radio.setEnabled(bool(self._selected_rows))
+        self.selected_radio.setChecked(bool(self._selected_rows))
+        self.all_radio.setChecked(not self._selected_rows)
+        scope_row.addWidget(self.selected_radio)
+        scope_row.addWidget(self.all_radio)
+        scope_row.addStretch()
+        layout.addLayout(scope_row)
+
+        action_row = QHBoxLayout()
+        action_row.addWidget(QLabel("Действие:"))
+        self.action_group = QButtonGroup(self)
+        self.replace_radio = QRadioButton("Заменить")
+        self.prepend_radio = QRadioButton("В начало")
+        self.append_radio = QRadioButton("В конец")
+        for button in (
+            self.replace_radio,
+            self.prepend_radio,
+            self.append_radio,
+        ):
+            self.action_group.addButton(button)
+            action_row.addWidget(button)
+        self.replace_radio.setChecked(True)
+        action_row.addStretch()
+        layout.addLayout(action_row)
+
+        self.form = QFormLayout()
+        self.find_edit = QLineEdit()
+        self.find_edit.setPlaceholderText("Текст, который нужно найти")
+        self.find_edit.setAccessibleName("Найти текст")
+        self.new_text_edit = QPlainTextEdit()
+        self.new_text_edit.setPlaceholderText("Новый текст")
+        self.new_text_edit.setAccessibleName("Новый текст")
+        self.new_text_edit.setMaximumHeight(110)
+        self.form.addRow("Найти", self.find_edit)
+        self.form.addRow("Текст", self.new_text_edit)
+        layout.addLayout(self.form)
+
+        self.summary_label = QLabel()
+        self.summary_label.setWordWrap(True)
+        self.summary_label.setProperty("v3Selection", True)
+        layout.addWidget(self.summary_label)
+        self.preview_list = QListWidget()
+        self.preview_list.setAccessibleName("Предварительный результат")
+        self.preview_list.setMinimumHeight(120)
+        layout.addWidget(self.preview_list)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        self.cancel_button = V3Button("Отмена", ButtonVariant.GHOST)
+        self.apply_button = V3Button("Применить", ButtonVariant.PRIMARY)
+        self.cancel_button.clicked.connect(self.reject)
+        self.apply_button.clicked.connect(self.accept)
+        button_row.addWidget(self.cancel_button)
+        button_row.addWidget(self.apply_button)
+        layout.addLayout(button_row)
+
+        for button in (
+            self.selected_radio,
+            self.all_radio,
+            self.replace_radio,
+            self.prepend_radio,
+            self.append_radio,
+        ):
+            button.toggled.connect(self._refresh_preview)
+        self.find_edit.textChanged.connect(self._refresh_preview)
+        self.new_text_edit.textChanged.connect(self._refresh_preview)
+        self._refresh_preview()
+
+    def action(self) -> str:
+        if self.prepend_radio.isChecked():
+            return "prepend"
+        if self.append_radio.isChecked():
+            return "append"
+        return "replace"
+
+    def rows(self) -> tuple[int, ...]:
+        if self.selected_radio.isChecked() and self._selected_rows:
+            return self._selected_rows
+        return tuple(range(len(self._entries)))
+
+    def affected_count(self) -> int:
+        return self._affected_count
+
+    def edited_entries(self) -> tuple[list[PromptEntry], int]:
+        return (
+            [
+                PromptEntry(entry.prompt, list(entry.references))
+                for entry in self._preview_entries
+            ],
+            self._affected_count,
+        )
+
+    def _refresh_preview(self, *_: Any) -> None:
+        replace_action = self.action() == "replace"
+        self.find_edit.setVisible(replace_action)
+        find_label = self.form.labelForField(self.find_edit)
+        if find_label is not None:
+            find_label.setVisible(replace_action)
+
+        rows = self.rows()
+        self._preview_entries, self._affected_count = apply_prompt_text_edit(
+            self._entries,
+            rows=rows,
+            action=self.action(),
+            find_text=self.find_edit.text(),
+            new_text=self.new_text_edit.toPlainText(),
+        )
+        too_long = any(
+            len(self._preview_entries[row].prompt) > MAX_TEXT_LENGTH for row in rows
+        )
+        unchanged_rows = tuple(
+            row
+            for row in rows
+            if self._entries[row].prompt == self._preview_entries[row].prompt
+        )
+        unchanged_row_labels = ", ".join(
+            str(row + 1) for row in unchanged_rows[:10]
+        )
+        if len(unchanged_rows) > 10:
+            unchanged_row_labels += ", …"
+        self.preview_list.clear()
+        for row in rows:
+            before = self._entries[row].prompt
+            after = self._preview_entries[row].prompt
+            if before == after:
+                continue
+            before_preview = before.replace("\n", " ")[:100]
+            after_preview = after.replace("\n", " ")[:100]
+            self.preview_list.addItem(
+                f"{row + 1}. {before_preview}  →  {after_preview}"
+            )
+            if self.preview_list.count() >= 3:
+                break
+
+        if too_long:
+            summary = f"Текст превышает максимум {MAX_TEXT_LENGTH} символов"
+        elif replace_action and not self.find_edit.text().strip():
+            summary = "Введите текст, который нужно найти"
+        elif not self.new_text_edit.toPlainText().strip() and not replace_action:
+            summary = "Введите текст для добавления"
+        elif not self._affected_count:
+            summary = (
+                "Совпадений не найдено"
+                + (
+                    f" · строки: {unchanged_row_labels}"
+                    if unchanged_row_labels
+                    else ""
+                )
+            )
+        else:
+            unchanged = len(rows) - self._affected_count
+            summary = (
+                f"Будет изменено: {self._affected_count} из {len(rows)}"
+                + (
+                    f" · без совпадений: {unchanged}"
+                    f" · строки: {unchanged_row_labels}"
+                    if replace_action and unchanged
+                    else ""
+                )
+            )
+        self.summary_label.setText(summary)
+        has_required_text = (
+            bool(self.find_edit.text().strip())
+            if replace_action
+            else bool(self.new_text_edit.toPlainText().strip())
+        )
+        self.apply_button.setEnabled(
+            self._affected_count > 0 and has_required_text and not too_long
+        )
 
 
 class ClipartProjectPage(_ScrollableStepPage):
@@ -1997,10 +2224,21 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.state = state
         self.changed = changed
         self._updating = False
+        self._batch_undo_snapshot: list[PromptEntry] | None = None
         self.progress_label = QLabel("Шаг 2 из 2 · Проверка серии")
         self.progress_label.setProperty("v3Selection", True)
         self.progress_label.setAccessibleName(self.progress_label.text())
         self.add_widget(self.progress_label)
+        self.batch_edit_button = V3Button(
+            "Найти и заменить",
+            ButtonVariant.SECONDARY,
+        )
+        self.undo_batch_button = V3Button(
+            "Отменить изменение",
+            ButtonVariant.GHOST,
+        )
+        self.undo_batch_button.setEnabled(False)
+        self.undo_batch_button.hide()
         search_row = QWidget()
         search_layout = QHBoxLayout(search_row)
         search_layout.setContentsMargins(0, 0, 0, 0)
@@ -2011,6 +2249,8 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.search_result_label.setProperty("v3Small", True)
         search_layout.addWidget(self.search_edit, 1)
         search_layout.addWidget(self.search_result_label)
+        search_layout.addWidget(self.batch_edit_button)
+        search_layout.addWidget(self.undo_batch_button)
         self.add_widget(search_row)
         self.table = _PromptReviewTable(0, 2)
         self.table.setHorizontalHeaderLabels(["Промпт", "Референсы"])
@@ -2105,10 +2345,62 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.duplicate_button.clicked.connect(self._duplicate)
         self.delete_button.clicked.connect(self._delete)
         self.delete_all_button.clicked.connect(self._delete_all)
+        self.batch_edit_button.clicked.connect(self._open_batch_editor)
+        self.undo_batch_button.clicked.connect(self._undo_batch_edit)
         self.add_refs_button.clicked.connect(self._add_references)
         self.replace_refs_button.clicked.connect(self._replace_references)
         self.delete_refs_button.clicked.connect(self._delete_references)
         self.refresh_from_state()
+
+    def _open_batch_editor(self) -> None:
+        if not self.state.clipart.prompts:
+            self.card.set_state("error", "Сначала добавьте промпты")
+            return
+        dialog = PromptBatchEditDialog(
+            self.state.clipart.prompts,
+            selected_rows=self._selected_rows(),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        entries, affected_count = dialog.edited_entries()
+        self._apply_batch_result(entries, affected_count=affected_count)
+
+    def _apply_batch_result(
+        self,
+        entries: Sequence[PromptEntry],
+        *,
+        affected_count: int,
+    ) -> None:
+        if affected_count <= 0:
+            return
+        self._batch_undo_snapshot = [
+            PromptEntry(entry.prompt, list(entry.references))
+            for entry in self.state.clipart.prompts
+        ]
+        self.state.clipart.prompts = [
+            PromptEntry(entry.prompt, list(entry.references))
+            for entry in entries
+        ]
+        self.undo_batch_button.setEnabled(True)
+        self.undo_batch_button.show()
+        self.refresh_from_state()
+        self.card.set_state("default", f"Изменено промптов: {affected_count}")
+        self.changed()
+
+    def _undo_batch_edit(self) -> None:
+        if self._batch_undo_snapshot is None:
+            return
+        self.state.clipart.prompts = self._batch_undo_snapshot
+        self._invalidate_batch_undo()
+        self.refresh_from_state()
+        self.card.set_state("default", "Массовое изменение отменено")
+        self.changed()
+
+    def _invalidate_batch_undo(self) -> None:
+        self._batch_undo_snapshot = None
+        self.undo_batch_button.setEnabled(False)
+        self.undo_batch_button.hide()
 
     def _rows_moved(self, *_: Any) -> None:
         if self._updating:
@@ -2124,6 +2416,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             if isinstance(source_row, int) and 0 <= source_row < len(self.state.clipart.prompts):
                 reordered.append(self.state.clipart.prompts[source_row])
         if len(reordered) == len(self.state.clipart.prompts):
+            self._invalidate_batch_undo()
             self.state.clipart.prompts = reordered
             self._updating = True
             for row in range(self.table.rowCount()):
@@ -2182,6 +2475,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         dialog = PromptReferenceEditorDialog(entry, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        self._invalidate_batch_undo()
         self.state.clipart.prompts[row] = dialog.prompt_entry()
         self.refresh_from_state()
         self.changed()
@@ -2250,6 +2544,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 entry.references = merged[:MAX_REFERENCES_PER_PROMPT]
             changed_any = True
         if changed_any:
+            self._invalidate_batch_undo()
             self.refresh_from_state()
             self.changed()
 
@@ -2272,6 +2567,10 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         else:
             row = self._selected_row()
             rows = [row] if row >= 0 else []
+        rows = list(rows)
+        if not rows:
+            return
+        self._invalidate_batch_undo()
         for row in rows:
             self.state.clipart.prompts[row].references = []
         self.refresh_from_state()
@@ -2279,6 +2578,9 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
 
     # Backward-compatible test and keyboard action name.
     def _delete_all_references(self) -> None:
+        if not self.state.clipart.prompts:
+            return
+        self._invalidate_batch_undo()
         for entry in self.state.clipart.prompts:
             entry.references = []
         self.refresh_from_state()
@@ -2287,6 +2589,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
     def _table_changed(self, _: QTableWidgetItem) -> None:
         if self._updating:
             return
+        self._invalidate_batch_undo()
         entries: list[PromptEntry] = []
         for row in range(self.table.rowCount()):
             prompt_item = self.table.item(row, 0)
@@ -2336,6 +2639,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             self.card.set_state("error", f"Максимум {MAX_PROMPT_ENTRIES} промптов")
             return
         self.card.set_state("default")
+        self._invalidate_batch_undo()
         self.state.clipart.prompts.append(PromptEntry(prompt="Новый промпт"))
         self.refresh_from_state()
         self.table.setCurrentCell(len(self.state.clipart.prompts) - 1, 0)
@@ -2349,6 +2653,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             self.card.set_state("error", f"Максимум {MAX_PROMPT_ENTRIES} промптов")
             return
         self.card.set_state("default")
+        self._invalidate_batch_undo()
         source = self.state.clipart.prompts[row]
         self.state.clipart.prompts.insert(
             row + 1,
@@ -2365,6 +2670,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             rows = [row] if row >= 0 else []
         if not rows:
             return
+        self._invalidate_batch_undo()
         for row in reversed(rows):
             del self.state.clipart.prompts[row]
         self.refresh_from_state()
@@ -2376,6 +2682,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             len(self.state.clipart.prompts),
         ):
             return
+        self._invalidate_batch_undo()
         self.state.clipart.prompts = []
         self.refresh_from_state()
         self.changed()
@@ -2385,6 +2692,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         target = row + offset
         if row < 0 or not 0 <= target < len(self.state.clipart.prompts):
             return
+        self._invalidate_batch_undo()
         prompts = self.state.clipart.prompts
         prompts[row], prompts[target] = prompts[target], prompts[row]
         self.refresh_from_state()

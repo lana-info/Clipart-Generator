@@ -11,10 +11,18 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import QItemSelectionModel, QMimeData, QObject, QUrl, Qt, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QMessageBox
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QLabel,
+    QMessageBox,
+    QRadioButton,
+)
 from PIL import Image
 
 import v3_clipart_flow
+from chroma_key import chroma_key_prompt_block
 from v3_clipart_flow import (
     MAX_CLIPART_REQUESTS,
     ClipartFlowError,
@@ -130,7 +138,79 @@ class V3ClipartFlowTests(unittest.TestCase):
             changed, rows=(0, 1), action="append", find_text="", new_text="isolated"
         )
         self.assertEqual(matches, 2)
-        self.assertEqual([entry.prompt for entry in appended], ["blue wolf isolated", "red fox isolated"])
+        self.assertEqual(
+            [entry.prompt for entry in appended],
+            ["blue wolf\nisolated", "red fox\nisolated"],
+        )
+
+    def test_batch_prompt_text_edit_changes_only_noncontiguous_selected_rows(self):
+        entries = [
+            PromptEntry(f"Акварельный цветок {index}", [f"ref-{index}.png"])
+            for index in range(20)
+        ]
+        rows = tuple(index for index in range(20) if index not in {1, 5, 12, 18, 19})
+
+        changed, matches = apply_prompt_text_edit(
+            entries,
+            rows=rows,
+            action="replace",
+            find_text="цветок",
+            new_text="букет",
+        )
+
+        self.assertEqual(matches, 15)
+        self.assertEqual(changed[0].prompt, "Акварельный букет 0")
+        self.assertEqual(changed[1].prompt, "Акварельный цветок 1")
+        self.assertEqual(
+            [entry.references for entry in changed],
+            [[f"ref-{index}.png"] for index in range(20)],
+        )
+
+    def test_batch_prompt_text_edit_preserves_generated_chroma_suffix(self):
+        chroma_suffix = chroma_key_prompt_block("blue", materials=("watercolor",))
+        entries = [
+            PromptEntry(
+                "Blue flower on a clean background\n" + chroma_suffix,
+                ["flower.png"],
+            )
+        ]
+
+        changed, matches = apply_prompt_text_edit(
+            entries,
+            rows=(0,),
+            action="replace",
+            find_text="background",
+            new_text="backdrop",
+        )
+        appended, appended_count = apply_prompt_text_edit(
+            changed,
+            rows=(0,),
+            action="append",
+            find_text="",
+            new_text="Centered composition",
+        )
+
+        self.assertEqual(matches, 1)
+        self.assertEqual(appended_count, 1)
+        self.assertEqual(
+            appended[0].prompt,
+            "Blue flower on a clean backdrop\nCentered composition\n" + chroma_suffix,
+        )
+        self.assertEqual(appended[0].references, ["flower.png"])
+
+    def test_batch_prompt_text_edit_reports_no_match_without_changing_entries(self):
+        entries = [PromptEntry("Лиса"), PromptEntry("Заяц")]
+
+        changed, matches = apply_prompt_text_edit(
+            entries,
+            rows=(0, 1),
+            action="replace",
+            find_text="медведь",
+            new_text="волк",
+        )
+
+        self.assertEqual(matches, 0)
+        self.assertEqual([entry.to_dict() for entry in changed], [entry.to_dict() for entry in entries])
 
     def test_application_view_installs_full_clipart_route_with_results(self):
         factory = WorkerFactory()
@@ -271,6 +351,145 @@ class V3ClipartFlowTests(unittest.TestCase):
             self.assertFalse(button.icon().isNull())
             self.assertLessEqual(button.maximumWidth(), 64)
         self.assertEqual(page.progress_label.text(), "Шаг 2 из 2 · Проверка серии")
+
+    def test_prompt_review_exposes_one_batch_editor_and_one_step_undo(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        self.assertTrue(hasattr(page, "batch_edit_button"))
+        self.assertEqual(page.batch_edit_button.text(), "Найти и заменить")
+        self.assertTrue(hasattr(page, "undo_batch_button"))
+        self.assertFalse(page.undo_batch_button.isEnabled())
+
+        page._apply_batch_result(
+            [PromptEntry("Red fox"), PromptEntry("Brown bear")],
+            affected_count=2,
+        )
+        self.assertEqual(
+            [entry.prompt for entry in state.clipart.prompts],
+            ["Red fox", "Brown bear"],
+        )
+        self.assertTrue(page.undo_batch_button.isEnabled())
+
+        page.undo_batch_button.click()
+
+        self.assertEqual(
+            [entry.prompt for entry in state.clipart.prompts],
+            ["Fox", "Bear"],
+        )
+        self.assertFalse(page.undo_batch_button.isEnabled())
+
+    def test_prompt_review_drops_stale_batch_undo_after_a_later_manual_edit(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        page._apply_batch_result(
+            [PromptEntry("Red fox"), PromptEntry("Bear")],
+            affected_count=1,
+        )
+
+        page.table.item(1, 0).setText("Brown bear")
+
+        self.assertEqual(
+            [entry.prompt for entry in state.clipart.prompts],
+            ["Red fox", "Brown bear"],
+        )
+        self.assertFalse(page.undo_batch_button.isEnabled())
+
+    def test_batch_prompt_dialog_previews_selected_or_all_rows(self):
+        if not hasattr(v3_clipart_flow, "PromptBatchEditDialog"):
+            self.fail("Окно массового редактирования промптов не создано")
+        entries = [PromptEntry(f"Blue flower {index}") for index in range(20)]
+        selected_rows = tuple(range(0, 20, 2))
+        dialog = v3_clipart_flow.PromptBatchEditDialog(
+            entries,
+            selected_rows=selected_rows,
+        )
+
+        self.assertTrue(dialog.selected_radio.isChecked())
+        self.assertEqual(dialog.selected_radio.text(), "Выбранные (10)")
+        self.assertEqual(dialog.all_radio.text(), "Все (20)")
+        self.assertEqual(dialog.replace_radio.text(), "Заменить")
+        self.assertEqual(dialog.prepend_radio.text(), "В начало")
+        self.assertEqual(dialog.append_radio.text(), "В конец")
+        self.assertNotIn(
+            "Вставить после",
+            [button.text() for button in dialog.findChildren(QRadioButton)],
+        )
+
+        dialog.find_edit.setText("flower")
+        dialog.new_text_edit.setPlainText("bouquet")
+        self.app.processEvents()
+
+        self.assertEqual(dialog.affected_count(), 10)
+        self.assertEqual(dialog.rows(), selected_rows)
+        self.assertIn("Будет изменено: 10 из 10", dialog.summary_label.text())
+        self.assertGreater(dialog.preview_list.count(), 0)
+        self.assertLessEqual(dialog.preview_list.count(), 3)
+        self.assertTrue(dialog.apply_button.isEnabled())
+
+        dialog.all_radio.setChecked(True)
+        self.app.processEvents()
+
+        self.assertEqual(dialog.affected_count(), 20)
+        self.assertEqual(dialog.rows(), tuple(range(20)))
+        self.assertIn("Будет изменено: 20 из 20", dialog.summary_label.text())
+
+    def test_batch_prompt_dialog_disables_apply_when_replace_has_no_matches(self):
+        if not hasattr(v3_clipart_flow, "PromptBatchEditDialog"):
+            self.fail("Окно массового редактирования промптов не создано")
+        dialog = v3_clipart_flow.PromptBatchEditDialog(
+            [PromptEntry("Fox"), PromptEntry("Bear")],
+            selected_rows=(),
+        )
+
+        dialog.find_edit.setText("Rabbit")
+        dialog.new_text_edit.setPlainText("Wolf")
+        self.app.processEvents()
+
+        self.assertTrue(dialog.all_radio.isChecked())
+        self.assertEqual(dialog.affected_count(), 0)
+        self.assertIn("Совпадений не найдено", dialog.summary_label.text())
+        self.assertIn("строки: 1, 2", dialog.summary_label.text())
+        self.assertFalse(dialog.apply_button.isEnabled())
+
+    def test_batch_prompt_dialog_treats_replacing_text_with_itself_as_no_change(self):
+        dialog = v3_clipart_flow.PromptBatchEditDialog(
+            [PromptEntry("Blue flower")],
+            selected_rows=(),
+        )
+
+        dialog.find_edit.setText("flower")
+        dialog.new_text_edit.setPlainText("flower")
+        self.app.processEvents()
+
+        edited, affected = dialog.edited_entries()
+        self.assertEqual(affected, 0)
+        self.assertEqual(edited[0].prompt, "Blue flower")
+        self.assertEqual(dialog.preview_list.count(), 0)
+        self.assertFalse(dialog.apply_button.isEnabled())
+
+    def test_batch_prompt_dialog_requires_text_for_start_or_end_actions(self):
+        dialog = v3_clipart_flow.PromptBatchEditDialog(
+            [PromptEntry("Fox")],
+            selected_rows=(),
+        )
+
+        dialog.prepend_radio.setChecked(True)
+        self.app.processEvents()
+
+        self.assertTrue(dialog.find_edit.isHidden())
+        self.assertIn("Введите текст", dialog.summary_label.text())
+        self.assertFalse(dialog.apply_button.isEnabled())
+
+        dialog.new_text_edit.setPlainText("Watercolor")
+        self.app.processEvents()
+
+        edited, affected = dialog.edited_entries()
+        self.assertEqual(affected, 1)
+        self.assertEqual(edited[0].prompt, "Watercolor\nFox")
+        self.assertTrue(dialog.apply_button.isEnabled())
 
     def test_editing_prompt_text_preserves_reference_paths(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
