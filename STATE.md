@@ -2,9 +2,9 @@
 
 Updated: 2026-08-29
 
-## Latest unintegrated checkpoint
+## Latest integrated checkpoint
 
-Task 22 is implemented on `codex/ui-3.1-pinterest-prompt-chroma-removal`:
+Task 22 is integrated in `develop/3.1` at `f00cec4`:
 Pinterest готовые промпты больше не показывают Chroma Key-helper; Pinterest
 получает отдельный plain selector модели с референсом только для batch с
 референсами, при общих proportion/resolution/variants; технические пояснения
