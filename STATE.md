@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-27
+Updated: 2026-08-29
 
 ## Operating model
 
@@ -27,6 +27,12 @@ Updated: 2026-08-27
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
+
+Regression suite для накопленного 3.1 checkpoint синхронизирован с текущими
+контрактами: prompt-only Pinterest, `output/rough`, имена `*_ready` и версия
+3.0.7. Исправлена идемпотентность Pinterest draft round-trip; будущие six-slot
+Pinterest-тесты сохранены как явно отложенные. Полный offline pytest проходит:
+937 passed, 56 intentional skips, 2 deselected и 123 subtests.
 
 Перейти к контролируемой оценке provider profiles после пополнения Fal.ai.
 Preview, zoom, add/remove кисть, reset, атомарный экспорт и skip remover для

@@ -16,6 +16,7 @@ env/
 # Runtime данные приложения
 raw/
 output/
+.vibix_fal_tasks.json
 
 # Локальные секреты и конфиг пользователя
 config.json

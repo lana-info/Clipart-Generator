@@ -117,6 +117,36 @@ class WorkerFactory:
         return worker
 
 
+class PinterestPromptOnlyFlowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_application_installs_the_active_prompt_only_route(self):
+        view = V3ApplicationView(
+            runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
+            worker_factory=WorkerFactory(),
+        )
+        view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
+        self.app.processEvents()
+
+        controller = view.shell.pinterest_flow_controller
+        self.assertEqual(
+            tuple(controller.pages),
+            (
+                StepId.PROJECT,
+                StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
+                StepId.PIN_FORMAT_MODEL,
+                StepId.REVIEW_RUN,
+                StepId.RESULTS,
+            ),
+        )
+
+
+@unittest.skip(
+    "Six-slot product/template Pinterest workflow is deferred; active MVP is prompt-only"
+)
 class V3PinterestFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

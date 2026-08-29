@@ -1989,7 +1989,7 @@ class ProjectState:
         if legacy_source is None and isinstance(pinterest_data, Mapping):
             legacy_fields = {
                 key: pinterest_data[key]
-                for key in ("prompts", "prompt_generator", "operations")
+                for key in ("prompt_generator", "operations")
                 if key in pinterest_data
             }
             legacy_source = legacy_fields or None

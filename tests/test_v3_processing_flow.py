@@ -412,7 +412,10 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 external_transfer_consent=False,
             )
             self.assertEqual(request.settings["run_mode"], "process_only")
-            self.assertEqual(request.settings["output_dir"], str(selected_output))
+            self.assertEqual(
+                request.settings["output_dir"],
+                str(selected_output / "output"),
+            )
 
     def test_external_action_requires_consent_and_matching_key(self):
         with tempfile.TemporaryDirectory(prefix="processing-external-") as temp:
@@ -569,7 +572,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             worker = WorkerThread(**request.worker_kwargs())
             worker._mode2_process_files()
             after = hashlib.sha256(source.read_bytes()).hexdigest()
-            outputs = list((Path(temp) / "output").glob("source_processed*.png"))
+            outputs = list((Path(temp) / "output").glob("source_ready*.png"))
 
             self.assertEqual(before, after)
             self.assertEqual(len(outputs), 1)
@@ -599,14 +602,14 @@ class V3ProcessingFlowTests(unittest.TestCase):
             worker = WorkerThread(**request.worker_kwargs())
             worker._mode2_process_files()
 
-            outputs = list((root / "output").glob("*_processed*.png"))
+            outputs = list((root / "output").glob("*_ready*.png"))
             after = {
                 path: hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in (readme, sibling)
             }
             self.assertEqual(before, after)
             self.assertEqual(
-                {path.name.split("_processed", 1)[0] for path in outputs},
+                {path.name.split("_ready", 1)[0] for path in outputs},
                 {"README", "sibling"},
             )
 

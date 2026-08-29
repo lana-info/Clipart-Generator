@@ -513,9 +513,10 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
 
             self.assertEqual(order, ["upscale", "unsharp", "remove_bg", "edge_shrink", "trim", "save"])
             outputs = list((temp_path / "output").glob("*.png"))
-            raw_outputs = list(Path(raw_dirs[0]).glob("*.png"))
+            rough_outputs = list((temp_path / "rough").glob("*.png"))
             self.assertEqual(len(outputs), 1)
-            self.assertGreaterEqual(len(raw_outputs), 4)
+            self.assertGreaterEqual(len(rough_outputs), 4)
+            self.assertFalse(Path(raw_dirs[0]).exists())
             with Image.open(outputs[0]) as result:
                 self.assertEqual(result.mode, "RGBA")
                 self.assertNotEqual(result.getchannel("A").getextrema(), (0, 0))

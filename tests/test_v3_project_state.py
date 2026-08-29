@@ -76,6 +76,7 @@ class ProjectRoutesTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
@@ -128,7 +129,7 @@ class ProjectRoutesTests(unittest.TestCase):
         state.switch_mode(ProjectMode.CLIPART)
         self.assertEqual(state.current_step, StepId.PROMPTS)
         self.assertEqual(state.clipart.prompts[0].prompt, "fox")
-        self.assertEqual(state.pinterest.generation.ratio, "9:16")
+        self.assertEqual(state.pinterest.generation.ratio, "2:3")
 
     def test_rejects_a_step_from_another_mode(self):
         state = ProjectState()
@@ -168,8 +169,8 @@ class ProjectSerializationTests(unittest.TestCase):
             draft.to_dict(),
         )
 
-    def test_clean_pinterest_project_uses_only_canonical_pin_state_and_route(self):
-        """A new Pinterest project must not require the removed prompt/content-plan state."""
+    def test_clean_pinterest_project_uses_prompt_only_canonical_state_and_route(self):
+        """A new Pinterest project persists prompts without the future pin workflow."""
         state = ProjectState(mode=ProjectMode.PINTEREST)
         payload = state.to_dict()
 
@@ -178,6 +179,7 @@ class ProjectSerializationTests(unittest.TestCase):
             (
                 StepId.PROJECT,
                 StepId.PROMPTS,
+                StepId.PROMPT_REVIEW,
                 StepId.PIN_FORMAT_MODEL,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
@@ -185,12 +187,12 @@ class ProjectSerializationTests(unittest.TestCase):
         )
         self.assertEqual(
             set(payload["pinterest"]),
-            {"generation", "pin", "results"},
+            {"prompts", "generation", "pin", "results"},
         )
         self.assertNotIn("pinterest_legacy", payload)
 
-    def test_legacy_pinterest_content_plan_migrates_outside_canonical_state(self):
-        """Old drafts retain their source data without letting it reach the Pinterest run state."""
+    def test_legacy_pinterest_extras_are_archived_while_prompts_stay_canonical(self):
+        """Prompt-only drafts keep prompts active and archive removed generator fields."""
         payload = ProjectState(mode=ProjectMode.PINTEREST).to_dict()
         payload["pinterest"].update(
             {
@@ -213,11 +215,14 @@ class ProjectSerializationTests(unittest.TestCase):
         restored = ProjectState.from_dict(payload)
         migrated = restored.to_dict()
 
-        self.assertNotIn("prompts", migrated["pinterest"])
+        self.assertEqual(
+            migrated["pinterest"]["prompts"],
+            [{"prompt": "legacy summer pin", "references": []}],
+        )
         self.assertNotIn("prompt_generator", migrated["pinterest"])
         self.assertEqual(
             migrated["pinterest_legacy"]["prompts"],
-            [{"prompt": "legacy summer pin", "references": []}],
+            [],
         )
 
     def test_pinterest_pin_draft_normalizes_bounds_and_selected_product(self):
