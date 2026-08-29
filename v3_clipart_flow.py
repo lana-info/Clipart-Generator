@@ -1936,7 +1936,6 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         drop_layout.addWidget(mapping_hint)
         self.csv_drop_zone.file_dropped.connect(self._import_csv_file)
         layout.addWidget(self.csv_drop_zone)
-        self._add_prompt_chroma_controls(layout, "csv")
         layout.addStretch(1)
         return widget
 
@@ -1961,14 +1960,6 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             return
         entries = [PromptEntry.from_value(entry) for entry in dialog.get_entries()]
         normalized_entries = [entry for entry in entries if entry is not None]
-        if self.csv_chroma_enabled.isChecked():
-            normalized_entries = [
-                PromptEntry(
-                    prompt=self._prompt_with_chroma(entry.prompt, "csv"),
-                    references=entry.references,
-                )
-                for entry in normalized_entries
-            ]
         if not normalized_entries:
             self.card.set_state("error", "Не найдено ни одной валидной строки CSV")
             return
