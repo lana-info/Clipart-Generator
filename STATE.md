@@ -47,9 +47,12 @@ Preview, zoom, add/remove кисть, reset, атомарный экспорт �
 
 Локальный chroma-key для Clipart теперь добавлен как отдельная CPU-only
 стратегия: prompt generator умеет добавлять инструкции для ровного ключевого
-фона, а processing pipeline удаляет синий/красный/зелёный цвет по tolerance и
-softness без AI и без сетевых расходов. Нужно выполнить ручной UI smoke на
-сложных сериях; Pinterest этим режимом не пользуется.
+фона, а processing pipeline автоматически удаляет синий/красный/зелёный фон
+без tolerance/softness, AI и сетевых расходов. Детальный путь сохраняет
+отверстия, завитки, листья и иголки, сглаживает alpha внутрь контура и подавляет
+цветной ореол. Детерминированные проверки включая JPEG проходят; изолированный
+замер 2048×2048 использует около 399 MiB при лимите 448 MiB. Нужен финальный
+Windows UI smoke на пользовательских сериях; Pinterest этим режимом не пользуется.
 
 Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
 Actions run `33032049521`. Do not publish it as an update before this

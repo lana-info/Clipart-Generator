@@ -41,7 +41,7 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertLessEqual(abs(green - 100), 3)
         self.assertLessEqual(abs(blue - 100), 4)
 
-    def test_automatic_keyer_rejects_key_colored_details_inside_subject(self):
+    def test_automatic_keyer_preserves_small_key_colored_details_inside_subject(self):
         examples = (
             ("blue", (0, 0, 255, 255), (0, 100, 220, 255)),
             ("green", (0, 255, 0, 255), (30, 150, 50, 255)),
@@ -55,10 +55,11 @@ class ChromaKeyTests(unittest.TestCase):
                         image.putpixel((x, y), (185, 185, 185, 255))
                 image.putpixel((7, 7), detail)
 
-                with self.assertRaises(ChromaKeyAmbiguousError):
-                    remove_chroma_key_automatic(image, key_name)
+                result = remove_chroma_key_automatic(image, key_name)
 
-    def test_automatic_keyer_rejects_key_colored_details_on_subject_edge(self):
+                self.assertEqual(result.getpixel((7, 7)), detail)
+
+    def test_automatic_keyer_does_not_block_when_key_color_touches_subject_edge(self):
         examples = (
             ("blue", (0, 0, 255, 255), (0, 100, 220, 255)),
             ("green", (0, 255, 0, 255), (30, 150, 50, 255)),
@@ -74,8 +75,10 @@ class ChromaKeyTests(unittest.TestCase):
                     for x in range(3, 6):
                         image.putpixel((x, y), detail)
 
-                with self.assertRaises(ChromaKeyAmbiguousError):
-                    remove_chroma_key_automatic(image, key_name)
+                result = remove_chroma_key_automatic(image, key_name)
+
+                self.assertEqual(result.getpixel((0, 0))[3], 0)
+                self.assertLess(result.getpixel((4, 7))[3], 255)
 
     def test_automatic_keyer_rejects_broad_interior_background_gradient(self):
         size = 65

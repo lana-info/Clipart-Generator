@@ -17,7 +17,8 @@ KEY_COLORS: Final[dict[str, tuple[int, int, int]]] = {
     "green": (0, 255, 0),
 }
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
-_MAX_AMBIGUOUS_COMPONENTS: Final[int] = 256
+_MAX_AMBIGUOUS_COMPONENT_DENSITY: Final[float] = 0.02
+_MIN_AMBIGUOUS_COMPONENT_LIMIT: Final[int] = 64
 
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
     "watercolor": (
@@ -105,7 +106,7 @@ def remove_chroma_key(
     return source
 
 
-def remove_chroma_key_automatic(
+def _remove_chroma_key_precise(
     image: Image.Image,
     key_color: object = "blue",
 ) -> Image.Image:
@@ -212,12 +213,17 @@ def remove_chroma_key_automatic(
         & (raw_matte < 0.95)
         & (distance_from_key < 200.0)
     )
+    protected_interior_detail = np.zeros(raw_matte.shape, dtype=bool)
     if np.any(ambiguous_band):
         component_count, labels, stats, _ = cv2.connectedComponentsWithStats(
             ambiguous_band.astype(np.uint8),
             connectivity=8,
         )
-        if component_count - 1 > _MAX_AMBIGUOUS_COMPONENTS:
+        component_limit = max(
+            _MIN_AMBIGUOUS_COMPONENT_LIMIT,
+            int(image.width * image.height * _MAX_AMBIGUOUS_COMPONENT_DENSITY),
+        )
+        if component_count - 1 > component_limit:
             raise ChromaKeyAmbiguousError(
                 "Chroma Key фон слишком неоднородный; нужен ровный однотонный фон"
             )
@@ -245,12 +251,16 @@ def remove_chroma_key_automatic(
             component_range = float(np.ptp(local_raw_matte[component]))
             suspicious_edge_detail = (
                 stats[component_id, cv2.CC_STAT_AREA] >= 9
-                and component_range < 0.5
+                and component_range < 0.1
             )
-            if np.any(local_subject & ring) and (enclosed or suspicious_edge_detail):
+            touches_subject = np.any(local_subject & ring)
+            local_protected = protected_interior_detail[y0:y1, x0:x1]
+            if touches_subject and suspicious_edge_detail:
                 raise ChromaKeyAmbiguousError(
                     "Предмет содержит выбранный Chroma Key цвет; выберите другой цвет фона"
                 )
+            if touches_subject and enclosed:
+                local_protected[component] = True
         del (
             component_count,
             labels,
@@ -266,8 +276,12 @@ def remove_chroma_key_automatic(
             local_distance,
             component_range,
             suspicious_edge_detail,
+            touches_subject,
+            local_protected,
         )
     del ambiguous_band
+    raw_matte[protected_interior_detail] = 1.0
+    del protected_interior_detail
     matte = raw_matte.copy()
     matte[distance_from_key >= 200.0] = 1.0
     visible = matte > (1.0 / 255.0)
@@ -324,6 +338,335 @@ def remove_chroma_key_automatic(
         np.rint(matte * 255.0).astype(np.uint8),
     )
     return Image.fromarray(pixels, mode="RGBA")
+
+
+def _blurred_subject_reference(
+    rgb: np.ndarray,
+    subject_mask: np.ndarray,
+    sigma: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return locally averaged subject RGB and its usable reference weight."""
+    mask = subject_mask.astype(np.float32)
+    weight = cv2.GaussianBlur(
+        mask,
+        (0, 0),
+        sigma,
+        borderType=cv2.BORDER_REFLECT,
+    )
+    reference = np.zeros(rgb.shape, dtype=np.float32)
+    usable = weight > 1e-6
+    for channel in range(3):
+        numerator = cv2.GaussianBlur(
+            rgb[..., channel] * mask,
+            (0, 0),
+            sigma,
+            borderType=cv2.BORDER_REFLECT,
+        )
+        np.divide(
+            numerator,
+            weight,
+            out=reference[..., channel],
+            where=usable,
+        )
+    return reference, weight
+
+
+def _fill_far_subject_reference(
+    rgb: np.ndarray,
+    subject_mask: np.ndarray,
+    reference: np.ndarray,
+    reference_weight: np.ndarray,
+) -> None:
+    """Fill pixels without a nearby foreground sample using a wider blur."""
+    use_far = reference_weight < 0.02
+    if not np.any(use_far):
+        return
+    mask = subject_mask.astype(np.float32)
+    far_weight = cv2.GaussianBlur(
+        mask,
+        (0, 0),
+        11.0,
+        borderType=cv2.BORDER_REFLECT,
+    )
+    usable = far_weight > 1e-6
+    for channel in range(3):
+        numerator = cv2.GaussianBlur(
+            rgb[..., channel] * mask,
+            (0, 0),
+            11.0,
+            borderType=cv2.BORDER_REFLECT,
+        )
+        np.divide(numerator, far_weight, out=numerator, where=usable)
+        np.copyto(reference[..., channel], numerator, where=use_far)
+    np.copyto(reference_weight, far_weight, where=use_far)
+
+
+def _remove_chroma_key_staged(
+    image: Image.Image,
+    key_color: object,
+) -> Image.Image:
+    """Robust fallback for detailed subjects and compressed key backgrounds."""
+    requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
+    source = image.convert("RGBA")
+    pixels = np.asarray(source, dtype=np.uint8).copy()
+    rgb = pixels[..., :3].astype(np.float32)
+    height, width = rgb.shape[:2]
+    frame = max(4, int(0.02 * min(width, height)))
+    sides = (
+        rgb[:frame, :, :].reshape(-1, 3),
+        rgb[-frame:, :, :].reshape(-1, 3),
+        rgb[:, :frame, :].reshape(-1, 3),
+        rgb[:, -frame:, :].reshape(-1, 3),
+    )
+    measured_key = np.median(np.concatenate(sides, axis=0), axis=0)
+    key_channel = int(np.argmax(requested_key))
+    if int(np.argmax(measured_key)) != key_channel:
+        raise ChromaKeyAmbiguousError(
+            "Фон по краям не совпадает с выбранным Chroma Key цветом"
+        )
+    other_channels = [index for index in range(3) if index != key_channel]
+    measured_other = max(
+        measured_key[other_channels[0]],
+        measured_key[other_channels[1]],
+    )
+    if measured_key[key_channel] - measured_other < 40.0:
+        raise ChromaKeyAmbiguousError(
+            "Фон по краям не совпадает с выбранным Chroma Key цветом"
+        )
+    side_medians = np.stack([np.median(side, axis=0) for side in sides])
+    if float(np.max(np.linalg.norm(side_medians - measured_key, axis=1))) > 30.0:
+        raise ChromaKeyAmbiguousError(
+            "Chroma Key фон неоднородный; нужен ровный однотонный фон"
+        )
+    del sides, side_medians, requested_key
+
+    dominant = rgb[..., key_channel]
+    other = np.maximum(
+        rgb[..., other_channels[0]],
+        rgb[..., other_channels[1]],
+    )
+    key_ratio = measured_key[key_channel] / max(measured_other, 1.0)
+    background_ratio = float(np.clip(0.75 * key_ratio, 1.65, 2.7))
+    hard_background = (dominant >= background_ratio * other) & (dominant >= 55.0)
+    confident_subject = (~hard_background) & (dominant <= 1.2 * other + 10.0)
+    transition = ~hard_background & ~confident_subject
+
+    distance_from_background = cv2.distanceTransform(
+        (~hard_background).astype(np.uint8),
+        cv2.DIST_L2,
+        3,
+    )
+    promoted = (
+        transition
+        & (distance_from_background > 6.0)
+        & (dominant <= 1.7 * other + 10.0)
+    )
+    confident_subject |= promoted
+    del distance_from_background, promoted
+
+    bright_background = hard_background & (dominant >= 145.0)
+    background_density = cv2.blur(
+        bright_background.astype(np.float32),
+        (41, 41),
+    )
+    dark_detail = (
+        (np.max(rgb, axis=2) < 58.0)
+        & ~confident_subject
+        & (background_density > 0.32)
+    )
+    dark_halo = None
+    if np.any(dark_detail):
+        confident_subject |= dark_detail
+        dark_halo = cv2.dilate(
+            dark_detail.astype(np.uint8),
+            np.ones((3, 3), dtype=np.uint8),
+            iterations=2,
+        ).astype(bool)
+        hard_background &= ~dark_halo
+    transition = ~hard_background & ~confident_subject
+    del bright_background, background_density, dark_detail
+    if dark_halo is not None:
+        del dark_halo
+
+    if not np.any(confident_subject):
+        background_distance = np.linalg.norm(rgb - measured_key, axis=2)
+        if float(np.percentile(background_distance, 90)) > 15.0:
+            raise ChromaKeyAmbiguousError(
+                "Chroma Key фон неоднородный; нужен ровный однотонный фон"
+            )
+
+    del hard_background
+    reference, reference_weight = _blurred_subject_reference(
+        rgb,
+        confident_subject,
+        3.0,
+    )
+    _fill_far_subject_reference(
+        rgb,
+        confident_subject,
+        reference,
+        reference_weight,
+    )
+    has_reference = reference_weight >= 0.005
+
+    alpha = np.zeros((height, width), dtype=np.float32)
+    alpha[confident_subject] = 1.0
+    del confident_subject
+    key_length = float(np.dot(measured_key, measured_key))
+    key_separation = max(measured_key[key_channel] - measured_other, 1.0)
+    tile_size = 512
+    for y0 in range(0, height, tile_size):
+        y1 = min(y0 + tile_size, height)
+        for x0 in range(0, width, tile_size):
+            x1 = min(x0 + tile_size, width)
+            tile = np.s_[y0:y1, x0:x1]
+            tile_transition = transition[tile]
+            solved = tile_transition & has_reference[tile]
+            if np.any(solved):
+                tile_rgb = rgb[tile]
+                tile_reference = reference[tile]
+                source_color = tile_rgb[solved]
+                foreground_color = tile_reference[solved]
+                foreground_length = np.sum(
+                    foreground_color * foreground_color,
+                    axis=1,
+                )
+                foreground_key = foreground_color @ measured_key
+                source_foreground = np.sum(
+                    source_color * foreground_color,
+                    axis=1,
+                )
+                source_key = source_color @ measured_key
+                determinant = (
+                    foreground_length * key_length
+                    - foreground_key * foreground_key
+                )
+                stable = determinant > 1e-3 * (
+                    foreground_length * key_length + 1e-6
+                )
+                subject_amount = np.empty(len(source_color), dtype=np.float32)
+                background_amount = np.empty(len(source_color), dtype=np.float32)
+                subject_amount[stable] = (
+                    source_foreground[stable] * key_length
+                    - source_key[stable] * foreground_key[stable]
+                ) / determinant[stable]
+                background_amount[stable] = (
+                    source_key[stable] * foreground_length[stable]
+                    - source_foreground[stable] * foreground_key[stable]
+                ) / determinant[stable]
+                dominance_alpha = 1.0 - np.clip(
+                    (
+                        source_color[:, key_channel]
+                        - np.maximum(
+                            source_color[:, other_channels[0]],
+                            source_color[:, other_channels[1]],
+                        )
+                    )
+                    / key_separation,
+                    0.0,
+                    1.0,
+                )
+                subject_amount[~stable] = dominance_alpha[~stable]
+                background_amount[~stable] = 1.0 - subject_amount[~stable]
+                np.clip(subject_amount, 0.0, 1.0, out=subject_amount)
+                np.clip(background_amount, 0.0, 1.5, out=background_amount)
+                tile_alpha = alpha[tile]
+                tile_alpha[solved] = subject_amount
+                tile_rgb[solved] = (
+                    source_color
+                    - background_amount[:, None] * measured_key[None, :]
+                ) / np.maximum(subject_amount[:, None], 0.05)
+            unsolved = tile_transition & ~has_reference[tile]
+            if np.any(unsolved):
+                tile_alpha = alpha[tile]
+                tile_dominant = dominant[tile]
+                tile_other = other[tile]
+                tile_alpha[unsolved] = 1.0 - np.clip(
+                    (tile_dominant[unsolved] - tile_other[unsolved])
+                    / key_separation,
+                    0.0,
+                    1.0,
+                )
+    del transition, has_reference, reference_weight, dominant, other
+
+    soft_edge = (alpha > 0.0) & (alpha < 0.999)
+    edge_ring = cv2.dilate(
+        soft_edge.astype(np.uint8),
+        np.ones((3, 3), dtype=np.uint8),
+        iterations=max(8, min(height, width) // 128),
+    ).astype(bool) & (alpha > 0.0)
+    del soft_edge
+    for y0 in range(0, height, tile_size):
+        y1 = min(y0 + tile_size, height)
+        for x0 in range(0, width, tile_size):
+            x1 = min(x0 + tile_size, width)
+            tile = np.s_[y0:y1, x0:x1]
+            tile_edge = edge_ring[tile]
+            if not np.any(tile_edge):
+                continue
+            tile_reference = reference[tile]
+            reference_other = np.maximum(
+                tile_reference[..., other_channels[0]],
+                tile_reference[..., other_channels[1]],
+            )
+            reference_ratio = np.clip(
+                tile_reference[..., key_channel]
+                / np.maximum(reference_other, 1.0),
+                0.05,
+                1.2,
+            )
+            tile_rgb = rgb[tile]
+            current_other = np.maximum(
+                tile_rgb[..., other_channels[0]],
+                tile_rgb[..., other_channels[1]],
+            )
+            spill = np.maximum(
+                tile_rgb[..., key_channel]
+                - (0.84 * reference_ratio * current_other + 2.0),
+                0.0,
+            )
+            tile_rgb[..., key_channel][tile_edge] -= spill[tile_edge]
+            for channel in other_channels:
+                tile_rgb[..., channel][tile_edge] += 0.12 * spill[tile_edge]
+    del edge_ring, reference
+
+    alpha = np.where(alpha < 0.025, 0.0, (alpha - 0.025) / 0.975)
+    alpha = np.clip(alpha, 0.0, 1.0)
+    smoothed_alpha = cv2.GaussianBlur(
+        alpha,
+        (0, 0),
+        0.36,
+        borderType=cv2.BORDER_REFLECT,
+    )
+    np.minimum(alpha, smoothed_alpha, out=alpha)
+    del smoothed_alpha
+    pixels[..., :3] = np.rint(np.clip(rgb, 0.0, 255.0)).astype(np.uint8)
+    pixels[..., 3] = np.minimum(
+        pixels[..., 3],
+        np.rint(alpha * 255.0).astype(np.uint8),
+    )
+    return Image.fromarray(pixels, mode="RGBA")
+
+
+def remove_chroma_key_automatic(
+    image: Image.Image,
+    key_color: object = "blue",
+) -> Image.Image:
+    """Remove a generated key background without user-tuned thresholds."""
+    if not isinstance(image, Image.Image):
+        raise TypeError("image must be a PIL image")
+    if image.width < 1 or image.height < 1:
+        raise ValueError("image dimensions must be positive")
+    try:
+        result = _remove_chroma_key_precise(image, key_color)
+    except ChromaKeyAmbiguousError:
+        # Leave the exception scope before starting the fallback. Otherwise its
+        # traceback keeps the precise engine's large NumPy arrays alive while
+        # the staged engine allocates its own working buffers.
+        pass
+    else:
+        return result
+    return _remove_chroma_key_staged(image, key_color)
 
 
 def chroma_key_prompt_block(
