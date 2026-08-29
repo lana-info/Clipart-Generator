@@ -33,7 +33,7 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         preserves_alpha=False,
         output_formats=("png", "jpeg", "webp"),
         price_note="Ideogram V3 price tier is selected by request parameters",
-        parameter_names=("prompt", "image_size", "rendering_speed", "num_images", "seed"),
+        parameter_names=("prompt", "aspect_ratio", "rendering_speed", "num_images", "seed"),
     ),
     FalEndpointProfile(
         model_id="fal-ai/ideogram/v3/generate-transparent",
@@ -42,7 +42,7 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         preserves_alpha=True,
         output_formats=("png",),
         price_note="Ideogram Transparent price tier is selected by request parameters",
-        parameter_names=("prompt", "image_size", "rendering_speed", "num_images", "seed"),
+        parameter_names=("prompt", "aspect_ratio", "rendering_speed", "num_images", "seed"),
     ),
     FalEndpointProfile(
         model_id="fal-ai/bria/background/remove",

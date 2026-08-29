@@ -105,6 +105,41 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(calls["request_id"], "fal-request-1")
         self.assertEqual(calls["request"].provider_id, "fal")
 
+    def test_ideogram_generation_sends_selected_aspect_ratio(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            kie_settings(
+                fal_api_key="fal-test-secret",
+                text_generation_model="fal-ai/ideogram/v3",
+                text_generation_ratio="3:4",
+            ),
+            generated_prompts=[{"prompt": "a flower", "references": []}],
+        )
+        calls = {}
+
+        class FakeFalClient:
+            def __init__(self, _config):
+                pass
+
+            def submit_task(self, request):
+                calls["request"] = request
+                return {"request_id": "fal-request-ideogram"}
+
+            def wait_for_result(self, request_id, **_kwargs):
+                return {
+                    "request_id": request_id,
+                    "result": {"images": [{"url": "https://cdn.example/flower.png"}]},
+                }
+
+        with patch.object(main, "FalClient", FakeFalClient):
+            worker._kie_generate_image("a flower")
+
+        self.assertEqual(
+            calls["request"].input_payload,
+            {"prompt": "a flower", "aspect_ratio": "3:4"},
+        )
+
     def test_fal_generation_honors_explicit_unconfirmed_cost_gate(self):
         worker = main.WorkerThread(
             "mode1_generate_only",

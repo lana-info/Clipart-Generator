@@ -91,6 +91,7 @@ from fal_provider import (
     fal_image_data_uri,
     fal_image_url,
 )
+from fal_model_catalog import fal_endpoint_profile
 from provider_contract import ProviderTaskRequest
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
@@ -4280,11 +4281,16 @@ class WorkerThread(QThread):
                 timeout_seconds=max(10.0, float(self.timeout)),
             )
         )
+        payload = {"prompt": str(prompt or "")}
+        profile = fal_endpoint_profile(model_id, "generation")
+        if "aspect_ratio" in profile.parameter_names:
+            ratio, _ = self._get_generation_profile(False)
+            payload["aspect_ratio"] = ratio
         request = ProviderTaskRequest(
             provider_id="fal",
             operation="generation",
             model_id=model_id,
-            input_payload={"prompt": str(prompt or "")},
+            input_payload=payload,
         )
         submitted = client.submit_task(request)
         request_id = str(submitted.get("request_id") or "").strip()

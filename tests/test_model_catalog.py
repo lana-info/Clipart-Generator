@@ -13,9 +13,14 @@ from model_catalog import (
 
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_ideogram_models_are_visible_fal_generation_choices(self):
+        for model_id in ("fal-ai/ideogram/v3", "fal-ai/ideogram/v3/generate-transparent"):
+            self.assertIn(model_id, VISIBLE_GENERATION_MODEL_IDS)
+            self.assertTrue(model_spec(model_id).label.startswith("Fal.ai — Ideogram"))
+
     def test_catalog_is_immutable_and_preserves_visible_snapshot(self):
-        self.assertEqual(len(GENERATION_MODELS), 26)
-        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 11)
+        self.assertEqual(len(GENERATION_MODELS), 28)
+        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 13)
         self.assertEqual(model_spec("gpt-image-2").resolutions, {"1K", "2K", "4K"})
         with self.assertRaises(TypeError):
             MODEL_SPECS["new-model"] = model_spec("gpt-image-2")
