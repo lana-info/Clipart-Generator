@@ -429,8 +429,8 @@ Dependencies: Task 5 and shared prompt workspace. Scope: M. Requirements:
 
 ## Task 12: Добавить безопасный Fal.ai concurrency
 
-Status: Todo — Fal connection/key/balance already verified; implement approved
-1/2/3 selector with default 3. KIE/PhotoRoom already covered
+Status: Done — implementation `40e78bc` on
+`codex/feat-3.1-fal-concurrency`; Fal connection/key/balance flow unchanged
 
 Goal:
 Расширить provider-specific scheduler без опасного общего значения `35`.
@@ -443,15 +443,21 @@ Steps:
 - Проверить 429/backoff/stop admission/per-item mapping network-free tests.
 
 Acceptance:
-- [ ] Лимит одного provider не меняет другой.
-- [ ] Все операции provider делят один лимит и stop gate.
-- [ ] Значение выше 3 нельзя выбрать/восстановить; default Fal равен 3.
-- [ ] HTTP 429 ограниченно повторяется и не приводит к потере очереди.
+- [x] Лимит одного provider не меняет другой.
+- [x] Все операции provider делят один лимит и stop gate.
+- [x] Значение выше 3 нельзя выбрать/восстановить; default Fal равен 3.
+- [x] HTTP 429 ограниченно повторяется и не приводит к потере очереди.
 
 Verification:
-- [ ] Network-free scheduler tests для Fal 1/2/3, общего cap 6, 429 и stop.
-- [ ] Paid smoke не является обязательным для completion/release и запускается
+- [x] Network-free scheduler tests для Fal 1/2/3, общего cap 6, 429 и stop.
+- [x] Paid smoke не является обязательным для completion/release и запускается
   только отдельной командой владельца.
+
+Evidence: 135 focused tests и 23 subtests прошли; `py_compile`,
+`git diff --check`, tracked-sensitive-artifact guard и независимый review
+прошли. Реальный платный вызов не выполнялся; 429/backoff/stop проверены
+детерминированными network-free tests. Offscreen screenshot подтвердил
+отдельную строку `Одновременных задач Fal.ai` со значением 3.
 
 Dependencies: existing Fal provider contract. Scope: M.
 Requirements: `CG31-FR-050`, `CG31-FR-051`.

@@ -63,9 +63,13 @@ registry blue/red/green, legacy custom/tolerance/softness в worker не поп�
 Task 11 завершён на ветке `codex/feat-3.1-batch-prompt-edit`, commit `ef56eb6`:
 modal preview поддерживает произвольный selection/всю серию, показывает
 no-match rows, защищает references/order и system Chroma Key suffix, а также
-даёт один безопасный undo. Следующий пункт по порядку — Task 12: добавить
-Fal.ai concurrency selector 1/2/3 с default 3, сохранив общий remote cap 6 и
-существующие проверки key/connection/balance.
+даёт один безопасный undo. Task 12 завершён на ветке
+`codex/feat-3.1-fal-concurrency`, commit `40e78bc`: добавлен отдельный selector
+Fal.ai 1/2/3 с default 3, общий remote cap остался 6, а POST безопасно
+повторяется только при 429 и проходит stop admission перед каждой попыткой.
+Следующий пункт по порядку — Task 14: сохранить работу ранее подтверждённой
+лицензии при временной недоступности сервера. До source/UI нужен утверждённый
+offline grace period и, если меняется видимый экран, утверждённый mockup.
 
 Release 3.0.7 и development 3.1 разделены:
 
