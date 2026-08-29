@@ -64,19 +64,18 @@ passes 57 tests; the complete offline suite passes 950 tests, 56 intentional
 skips, 2 deselected and 127 subtests. Compilation and tracked sensitive-artifact
 scan pass.
 
-Task 13 source integration is complete at `dd01703`. Next: integrate the
-verified Task 15 checkpoint, then perform manual Windows acceptance for the
-image/mask editor, output/rough paths, chroma quality and offline-license
-startup/run. Version bump, installer build and publication remain separate
-actions and are not yet authorized.
+Task 13 source integration is complete at `ea57e12` (including the verified
+Task 15 checkpoint). Next is manual Windows acceptance for the image/mask
+editor, output/rough paths, chroma quality and offline-license startup/run.
+Version bump, installer build and publication remain separate actions and are
+not yet authorized.
 
 Task 15 adds the approved compact «Что нового» block to the signed update
-prompt on `codex/update-release-notes`. It does not add any network request:
-it displays the existing manifest `notes` as plain text, hides when empty, and
-keeps long text scrollable. Focused update tests and the full offline suite
-pass (954 passed, 56 intentional skips, 2 deselected, 127 subtests); the branch
-is ready for fast-forward integration into `develop/3.1` before the remaining
-Windows acceptance.
+prompt and is integrated in `develop/3.1` at `ea57e12`. It does not add any
+network request: it displays the existing manifest `notes` as plain text, hides
+when empty, and keeps long text scrollable. Focused update tests and the full
+offline suite pass (954 passed, 56 intentional skips, 2 deselected, 127
+subtests).
 
 Regression suite для накопленного 3.1 checkpoint синхронизирован с текущими
 контрактами: prompt-only Pinterest, `output/rough`, имена `*_ready` и версия

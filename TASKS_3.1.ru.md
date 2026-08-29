@@ -516,8 +516,8 @@ Requirements: `CG31-FR-060`–`CG31-FR-062`.
 
 ## Task 15: Показать описание изменений при обновлении
 
-Status: Done in source — visual approved 2026-08-29; integration follows the
-verified checkpoint
+Status: Done — visual approved 2026-08-29; integrated in `develop/3.1` at
+`ea57e12`
 
 Goal:
 Показывать пользователю краткое описание изменений новой версии до решения о
@@ -543,7 +543,7 @@ Dependencies: existing V3 signed update client. Scope: S.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: In progress — source integrated into `develop/3.1` at `dd01703`; full
+Status: In progress — source integrated into `develop/3.1` at `ea57e12`; full
 VDS verification passes, Windows acceptance and release preparation remain
 
 Goal:
@@ -566,11 +566,11 @@ Verification:
 - [ ] History/merge-base audit and full VDS tests pass; Windows checklist
   remains.
 
-Evidence: `develop/3.1` fast-forwarded from `78f8c63` to `dd01703` without
-conflicts and was pushed to GitHub. Post-integration verification: 950 passed,
-56 intentional skips, 2 deselected, 127 subtests; `py_compile` and tracked
-sensitive-artifact scan pass. No paid request, installer build or publication
-was started.
+Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
+`ea57e12` without conflicts and was pushed to GitHub. Post-integration
+verification: 954 passed, 56 intentional skips, 2 deselected, 127 subtests;
+`py_compile` and tracked sensitive-artifact scan pass. No paid request,
+installer build or publication was started.
 
 Dependencies: Tasks 1–12, 14. Scope: M.
 
