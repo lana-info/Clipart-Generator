@@ -146,7 +146,11 @@ Goal:
 исходного текста.
 
 Steps:
-- Разместить общий control внизу трёх prompt sources.
+- Разместить общий control и утверждённый compact helper во всех трёх prompt
+  sources: series, ready multiline prompt и CSV.
+- Сразу после цветовых buttons разместить multi-select материалов и деталей;
+  helper справа содержит только порядок выбора blue/red/green и короткое
+  пояснение про автоматические material clauses.
 - Записывать modifier/color в metadata каждого создаваемого `PromptEntry` и
   показывать final preview.
 - Обновлять существующий block при смене цвета без duplicate.
@@ -158,14 +162,18 @@ Acceptance:
 - [ ] Modifier off by default, существует только в Clipart и допускает разные
   colors у entries одной batch.
 - [ ] Blue/red/green templates используют правильные name/HEX.
+- [ ] `Акварель`, `Тонкие листья`, `Хвоя`, `Металл`, `Лента / сатин`,
+  `Прозрачные детали`, `Снег / лёд` добавляют только свои clauses; отсутствие
+  выбора даёт base chroma block.
+- [ ] Helper compact, не повторяет selectors и не содержит технических
+  объяснений. Approved visual: `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`.
 - [ ] Pinterest/Processing prompt UI не получает control.
 
 Verification:
 - [ ] Render/update/no-duplicate unit tests.
 - [ ] Offscreen tests трёх источников и двух исключённых modes.
 
-Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`,
-`CG31-FR-003`.
+Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 
 ## Task 6: Разделить `rough` и `output` и нормализовать имена
 

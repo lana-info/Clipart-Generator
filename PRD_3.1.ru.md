@@ -87,12 +87,29 @@ PRD Key: `CG31-PRD-001`
   порядок не меняются, одна массовая операция отменяется целиком. Редактируется
   только user-authored text; system chroma metadata/rendered block не является
   целью find/replace и не дублируется при prepend/append.
+- `CG31-FR-005` — во всех трёх источниках Clipart prompt используется один
+  утверждённый compact Chroma Key UI: многострочное поле prompt, checkbox
+  `Добавить Chroma Key-блок в конец промпта`, только три кнопки цвета и кнопка
+  `Добавить промпт`. Сразу после выбора цвета остаётся multi-select
+  `Материалы и детали`: `Акварель`, `Тонкие листья`, `Хвоя`, `Металл`,
+  `Лента / сатин`, `Прозрачные детали`, `Снег / лёд`. Выбор добавляет только
+  подходящие clauses к chroma block; если ничего не выбрано, добавляется
+  базовый block.
+- `CG31-FR-006` — справа от Clipart prompt UI остаётся компактный сворачиваемый
+  `Помощник чистого фона`: сначала три короткие подсказки по цветам (blue для
+  обычных объектов и растений, red для blue/purple subject, green при
+  конфликте первых двух), затем одно пояснение, что нужные материалы и детали
+  выбираются слева и автоматически добавляют фразу. В помощнике нет длинных
+  описаний алгоритмов, повторных controls или preview.
 
 Утверждённый синий шаблон; для red/green меняются только название и HEX:
 
 ```text
 Isolated on a completely flat, uniform, solid pure blue (#0000FF) digital chroma-key background. The background fills the image edge to edge with no gradient and stays fully bright inside every gap and opening. No reflection, tint, shadow, glow, haze or color spill on the subject. Crisp hard edges, everything in sharp focus, the complete subject centered with at least 10% empty margin, nothing cropped, no text, no watermark, no stray fragments.
 ```
+
+Утверждённый экран и его состояния для Task 5:
+[`docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`](docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png).
 
 ### Общий редактор обработки
 

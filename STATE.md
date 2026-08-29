@@ -78,6 +78,10 @@ Release 3.0.7 и development 3.1 разделены:
   `Макет утверждён`, только после этого source code. После реализации реальные
   screenshots сравниваются с макетом; PRD approval сам по себе UI не утверждает;
 - chroma использует только pure blue/green/red без custom/HEX/eyedropper;
+- Task 5 Chroma Key UI approved: compact helper справа, сначала короткие
+  подсказки blue/red/green, затем пояснение про materials; material buttons
+  остаются слева сразу после выбора цвета. Approved mockup:
+  `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`;
 - промежуточные файлы идут в `rough/`, готовые `_ready` — в `output/`;
 - текущий встроенный Results mask editor не принят: требуется отдельная страница
   проверки, presets масштаба, видимый continuous brush и hardness;
