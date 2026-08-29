@@ -3,9 +3,16 @@
 ## Branches
 
 - `develop/3.0` is the development and integration branch.
+- `codex/fix-pinterest-prompt-only` at the verified 3.0.7 checkpoint remains
+  the frozen source candidate until it is explicitly integrated/released.
+- After 3.0.7 is frozen and the owner approves the transition, create
+  `develop/3.1` from the exact published 3.0.7 commit. All 3.1 implementation
+  branches must start from current `develop/3.1`, not from an older 3.0 task
+  branch. The 3.1 PRD/docs alone do not authorize this branch creation.
 - `release/3.x` is the stabilization branch for release preparation.
 - `main` is not part of routine 3.0 development.
-- Create task branches from the current `develop/3.0`:
+- Create task branches from the current development branch for the target
+  release (`develop/3.0` now; `develop/3.1` only after the approved transition):
   - `codex/fix-*` for bug fixes;
   - `codex/ui-*` for visual or usability changes;
   - `codex/license-*` for licensing and registration;
@@ -23,7 +30,8 @@
   explicit user approval.
 - Never dispatch GitHub Actions or start local/GitHub builds without a separate
   explicit user command. An ordinary push must not trigger a build workflow.
-- Merge completed task branches into `develop/3.0` one at a time and verify after each merge.
+- Merge completed task branches into the active target development branch one
+  at a time and verify after each merge.
 - Update `release/3.x` only after the candidate is stable and explicitly approved.
 
 ## Important project boundaries

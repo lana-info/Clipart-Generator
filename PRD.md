@@ -151,6 +151,11 @@ Structured hidden-marker result contract: [`PIXEL_WATERMARK_STATUS_CONTRACT.md`]
 
 ## Next Product Phase: Prompt Quality, Localization, and Fal.ai
 
+Version 3.0.7 freezes the implemented baseline described by this historical
+section. For the next release, `PRD_3.1.ru.md` is the authoritative product
+delta and `TASKS_3.1.ru.md` is the implementation order; where they conflict
+with this section, the 3.1 documents take precedence.
+
 This section defines the next implementation phase after the current 3.0
 stabilization. It does not expand the current release promise and does not
 authorize Patterns, mockups, invitations, Canva export, or modular licensing.
