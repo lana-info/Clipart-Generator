@@ -176,6 +176,160 @@ def install_fake_file_io(worker, saved=None):
 
 
 class ParallelGenerationTests(unittest.TestCase):
+    def test_fal_provider_limit_one_two_and_three_are_enforced(self):
+        for limit in (1, 2, 3):
+            with self.subTest(limit=limit):
+                worker = main.WorkerThread(
+                    "mode2_process",
+                    ".",
+                    {"fal_api_key": "fal-key", "fal_concurrency": limit},
+                )
+                lock = threading.Lock()
+                active = 0
+                maximum = 0
+
+                def hold_fal_slot():
+                    nonlocal active, maximum
+                    with worker._provider_lease("fal"):
+                        with lock:
+                            active += 1
+                            maximum = max(maximum, active)
+                        time.sleep(0.03)
+                        with lock:
+                            active -= 1
+
+                with ThreadPoolExecutor(max_workers=6) as executor:
+                    futures = [executor.submit(hold_fal_slot) for _ in range(6)]
+                    for future in futures:
+                        future.result(timeout=2)
+
+                self.assertEqual(maximum, limit)
+
+    def test_remote_worker_limit_uses_actual_fal_generation_limit_and_global_cap(self):
+        fal_generation = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            {
+                "fal_api_key": "fal-key",
+                "fal_concurrency": 2,
+                "kie_concurrency": 1,
+                "text_generation_model": "fal-ai/flux/schnell",
+            },
+            generated_prompts=[{"prompt": "flower", "references": []}],
+        )
+        all_providers = main.WorkerThread(
+            "mode2_process",
+            ".",
+            {
+                "kie_concurrency": 3,
+                "photoroom_concurrency": 3,
+                "fal_concurrency": 3,
+                "upscale": True,
+                "upscale_provider": "kie",
+                "remove_bg": True,
+                "remove_bg_provider": "photoroom",
+                "upscale_after": True,
+                "upscale_after_provider": "fal",
+            },
+        )
+
+        self.assertEqual(
+            fal_generation._remote_worker_limit(
+                include_generation=True,
+                include_processing=False,
+            ),
+            2,
+        )
+        self.assertEqual(all_providers._remote_worker_limit(), 6)
+
+    def test_fal_generation_preserves_per_item_mapping_under_parallel_load(self):
+        with tempfile.TemporaryDirectory(prefix="parallel-fal-generation-") as temp_dir:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp_dir,
+                {
+                    "fal_api_key": "fal-key",
+                    "fal_concurrency": 3,
+                    "text_generation_model": "fal-ai/flux/schnell",
+                    "fal_cost_confirmed": True,
+                },
+                generated_prompts=[
+                    {"prompt": f"prompt-{index}", "references": []}
+                    for index in range(1, 7)
+                ],
+            )
+            lock = threading.Lock()
+            active = 0
+            maximum = 0
+            request_items = {}
+            saved = []
+            item_events = []
+            worker.item_progress.connect(item_events.append)
+
+            class FakeFalClient:
+                def __init__(self, config):
+                    self.config = config
+
+                def submit_task(self, request):
+                    nonlocal active, maximum
+                    item_index = worker._diagnostic_context.item_index
+                    request_id = f"fal-{item_index}"
+                    with lock:
+                        active += 1
+                        maximum = max(maximum, active)
+                        request_items[request_id] = item_index
+                    return {"request_id": request_id}
+
+                def wait_for_result(self, request_id, **_kwargs):
+                    nonlocal active
+                    time.sleep(0.03)
+                    with lock:
+                        active -= 1
+                    return {
+                        "request_id": request_id,
+                        "result": {
+                            "images": [
+                                {
+                                    "url": (
+                                        "https://cdn.example/"
+                                        f"{request_items[request_id]}.png"
+                                    )
+                                }
+                            ]
+                        },
+                    }
+
+            install_fake_file_io(worker, saved)
+            with patch.object(main, "FalClient", FakeFalClient):
+                worker._mode1_generate(process_generated=False, emit_final=False)
+
+            succeeded = {
+                event["item_index"]
+                for event in item_events
+                if event.get("status") == "succeeded"
+            }
+            self.assertEqual(maximum, 3)
+            self.assertEqual(succeeded, set(range(1, 7)))
+            self.assertEqual(len(saved), 6)
+
+    def test_stop_gate_blocks_fal_submit_before_network_send(self):
+        worker = main.WorkerThread(
+            "mode1_generate_only",
+            ".",
+            {
+                "fal_api_key": "fal-key",
+                "text_generation_model": "fal-ai/flux/schnell",
+                "fal_cost_confirmed": True,
+            },
+        )
+        worker.request_stop_after_current()
+
+        with patch("fal_provider.urllib.request.build_opener") as opener:
+            with self.assertRaises(main.ProcessingCancelled):
+                worker._fal_generate_image("a flower", "fal-ai/flux/schnell")
+
+        opener.assert_not_called()
+
     def _failed_reference_read_message(self, temp_dir, reference_path, private_path):
         private_prompt = "private path prompt"
         api_key = "private-path-api-key"

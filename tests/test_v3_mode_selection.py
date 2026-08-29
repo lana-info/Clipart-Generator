@@ -188,7 +188,13 @@ class V3ModeSelectionTests(unittest.TestCase):
             draft_path = Path(temp) / "project_state.json"
             preferences_path = Path(temp) / "preferences.json"
             preferences_path.write_text(
-                json.dumps({"kie_concurrency": 10, "photoroom_concurrency": 2}),
+                json.dumps(
+                    {
+                        "kie_concurrency": 10,
+                        "photoroom_concurrency": 2,
+                        "fal_concurrency": 35,
+                    }
+                ),
                 encoding="utf-8",
             )
 
@@ -197,11 +203,13 @@ class V3ModeSelectionTests(unittest.TestCase):
                 runtime_settings_provider=lambda: {
                     "kie_concurrency": 1,
                     "photoroom_concurrency": 1,
+                    "fal_concurrency": 1,
                 },
             )
 
             self.assertEqual(view._runtime_settings()["kie_concurrency"], 3)
             self.assertEqual(view._runtime_settings()["photoroom_concurrency"], 2)
+            self.assertEqual(view._runtime_settings()["fal_concurrency"], 3)
             view.close()
             view.deleteLater()
 

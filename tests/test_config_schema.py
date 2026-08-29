@@ -45,6 +45,19 @@ class ConfigSchemaTests(unittest.TestCase):
             path.write_text('{"schema_version": 1,', encoding="utf-8")
             self.assertEqual(load_preferences(path)["schema_version"], PREFERENCES_SCHEMA_VERSION)
 
+    def test_provider_concurrency_preferences_preserve_all_three_providers(self):
+        migrated = migrate_preferences(
+            {
+                "kie_concurrency": 1,
+                "photoroom_concurrency": 2,
+                "fal_concurrency": 3,
+            }
+        )
+
+        self.assertEqual(migrated["kie_concurrency"], 1)
+        self.assertEqual(migrated["photoroom_concurrency"], 2)
+        self.assertEqual(migrated["fal_concurrency"], 3)
+
     def test_output_dir_preserves_configured_path_with_writable_parent(self):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)

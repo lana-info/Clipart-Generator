@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 import urllib.error
+from io import BytesIO
 from unittest.mock import patch
 
 from fal_provider import (
@@ -61,6 +62,9 @@ class FalProviderTests(unittest.TestCase):
             "fal-secret",
             repr(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell")),
         )
+
+    def test_config_can_guard_each_paid_submit_attempt(self):
+        self.assertIn("before_paid_submit", FalConfig.__dataclass_fields__)
 
     def test_status_kind_maps_queue_lifecycle_and_cancel_states(self):
         self.assertEqual(fal_status_kind({"status": "IN_QUEUE"}), "queued")
@@ -162,6 +166,106 @@ class FalProviderTests(unittest.TestCase):
             with self.assertRaises(FalProviderError):
                 client.submit({"prompt": "a fox"})
         self.assertEqual(opener.calls, 1)
+
+    def test_paid_submit_is_not_retried_after_ambiguous_network_failure(self):
+        class FailingOpener:
+            calls = 0
+
+            def open(self, _request, timeout):
+                self.calls += 1
+                raise urllib.error.URLError("connection lost")
+
+        opener = FailingOpener()
+        client = FalClient(
+            FalConfig(
+                api_key="fal-secret",
+                model_id="fal-ai/flux/schnell",
+                max_retries=2,
+                retry_backoff_seconds=0,
+            )
+        )
+        with patch("fal_provider.urllib.request.build_opener", return_value=opener):
+            with self.assertRaises(FalProviderError):
+                client.submit({"prompt": "a fox"})
+
+        self.assertEqual(opener.calls, 1)
+
+    def test_paid_submit_retries_only_http_429_with_bounded_admission_checks(self):
+        class RateLimitedOnce:
+            def __init__(self):
+                self.calls = 0
+
+            def open(self, _request, timeout):
+                self.calls += 1
+                if self.calls == 1:
+                    raise urllib.error.HTTPError(
+                        "https://queue.fal.run",
+                        429,
+                        "rate limited",
+                        {},
+                        BytesIO(b'{"detail":"slow down"}'),
+                    )
+                return _Response({"request_id": "req-after-429"})
+
+        opener = RateLimitedOnce()
+        admissions = []
+        client = FalClient(
+            FalConfig(
+                api_key="fal-secret",
+                model_id="fal-ai/flux/schnell",
+                max_retries=2,
+                retry_backoff_seconds=0,
+                before_paid_submit=lambda: admissions.append(True),
+            )
+        )
+
+        with patch("fal_provider.urllib.request.build_opener", return_value=opener):
+            result = client.submit({"prompt": "a fox"})
+
+        self.assertEqual(result["request_id"], "req-after-429")
+        self.assertEqual(opener.calls, 2)
+        self.assertEqual(admissions, [True, True])
+
+    def test_stop_gate_prevents_network_retry_after_fal_http_429(self):
+        class AlwaysRateLimited:
+            def __init__(self):
+                self.calls = 0
+
+            def open(self, _request, timeout):
+                self.calls += 1
+                raise urllib.error.HTTPError(
+                    "https://queue.fal.run",
+                    429,
+                    "rate limited",
+                    {},
+                    BytesIO(b"{}"),
+                )
+
+        opener = AlwaysRateLimited()
+        admission_count = 0
+
+        def stop_before_second_attempt():
+            nonlocal admission_count
+            admission_count += 1
+            if admission_count == 2:
+                raise RuntimeError("stopped before retry")
+
+        client = FalClient(
+            FalConfig(
+                api_key="fal-secret",
+                model_id="fal-ai/flux/schnell",
+                max_retries=2,
+                retry_backoff_seconds=0,
+                before_paid_submit=stop_before_second_attempt,
+            )
+        )
+
+        with patch("fal_provider.urllib.request.build_opener", return_value=opener):
+            with self.assertRaisesRegex(RuntimeError, "stopped before retry"):
+                client.submit({"prompt": "a fox"})
+
+        self.assertEqual(opener.calls, 1)
+        self.assertEqual(admission_count, 2)
 
     def test_wait_for_result_polls_by_request_id_without_resubmitting(self):
         client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))

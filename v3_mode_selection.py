@@ -325,7 +325,7 @@ class V3ApplicationView(QWidget):
         self._preferences = self._load_preferences()
         from runtime_settings import normalize_provider_concurrency
 
-        for key in ("kie_concurrency", "photoroom_concurrency"):
+        for key in ("kie_concurrency", "photoroom_concurrency", "fal_concurrency"):
             if key in self._preferences:
                 self._v3_runtime_settings[key] = normalize_provider_concurrency(
                     self._preferences.get(key)
@@ -384,7 +384,7 @@ class V3ApplicationView(QWidget):
             from runtime_settings import normalize_provider_concurrency
 
             updated_provider_concurrency = False
-            for key in ("kie_concurrency", "photoroom_concurrency"):
+            for key in ("kie_concurrency", "photoroom_concurrency", "fal_concurrency"):
                 if key in dialog.settings:
                     self._preferences[key] = normalize_provider_concurrency(
                         dialog.settings.get(key)

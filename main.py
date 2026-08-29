@@ -2295,13 +2295,14 @@ class WorkerThread(QThread):
         include_generation: bool = False,
         include_processing: bool = True,
     ) -> int:
-        uses_kie = include_generation or (
+        uses_kie = (include_generation and self._uses_kie_generation()) or (
             include_processing
             and (self._uses_any_kie_upscale() or self._uses_kie_remove_bg())
         )
         uses_photoroom = include_processing and self._uses_photoroom_remove_bg()
-        uses_fal = include_processing and (
-            self._uses_any_fal_upscale() or self._uses_fal_remove_bg()
+        uses_fal = (include_generation and self._uses_fal_generation()) or (
+            include_processing
+            and (self._uses_any_fal_upscale() or self._uses_fal_remove_bg())
         )
         limit = 0
         if uses_kie:
@@ -2912,6 +2913,9 @@ class WorkerThread(QThread):
                 api_key=self.fal_api_key,
                 model_id=model_id,
                 timeout_seconds=max(10.0, float(self.timeout)),
+                before_paid_submit=lambda: self._admit_paid_submission(
+                    "fal", "POST"
+                ),
             )
         )
         self.progress.emit(f"  Fal.ai операция: {operation}; модель={model_id}")
@@ -4342,6 +4346,9 @@ class WorkerThread(QThread):
                 api_key=self.fal_api_key,
                 model_id=model_id,
                 timeout_seconds=max(10.0, float(self.timeout)),
+                before_paid_submit=lambda: self._admit_paid_submission(
+                    "fal", "POST"
+                ),
             )
         )
         payload = {"prompt": str(prompt or "")}
@@ -5688,7 +5695,7 @@ class MainWindow(QMainWindow):
             "generation_concurrency": 3,
             "kie_concurrency": 3,
             "photoroom_concurrency": 3,
-            "fal_concurrency": 1,
+            "fal_concurrency": 3,
             "generation_launch_interval": 1.0,
             "generation_wait_timeout": 300,
             "status_poll_interval": 20,
@@ -5757,6 +5764,7 @@ class MainWindow(QMainWindow):
                 self.config = json.load(f)
             had_kie_concurrency = "kie_concurrency" in self.config
             had_photoroom_concurrency = "photoroom_concurrency" in self.config
+            had_fal_concurrency = "fal_concurrency" in self.config
             for key, value in default_config.items():
                 if key not in self.config:
                     self.config[key] = value
@@ -5767,6 +5775,8 @@ class MainWindow(QMainWindow):
                 )
             if not had_photoroom_concurrency:
                 self.config["photoroom_concurrency"] = normalize_provider_concurrency(None)
+            if not had_fal_concurrency:
+                self.config["fal_concurrency"] = normalize_provider_concurrency(None)
         else:
             self.config = default_config
         self.config["app_language"] = app_locale_from_settings(self.config)

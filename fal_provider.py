@@ -153,6 +153,11 @@ class FalConfig:
     timeout_seconds: float = 30.0
     max_retries: int = 2
     retry_backoff_seconds: float = 0.5
+    before_paid_submit: Callable[[], None] | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def validate(self) -> None:
         if not str(self.api_key or "").strip():
@@ -301,6 +306,11 @@ class FalClient:
         )
         transient_http = {408, 409, 425, 429, 500, 502, 503, 504}
         for attempt in range(int(self.config.max_retries) + 1):
+            if (
+                request.method.upper() == "POST"
+                and self.config.before_paid_submit is not None
+            ):
+                self.config.before_paid_submit()
             try:
                 opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
                 with opener.open(request, timeout=self.config.timeout_seconds) as response:
@@ -329,8 +339,11 @@ class FalClient:
                         raise FalProviderError("Fal.ai вернул некорректный ответ отмены") from parse_error
                     if isinstance(result, dict):
                         return result
+                retryable_request = request.method.upper() in {"GET", "HEAD"} or (
+                    request.method.upper() == "POST" and error.code == 429
+                )
                 if (
-                    request.method.upper() not in {"GET", "HEAD"}
+                    not retryable_request
                     or error.code not in transient_http
                     or attempt >= int(self.config.max_retries)
                 ):
@@ -338,7 +351,10 @@ class FalClient:
                     raise FalProviderError(f"Fal.ai HTTP {error.code}{suffix}") from error
                 time.sleep(float(self.config.retry_backoff_seconds) * (2**attempt))
             except (urllib.error.URLError, OSError, NetworkSecurityError) as error:
-                if attempt >= int(self.config.max_retries):
+                if (
+                    request.method.upper() not in {"GET", "HEAD"}
+                    or attempt >= int(self.config.max_retries)
+                ):
                     raise FalProviderError("Не удалось обратиться к Fal.ai") from error
                 time.sleep(float(self.config.retry_backoff_seconds) * (2**attempt))
         try:

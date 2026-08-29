@@ -54,4 +54,7 @@ def build_runtime_settings(
     settings["photoroom_concurrency"] = normalize_provider_concurrency(
         settings.get("photoroom_concurrency")
     )
+    settings["fal_concurrency"] = normalize_provider_concurrency(
+        settings.get("fal_concurrency")
+    )
     return settings

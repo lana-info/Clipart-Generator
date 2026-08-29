@@ -80,7 +80,13 @@ def test_fal_balance_and_pricing_use_platform_api(monkeypatch):
 def test_api_dialog_exposes_only_supported_provider_concurrency_values(monkeypatch):
     app = QApplication.instance() or QApplication([])
     monkeypatch.setattr("v3_api_settings.load_credentials", lambda: {})
-    dialog = ApiSettingsDialog(initial={"kie_concurrency": 10, "photoroom_concurrency": 5})
+    dialog = ApiSettingsDialog(
+        initial={
+            "kie_concurrency": 10,
+            "photoroom_concurrency": 5,
+            "fal_concurrency": 35,
+        }
+    )
 
     assert PROVIDER_CONCURRENCY_CHOICES == (1, 2, 3)
     assert [
@@ -91,8 +97,13 @@ def test_api_dialog_exposes_only_supported_provider_concurrency_values(monkeypat
         int(dialog.photoroom_concurrency_combo.itemData(index))
         for index in range(dialog.photoroom_concurrency_combo.count())
     ] == [1, 2, 3]
+    assert [
+        int(dialog.fal_concurrency_combo.itemData(index))
+        for index in range(dialog.fal_concurrency_combo.count())
+    ] == [1, 2, 3]
     assert dialog.kie_concurrency_combo.currentData() == 3
     assert dialog.photoroom_concurrency_combo.currentData() == 3
+    assert dialog.fal_concurrency_combo.currentData() == 3
     dialog.close()
     app.processEvents()
 
@@ -102,19 +113,30 @@ def test_api_dialog_returns_provider_concurrency_but_never_writes_it_as_credenti
     saved = []
     monkeypatch.setattr("v3_api_settings.load_credentials", lambda: {})
     monkeypatch.setattr("v3_api_settings.save_credentials", lambda values: saved.append(dict(values)))
-    dialog = ApiSettingsDialog(initial={"kie_concurrency": 3, "photoroom_concurrency": 3})
+    dialog = ApiSettingsDialog(
+        initial={
+            "kie_concurrency": 3,
+            "photoroom_concurrency": 3,
+            "fal_concurrency": 3,
+        }
+    )
     dialog.kie_concurrency_combo.setCurrentIndex(
         dialog.kie_concurrency_combo.findData(1)
     )
     dialog.photoroom_concurrency_combo.setCurrentIndex(
         dialog.photoroom_concurrency_combo.findData(2)
     )
+    dialog.fal_concurrency_combo.setCurrentIndex(
+        dialog.fal_concurrency_combo.findData(3)
+    )
 
     dialog._save()
 
     assert dialog.settings["kie_concurrency"] == 1
     assert dialog.settings["photoroom_concurrency"] == 2
+    assert dialog.settings["fal_concurrency"] == 3
     assert "kie_concurrency" not in saved[0]
     assert "photoroom_concurrency" not in saved[0]
+    assert "fal_concurrency" not in saved[0]
     dialog.close()
     app.processEvents()

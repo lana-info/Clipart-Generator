@@ -287,6 +287,16 @@ class ApiSettingsDialog(QDialog):
             self.photoroom_concurrency_combo.findData(selected_photoroom_concurrency)
         )
         form.addRow("Одновременных задач PhotoRoom", self.photoroom_concurrency_combo)
+        self.fal_concurrency_combo = QComboBox()
+        for concurrency in PROVIDER_CONCURRENCY_CHOICES:
+            self.fal_concurrency_combo.addItem(str(concurrency), concurrency)
+        selected_fal_concurrency = normalize_provider_concurrency(
+            values.get("fal_concurrency")
+        )
+        self.fal_concurrency_combo.setCurrentIndex(
+            self.fal_concurrency_combo.findData(selected_fal_concurrency)
+        )
+        form.addRow("Одновременных задач Fal.ai", self.fal_concurrency_combo)
         layout.addLayout(form)
         actions = QVBoxLayout()
         self.status = QLabel()
@@ -329,6 +339,9 @@ class ApiSettingsDialog(QDialog):
             ),
             "photoroom_concurrency": normalize_provider_concurrency(
                 self.photoroom_concurrency_combo.currentData()
+            ),
+            "fal_concurrency": normalize_provider_concurrency(
+                self.fal_concurrency_combo.currentData()
             ),
         }
         save_credentials(

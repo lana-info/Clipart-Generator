@@ -33,3 +33,5 @@ def test_runtime_settings_adds_normalized_provider_concurrency():
     assert build_runtime_settings({"generation_concurrency": 2}, {})["kie_concurrency"] == 2
     assert build_runtime_settings({"kie_concurrency": 4}, {})["kie_concurrency"] == 3
     assert build_runtime_settings({}, {})["photoroom_concurrency"] == 3
+    assert build_runtime_settings({}, {})["fal_concurrency"] == 3
+    assert build_runtime_settings({"fal_concurrency": 35}, {})["fal_concurrency"] == 3
