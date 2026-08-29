@@ -55,7 +55,7 @@ class V3OutputPathsTests(unittest.TestCase):
             controller = install_processing_flow(shell)
             page = controller.pages[StepId.FILES]
 
-            expected_default = str(Path(temp) / "output")
+            expected_default = str(Path(temp))
             self.assertEqual(page.output_selector.path(), expected_default)
             self.assertEqual(state.common.output_dir, expected_default)
 
@@ -68,12 +68,12 @@ class V3OutputPathsTests(unittest.TestCase):
             work_dir = Path(temp)
             source = work_dir / "source.png"
             Image.new("RGBA", (12, 12), (10, 20, 30, 255)).save(source)
-            output_dir = work_dir / "exports"
-            output_dir.mkdir()
+            workspace_root = work_dir / "workspace"
+            workspace_root.mkdir()
 
             state = ProjectState(mode=ProjectMode.PROCESSING)
             state.common.work_dir = str(work_dir)
-            state.common.output_dir = str(output_dir)
+            state.common.output_dir = str(workspace_root)
             state.processing.selected_files = [str(source)]
             state.processing.operations.upscale_before = False
             state.processing.operations.upscale_after = False
@@ -91,7 +91,7 @@ class V3OutputPathsTests(unittest.TestCase):
             source_bytes = source.read_bytes()
             worker._mode2_process_files(emit_final=False)
 
-            produced = list(output_dir.glob("source_processed*.png"))
+            produced = list((workspace_root / "output").glob("source_ready*.png"))
             self.assertTrue(produced)
             self.assertEqual(source.read_bytes(), source_bytes)
 
@@ -127,7 +127,7 @@ class V3OutputPathsTests(unittest.TestCase):
 
             worker._mode2_process_files(emit_final=False)
 
-            self.assertTrue(list(output_dir.glob("source_processed*.png")))
+            self.assertTrue(list((output_dir / "output").glob("source_ready*.png")))
             self.assertEqual(len(raw_dirs), 1)
             self.assertNotEqual(Path(raw_dirs[0]).parent, Path(state.common.work_dir))
 
@@ -147,7 +147,7 @@ class V3OutputPathsTests(unittest.TestCase):
                 external_transfer_consent=True,
             )
             self.assertEqual(Path(request.work_dir), output_dir)
-            self.assertEqual(Path(request.settings["output_dir"]), output_dir)
+            self.assertEqual(Path(request.settings["output_dir"]), output_dir / "output")
 
 
 if __name__ == "__main__":

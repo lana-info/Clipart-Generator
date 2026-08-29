@@ -67,6 +67,7 @@ from v3_lazy_loading import LazyPageRegistry
 from workflow_definitions import workflow_for_mode
 from config_schema import resolve_output_directory
 from processing_contract import pipeline_steps as _pure_pipeline_steps
+from output_naming import workspace_layout
 
 
 MAX_LOCAL_FILE_BYTES = 100 * 1024 * 1024
@@ -524,7 +525,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.add_widget(row)
 
         self.output_selector = WorkspaceSelector(
-            "Папка для результатов",
+            "Рабочая папка",
             self._default_output_dir(),
             changed=self._sync_output_dir,
         )
@@ -572,7 +573,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
 
     def _default_output_dir(self) -> str:
         work_dir = self.state.common.work_dir.strip()
-        return str(Path(work_dir) / "output") if work_dir else ""
+        return work_dir
 
     def _sync_output_dir(self, *_: Any) -> None:
         value = self.output_selector.path()
@@ -1186,19 +1187,17 @@ def build_processing_run_request(
         raise ProcessingFlowError("Запуск доступен только в режиме обработки")
     work_dir = Path(state.common.work_dir).expanduser()
     configured_output_value = state.output_dir_for_mode(ProjectMode.PROCESSING).strip()
-    configured_output = (
-        Path(configured_output_value).expanduser()
-        if configured_output_value
-        else work_dir / "output"
-    )
+    layout = workspace_layout(configured_output_value or work_dir)
+    workspace_root = layout.root
+    configured_output = layout.output
     if not work_dir.is_dir() or not os.access(work_dir, os.W_OK):
-        if configured_output.is_dir() and os.access(configured_output, os.W_OK):
-            work_dir = configured_output
+        if workspace_root.is_dir() and os.access(workspace_root, os.W_OK):
+            work_dir = workspace_root
         else:
             raise ProcessingFlowError(
                 "Рабочая папка не существует или недоступна для записи"
             )
-    configured_output = resolve_output_directory(work_dir, configured_output)
+    configured_output = resolve_output_directory(workspace_root, configured_output)
     if not state.processing.selected_files:
         raise ProcessingFlowError("Добавьте хотя бы один файл")
     if len(state.processing.selected_files) > MAX_PROCESSING_FILES:
@@ -1226,6 +1225,7 @@ def build_processing_run_request(
     settings = _worker_settings(adapter, runtime_settings)
     settings["run_mode"] = "process_only"
     settings["output_dir"] = str(configured_output)
+    settings["workspace_root"] = str(workspace_root)
     settings["overwrite_existing"] = state.processing.overwrite_existing
     settings["skip_remover_for_alpha"] = True
     return ClipartRunRequest(

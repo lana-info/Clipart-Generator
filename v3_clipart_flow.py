@@ -66,6 +66,7 @@ from v3_processing_editor import (
     RunPlanBuilder,
 )
 from processing_cleanup import METADATA_CLEANUP_FIELDS
+from output_naming import workspace_layout
 from v3_prompt_csv_import import PromptCsvImportDialog
 from v3_project_state import (
     MAX_PROMPT_ENTRIES,
@@ -796,7 +797,11 @@ def build_clipart_run_request(
             )
 
     settings = _worker_settings(state, runtime_settings)
-    settings["output_dir"] = state.output_dir_for_mode(ProjectMode.CLIPART)
+    layout = workspace_layout(
+        state.output_dir_for_mode(ProjectMode.CLIPART) or work_dir
+    )
+    settings["output_dir"] = str(layout.output)
+    settings["workspace_root"] = str(layout.root)
     mode = "mode_both" if _processing_requested(operations) else "mode1_generate_only"
     return ClipartRunRequest(
         mode=mode,

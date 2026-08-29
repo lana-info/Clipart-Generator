@@ -1030,6 +1030,7 @@ class WorkerThread(QThread):
         self.generation_wait_timeout = max(120, int(settings.get("generation_wait_timeout", 300)))
         self.status_poll_interval = max(5.0, min(60.0, float(settings.get("status_poll_interval", 20))))
         self.output_dir = settings.get("output_dir") or os.path.join(self.work_dir, "output")
+        self.workspace_root = settings.get("workspace_root") or str(Path(self.output_dir).parent)
         self.overwrite_existing = bool(settings.get("overwrite_existing", False))
 
         # Legacy `upscale` remains the before-background pass for old configs.
@@ -2161,7 +2162,7 @@ class WorkerThread(QThread):
         invalid persisted workspace path. Final exports remain controlled by
         ``self.output_dir``.
         """
-        candidate = str(run_workspace(self.output_dir or self.work_dir))
+        candidate = str(run_workspace(self.workspace_root or self.work_dir))
         try:
             os.makedirs(candidate, exist_ok=True)
             return candidate

@@ -82,7 +82,7 @@ def output_path(source_path: str | Path, output_dir: str | Path) -> Path:
 
 
 def run_workspace(output_dir: str | Path) -> Path:
-    """Keep intermediates beside the selected output, never in stale work_dir."""
+    """Keep transient intermediates in the selected workspace root."""
     return Path(output_dir) / ".run"
 
 
