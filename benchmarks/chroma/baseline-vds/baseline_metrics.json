@@ -1,0 +1,122 @@
+{
+  "algorithm": "rgb-distance-baseline",
+  "cases": [
+    {
+      "alpha_iou": 1.0,
+      "alpha_mae": 0.0,
+      "background_leakage": 0.0,
+      "id": "clean-edge-blue",
+      "key_color": "blue",
+      "kind": "clean_edge",
+      "opaque_rgb_mae": 0.0,
+      "opaque_subject_loss": 0.0,
+      "partial_rgb_mae": 0.0,
+      "risk": "A solid opaque subject edge is damaged or leaves a key-color outline."
+    },
+    {
+      "alpha_iou": 0.8459777527003063,
+      "alpha_mae": 0.07585473358631134,
+      "background_leakage": 0.0,
+      "id": "soft-edge-red",
+      "key_color": "red",
+      "kind": "soft_edge",
+      "opaque_rgb_mae": 0.0006941318861208856,
+      "opaque_subject_loss": 0.0,
+      "partial_rgb_mae": 0.44689205288887024,
+      "risk": "A naturally antialiased edge becomes jagged, opaque or over-erased."
+    },
+    {
+      "alpha_iou": 0.7729645093945721,
+      "alpha_mae": 0.007757807616144419,
+      "background_leakage": 0.0,
+      "id": "thin-lines-green",
+      "key_color": "green",
+      "kind": "thin_lines",
+      "opaque_rgb_mae": 0.0020159767009317875,
+      "opaque_subject_loss": 0.0,
+      "partial_rgb_mae": 0.5203017592430115,
+      "risk": "Narrow stems, needles or decorative lines disappear."
+    },
+    {
+      "alpha_iou": 0.9794661190965093,
+      "alpha_mae": 0.008362474851310253,
+      "background_leakage": 0.0,
+      "id": "openings-blue",
+      "key_color": "blue",
+      "kind": "openings",
+      "opaque_rgb_mae": 0.00039093897794373333,
+      "opaque_subject_loss": 0.0,
+      "partial_rgb_mae": 0.5443142056465149,
+      "risk": "Background remains inside foliage, loops or other internal openings."
+    },
+    {
+      "alpha_iou": 0.9506312090581753,
+      "alpha_mae": 0.14512628316879272,
+      "background_leakage": 0.0,
+      "id": "partial-alpha-red",
+      "key_color": "red",
+      "kind": "partial_alpha",
+      "opaque_rgb_mae": 0.0,
+      "opaque_subject_loss": 0.0,
+      "partial_rgb_mae": 0.318353533744812,
+      "risk": "Glass, watercolor wash or translucent material loses partial alpha."
+    },
+    {
+      "alpha_iou": 0.9919169893605023,
+      "alpha_mae": 0.0038795021828264,
+      "background_leakage": 0.0,
+      "id": "color-spill-green",
+      "key_color": "green",
+      "kind": "color_spill",
+      "opaque_rgb_mae": 0.05180554836988449,
+      "opaque_subject_loss": 0.0,
+      "partial_rgb_mae": 0.5809131860733032,
+      "risk": "Key-color spill remains on a difficult subject edge or removes subject color."
+    }
+  ],
+  "environment": {
+    "git_commit": "063a7cd2c0425bcdbe0297fb57c7aece9651f22d",
+    "git_dirty": false,
+    "machine": "x86_64",
+    "numpy": "2.4.6",
+    "pillow": "12.3.0",
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "python": "3.11.15"
+  },
+  "fixture_size": 256,
+  "performance": {
+    "elapsed_samples_seconds": [
+      2.606277,
+      2.733318,
+      2.485053
+    ],
+    "elapsed_seconds": 2.606277,
+    "memory_measurement": "isolated_process_peak_rss",
+    "peak_memory_mib": 303.805,
+    "sample_count": 3,
+    "size": 2048,
+    "warmup_count": 1
+  },
+  "quality_gates": {
+    "maximum_background_leakage_regression": 0.005,
+    "maximum_clean_iou_regression": 0.02,
+    "maximum_improvement_cycles": 2,
+    "maximum_opaque_rgb_mae_regression": 0.005,
+    "maximum_opaque_subject_loss_regression": 0.005,
+    "maximum_partial_rgb_mae_regression": 0.01,
+    "maximum_peak_memory_mib": 384.0,
+    "maximum_runtime_multiplier": 1.25,
+    "maximum_runtime_seconds": 30.0,
+    "minimum_improved_cases": 4,
+    "minimum_mean_alpha_mae_improvement": 0.2
+  },
+  "schema_version": 1,
+  "summary": {
+    "alpha_iou": 0.9234927632683444,
+    "alpha_mae": 0.040163466900897525,
+    "background_leakage": 0.0,
+    "opaque_rgb_mae": 0.00915109932248015,
+    "opaque_subject_loss": 0.0,
+    "partial_rgb_mae": 0.40179578959941864
+  }
+}
