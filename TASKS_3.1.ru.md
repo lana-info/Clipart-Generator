@@ -137,26 +137,25 @@ Verification:
 
 Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
-## Task 5: Добавить chroma modifier во все источники Clipart prompt
+## Task 5: Добавить chroma modifier к созданию Clipart prompt
 
 Status: Todo
 
 Goal:
-Добавлять утверждённый chroma block к series, ready prompt и CSV без изменения
+Добавлять утверждённый chroma block к series и ready prompt без изменения
 исходного текста.
 
 Steps:
-- Разместить общий control и утверждённый compact helper во всех трёх prompt
-  sources: series, ready multiline prompt и CSV.
+- Разместить общий control и утверждённый compact helper в series и ready
+  multiline prompt. CSV оставляет текст строк неизменным при импорте.
 - Сразу после цветовых buttons разместить multi-select материалов и деталей;
   helper справа содержит только порядок выбора blue/red/green и короткое
   пояснение про автоматические material clauses.
 - Записывать modifier/color в metadata каждого создаваемого `PromptEntry` и
   показывать final preview.
 - Обновлять существующий block при смене цвета без duplicate.
-- Для CSV применять выбранный modifier в момент подтверждения import до
-  автоматического перехода к review; последующая смена control не меняет уже
-  добавленные entries.
+- Массовое Chroma Key-применение к импортированным строкам — отдельное действие
+  следующего экрана review, не часть CSV import.
 
 Acceptance:
 - [ ] Modifier off by default, существует только в Clipart и допускает разные
@@ -167,11 +166,11 @@ Acceptance:
   выбора даёт base chroma block.
 - [ ] Helper compact, не повторяет selectors и не содержит технических
   объяснений. Approved visual: `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`.
-- [ ] Pinterest/Processing prompt UI не получает control.
+- [ ] CSV/Pinterest/Processing prompt UI не получает control.
 
 Verification:
 - [ ] Render/update/no-duplicate unit tests.
-- [ ] Offscreen tests трёх источников и двух исключённых modes.
+- [ ] Offscreen tests двух источников и трёх исключённых modes.
 
 Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 
