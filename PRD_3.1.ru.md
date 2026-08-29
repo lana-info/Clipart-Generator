@@ -90,8 +90,9 @@ PRD Key: `CG31-PRD-001`
   последующая смена общего control не переписывает уже добавленные entries.
   В Pinterest и Processing prompt modifier отсутствует.
 - `CG31-FR-004` — на странице проверки можно применить к выделенным строкам
-  (например, 15) или ко всему списку find/replace, insert-after, prepend или
-  append. До применения видны область, количество и preview; references и
+  (например, 15) или ко всему списку find/replace, prepend или append.
+  Отдельное действие insert-after по решению владельца не показывается. До
+  применения видны область, количество и preview; references и
   порядок не меняются, одна массовая операция отменяется целиком. Редактируется
   только user-authored text; system chroma metadata/rendered block не является
   целью find/replace и не дублируется при prepend/append.

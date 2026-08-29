@@ -120,7 +120,8 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-012`.
 
 ## Task 4: Исправить cleanup, 300 DPI и chroma presets
 
-Status: Todo
+Status: In progress — visual approved; implementation checkpoint `46f11ba`,
+final screenshot comparison pending
 
 Goal:
 Закрепить короткие подписи и один безопасный набор key colors.
@@ -145,7 +146,8 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
 ## Task 5: Добавить chroma modifier к созданию Clipart prompt
 
-Status: Todo
+Status: In progress — approved Chroma helper implemented; focused Chroma/CSV
+suite passed, final screenshot comparison pending
 
 Goal:
 Добавлять утверждённый chroma block к series и ready prompt без изменения
@@ -182,7 +184,8 @@ Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 
 ## Task 6: Разделить `rough` и `output` и нормализовать имена
 
-Status: Todo
+Status: In progress — implementation checkpoints `ec31203`, `ba95ba0`,
+`99ea7eb`; final workspace migration/manual Windows acceptance pending
 
 Goal:
 Хранить intermediates отдельно от готовых файлов с короткими говорящими names.
@@ -346,7 +349,8 @@ Goal:
 Безопасно менять выделенные строки или весь список одной reversible operation.
 
 Steps:
-- Добавить find/replace, insert-after, prepend и append.
+- Добавить find/replace и короткие действия `В начало`/`В конец`; отдельную
+  кнопку insert-after не показывать.
 - Показывать scope/count/preview и no-match rows.
 - Менять только user-authored text: не редактировать и не дублировать system
   chroma metadata/rendered block. Сохранять references/order и undo одной batch
