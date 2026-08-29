@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QFrame,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -219,6 +220,16 @@ class RunPlanBuilder:
 
 
 class ProcessingPipelineEditor(QScrollArea):
+    _STAGE_TITLES = {
+        "upscale_before": "Апскейл до удаления фона",
+        "unsharp": "Unsharp Mask",
+        "remove_background": "Удалить фон",
+        "upscale_after": "Апскейл после удаления фона",
+        "edge_shrink": "Очистить край alpha",
+        "trim": "Trim",
+        "export_300_dpi": "Установить 300 DPI",
+    }
+    _STAGE_ORDER = tuple(_STAGE_TITLES)
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить обнаруженную видимую метку Gemini",
         "invisible_watermark_cleanup": "Обработать скрытые водяные знаки (SynthID)",
@@ -482,6 +493,7 @@ class ProcessingPipelineEditor(QScrollArea):
             operations,
         )
         self.add_widget(advanced)
+        self._build_stage_sections(operations_group, advanced)
 
         if include_cleanup:
             cleanup = QGroupBox("Очистка следов ИИ")
@@ -523,6 +535,144 @@ class ProcessingPipelineEditor(QScrollArea):
 
     def add_widget(self, widget: QWidget) -> None:
         self._layout.addWidget(widget)
+
+    def _build_stage_sections(
+        self,
+        operations_group: QGroupBox,
+        advanced_group: QGroupBox,
+    ) -> None:
+        """Move controls into lightweight enabled-stage sections.
+
+        The controls remain the same widgets, so the editor continues to own a
+        single source of truth for state and provider-specific visibility.
+        """
+        self.stage_headers: dict[str, QLabel] = {}
+        self.stage_sections: dict[str, QWidget] = {}
+        self._stage_layout = QVBoxLayout()
+        self._stage_layout.setContentsMargins(0, 0, 0, 0)
+        self._stage_layout.setSpacing(0)
+        stages_widget = QWidget()
+        stages_widget.setLayout(self._stage_layout)
+        self.add_widget(stages_widget)
+
+        stage_forms = {
+            key: self._add_stage_section(key, title)
+            for key, title in self._STAGE_TITLES.items()
+        }
+        labels = {
+            "upscale_before_provider": "Провайдер",
+            "kie_upscale_model": "Модель",
+            "upscale_factor": "Масштаб",
+            "local_realesrgan_profile": "Профиль",
+            "local_realesrgan_scale": "Масштаб",
+            "unsharp_amount": "Интенсивность",
+            "unsharp_radius": "Радиус",
+            "unsharp_threshold": "Порог",
+            "remove_background_provider": "Провайдер",
+            "kie_remove_bg_model": "Модель",
+            "fal_remove_bg_model": "Модель Fal.ai",
+            "fal_birefnet_model": "Вариант BiRefNet",
+            "fal_birefnet_resolution": "Разрешение BiRefNet",
+            "chroma_key_color": "Цвет фона",
+            "chroma_key_custom_color": "Свой оттенок",
+            "chroma_key_tolerance": "Допуск",
+            "chroma_key_softness": "Мягкость края",
+            "local_rembg_profile": "Профиль rembg",
+            "local_rembg_model": "Модель rembg",
+            "local_rembg_edge_quality": "Качество края",
+            "local_ben2_alpha_threshold": "Порог alpha",
+            "local_ben2_edge_softness": "Мягкость края",
+            "local_ben2_corner_radius": "Радиус углов",
+            "upscale_after_provider": "Провайдер",
+            "kie_upscale_after_model": "Модель",
+            "local_realesrgan_after_scale": "Масштаб",
+            "edge_shrink_pixels": "Очистка края, px",
+            "trim_mode": "Trim по",
+        }
+        groups = {
+            "upscale_before": (
+                "upscale_before_provider", "kie_upscale_model", "upscale_factor",
+                "local_realesrgan_profile", "local_realesrgan_scale",
+            ),
+            "unsharp": ("unsharp_amount", "unsharp_radius", "unsharp_threshold"),
+            "remove_background": (
+                "remove_background_provider", "kie_remove_bg_model",
+                "fal_remove_bg_model", "fal_birefnet_model",
+                "fal_birefnet_resolution", "fal_birefnet_refine_foreground",
+                "fal_rembg_crop_to_bbox", "chroma_key_color",
+                "chroma_key_custom_color", "chroma_key_tolerance",
+                "chroma_key_softness", "local_rembg_profile", "local_rembg_model",
+                "local_rembg_edge_quality", "local_ben2_refine_foreground",
+                "local_ben2_alpha_threshold", "local_ben2_edge_softness",
+                "local_ben2_corner_radius",
+            ),
+            "upscale_after": (
+                "upscale_after_provider", "kie_upscale_after_model",
+                "local_realesrgan_after_scale",
+            ),
+            "edge_shrink": ("edge_shrink_pixels",),
+            "trim": ("trim_mode",),
+            "export_300_dpi": (),
+        }
+        for stage_key, control_names in groups.items():
+            for name in control_names:
+                self._move_control_to_stage(
+                    self.operation_widgets[name],
+                    stage_forms[stage_key],
+                    labels.get(name),
+                )
+        advanced_group.setVisible(False)
+        operations_group.layout().activate()
+
+    def _add_stage_section(self, key: str, title: str) -> QFormLayout:
+        section = QWidget()
+        section_layout = QVBoxLayout(section)
+        section_layout.setContentsMargins(0, 12, 0, 12)
+        section_layout.setSpacing(8)
+        header = QLabel(title)
+        header.setProperty("v3StageTitle", True)
+        section_layout.addWidget(header)
+        form_container = QWidget()
+        form = QFormLayout(form_container)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setHorizontalSpacing(16)
+        form.setVerticalSpacing(8)
+        section_layout.addWidget(form_container)
+        self.stage_headers[key] = header
+        self.stage_sections[key] = section
+        if self._stage_layout.count():
+            divider = QFrame()
+            divider.setFrameShape(QFrame.Shape.HLine)
+            divider.setFrameShadow(QFrame.Shadow.Sunken)
+            divider.setProperty("v3StageDivider", True)
+            self._stage_layout.addWidget(divider)
+        self._stage_layout.addWidget(section)
+        return form
+
+    @staticmethod
+    def _move_control_to_stage(
+        control: QWidget,
+        target: QFormLayout,
+        label: str | None,
+    ) -> None:
+        source = control.parentWidget()
+        source_layout = source.layout() if source is not None else None
+        if isinstance(source_layout, QFormLayout):
+            original_label = source_layout.labelForField(control)
+            source_layout.removeWidget(control)
+            if original_label is not None:
+                source_layout.removeWidget(original_label)
+                original_label.hide()
+        if isinstance(control, QCheckBox):
+            target.addRow(control)
+        else:
+            target.addRow(label or control.accessibleName(), control)
+
+    def visible_stage_keys(self) -> tuple[str, ...]:
+        return tuple(
+            key for key in self._STAGE_ORDER
+            if not self.stage_sections[key].isHidden()
+        )
 
     def _add_bool(self, form: QFormLayout, name: str, operations: ImageOperationData) -> None:
         control = QCheckBox(self._BOOL_LABELS[name])
@@ -742,6 +892,21 @@ class ProcessingPipelineEditor(QScrollArea):
         }
         for name, visible in visibility.items():
             self._set_control_visible(name, visible)
+        self._refresh_stage_visibility()
+
+    def _refresh_stage_visibility(self) -> None:
+        operations = self.state_owner.operations
+        enabled = {
+            "upscale_before": operations.upscale_before,
+            "unsharp": operations.unsharp,
+            "remove_background": operations.remove_background,
+            "upscale_after": operations.upscale_after,
+            "edge_shrink": operations.edge_shrink,
+            "trim": operations.trim,
+            "export_300_dpi": operations.export_300_dpi,
+        }
+        for key, section in self.stage_sections.items():
+            section.setVisible(bool(enabled[key]))
         self._apply_workflow_visibility()
         self._refresh_model_compatibility()
 

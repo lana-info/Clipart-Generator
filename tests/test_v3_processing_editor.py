@@ -126,6 +126,28 @@ class ProcessingEditorTests(unittest.TestCase):
             ),
         )
 
+    def test_stage_sections_follow_enabled_pipeline_order(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        operations = state.processing.operations
+        operations.upscale_before = True
+        operations.unsharp = True
+        operations.remove_background = True
+        operations.edge_shrink = True
+        operations.trim = True
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+
+        self.assertEqual(
+            editor.visible_stage_keys(),
+            ("upscale_before", "unsharp", "remove_background", "edge_shrink", "trim"),
+        )
+        self.assertTrue(editor.stage_sections["upscale_after"].isHidden())
+
     def test_operation_requirement_can_be_disabled_for_generation_modes(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations
