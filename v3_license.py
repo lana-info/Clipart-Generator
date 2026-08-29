@@ -30,9 +30,11 @@ class LicenseClientProtocol(Protocol):
 
     def validate(self) -> LicenseAuthorization: ...
 
+    def authorize_offline_grace(self) -> LicenseAuthorization: ...
+
 
 class OnlineLicenseGate:
-    """One online-only authorization boundary shared by all V3 modes."""
+    """Online-first authorization boundary with bounded outage-only grace."""
 
     def __init__(self, client: LicenseClientProtocol) -> None:
         self.client = client
@@ -55,6 +57,18 @@ class OnlineLicenseGate:
         authorization = self.current_authorization
         if authorization is None:
             return "Онлайн-проверка не выполнена"
+        if (
+            authorization.is_offline_grace
+            and authorization.last_verified_at is not None
+            and authorization.grace_expires_at is not None
+        ):
+            checked_at = authorization.last_verified_at.astimezone().strftime(
+                "%d.%m.%Y %H:%M"
+            )
+            grace_end = authorization.grace_expires_at.astimezone().strftime(
+                "%d.%m.%Y"
+            )
+            return f"Последняя проверка: {checked_at}  •  Доступ до: {grace_end}"
         checked_at = authorization.issued_at.astimezone().strftime("%d.%m.%Y %H:%M")
         return f"Проверено онлайн: {checked_at}"
 
@@ -80,6 +94,13 @@ class OnlineLicenseGate:
             raise LicenseError("Активируйте лицензию перед запуском")
         try:
             authorization = self.client.validate()
+        except LicenseUnavailableError:
+            try:
+                authorization = self.client.authorize_offline_grace()
+            except LicenseError as exc:
+                self.current_authorization = None
+                self.status_text = "Требуется подключение"
+                raise LicenseUnavailableError(str(exc)) from None
         except LicenseError:
             self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
@@ -89,7 +110,11 @@ class OnlineLicenseGate:
             self.status_text = "Лицензия не подтверждена"
             raise LicenseUnavailableError("Не удалось проверить лицензию") from None
         self.current_authorization = authorization
-        self.status_text = "Лицензия активна"
+        self.status_text = (
+            "Временный автономный доступ"
+            if authorization.is_offline_grace
+            else "Лицензия активна"
+        )
         return authorization
 
 
@@ -108,7 +133,7 @@ class LicenseDialog(QDialog):
 
         layout = QVBoxLayout(self)
         description = QLabel(
-            "Введите лицензионный ключ. Для активации и каждого запуска требуется интернет."
+            "Введите лицензионный ключ. Для первой активации требуется интернет."
         )
         description.setWordWrap(True)
         layout.addWidget(description)
@@ -159,7 +184,7 @@ class LicenseDialog(QDialog):
 
 
 class SavedLicenseUnavailableDialog(QDialog):
-    """Fail-closed retry UI for a saved activation whose server check failed."""
+    """Fail-closed retry UI after grace is unavailable or expired."""
 
     def __init__(self, message: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -167,20 +192,32 @@ class SavedLicenseUnavailableDialog(QDialog):
         self.setMinimumWidth(460)
 
         layout = QVBoxLayout(self)
+        title = QLabel("Нужно восстановить соединение")
+        title.setProperty("v3Title", True)
+        layout.addWidget(title)
         description = QLabel(
-            "Сохранённая лицензия не может быть проверена онлайн. "
-            "Работа приложения не будет разрешена до ответа сервера."
+            "Срок временного автономного доступа завершён. Чтобы продолжить "
+            "работу, подключитесь к интернету и повторите проверку лицензии."
         )
         description.setWordWrap(True)
         layout.addWidget(description)
 
-        self.status_label = QLabel(str(message or "Сервер лицензий временно недоступен")[:300])
+        safe_message = str(message or "Сервер лицензий временно недоступен")[:300]
+        status_text = next(
+            (
+                line
+                for line in safe_message.splitlines()
+                if line.startswith("Последняя успешная проверка:")
+            ),
+            safe_message,
+        )
+        self.status_label = QLabel(status_text)
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
         self.buttons = QDialogButtonBox()
         retry_button = self.buttons.addButton(
-            "Повторить",
+            "Повторить проверку",
             QDialogButtonBox.ButtonRole.ActionRole,
         )
         close_button = self.buttons.addButton(

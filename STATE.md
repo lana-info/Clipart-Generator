@@ -20,7 +20,13 @@ Updated: 2026-08-29
 
 ## Current branch and handoff
 
-- Base branch: `develop/3.0`
+- Active 3.1 integration line: `codex/license-3.1-offline-grace`, based on
+  `develop/3.1`. It contains the consolidated 3.1 product specification, Tasks
+  1–12 implementation checkpoints and the verified Task 14 source. After the
+  feature checkpoint is committed, this line is ready for controlled
+  fast-forward integration into `develop/3.1`; it must not be merged into
+  `develop/3.0` or a release branch.
+- Release baseline branch: `develop/3.0`
 - Current 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`;
   `release/VERSION.txt` is `3.0.7`. This branch contains
   `codex/feature-generation-fal-localization` and is a strict descendant of
@@ -48,6 +54,21 @@ Updated: 2026-08-29
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
 ## Next task
+
+Task 14 implements a seven-calendar-day offline grace only for a previously
+verified license and only after timeout/transport/5xx unavailability. First
+activation, explicit denial, a signed response already expired when received,
+tampering, device/product mismatch, clock rollback and grace expiry remain
+fail-closed. The approved and implemented UI screenshots are stored in
+`docs/ui/3.1/task-14-license-grace/`. Focused license/update/release verification
+passes 57 tests; the complete offline suite passes 950 tests, 56 intentional
+skips, 2 deselected and 127 subtests. Compilation and tracked sensitive-artifact
+scan pass.
+
+Next is Task 13: integrate the verified source into `develop/3.1`, then perform
+manual Windows acceptance for the image/mask editor, output/rough paths, chroma
+quality and offline-license startup/run. Version bump, installer build and
+publication remain separate actions and are not yet authorized.
 
 Regression suite для накопленного 3.1 checkpoint синхронизирован с текущими
 контрактами: prompt-only Pinterest, `output/rough`, имена `*_ready` и версия

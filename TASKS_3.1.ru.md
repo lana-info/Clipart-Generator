@@ -464,7 +464,8 @@ Requirements: `CG31-FR-050`, `CG31-FR-051`.
 
 ## Task 14: Сохранить работу при временной недоступности лицензионного сервера
 
-Status: Todo
+Status: Done in source — approved visual and VDS security tests pass; manual
+Windows offline startup/run acceptance remains in Task 13
 
 Goal:
 Не блокировать уже подтверждённого пользователя из-за краткого сбоя сервера или
@@ -485,18 +486,30 @@ Steps:
   остановить новые операции с понятной возможностью повторить проверку.
 
 Acceptance:
-- [ ] Уже подтверждённая лицензия работает при timeout/5xx внутри утверждённого
+- [x] Уже подтверждённая лицензия работает при timeout/5xx внутри утверждённого
   grace и показывает дату последней успешной проверки.
-- [ ] Первая активация, 401/403/явный отказ, expired authorization, повреждённое
-  состояние, clock rollback и grace expiry не дают offline-доступ.
-- [ ] Сбой сервера не маскируется как новая успешная активация; ключ лицензии не
+- [x] Первая активация, 401/403/явный отказ, подписанный ответ, уже истёкший в
+  момент получения, повреждённое состояние, clock rollback и grace expiry не
+  дают offline-доступ.
+- [x] Сбой сервера не маскируется как новая успешная активация; ключ лицензии не
   попадает в state, UI или diagnostic journal.
 
 Verification:
-- [ ] Network-free tests: valid grace, expiry, timeout/5xx, explicit denial,
+- [x] Network-free tests: valid grace, expiry, timeout/5xx, explicit denial,
   expired signed payload, state tampering и clock rollback.
 - [ ] Manual offline startup/run acceptance с заранее активированной тестовой
   лицензией; отдельная проверка первого запуска без сети.
+
+Evidence: offline grace равен семи календарным дням и включается только после
+`LicenseUnavailableError`. Cache атомарно хранит исходный server-signed envelope,
+device/nonce binding и подписанный device key маркер времени; обе подписи
+перепроверяются перед каждым offline run. Явные HTTP 400/401/403/409/422,
+повреждение, подмена server envelope, rollback времени и окончание grace
+остаются fail-closed. Approved и implemented screenshots сохранены в
+`docs/ui/3.1/task-14-license-grace/`. 57 focused license/update/release tests и
+полный offline suite (950 passed, 56 intentional skips, 2 deselected, 127
+subtests) проходят; `py_compile` и sensitive-artifact scan также проходят,
+лицензионный ключ в state/UI/diagnostics не добавлен.
 
 Dependencies: existing signed license client and startup gate. Scope: M.
 Requirements: `CG31-FR-060`–`CG31-FR-062`.

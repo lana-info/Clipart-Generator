@@ -31,21 +31,21 @@
 - Consumes: the existing signed server envelope returned by activation/validation.
 - Produces: `LicenseClient.authorize_offline_grace(now: datetime | None = None) -> LicenseAuthorization` and offline metadata on `LicenseAuthorization`.
 
-- [ ] **Step 1: Write failing security tests**
+- [x] **Step 1: Write failing security tests**
 
 Add literal-behavior tests proving that activation creates no license-key copy, timeout within seven days succeeds, HTTP 401/403 does not fall back, and expired/tampered/rolled-back cache fails.
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run: `python -m unittest tests.test_license_client_security -v`
 
 Expected: new offline-grace tests fail because no cached authorization API exists.
 
-- [ ] **Step 3: Implement the minimal signed cache**
+- [x] **Step 3: Implement the minimal signed cache**
 
 Store the original signed envelope, expected nonce/device, last successful online time, and highest observed local time. Canonicalize the record with RFC 8785 and sign it with the existing device Ed25519 key. Verify both server and device signatures before returning an offline authorization.
 
-- [ ] **Step 4: Run focused security tests and confirm GREEN**
+- [x] **Step 4: Run focused security tests and confirm GREEN**
 
 Run: `python -m unittest tests.test_license_client_security -v`
 
@@ -62,19 +62,19 @@ Expected: all license-client security tests pass.
 - Consumes: `LicenseClient.authorize_offline_grace()` only after `validate()` raises `LicenseUnavailableError`.
 - Produces: the approved `Временный автономный доступ` status and last-check/grace-end text.
 
-- [ ] **Step 1: Write failing gate/UI tests**
+- [x] **Step 1: Write failing gate/UI tests**
 
 Cover temporary outage success, explicit denial failure, unexpected exception sanitization, approved status copy, and grace-expired retry dialog copy.
 
-- [ ] **Step 2: Run focused tests and confirm RED**
+- [x] **Step 2: Run focused tests and confirm RED**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m unittest tests.test_v3_license_gate tests.test_v3_license_flow_gate -v`
 
-- [ ] **Step 3: Implement outage-only fallback**
+- [x] **Step 3: Implement outage-only fallback**
 
 Catch only `LicenseUnavailableError`, ask the client for the cached authorization, and keep all other failures on the existing blocking path. Update the saved-license dialog and activation description without adding new controls.
 
-- [ ] **Step 4: Run focused tests and confirm GREEN**
+- [x] **Step 4: Run focused tests and confirm GREEN**
 
 Run: `QT_QPA_PLATFORM=offscreen python -m unittest tests.test_v3_license_gate tests.test_v3_license_flow_gate -v`
 
@@ -92,11 +92,11 @@ Run: `QT_QPA_PLATFORM=offscreen python -m unittest tests.test_v3_license_gate te
 - Consumes: the implemented gate and approved screenshots.
 - Produces: auditable Task 14 evidence and a verified feature checkpoint.
 
-- [ ] **Step 1: Render the implemented UI**
+- [x] **Step 1: Render the implemented UI**
 
 Capture the real main-screen grace state and expired dialog at 1120×780/compact dialog size, then compare them with the approved mockups.
 
-- [ ] **Step 2: Run complete verification**
+- [x] **Step 2: Run complete verification**
 
 Run: `python -m py_compile license_client.py v3_license.py main.py`
 
@@ -104,10 +104,10 @@ Run: `QT_QPA_PLATFORM=offscreen python -m pytest -q`
 
 Run: `git diff --check`
 
-- [ ] **Step 3: Perform the security review**
+- [x] **Step 3: Perform the security review**
 
 Confirm that only transport/server unavailability enters grace, no secret is persisted or rendered, both signatures are verified, and time rollback/cache corruption fail closed.
 
-- [ ] **Step 4: Commit and push the verified checkpoint**
+- [x] **Step 4: Commit and push the verified checkpoint**
 
 Commit message: `feat: allow bounded offline license grace`

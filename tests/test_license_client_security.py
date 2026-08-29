@@ -150,6 +150,66 @@ class LicenseClientSecurityTests(unittest.TestCase):
             with self.assertRaisesRegex(license_client.LicenseError, "сервер"):
                 client.validate()
 
+    def test_temporary_outage_uses_recent_server_signed_authorization(self):
+        client, _, _, activated = self.activate()
+        offline_now = activated.issued_at + timedelta(days=1)
+
+        result = client.authorize_offline_grace(now=offline_now)
+
+        self.assertTrue(result.is_offline_grace)
+        self.assertEqual(result.license_id, activated.license_id)
+        self.assertEqual(result.last_verified_at, activated.issued_at)
+        self.assertEqual(
+            result.grace_expires_at,
+            activated.issued_at + timedelta(days=7),
+        )
+        self.assertNotIn(DUMMY_LICENSE_KEY, Path(self.state_path).read_text("utf-8"))
+
+    def test_offline_grace_expires_after_seven_calendar_days(self):
+        client, _, _, activated = self.activate()
+
+        with self.assertRaisesRegex(license_client.LicenseError, "завершён"):
+            client.authorize_offline_grace(
+                now=activated.issued_at + timedelta(days=7, seconds=1)
+            )
+
+    def test_offline_grace_rejects_cache_tampering(self):
+        client, _, _, _ = self.activate()
+        state = json.loads(Path(self.state_path).read_text(encoding="utf-8"))
+        state["offline_authorization"]["last_verified_at"] = (
+            datetime.now(timezone.utc) + timedelta(days=30)
+        ).isoformat()
+        Path(self.state_path).write_text(json.dumps(state), encoding="utf-8")
+
+        with self.assertRaisesRegex(license_client.LicenseError, "подпись"):
+            client.authorize_offline_grace()
+
+    def test_offline_grace_rechecks_the_original_server_signature(self):
+        client, _, _, _ = self.activate()
+        state = json.loads(Path(self.state_path).read_text(encoding="utf-8"))
+        record = state["offline_authorization"]
+        record["server_envelope"]["payload"]["product_id"] = "other-product"
+        private_key = Ed25519PrivateKey.from_private_bytes(
+            base64.urlsafe_b64decode(state["device_private_key"] + "==")
+        )
+        signed_record = dict(record)
+        signed_record.pop("device_signature")
+        record["device_signature"] = encode(
+            private_key.sign(rfc8785.dumps(signed_record))
+        )
+        Path(self.state_path).write_text(json.dumps(state), encoding="utf-8")
+
+        with self.assertRaisesRegex(license_client.LicenseError, "подпись"):
+            client.authorize_offline_grace()
+
+    def test_offline_grace_rejects_clock_rollback(self):
+        client, _, _, activated = self.activate()
+        later = activated.issued_at + timedelta(days=2)
+        client.authorize_offline_grace(now=later)
+
+        with self.assertRaisesRegex(license_client.LicenseError, "врем"):
+            client.authorize_offline_grace(now=later - timedelta(hours=2))
+
     def test_tampered_signed_payload_is_rejected(self):
         responder = SignedLicenseResponder(self.server_private)
         original = responder.__call__
@@ -232,6 +292,35 @@ class LicenseClientSecurityTests(unittest.TestCase):
                 for handler in build_mock.call_args.args
             )
         )
+
+    def test_http_denial_is_distinct_from_a_temporary_server_outage(self):
+        client, _, _, _ = self.activate()
+        for status, expected_type in (
+            (401, license_client.LicenseError),
+            (403, license_client.LicenseError),
+            (500, license_client.LicenseUnavailableError),
+            (503, license_client.LicenseUnavailableError),
+        ):
+            with self.subTest(status=status):
+                failure = error.HTTPError(
+                    "https://license.example/api/v1/licenses/validate",
+                    status,
+                    "bounded failure",
+                    {},
+                    BytesIO(b"ignored"),
+                )
+                with patch.object(
+                    license_client.request,
+                    "build_opener",
+                    return_value=FakeOpener(failure=failure),
+                ):
+                    with self.assertRaises(expected_type) as raised:
+                        client.validate()
+                if status in {401, 403}:
+                    self.assertNotIsInstance(
+                        raised.exception,
+                        license_client.LicenseUnavailableError,
+                    )
 
     def test_license_response_read_is_bounded(self):
         response = JsonResponse({"ok": True}, declared_length=9)
