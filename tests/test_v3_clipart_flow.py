@@ -1008,8 +1008,34 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(request.settings["remove_bg"], True)
         self.assertEqual(request.settings["timeout"], 42)
         self.assertEqual(estimate.request_count, 12)
-        self.assertEqual(estimate.estimated_usd, Decimal("0.940"))
+        self.assertEqual(estimate.estimated_usd, Decimal("0.920"))
         self.assertTrue(estimate.complete)
+
+    def test_reference_prompts_use_their_own_generation_profile(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-reference-profile-") as temp:
+            state = self.make_state(temp)
+            state.clipart.generation.model = "gpt-image-2"
+            state.clipart.generation.ratio = "16:9"
+            state.clipart.generation.resolution = "2K"
+            state.clipart.generation.reference_model = "gpt-image/1.5-image-to-image"
+            state.clipart.generation.reference_ratio = "2:3"
+            state.clipart.generation.reference_resolution = "1K"
+            state.clipart.operations.upscale_before = False
+            state.clipart.operations.remove_background = False
+
+            request = build_clipart_run_request(state, {"kie_api_key": "test-key"})
+            estimate = estimate_clipart_cost(state)
+
+        self.assertEqual(request.settings["text_generation_model"], "gpt-image-2")
+        self.assertEqual(request.settings["text_generation_ratio"], "16:9")
+        self.assertEqual(request.settings["text_generation_resolution"], "2K")
+        self.assertEqual(
+            request.settings["reference_generation_model"],
+            "gpt-image/1.5-image-to-image",
+        )
+        self.assertEqual(request.settings["reference_generation_ratio"], "2:3")
+        self.assertEqual(request.settings["reference_generation_resolution"], "1K")
+        self.assertEqual(estimate.generation_usd, Decimal("0.140"))
 
     def test_clipart_chroma_request_omits_legacy_numeric_and_custom_fields(self):
         with tempfile.TemporaryDirectory(prefix="clipart-chroma-request-") as temp:
@@ -1089,6 +1115,8 @@ class V3ClipartFlowTests(unittest.TestCase):
             ]
             state.clipart.generation.model = "qwen-image-2"
             state.clipart.generation.ratio = "1:1"
+            state.clipart.generation.reference_model = "qwen-image-2"
+            state.clipart.generation.reference_ratio = "1:1"
 
             with self.assertRaisesRegex(ClipartFlowError, "1 референс"):
                 build_clipart_run_request(state, {"kie_api_key": "test-key"})
@@ -1104,6 +1132,8 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.clipart.prompts = [PromptEntry("Baby turtle", [str(reference_path)])]
             state.clipart.generation.model = "qwen-image-2"
             state.clipart.generation.ratio = "1:1"
+            state.clipart.generation.reference_model = "qwen-image-2"
+            state.clipart.generation.reference_ratio = "1:1"
 
             with self.assertRaisesRegex(ClipartFlowError, "10 МБ"):
                 build_clipart_run_request(state, {"kie_api_key": "test-key"})
@@ -1436,16 +1466,16 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertNotIn("ориентировочно", visible_copy)
         self.assertNotIn("стоимость", visible_copy)
 
-    def test_generation_page_uses_one_settings_set_without_references(self):
+    def test_generation_page_hides_reference_settings_without_references(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
 
         page = ClipartGenerationPage(state, lambda: None)
 
-        self.assertEqual(page.primary_scope_label.text(), "Все промпты · 2")
+        self.assertFalse(page.reference_controls_container.isVisible())
         self.assertFalse(hasattr(page, "reference_advanced"))
 
-    def test_generation_page_filters_one_shared_model_list_for_references(self):
+    def test_generation_page_exposes_independent_reference_settings(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [
             PromptEntry("Fox"),
@@ -1455,14 +1485,25 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         page = ClipartGenerationPage(state, lambda: None)
 
-        self.assertEqual(page.primary_scope_label.text(), "Все промпты · 3 · с референсами: 2")
+        self.assertFalse(page.reference_controls_container.isHidden())
         self.assertFalse(hasattr(page, "reference_advanced"))
         self.assertGreaterEqual(page.model_combo.findData("gpt-image-2"), 0)
-        self.assertEqual(page.model_combo.findData("fal-ai/ideogram/v3"), -1)
-        self.assertEqual(page.model_combo.findData("gpt-image/1.5-text-to-image"), -1)
-        self.assertEqual(state.clipart.generation.model, state.clipart.generation.reference_model)
-        self.assertEqual(state.clipart.generation.ratio, state.clipart.generation.reference_ratio)
-        self.assertEqual(state.clipart.generation.resolution, state.clipart.generation.reference_resolution)
+        self.assertGreaterEqual(page.model_combo.findData("fal-ai/ideogram/v3"), 0)
+        self.assertGreaterEqual(page.model_combo.findData("gpt-image/1.5-text-to-image"), 0)
+        self.assertGreaterEqual(
+            page.reference_model_combo.findData("gpt-image/1.5-image-to-image"),
+            0,
+        )
+        self.assertEqual(page.reference_model_combo.findData("fal-ai/ideogram/v3"), -1)
+        page.reference_model_combo.setCurrentIndex(
+            page.reference_model_combo.findData("gpt-image/1.5-image-to-image")
+        )
+        page.reference_ratio_combo.setCurrentText("2:3")
+        self.assertEqual(
+            state.clipart.generation.reference_model,
+            "gpt-image/1.5-image-to-image",
+        )
+        self.assertEqual(state.clipart.generation.reference_ratio, "2:3")
 
     def test_nonprefixed_fal_generation_model_requires_fal_key(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

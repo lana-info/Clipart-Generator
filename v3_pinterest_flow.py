@@ -1266,7 +1266,7 @@ class PinterestFormatModelPage(ClipartGenerationPage):
     allow_shared_text_models = True
     allow_fal_models = True
     shared_generation_settings = False
-    shared_reference_format = True
+    shared_reference_format = False
     reference_controls_compact = True
     show_primary_scope = False
     show_model_capabilities = False

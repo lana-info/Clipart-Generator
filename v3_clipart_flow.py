@@ -459,9 +459,16 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
     generation_request_count = len(state.clipart.prompts) * variants
     processing_request_count = 0
 
-    for _entry in state.clipart.prompts:
-        option = _model_option(generation.model)
-        resolution = generation.resolution
+    for entry in state.clipart.prompts:
+        has_references = bool(entry.references)
+        option = _model_option(
+            generation.reference_model if has_references else generation.model
+        )
+        resolution = (
+            generation.reference_resolution
+            if has_references
+            else generation.resolution
+        )
         unit = _price_usd(option.pricing, resolution)
         if unit is None:
             complete = False
@@ -587,9 +594,9 @@ def _worker_settings(
             "text_generation_model": generation.model,
             "text_generation_ratio": generation.ratio,
             "text_generation_resolution": generation.resolution,
-            "reference_generation_model": generation.model,
-            "reference_generation_ratio": generation.ratio,
-            "reference_generation_resolution": generation.resolution,
+            "reference_generation_model": generation.reference_model,
+            "reference_generation_ratio": generation.reference_ratio,
+            "reference_generation_resolution": generation.reference_resolution,
             "visible_mark_cleanup_enabled": operations.visible_mark_cleanup,
             "visible_mark_cleanup_mode": operations.visible_mark_cleanup_mode,
             "invisible_watermark_cleanup_enabled": operations.invisible_watermark_cleanup,
@@ -773,10 +780,19 @@ def build_clipart_run_request(
     )
 
     if any(entry.references for entry in state.clipart.prompts):
-        if not text_option.reference_compatible_text:
+        reference_option = _model_option(generation.reference_model)
+        if (
+            reference_option.model_type not in {"image_to_image", "edit"}
+            and not reference_option.reference_compatible_text
+        ):
             raise ClipartFlowError(
-                "Выбранная модель не поддерживает промпты с референсами"
+                "Модель с референсом не поддерживает промпты с референсами"
             )
+        _validate_generation_profile(
+            reference_option,
+            generation.reference_ratio,
+            generation.reference_resolution,
+        )
 
     request_count = len(state.clipart.prompts) * generation.variants
     if request_count > MAX_CLIPART_REQUESTS:
@@ -797,9 +813,17 @@ def build_clipart_run_request(
         if not entry.prompt.strip():
             raise ClipartFlowError("Пустой промпт нельзя отправить на генерацию")
         has_references = bool(entry.references)
-        contract_model = generation.model
-        contract_ratio = generation.ratio
-        contract_resolution = generation.resolution
+        contract_model = (
+            generation.reference_model if has_references else generation.model
+        )
+        contract_ratio = (
+            generation.reference_ratio if has_references else generation.ratio
+        )
+        contract_resolution = (
+            generation.reference_resolution
+            if has_references
+            else generation.resolution
+        )
         reference_sizes = tuple(
             Path(reference).expanduser().stat().st_size
             for reference in entry.references
@@ -851,7 +875,15 @@ def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
 
     if request.generated_prompts:
         generation_models = {
-            str(request.settings.get("text_generation_model") or "").strip()
+            str(
+                request.settings.get(
+                    "reference_generation_model"
+                    if entry.get("references")
+                    else "text_generation_model",
+                    "",
+                )
+            ).strip()
+            for entry in request.generated_prompts
         }
         if any(is_fal_generation_model(model) for model in generation_models):
             if not str(request.settings.get("fal_api_key") or "").strip():
@@ -2854,10 +2886,10 @@ class PromptWorkspacePage(_ScrollableStepPage):
 class ClipartGenerationPage(_ScrollableStepPage):
     allow_shared_text_models = True
     allow_fal_models = True
-    shared_generation_settings = True
+    shared_generation_settings = False
     shared_reference_format = False
-    reference_controls_compact = False
-    show_primary_scope = True
+    reference_controls_compact = True
+    show_primary_scope = False
     show_model_capabilities = True
     show_ratio_preview = True
     def __init__(
@@ -3082,7 +3114,8 @@ class ClipartGenerationPage(_ScrollableStepPage):
             )
         elif not self.shared_generation_settings and not self.shared_reference_format:
             option = self._option_for_combo(self.reference_model_combo)
-            self.reference_capability_label.setText(_capability_summary(option))
+            if hasattr(self, "reference_capability_label"):
+                self.reference_capability_label.setText(_capability_summary(option))
             self._set_values(
                 self.reference_ratio_combo,
                 option.ratios or ("1:1",),
@@ -3678,8 +3711,11 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
         if is_fal_model_id(model_id) and count > 0:
             quantities[model_id] = quantities.get(model_id, 0) + count
 
-    for _entry in state.clipart.prompts:
-        add(generation.model, variants)
+    for entry in state.clipart.prompts:
+        add(
+            generation.reference_model if entry.references else generation.model,
+            variants,
+        )
     operations = state.clipart.operations
     output_count = len(state.clipart.prompts) * variants
     if operations.upscale_before and operations.upscale_before_provider == "fal":

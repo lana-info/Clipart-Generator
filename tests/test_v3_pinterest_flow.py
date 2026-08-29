@@ -156,19 +156,32 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
         self.assertTrue(hasattr(page, "add_references_button"))
         self.assertTrue(hasattr(page, "add_prompt_button"))
 
-    def test_pinterest_reference_model_is_a_plain_conditional_control(self):
+    def test_pinterest_reference_profile_is_a_plain_conditional_control(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
-        state.clipart.prompts = [
+        state.pinterest.prompts = [
             PromptEntry("Text-only pin"),
             PromptEntry("Pin with reference", ["reference.png"]),
         ]
-        page = PinterestFormatModelPage(state, lambda: None)
+        shell = AppShell(state)
+        controller = install_pinterest_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PIN_FORMAT_MODEL]
 
         self.assertFalse(hasattr(page, "reference_advanced"))
         self.assertFalse(page.primary_scope_label.isVisible())
         self.assertFalse(page.model_capability_label.isVisible())
         self.assertFalse(page.card.description_label.isVisible())
         self.assertFalse(page.reference_model_combo.isHidden())
+        self.assertFalse(page.reference_ratio_combo.isHidden())
+        self.assertFalse(page.reference_resolution_combo.isHidden())
+        page.reference_model_combo.setCurrentIndex(
+            page.reference_model_combo.findData("gpt-image/1.5-image-to-image")
+        )
+        page.reference_ratio_combo.setCurrentText("2:3")
+        self.assertEqual(
+            state.pinterest.generation.reference_model,
+            "gpt-image/1.5-image-to-image",
+        )
+        self.assertEqual(state.pinterest.generation.reference_ratio, "2:3")
         self.assertFalse(page.ratio_preview.isHidden())
 
     def test_clipart_generation_has_the_same_ratio_preview(self):
