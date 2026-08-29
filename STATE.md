@@ -67,7 +67,7 @@ scan pass.
 Task 13 source integration is complete; the `3.1.0` candidate installer was
 built successfully, but the first visual review found an approved Chroma helper
 follow-up: blue stays the default for a new draft, selected materials use a
-readable dark-turquoise state and selection is limited to two. The current
+readable dark-turquoise state and selection is limited to three. The current
 candidate is therefore not publishable. After this branch is integrated and
 verified, create a replacement Windows candidate, then continue manual
 acceptance for the image/mask editor, output/rough paths, chroma quality and

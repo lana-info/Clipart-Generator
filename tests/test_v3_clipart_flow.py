@@ -639,21 +639,23 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         self.assertFalse(hasattr(page, "chroma_key_custom_color"))
 
-    def test_series_chroma_controls_default_to_blue_and_limit_materials_to_two(self):
+    def test_series_chroma_controls_default_to_blue_and_limit_materials_to_three(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
 
         self.assertEqual(page.chroma_key_color.currentData(), "blue")
-        watercolor, leaves, needles = page.chroma_material_buttons[:3]
+        watercolor, leaves, needles, metal = page.chroma_material_buttons[:4]
         watercolor.click()
         leaves.click()
+        needles.click()
 
         self.assertTrue(watercolor.isChecked())
         self.assertTrue(leaves.isChecked())
-        self.assertFalse(needles.isEnabled())
+        self.assertTrue(needles.isChecked())
+        self.assertFalse(metal.isEnabled())
 
         watercolor.click()
 
-        self.assertTrue(needles.isEnabled())
+        self.assertTrue(metal.isEnabled())
 
     def test_series_chroma_selected_materials_use_dedicated_readable_style(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
@@ -671,14 +673,16 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         self.assertIn("matte brushed metal", state.clipart.prompts[0].prompt)
 
-    def test_paste_chroma_controls_limit_materials_to_two(self):
+    def test_paste_chroma_controls_limit_materials_to_three(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
 
         buttons = page.paste_chroma_material_buttons
         buttons["watercolor"].click()
         buttons["thin_leaves"].click()
+        buttons["conifer_needles"].click()
 
-        self.assertFalse(buttons["conifer_needles"].isEnabled())
+        self.assertTrue(buttons["conifer_needles"].isChecked())
+        self.assertFalse(buttons["metal"].isEnabled())
 
     def test_csv_import_has_no_chroma_controls(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)

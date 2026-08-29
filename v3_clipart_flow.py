@@ -141,7 +141,7 @@ def configure_chroma_material_buttons(buttons: Sequence[QPushButton]) -> None:
 
     for button in buttons:
         button.setProperty("v3ChromaMaterial", True)
-        button.setToolTip("Можно выбрать до двух материалов")
+        button.setToolTip("Можно выбрать до трёх материалов")
         button.toggled.connect(refresh)
     refresh()
 MAX_REFERENCE_FILE_BYTES = 10 * 1024 * 1024

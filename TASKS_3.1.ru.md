@@ -146,7 +146,7 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
 ## Task 5: Добавить chroma modifier к созданию Clipart prompt
 
-Status: In progress — approved helper implemented; compact two-material limit
+Status: In progress — approved helper implemented; compact three-material limit
 and readable selected state added after candidate visual review; manual Windows
 acceptance remains in Task 13
 
@@ -177,7 +177,7 @@ Acceptance:
   объяснений. Approved visual: `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`.
 - [x] Новый generator по умолчанию выбирает синий; сохранённый выбор проекта
   не перезаписывается.
-- [x] Разрешены максимум два материала: выбранные тёмно-бирюзовые с белым
+- [x] Разрешены максимум три материала: выбранные тёмно-бирюзовые с белым
   текстом, остальные при достижении лимита приглушены без постоянной подписи.
 - [ ] CSV/Pinterest/Processing prompt UI не получает control.
 
@@ -188,7 +188,7 @@ Verification:
 Evidence: follow-up branch `codex/fix-3.1-chroma-control-ux`; focused offscreen
 tests generator/paste и prompt-state проходят. Visual screenshot сопоставлен с
 утверждённым compact layout; лимит сериализуется, поэтому старый draft с
-лишними materials безопасно сохраняет первые два.
+лишними materials безопасно сохраняет первые три.
 
 Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 
