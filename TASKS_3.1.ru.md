@@ -266,7 +266,7 @@ Scope: M. Requirements: `CG31-FR-030`–`CG31-FR-033`.
 
 ## Task 8: Зафиксировать chroma benchmark и критерии продолжения
 
-Status: Todo
+Status: Done (VDS checkpoint; Windows performance повторяется при acceptance)
 
 Goal:
 До нового алгоритма определить собственный reproducible golden set и измеримые
@@ -281,15 +281,24 @@ Steps:
   improvement cycles и stop/continue decision.
 
 Acceptance:
-- [ ] Каждый case имеет input, expected risk и checkerboard/black/white/bright
+- [x] Каждый case имеет input, expected risk и checkerboard/black/white/bright
   comparison.
-- [ ] Provenance честно фиксирует, что Clipbrook source ранее изучался как
+- [x] Provenance честно фиксирует, что Clipbrook source ранее изучался как
   research reference; его code/constants/tests не входят в fixtures/spec.
-- [ ] Spec может использовать изученные методы и идеи как research input, но
+- [x] Spec может использовать изученные методы и идеи как research input, но
   не содержит скопированный code/tests/constants Clipbrook.
 
 Verification:
-- [ ] Deterministic benchmark manifest и baseline contact sheet.
+- [x] Deterministic benchmark manifest и baseline contact sheet.
+
+Implementation evidence: feature commits `063a7cd` и `ed0dc4d`; manifest
+содержит шесть детерминированных cases и hash-checked input/mask/foreground
+goldens. Канонический offline baseline создан чистым commit `063a7cd`: mean
+alpha MAE `0.04016`, alpha IoU `0.92349`, median 2048×2048 runtime `2.606 s`,
+peak RSS `303.805 MiB`. 19 focused tests, `py_compile` и `git diff --check`
+прошли. Обычный runner не изменяет goldens; их обновление вынесено в отдельную
+явно подтверждаемую команду. Candidate comparison отклоняет другой schema,
+fixture/performance size, kind/key color и подменённую summary.
 
 Dependencies: Task 4. Scope: S. Requirements: `CG31-FR-040`–`CG31-FR-043`.
 

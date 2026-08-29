@@ -28,8 +28,8 @@ Updated: 2026-08-29
   integrated without rewriting history after explicit merge approval.
 - Current documentation branch: `codex/docs-3.1.0-feedback-prd`, created from
   that exact 3.0.7 source line. It defines the next 3.1.0 scope without changing
-  `release/VERSION.txt` or 3.0 source contracts and currently has no upstream
-  until its first explicit `push -u` to the same branch name.
+  `release/VERSION.txt` or 3.0 source contracts and tracks the same branch name
+  on GitHub.
 - The older `codex/fix-windows-acceptance-ux-3.0.5` branch is not an
   implementation base: its 14 feedback commits diverged from current
   `develop/3.0`. Their product requirements are being consolidated manually
@@ -50,9 +50,12 @@ Updated: 2026-08-29
 ## Next task
 
 Продолжить 3.1 implementation по `TASKS_3.1.ru.md`: Task 7 имеет утверждённый
-макет и Linux-safe implementation checkpoint `1724c76`; до закрытия остаётся
-manual Windows mouse/pen acceptance. Следующий независимый пункт по порядку —
-Task 8, reproducible Local Chroma Key benchmark и критерии stop/continue.
+макет и Linux-safe implementation checkpoint `1724c76`; до окончательного
+acceptance остаётся manual Windows mouse/pen pass. Task 8 завершён на ветке
+`codex/feat-3.1-chroma-benchmark`: implementation/goldens `063a7cd`, чистый
+канонический baseline `ed0dc4d`, 19 focused tests. Следующий пункт по порядку —
+Task 9, один bounded prototype cycle собственного automatic chroma engine с
+измеримым сравнением против зафиксированного baseline.
 
 Release 3.0.7 и development 3.1 разделены:
 
