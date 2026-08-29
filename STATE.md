@@ -60,8 +60,12 @@ acceptance остаётся manual Windows mouse/pen pass. Task 8 завершё
 `codex/feat-3.1-automatic-chroma-ux`, commit `33d2544`: automatic engine
 подключён к common Clipart/Processing run plan, UI оставляет только общий preset
 registry blue/red/green, legacy custom/tolerance/softness в worker не попадают.
-Следующий пункт по порядку — Task 11: массовое редактирование prompt через
-`Найти и заменить`, `В начало` и `В конец` с одной reversible operation.
+Task 11 завершён на ветке `codex/feat-3.1-batch-prompt-edit`, commit `ef56eb6`:
+modal preview поддерживает произвольный selection/всю серию, показывает
+no-match rows, защищает references/order и system Chroma Key suffix, а также
+даёт один безопасный undo. Следующий пункт по порядку — Task 12: добавить
+Fal.ai concurrency selector 1/2/3 с default 3, сохранив общий remote cap 6 и
+существующие проверки key/connection/balance.
 
 Release 3.0.7 и development 3.1 разделены:
 

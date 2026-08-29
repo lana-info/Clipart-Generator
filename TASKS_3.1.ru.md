@@ -391,7 +391,8 @@ Dependencies: Tasks 5, 7, 9. Scope: M. Requirements: `CG31-FR-041`.
 
 ## Task 11: Добавить массовое редактирование prompt
 
-Status: Todo
+Status: Done (Linux-safe checkpoint; Windows visual smoke remains in the final
+3.1 acceptance pass)
 
 Goal:
 Безопасно менять выделенные строки или весь список одной reversible operation.
@@ -405,13 +406,23 @@ Steps:
   operation.
 
 Acceptance:
-- [ ] Работает произвольный selection, включая 15 строк, и весь список.
-- [ ] No-match не меняет строку и виден до подтверждения.
-- [ ] References/order остаются неизменными.
+- [x] Работает произвольный selection, включая 15 строк, и весь список.
+- [x] No-match не меняет строку и виден до подтверждения.
+- [x] References/order остаются неизменными.
 
 Verification:
-- [ ] Unit tests каждой операции, Unicode, selection/all/no-match/undo.
-- [ ] Offscreen performance smoke на сотнях строк.
+- [x] Unit tests каждой операции, Unicode, selection/all/no-match/undo.
+- [x] Offscreen performance smoke на сотнях строк.
+
+Implementation evidence: feature commit `ef56eb6`. На странице проверки
+промптов одна кнопка `Найти и заменить` открывает modal preview с действиями
+`Заменить`, `В начало`, `В конец` и scope `Выбранные`/`Все`. До применения
+видны количество, до трёх примеров и номера строк без совпадений; no-op
+`X → X` не разрешает применение. Один undo восстанавливает весь последний
+batch и сбрасывается после следующего ручного изменения. References, порядок
+и сгенерированный Chroma Key suffix сохраняются. 71 focused test,
+`py_compile`, `git diff --check`, offscreen screenshots и независимый review
+прошли; 5000 строк обработаны за 0.013 s в локальном smoke.
 
 Dependencies: Task 5 and shared prompt workspace. Scope: M. Requirements:
 `CG31-FR-004`.
