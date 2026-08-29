@@ -6,9 +6,10 @@ Updated: 2026-08-29
 
 - VDS is the primary development environment.
 - Windows is the environment for Windows-specific behavior and visual verification.
-- GitHub is the source-code handoff point between environments. The current
-  Windows 3.0.5 installer must be built by the manual GitHub Actions workflow;
-  Azure remains historical/fallback infrastructure and is not queued here.
+- GitHub is the source-code handoff point between environments. The last
+  Windows 3.0.5 installer was built by the manual GitHub Actions workflow;
+  any future 3.0.7 build also requires a separate explicit command. Azure
+  remains historical/fallback infrastructure and is not queued here.
 - Only one side edits the active branch at a time.
 - Before changing sides, the active side runs relevant checks, commits, and pushes.
 - The receiving side uses `git fetch` and `git pull --ff-only`.
@@ -20,6 +21,26 @@ Updated: 2026-08-29
 ## Current branch and handoff
 
 - Base branch: `develop/3.0`
+- Current 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`;
+  `release/VERSION.txt` is `3.0.7`. This branch contains
+  `codex/feature-generation-fal-localization` and is a strict descendant of
+  `develop/3.0` (73 commits ahead at the audit point), so it can later be
+  integrated without rewriting history after explicit merge approval.
+- Current documentation branch: `codex/docs-3.1.0-feedback-prd`, created from
+  that exact 3.0.7 source line. It defines the next 3.1.0 scope without changing
+  `release/VERSION.txt` or 3.0 source contracts and tracks the same branch name
+  on GitHub.
+- The older `codex/fix-windows-acceptance-ux-3.0.5` branch is not an
+  implementation base: its 14 feedback commits diverged from current
+  `develop/3.0`. Their product requirements are being consolidated manually
+  into the separate 3.1 documents to avoid importing stale state or duplicate
+  history.
+- Ancestry audit confirms that the 3.0.7 source line already contains the
+  recent Fal/localization, reference-preflight, generation-section and
+  Pinterest-future-doc branches. `codex/tech-debt-11`,
+  `codex/license-server-client-integration` and old CSV alternatives remain
+  separate scopes and must not be merged into 3.0.7 or 3.1 merely because they
+  exist.
 - Provider-contract checkpoint branch: `fix/provider-api-contracts`
 - Verified provider-aware source: `08648e2a623291b8ba90684e37d947b1db427a0f`
 - Recommended VDS path: `~/projects/clipart-generator`
@@ -42,14 +63,17 @@ Preview, zoom, add/remove кисть, reset, атомарный экспорт �
 контролируемое сравнение BiRefNet v2, BEN v2, Ideogram, Bria и rembg. До этого
 зафиксировать endpoint `fal-ai/birefnet/v2` и режимы Matting/Portrait/Heavy.
 
-Предварительная стоимость Fal.ai теперь запрашивается вручную с экрана
-проверки запуска по текущему набору вызовов. Фактический Usage API после
-запуска пока не подключён, чтобы не выдавать расходы всего аккаунта за один
-конкретный запуск.
+Release 3.0.7 и development 3.1 разделены:
 
-Добавить и проверить Fal.ai background-removal profiles в рабочем UI. До
-появления ключа и средств ограничиться локальными тестами; после этого
-выполнить небольшой controlled live smoke с подтверждением стоимости.
+1. 3.0.7 остаётся immutable baseline `78f8c63`; новые пожелания туда не входят.
+2. Перед публикацией отдельно проверить этот exact baseline, получить явное
+   разрешение, fast-forward интегрировать его в `develop/3.0` и создать
+   `release/3.0.7` от точного проверенного commit. Build/publish — отдельные
+   явно разрешённые действия.
+3. После freeze создать `develop/3.1` от точного опубликованного 3.0.7 commit и
+   интегрировать туда утверждённые 3.1 docs.
+4. Tasks 1–13 выполнять отдельными короткими ветками от `develop/3.1` и
+   возвращать по одной с проверкой.
 
 Локальный chroma-key для Clipart теперь добавлен как отдельная CPU-only
 стратегия: prompt generator умеет добавлять инструкции для ровного ключевого
@@ -70,9 +94,42 @@ smoke на пользовательских сериях; Pinterest этим р�
 контекстные действия для края или внутренних просветов. До этого основной
 режим остаётся автоматическим и не показывает технические ползунки.
 
-Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
-Actions run `33032049521`. Do not publish it as an update before this
-target-machine acceptance.
+- генерация использует один общий selector `KIE — модель` / `Fal.ai — модель`;
+  существующие модели не удаляются, а пропорция, разрешение и число вариантов
+  общие для обычных и reference prompts. При референсах остаются только
+  совместимые модели;
+- общая настройка параллельности `35` отклонена: KIE, PhotoRoom и Fal.ai имеют
+  независимый выбор 1/2/3 с default 3, а общий remote cap для всех трёх
+  providers равен 6;
+- Fal.ai key, connection и balance check уже подтверждены владельцем; Task 12
+  добавляет утверждённый selector 1/2/3 и не переделывает balance flow;
+- для каждого нового или существенно переделанного видимого раздела утверждён
+  обязательный порядок: сначала полноэкранный mockup и состояния, затем явное
+  `Макет утверждён`, только после этого source code. После реализации реальные
+  screenshots сравниваются с макетом; PRD approval сам по себе UI не утверждает;
+- chroma использует только pure blue/green/red без custom/HEX/eyedropper;
+- Task 5 Chroma Key UI approved: compact helper справа, сначала короткие
+  подсказки blue/red/green, затем пояснение про materials; material buttons
+  остаются слева сразу после выбора цвета. Approved mockup:
+  `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`;
+- Task 2 processing editor UI approved: compact operation checklist сверху;
+  enabled stages ниже в pipeline order с тонкими разделителями. Approved
+  mockup: `docs/ui/3.1/task-2-processing-editor/approved-mockup.png`;
+- промежуточные файлы идут в `rough/`, готовые `_ready` — в `output/`;
+- текущий встроенный Results mask editor не принят: требуется отдельная страница
+  проверки, presets масштаба, видимый continuous brush и hardness;
+- Local Chroma Key требует собственного автоматического prototype. Отдельный
+  юридический gate не добавляется; при обычном code review проверяется только,
+  что чужие файлы и фрагменты не переносились.
+  Репозиторий Clipbrook скачан отдельно в
+  `/root/projects/clipbrook-core-research` только для исследования поведения;
+  его AGPL source уже был просмотрен как research reference. Изученные методы
+  и идеи можно адаптировать, упрощать и улучшать, но code/constants/tests не
+  переносятся. Работа не называется clean-room.
+
+Не запускать платные запросы, Windows/macOS build, merge или публикацию до
+соответствующего отдельного разрешения. Готовая исходная 3.0.7 публикуется
+отдельно; текущая docs-ветка предназначена только для будущей 3.1.0.
 
 ## Pinterest Pins Task 6 checkpoint — 2026-08-28
 

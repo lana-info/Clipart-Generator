@@ -26,7 +26,11 @@ Windows activation is `.venv\\Scripts\\Activate.ps1`.
 
 ## Workflow boundary
 
-Development is VDS-first on `develop/3.0`. Windows remains the clean clone for Windows-specific behavior and visual checks. GitHub is the only handoff point; do not edit the same branch from both machines simultaneously.
+Development is VDS-first. `develop/3.0` remains active through the 3.0.7
+freeze; after the approved transition, 3.1 work uses `develop/3.1` created from
+the exact published 3.0.7 commit. Windows remains the clean clone for
+Windows-specific behavior and visual checks. GitHub is the only handoff point;
+do not edit the same branch from both machines simultaneously.
 
 ## Sensitive data and artifacts
 
@@ -76,14 +80,13 @@ screens from the installed copy. The installer SHA-256 is
 
 ## Next product phase — generation quality and provider expansion
 
-After the current product acceptance tasks (`CG3-TASK-034`, `CG3-TASK-035`,
-`61A`, `62A`, `64`, and `65`) are closed, the next implementation phase is not
-the modular store or new product modes. The single source of truth for this
-phase is the `Next Product Phase` section in `PRD.md` and the `NEXT-TASK-*`
-section in `TASKS_3.0.ru.md`. The full R31-01/R31-07 architecture roadmap is
-not a prerequisite for the first prompt foundation tasks; Fal.ai integration
-does require the provider-neutral contract described below. The phase is a
-focused improvement of the existing generation workflow:
+Version 3.0.7 is the frozen baseline for the next product phase; new owner
+feedback does not expand that release. The authoritative 3.1.0 delta is
+`PRD_3.1.ru.md`, and its ordered implementation source is `TASKS_3.1.ru.md`.
+The `Next Product Phase` section in `PRD.md` and `NEXT-TASK-*` history in
+`TASKS_3.0.ru.md` remain architectural background only where they do not
+conflict with those 3.1 documents. The phase is a focused improvement of the
+existing generation and processing workflows:
 
 1. establish workflow composition and a structured clipart prompt contract;
 2. prepare localization infrastructure for Russian and English versions

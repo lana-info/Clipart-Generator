@@ -3,9 +3,16 @@
 ## Branches
 
 - `develop/3.0` is the development and integration branch.
+- `codex/fix-pinterest-prompt-only` at the verified 3.0.7 checkpoint remains
+  the frozen source candidate until it is explicitly integrated/released.
+- After 3.0.7 is frozen and the owner approves the transition, create
+  `develop/3.1` from the exact published 3.0.7 commit. All 3.1 implementation
+  branches must start from current `develop/3.1`, not from an older 3.0 task
+  branch. The 3.1 PRD/docs alone do not authorize this branch creation.
 - `release/3.x` is the stabilization branch for release preparation.
 - `main` is not part of routine 3.0 development.
-- Create task branches from the current `develop/3.0`:
+- Create task branches from the current development branch for the target
+  release (`develop/3.0` now; `develop/3.1` only after the approved transition):
   - `codex/fix-*` for bug fixes;
   - `codex/ui-*` for visual or usability changes;
   - `codex/license-*` for licensing and registration;
@@ -23,8 +30,39 @@
   explicit user approval.
 - Never dispatch GitHub Actions or start local/GitHub builds without a separate
   explicit user command. An ordinary push must not trigger a build workflow.
-- Merge completed task branches into `develop/3.0` one at a time and verify after each merge.
+- Merge completed task branches into the active target development branch one
+  at a time and verify after each merge.
 - Update `release/3.x` only after the candidate is stable and explicitly approved.
+
+## Mandatory visual approval gate
+
+- Before coding any new or materially redesigned user-visible page, section,
+  dialog, result view, editor or control group, first show the owner a visual
+  mockup. A PRD/task approval does not approve the later UI automatically.
+- Before the mockup, restate in plain language what is changing, why, what stays
+  unchanged and which user action the screen must support.
+- The mockup must use the actual Vibix dark visual language and show the full
+  screen context rather than an isolated control when surrounding layout affects
+  understanding. Show at least the normal target size 1120×780 and verify the
+  design remains usable at the 980×700 minimum. Early alternatives may be rough,
+  but the version submitted for final approval must be visually close to the
+  intended implementation, not only a text diagram.
+- Show all materially different states before implementation: default/empty,
+  enabled or populated, relevant provider/model choice, validation/error, and
+  disabled/hidden behavior where applicable. For a redesign, include a clear
+  current-versus-proposed comparison.
+- Explain interactions and conditional visibility next to the mockup. Revise the
+  visual as many times as needed. Do not edit implementation source until the
+  owner explicitly says that the mockup is approved.
+- If implementation discovers a visual change not present in the approved
+  mockup, stop and obtain approval for the revised visual before continuing.
+- After implementation, capture the real screen in the same important states
+  and compare it with the approved mockup before declaring the UI task complete.
+- Save the approved mockup and final comparison in the task-specific design
+  artifacts under `docs/ui/3.1/<task-id>/` using only safe dummy content; link
+  them from the task/spec so a later session can recover the exact approval.
+- Purely internal or non-visual fixes do not require a mockup, but still require
+  a short description of the intended behavior and approval before source edits.
 
 ## Important project boundaries
 
