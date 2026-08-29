@@ -1949,3 +1949,13 @@ Status: Implemented on feature branch; owner acceptance pending
 - [x] Verify focused offscreen tests, compilation, and `git diff --check`.
 - [ ] Perform manual owner acceptance in the desktop app; do not run paid API
   calls or publish a build without explicit approval.
+
+### Task 76 - Temporarily Hide Alpha Brush Editor
+
+Status: Implemented on feature branch; owner acceptance pending
+
+- [x] Hide the Clipart result-page alpha/transparency brush editor in the
+  current stable client surface.
+- [x] Hide save-corrected-PNG and save-alpha-mask actions together with it.
+- [x] Preserve the implementation for the future image-processing release.
+- [x] Add a regression test and verify focused queue/navigation checks.

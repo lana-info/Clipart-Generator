@@ -136,6 +136,23 @@ class V3RunQueueTests(unittest.TestCase):
     def tearDown(self):
         self.app.processEvents()
 
+    def test_clipart_results_temporarily_hide_alpha_brush_editor(self):
+        with tempfile.TemporaryDirectory(prefix="v3-results-alpha-hidden-") as temp:
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            page = RunResultsPage(state)
+            session = RunQueueSession(generation_request(temp, count=1), ProjectMode.CLIPART)
+            page.set_session(session)
+            page._selection_changed(0)
+
+            self.assertFalse(page.SHOW_TRANSPARENCY_EDITOR)
+            self.assertTrue(page.transparency_preview.isHidden())
+            self.assertTrue(page.save_corrected_button.isHidden())
+            self.assertTrue(page.save_mask_button.isHidden())
+            page.deleteLater()
+
     def test_elapsed_duration_is_human_readable(self):
         self.assertEqual(format_elapsed_duration(45), "45 секунд")
         self.assertEqual(format_elapsed_duration(93), "1 мин 33 сек")

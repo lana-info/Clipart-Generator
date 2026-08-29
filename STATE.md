@@ -461,6 +461,11 @@ acceptance are approved.
 - Focused offscreen checks pass: 104 tests plus 11 subtests, and the Pinterest
   mode suite passes: 24 tests plus 6 subtests. Manual desktop acceptance remains.
 
+The alpha/transparency brush editor on the Clipart results page is temporarily
+hidden for the stable client release, including corrected-PNG and alpha-mask
+save buttons. The implementation remains available for the future dedicated
+image-processing version.
+
 ## Prohibited without explicit approval
 
 - Secrets, credentials, `.env` files, and user data in Git.

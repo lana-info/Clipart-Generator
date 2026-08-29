@@ -1382,6 +1382,11 @@ class RunCompletionDialog(QDialog):
 
 
 class RunResultsPage(QWidget):
+    # The alpha/brush editor is implemented but intentionally hidden in the
+    # stable client release. It will return in the dedicated image-processing
+    # version after a separate product review.
+    SHOW_TRANSPARENCY_EDITOR = False
+
     stop_requested = pyqtSignal()
     immediate_stop_requested = pyqtSignal()
     retry_requested = pyqtSignal()
@@ -1701,7 +1706,7 @@ class RunResultsPage(QWidget):
             self.handoff_label.setText("Передача на проверку: не выполнялась")
             return
         self.preview_popup.hide()
-        if self.state.mode is ProjectMode.CLIPART:
+        if self.SHOW_TRANSPARENCY_EDITOR and self.state.mode is ProjectMode.CLIPART:
             preview_path = (
                 item.output_path
                 if item.status is RunItemStatus.SUCCEEDED
