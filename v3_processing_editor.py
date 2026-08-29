@@ -313,8 +313,17 @@ class ProcessingPipelineEditor(QScrollArea):
         )
         for name in operation_names:
             self._add_bool(form, name, operations)
-        if not include_cleanup:
+        if include_cleanup:
+            self.cleanup_checkbox = QCheckBox("Удалить служебные данные изображения")
+            self.cleanup_checkbox.setAccessibleName("Удалить служебные данные изображения")
+            form.addRow(self.cleanup_checkbox)
             self._add_bool(form, "visible_mark_cleanup", operations)
+        else:
+            self.cleanup_checkbox = None
+        self._add_bool(form, "invisible_watermark_cleanup", operations)
+        invisible_control = self.operation_widgets["invisible_watermark_cleanup"]
+        operations.invisible_watermark_cleanup = False
+        configure_unavailable_synthid(invisible_control)
         self._add_combo(
             form,
             "upscale_before_provider",
@@ -420,10 +429,9 @@ class ProcessingPipelineEditor(QScrollArea):
             advanced_form,
             "chroma_key_color",
             "Chroma Key цвет",
-            (("Синий", "blue"), ("Красный", "red"), ("Зелёный", "green"), ("Свой оттенок", "custom")),
+            (("Синий", "blue"), ("Зелёный", "green"), ("Красный", "red")),
             operations,
         )
-        self._add_text(advanced_form, "chroma_key_custom_color", "Свой оттенок #RRGGBB", operations)
         self._add_int(advanced_form, "chroma_key_tolerance", "Chroma Key допуск", 0, 255, operations)
         self._add_int(advanced_form, "chroma_key_softness", "Chroma Key мягкость края", 0, 255, operations)
         self._add_combo(
@@ -524,36 +532,9 @@ class ProcessingPipelineEditor(QScrollArea):
         self.add_widget(advanced)
         self._build_stage_sections(operations_group, advanced)
 
-        if include_cleanup:
-            cleanup = QGroupBox("Очистка следов ИИ")
-            self.cleanup_group = cleanup
-            cleanup_form = QFormLayout(cleanup)
-            self.cleanup_checkbox = QCheckBox("Очистить служебные данные")
-            self.cleanup_checkbox.setAccessibleName("Очистить служебные данные")
-            cleanup_form.addRow(self.cleanup_checkbox)
-            self._add_bool(cleanup_form, "visible_mark_cleanup", operations)
-            self._add_bool(cleanup_form, "invisible_watermark_cleanup", operations)
-            invisible_control = self.operation_widgets["invisible_watermark_cleanup"]
-            operations.invisible_watermark_cleanup = False
-            configure_unavailable_synthid(invisible_control)
-            cleanup_hint = QLabel(
-                "Удаляет EXIF, XMP, IPTC, текстовые комментарии, встроенную "
-                "миниатюру, поля программы-создателя и встроенные данные C2PA. "
-                "ICC и DPI всегда сохраняются."
-            )
-            cleanup_hint.setWordWrap(True)
-            cleanup_form.addRow(cleanup_hint)
-            cleanup_note = QLabel(
-                "Сначала очищаются метаданные и видимая метка. Пересоздание через KIE "
-                "будет отдельным необязательным действием, так как оно может изменить изображение."
-            )
-            cleanup_note.setWordWrap(True)
-            cleanup_form.addRow(cleanup_note)
-            self.add_widget(cleanup)
+        self.cleanup_group = None
+        if self.cleanup_checkbox is not None:
             self.cleanup_checkbox.toggled.connect(self._sync)
-        else:
-            self.cleanup_checkbox = None
-            self.cleanup_group = None
 
         self.pipeline_label = QLabel()
         self.pipeline_label.setWordWrap(True)
@@ -605,7 +586,6 @@ class ProcessingPipelineEditor(QScrollArea):
             "fal_birefnet_model": "Вариант BiRefNet",
             "fal_birefnet_resolution": "Разрешение BiRefNet",
             "chroma_key_color": "Цвет фона",
-            "chroma_key_custom_color": "Свой оттенок",
             "chroma_key_tolerance": "Допуск",
             "chroma_key_softness": "Мягкость края",
             "local_rembg_profile": "Профиль rembg",
@@ -634,7 +614,7 @@ class ProcessingPipelineEditor(QScrollArea):
                 "fal_remove_bg_model", "fal_birefnet_model",
                 "fal_birefnet_resolution", "fal_birefnet_refine_foreground",
                 "fal_rembg_crop_to_bbox", "chroma_key_color",
-                "chroma_key_custom_color", "chroma_key_tolerance",
+                "chroma_key_tolerance",
                 "chroma_key_softness", "local_rembg_profile", "local_rembg_model",
                 "local_rembg_edge_quality", "local_ben2_refine_foreground",
                 "local_ben2_alpha_threshold", "local_ben2_edge_softness",
@@ -926,9 +906,6 @@ class ProcessingPipelineEditor(QScrollArea):
             and "local_ben2_corner_radius" in remove_controls,
             "chroma_key_color": operations.remove_background
             and "chroma_key_color" in remove_controls,
-            "chroma_key_custom_color": operations.remove_background
-            and "chroma_key_custom_color" in remove_controls
-            and operations.chroma_key_color == "custom",
             "chroma_key_tolerance": operations.remove_background
             and "chroma_key_tolerance" in remove_controls,
             "chroma_key_softness": operations.remove_background
@@ -1009,7 +986,6 @@ class ProcessingPipelineEditor(QScrollArea):
             "local_ben2_edge_softness": "remove_background",
             "local_ben2_corner_radius": "remove_background",
             "chroma_key_color": "remove_background",
-            "chroma_key_custom_color": "remove_background",
             "chroma_key_tolerance": "remove_background",
             "chroma_key_softness": "remove_background",
             "unsharp_amount": "unsharp",

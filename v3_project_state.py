@@ -235,7 +235,9 @@ class PromptGeneratorData:
             limit=MAX_PROMPT_GENERATOR_ITEMS,
         )
         self.chroma_key_enabled = _boolean(self.chroma_key_enabled, default=False)
-        self.chroma_key_color = _text(self.chroma_key_color, limit=20) or "blue"
+        self.chroma_key_color = _text(self.chroma_key_color, limit=20).lower()
+        if self.chroma_key_color not in {"blue", "green", "red"}:
+            self.chroma_key_color = "blue"
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         allowed_materials = {
             "watercolor", "thin_leaves", "conifer_needles", "metal",
@@ -595,7 +597,9 @@ class ImageOperationData:
             minimum=0,
             maximum=3,
         )
-        self.chroma_key_color = _text(self.chroma_key_color, limit=20) or "blue"
+        self.chroma_key_color = _text(self.chroma_key_color, limit=20).lower()
+        if self.chroma_key_color not in {"blue", "green", "red"}:
+            self.chroma_key_color = "blue"
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         self.chroma_key_tolerance = _bounded_int(
             self.chroma_key_tolerance, default=32, minimum=0, maximum=255

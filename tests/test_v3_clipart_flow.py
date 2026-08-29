@@ -630,6 +630,7 @@ class V3ClipartFlowTests(unittest.TestCase):
                 "remove_embedded_c2pa",
                 "preserve_icc",
                 "preserve_dpi",
+                "chroma_key_custom_color",
             },
         )
         self.assertIsInstance(

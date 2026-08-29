@@ -105,11 +105,9 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertIn("недоступно", synthid.text().lower())
 
         copy = " ".join(label.text() for label in editor.findChildren(QLabel))
-        self.assertIn("текстовые комментарии", copy)
-        self.assertIn("встроенную миниатюру", copy)
-        self.assertNotIn("comments/text", copy)
-        self.assertNotIn("embedded thumbnail", copy)
-        self.assertNotIn("generator fields", copy)
+        self.assertNotIn("текстовые комментарии", copy)
+        self.assertNotIn("встроенную миниатюру", copy)
+        self.assertNotIn("Очистка следов ИИ", copy)
 
     def test_shared_steps_match_current_pipeline_contract(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
