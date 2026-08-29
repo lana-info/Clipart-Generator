@@ -153,6 +153,110 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertTrue(page.save_mask_button.isHidden())
             page.deleteLater()
 
+    def test_clipart_results_open_the_dedicated_transparency_page_on_double_click(self):
+        with tempfile.TemporaryDirectory(prefix="v3-results-alpha-page-") as temp:
+            root = Path(temp)
+            output = root / "output" / "flowers_ready.png"
+            output.parent.mkdir(parents=True)
+            Image.new("RGBA", (20, 20), (10, 20, 30, 128)).save(output)
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            page = RunResultsPage(state)
+            session = RunQueueSession(
+                generation_request(temp, count=1), ProjectMode.CLIPART
+            )
+            session.items[0].status = RunItemStatus.SUCCEEDED
+            session.items[0].output_path = str(output)
+            page.set_session(session)
+            opened = []
+            page.transparency_requested.connect(opened.append)
+
+            page.queue.itemDoubleClicked.emit(page.queue.item(0))
+
+            self.assertEqual(opened, [0])
+            page.deleteLater()
+
+    def test_terminal_clipart_results_offer_a_visible_transparency_button(self):
+        with tempfile.TemporaryDirectory(prefix="v3-results-alpha-button-") as temp:
+            root = Path(temp)
+            output = root / "output" / "flowers_ready.png"
+            output.parent.mkdir(parents=True)
+            Image.new("RGBA", (20, 20), (10, 20, 30, 128)).save(output)
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            page = RunResultsPage(state)
+            session = RunQueueSession(
+                generation_request(temp, count=1), ProjectMode.CLIPART
+            )
+            session.items[0].status = RunItemStatus.SUCCEEDED
+            session.items[0].output_path = str(output)
+            session.handle_finished()
+            page.set_session(session)
+            page.queue.setCurrentRow(0)
+            opened = []
+            page.transparency_requested.connect(opened.append)
+
+            self.assertEqual(
+                page.check_transparency_button.text(),
+                "Проверить прозрачность",
+            )
+            self.assertFalse(page.check_transparency_button.isHidden())
+            page.check_transparency_button.click()
+
+            self.assertEqual(opened, [0])
+            page.deleteLater()
+
+    def test_clipart_route_has_a_dedicated_transparency_page_after_results(self):
+        self.assertEqual(
+            route_for_mode(ProjectMode.CLIPART)[-2:],
+            (StepId.RESULTS, StepId.TRANSPARENCY),
+        )
+        self.assertNotIn(
+            StepId.TRANSPARENCY,
+            route_for_mode(ProjectMode.PROCESSING),
+        )
+        self.assertNotIn(
+            StepId.TRANSPARENCY,
+            route_for_mode(ProjectMode.PINTEREST),
+        )
+
+    def test_clipart_controller_opens_editor_with_successful_outputs_and_returns(self):
+        with tempfile.TemporaryDirectory(prefix="v3-alpha-controller-") as temp:
+            root = Path(temp)
+            output = root / "output" / "flowers_ready.png"
+            output.parent.mkdir(parents=True)
+            Image.new("RGBA", (20, 20), (10, 20, 30, 128)).save(output)
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            shell = AppShell(state)
+            controller = install_clipart_flow(shell)
+            session = RunQueueSession(
+                generation_request(temp, count=1), ProjectMode.CLIPART
+            )
+            session.items[0].status = RunItemStatus.SUCCEEDED
+            session.items[0].output_path = str(output)
+            session.handle_finished()
+            controller.run_queue.session = session
+            controller.run_queue.page.set_session(session)
+
+            controller.run_queue.page.transparency_requested.emit(0)
+
+            editor = controller.pages[StepId.TRANSPARENCY]
+            self.assertIs(shell.current_page, editor)
+            self.assertEqual(editor.current_path, output)
+            editor.focus_button.click()
+            self.assertTrue(shell.sidebar.isHidden())
+            editor.back_button.click()
+            self.assertIs(shell.state.current_step, StepId.RESULTS)
+            self.assertFalse(shell.sidebar.isHidden())
+            shell.deleteLater()
+
     def test_elapsed_duration_is_human_readable(self):
         self.assertEqual(format_elapsed_duration(45), "45 секунд")
         self.assertEqual(format_elapsed_duration(93), "1 мин 33 сек")
@@ -347,10 +451,12 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertTrue(session.running)
             self.assertIn("event=diagnostic_parse_failed", session.technical_log)
 
-    def test_all_routes_end_in_the_shared_results_step(self):
+    def test_all_routes_include_the_shared_results_step(self):
         for mode in ProjectMode:
             with self.subTest(mode=mode):
-                self.assertIs(route_for_mode(mode)[-1], StepId.RESULTS)
+                self.assertIn(StepId.RESULTS, route_for_mode(mode))
+        self.assertIs(route_for_mode(ProjectMode.PROCESSING)[-1], StepId.RESULTS)
+        self.assertIs(route_for_mode(ProjectMode.PINTEREST)[-1], StepId.RESULTS)
 
     def test_processing_item_start_is_not_reported_as_generation(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-processing-stage-") as temp:

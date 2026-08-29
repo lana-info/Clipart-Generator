@@ -1392,6 +1392,7 @@ class RunResultsPage(QWidget):
     retry_requested = pyqtSignal()
     process_more_requested = pyqtSignal()
     finish_requested = pyqtSignal()
+    transparency_requested = pyqtSignal(int)
 
     def __init__(
         self,
@@ -1432,6 +1433,7 @@ class RunResultsPage(QWidget):
         self.queue.setAccessibleName("Очередь выполнения")
         self.queue.setMinimumHeight(360)
         self.queue.currentRowChanged.connect(self._selection_changed)
+        self.queue.itemDoubleClicked.connect(self._open_transparency_item)
         self.viewer = BeforeAfterViewer()
         self.viewer.hide()
         self.transparency_preview = ClipartTransparencyPreview()
@@ -1521,6 +1523,14 @@ class RunResultsPage(QWidget):
             ButtonVariant.PRIMARY,
         )
         self.open_folder_button.clicked.connect(self._open_folder)
+        self.check_transparency_button = V3Button(
+            "Проверить прозрачность",
+            ButtonVariant.SECONDARY,
+        )
+        self.check_transparency_button.clicked.connect(
+            self._request_selected_transparency
+        )
+        self.check_transparency_button.hide()
         self.save_corrected_button = V3Button(
             "Сохранить исправленный PNG",
             ButtonVariant.PRIMARY,
@@ -1548,6 +1558,7 @@ class RunResultsPage(QWidget):
         self.finish_button.hide()
         workflow_layout.addStretch()
         utility_primary_layout.addWidget(self.open_folder_button)
+        utility_primary_layout.addWidget(self.check_transparency_button)
         utility_primary_layout.addWidget(self.save_corrected_button)
         utility_primary_layout.addWidget(self.save_mask_button)
         utility_primary_layout.addStretch()
@@ -1595,6 +1606,7 @@ class RunResultsPage(QWidget):
             self.process_more_button.hide()
             self.finish_button.hide()
             self.open_folder_button.setEnabled(False)
+            self.check_transparency_button.hide()
             self.save_corrected_button.hide()
             self.save_mask_button.hide()
             self.log_button.setEnabled(False)
@@ -1689,11 +1701,39 @@ class RunResultsPage(QWidget):
             return None
         return self.session.items[row]
 
+    def _open_transparency_item(self, row: QListWidgetItem) -> None:
+        if self.state.mode is not ProjectMode.CLIPART:
+            return
+        item_index = row.data(Qt.ItemDataRole.UserRole)
+        item = self._selected_item(item_index)
+        if (
+            item is None
+            or item.status is not RunItemStatus.SUCCEEDED
+            or not item.output_path
+        ):
+            return
+        self.transparency_requested.emit(int(item_index))
+
+    def _request_selected_transparency(self) -> None:
+        row = self.queue.currentRow()
+        item = self._selected_item(row)
+        if (
+            self.state.mode is not ProjectMode.CLIPART
+            or self.session is None
+            or self.session.running
+            or item is None
+            or item.status is not RunItemStatus.SUCCEEDED
+            or not item.output_path
+        ):
+            return
+        self.transparency_requested.emit(row)
+
     def _selection_changed(self, row: int) -> None:
         item = self._selected_item(row)
         if item is None:
             self.preview_popup.hide()
             self.transparency_preview.hide()
+            self.check_transparency_button.hide()
             self.save_corrected_button.hide()
             self._set_status_label(
                 self.processing_label,
@@ -1726,6 +1766,13 @@ class RunResultsPage(QWidget):
             self.transparency_preview.hide()
             self.save_corrected_button.hide()
             self.save_mask_button.hide()
+        self.check_transparency_button.setVisible(
+            self.state.mode is ProjectMode.CLIPART
+            and self.session is not None
+            and not self.session.running
+            and item.status is RunItemStatus.SUCCEEDED
+            and bool(item.output_path)
+        )
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),

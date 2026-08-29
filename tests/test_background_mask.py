@@ -3,6 +3,7 @@ import unittest
 from PIL import Image
 
 from background_mask import (
+    apply_mask_path,
     apply_mask_stroke,
     apply_mask_to_image,
     has_usable_alpha,
@@ -44,6 +45,38 @@ class BackgroundMaskTests(unittest.TestCase):
         self.assertEqual(removed.getpixel((1, 1)), 0)
         self.assertIsNot(added, mask)
 
+    def test_soft_brush_keeps_a_solid_center_and_feathers_the_edge(self):
+        mask = Image.new("L", (41, 41), 255)
+
+        removed = apply_mask_stroke(
+            mask,
+            (20, 20),
+            radius=10,
+            action="remove",
+            hardness=50,
+        )
+
+        self.assertEqual(removed.getpixel((20, 20)), 0)
+        self.assertGreater(removed.getpixel((29, 20)), 0)
+        self.assertLess(removed.getpixel((29, 20)), 255)
+        self.assertEqual(removed.getpixel((31, 20)), 255)
+
+    def test_path_stroke_fills_the_gap_between_pointer_events(self):
+        mask = Image.new("L", (61, 21), 255)
+
+        removed = apply_mask_path(
+            mask,
+            ((10, 10), (50, 10)),
+            radius=3,
+            action="remove",
+            hardness=100,
+        )
+
+        self.assertEqual(removed.getpixel((10, 10)), 0)
+        self.assertEqual(removed.getpixel((30, 10)), 0)
+        self.assertEqual(removed.getpixel((50, 10)), 0)
+        self.assertEqual(removed.getpixel((30, 15)), 255)
+
     def test_invalid_stroke_is_rejected(self):
         mask = Image.new("L", (3, 3), 0)
 
@@ -51,6 +84,14 @@ class BackgroundMaskTests(unittest.TestCase):
             apply_mask_stroke(mask, (1, 1), radius=0, action="add")
         with self.assertRaises(ValueError):
             apply_mask_stroke(mask, (1, 1), radius=1, action="paint")
+        with self.assertRaises(ValueError):
+            apply_mask_stroke(
+                mask,
+                (1, 1),
+                radius=1,
+                action="add",
+                hardness=101,
+            )
 
     def test_apply_mask_preserves_source_rgb_and_rejects_size_mismatch(self):
         source = Image.new("RGBA", (2, 1), (10, 20, 30, 255))

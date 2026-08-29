@@ -68,6 +68,7 @@ class ProjectRoutesTests(unittest.TestCase):
                 StepId.PROCESSING_OPTIONS,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
+                StepId.TRANSPARENCY,
             ),
         )
         self.assertEqual(
@@ -136,6 +137,17 @@ class ProjectRoutesTests(unittest.TestCase):
 
 
 class ProjectSerializationTests(unittest.TestCase):
+    def test_saved_transparency_editor_step_reopens_on_results_without_a_session(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.set_step(StepId.TRANSPARENCY)
+
+        restored = ProjectState.from_dict(state.to_dict())
+
+        self.assertIs(
+            restored.current_step_by_mode[ProjectMode.CLIPART],
+            StepId.RESULTS,
+        )
+
     def test_pinterest_pin_draft_defaults_are_serializable(self):
         draft = PinterestPinData()
 

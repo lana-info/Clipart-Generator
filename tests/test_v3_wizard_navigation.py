@@ -105,6 +105,25 @@ class V3WizardNavigationTests(unittest.TestCase):
         shell.close()
         shell.deleteLater()
 
+    def test_repeated_refresh_hides_replaced_step_labels_immediately(self):
+        state = complete_state(ProjectMode.CLIPART)
+        shell = AppShell(state)
+        shell.show()
+        self.app.processEvents()
+
+        shell.refresh()
+        shell.refresh()
+        visible_steps = [
+            label
+            for label in shell.sidebar.findChildren(QLabel)
+            if label.text().startswith(("✓", "●", "○", "✕"))
+            and label.isVisible()
+        ]
+
+        self.assertEqual(len(visible_steps), len(state.route))
+        shell.close()
+        shell.deleteLater()
+
     def test_navigation_state_survives_shell_recreation(self):
         state = complete_state(ProjectMode.PINTEREST)
         first_shell = AppShell(state)

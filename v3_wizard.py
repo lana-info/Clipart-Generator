@@ -51,6 +51,7 @@ STEP_TITLES: dict[StepId, str] = {
     StepId.PIPELINE: "Обработка изображений",
     StepId.REVIEW_RUN: "Проверка и запуск",
     StepId.RESULTS: "Результаты",
+    StepId.TRANSPARENCY: "Проверка прозрачности",
 }
 
 STEP_DESCRIPTIONS: dict[StepId, str] = {
@@ -65,6 +66,7 @@ STEP_DESCRIPTIONS: dict[StepId, str] = {
     StepId.PIPELINE: "Проверьте точный порядок включённых операций.",
     StepId.REVIEW_RUN: "Проверьте настройки, стоимость и ожидаемый результат.",
     StepId.RESULTS: "Просмотрите результаты и журнал выполненных операций.",
+    StepId.TRANSPARENCY: "Проверьте и исправьте прозрачность готовых PNG.",
 }
 
 VALIDATION_MESSAGES: dict[str, str] = {
@@ -230,6 +232,20 @@ class AppShell(QWidget):
     def another_run_is_active(self, controller: object) -> bool:
         active = self.active_run_controller()
         return active is not None and active is not controller
+
+    def set_canvas_focus_mode(self, enabled: bool) -> None:
+        """Temporarily maximize an editor canvas without changing OS fullscreen."""
+        focused = bool(enabled)
+        self.top_bar.setVisible(not focused)
+        self.sidebar.setVisible(not focused)
+        self.footer.setVisible(not focused)
+        if focused:
+            self.save_error_label.hide()
+            self.mode_switch_banner.hide()
+        else:
+            self.save_error_label.setVisible(bool(self.save_error_label.text()))
+            self.mode_switch_banner.setVisible(self._pending_mode is not None)
+        self.updateGeometry()
 
     @property
     def is_dirty(self) -> bool:
@@ -546,10 +562,13 @@ class AppShell(QWidget):
 
     def _refresh_footer(self) -> None:
         index = self.state.route.index(self.state.current_step)
-        on_results = self.state.current_step is StepId.RESULTS
-        self.back_button.setVisible(not on_results)
-        self.next_button.setVisible(not on_results)
-        self.back_button.setEnabled(index > 0 and not on_results)
+        on_terminal_page = self.state.current_step in {
+            StepId.RESULTS,
+            StepId.TRANSPARENCY,
+        }
+        self.back_button.setVisible(not on_terminal_page)
+        self.next_button.setVisible(not on_terminal_page)
+        self.back_button.setEnabled(index > 0 and not on_terminal_page)
 
         if self.state.current_step is StepId.REVIEW_RUN:
             text = "Запустить"
@@ -695,7 +714,10 @@ class AppShell(QWidget):
     def _switch_mode(self, mode: ProjectMode) -> None:
         self._run_request_key = None
         self.mode_switch_banner.hide()
-        restart_workflow = self.state.current_step is StepId.RESULTS
+        restart_workflow = self.state.current_step in {
+            StepId.RESULTS,
+            StepId.TRANSPARENCY,
+        }
         self.state.switch_mode(mode)
         if restart_workflow:
             # Results are terminal for the previous run.  Reusing that step

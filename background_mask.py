@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import tempfile
+from functools import lru_cache
+from math import ceil, hypot
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 
 def mask_for_image(image: Image.Image) -> Image.Image:
@@ -24,26 +26,122 @@ def apply_mask_stroke(
     *,
     radius: int,
     action: str,
+    hardness: int = 100,
 ) -> Image.Image:
-    """Apply one hard-edged add/remove brush stroke to a defensive mask copy."""
+    """Apply one add/remove brush stamp to a defensive mask copy."""
+    return apply_mask_path(
+        mask,
+        (center,),
+        radius=radius,
+        action=action,
+        hardness=hardness,
+    )
+
+
+def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) -> None:
     if mask.mode != "L":
         raise ValueError("Маска должна быть в режиме L")
     if radius < 1:
         raise ValueError("Радиус кисти должен быть положительным")
     if action not in {"add", "remove"}:
         raise ValueError("Действие кисти должно быть add или remove")
+    if not 0 <= hardness <= 100:
+        raise ValueError("Жёсткость кисти должна быть от 0 до 100")
+
+
+@lru_cache(maxsize=16)
+def _brush_opacity(radius: int, hardness: int) -> Image.Image:
+    diameter = radius * 2 + 1
+    shape = Image.new("L", (diameter, diameter), 0)
+    ImageDraw.Draw(shape).ellipse((0, 0, diameter - 1, diameter - 1), fill=255)
+    if hardness == 100:
+        return shape
+    gradient = Image.radial_gradient("L").resize(
+        (diameter, diameter),
+        Image.Resampling.BILINEAR,
+    )
+    threshold = round(255 * hardness / 100)
+    span = max(1, 255 - threshold)
+    feather = gradient.point(
+        lambda value: 255
+        if value <= threshold
+        else max(0, round(255 * (255 - value) / span))
+    )
+    return ImageChops.multiply(shape, feather)
+
+
+def apply_mask_path(
+    mask: Image.Image,
+    points: tuple[tuple[int, int], ...] | list[tuple[int, int]],
+    *,
+    radius: int,
+    action: str,
+    hardness: int = 100,
+) -> Image.Image:
+    """Apply a continuous add/remove stroke between sampled pointer points."""
     result = mask.copy()
-    value = 255 if action == "add" else 0
-    ImageDraw.Draw(result).ellipse(
-        (
-            center[0] - radius,
-            center[1] - radius,
-            center[0] + radius,
-            center[1] + radius,
-        ),
-        fill=value,
+    _paint_mask_path(
+        result,
+        points,
+        radius=radius,
+        action=action,
+        hardness=hardness,
     )
     return result
+
+
+def paint_mask_path(
+    mask: Image.Image,
+    points: tuple[tuple[int, int], ...] | list[tuple[int, int]],
+    *,
+    radius: int,
+    action: str,
+    hardness: int = 100,
+) -> None:
+    """Paint a continuous stroke directly into an owned writable mask."""
+    _paint_mask_path(
+        mask,
+        points,
+        radius=radius,
+        action=action,
+        hardness=hardness,
+    )
+
+
+def _paint_mask_path(
+    mask: Image.Image,
+    points: tuple[tuple[int, int], ...] | list[tuple[int, int]],
+    *,
+    radius: int,
+    action: str,
+    hardness: int,
+) -> None:
+    _validate_brush(mask, radius, action, hardness)
+    if not points:
+        return
+    opacity = _brush_opacity(radius, hardness)
+    value = 255 if action == "add" else 0
+
+    def stamp(x: int, y: int) -> None:
+        mask.paste(
+            value,
+            (x - radius, y - radius, x + radius + 1, y + radius + 1),
+            opacity,
+        )
+
+    previous = (int(points[0][0]), int(points[0][1]))
+    stamp(*previous)
+    spacing = max(1.0, radius / 3)
+    for raw_point in points[1:]:
+        current = (int(raw_point[0]), int(raw_point[1]))
+        distance = hypot(current[0] - previous[0], current[1] - previous[1])
+        steps = max(1, ceil(distance / spacing))
+        for step in range(1, steps + 1):
+            stamp(
+                round(previous[0] + (current[0] - previous[0]) * step / steps),
+                round(previous[1] + (current[1] - previous[1]) * step / steps),
+            )
+        previous = current
 
 
 def apply_mask_to_image(image: Image.Image, mask: Image.Image) -> Image.Image:
