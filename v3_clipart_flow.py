@@ -3587,7 +3587,7 @@ class _SharedClipartProcessingPage(ProcessingPipelineEditor):
             state.clipart,
             changed,
             title="Обработка изображений",
-            description="Единые настройки обработки изображений для всех режимов.",
+            description="",
             include_cleanup=True,
             require_operation=False,
             allowed_operations=workflow_for_mode(ProjectMode.CLIPART).processing_operations,

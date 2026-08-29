@@ -76,14 +76,19 @@ Goal:
 фактического pipeline.
 
 Steps:
-- Оставить сверху компактный operation checklist.
+- Оставить сверху компактный operation checklist в трёх колонках, сохраняя
+  установленный порядок чтения.
 - Рендерить ниже только enabled stages с heading/divider/spacing.
+- Показывать divider только между двумя реально включёнными stage, никогда не
+  выводить пустые разделители.
 - Использовать один editor/recipe/builder в Clipart и Processing.
 
 Acceptance:
 - [ ] Выключенный stage и его controls отсутствуют.
 - [ ] Порядок UI совпадает с run plan.
 - [ ] Нет тяжёлых вложенных frames и лишней explanatory copy.
+- [ ] При одной включённой операции нет лишнего divider; при выключенной
+  операции нет её пустого блока.
 
 Verification:
 - [ ] Contract tests order/visibility.

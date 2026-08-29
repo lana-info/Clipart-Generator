@@ -5,7 +5,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtWidgets import QApplication, QLabel
+from PyQt6.QtWidgets import QApplication, QGridLayout, QLabel
 
 from v3_processing_editor import (
     PROCESSING_RECIPES,
@@ -145,6 +145,41 @@ class ProcessingEditorTests(unittest.TestCase):
             ("upscale_before", "unsharp", "remove_background", "edge_shrink", "trim"),
         )
         self.assertTrue(editor.stage_sections["upscale_after"].isHidden())
+
+    def test_stage_dividers_only_appear_between_enabled_stages(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        state.processing.operations.upscale_before = False
+        state.processing.operations.remove_background = False
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+
+        self.assertTrue(all(divider.isHidden() for divider in editor.stage_dividers.values()))
+        state.processing.operations.trim = True
+        editor.refresh_from_state()
+        self.assertTrue(all(divider.isHidden() for divider in editor.stage_dividers.values()))
+
+        state.processing.operations.unsharp = True
+        editor.refresh_from_state()
+        self.assertFalse(editor.stage_dividers["trim"].isHidden())
+        self.assertNotIn("upscale_before", editor.stage_dividers)
+
+    def test_operations_are_arranged_in_three_columns(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+
+        self.assertIsInstance(editor.operations_grid, QGridLayout)
+        self.assertEqual(editor.operations_grid.columnCount(), 3)
 
     def test_local_chroma_key_shows_only_the_three_preset_colors(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)

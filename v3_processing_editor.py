@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QFrame,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -279,18 +280,19 @@ class ProcessingPipelineEditor(QScrollArea):
         self._layout = QVBoxLayout(outer)
         self._layout.setContentsMargins(
             tokens.space_4,
-            tokens.space_4,
+            0,
             tokens.space_4,
             tokens.space_4,
         )
         self._layout.setSpacing(tokens.space_4)
         title_label = QLabel(title)
         title_label.setProperty("v3Title", True)
-        description_label = QLabel(description)
-        description_label.setWordWrap(True)
-        description_label.setProperty("v3Subtitle", True)
         self._layout.addWidget(title_label)
-        self._layout.addWidget(description_label)
+        if description:
+            description_label = QLabel(description)
+            description_label.setWordWrap(True)
+            description_label.setProperty("v3Subtitle", True)
+            self._layout.addWidget(description_label)
         self.state_owner = state_owner
         self.changed = changed
         self.include_cleanup = include_cleanup
@@ -302,7 +304,12 @@ class ProcessingPipelineEditor(QScrollArea):
         operations = state_owner.operations
 
         operations_group = QGroupBox("Операции")
-        form = QFormLayout(operations_group)
+        self.operations_grid = QGridLayout(operations_group)
+        self.operations_grid.setContentsMargins(12, 8, 12, 8)
+        self.operations_grid.setHorizontalSpacing(24)
+        self.operations_grid.setVerticalSpacing(4)
+        self._control_staging = QWidget()
+        form = QFormLayout(self._control_staging)
         operation_names = (
             "upscale_before",
             "unsharp",
@@ -312,19 +319,36 @@ class ProcessingPipelineEditor(QScrollArea):
             "trim",
             "export_300_dpi",
         )
+        operation_checkboxes: list[tuple[str, QCheckBox]] = []
         for name in operation_names:
-            self._add_bool(form, name, operations)
+            operation_checkboxes.append(
+                (name, self._new_bool_control(name, operations))
+            )
         if include_cleanup:
             self.cleanup_checkbox = QCheckBox("Удалить служебные данные изображения")
             self.cleanup_checkbox.setAccessibleName("Удалить служебные данные изображения")
-            form.addRow(self.cleanup_checkbox)
-            self._add_bool(form, "visible_mark_cleanup", operations)
+            operation_checkboxes.append(("cleanup", self.cleanup_checkbox))
+            operation_checkboxes.append(
+                (
+                    "visible_mark_cleanup",
+                    self._new_bool_control("visible_mark_cleanup", operations),
+                )
+            )
         else:
             self.cleanup_checkbox = None
         self._add_bool(form, "invisible_watermark_cleanup", operations)
         invisible_control = self.operation_widgets["invisible_watermark_cleanup"]
         operations.invisible_watermark_cleanup = False
         configure_unavailable_synthid(invisible_control)
+        operation_rows = (len(operation_checkboxes) + 2) // 3
+        for index, (_name, control) in enumerate(operation_checkboxes):
+            self.operations_grid.addWidget(
+                control,
+                index % operation_rows,
+                index // operation_rows,
+            )
+        for column in range(3):
+            self.operations_grid.setColumnStretch(column, 1)
         self._add_combo(
             form,
             "upscale_before_provider",
@@ -539,6 +563,7 @@ class ProcessingPipelineEditor(QScrollArea):
         self.pipeline_label.setWordWrap(True)
         self.pipeline_label.setAccessibleName("Порядок обработки")
         self.add_widget(self.pipeline_label)
+        self._layout.addStretch(1)
         self._connect_controls()
         self.refresh_from_state()
 
@@ -651,12 +676,15 @@ class ProcessingPipelineEditor(QScrollArea):
         section_layout.addWidget(form_container)
         self.stage_headers[key] = header
         self.stage_sections[key] = section
+        if not hasattr(self, "stage_dividers"):
+            self.stage_dividers: dict[str, QFrame] = {}
         if self._stage_layout.count():
             divider = QFrame()
             divider.setFrameShape(QFrame.Shape.HLine)
             divider.setFrameShadow(QFrame.Shadow.Sunken)
             divider.setProperty("v3StageDivider", True)
             self._stage_layout.addWidget(divider)
+            self.stage_dividers[key] = divider
         self._stage_layout.addWidget(section)
         return form
 
@@ -686,6 +714,14 @@ class ProcessingPipelineEditor(QScrollArea):
         )
 
     def _add_bool(self, form: QFormLayout, name: str, operations: ImageOperationData) -> None:
+        control = self._new_bool_control(name, operations)
+        form.addRow(control)
+
+    def _new_bool_control(
+        self,
+        name: str,
+        operations: ImageOperationData,
+    ) -> QCheckBox:
         control = QCheckBox(self._BOOL_LABELS[name])
         control.setChecked(bool(getattr(operations, name)))
         control.setAccessibleName(self._BOOL_LABELS[name])
@@ -694,8 +730,8 @@ class ProcessingPipelineEditor(QScrollArea):
                 "Пытается удалить только подтверждённую видимую метку на пикселях. "
                 "Метаданные и SynthID эта настройка не удаляет."
             )
-        form.addRow(control)
         self.operation_widgets[name] = control
+        return control
 
     def _add_combo(
         self,
@@ -923,6 +959,13 @@ class ProcessingPipelineEditor(QScrollArea):
         }
         for key, section in self.stage_sections.items():
             section.setVisible(bool(enabled[key]))
+        has_visible_stage = False
+        for key in self._STAGE_ORDER:
+            visible = bool(enabled[key])
+            divider = self.stage_dividers.get(key)
+            if divider is not None:
+                divider.setVisible(visible and has_visible_stage)
+            has_visible_stage = has_visible_stage or visible
         self._apply_workflow_visibility()
         self._refresh_model_compatibility()
 
