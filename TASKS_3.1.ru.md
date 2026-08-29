@@ -514,6 +514,33 @@ subtests) проходят; `py_compile` и sensitive-artifact scan также �
 Dependencies: existing signed license client and startup gate. Scope: M.
 Requirements: `CG31-FR-060`–`CG31-FR-062`.
 
+## Task 15: Показать описание изменений при обновлении
+
+Status: Done in source — visual approved 2026-08-29; integration follows the
+verified checkpoint
+
+Goal:
+Показывать пользователю краткое описание изменений новой версии до решения о
+скачивании, используя уже подписанные данные release manifest.
+
+Acceptance:
+- [x] При непустом `notes` диалог показывает «Что нового» и сам текст до
+  действий «Не сейчас» / «Обновить».
+- [x] Текст отображается как plain text, без исполнения HTML/разметки.
+- [x] При пустом `notes` блок не занимает место; длинное описание прокручивается
+  в компактной области.
+
+Verification:
+- [x] Offscreen tests: обычное описание, пустое описание и текст с HTML-маркерами.
+- [x] Approved и implemented screenshots сохранены в
+  `docs/ui/3.1/task-15-update-notes/`.
+
+Evidence: поле `notes` уже приходит в server-signed manifest и ограничено 2000
+символами в `UpdateClient`; UI не создаёт нового сетевого запроса и не меняет
+сценарий согласия, скачивания либо проверки SHA-256.
+
+Dependencies: existing V3 signed update client. Scope: S.
+
 ## Task 13: Интегрировать и принять 3.1.0
 
 Status: In progress — source integrated into `develop/3.1` at `dd01703`; full

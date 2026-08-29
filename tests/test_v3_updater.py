@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PyQt6.QtCore import QObject, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from diagnostics import DiagnosticJournal
 from update_client import UpdateRelease
@@ -71,6 +71,65 @@ class V3UpdaterTests(unittest.TestCase):
             download_url="https://license.example/downloads/token",
             correlation_id="correlation-1",
         )
+
+    def test_update_dialog_shows_release_notes_as_plain_text(self) -> None:
+        release = UpdateRelease(
+            version="3.1.1",
+            filename="VibixImages-Setup-3.1.1.exe",
+            size=20,
+            sha256="a" * 64,
+            download_url="https://license.example/downloads/token",
+            notes="Улучшено удаление фона\nДобавлен редактор прозрачности",
+        )
+
+        dialog = v3_updater.UpdateAvailableDialog(release, "windows-x64")
+
+        labels = [item.text() for item in dialog.findChildren(QLabel)]
+        buttons = [item.text() for item in dialog.findChildren(QPushButton)]
+        self.assertIn("Что нового", labels)
+        self.assertIn(release.notes, dialog.notes_view.toPlainText())
+        self.assertIn("Обновить", buttons)
+        self.assertIn("Не сейчас", buttons)
+        dialog.deleteLater()
+
+    def test_update_dialog_hides_notes_section_when_server_sent_no_notes(self) -> None:
+        dialog = v3_updater.UpdateAvailableDialog(self.release(), "windows-x64")
+
+        self.assertTrue(dialog.notes_section.isHidden())
+        dialog.deleteLater()
+
+    def test_update_dialog_never_interprets_release_notes_as_markup(self) -> None:
+        release = UpdateRelease(
+            version="3.1.1",
+            filename="VibixImages-Setup-3.1.1.exe",
+            size=20,
+            sha256="a" * 64,
+            download_url="https://license.example/downloads/token",
+            notes="<b>Только текст</b>",
+        )
+
+        dialog = v3_updater.UpdateAvailableDialog(release, "windows-x64")
+
+        self.assertEqual(dialog.notes_view.toPlainText(), "<b>Только текст</b>")
+        dialog.deleteLater()
+
+    def test_update_dialog_keeps_long_notes_in_a_scrollable_compact_area(self) -> None:
+        release = UpdateRelease(
+            version="3.1.1",
+            filename="VibixImages-Setup-3.1.1.exe",
+            size=20,
+            sha256="a" * 64,
+            download_url="https://license.example/downloads/token",
+            notes="\n".join(f"Изменение {index}" for index in range(30)),
+        )
+        dialog = v3_updater.UpdateAvailableDialog(release, "windows-x64")
+        dialog.show()
+        self.app.processEvents()
+
+        self.assertGreater(dialog.notes_view.verticalScrollBar().maximum(), 0)
+        self.assertLessEqual(dialog.notes_view.height(), 92)
+        dialog.close()
+        dialog.deleteLater()
 
     def test_not_now_never_starts_download_and_check_runs_once(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

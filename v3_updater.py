@@ -7,11 +7,23 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
-from PyQt6.QtWidgets import QApplication, QMessageBox, QProgressDialog, QWidget
+from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressDialog,
+    QVBoxLayout,
+    QWidget,
+)
 
 from update_client import UpdateClient, UpdateError, UpdateRelease
 from app_identity import APP_NAME
+from v3_components import ButtonVariant, V3Button
 
 
 class UpdateCheckWorker(QThread):
@@ -71,6 +83,81 @@ def launch_update_artifact(path: Path) -> None:
         subprocess.Popen(["open", "-R", str(path)], close_fds=True)
         return
     raise UpdateError("Формат обновления не поддерживается на этой платформе")
+
+
+class UpdateAvailableDialog(QDialog):
+    """Approved compact release-notes prompt for a signed update."""
+
+    def __init__(
+        self,
+        release: UpdateRelease,
+        platform_id: str,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"Обновление {APP_NAME}")
+        self.setMinimumWidth(560)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 26, 28, 24)
+        layout.setSpacing(14)
+
+        title = QLabel("Доступна новая версия")
+        title.setProperty("v3Title", True)
+        layout.addWidget(title)
+
+        version = QLabel(f"{APP_NAME} {release.version}")
+        version.setProperty("v3Selection", True)
+        layout.addWidget(version)
+
+        self.notes_section = QFrame()
+        self.notes_section.setProperty("v3Card", True)
+        notes_layout = QVBoxLayout(self.notes_section)
+        notes_layout.setContentsMargins(18, 16, 18, 16)
+        notes_layout.setSpacing(10)
+        notes_title = QLabel("Что нового")
+        notes_title.setStyleSheet("font-size: 15px; font-weight: 700;")
+        notes_layout.addWidget(notes_title)
+
+        self.notes_view = QPlainTextEdit()
+        self.notes_view.setReadOnly(True)
+        self.notes_view.setFrameShape(QFrame.Shape.NoFrame)
+        self.notes_view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.notes_view.setFixedHeight(92)
+        self.notes_view.setStyleSheet(
+            "background: transparent; border: none; padding: 0;"
+        )
+        self.notes_view.setPlainText(release.notes.strip())
+        notes_layout.addWidget(self.notes_view)
+        layout.addWidget(self.notes_section)
+        if not release.notes.strip():
+            self.notes_section.hide()
+
+        information = QLabel(self._information_text(platform_id))
+        information.setProperty("v3Description", True)
+        information.setWordWrap(True)
+        layout.addWidget(information)
+        layout.addStretch(1)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        later_button = V3Button("Не сейчас", ButtonVariant.SECONDARY)
+        update_button = V3Button("Обновить", ButtonVariant.PRIMARY)
+        later_button.clicked.connect(self.reject)
+        update_button.clicked.connect(self.accept)
+        buttons.addWidget(later_button)
+        buttons.addWidget(update_button)
+        layout.addLayout(buttons)
+
+    @staticmethod
+    def _information_text(platform_id: str) -> str:
+        if platform_id.startswith("macos-"):
+            return (
+                "Программа скачает и проверит ZIP-архив, затем покажет его в Finder. "
+                "Приложение закроется; распакуйте архив и перенесите новую версию "
+                "в папку «Программы»."
+            )
+        return "Программа скачает и проверит обновление, затем закроется и запустит установщик."
 
 
 class UpdateController(QObject):
@@ -152,23 +239,12 @@ class UpdateController(QObject):
         self._start_download(release)
 
     def _prompt_user(self, release: UpdateRelease) -> bool:
-        box = QMessageBox(self.parent_widget)
-        box.setWindowTitle(f"Обновление {APP_NAME}")
-        box.setIcon(QMessageBox.Icon.Question)
-        box.setText(f"Доступна версия {release.version}. Обновить программу сейчас?")
-        if self.client.platform_id.startswith("macos-"):
-            box.setInformativeText(
-                "Программа скачает и проверит ZIP-архив, затем покажет его в Finder. "
-                "Приложение закроется; распакуйте архив и перенесите новую версию в папку «Программы»."
-            )
-        else:
-            box.setInformativeText(
-                "Программа скачает обновление, закроется и запустит установщик."
-            )
-        update_button = box.addButton("Обновить", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton("Не сейчас", QMessageBox.ButtonRole.RejectRole)
-        box.exec()
-        return box.clickedButton() is update_button
+        dialog = UpdateAvailableDialog(
+            release,
+            self.client.platform_id,
+            self.parent_widget,
+        )
+        return dialog.exec() == QDialog.DialogCode.Accepted
 
     def _start_download(self, release: UpdateRelease) -> None:
         dialog = QProgressDialog(
