@@ -4,6 +4,15 @@ Updated: 2026-08-29
 
 ## Latest integrated checkpoint
 
+Task 23 is integrated in `develop/3.1` at `ea08918`:
+режим обработки файлов после Results открывает тот же утверждённый редактор
+прозрачности, что и Clipart. В список попадают только успешные PNG текущего
+запуска; выбранный файл открывается сразу, а «Назад» возвращает к Results.
+Отдельного нового дизайна нет: используются кисть, pan пробелом, масштаб и
+экспорт существующего редактора. Focused offscreen suite для очереди и режима
+обработки (75 tests), `py_compile`, `git diff --check` и sensitive scan прошли.
+Windows visual acceptance по-прежнему ожидается.
+
 Task 22 is integrated in `develop/3.1` at `f00cec4`:
 Pinterest готовые промпты больше не показывают Chroma Key-helper; Pinterest
 получает отдельный plain selector модели с референсом только для batch с

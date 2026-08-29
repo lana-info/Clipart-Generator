@@ -569,8 +569,7 @@ Dependencies: existing V3 signed update client. Scope: S.
 
 ## Task 22: Упростить Pinterest prompt и выбор генерации
 
-Status: Done in source — макеты утверждены 2026-08-29; ожидает интеграции в
-`develop/3.1`
+Status: Done — integrated in `develop/3.1` at `f00cec4`
 
 Goal:
 Убрать из Pinterest не относящийся к нему Chroma Key-helper и сделать выбор
@@ -595,6 +594,32 @@ Verification:
 - [x] Existing Clipart/Pinterest focused suite, `py_compile` и `git diff --check`.
 
 Design: `docs/ui/3.1/task-22-pinterest-prompt-no-chroma/`.
+
+## Task 23: Проверка и корректировка прозрачности после обработки файлов
+
+Status: Done — integrated in `develop/3.1` at `ea08918`
+
+Goal:
+После обычной обработки файлов открывать тот же утверждённый редактор
+прозрачности, что и в режиме Clipart.
+
+Acceptance:
+
+- [x] На результатах обработки успешный PNG можно открыть кнопкой и двойным
+  кликом в отдельном редакторе прозрачности.
+- [x] Редактор показывает только успешные файлы текущего запуска, открывает
+  выбранный файл и возвращает пользователя к результатам.
+- [x] Черновик, сохранённый на странице редактора, при повторном открытии
+  переходит к устойчивой странице результатов, так как очередь запуска не
+  сохраняется в проекте.
+- [x] Внешний вид не менялся: повторно используется утверждённый Clipart
+  editor, включая кисть, pan пробелом, масштаб и экспорт PNG.
+
+Verification:
+
+- [x] Focused offscreen tests `tests.test_v3_run_queue` и
+  `tests.test_v3_processing_flow` (75 tests).
+- [x] `py_compile`, `git diff --check` и tracked sensitive-artifact scan.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
