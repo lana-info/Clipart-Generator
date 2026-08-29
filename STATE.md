@@ -53,9 +53,12 @@ Updated: 2026-08-29
 макет и Linux-safe implementation checkpoint `1724c76`; до окончательного
 acceptance остаётся manual Windows mouse/pen pass. Task 8 завершён на ветке
 `codex/feat-3.1-chroma-benchmark`: implementation/goldens `063a7cd`, чистый
-канонический baseline `ed0dc4d`, 19 focused tests. Следующий пункт по порядку —
-Task 9, один bounded prototype cycle собственного automatic chroma engine с
-измеримым сравнением против зафиксированного baseline.
+канонический baseline `ed0dc4d`, 19 focused tests. Task 9 завершён на ветке
+`codex/feat-3.1-automatic-chroma-engine`: engine `07f84a7`, canonical evidence
+`59df0e1`, mean alpha MAE улучшен на 54.7%, runtime 0.758 s и peak RSS
+421.055 MiB на 2048×2048. Следующий пункт по порядку — Task 10: интегрировать
+automatic engine в common processing plan и утверждённый простой UX без
+обязательных tolerance/softness.
 
 Release 3.0.7 и development 3.1 разделены:
 

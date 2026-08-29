@@ -304,7 +304,7 @@ Dependencies: Task 4. Scope: S. Requirements: `CG31-FR-040`–`CG31-FR-043`.
 
 ## Task 9: Реализовать собственный automatic chroma engine
 
-Status: Todo
+Status: Done (VDS checkpoint; Windows visual/performance acceptance pending)
 
 Goal:
 Заменить RGB-distance собственным алгоритмом, выбранным по Task 8.
@@ -319,16 +319,28 @@ Steps:
   обрабатывать fail-safe с warning.
 
 Acceptance:
-- [ ] Engine заметно улучшает согласованные benchmark cases без subject damage.
-- [ ] Production code использует только собственную архитектуру и существующие
+- [x] Engine заметно улучшает согласованные benchmark cases без subject damage.
+- [x] Production code использует только собственную архитектуру и существующие
   Pillow/NumPy/OpenCV.
-- [ ] Failure/ambiguous key приводит к safe result/warning, не к silent damage.
-- [ ] Обычный code review подтверждает, что в change set нет перенесённых
+- [x] Failure/ambiguous key приводит к safe result/warning, не к silent damage.
+- [x] Обычный code review подтверждает, что в change set нет перенесённых
   файлов или скопированных code fragments Clipbrook.
 
 Verification:
-- [ ] Alpha/image regression metrics и contact sheet against baseline.
-- [ ] Full-resolution performance/memory test.
+- [x] Alpha/image regression metrics и contact sheet against baseline.
+- [x] Full-resolution performance/memory test.
+
+Implementation evidence: feature commits `07f84a7` и `59df0e1`; accepted
+automatic-v1 report создан из clean commit `07f84a7` (`git_dirty=false`). Mean
+alpha MAE улучшен на `54.7%`, улучшены `5/6` cases, alpha IoU `0.96870`, median
+runtime 2048×2048 `0.758 s`, peak RSS `421.055 MiB` при owner-approved ceiling
+`448 MiB`. 34 focused tests, `py_compile`, `git diff --check` и три независимых
+review pass завершены; blocking/important findings закрыты. Неоднородный фон,
+неверный key, заметные near-key детали предмета и чрезмерная фрагментация
+отклоняются до изменения файла. Exact selected-key pixels по контракту считаются
+фоном/openings; если предмет содержит этот точный цвет, пользователь выбирает
+другой preset. Canonical report и contact sheet находятся в
+`benchmarks/chroma/automatic-v1/`.
 
 Dependencies: Task 8. Scope: M на один bounded prototype cycle; если выбранная
 архитектура требует больше пяти файлов, до coding разбить реализацию ещё раз.
