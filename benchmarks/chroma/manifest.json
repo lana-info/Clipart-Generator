@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "name": "Vibix Local Chroma Key golden set",
+  "fixture_size": 256,
+  "performance_size": 2048,
+  "golden_dir": "baseline-vds/fixtures",
+  "provenance": {
+    "fixtures": "Deterministically generated in this repository with Pillow and NumPy; no third-party images or tests are included.",
+    "research_reference": "Clipbrook behavior and source were previously studied as research input. Its code, constants, tests and assets are not included in this benchmark."
+  },
+  "preview_backgrounds": [
+    "checker",
+    "black",
+    "white",
+    "magenta"
+  ],
+  "quality_gates": {
+    "minimum_mean_alpha_mae_improvement": 0.2,
+    "minimum_improved_cases": 4,
+    "maximum_clean_iou_regression": 0.02,
+    "maximum_opaque_subject_loss_regression": 0.005,
+    "maximum_opaque_rgb_mae_regression": 0.005,
+    "maximum_partial_rgb_mae_regression": 0.01,
+    "maximum_background_leakage_regression": 0.005,
+    "maximum_runtime_multiplier": 1.25,
+    "maximum_runtime_seconds": 30,
+    "maximum_peak_memory_mib": 384,
+    "maximum_improvement_cycles": 2
+  },
+  "cases": [
+    {
+      "id": "clean-edge-blue",
+      "kind": "clean_edge",
+      "key_color": "blue",
+      "risk": "A solid opaque subject edge is damaged or leaves a key-color outline."
+    },
+    {
+      "id": "soft-edge-red",
+      "kind": "soft_edge",
+      "key_color": "red",
+      "risk": "A naturally antialiased edge becomes jagged, opaque or over-erased."
+    },
+    {
+      "id": "thin-lines-green",
+      "kind": "thin_lines",
+      "key_color": "green",
+      "risk": "Narrow stems, needles or decorative lines disappear."
+    },
+    {
+      "id": "openings-blue",
+      "kind": "openings",
+      "key_color": "blue",
+      "risk": "Background remains inside foliage, loops or other internal openings."
+    },
+    {
+      "id": "partial-alpha-red",
+      "kind": "partial_alpha",
+      "key_color": "red",
+      "risk": "Glass, watercolor wash or translucent material loses partial alpha."
+    },
+    {
+      "id": "color-spill-green",
+      "kind": "color_spill",
+      "key_color": "green",
+      "risk": "Key-color spill remains on a difficult subject edge or removes subject color."
+    }
+  ],
+  "golden_sha256": {
+    "clean-edge-blue": {
+      "input": "8164b3211317eedfa76f98a7f9473be48b66084a6f475fe7e730090ef4686a57",
+      "expected_mask": "4943ae6196a7e49258e6d82456a498e5d519c7dc25fd7d2808bafaa99b88313d",
+      "expected_foreground": "bfee1aaaf0646f4cd3af441cba59388f680a07174b4c8cfc14ab4848aeef1650"
+    },
+    "soft-edge-red": {
+      "input": "9f462500d6154feeb036352488705467de085c0f1c76bcdcb77fc2449b8d15e4",
+      "expected_mask": "c1f3849e3a3188e551e3a94492bb6429006d8fa27d260465c6299829633b6549",
+      "expected_foreground": "f5385e47f4f339d3dea55c26c18078bbbe99fa56525d97c9262ce8f952b78083"
+    },
+    "thin-lines-green": {
+      "input": "d7380d63eee7a340cb72e9f0be1a9be9aa28464f96c4695059c0e6cf20ec23d1",
+      "expected_mask": "5eca49c6e2ffbcd8553a4f63a62a6a611cbb8f9dfb3a8a6942beebffe81b10a5",
+      "expected_foreground": "d8046602d4e7fc565ea0fcfd108e2282d67df6e1552dac95983228b4093a6b8b"
+    },
+    "openings-blue": {
+      "input": "51461e1d101852313ae3ba190a9643c34bacc66bfb335b98735e5309bb32f44f",
+      "expected_mask": "06cb94a0208d6867c28fe2840f6f962cd5620b600776d28dc4ae232d5ad62f7b",
+      "expected_foreground": "bfee1aaaf0646f4cd3af441cba59388f680a07174b4c8cfc14ab4848aeef1650"
+    },
+    "partial-alpha-red": {
+      "input": "73d8bf2d9508a731d000f4e4c05bec818fc415d500a2c58ae938f8444e55a7bc",
+      "expected_mask": "ab0982c3c49b505904a19e0ae817e718b50920772d31953c178c01d2b3ef88b5",
+      "expected_foreground": "f5385e47f4f339d3dea55c26c18078bbbe99fa56525d97c9262ce8f952b78083"
+    },
+    "color-spill-green": {
+      "input": "3001ed2df210286032b7fcf5c94659bbae79691068399a82998e55a8d35a1735",
+      "expected_mask": "fdf8f27cbeea0e8b63950abb770bbd09ae350f7c08a7a8bf9988fd163071fdfe",
+      "expected_foreground": "d8046602d4e7fc565ea0fcfd108e2282d67df6e1552dac95983228b4093a6b8b"
+    }
+  }
+}
