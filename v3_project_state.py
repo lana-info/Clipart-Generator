@@ -9,6 +9,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from chroma_key import KEY_COLORS
 from v3_provider_registry import (
     KIE_TOPAZ_MODEL_ID,
     normalize_kie_upscale_model,
@@ -238,7 +239,7 @@ class PromptGeneratorData:
         )
         self.chroma_key_enabled = _boolean(self.chroma_key_enabled, default=False)
         self.chroma_key_color = _text(self.chroma_key_color, limit=20).lower()
-        if self.chroma_key_color not in {"blue", "green", "red"}:
+        if self.chroma_key_color not in KEY_COLORS:
             self.chroma_key_color = "blue"
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         allowed_materials = {
@@ -497,6 +498,8 @@ class ImageOperationData:
     local_ben2_edge_softness: int = 0
     local_ben2_corner_radius: int = 0
     chroma_key_color: str = "blue"
+    # Retained only so older drafts round-trip safely. Automatic chroma removal
+    # ignores custom colors and the two former numeric controls.
     chroma_key_custom_color: str = "#0000FF"
     chroma_key_tolerance: int = 32
     chroma_key_softness: int = 8
@@ -600,7 +603,7 @@ class ImageOperationData:
             maximum=3,
         )
         self.chroma_key_color = _text(self.chroma_key_color, limit=20).lower()
-        if self.chroma_key_color not in {"blue", "green", "red"}:
+        if self.chroma_key_color not in KEY_COLORS:
             self.chroma_key_color = "blue"
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         self.chroma_key_tolerance = _bounded_int(
@@ -1411,7 +1414,7 @@ def _validate_prompt_generator_section(
         )
     key_color = section.get("chroma_key_color", "blue")
     if not isinstance(key_color, str) or len(key_color) > 20 or not (
-        key_color.casefold() in {"blue", "red", "green"}
+        key_color.casefold() in KEY_COLORS
         or _CHROMA_KEY_COLOR_PATTERN.fullmatch(key_color.strip())
     ):
         raise ProjectStateError(

@@ -49,7 +49,7 @@ ensure_gui_standard_streams()
 
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
-from chroma_key import remove_chroma_key
+from chroma_key import KEY_COLORS, remove_chroma_key_automatic
 from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from ai_watermark_backend import (
@@ -1082,11 +1082,11 @@ class WorkerThread(QThread):
         self.fal_birefnet_resolution = settings.get("fal_birefnet_resolution", "1024x1024")
         self.fal_birefnet_refine_foreground = bool(settings.get("fal_birefnet_refine_foreground", True))
         self.fal_rembg_crop_to_bbox = bool(settings.get("fal_rembg_crop_to_bbox", False))
-        self.chroma_key_color = settings.get("chroma_key_color", "blue")
-        if self.chroma_key_color == "custom":
-            self.chroma_key_color = settings.get("chroma_key_custom_color", "#0000FF")
-        self.chroma_key_tolerance = max(0, min(255, int(settings.get("chroma_key_tolerance", 32))))
-        self.chroma_key_softness = max(0, min(255, int(settings.get("chroma_key_softness", 8))))
+        self.chroma_key_color = str(
+            settings.get("chroma_key_color", "blue") or "blue"
+        ).strip().lower()
+        if self.chroma_key_color not in KEY_COLORS:
+            self.chroma_key_color = "blue"
         self.upscale_factor = normalize_topaz_upscale_factor(
             settings.get("upscale_factor", 4)
         )
@@ -2567,11 +2567,9 @@ class WorkerThread(QThread):
                         )
                         validate_local_image_input(current_path)
                         with Image.open(current_path) as source_image:
-                            result = remove_chroma_key(
+                            result = remove_chroma_key_automatic(
                                 source_image,
                                 self.chroma_key_color,
-                                tolerance=self.chroma_key_tolerance,
-                                softness=self.chroma_key_softness,
                             )
                             self._save_image_object_as_png(result, nobg_path)
                     self.progress.emit(f"  Локальный Chroma Key без фона: {nobg_path}")

@@ -146,6 +146,28 @@ class ProcessingEditorTests(unittest.TestCase):
         )
         self.assertTrue(editor.stage_sections["upscale_after"].isHidden())
 
+    def test_local_chroma_key_shows_only_the_three_preset_colors(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        operations = state.processing.operations
+        operations.remove_background = True
+        operations.remove_background_provider = "local_chroma_key"
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+
+        color = editor.operation_widgets["chroma_key_color"]
+        self.assertFalse(color.isHidden())
+        self.assertEqual(
+            tuple(color.itemData(index) for index in range(color.count())),
+            ("blue", "red", "green"),
+        )
+        self.assertNotIn("chroma_key_tolerance", editor.operation_widgets)
+        self.assertNotIn("chroma_key_softness", editor.operation_widgets)
+
     def test_fal_controls_show_selected_model_and_only_its_parameters(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations

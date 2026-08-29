@@ -649,8 +649,12 @@ class V3ClipartFlowTests(unittest.TestCase):
                 "preserve_icc",
                 "preserve_dpi",
                 "chroma_key_custom_color",
+                "chroma_key_tolerance",
+                "chroma_key_softness",
             },
         )
+        self.assertNotIn("chroma_key_tolerance", page.operation_widgets)
+        self.assertNotIn("chroma_key_softness", page.operation_widgets)
         self.assertIsInstance(
             page.operation_widgets["remove_background"],
             QCheckBox,
@@ -712,6 +716,24 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(estimate.request_count, 12)
         self.assertEqual(estimate.estimated_usd, Decimal("0.940"))
         self.assertTrue(estimate.complete)
+
+    def test_clipart_chroma_request_omits_legacy_numeric_and_custom_fields(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-chroma-request-") as temp:
+            state = self.make_state(temp)
+            operations = state.clipart.operations
+            operations.remove_background = True
+            operations.remove_background_provider = "local_chroma_key"
+            operations.chroma_key_color = "green"
+            operations.chroma_key_custom_color = "#123456"
+            operations.chroma_key_tolerance = 255
+            operations.chroma_key_softness = 255
+
+            request = build_clipart_run_request(state, {"kie_api_key": "test-key"})
+
+        self.assertEqual(request.settings["chroma_key_color"], "green")
+        self.assertNotIn("chroma_key_custom_color", request.settings)
+        self.assertNotIn("chroma_key_tolerance", request.settings)
+        self.assertNotIn("chroma_key_softness", request.settings)
 
     def test_generation_options_use_mode_specific_qwen_ratios(self):
         primary = next(

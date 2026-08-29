@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 
 from v3_components import DEFAULT_TOKENS, V3DesignTokens
 from v3_provider_registry import (
+    CHROMA_KEY_COLOR_OPTIONS,
     FAL_BIREFNET_MODEL_OPTIONS,
     FAL_BIREFNET_RESOLUTION_OPTIONS,
     FAL_REMOVE_BG_MODEL_OPTIONS,
@@ -429,11 +430,9 @@ class ProcessingPipelineEditor(QScrollArea):
             advanced_form,
             "chroma_key_color",
             "Chroma Key цвет",
-            (("Синий", "blue"), ("Зелёный", "green"), ("Красный", "red")),
+            CHROMA_KEY_COLOR_OPTIONS,
             operations,
         )
-        self._add_int(advanced_form, "chroma_key_tolerance", "Chroma Key допуск", 0, 255, operations)
-        self._add_int(advanced_form, "chroma_key_softness", "Chroma Key мягкость края", 0, 255, operations)
         self._add_combo(
             advanced_form,
             "local_realesrgan_profile",
@@ -586,8 +585,6 @@ class ProcessingPipelineEditor(QScrollArea):
             "fal_birefnet_model": "Вариант BiRefNet",
             "fal_birefnet_resolution": "Разрешение BiRefNet",
             "chroma_key_color": "Цвет фона",
-            "chroma_key_tolerance": "Допуск",
-            "chroma_key_softness": "Мягкость края",
             "local_rembg_profile": "Профиль rembg",
             "local_rembg_model": "Модель rembg",
             "local_rembg_edge_quality": "Качество края",
@@ -614,8 +611,7 @@ class ProcessingPipelineEditor(QScrollArea):
                 "fal_remove_bg_model", "fal_birefnet_model",
                 "fal_birefnet_resolution", "fal_birefnet_refine_foreground",
                 "fal_rembg_crop_to_bbox", "chroma_key_color",
-                "chroma_key_tolerance",
-                "chroma_key_softness", "local_rembg_profile", "local_rembg_model",
+                "local_rembg_profile", "local_rembg_model",
                 "local_rembg_edge_quality", "local_ben2_refine_foreground",
                 "local_ben2_alpha_threshold", "local_ben2_edge_softness",
                 "local_ben2_corner_radius",
@@ -906,10 +902,6 @@ class ProcessingPipelineEditor(QScrollArea):
             and "local_ben2_corner_radius" in remove_controls,
             "chroma_key_color": operations.remove_background
             and "chroma_key_color" in remove_controls,
-            "chroma_key_tolerance": operations.remove_background
-            and "chroma_key_tolerance" in remove_controls,
-            "chroma_key_softness": operations.remove_background
-            and "chroma_key_softness" in remove_controls,
             "unsharp_amount": operations.unsharp,
             "unsharp_radius": operations.unsharp,
             "unsharp_threshold": operations.unsharp,
@@ -986,8 +978,6 @@ class ProcessingPipelineEditor(QScrollArea):
             "local_ben2_edge_softness": "remove_background",
             "local_ben2_corner_radius": "remove_background",
             "chroma_key_color": "remove_background",
-            "chroma_key_tolerance": "remove_background",
-            "chroma_key_softness": "remove_background",
             "unsharp_amount": "unsharp",
             "unsharp_radius": "unsharp",
             "unsharp_threshold": "unsharp",

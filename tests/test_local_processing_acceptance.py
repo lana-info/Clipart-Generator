@@ -66,6 +66,78 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             worker_settings(**settings),
         )
 
+    def test_local_chroma_pipeline_uses_automatic_engine_and_ignores_legacy_numbers(self):
+        with tempfile.TemporaryDirectory(prefix="automatic-chroma-") as temp:
+            root = Path(temp)
+            source_path = root / "source.png"
+            raw_dir = root / "rough"
+            raw_dir.mkdir()
+            image = Image.new("RGBA", (15, 15), (0, 0, 255, 255))
+            for y in range(4, 11):
+                for x in range(4, 11):
+                    image.putpixel((x, y), (220, 90, 40, 255))
+            image.save(source_path)
+            worker = self.make_worker(
+                root,
+                remove_bg=True,
+                remove_bg_provider="local_chroma_key",
+                chroma_key_color="custom",
+                chroma_key_custom_color="#0000FF",
+                chroma_key_tolerance=255,
+                chroma_key_softness=255,
+            )
+
+            with patch.object(
+                main,
+                "remove_chroma_key_automatic",
+                wraps=main.remove_chroma_key_automatic,
+            ) as automatic:
+                result_path = worker._run_processing_pipeline(
+                    str(source_path), None, str(raw_dir), 1, "file"
+                )
+
+            automatic.assert_called_once()
+            with Image.open(result_path) as result:
+                self.assertEqual(result.getpixel((0, 0))[3], 0)
+                self.assertEqual(result.getpixel((7, 7)), (220, 90, 40, 255))
+
+    def test_local_chroma_pipeline_rejects_an_ambiguous_background(self):
+        with tempfile.TemporaryDirectory(prefix="ambiguous-chroma-") as temp:
+            root = Path(temp)
+            source_path = root / "source.png"
+            raw_dir = root / "rough"
+            raw_dir.mkdir()
+            size = 65
+            image = Image.new("RGBA", (size, size))
+            for y in range(size):
+                for x in range(size):
+                    edge_distance = min(x, y, size - 1 - x, size - 1 - y)
+                    blue = 255 - round(95 * edge_distance / ((size - 1) / 2))
+                    image.putpixel((x, y), (0, 0, blue, 255))
+            image.save(source_path)
+            worker = self.make_worker(
+                root,
+                remove_bg=True,
+                remove_bg_provider="local_chroma_key",
+                chroma_key_color="blue",
+            )
+
+            with self.assertRaisesRegex(ValueError, "неоднородный"):
+                worker._run_processing_pipeline(
+                    str(source_path), None, str(raw_dir), 1, "file"
+                )
+
+    def test_worker_normalizes_a_non_preset_legacy_chroma_color_to_blue(self):
+        with tempfile.TemporaryDirectory(prefix="legacy-chroma-color-") as temp:
+            worker = self.make_worker(
+                temp,
+                remove_bg=True,
+                remove_bg_provider="local_chroma_key",
+                chroma_key_color="#FF0000",
+            )
+
+            self.assertEqual(worker.chroma_key_color, "blue")
+
     def require_local_realesrgan(self):
         exe_path, error = main.validate_local_realesrgan_exe(str(REALESRGAN_DIR))
         if error:

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import unittest
 
+from chroma_key import KEY_COLORS
 from v3_provider_registry import (
+    CHROMA_KEY_COLOR_OPTIONS,
     KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
     LOCAL_REMBG_MODEL_OPTIONS,
@@ -90,7 +92,17 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertIn("kie_upscale_after_model", provider_visible_controls("kie"))
         self.assertIn("local_realesrgan_profile", provider_visible_controls("local_realesrgan"))
         self.assertIn("local_ben2_alpha_threshold", provider_visible_controls("local_ben2"))
+        self.assertEqual(
+            provider_visible_controls("local_chroma_key"),
+            ("chroma_key_color",),
+        )
         self.assertEqual(provider_visible_controls("photoroom"), ())
+
+    def test_chroma_ui_colors_are_derived_from_the_engine_registry(self) -> None:
+        self.assertEqual(
+            tuple(value for _label, value in CHROMA_KEY_COLOR_OPTIONS),
+            tuple(KEY_COLORS),
+        )
 
     def test_unknown_field_or_provider_raises(self) -> None:
         with self.assertRaises(KeyError):

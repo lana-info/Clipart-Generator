@@ -376,6 +376,30 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertNotIn(str(source), repr(request))
             self.assertEqual(missing_processing_runtime_requirements(request), ())
 
+    def test_local_chroma_run_plan_keeps_only_the_selected_preset_color(self):
+        with tempfile.TemporaryDirectory(prefix="processing-chroma-request-") as temp:
+            state, _ = self.make_state(temp)
+            operations = state.processing.operations
+            operations.upscale_before = False
+            operations.unsharp = False
+            operations.remove_background = True
+            operations.remove_background_provider = "local_chroma_key"
+            operations.chroma_key_color = "red"
+            operations.chroma_key_tolerance = 255
+            operations.chroma_key_softness = 255
+            request = build_processing_run_request(
+                state,
+                {},
+                allow_full_image_changes=True,
+                external_transfer_consent=False,
+            )
+
+            self.assertEqual(request.settings["chroma_key_color"], "red")
+            self.assertNotIn("chroma_key_custom_color", request.settings)
+            self.assertNotIn("chroma_key_tolerance", request.settings)
+            self.assertNotIn("chroma_key_softness", request.settings)
+            self.assertEqual(missing_processing_runtime_requirements(request), ())
+
     def test_processing_request_preserves_selected_output_directory(self):
         with tempfile.TemporaryDirectory(prefix="processing-output-") as temp:
             state, _ = self.make_state(temp)

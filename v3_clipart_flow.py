@@ -65,6 +65,7 @@ from v3_processing_editor import (
     ProcessingPipelineEditor,
     RunPlanBuilder,
 )
+from v3_provider_registry import CHROMA_KEY_COLOR_OPTIONS
 from processing_cleanup import METADATA_CLEANUP_FIELDS
 from output_naming import workspace_layout
 from v3_prompt_csv_import import PromptCsvImportDialog
@@ -599,9 +600,6 @@ def _worker_settings(
             "local_ben2_edge_softness": operations.local_ben2_edge_softness,
             "local_ben2_corner_radius": operations.local_ben2_corner_radius,
             "chroma_key_color": operations.chroma_key_color,
-            "chroma_key_custom_color": operations.chroma_key_custom_color,
-            "chroma_key_tolerance": operations.chroma_key_tolerance,
-            "chroma_key_softness": operations.chroma_key_softness,
             "unsharp_enabled": operations.unsharp,
             "unsharp_amount": operations.unsharp_amount,
             "unsharp_radius": operations.unsharp_radius,
@@ -1611,11 +1609,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             "Генерировать на chroma-key фоне"
         )
         self.chroma_key_color = QComboBox()
-        for label, value in (
-            ("Синий", "blue"),
-            ("Красный", "red"),
-            ("Зелёный", "green"),
-        ):
+        for label, value in CHROMA_KEY_COLOR_OPTIONS:
             self.chroma_key_color.addItem(label, value)
         index = self.chroma_key_color.findData(draft.chroma_key_color)
         self.chroma_key_color.setCurrentIndex(index if index >= 0 else 0)
@@ -1822,7 +1816,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         form = QFormLayout(group)
         enabled = QCheckBox("Добавить Chroma Key-блок в конец промпта")
         color = QComboBox()
-        for label, value in (("Синий", "blue"), ("Красный", "red"), ("Зелёный", "green")):
+        for label, value in CHROMA_KEY_COLOR_OPTIONS:
             color.addItem(label, value)
         materials = QWidget()
         material_layout = QHBoxLayout(materials)
@@ -2901,12 +2895,9 @@ class ClipartProcessingPage(_ScrollableStepPage):
             advanced_form,
             "chroma_key_color",
             "Chroma Key цвет",
-            (("Синий", "blue"), ("Красный", "red"), ("Зелёный", "green"), ("Свой оттенок", "custom")),
+            CHROMA_KEY_COLOR_OPTIONS,
             operations,
         )
-        self._add_text(advanced_form, "chroma_key_custom_color", "Свой оттенок #RRGGBB", operations)
-        self._add_int(advanced_form, "chroma_key_tolerance", "Chroma Key допуск", 0, 255, operations)
-        self._add_int(advanced_form, "chroma_key_softness", "Chroma Key мягкость края", 0, 255, operations)
         self._add_combo(
             advanced_form,
             "local_realesrgan_profile",
@@ -3197,13 +3188,6 @@ class ClipartProcessingPage(_ScrollableStepPage):
             and "local_ben2_corner_radius" in remove_controls,
             "chroma_key_color": operations.remove_background
             and "chroma_key_color" in remove_controls,
-            "chroma_key_custom_color": operations.remove_background
-            and "chroma_key_custom_color" in remove_controls
-            and operations.chroma_key_color == "custom",
-            "chroma_key_tolerance": operations.remove_background
-            and "chroma_key_tolerance" in remove_controls,
-            "chroma_key_softness": operations.remove_background
-            and "chroma_key_softness" in remove_controls,
             "unsharp_amount": operations.unsharp,
             "unsharp_radius": operations.unsharp,
             "unsharp_threshold": operations.unsharp,

@@ -3,12 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final
 
+from chroma_key import KEY_COLORS
+
 
 KIE_TOPAZ_MODEL_ID: Final = "topaz/image-upscale"
 LEGACY_KIE_TOPAZ_MODEL_IDS: Final = frozenset({"topaz/upscale"})
 TOPAZ_UPSCALE_FACTORS: Final = (2, 4)
 TOPAZ_MAX_FILE_BYTES: Final = 10_000_000
 TOPAZ_MAX_OUTPUT_SIDE: Final = 20_000
+CHROMA_KEY_COLOR_OPTIONS: Final = tuple(
+    ({"blue": "Синий", "red": "Красный", "green": "Зелёный"}[name], name)
+    for name in KEY_COLORS
+)
 
 
 def normalize_kie_upscale_model(model_id: object) -> str:
@@ -123,12 +129,7 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
         requires_cost=False,
         preserves_alpha=True,
         requires_api_key=False,
-        visible_controls=(
-            "chroma_key_color",
-            "chroma_key_custom_color",
-            "chroma_key_tolerance",
-            "chroma_key_softness",
-        ),
+        visible_controls=("chroma_key_color",),
     ),
     "local_realesrgan": ProviderSpec(
         provider_id="local_realesrgan",
