@@ -33,6 +33,7 @@ from v3_clipart_flow import (
     missing_runtime_requirements,
     parse_prompt_csv,
     _safe_runtime_error,
+    apply_prompt_text_edit,
 )
 from v3_mode_selection import V3ApplicationView
 from v3_project_state import (
@@ -113,6 +114,23 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.generation.model = "gpt-image-2"
         state.clipart.generation.variants = 2
         return state
+
+    def test_batch_prompt_text_edits_preserve_references_and_order(self):
+        entries = [
+            PromptEntry("blue fox", ["one.png"]),
+            PromptEntry("red fox", ["two.png"]),
+        ]
+        changed, matches = apply_prompt_text_edit(
+            entries, rows=(0,), action="replace", find_text="fox", new_text="wolf"
+        )
+        self.assertEqual(matches, 1)
+        self.assertEqual([entry.prompt for entry in changed], ["blue wolf", "red fox"])
+        self.assertEqual([entry.references for entry in changed], [["one.png"], ["two.png"]])
+        appended, matches = apply_prompt_text_edit(
+            changed, rows=(0, 1), action="append", find_text="", new_text="isolated"
+        )
+        self.assertEqual(matches, 2)
+        self.assertEqual([entry.prompt for entry in appended], ["blue wolf isolated", "red fox isolated"])
 
     def test_application_view_installs_full_clipart_route_with_results(self):
         factory = WorkerFactory()

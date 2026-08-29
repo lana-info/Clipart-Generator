@@ -867,6 +867,31 @@ def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
     return tuple(missing)
 
 
+def apply_prompt_text_edit(
+    entries: Sequence[PromptEntry], *, rows: Sequence[int], action: str,
+    find_text: str, new_text: str,
+) -> tuple[list[PromptEntry], int]:
+    """Apply one text-only batch edit without changing references or order."""
+    if action not in {"replace", "prepend", "append"}:
+        raise ValueError("Unknown prompt text edit action")
+    selected = {row for row in rows if 0 <= row < len(entries)}
+    find_text, new_text = find_text.strip(), new_text.strip()
+    result = [PromptEntry(entry.prompt, list(entry.references)) for entry in entries]
+    matches = 0
+    for row in selected:
+        prompt = result[row].prompt
+        if action == "replace":
+            if not find_text or find_text not in prompt:
+                continue
+            result[row].prompt = prompt.replace(find_text, new_text)
+        elif action == "prepend":
+            result[row].prompt = " ".join(part for part in (new_text, prompt) if part)
+        else:
+            result[row].prompt = " ".join(part for part in (prompt, new_text) if part)
+        matches += 1
+    return result, matches
+
+
 def parse_prompt_csv(path: str | os.PathLike[str]) -> list[PromptEntry]:
     source = Path(path)
     try:
