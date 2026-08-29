@@ -15,6 +15,7 @@ Source-build и Windows packaging используют `release/VERSION.txt` к�
 ## Для пользователя
 
 - [USER_INSTALL_GUIDE.md](USER_INSTALL_GUIDE.md) — установка и первый запуск;
+- [API_KEYS_GUIDE.ru.md](API_KEYS_GUIDE.ru.md) — регистрация и получение ключей KIE.AI, fal.ai и PhotoRoom;
 - [MANUAL_SMOKE_TEST_3.0.md](MANUAL_SMOKE_TEST_3.0.md) — пользовательская проверка;
 - [KNOWN_LIMITATIONS_3.0.md](KNOWN_LIMITATIONS_3.0.md) — ограничения и ручные проверки;
 - [RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md) — изменения версии 3.0.
