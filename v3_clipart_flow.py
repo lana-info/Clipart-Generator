@@ -49,6 +49,7 @@ from PyQt6.QtWidgets import (
 )
 
 from license_client import LicenseError
+from chroma_key import chroma_key_prompt_block
 from provider_error_messages import friendly_provider_error
 from v3_api_settings import estimate_fal_cost
 
@@ -1789,6 +1790,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         action_layout.addWidget(self.clear_references_button)
         action_layout.addStretch()
         layout.addWidget(actions)
+        self._add_prompt_chroma_controls(layout, "paste")
         self.add_prompt_button = V3Button("Добавить промпт")
         self.add_prompt_button.clicked.connect(self._apply_paste)
         layout.addWidget(self.add_prompt_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -1799,6 +1801,44 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         self._paste_references: list[str] = []
         layout.addStretch()
         return widget
+
+    def _add_prompt_chroma_controls(self, layout: QVBoxLayout, prefix: str) -> None:
+        group = QGroupBox("Фон для лёгкого удаления")
+        form = QFormLayout(group)
+        enabled = QCheckBox("Добавить Chroma Key-блок в конец промпта")
+        color = QComboBox()
+        for label, value in (("Синий", "blue"), ("Красный", "red"), ("Зелёный", "green")):
+            color.addItem(label, value)
+        materials = QWidget()
+        material_layout = QHBoxLayout(materials)
+        material_layout.setContentsMargins(0, 0, 0, 0)
+        buttons: dict[str, QPushButton] = {}
+        for label, value in (
+            ("Акварель", "watercolor"), ("Тонкие листья", "thin_leaves"),
+            ("Хвоя", "conifer_needles"), ("Металл", "metal"),
+            ("Лента / сатин", "ribbon_satin"), ("Прозрачные детали", "transparent_details"),
+            ("Снег / лёд", "snow_ice"),
+        ):
+            button = QPushButton(label)
+            button.setCheckable(True)
+            buttons[value] = button
+            material_layout.addWidget(button)
+        form.addRow(enabled)
+        form.addRow("Цвет фона", color)
+        form.addRow("Материалы и детали", materials)
+        setattr(self, f"{prefix}_chroma_enabled", enabled)
+        setattr(self, f"{prefix}_chroma_color", color)
+        setattr(self, f"{prefix}_chroma_material_buttons", buttons)
+        layout.addWidget(group)
+
+    def _prompt_with_chroma(self, prompt: str, prefix: str) -> str:
+        enabled = getattr(self, f"{prefix}_chroma_enabled")
+        if not enabled.isChecked():
+            return prompt
+        color = getattr(self, f"{prefix}_chroma_color").currentData()
+        buttons = getattr(self, f"{prefix}_chroma_material_buttons")
+        materials = [value for value, button in buttons.items() if button.isChecked()]
+        return prompt + "\n" + chroma_key_prompt_block(color, materials=materials)
 
     def _choose_paste_references(self) -> None:
         selected, _ = QFileDialog.getOpenFileNames(
@@ -1856,6 +1896,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         if len(prompt) > MAX_TEXT_LENGTH:
             self.card.set_state("error", "Промпт слишком длинный")
             return
+        prompt = self._prompt_with_chroma(prompt, "paste")
         if self._store_entries(
             [PromptEntry(prompt=prompt, references=self._paste_references)],
             action="append",
@@ -1895,6 +1936,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         drop_layout.addWidget(mapping_hint)
         self.csv_drop_zone.file_dropped.connect(self._import_csv_file)
         layout.addWidget(self.csv_drop_zone)
+        self._add_prompt_chroma_controls(layout, "csv")
         layout.addStretch(1)
         return widget
 
@@ -1919,6 +1961,14 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             return
         entries = [PromptEntry.from_value(entry) for entry in dialog.get_entries()]
         normalized_entries = [entry for entry in entries if entry is not None]
+        if self.csv_chroma_enabled.isChecked():
+            normalized_entries = [
+                PromptEntry(
+                    prompt=self._prompt_with_chroma(entry.prompt, "csv"),
+                    references=entry.references,
+                )
+                for entry in normalized_entries
+            ]
         if not normalized_entries:
             self.card.set_state("error", "Не найдено ни одной валидной строки CSV")
             return

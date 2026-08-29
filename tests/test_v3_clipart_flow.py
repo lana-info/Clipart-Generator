@@ -401,6 +401,22 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         self.assertFalse(hasattr(page, "chroma_key_custom_color"))
 
+    def test_paste_can_append_selected_chroma_material_clause(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        page = ClipartPromptInputPage(state, lambda: None)
+        page.paste_chroma_enabled.setChecked(True)
+        page.paste_chroma_material_buttons["metal"].setChecked(True)
+        page.paste_edit.setPlainText("gold ornament")
+
+        page._apply_paste()
+
+        self.assertIn("matte brushed metal", state.clipart.prompts[0].prompt)
+
+    def test_csv_chroma_controls_use_the_same_materials(self):
+        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
+
+        self.assertEqual(set(page.csv_chroma_material_buttons), set(page.paste_chroma_material_buttons))
+
     def test_csv_source_has_primary_button_and_accepts_csv_drop(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-csv-drop-") as temp:
             csv_path = Path(temp) / "prompts.csv"
