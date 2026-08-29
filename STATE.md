@@ -49,8 +49,10 @@ Updated: 2026-08-29
 
 ## Next task
 
-Завершить review `PRD_3.1.ru.md` и `TASKS_3.1.ru.md`, исправить найденные
-противоречия и получить product approval до изменения source code.
+Продолжить 3.1 implementation по `TASKS_3.1.ru.md`: Task 7 имеет утверждённый
+макет и Linux-safe implementation checkpoint `1724c76`; до закрытия остаётся
+manual Windows mouse/pen acceptance. Следующий независимый пункт по порядку —
+Task 8, reproducible Local Chroma Key benchmark и критерии stop/continue.
 
 Release 3.0.7 и development 3.1 разделены:
 

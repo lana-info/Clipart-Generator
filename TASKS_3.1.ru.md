@@ -223,29 +223,43 @@ Dependencies: None. Scope: M. Requirements: `CG31-FR-020`–`CG31-FR-022`.
 
 ## Task 7: Сделать mask editor отдельным рабочим пространством
 
-Status: Todo — reuse existing mask/preview primitives; текущий скрытый
-Results-блок не считается принятой UX-реализацией
+Status: In progress — visual approved; implementation checkpoint `1724c76`,
+manual Windows mouse/pen acceptance pending
 
 Goal:
 Открывать один result на крупном canvas с предсказуемой кистью и zoom.
 
 Steps:
-- Добавить отдельную страницу `Проверка прозрачности` с file list слева и
-  large canvas справа; double click выбирает файл и фокусирует canvas.
-- Реализовать Fit/25/50/100/200%, manual zoom и pan.
+- Добавить отдельную страницу `Проверка и корректировка прозрачности` с large
+  canvas слева и прокручиваемым file list/инструментами в компактной правой
+  панели; на Results дать кнопку `Проверить прозрачность`, double click оставить
+  shortcut.
+- Реализовать Fit/50/100/150/200/400%, полноэкранный canvas и pan удержанием
+  `Пробел` без отдельного переключателя инструмента.
 - Добавить visible footprint, radius, hardness, continuous stroke, add/remove,
   undo/redo и reset.
 - Сохранять corrected `_ready` PNG в `output/`, alpha-mask `_alpha-mask` в
-  `rough/`, atomically и без paid remover.
+  `rough/` согласованной парой с rollback при ошибке, без paid remover и без
+  потери 300 DPI.
 
 Acceptance:
-- [ ] Полное изображение видно и масштабируется без обрезанной полосы.
-- [ ] Drag рисует continuous line, cursor outline совпадает с footprint.
-- [ ] File switch изолирует mask/history; preview background не сохраняется.
+- [x] Полное изображение видно и масштабируется без обрезанной полосы.
+- [x] Drag рисует continuous line, cursor outline совпадает с footprint.
+- [x] File switch изолирует mask; preview background не сохраняется, а
+  несохранённые изменения не теряются без предупреждения.
+- [x] `Сохранить PNG` — единственное primary action; `К результатам` — secondary.
 
 Verification:
-- [ ] Unit tests interpolation, hardness, history и mask isolation.
-- [ ] Offscreen interaction smoke и manual Windows mouse/pen acceptance.
+- [x] Unit tests interpolation, hardness, bounded history, mask isolation,
+  300-DPI round-trip и rollback парного сохранения.
+- [x] Offscreen interaction smoke и screenshot при 980×700.
+- [ ] Manual Windows mouse/pen acceptance.
+
+Implementation evidence: feature commit `1724c76`; 83 focused offscreen tests,
+`py_compile` и `git diff --check` прошли. Замер одного движения кисти на 4K —
+около 0,018 с вместо 3,22 с до оптимизации. При возврате к файлу его текущая
+несохранённая маска восстанавливается, но отдельная Undo/Redo history для ранее
+покинутого файла не сохраняется.
 
 Dependencies: Task 6, existing `background_mask.py`, `v3_transparency_preview.py`.
 Scope: M. Requirements: `CG31-FR-030`–`CG31-FR-033`.
