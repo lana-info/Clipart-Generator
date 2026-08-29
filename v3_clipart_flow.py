@@ -71,6 +71,7 @@ from output_naming import workspace_layout
 from v3_prompt_csv_import import PromptCsvImportDialog
 from v3_project_state import (
     MAX_PROMPT_ENTRIES,
+    MAX_CHROMA_KEY_MATERIALS,
     MAX_PROMPT_GENERATOR_TEXT_LENGTH,
     MAX_REFERENCES_PER_PROMPT,
     MAX_TEXT_LENGTH,
@@ -118,6 +119,31 @@ from model_catalog import (
 
 MAX_CSV_BYTES = 2 * 1024 * 1024
 MAX_CLIPART_REQUESTS = 5000
+CHROMA_KEY_MATERIAL_OPTIONS = (
+    ("Акварель", "watercolor"),
+    ("Тонкие листья", "thin_leaves"),
+    ("Хвоя", "conifer_needles"),
+    ("Металл", "metal"),
+    ("Лента / сатин", "ribbon_satin"),
+    ("Прозрачные детали", "transparent_details"),
+    ("Снег / лёд", "snow_ice"),
+)
+
+
+def configure_chroma_material_buttons(buttons: Sequence[QPushButton]) -> None:
+    """Keep the compact Chroma Key helper readable and prompt-safe."""
+
+    def refresh() -> None:
+        selected_count = sum(button.isChecked() for button in buttons)
+        limit_reached = selected_count >= MAX_CHROMA_KEY_MATERIALS
+        for button in buttons:
+            button.setEnabled(button.isChecked() or not limit_reached)
+
+    for button in buttons:
+        button.setProperty("v3ChromaMaterial", True)
+        button.setToolTip("Можно выбрать до двух материалов")
+        button.toggled.connect(refresh)
+    refresh()
 MAX_REFERENCE_FILE_BYTES = 10 * 1024 * 1024
 _DOLLAR_PATTERN = re.compile(r"\$(\d+(?:\.\d+)?)")
 _CHROMA_PROMPT_SUFFIX_MARKER = (
@@ -1845,23 +1871,15 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         materials_layout = QHBoxLayout(materials_widget)
         materials_layout.setContentsMargins(0, 0, 0, 0)
         materials_layout.setSpacing(self.tokens.space_2)
-        material_options = (
-            ("Акварель", "watercolor"),
-            ("Тонкие листья", "thin_leaves"),
-            ("Хвоя", "conifer_needles"),
-            ("Металл", "metal"),
-            ("Лента / сатин", "ribbon_satin"),
-            ("Прозрачные детали", "transparent_details"),
-            ("Снег / лёд", "snow_ice"),
-        )
         self.chroma_material_buttons: list[QPushButton] = []
-        for label, value in material_options:
+        for label, value in CHROMA_KEY_MATERIAL_OPTIONS:
             button = QPushButton(label)
             button.setCheckable(True)
             button.setProperty("chromaMaterial", value)
             button.setChecked(value in draft.chroma_key_materials)
             self.chroma_material_buttons.append(button)
             materials_layout.addWidget(button)
+        configure_chroma_material_buttons(self.chroma_material_buttons)
         materials_layout.addStretch(1)
         key_form.addRow(self.chroma_key_enabled)
         key_form.addRow("Цвет фона для удаления", self.chroma_key_color)
@@ -2049,16 +2067,12 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         material_layout = QHBoxLayout(materials)
         material_layout.setContentsMargins(0, 0, 0, 0)
         buttons: dict[str, QPushButton] = {}
-        for label, value in (
-            ("Акварель", "watercolor"), ("Тонкие листья", "thin_leaves"),
-            ("Хвоя", "conifer_needles"), ("Металл", "metal"),
-            ("Лента / сатин", "ribbon_satin"), ("Прозрачные детали", "transparent_details"),
-            ("Снег / лёд", "snow_ice"),
-        ):
+        for label, value in CHROMA_KEY_MATERIAL_OPTIONS:
             button = QPushButton(label)
             button.setCheckable(True)
             buttons[value] = button
             material_layout.addWidget(button)
+        configure_chroma_material_buttons(tuple(buttons.values()))
         form.addRow(enabled)
         form.addRow("Цвет фона", color)
         form.addRow("Материалы и детали", materials)

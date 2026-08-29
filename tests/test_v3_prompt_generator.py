@@ -133,6 +133,16 @@ class V3PromptGeneratorTests(unittest.TestCase):
 
         self.assertIn("thick flat blades", prompts[0].prompt)
 
+    def test_chroma_material_selection_keeps_at_most_two_materials(self):
+        data = PromptGeneratorData(
+            chroma_key_materials=["watercolor", "thin_leaves", "metal"],
+        )
+
+        self.assertEqual(
+            data.chroma_key_materials,
+            ["watercolor", "thin_leaves"],
+        )
+
     def test_chroma_key_generator_settings_survive_project_draft(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompt_generator.chroma_key_enabled = True

@@ -146,8 +146,9 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
 ## Task 5: Добавить chroma modifier к созданию Clipart prompt
 
-Status: In progress — approved Chroma helper implemented; focused Chroma/CSV
-suite passed, final screenshot comparison pending
+Status: In progress — approved helper implemented; compact two-material limit
+and readable selected state added after candidate visual review; manual Windows
+acceptance remains in Task 13
 
 Goal:
 Добавлять утверждённый chroma block к series и ready prompt без изменения
@@ -174,11 +175,20 @@ Acceptance:
   выбора даёт base chroma block.
 - [ ] Helper compact, не повторяет selectors и не содержит технических
   объяснений. Approved visual: `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`.
+- [x] Новый generator по умолчанию выбирает синий; сохранённый выбор проекта
+  не перезаписывается.
+- [x] Разрешены максимум два материала: выбранные тёмно-бирюзовые с белым
+  текстом, остальные при достижении лимита приглушены без постоянной подписи.
 - [ ] CSV/Pinterest/Processing prompt UI не получает control.
 
 Verification:
 - [ ] Render/update/no-duplicate unit tests.
 - [ ] Offscreen tests двух источников и трёх исключённых modes.
+
+Evidence: follow-up branch `codex/fix-3.1-chroma-control-ux`; focused offscreen
+tests generator/paste и prompt-state проходят. Visual screenshot сопоставлен с
+утверждённым compact layout; лимит сериализуется, поэтому старый draft с
+лишними materials безопасно сохраняет первые два.
 
 Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 
@@ -543,8 +553,9 @@ Dependencies: existing V3 signed update client. Scope: S.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: In progress — source integrated into `develop/3.1` at `ea57e12`; full
-VDS verification passes, Windows acceptance and release preparation remain
+Status: In progress — source integrated into `develop/3.1`; candidate `3.1.0`
+собран, но после visual review требует approved Chroma follow-up и replacement
+Windows candidate before acceptance/publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый

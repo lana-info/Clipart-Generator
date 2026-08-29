@@ -24,6 +24,7 @@ MAX_REFERENCES_PER_PROMPT = 5
 MAX_PROMPT_GENERATOR_ITEMS = 500
 MAX_PROMPT_GENERATOR_TEXT_LENGTH = 4000
 MAX_PROMPT_SERIES_COUNT = 500
+MAX_CHROMA_KEY_MATERIALS = 2
 MAX_SELECTED_FILES = 10000
 MAX_TEXT_LENGTH = 20000
 PINTEREST_CANVAS_WIDTH = 1000
@@ -249,7 +250,7 @@ class PromptGeneratorData:
         self.chroma_key_materials = [
             material for material in _string_list(self.chroma_key_materials, limit=7)
             if material in allowed_materials
-        ]
+        ][:MAX_CHROMA_KEY_MATERIALS]
         self.count = _bounded_int(
             self.count,
             default=12,

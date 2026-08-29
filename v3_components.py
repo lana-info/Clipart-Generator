@@ -385,6 +385,31 @@ QPushButton[v3SourceChoice="true"]:checked {{
 QPushButton[v3SourceChoice="true"]:focus {{
     border: {tokens.focus_width}px solid {tokens.focus};
 }}
+QPushButton[v3ChromaMaterial="true"] {{
+    min-height: 32px;
+    padding: 0 {tokens.space_3}px;
+    color: {tokens.text};
+    background: {tokens.surface_muted};
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_control}px;
+}}
+QPushButton[v3ChromaMaterial="true"]:hover {{
+    border-color: {tokens.text_muted};
+}}
+QPushButton[v3ChromaMaterial="true"]:checked {{
+    color: white;
+    background: {tokens.accent_soft};
+    border: 1px solid {tokens.accent};
+}}
+QPushButton[v3ChromaMaterial="true"]:checked:hover {{
+    background: {tokens.accent_hover};
+    border-color: {tokens.accent_hover};
+}}
+QPushButton[v3ChromaMaterial="true"]:disabled {{
+    color: {tokens.disabled};
+    background: {tokens.disabled_soft};
+    border: 1px solid {tokens.border};
+}}
 QToolButton[v3Disclosure="true"] {{
     min-height: {tokens.control_height}px;
     color: {tokens.text};

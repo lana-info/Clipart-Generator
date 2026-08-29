@@ -64,11 +64,14 @@ passes 57 tests; the complete offline suite passes 950 tests, 56 intentional
 skips, 2 deselected and 127 subtests. Compilation and tracked sensitive-artifact
 scan pass.
 
-Task 13 source integration is complete at `ea57e12` (including the verified
-Task 15 checkpoint). Next is manual Windows acceptance for the image/mask
-editor, output/rough paths, chroma quality and offline-license startup/run.
-Version bump, installer build and publication remain separate actions and are
-not yet authorized.
+Task 13 source integration is complete; the `3.1.0` candidate installer was
+built successfully, but the first visual review found an approved Chroma helper
+follow-up: blue stays the default for a new draft, selected materials use a
+readable dark-turquoise state and selection is limited to two. The current
+candidate is therefore not publishable. After this branch is integrated and
+verified, create a replacement Windows candidate, then continue manual
+acceptance for the image/mask editor, output/rough paths, chroma quality and
+offline-license startup/run. Publication remains a separate owner decision.
 
 Task 15 adds the approved compact «Что нового» block to the signed update
 prompt and is integrated in `develop/3.1` at `ea57e12`. It does not add any
