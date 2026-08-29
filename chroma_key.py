@@ -401,6 +401,96 @@ def _fill_far_subject_reference(
     np.copyto(reference_weight, far_weight, where=use_far)
 
 
+def _neutralize_opaque_key_spill(
+    source: Image.Image,
+    result: Image.Image,
+    key_color: object,
+) -> Image.Image:
+    """Recover localized key reflections inside an otherwise opaque subject."""
+    requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
+    key_channel = int(np.argmax(requested_key))
+    other_channels = [index for index in range(3) if index != key_channel]
+    source_rgb = np.asarray(source.convert("RGB"), dtype=np.float32)
+    frame = max(4, int(0.02 * min(source.size)))
+    border = np.concatenate(
+        (
+            source_rgb[:frame, :, :].reshape(-1, 3),
+            source_rgb[-frame:, :, :].reshape(-1, 3),
+            source_rgb[:, :frame, :].reshape(-1, 3),
+            source_rgb[:, -frame:, :].reshape(-1, 3),
+        ),
+        axis=0,
+    )
+    measured_key = np.median(border, axis=0)
+    del source_rgb, border
+
+    pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8).copy()
+    rgb = pixels[..., :3].astype(np.float32)
+    subject = pixels[..., 3] >= 250
+    other = np.maximum(
+        rgb[..., other_channels[0]],
+        rgb[..., other_channels[1]],
+    )
+    clean_reference = subject & (
+        rgb[..., key_channel] <= 0.86 * other + 5.0
+    )
+    suspected_spill = subject & (
+        rgb[..., key_channel] >= 0.90 * other + 5.0
+    )
+    if not np.any(clean_reference) or not np.any(suspected_spill):
+        return result
+
+    distance, nearest = cv2.distanceTransformWithLabels(
+        (~clean_reference).astype(np.uint8),
+        cv2.DIST_L2,
+        5,
+        labelType=cv2.DIST_LABEL_PIXEL,
+    )
+    reference_labels = nearest[clean_reference]
+    spill_labels = nearest[suspected_spill]
+    reference = np.empty(
+        (int(np.count_nonzero(suspected_spill)), 3),
+        dtype=np.float32,
+    )
+    for channel in range(3):
+        lookup = np.zeros(int(nearest.max()) + 1, dtype=np.float32)
+        lookup[reference_labels] = rgb[..., channel][clean_reference]
+        reference[:, channel] = lookup[spill_labels]
+
+    source_spill = rgb[suspected_spill]
+    direction = measured_key[None, :] - reference
+    denominator = np.sum(direction * direction, axis=1)
+    mixture = np.divide(
+        np.sum((source_spill - reference) * direction, axis=1),
+        denominator,
+        out=np.zeros_like(denominator),
+        where=denominator > 1e-6,
+    )
+    predicted = (
+        (1.0 - mixture[:, None]) * reference
+        + mixture[:, None] * measured_key[None, :]
+    )
+    residual = np.linalg.norm(source_spill - predicted, axis=1)
+    max_distance = max(48.0, min(source.size) / 16.0)
+    correct = (
+        (mixture >= 0.04)
+        & (mixture <= 0.60)
+        & (residual <= 8.0)
+        & (distance[suspected_spill] <= max_distance)
+    )
+    if np.any(correct):
+        recovered = (
+            source_spill[correct]
+            - mixture[correct, None] * measured_key[None, :]
+        ) / (1.0 - mixture[correct, None])
+        corrected = source_spill.copy()
+        corrected[correct] = recovered
+        rgb[suspected_spill] = corrected
+        pixels[..., :3] = np.rint(np.clip(rgb, 0.0, 255.0)).astype(np.uint8)
+        return Image.fromarray(pixels, mode="RGBA")
+    return result
+
+
 def _remove_chroma_key_staged(
     image: Image.Image,
     key_color: object,
@@ -665,8 +755,9 @@ def remove_chroma_key_automatic(
         # the staged engine allocates its own working buffers.
         pass
     else:
-        return result
-    return _remove_chroma_key_staged(image, key_color)
+        return _neutralize_opaque_key_spill(image, result, key_color)
+    result = _remove_chroma_key_staged(image, key_color)
+    return _neutralize_opaque_key_spill(image, result, key_color)
 
 
 def chroma_key_prompt_block(

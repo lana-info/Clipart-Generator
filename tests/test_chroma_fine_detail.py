@@ -185,7 +185,54 @@ def _fragment_flat_background(
     return Image.fromarray(pixels, mode="RGB")
 
 
+def _opaque_subject_with_interior_blue_spill() -> tuple[
+    Image.Image,
+    Image.Image,
+    np.ndarray,
+]:
+    expected = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(expected)
+    clean_color = (205, 190, 132, 255)
+    draw.rounded_rectangle((70, 70, 314, 314), radius=50, fill=clean_color)
+    input_image = np.asarray(
+        _flatten_on_key(expected, "blue"),
+        dtype=np.uint8,
+    ).copy()
+    y, x = np.indices((SIZE, SIZE))
+    spill = ((x - 190) / 60) ** 2 + ((y - 190) / 45) ** 2 < 1
+    key = np.asarray(KEY_COLORS["blue"], dtype=np.float32)
+    input_image[spill] = np.rint(
+        input_image[spill].astype(np.float32) * 0.78 + key * 0.22
+    ).astype(np.uint8)
+    return Image.fromarray(input_image, mode="RGB"), expected, spill
+
+
 class ChromaFineDetailTests(unittest.TestCase):
+    def test_opaque_blue_spill_inside_a_light_subject_is_neutralized(self):
+        input_image, expected, spill = _opaque_subject_with_interior_blue_spill()
+
+        result = remove_chroma_key_automatic(input_image, "blue")
+        actual = np.asarray(result.convert("RGBA"), dtype=np.float32)
+        reference = np.asarray(expected.convert("RGBA"), dtype=np.float32)
+        subject = reference[..., 3] == 255
+
+        self.assertLessEqual(
+            float(np.mean(np.abs(actual[..., :3][spill] - reference[..., :3][spill]))),
+            8.0,
+        )
+        self.assertLessEqual(
+            float(
+                np.mean(
+                    np.abs(
+                        actual[..., :3][subject & ~spill]
+                        - reference[..., :3][subject & ~spill]
+                    )
+                )
+            ),
+            2.0,
+        )
+        self.assertGreaterEqual(float(np.mean(actual[..., 3][spill])), 254.0)
+
     def test_complex_openings_and_curls_are_cut_without_rejection(self):
         expected = _rings_and_curls()
 
