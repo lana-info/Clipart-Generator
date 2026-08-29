@@ -35,7 +35,7 @@ Task Set Key: `CG31-TASKSET-001`
 
 ## Task 1: Единый selector `provider — model` генерации
 
-Status: Todo
+Status: In progress — visual approved 2026-08-29
 
 Goal:
 Показывать одну понятную модель с её provider, не удаляя ни одной существующей
@@ -65,7 +65,7 @@ Dependencies: None. Scope: M. Requirements: `CG31-FR-001`.
 
 ## Task 2: Перестроить общий processing editor
 
-Status: Todo
+Status: In progress — visual approved 2026-08-29
 
 Goal:
 Показывать настройки включённых этапов отдельными лёгкими секциями в порядке

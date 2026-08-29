@@ -84,6 +84,9 @@ Release 3.0.7 и development 3.1 разделены:
   подсказки blue/red/green, затем пояснение про materials; material buttons
   остаются слева сразу после выбора цвета. Approved mockup:
   `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`;
+- Task 2 processing editor UI approved: compact operation checklist сверху;
+  enabled stages ниже в pipeline order с тонкими разделителями. Approved
+  mockup: `docs/ui/3.1/task-2-processing-editor/approved-mockup.png`;
 - промежуточные файлы идут в `rough/`, готовые `_ready` — в `output/`;
 - текущий встроенный Results mask editor не принят: требуется отдельная страница
   проверки, presets масштаба, видимый continuous brush и hardness;
