@@ -108,6 +108,7 @@ def normalize_generator_data(
         chroma_key_enabled=bool(data.chroma_key_enabled),
         chroma_key_color=normalize_prompt_text(data.chroma_key_color, limit=20) or "blue",
         chroma_key_custom_color=normalize_prompt_text(data.chroma_key_custom_color, limit=20) or "#0000FF",
+        chroma_key_materials=list(data.chroma_key_materials),
         count=data.count,
     )
 
@@ -217,6 +218,7 @@ def generate_prompt_series(
                             or "акварел" in " ".join(
                                 (normalized.style, normalized.theme)
                             ).casefold(),
+                            materials=normalized.chroma_key_materials,
                         )
                     except ValueError as error:
                         raise PromptGeneratorError(str(error)) from error

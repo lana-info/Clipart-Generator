@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Final
 
 from PIL import Image
@@ -14,6 +15,37 @@ KEY_COLORS: Final[dict[str, tuple[int, int, int]]] = {
     "green": (0, 255, 0),
 }
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
+    "watercolor": (
+        " Watercolor texture belongs to the subject only; the background "
+        "has no paper texture, paper grain, wash or painted variation."
+    ),
+    "thin_leaves": (
+        " Leaves are thick flat blades with rounded tips, solid and opaque, "
+        "never hair-thin, wispy or feathery."
+    ),
+    "conifer_needles": (
+        " Needles are short, broad and thick, each a solid opaque blade with "
+        "a blunt rounded tip, never fine or feathery."
+    ),
+    "metal": (
+        " Metal elements are matte brushed metal with a soft satin finish, "
+        "no mirror reflections or background-colour glints."
+    ),
+    "ribbon_satin": (
+        " Ribbon is matte woven fabric with crisp folded edges and no sheen "
+        "or reflection."
+    ),
+    "transparent_details": (
+        " Translucent details have crisp defined edges, no background-colour "
+        "reflection, tint or glow."
+    ),
+    "snow_ice": (
+        " Snow and ice are opaque with crisp defined edges, no mist, haze, "
+        "glitter particles or background-colour glow."
+    ),
+}
 
 
 def parse_key_color(value: object) -> tuple[int, int, int]:
@@ -66,7 +98,12 @@ def remove_chroma_key(
     return source
 
 
-def chroma_key_prompt_block(key_color: object = "blue", *, watercolor: bool = False) -> str:
+def chroma_key_prompt_block(
+    key_color: object = "blue",
+    *,
+    watercolor: bool = False,
+    materials: Iterable[object] = (),
+) -> str:
     """Return a provider-ready prompt suffix for a removable flat background."""
     rgb = parse_key_color(key_color)
     color_name = next((name for name, value in KEY_COLORS.items() if value == rgb), None)
@@ -81,12 +118,19 @@ def chroma_key_prompt_block(key_color: object = "blue", *, watercolor: bool = Fa
         "focus, the complete subject centered with at least 10% empty margin, "
         "nothing cropped, no text, no watermark, no stray fragments."
     )
+    selected = {str(item).strip().casefold() for item in materials}
     if watercolor:
-        block += (
-            " Watercolor texture belongs to the subject only; the background "
-            "has no paper texture, paper grain, wash or painted variation."
-        )
+        selected.add("watercolor")
+    for material in MATERIAL_PROMPT_CLAUSES:
+        if material in selected:
+            block += MATERIAL_PROMPT_CLAUSES[material]
     return block
 
 
-__all__ = ["KEY_COLORS", "chroma_key_prompt_block", "parse_key_color", "remove_chroma_key"]
+__all__ = [
+    "KEY_COLORS",
+    "MATERIAL_PROMPT_CLAUSES",
+    "chroma_key_prompt_block",
+    "parse_key_color",
+    "remove_chroma_key",
+]

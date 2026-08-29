@@ -33,6 +33,17 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertIn("chroma-key", prompt)
         self.assertIn("no paper texture", prompt)
 
+    def test_prompt_block_adds_only_selected_material_clauses(self):
+        prompt = chroma_key_prompt_block(
+            "blue",
+            materials=("thin_leaves", "metal"),
+        )
+
+        self.assertIn("thick flat blades", prompt)
+        self.assertIn("matte brushed metal", prompt)
+        self.assertNotIn("paper texture", prompt)
+        self.assertNotIn("unlit", prompt)
+
     def test_invalid_color_is_rejected(self):
         with self.assertRaises(ValueError):
             parse_key_color("#12")

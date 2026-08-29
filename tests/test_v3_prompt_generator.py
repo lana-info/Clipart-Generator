@@ -120,6 +120,19 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertIn("#0000FF", prompts[0].prompt)
         self.assertIn("no paper texture", prompts[0].prompt)
 
+    def test_clipart_series_keeps_selected_chroma_materials(self):
+        prompts = generate_prompt_series(
+            ProjectMode.CLIPART,
+            PromptGeneratorData(
+                subjects=["eucalyptus branch"],
+                chroma_key_enabled=True,
+                chroma_key_color="blue",
+                chroma_key_materials=["thin_leaves"],
+            ),
+        )
+
+        self.assertIn("thick flat blades", prompts[0].prompt)
+
     def test_chroma_key_generator_settings_survive_project_draft(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompt_generator.chroma_key_enabled = True

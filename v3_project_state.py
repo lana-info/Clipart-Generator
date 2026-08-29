@@ -202,6 +202,7 @@ class PromptGeneratorData:
     chroma_key_enabled: bool = False
     chroma_key_color: str = "blue"
     chroma_key_custom_color: str = "#0000FF"
+    chroma_key_materials: list[str] = field(default_factory=list)
     # Kept in the draft schema for backward compatibility with 3.0.5 files.
     # New prompt series use the object × variation combinations instead.
     count: int = 12
@@ -236,6 +237,14 @@ class PromptGeneratorData:
         self.chroma_key_enabled = _boolean(self.chroma_key_enabled, default=False)
         self.chroma_key_color = _text(self.chroma_key_color, limit=20) or "blue"
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
+        allowed_materials = {
+            "watercolor", "thin_leaves", "conifer_needles", "metal",
+            "ribbon_satin", "transparent_details", "snow_ice",
+        }
+        self.chroma_key_materials = [
+            material for material in _string_list(self.chroma_key_materials, limit=7)
+            if material in allowed_materials
+        ]
         self.count = _bounded_int(
             self.count,
             default=12,
@@ -257,6 +266,7 @@ class PromptGeneratorData:
             "chroma_key_enabled": self.chroma_key_enabled,
             "chroma_key_color": self.chroma_key_color,
             "chroma_key_custom_color": self.chroma_key_custom_color,
+            "chroma_key_materials": list(self.chroma_key_materials),
             "count": self.count,
         }
 
@@ -282,6 +292,7 @@ class PromptGeneratorData:
             chroma_key_enabled=data.get("chroma_key_enabled", base.chroma_key_enabled),
             chroma_key_color=data.get("chroma_key_color", base.chroma_key_color),
             chroma_key_custom_color=data.get("chroma_key_custom_color", base.chroma_key_custom_color),
+            chroma_key_materials=data.get("chroma_key_materials", base.chroma_key_materials),
             count=data.get("count", base.count),
         )
 
@@ -1322,6 +1333,7 @@ def _validate_prompt_generator_section(
             "chroma_key_enabled",
             "chroma_key_color",
             "chroma_key_custom_color",
+            "chroma_key_materials",
         ),
         name,
     )
@@ -1388,6 +1400,9 @@ def _validate_prompt_generator_section(
         raise ProjectStateError(
             f"Project draft field {name}.chroma_key_custom_color is invalid"
         )
+    materials = section.get("chroma_key_materials", [])
+    if not isinstance(materials, list) or not all(isinstance(value, str) for value in materials):
+        raise ProjectStateError(f"Project draft field {name}.chroma_key_materials must be a string list")
 
 
 def _validate_verification_records(processing: Mapping[str, Any]) -> None:
