@@ -15,6 +15,7 @@ from fal_provider import (
     fal_status_kind,
     validate_fal_image_result,
 )
+from fal_model_catalog import fal_endpoint_profile
 from provider_contract import ProviderTaskRequest
 
 
@@ -45,6 +46,12 @@ class _Opener:
 
 
 class FalProviderTests(unittest.TestCase):
+    def test_ideogram_generation_profiles_support_png_results(self):
+        for model_id in ("fal-ai/ideogram/v3", "fal-ai/ideogram/v3/generate-transparent"):
+            profile = fal_endpoint_profile(model_id, "generation")
+            self.assertTrue(profile.supports_references is False)
+            self.assertIn("png", profile.output_formats)
+
     def test_config_requires_key_and_safe_model_identifier(self):
         with self.assertRaises(FalProviderError):
             FalConfig(api_key="", model_id="fal-ai/flux/schnell").validate()
