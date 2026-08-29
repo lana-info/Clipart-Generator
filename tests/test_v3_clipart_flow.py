@@ -110,6 +110,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             PromptEntry("Baby whale"),
             PromptEntry("Baby turtle", [str(reference_path)]),
         ]
+        state.clipart.generation.model = "gpt-image-2"
         state.clipart.generation.variants = 2
         return state
 
@@ -356,7 +357,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.prompts[0].references = ["D:/fox.png"]
         generation_page = controller.pages[StepId.GENERATION]
         generation_page.refresh_from_state()
-        self.assertTrue(generation_page.reference_advanced.is_expanded)
+        self.assertFalse(hasattr(generation_page, "reference_advanced"))
         self.assertEqual(len(state.clipart.prompts), 4)
         self.assertNotIn("Series item", state.clipart.prompts[0].prompt)
         self.assertNotIn("Output intent", state.clipart.prompts[0].prompt)
@@ -690,7 +691,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(request.settings["remove_bg"], True)
         self.assertEqual(request.settings["timeout"], 42)
         self.assertEqual(estimate.request_count, 12)
-        self.assertEqual(estimate.estimated_usd, Decimal("0.900"))
+        self.assertEqual(estimate.estimated_usd, Decimal("0.940"))
         self.assertTrue(estimate.complete)
 
     def test_generation_options_use_mode_specific_qwen_ratios(self):
@@ -751,8 +752,8 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.clipart.prompts = [
                 PromptEntry("Baby turtle", [reference_path] * 2),
             ]
-            state.clipart.generation.reference_model = "qwen-image-2"
-            state.clipart.generation.reference_ratio = "1:1"
+            state.clipart.generation.model = "qwen-image-2"
+            state.clipart.generation.ratio = "1:1"
 
             with self.assertRaisesRegex(ClipartFlowError, "1 референс"):
                 build_clipart_run_request(state, {"kie_api_key": "test-key"})
@@ -766,8 +767,8 @@ class V3ClipartFlowTests(unittest.TestCase):
                 + b"\0" * (10 * 1024 * 1024 + 1)
             )
             state.clipart.prompts = [PromptEntry("Baby turtle", [str(reference_path)])]
-            state.clipart.generation.reference_model = "qwen-image-2"
-            state.clipart.generation.reference_ratio = "1:1"
+            state.clipart.generation.model = "qwen-image-2"
+            state.clipart.generation.ratio = "1:1"
 
             with self.assertRaisesRegex(ClipartFlowError, "10 МБ"):
                 build_clipart_run_request(state, {"kie_api_key": "test-key"})
@@ -868,6 +869,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_fal_model_requires_fal_key_instead_of_kie_key(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-fal-guard-") as temp:
             state = self.make_state(temp)
+            state.clipart.prompts = [PromptEntry("Baby whale")]
             state.clipart.generation.model = "fal-ai/flux/schnell"
             request = build_clipart_run_request(state, {"kie_api_key": "test-key"})
 
@@ -1099,20 +1101,16 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertNotIn("ориентировочно", visible_copy)
         self.assertNotIn("стоимость", visible_copy)
 
-    def test_generation_page_hides_reference_settings_without_references(self):
+    def test_generation_page_uses_one_settings_set_without_references(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
 
         page = ClipartGenerationPage(state, lambda: None)
 
-        self.assertEqual(
-            page.primary_scope_label.text(),
-            "Промпты без референсов · 2",
-        )
-        self.assertTrue(page.reference_advanced.isHidden())
-        self.assertFalse(page.reference_advanced.is_expanded)
+        self.assertEqual(page.primary_scope_label.text(), "Все промпты · 2")
+        self.assertFalse(hasattr(page, "reference_advanced"))
 
-    def test_generation_page_labels_and_shows_reference_settings_when_needed(self):
+    def test_generation_page_filters_one_shared_model_list_for_references(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [
             PromptEntry("Fox"),
@@ -1122,17 +1120,14 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         page = ClipartGenerationPage(state, lambda: None)
 
-        self.assertEqual(
-            page.primary_scope_label.text(),
-            "Промпты без референсов · 1",
-        )
-        self.assertFalse(page.reference_advanced.isHidden())
-        self.assertTrue(page.reference_advanced.is_expanded)
-        self.assertFalse(page.reference_advanced.toggle_button.isHidden())
-        self.assertEqual(
-            page.reference_advanced.toggle_button.text(),
-            "Промпты с референсами · 2",
-        )
+        self.assertEqual(page.primary_scope_label.text(), "Все промпты · 3 · с референсами: 2")
+        self.assertFalse(hasattr(page, "reference_advanced"))
+        self.assertGreaterEqual(page.model_combo.findData("gpt-image-2"), 0)
+        self.assertEqual(page.model_combo.findData("fal-ai/ideogram/v3"), -1)
+        self.assertEqual(page.model_combo.findData("gpt-image/1.5-text-to-image"), -1)
+        self.assertEqual(state.clipart.generation.model, state.clipart.generation.reference_model)
+        self.assertEqual(state.clipart.generation.ratio, state.clipart.generation.reference_ratio)
+        self.assertEqual(state.clipart.generation.resolution, state.clipart.generation.reference_resolution)
 
     def test_review_summary_is_compact_and_left_aligned(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

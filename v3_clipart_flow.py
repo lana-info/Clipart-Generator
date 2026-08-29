@@ -426,13 +426,9 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
     generation_request_count = len(state.clipart.prompts) * variants
     processing_request_count = 0
 
-    for entry in state.clipart.prompts:
-        if entry.references:
-            option = _model_option(generation.reference_model)
-            resolution = generation.reference_resolution
-        else:
-            option = _model_option(generation.model)
-            resolution = generation.resolution
+    for _entry in state.clipart.prompts:
+        option = _model_option(generation.model)
+        resolution = generation.resolution
         unit = _price_usd(option.pricing, resolution)
         if unit is None:
             complete = False
@@ -558,9 +554,9 @@ def _worker_settings(
             "text_generation_model": generation.model,
             "text_generation_ratio": generation.ratio,
             "text_generation_resolution": generation.resolution,
-            "reference_generation_model": generation.reference_model,
-            "reference_generation_ratio": generation.reference_ratio,
-            "reference_generation_resolution": generation.reference_resolution,
+            "reference_generation_model": generation.model,
+            "reference_generation_ratio": generation.ratio,
+            "reference_generation_resolution": generation.resolution,
             "visible_mark_cleanup_enabled": operations.visible_mark_cleanup,
             "visible_mark_cleanup_mode": operations.visible_mark_cleanup_mode,
             "invisible_watermark_cleanup_enabled": operations.invisible_watermark_cleanup,
@@ -743,19 +739,10 @@ def build_clipart_run_request(
     )
 
     if any(entry.references for entry in state.clipart.prompts):
-        reference_option = _model_option(generation.reference_model)
-        if not (
-            reference_option.model_type in {"image_to_image", "edit"}
-            or reference_option.reference_compatible_text
-        ):
+        if not text_option.reference_compatible_text:
             raise ClipartFlowError(
-                "Референсная модель не поддерживает image-to-image"
+                "Выбранная модель не поддерживает промпты с референсами"
             )
-        _validate_generation_profile(
-            reference_option,
-            generation.reference_ratio,
-            generation.reference_resolution,
-        )
 
     request_count = len(state.clipart.prompts) * generation.variants
     if request_count > MAX_CLIPART_REQUESTS:
@@ -776,11 +763,9 @@ def build_clipart_run_request(
         if not entry.prompt.strip():
             raise ClipartFlowError("Пустой промпт нельзя отправить на генерацию")
         has_references = bool(entry.references)
-        contract_model = generation.reference_model if has_references else generation.model
-        contract_ratio = generation.reference_ratio if has_references else generation.ratio
-        contract_resolution = (
-            generation.reference_resolution if has_references else generation.resolution
-        )
+        contract_model = generation.model
+        contract_ratio = generation.ratio
+        contract_resolution = generation.resolution
         reference_sizes = tuple(
             Path(reference).expanduser().stat().st_size
             for reference in entry.references
@@ -827,14 +812,9 @@ def missing_runtime_requirements(request: ClipartRunRequest) -> tuple[str, ...]:
             missing.append(label)
 
     if request.generated_prompts:
-        generation_models: set[str] = set()
-        for entry in request.generated_prompts:
-            model_key = (
-                "reference_generation_model"
-                if entry.get("references")
-                else "text_generation_model"
-            )
-            generation_models.add(str(request.settings.get(model_key) or "").strip())
+        generation_models = {
+            str(request.settings.get("text_generation_model") or "").strip()
+        }
         if any(model.startswith("fal-ai/") for model in generation_models):
             if not str(request.settings.get("fal_api_key") or "").strip():
                 add_missing("Fal.ai API Key")
@@ -2468,6 +2448,7 @@ class PromptWorkspacePage(_ScrollableStepPage):
 class ClipartGenerationPage(_ScrollableStepPage):
     allow_shared_text_models = True
     allow_fal_models = True
+    shared_generation_settings = True
     def __init__(
         self,
         state: ProjectState,
@@ -2501,7 +2482,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.resolution_combo = QComboBox()
         self.variants_spin = QSpinBox()
         self.variants_spin.setRange(1, 100)
-        for option in self.text_options:
+        for option in self._model_options_for_current_prompts():
             self.model_combo.addItem(option.label, option.model_id)
         form.addRow("Модель", self.model_combo)
         form.addRow("Пропорция", self.ratio_combo)
@@ -2516,59 +2497,66 @@ class ClipartGenerationPage(_ScrollableStepPage):
         self.model_capability_label.setProperty("v3Small", True)
         self.add_widget(self.model_capability_label)
 
-        advanced = AdvancedSection("Промпты с референсами", tokens=tokens)
-        self.reference_advanced = advanced
-        advanced.set_expanded(True)
-        self.reference_capability_label = QLabel()
-        self.reference_capability_label.setWordWrap(True)
-        self.reference_capability_label.setProperty("v3Small", True)
-        advanced.add_widget(self.reference_capability_label)
-        reference_form = QFormLayout()
-        self.reference_model_combo = QComboBox()
-        self.reference_ratio_combo = QComboBox()
-        self.reference_resolution_combo = QComboBox()
-        for option in self.reference_options:
-            self.reference_model_combo.addItem(option.label, option.model_id)
-        reference_form.addRow("Модель с референсом", self.reference_model_combo)
-        reference_form.addRow("Пропорция с референсом", self.reference_ratio_combo)
-        reference_form.addRow(
-            "Разрешение с референсом",
-            self.reference_resolution_combo,
-        )
-        reference_widget = QWidget()
-        reference_widget.setLayout(reference_form)
-        advanced.add_widget(reference_widget)
-        self.add_widget(advanced)
+        if not self.shared_generation_settings:
+            advanced = AdvancedSection("Промпты с референсами", tokens=tokens)
+            self.reference_advanced = advanced
+            advanced.set_expanded(True)
+            self.reference_capability_label = QLabel()
+            self.reference_capability_label.setWordWrap(True)
+            self.reference_capability_label.setProperty("v3Small", True)
+            advanced.add_widget(self.reference_capability_label)
+            reference_form = QFormLayout()
+            self.reference_model_combo = QComboBox()
+            self.reference_ratio_combo = QComboBox()
+            self.reference_resolution_combo = QComboBox()
+            for option in self.reference_options:
+                self.reference_model_combo.addItem(option.label, option.model_id)
+            reference_form.addRow("Модель с референсом", self.reference_model_combo)
+            reference_form.addRow("Пропорция с референсом", self.reference_ratio_combo)
+            reference_form.addRow(
+                "Разрешение с референсом",
+                self.reference_resolution_combo,
+            )
+            reference_widget = QWidget()
+            reference_widget.setLayout(reference_form)
+            advanced.add_widget(reference_widget)
+            self.add_widget(advanced)
 
         for label, control in (
             ("Модель", self.model_combo),
             ("Пропорция", self.ratio_combo),
             ("Разрешение", self.resolution_combo),
             ("Вариантов на промпт", self.variants_spin),
-            ("Модель с референсом", self.reference_model_combo),
-            ("Пропорция с референсом", self.reference_ratio_combo),
-            ("Разрешение с референсом", self.reference_resolution_combo),
+            *((
+                ("Модель с референсом", self.reference_model_combo),
+                ("Пропорция с референсом", self.reference_ratio_combo),
+                ("Разрешение с референсом", self.reference_resolution_combo),
+            ) if not self.shared_generation_settings else ()),
         ):
             control.setAccessibleName(label)
 
         self._select_model(self.model_combo, state.clipart.generation.model)
-        self._select_model(
-            self.reference_model_combo,
-            state.clipart.generation.reference_model,
-        )
+        if not self.shared_generation_settings:
+            self._select_model(
+                self.reference_model_combo,
+                state.clipart.generation.reference_model,
+            )
         self._refresh_profile_controls(primary=True, sync=False)
-        self._refresh_profile_controls(primary=False, sync=False)
+        if not self.shared_generation_settings:
+            self._refresh_profile_controls(primary=False, sync=False)
         self.variants_spin.setValue(state.clipart.generation.variants)
         self.model_combo.currentIndexChanged.connect(
             lambda: self._refresh_profile_controls(primary=True)
         )
-        self.reference_model_combo.currentIndexChanged.connect(
-            lambda: self._refresh_profile_controls(primary=False)
-        )
+        if not self.shared_generation_settings:
+            self.reference_model_combo.currentIndexChanged.connect(
+                lambda: self._refresh_profile_controls(primary=False)
+            )
         self.ratio_combo.currentTextChanged.connect(self._sync)
         self.resolution_combo.currentIndexChanged.connect(self._sync)
-        self.reference_ratio_combo.currentTextChanged.connect(self._sync)
-        self.reference_resolution_combo.currentIndexChanged.connect(self._sync)
+        if not self.shared_generation_settings:
+            self.reference_ratio_combo.currentTextChanged.connect(self._sync)
+            self.reference_resolution_combo.currentIndexChanged.connect(self._sync)
         self.variants_spin.valueChanged.connect(self._sync)
         self._sync(mark=False)
         ClipartGenerationPage.refresh_from_state(self)
@@ -2576,6 +2564,27 @@ class ClipartGenerationPage(_ScrollableStepPage):
     def _select_model(self, combo: QComboBox, model_id: str) -> None:
         index = combo.findData(model_id)
         combo.setCurrentIndex(index if index >= 0 else 0)
+
+    def _has_references(self) -> bool:
+        return any(entry.references for entry in self.state.clipart.prompts)
+
+    def _model_options_for_current_prompts(self) -> tuple[GenerationModelOption, ...]:
+        if not self.shared_generation_settings or not self._has_references():
+            return self.text_options
+        reference_ids = {option.model_id for option in self.reference_options}
+        return tuple(
+            option for option in self.text_options if option.model_id in reference_ids
+        )
+
+    def _replace_model_options(self) -> None:
+        selected_model = str(self.model_combo.currentData() or self.state.clipart.generation.model)
+        options = self._model_options_for_current_prompts()
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        for option in options:
+            self.model_combo.addItem(option.label, option.model_id)
+        self._select_model(self.model_combo, selected_model)
+        self.model_combo.blockSignals(False)
 
     def _option_for_combo(self, combo: QComboBox) -> GenerationModelOption:
         return _model_option(str(combo.currentData() or ""))
@@ -2622,7 +2631,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
                 generation.resolution,
                 fixed_value="1K",
             )
-        else:
+        elif not self.shared_generation_settings:
             option = self._option_for_combo(self.reference_model_combo)
             self.reference_capability_label.setText(_capability_summary(option))
             self._set_values(
@@ -2648,10 +2657,20 @@ class ClipartGenerationPage(_ScrollableStepPage):
             model=str(self.model_combo.currentData() or ""),
             ratio=self.ratio_combo.currentText(),
             resolution=self._combo_value(self.resolution_combo),
-            reference_model=str(self.reference_model_combo.currentData() or ""),
-            reference_ratio=self.reference_ratio_combo.currentText(),
-            reference_resolution=self._combo_value(
-                self.reference_resolution_combo
+            reference_model=(
+                str(self.model_combo.currentData() or "")
+                if self.shared_generation_settings
+                else str(self.reference_model_combo.currentData() or "")
+            ),
+            reference_ratio=(
+                self.ratio_combo.currentText()
+                if self.shared_generation_settings
+                else self.reference_ratio_combo.currentText()
+            ),
+            reference_resolution=(
+                self._combo_value(self.resolution_combo)
+                if self.shared_generation_settings
+                else self._combo_value(self.reference_resolution_combo)
             ),
             variants=self.variants_spin.value(),
         )
@@ -2663,20 +2682,31 @@ class ClipartGenerationPage(_ScrollableStepPage):
         reference_count = sum(bool(entry.references) for entry in prompts)
         text_count = len(prompts) - reference_count
         has_references = reference_count > 0
-        self.primary_scope_label.setText(
-            f"Промпты без референсов · {text_count}"
-        )
-        self.primary_scope_label.setAccessibleDescription(
-            f"Настройки применяются к промптам без референсов: {text_count}"
-        )
-        self.reference_advanced.toggle_button.setText(
-            f"Промпты с референсами · {reference_count}"
-        )
-        self.reference_advanced.toggle_button.setAccessibleName(
-            f"Промпты с референсами: {reference_count}"
-        )
-        self.reference_advanced.set_expanded(has_references)
-        self.reference_advanced.setVisible(has_references)
+        if self.shared_generation_settings:
+            label = f"Все промпты · {len(prompts)}"
+            if has_references:
+                label += f" · с референсами: {reference_count}"
+            self.primary_scope_label.setText(label)
+            self.primary_scope_label.setAccessibleDescription(
+                "Общие настройки применяются ко всем промптам"
+            )
+            self._replace_model_options()
+            self._refresh_profile_controls(primary=True, sync=False)
+        else:
+            self.primary_scope_label.setText(
+                f"Промпты без референсов · {text_count}"
+            )
+            self.primary_scope_label.setAccessibleDescription(
+                f"Настройки применяются к промптам без референсов: {text_count}"
+            )
+            self.reference_advanced.toggle_button.setText(
+                f"Промпты с референсами · {reference_count}"
+            )
+            self.reference_advanced.toggle_button.setAccessibleName(
+                f"Промпты с референсами: {reference_count}"
+            )
+            self.reference_advanced.set_expanded(has_references)
+            self.reference_advanced.setVisible(has_references)
         current = self._option_for_combo(self.model_combo)
         self.model_capability_label.setText(_capability_summary(current))
         self._sync(mark=False)
@@ -3190,8 +3220,8 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
         if str(model_id).startswith("fal-ai/") and count > 0:
             quantities[model_id] = quantities.get(model_id, 0) + count
 
-    for entry in state.clipart.prompts:
-        add(generation.reference_model if entry.references else generation.model, variants)
+    for _entry in state.clipart.prompts:
+        add(generation.model, variants)
     operations = state.clipart.operations
     output_count = len(state.clipart.prompts) * variants
     if operations.upscale_before and operations.upscale_before_provider == "fal":
@@ -3292,7 +3322,6 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         operations = self.state.clipart.operations
         return (
             str(generation.model).startswith("fal-ai/")
-            or str(generation.reference_model).startswith("fal-ai/")
             or (operations.upscale_before and operations.upscale_before_provider == "fal")
             or (operations.upscale_after and operations.upscale_after_provider == "fal")
             or (operations.remove_background and operations.remove_background_provider == "fal")
@@ -3317,14 +3346,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         generation = self.state.clipart.generation
         self.output_label.setText(f"Папка результата: {output_dir}")
         variants = generation.variants
-        text_count = sum(not entry.references for entry in self.state.clipart.prompts) * variants
-        reference_count = sum(bool(entry.references) for entry in self.state.clipart.prompts) * variants
-        model_summary = f"без референса {text_count}: {generation.model}"
-        if reference_count:
-            model_summary += (
-                f" · с референсом {reference_count}: "
-                f"{generation.reference_model}"
-            )
+        model_summary = f"модель {generation.model}"
         output_count = len(self.state.clipart.prompts) * variants
         self.summary_label.setText(
             f"Всего изображений {output_count} · {model_summary} · "

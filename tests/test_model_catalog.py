@@ -18,6 +18,12 @@ class ModelCatalogTests(unittest.TestCase):
             self.assertIn(model_id, VISIBLE_GENERATION_MODEL_IDS)
             self.assertTrue(model_spec(model_id).label.startswith("Fal.ai — Ideogram"))
 
+    def test_every_visible_model_has_an_explicit_provider_label(self):
+        for model_id in VISIBLE_GENERATION_MODEL_IDS:
+            label = model_spec(model_id).label
+            expected_prefix = "Fal.ai — " if model_id.startswith("fal-ai/") else "KIE — "
+            self.assertTrue(label.startswith(expected_prefix), label)
+
     def test_catalog_is_immutable_and_preserves_visible_snapshot(self):
         self.assertEqual(len(GENERATION_MODELS), 28)
         self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 13)

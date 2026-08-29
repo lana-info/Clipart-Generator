@@ -1264,6 +1264,7 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
 class PinterestFormatModelPage(ClipartGenerationPage):
     allow_shared_text_models = True
     allow_fal_models = True
+    shared_generation_settings = False
 
     def __init__(
         self,
