@@ -20,7 +20,8 @@ Updated: 2026-08-29
 
 ## Current branch and handoff
 
-- Active 3.1 integration line: `develop/3.1` at `dd01703`. It contains the
+- Active 3.1 integration line: `develop/3.1`; integrated source checkpoint
+  `dd01703`, followed only by the Task 13 status update. It contains the
   consolidated 3.1 product specification, Tasks 1–12 implementation checkpoints
   and the verified Task 14 source. The complete line was integrated by
   fast-forward and pushed without changing `develop/3.0` or a release branch.
