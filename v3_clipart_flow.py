@@ -3023,6 +3023,21 @@ class ClipartGenerationPage(_ScrollableStepPage):
     def _option_for_combo(self, combo: QComboBox) -> GenerationModelOption:
         return _model_option(str(combo.currentData() or ""))
 
+    def _supported_primary_ratios(
+        self,
+        option: GenerationModelOption,
+    ) -> tuple[str, ...]:
+        """Expose only ratios valid for every prompt routed through this model."""
+        modes = {False}
+        if self.shared_generation_settings:
+            prompts = getattr(self.state.clipart, "prompts", ())
+            modes = {bool(entry.references) for entry in prompts} or {False}
+        allowed: set[str] | None = None
+        for has_references in modes:
+            supported = set(ratios_for_mode(option.model_id, has_references))
+            allowed = supported if allowed is None else allowed & supported
+        return tuple(ratio for ratio in option.ratios if ratio in (allowed or set()))
+
     def _set_values(
         self,
         combo: QComboBox,
@@ -3056,7 +3071,7 @@ class ClipartGenerationPage(_ScrollableStepPage):
             self.model_capability_label.setText(_capability_summary(option))
             self._set_values(
                 self.ratio_combo,
-                option.ratios or ("1:1",),
+                self._supported_primary_ratios(option) or ("1:1",),
                 generation.ratio,
             )
             self._set_values(

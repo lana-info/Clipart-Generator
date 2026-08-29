@@ -178,6 +178,19 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
         self.assertEqual(page.ratio_preview_label.text(), page.ratio_combo.currentText())
         self.assertFalse(page.ratio_preview.isHidden())
 
+    def test_qwen_text_model_offers_only_contract_supported_ratios(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        page = ClipartGenerationPage(state, lambda: None)
+
+        page.model_combo.setCurrentIndex(page.model_combo.findData("qwen-image-2"))
+
+        ratios = {
+            page.ratio_combo.itemText(index)
+            for index in range(page.ratio_combo.count())
+        }
+        self.assertNotIn("2:3", ratios)
+        self.assertEqual(page.ratio_combo.currentText(), state.clipart.generation.ratio)
+
 
 @unittest.skip(
     "Six-slot product/template Pinterest workflow is deferred; active MVP is prompt-only"
