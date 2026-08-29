@@ -4,6 +4,15 @@ Updated: 2026-08-29
 
 ## Latest integrated checkpoint
 
+Task 24 is integrated in `develop/3.1` at `aaf6a4f`:
+Clipart и Pinterest ведут отдельные профили text/reference generation. Если
+есть референсы, для их модели появляются отдельные списки модели, пропорции и
+разрешения; несовместимые значения не предлагаются. Worker, runtime-проверка,
+расчёт стоимости и Fal.ai quantity estimate выбирают профиль по каждой строке
+промпта. Количество вариантов остаётся общим. Focused active suite
+(185 tests, 54 deferred skips), `py_compile`, `git diff --check` и sensitive
+scan прошли. Windows visual acceptance по-прежнему ожидается.
+
 Task 23 is integrated in `develop/3.1` at `ea08918`:
 режим обработки файлов после Results открывает тот же утверждённый редактор
 прозрачности, что и Clipart. В список попадают только успешные PNG текущего
