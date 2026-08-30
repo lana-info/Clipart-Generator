@@ -142,12 +142,15 @@ class FalTaskJournal:
             return tuple(
                 record
                 for record in self._read().values()
-                if record.status not in {"completed", "cancelled", "failed"}
+                if record.status not in _TERMINAL_TASK_STATUSES
             )
 
 
 _MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$")
 _REQUEST_RE = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
+_TERMINAL_TASK_STATUSES = frozenset(
+    {"completed", "completed_after_cancel", "cancelled", "failed"}
+)
 
 
 @dataclass(frozen=True, slots=True)

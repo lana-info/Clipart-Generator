@@ -356,6 +356,18 @@ class FalProviderTests(unittest.TestCase):
             self.assertNotIn("secret", payload.lower())
             self.assertIn("req-123", payload)
 
+    def test_task_journal_does_not_recover_completed_after_cancel(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = FalTaskJournal(f"{temp}/fal-tasks.json")
+            journal.upsert(
+                "req-late",
+                "generation",
+                "fal-ai/flux/schnell",
+                "completed_after_cancel",
+            )
+
+            self.assertEqual(journal.pending(), ())
+
     def test_task_journal_keeps_all_concurrent_request_updates(self):
         class SlowReadJournal(FalTaskJournal):
             def _read(self):

@@ -105,6 +105,45 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(calls["request_id"], "fal-request-1")
         self.assertEqual(calls["request"].provider_id, "fal")
 
+    def test_fal_recovery_continues_after_one_transient_poll_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            worker.fal_task_journal.upsert(
+                "req-timeout", "generation", "fal-ai/flux/schnell", "running"
+            )
+            worker.fal_task_journal.upsert(
+                "req-complete", "generation", "fal-ai/flux/schnell", "queued"
+            )
+            polled = []
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def wait_for_result(self, request_id, *, on_status, **_kwargs):
+                    polled.append(request_id)
+                    if request_id == "req-timeout":
+                        raise TimeoutError("temporary polling outage")
+                    on_status("completed")
+                    return {"request_id": request_id, "status": "completed"}
+
+            with patch("main.FalClient", FakeFalClient):
+                recovered = worker.recover_pending_fal_tasks()
+
+            self.assertEqual(polled, ["req-timeout", "req-complete"])
+            self.assertEqual(
+                recovered,
+                ({"request_id": "req-complete", "status": "completed"},),
+            )
+            self.assertEqual(
+                {record.request_id for record in worker.fal_task_journal.pending()},
+                {"req-timeout"},
+            )
+
     def test_ideogram_generation_sends_selected_aspect_ratio(self):
         worker = main.WorkerThread(
             "mode1_generate_only",

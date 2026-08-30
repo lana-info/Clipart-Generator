@@ -2959,22 +2959,33 @@ class WorkerThread(QThread):
 
         recovered = []
         for task in self.fal_task_journal.pending():
-            client = FalClient(
-                FalConfig(
-                    api_key=self.fal_api_key,
-                    model_id=task.model_id,
-                    timeout_seconds=max(10.0, float(self.timeout)),
+            try:
+                client = FalClient(
+                    FalConfig(
+                        api_key=self.fal_api_key,
+                        model_id=task.model_id,
+                        timeout_seconds=max(10.0, float(self.timeout)),
+                    )
                 )
-            )
-            result = client.wait_for_result(
-                task.request_id,
-                timeout_seconds=float(self.generation_wait_timeout),
-                poll_interval_seconds=float(self.status_poll_interval),
-                is_cancelled=lambda: not self.is_running,
-                on_status=lambda status, task=task: self._record_fal_task(
-                    task.request_id, task.operation, task.model_id, status
-                ),
-            )
+                result = client.wait_for_result(
+                    task.request_id,
+                    timeout_seconds=float(self.generation_wait_timeout),
+                    poll_interval_seconds=float(self.status_poll_interval),
+                    is_cancelled=lambda: not self.is_running,
+                    on_status=lambda status, task=task: self._record_fal_task(
+                        task.request_id, task.operation, task.model_id, status
+                    ),
+                )
+            except (FalProviderError, TimeoutError, OSError) as error:
+                self._emit_diagnostic(
+                    "provider_task_recovery_deferred",
+                    provider="fal",
+                    model=task.model_id,
+                    task=task.request_id,
+                    outcome="deferred",
+                    error_message=self._safe_error_text(error),
+                )
+                continue
             recovered.append(result)
         return tuple(recovered)
 
