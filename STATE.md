@@ -33,6 +33,31 @@ yet persist KIE IDs, so its visually identical files cannot be attributed to
 task recovery without the original filenames/log. Windows evidence must retain
 output names, SHA-256 hashes and the diagnostic journal if the symptom recurs.
 
+Prebuild source-acceptance audit is active on
+`codex/chore-3.1-prebuild-acceptance`, created from synchronized
+`develop/3.1` commit `7b3d0d3`. Tasks 2–6 were checked against current code,
+tests and rendered UI rather than their stale checkboxes. The audit confirmed
+Tasks 2, 3 and 6 in source and found two real UI contract gaps: the approved
+Task 5 clean-background helper had never been connected and its color control
+was still a combo instead of three visible buttons; the Task 4 Gemini action
+used a longer unapproved label. Regression tests reproduced both gaps before
+the fixes. The helper, three buttons, compact material wrapping and exact
+`Удалить водяной знак Gemini` copy are now implemented on the audit branch.
+Implemented screenshots for Tasks 2, 3 and 5 are stored beside their approved
+mockups. Task 5 is not yet visually accepted at the 980×700 minimum: Linux
+offscreen measurement shows `140 px` horizontal overflow, and the third source
+button plus the right helper cannot be seen together without horizontal
+scrolling. Windows 100%/125% scaling remains an explicit gate; a responsive
+layout change requires visual approval rather than being invented during code
+cleanup. The focused Clipart/Pinterest/Processing/output gate passes 215 tests,
+55 intentional deferred Pinterest skips and 32 subtests; the unavailable local
+Windows Real-ESRGAN binary accounts for one additional environment skip. The
+complete offline suite passes 1025 tests, 55 skips, 2 network deselections and
+140 subtests. All tracked Python files compile, the sensitive-artifact scan and
+`git diff --check` pass. The fresh automatic Chroma benchmark remains within
+its gates: alpha IoU `0.968704`, alpha MAE `0.018194`, 2048×2048 median
+`1.357 s`, peak RSS `421.465 MiB` below the `448 MiB` ceiling.
+
 Task 7 zoom presets are integrated in `develop/3.1` at `35931e3`:
 редактор прозрачности предлагает `Fit`, `50%`, `100%`, `150%`, `200%` и
 `300%`; прежний `400%` удалён. Выбранный масштаб сохраняется при переключении
@@ -108,11 +133,11 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Current branch and handoff
 
-- Active 3.1 integration line: `develop/3.1`; integrated source checkpoint
-  `dd01703`, followed only by the Task 13 status update. It contains the
-  consolidated 3.1 product specification, Tasks 1–12 implementation checkpoints
-  and the verified Task 14 source. The complete line was integrated by
-  fast-forward and pushed without changing `develop/3.0` or a release branch.
+- Target 3.1 integration line: `develop/3.1` at synchronized commit `7b3d0d3`.
+  Active prebuild source-acceptance branch:
+  `codex/chore-3.1-prebuild-acceptance`, created from that exact commit. It is
+  not merged yet. No version, installer, paid request or publication change is
+  part of this branch.
 - Release baseline branch: `develop/3.0`
 - Current 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`;
   `release/VERSION.txt` is `3.0.7`. This branch contains
@@ -140,7 +165,16 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 - Bootstrap: `bash scripts/bootstrap_vds.sh`
 - Baseline: `python -m py_compile main.py` and `QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -v`
 
-## Next task
+## Immediate next action
+
+Finish review and verification of the prebuild source-acceptance branch, then
+present its actual Task 5 screenshots and request explicit merge approval. On
+Windows, run the manual UI/path/license/Chroma checklist from the integrated
+source before changing `release/VERSION.txt`. The one-prompt/one-variant KIE
+duplicate audit is a separately authorized paid request. Installer build and
+publication remain separate later decisions.
+
+## Historical implementation notes
 
 Task 14 implements a seven-calendar-day offline grace only for a previously
 verified license and only after timeout/transport/5xx unavailability. First

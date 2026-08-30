@@ -10,3 +10,15 @@
 Задача должна использовать один `ProcessingPipelineEditor` в Clipart и
 Processing. После реализации реальные screenshots обоих маршрутов сравниваются
 с этим макетом.
+
+## Реализация
+
+- [`implemented-processing-1120x780.png`](implemented-processing-1120x780.png) —
+  маршрут Processing с Fal.ai upscale, BiRefNet, cleanup и 300 DPI.
+- [`implemented-clipart-1120x780.png`](implemented-clipart-1120x780.png) — тот
+  же recipe и порядок этапов в Clipart.
+
+Оба маршрута используют один редактор. Выключенные этапы не создают секций,
+разделители появляются только между включёнными этапами, а подписи cleanup и
+300 DPI соответствуют утверждённому контракту. Финальная проверка системного
+масштабирования и шрифтов остаётся в общем Windows-чеклисте Task 13.

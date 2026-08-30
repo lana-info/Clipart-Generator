@@ -70,7 +70,8 @@ Dependencies: None. Scope: M. Requirements: `CG31-FR-001`.
 
 ## Task 2: Перестроить общий processing editor
 
-Status: In progress — visual approved 2026-08-29
+Status: Done in source — approved and implemented screenshots recorded;
+Windows scaling remains in Task 13
 
 Goal:
 Показывать настройки включённых этапов отдельными лёгкими секциями в порядке
@@ -85,23 +86,23 @@ Steps:
 - Использовать один editor/recipe/builder в Clipart и Processing.
 
 Acceptance:
-- [ ] Выключенный stage и его controls отсутствуют.
-- [ ] Порядок UI совпадает с run plan.
-- [ ] Нет тяжёлых вложенных frames и лишней explanatory copy.
-- [ ] При одной включённой операции нет лишнего divider; при выключенной
+- [x] Выключенный stage и его controls отсутствуют.
+- [x] Порядок UI совпадает с run plan.
+- [x] Нет тяжёлых вложенных frames и лишней explanatory copy.
+- [x] При одной включённой операции нет лишнего divider; при выключенной
   операции нет её пустого блока.
 
 Verification:
-- [ ] Contract tests order/visibility.
-- [ ] Offscreen screenshots обоих routes с одинаковым recipe.
+- [x] Contract tests order/visibility.
+- [x] Offscreen screenshots обоих routes с одинаковым recipe.
 
 Dependencies: shared processing contract. Scope: M. Requirements:
 `CG31-FR-010`, `CG31-FR-011`.
 
 ## Task 3: Фильтровать processing controls по endpoint/model
 
-Status: In progress — visual approved 2026-08-29; implementation checkpoint
-`677147d`, final screenshot comparison pending
+Status: Done in source — implementation checkpoint `677147d`; BiRefNet, Bria
+and rembg screenshots recorded, Windows scaling remains in Task 13
 
 Goal:
 Убрать скрытые defaults и несовместимые настройки Fal.ai/KIE.
@@ -112,26 +113,26 @@ Steps:
 - Проверить BiRefNet, rembg, Bria, Topaz и Recraft contracts.
 
 Acceptance:
-- [ ] Fal upscale нельзя запустить без видимых model/scale.
-- [ ] BiRefNet, rembg и Bria controls не видны одновременно.
-- [ ] Payload содержит только поля выбранного profile.
+- [x] Fal upscale нельзя запустить без видимых model/scale.
+- [x] BiRefNet, rembg и Bria controls не видны одновременно.
+- [x] Payload содержит только поля выбранного profile.
 
 Verification:
-- [ ] Parameterized registry/payload tests.
-- [ ] Offscreen visibility matrix двух upscale и removal stages.
+- [x] Parameterized registry/payload tests.
+- [x] Offscreen visibility matrix двух upscale и removal stages.
 
 Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-012`.
 
 ## Checkpoint A: Базовый UI contract
 
-- [ ] Tasks 1–3 focused suites проходят.
-- [ ] Clipart и Processing строят одинаковый порядок без stale controls.
-- [ ] Diff/review не выявляет provider payload regression.
+- [x] Tasks 1–3 focused suites проходят.
+- [x] Clipart и Processing строят одинаковый порядок без stale controls.
+- [x] Diff/review не выявляет provider payload regression.
 
 ## Task 4: Исправить cleanup, 300 DPI и chroma presets
 
-Status: In progress — visual approved; implementation checkpoint `46f11ba`,
-final screenshot comparison pending
+Status: Done in source — approved copy and implementation checkpoint `46f11ba`;
+shared editor screenshots recorded, Windows scaling remains in Task 13
 
 Goal:
 Закрепить короткие подписи и один безопасный набор key colors.
@@ -142,23 +143,24 @@ Steps:
 - Удалить custom/HEX/eyedropper; оставить pure blue/green/red в общем enum.
 
 Acceptance:
-- [ ] Нет обещания удалить скрытый SynthID.
-- [ ] Exact actions: `Удалить служебные данные изображения` и
+- [x] Нет обещания удалить скрытый SynthID.
+- [x] Exact actions: `Удалить служебные данные изображения` и
   `Удалить водяной знак Gemini`.
-- [ ] 300 DPI меняет metadata и не скрыт в applicable workflow.
-- [ ] Prompt/removal используют один закрытый набор трёх цветов.
+- [x] 300 DPI меняет metadata и не скрыт в applicable workflow.
+- [x] Prompt/removal используют один закрытый набор трёх цветов.
 
 Verification:
-- [ ] UI string/visibility tests.
-- [ ] DPI metadata round-trip и draft migration tests.
+- [x] UI string/visibility tests.
+- [x] DPI metadata round-trip и draft migration tests.
 
 Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
 ## Task 5: Добавить chroma modifier к созданию Clipart prompt
 
-Status: In progress — approved helper implemented; compact three-material limit
-and readable selected state added after candidate visual review; manual Windows
-acceptance remains in Task 13
+Status: Source behavior fixed — prebuild audit restored the approved helper and
+three visible color buttons; 980×700 responsive layout and Windows acceptance
+remain open in Task 13. Linux offscreen currently measures `140 px` horizontal
+overflow at 980×700, so Task 5 is not yet visually accepted at the minimum size.
 
 Goal:
 Добавлять утверждённый chroma block к series и ready prompt без изменения
@@ -177,23 +179,23 @@ Steps:
   следующего экрана review, не часть CSV import.
 
 Acceptance:
-- [ ] Modifier off by default, существует только в Clipart и допускает разные
+- [x] Modifier off by default, существует только в Clipart и допускает разные
   colors у entries одной batch.
-- [ ] Blue/red/green templates используют правильные name/HEX.
-- [ ] `Акварель`, `Тонкие листья`, `Хвоя`, `Металл`, `Лента / сатин`,
+- [x] Blue/red/green templates используют правильные name/HEX.
+- [x] `Акварель`, `Тонкие листья`, `Хвоя`, `Металл`, `Лента / сатин`,
   `Прозрачные детали`, `Снег / лёд` добавляют только свои clauses; отсутствие
   выбора даёт base chroma block.
-- [ ] Helper compact, не повторяет selectors и не содержит технических
+- [x] Helper compact, не повторяет selectors и не содержит технических
   объяснений. Approved visual: `docs/ui/3.1/task-5-chroma-advisor/approved-mockup.png`.
 - [x] Новый generator по умолчанию выбирает синий; сохранённый выбор проекта
   не перезаписывается.
 - [x] Разрешены максимум три материала: выбранные тёмно-бирюзовые с белым
   текстом, остальные при достижении лимита приглушены без постоянной подписи.
-- [ ] CSV/Pinterest/Processing prompt UI не получает control.
+- [x] CSV/Pinterest/Processing prompt UI не получает control.
 
 Verification:
-- [ ] Render/update/no-duplicate unit tests.
-- [ ] Offscreen tests двух источников и трёх исключённых modes.
+- [x] Render/update/no-duplicate unit tests.
+- [x] Offscreen tests двух источников и трёх исключённых modes.
 
 Evidence: follow-up branch `codex/fix-3.1-chroma-control-ux`; focused offscreen
 tests generator/paste и prompt-state проходят. Visual screenshot сопоставлен с
@@ -210,8 +212,8 @@ Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 
 ## Task 6: Разделить `rough` и `output` и нормализовать имена
 
-Status: In progress — implementation checkpoints `ec31203`, `ba95ba0`,
-`99ea7eb`, `6551011`; final automatic compatibility/manual Windows acceptance pending
+Status: Done in source — implementation checkpoints `ec31203`, `ba95ba0`,
+`99ea7eb`, `6551011`; manual Windows path/output acceptance remains in Task 13
 
 Goal:
 Хранить intermediates отдельно от готовых файлов с короткими говорящими names.
@@ -231,27 +233,27 @@ Steps:
   английский эквивалент (`лисенок` → `fox`).
 
 Acceptance:
-- [ ] В `output/` нет intermediates, в `rough/` нет final `_ready`.
+- [x] В `output/` нет intermediates, в `rough/` нет final `_ready`.
 - [x] `.run/` не показывается как пользовательский intermediate, literal legacy
   `output` path автоматически нормализуется в parent и не создаёт
   `output/output`; дополнительной страницы нет.
-- [ ] Нет timestamp/UUID/цепочек suffix и silent overwrite.
-- [ ] Пользователь не вводит имя вручную.
+- [x] Нет timestamp/UUID/цепочек suffix и silent overwrite.
+- [x] Пользователь не вводит имя вручную.
 - [x] Generated output не содержит служебных label `object`/`scene`: например,
   `Object: fox. Scene: …` сохраняется как `fox_01_ready.png`.
 
 Verification:
-- [ ] Clipart, Pinterest prompt-only и Processing integration tests всех
+- [x] Clipart, Pinterest prompt-only и Processing integration tests всех
   применимых suffix/collisions/workspace paths.
-- [ ] Windows-safe path/name tests.
+- [x] Windows-safe path/name tests.
 
 Dependencies: None. Scope: M. Requirements: `CG31-FR-020`–`CG31-FR-022`.
 
 ## Checkpoint B: Основной workflow
 
-- [ ] Tasks 4–6 tests проходят вместе с Tasks 1–3.
-- [ ] Existing drafts мигрируют без custom chroma leakage.
-- [ ] Run plan и фактические output paths совпадают.
+- [x] Tasks 4–6 tests проходят вместе с Tasks 1–3.
+- [x] Existing drafts мигрируют без custom chroma leakage.
+- [x] Run plan и фактические output paths совпадают.
 
 ## Task 7: Сделать mask editor отдельным рабочим пространством
 
@@ -790,10 +792,26 @@ Steps:
 - [x] Merge tasks in dependency order with verification after integration.
 - [x] Run focused, full offline, compile, sensitive-artifact and diff checks.
 - Провести manual Windows acceptance; build — только отдельной командой.
+- [ ] До build открыть интегрированный source на Windows при 1120×780 и
+  980×700: сравнить Tasks 2, 3 и 5 с сохранёнными implemented screenshots,
+  проверить 100%/125% scaling, отсутствие наложений и доступность навигации.
+  Для Task 5 отдельно решить известный Linux-offscreen `140 px` horizontal
+  overflow: явно принять прокрутку либо утвердить responsive-макет и исправить.
+- [ ] Проверить мышью и пером mask editor: Fit/50/100/150/200/300%, continuous
+  add/remove brush, hardness, пробел-pan, undo/redo/reset и atomic PNG/mask save.
+- [ ] В новой пустой рабочей папке проверить `rough/`, `output/`, `.run/<run-id>`,
+  короткие Windows-safe имена, collision numbering и отсутствие файлов
+  предыдущего запуска; отдельно проверить старый сохранённый literal `output`.
+- [ ] Проверить Local Chroma Key на blue/red/green, near-key деталях и нескольких
+  реальных полупрозрачных материалах; exact выбранный key внутри предмета
+  остаётся фоном, поэтому для такого предмета выбирается другой preset.
+- [ ] С заранее активированной тестовой лицензией проверить разрешённый outage
+  grace и fail-closed denial/revocation/expiry/clock rollback.
 - [ ] На Windows выполнить контрольный KIE-запуск в новой пустой рабочей папке:
   один промпт, один вариант, один Task ID и ровно один ready-файл в `output/`.
   При расхождении сохранить имена файлов, SHA-256 и диагностический журнал;
-  отдельно сверить ожидаемые stage-копии в `rough/`.
+  отдельно сверить ожидаемые stage-копии в `rough/`. Это paid request и требует
+  отдельного явного разрешения владельца.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
@@ -824,6 +842,15 @@ verification: 983 passed, 55 intentional skips, 2 configured deselections and
 source-review checkpoint: `release/VERSION.txt` intentionally remains `3.0.7`,
 and no installer build or publication is started before the separate
 review/refactoring pass.
+
+Prebuild source-acceptance follow-up on
+`codex/chore-3.1-prebuild-acceptance`: Tasks 2–6 were reconciled against code,
+tests and rendered UI. Missing Task 5 helper/three color buttons and the Task 4
+Gemini label mismatch were reproduced before repair. Current verification:
+1025 passed, 55 intentional skips, 2 network deselections and 140 subtests;
+tracked Python compilation, sensitive scan and `git diff --check` pass. Fresh
+automatic Chroma metrics: alpha IoU `0.968704`, alpha MAE `0.018194`, median
+2048×2048 runtime `1.357 s`, peak RSS `421.465 MiB` under `448 MiB`.
 
 Dependencies: Tasks 1–12, 14. Scope: M.
 
