@@ -490,6 +490,35 @@ class KieRoutingTests(unittest.TestCase):
             self.assertIn("task-resume-1", journal_text)
             self.assertNotIn("private prompt", journal_text)
 
+    def test_kie_result_parse_failure_keeps_completed_task_recoverable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(kie_api_key=DUMMY_KIE_KEY),
+            )
+            worker.kie_task_journal.upsert(
+                "task-result-pending",
+                "generation",
+                "z-image",
+                "queued",
+            )
+            worker._request_json = types.MethodType(
+                lambda _self, *_args, **_kwargs: {
+                    "code": 200,
+                    "data": {"state": "success", "resultJson": "not-json"},
+                },
+                worker,
+            )
+
+            with self.assertRaises(Exception):
+                worker._kie_wait_result("task-result-pending")
+
+            self.assertEqual(
+                {record.request_id for record in worker.kie_task_journal.pending()},
+                {"task-result-pending"},
+            )
+
     def test_status_transport_errors_emit_failure_without_masking_original_error(self):
         worker = main.WorkerThread(
             "mode1_generate_only",

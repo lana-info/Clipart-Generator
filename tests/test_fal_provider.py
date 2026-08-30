@@ -356,6 +356,26 @@ class FalProviderTests(unittest.TestCase):
             self.assertNotIn("secret", payload.lower())
             self.assertIn("req-123", payload)
 
+    def test_completed_status_is_not_emitted_until_result_is_fetched(self):
+        client = FalClient(
+            FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell")
+        )
+        client.status = lambda _request_id: {"status": "COMPLETED"}
+        client.result = lambda _request_id: (_ for _ in ()).throw(
+            FalProviderError("temporary result outage")
+        )
+        statuses = []
+
+        with self.assertRaisesRegex(FalProviderError, "temporary result outage"):
+            client.wait_for_result(
+                "req-result-pending",
+                timeout_seconds=1,
+                poll_interval_seconds=0,
+                on_status=statuses.append,
+            )
+
+        self.assertNotIn("completed", statuses)
+
     def test_task_journal_does_not_recover_completed_after_cancel(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = FalTaskJournal(f"{temp}/fal-tasks.json")

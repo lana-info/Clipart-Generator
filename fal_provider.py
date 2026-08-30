@@ -534,9 +534,9 @@ class FalClient:
                     ) from error
                 cancel_kind = fal_status_kind(cancel_response)
                 if cancel_kind == "already_completed":
+                    result = self.result(request_id)
                     if on_status is not None:
                         on_status("completed_after_cancel")
-                    result = self.result(request_id)
                     return {
                         "request_id": str(request_id),
                         "status": "completed_after_cancel",
@@ -547,15 +547,21 @@ class FalClient:
                 cancellation_requested = True
             status = self.status(request_id)
             kind = fal_status_kind(status)
-            if on_status is not None:
-                on_status(kind)
             if kind == "completed":
                 result = self.result(request_id)
+                if on_status is not None:
+                    on_status(
+                        "completed_after_cancel"
+                        if cancellation_requested
+                        else kind
+                    )
                 return {
                     "request_id": str(request_id),
                     "status": "completed_after_cancel" if cancellation_requested else kind,
                     "result": result,
                 }
+            if on_status is not None:
+                on_status(kind)
             if kind in {
                 "cancel_requested",
                 "cancelled",

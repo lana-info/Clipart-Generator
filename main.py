@@ -5009,6 +5009,7 @@ class WorkerThread(QThread):
             self.progress.emit(f"  Статус: {state}")
             self._record_kie_task(task_id, status=state or "unknown")
             if state in {"success", "succeeded"}:
+                result_url = self._extract_result_url(data.get("resultJson"))
                 self._emit_diagnostic(
                     "provider_task_succeeded",
                     provider="kie",
@@ -5018,7 +5019,7 @@ class WorkerThread(QThread):
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
                 self._record_kie_task(task_id, status="completed")
-                return self._extract_result_url(data.get("resultJson"))
+                return result_url
             if state in {"fail", "failed", "error"}:
                 error_code = data.get("failCode") or data.get("errorCode") or "unknown"
                 fail_message = self._safe_error_text(data.get("failMsg") or "KIE вернул fail")
