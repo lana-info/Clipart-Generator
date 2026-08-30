@@ -144,9 +144,9 @@ quality, and it must not perform an automatic paid regeneration.
 
 ## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
 
-The owner has started manual Windows acceptance and has not found a critical
-error so far. Two non-blocking clarity issues are deliberately deferred without
-changing the current 3.1.0 candidate:
+The owner has started manual Windows acceptance. Several next-version product
+improvements are deliberately deferred without changing the current 3.1.0
+candidate:
 
 - a mixed KIE/Fal.ai pipeline can show only the refreshed Fal.ai estimate, so
   it is unclear whether KIE is included; the next-version direction is a
@@ -163,8 +163,18 @@ changing the current 3.1.0 candidate:
   that preserves alpha end-to-end and always returns PNG at a fixed, billed 4×
   scale. Task 29 records it as the preferred next-version after-removal model;
   ESRGAN remains a before-removal option unless separately proven alpha-safe.
+- a complex multicolour subject demonstrated that no single blue/red/green key
+  is universally safe and that blue subject details can visually shift toward
+  green/teal under despill. Task 30 records the approved future direction:
+  retain visible manual colour buttons, evaluate orange as a fourth preset,
+  add `Авто`, and persist the selected/observed key separately for each image
+  through task recovery, Results, run report and diagnostics. Auto must choose
+  before generation, reuse the same stored key for removal, validate the actual
+  border and never trigger an automatic paid regeneration. The supplied file
+  predates the current candidate, so current-source reproduction and a minimal
+  adversarial test remain mandatory before changing Chroma.
 
-These requirements are recorded in Tasks 28–29 (3.2.0). They require approved
+These requirements are recorded in Tasks 28–30 (3.2.0). They require approved
 full screen/state mockups before implementation. No runtime source, release
 version, installer or current acceptance criterion is changed by this
 documentation checkpoint. For 3.1.0, the safe after-removal path is Local

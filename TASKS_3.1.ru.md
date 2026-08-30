@@ -1112,6 +1112,66 @@ Dependencies: Task 28 pricing breakdown and released 3.1.0 processing baseline.
 Scope: next-version provider capability; paid verification requires separate
 owner approval.
 
+## Task 30 (3.2.0): Chroma «Авто» и цвет фона для каждого изображения
+
+Status: Deferred to the next version after 3.1.0 — product direction approved;
+visual mockup, current-candidate reproduction and implementation intentionally
+not started
+
+Goal:
+Снизить повреждение многоцветных предметов Chroma Key и однозначно хранить,
+какой фон был выбран, сгенерирован и удалён для каждого изображения.
+
+Approved direction:
+- Не менять 3.1.0. Сохранить видимые ручные кнопки `Синий`, `Красный`,
+  `Зелёный`; в будущей версии рассмотреть четвёртый `Оранжевый` (`#FF6600`)
+  только после contract/adversarial test. Рядом добавить отдельную кнопку
+  `Авто`, а не заменять ручное управление выпадающим списком.
+- В `Авто` выбирать chroma-цвет до платной генерации отдельно для каждого
+  промпта, добавлять его в prompt и сохранять вместе с item/task state.
+  Удаление фона обязано использовать тот же сохранённый цвет, а не выполнять
+  независимый повторный выбор после загрузки.
+- Для каждого item записывать requested key (`name` + `#RRGGBB`), источник
+  выбора (`manual`/`auto`), измеренный border key, результат проверки
+  (`matched`, `mismatch`, `already_alpha`, `ambiguous`) и факт
+  `chroma_applied`/`skipped`. Данные должны переживать restart/recovery и быть
+  видимы в Results, run report и безопасном diagnostic journal без текста
+  промпта и credentials.
+- После загрузки проверять фактический фон. При несовпадении, неоднородном фоне
+  или уже существующем alpha не применять другой key молча: показать понятное
+  сообщение, сохранить исходник и предложить ручной цвет либо semantic remover.
+- Никогда не запускать автоматическую повторную платную генерацию из-за
+  неверного chroma-фона.
+- Если безопасного key нет, `Авто` рекомендует Local BEN2/rembg либо облачный
+  remover, а не обещает безопасное удаление.
+
+Evidence and boundary:
+- В сложной композиции с зелёной листвой, розово-красными цветами, голубой
+  гортензией, синей лентой и синей росписью нет универсально безопасного
+  primary key. В предоставленном результате blue key фон удалён и тонкие
+  детали в основном сохранены, но часть собственных синих деталей визуально
+  уходит в зелёный/бирюзовый, что согласуется с риском чрезмерного despill.
+- Файл датирован 2026-08-28, поэтому это продуктовое adversarial evidence, но
+  не доказательство регрессии актуального Windows candidate. До изменения
+  Chroma нужно воспроизвести сдвиг на текущем source/candidate и создать
+  минимальный synthetic test; без подтверждения алгоритм не менять.
+- Действующее правило сохраняется: точный выбранный key внутри предмета
+  неотличим от фона без дополнительной маски. `Авто` снижает и объясняет риск,
+  но не отменяет это ограничение.
+
+Acceptance before implementation:
+- [ ] Утверждены mockups четырёх ручных кнопок, `Авто`, per-item badge и
+  состояний matched/mismatch/already-alpha/ambiguous/no-safe-key.
+- [ ] Project state, task recovery и run report round-trip сохраняют один key
+  на item и никогда не меняют его после restart.
+- [ ] Synthetic adversarial tests покрывают собственные синие, красные,
+  зелёные и оранжевые детали, near-key despill, тонкие веточки и отверстия.
+- [ ] Paid generation не повторяется автоматически; mismatch безопасно
+  останавливает Chroma и сохраняет исходный provider result.
+
+Dependencies: released 3.1.0 Chroma baseline and Task 13 diagnostics fixes.
+Scope: next-version per-item state/UI and key-selection feature.
+
 ## Исторические задачи 3.0
 
 `NEXT-TASK-009B` и `NEXT-TASK-009C` в `TASKS_3.0.ru.md` остаются историческим
