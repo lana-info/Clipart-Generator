@@ -90,6 +90,7 @@ class ProjectRoutesTests(unittest.TestCase):
                 StepId.PIPELINE,
                 StepId.REVIEW_RUN,
                 StepId.RESULTS,
+                StepId.TRANSPARENCY,
             ),
         )
 
