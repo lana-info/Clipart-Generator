@@ -729,9 +729,9 @@ Verification:
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: In progress — source integrated into `develop/3.1`; candidate `3.1.0`
-собран, approved Chroma quality follow-up реализован в отдельной ветке и после
-интеграции требует replacement Windows candidate before acceptance/publication
+Status: In progress — all approved source fixes are integrated into
+`develop/3.1`; review/refactoring and replacement Windows candidate remain
+before acceptance/publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый
@@ -750,14 +750,25 @@ Acceptance:
 - [ ] Update не публикуется автоматически.
 
 Verification:
-- [ ] History/merge-base audit and full VDS tests pass; Windows checklist
-  remains.
+- [x] History/merge-base audit and full VDS tests pass.
+- [ ] Replacement Windows candidate and manual Windows checklist remain.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration
 verification: 954 passed, 56 intentional skips, 2 deselected, 127 subtests;
 `py_compile` and tracked sensitive-artifact scan pass. No paid request,
 installer build or publication was started.
+
+Review checkpoint 2026-08-30: `develop/3.1` additionally merges the approved
+translucent-material prompt, Processing transparency route regression and both
+Chroma quality follow-ups through merge commit `554e944`. Final integrated
+verification: 983 passed, 55 intentional skips, 2 configured deselections and
+133 subtests. Focused Chroma/project-state checks, Python compilation,
+`git diff --check` and tracked sensitive-artifact scan pass; automatic Chroma
+2048×2048 peak RSS remains `421.402 MiB` under the `448 MiB` ceiling. This is a
+source-review checkpoint: `release/VERSION.txt` intentionally remains `3.0.7`,
+and no installer build or publication is started before the separate
+review/refactoring pass.
 
 Dependencies: Tasks 1–12, 14. Scope: M.
 

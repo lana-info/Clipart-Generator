@@ -128,6 +128,16 @@ verified, create a replacement Windows candidate, then continue manual
 acceptance for the image/mask editor, output/rough paths, chroma quality and
 offline-license startup/run. Publication remains a separate owner decision.
 
+Review checkpoint 2026-08-30: the remaining approved source fixes are now
+integrated into `develop/3.1` through `554e944`: genuine-translucency prompt,
+Processing transparency route regression, rendered-key edge recovery and
+translucent colour correction. The merged tree passes 983 tests, 55 intentional
+skips, 2 configured deselections and 133 subtests; focused tests, compilation,
+diff integrity and sensitive-artifact scan pass. Automatic Chroma 2048×2048
+uses `421.402 MiB` under the `448 MiB` ceiling. This checkpoint is ready for the
+separate code review/refactoring task. No Windows build was started and
+`release/VERSION.txt` intentionally remains `3.0.7` until release preparation.
+
 The requested Fal.ai text-to-image catalogue expansion is integrated: Recraft
 V4, Ideogram V4 Fast, FLUX.2 Klein 4B, Kling O3 Image and Bria Fibo Gen 1.5.
 All remain text-only choices; attaching references keeps only models that
