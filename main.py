@@ -968,6 +968,7 @@ class WorkerThread(QThread):
         self._shared_state_lock = threading.Lock()
         self._claimed_fal_task_ids: set[str] = set()
         self._claimed_kie_task_ids: set[str] = set()
+        self._kie_uploaded_content_ids: dict[str, str] = {}
         self._precleaned_paths: set[str] = set()
         self._item_context = threading.local()
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -3111,10 +3112,21 @@ class WorkerThread(QThread):
             item_index = 0
         return f"{operation}:{item_index}" if item_index > 0 else operation
 
-    @staticmethod
-    def _paid_task_fingerprint(input_payload):
+    def _paid_task_fingerprint(self, input_payload):
+        with self._shared_state_lock:
+            uploaded_content_ids = dict(self._kie_uploaded_content_ids)
+
+        def stable_value(value):
+            if isinstance(value, str) and value in uploaded_content_ids:
+                return {"kie_upload_sha256": uploaded_content_ids[value]}
+            if isinstance(value, dict):
+                return {key: stable_value(item) for key, item in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [stable_value(item) for item in value]
+            return value
+
         canonical = json.dumps(
-            input_payload,
+            stable_value(input_payload),
             ensure_ascii=True,
             sort_keys=True,
             separators=(",", ":"),
@@ -4391,6 +4403,10 @@ class WorkerThread(QThread):
             data = payload.get("data") or {}
             download_url = data.get("downloadUrl") or data.get("url") or payload.get("url")
             if download_url:
+                with self._shared_state_lock:
+                    self._kie_uploaded_content_ids[str(download_url)] = hashlib.sha256(
+                        file_bytes
+                    ).hexdigest()
                 self._emit_diagnostic(
                     "provider_upload_finished",
                     provider="kie",

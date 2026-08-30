@@ -654,6 +654,74 @@ class KieRoutingTests(unittest.TestCase):
             self.assertEqual(result, "https://cdn.example/recovered.png")
             self.assertEqual(methods, ["GET"])
 
+    def test_kie_restart_matches_local_reference_when_upload_url_changes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "reference.png"
+            create_rgb_source(source)
+            model_name = "gpt-image/1.5-image-to-image"
+            model_id = main.resolve_kie_generation_model(model_name, True)
+
+            first = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(kie_api_key=DUMMY_KIE_KEY),
+            )
+            first._set_diagnostic_context(1, 1, "generation")
+            first._request_with_retries = lambda *_args, **_kwargs: json.dumps(
+                {"success": True, "data": {"downloadUrl": "https://cdn.example/token-A"}}
+            ).encode("utf-8")
+            first_urls = first._resolve_reference_urls([str(source)])
+            first_payload = first._build_documented_model_input(
+                model_name,
+                "same prompt",
+                first_urls,
+            )
+            first.kie_task_journal.upsert(
+                "existing-reference-task",
+                "generation:1",
+                model_id,
+                "queued",
+                input_fingerprint=first._paid_task_fingerprint(first_payload),
+            )
+
+            restarted = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(kie_api_key=DUMMY_KIE_KEY),
+            )
+            restarted.status_poll_interval = 0
+            restarted._set_diagnostic_context(1, 1, "generation")
+            restarted._request_with_retries = lambda *_args, **_kwargs: json.dumps(
+                {"success": True, "data": {"downloadUrl": "https://cdn.example/token-B"}}
+            ).encode("utf-8")
+            restarted_urls = restarted._resolve_reference_urls([str(source)])
+            methods = []
+
+            def fake_request_json(_self, _url, *, method, **_kwargs):
+                methods.append(method)
+                if method == "POST":
+                    raise AssertionError("restart must not submit another paid task")
+                return {
+                    "code": 200,
+                    "data": {
+                        "state": "success",
+                        "resultJson": json.dumps(
+                            {"resultUrls": ["https://cdn.example/recovered.png"]}
+                        ),
+                    },
+                }
+
+            restarted._request_json = types.MethodType(fake_request_json, restarted)
+
+            result = restarted._kie_generate_generic_model(
+                model_name,
+                "same prompt",
+                reference_urls=restarted_urls,
+            )
+
+            self.assertEqual(result, "https://cdn.example/recovered.png")
+            self.assertEqual(methods, ["GET"])
+
     def test_kie_restart_never_reuses_a_task_for_a_changed_prompt(self):
         with tempfile.TemporaryDirectory() as temp:
             model_id = main.resolve_kie_generation_model("z-image", False)
