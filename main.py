@@ -94,6 +94,7 @@ from fal_provider import (
     FalTaskJournal,
     fal_image_data_uri,
     fal_image_url,
+    fal_lifecycle_urls,
 )
 from fal_model_catalog import (
     fal_generation_payload,
@@ -2965,7 +2966,7 @@ class WorkerThread(QThread):
             }
         )
 
-        def record_submission(request_id):
+        def record_submission(request_id, lifecycle_urls):
             task["request_id"] = str(request_id or "")
             self._record_fal_task(
                 task["request_id"],
@@ -2973,6 +2974,7 @@ class WorkerThread(QThread):
                 model_id,
                 "queued",
                 input_fingerprint=input_fingerprint,
+                **dict(lifecycle_urls),
             )
 
         pending_task = self._claim_pending_task(
@@ -2999,6 +3001,9 @@ class WorkerThread(QThread):
                     status,
                     input_fingerprint=input_fingerprint,
                 ),
+                status_url=pending_task.status_url,
+                response_url=pending_task.response_url,
+                cancel_url=pending_task.cancel_url,
             )
         else:
             completed = client.run_image_operation(
@@ -3008,7 +3013,7 @@ class WorkerThread(QThread):
                 model_id=model_id,
                 parameters=parameters,
                 is_cancelled=lambda: not self.is_running,
-                on_submitted=record_submission,
+                on_submitted_task=record_submission,
                 on_status=lambda status: self._record_fal_task(
                     task["request_id"],
                     operation,
@@ -3040,6 +3045,9 @@ class WorkerThread(QThread):
         status,
         *,
         input_fingerprint="",
+        status_url="",
+        response_url="",
+        cancel_url="",
     ):
         request_id = str(request_id or "").strip()
         if not request_id:
@@ -3051,6 +3059,9 @@ class WorkerThread(QThread):
                 model_id,
                 status,
                 input_fingerprint=str(input_fingerprint or ""),
+                status_url=str(status_url or ""),
+                response_url=str(response_url or ""),
+                cancel_url=str(cancel_url or ""),
             )
         except (OSError, ValueError, FalProviderError):
             # A journal failure must not expose secrets or turn a successful
@@ -3202,6 +3213,9 @@ class WorkerThread(QThread):
                     on_status=lambda status, task=task: self._record_fal_poll_status(
                         task.request_id, task.operation, task.model_id, status
                     ),
+                    status_url=task.status_url,
+                    response_url=task.response_url,
+                    cancel_url=task.cancel_url,
                 )
             except (FalProviderError, TimeoutError, OSError) as error:
                 self._emit_diagnostic(
@@ -4655,17 +4669,24 @@ class WorkerThread(QThread):
         if pending_task is not None:
             request_id = pending_task.request_id
             task_operation = pending_task.operation
+            lifecycle_urls = {
+                "status_url": pending_task.status_url,
+                "response_url": pending_task.response_url,
+                "cancel_url": pending_task.cancel_url,
+            }
             self.progress.emit(f"  Продолжаем Fal.ai Request ID: {request_id}")
         else:
             submitted = client.submit_task(request)
             request_id = str(submitted.get("request_id") or "").strip()
             task_operation = "generation"
+            lifecycle_urls = fal_lifecycle_urls(submitted, request_id)
             self._record_fal_task(
                 request_id,
                 task_operation,
                 model_id,
                 "queued",
                 input_fingerprint=input_fingerprint,
+                **lifecycle_urls,
             )
             self.progress.emit(f"  Fal.ai Request ID: {request_id}")
             self._emit_diagnostic(
@@ -4687,6 +4708,7 @@ class WorkerThread(QThread):
                 status,
                 input_fingerprint=input_fingerprint,
             ),
+            **lifecycle_urls,
         )
         self._ensure_running()
         try:

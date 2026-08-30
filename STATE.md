@@ -59,14 +59,22 @@ information-level event.
 The exported full diagnostic sequence narrows the failure boundary. Fal accepts
 each POST submission and returns a distinct request ID; the application records
 `provider_task_submitted`, then fails before the first
-`provider_task_polled`. Source tracing shows that the next shared-client action
-is the first GET status request. Therefore the 405 is not a submit rejection and
-is localized to Fal status polling (provider route/transport compatibility),
-although the exact HTTP contract mismatch still requires a regression test and
-must not be guessed. Official Fal queue documentation continues to describe GET
-status polling and returns provider-supplied `status_url`, `response_url` and
-`cancel_url`; the current client discards those URLs and reconstructs routes
-from model ID and request ID.
+`provider_task_polled`. The 405 is therefore not a submit rejection and occurs
+during the first lifecycle read. If the first status is already `COMPLETED`, the
+old event order also permits the failing read to be the result URL, so the
+archive alone cannot honestly distinguish status from result. Official Fal
+queue documentation returns provider-supplied `status_url`, `response_url` and
+`cancel_url`; the candidate discarded all three and reconstructed them from the
+model and request ID.
+
+The fix branch now validates, uses and journals Fal's exact lifecycle URLs for
+generation and processing, including restart recovery. Only HTTPS URLs on
+`queue.fal.run` containing the same request ID are accepted; cross-host,
+downgrade and mismatched-task values are rejected, and old journal records keep
+the backward-compatible reconstructed fallback. The focused Fal/KIE/concurrency
+and redirect-security suite passes 116 tests. This removes the confirmed client
+contract defect without another paid submission; one controlled Windows Fal
+run remains necessary to prove that the observed provider-side 405 is gone.
 
 The same report exposes a separate diagnostics defect:
 `v3_run_queue._provider_model_routes()` hard-codes `generation:kie` for every
@@ -74,10 +82,8 @@ generation run, so both Fal runs are incorrectly announced as KIE even though
 their model and actual worker are Fal. This does not cause HTTP 405, but it makes
 provider preflight, cost interpretation and support evidence misleading.
 
-Further paid Fal.ai attempts are stopped for this candidate. Task 13 records a
-post-observation regression test and root-cause fix before the replacement
-installer. Runtime source remains unchanged during the owner's observation
-pass.
+Further paid Fal.ai attempts remain stopped until the source gate and review are
+green and the owner separately authorizes a controlled acceptance request.
 
 ## Windows acceptance evidence: KIE GPT Image 2 succeeds — 2026-08-30
 

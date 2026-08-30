@@ -317,6 +317,51 @@ class FalProviderTests(unittest.TestCase):
         self.assertEqual(result["request_id"], "req-123")
         self.assertEqual(result["result"]["images"][0]["url"], "https://cdn.example/a.png")
 
+    def test_wait_for_result_uses_provider_supplied_lifecycle_urls(self):
+        client = FalClient(
+            FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell")
+        )
+        requested = []
+
+        def fake_request(url, **_kwargs):
+            requested.append(url)
+            if url.endswith("/poll/req-123"):
+                return {"status": "COMPLETED", "request_id": "req-123"}
+            return {"images": [{"url": "https://cdn.example/a.png"}]}
+
+        client._request = fake_request
+        result = client.wait_for_result(
+            "req-123",
+            status_url="https://queue.fal.run/custom/poll/req-123",
+            response_url="https://queue.fal.run/custom/result/req-123",
+            cancel_url="https://queue.fal.run/custom/cancel/req-123",
+            poll_interval_seconds=0,
+            sleep=lambda _seconds: None,
+        )
+
+        self.assertEqual(
+            requested,
+            [
+                "https://queue.fal.run/custom/poll/req-123",
+                "https://queue.fal.run/custom/result/req-123",
+            ],
+        )
+        self.assertEqual(result["request_id"], "req-123")
+
+    def test_provider_lifecycle_urls_reject_cross_host_and_downgrade(self):
+        client = FalClient(
+            FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell")
+        )
+        for unsafe_url in (
+            "http://queue.fal.run/custom/poll/req-123",
+            "https://other.example/custom/poll/req-123",
+            "https://queue.fal.run/custom/poll/different-request",
+            "https://queue.fal.run/custom/poll/req-123?token=secret",
+        ):
+            with self.subTest(url=unsafe_url):
+                with self.assertRaises(FalProviderError):
+                    client.status("req-123", url=unsafe_url)
+
     def test_wait_for_result_requests_cancellation_without_resubmitting(self):
         client = FalClient(FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell"))
         client.cancel = lambda _request_id: {"status": "CANCELLATION_REQUESTED"}
@@ -375,6 +420,33 @@ class FalProviderTests(unittest.TestCase):
             payload = open(f"{temp}/fal-tasks.json", encoding="utf-8").read()
             self.assertNotIn("secret", payload.lower())
             self.assertIn("req-123", payload)
+
+    def test_task_journal_round_trips_provider_lifecycle_urls(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = FalTaskJournal(f"{temp}/fal-tasks.json")
+            journal.upsert(
+                "req-routes",
+                "generation",
+                "fal-ai/flux/schnell",
+                "queued",
+                status_url="https://queue.fal.run/custom/poll/req-routes",
+                response_url="https://queue.fal.run/custom/result/req-routes",
+                cancel_url="https://queue.fal.run/custom/cancel/req-routes",
+            )
+
+            record = journal.pending()[0]
+            self.assertEqual(
+                record.status_url,
+                "https://queue.fal.run/custom/poll/req-routes",
+            )
+            self.assertEqual(
+                record.response_url,
+                "https://queue.fal.run/custom/result/req-routes",
+            )
+            self.assertEqual(
+                record.cancel_url,
+                "https://queue.fal.run/custom/cancel/req-routes",
+            )
 
     def test_completed_status_is_not_emitted_until_result_is_fetched(self):
         client = FalClient(

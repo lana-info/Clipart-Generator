@@ -21,7 +21,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Mapping
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -86,6 +86,9 @@ class FalTaskRecord:
     created_at: str = ""
     updated_at: str = ""
     input_fingerprint: str = ""
+    status_url: str = ""
+    response_url: str = ""
+    cancel_url: str = ""
 
     def __post_init__(self) -> None:
         if not _REQUEST_RE.fullmatch(str(self.request_id or "")):
@@ -98,6 +101,9 @@ class FalTaskRecord:
             r"[0-9a-f]{64}", self.input_fingerprint
         ):
             raise FalProviderError("Некорректный fingerprint задачи в журнале")
+        for value in (self.status_url, self.response_url, self.cancel_url):
+            if value:
+                _validate_lifecycle_url(value, self.request_id)
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -108,6 +114,9 @@ class FalTaskRecord:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "input_fingerprint": self.input_fingerprint,
+            "status_url": self.status_url,
+            "response_url": self.response_url,
+            "cancel_url": self.cancel_url,
         }
 
 
@@ -158,6 +167,9 @@ class FalTaskJournal:
                         created_at=str(entry.get("created_at") or ""),
                         updated_at=str(entry.get("updated_at") or ""),
                         input_fingerprint=str(entry.get("input_fingerprint") or ""),
+                        status_url=str(entry.get("status_url") or ""),
+                        response_url=str(entry.get("response_url") or ""),
+                        cancel_url=str(entry.get("cancel_url") or ""),
                     )
                 except FalProviderError:
                     continue
@@ -195,6 +207,9 @@ class FalTaskJournal:
         status: str,
         *,
         input_fingerprint: str = "",
+        status_url: str = "",
+        response_url: str = "",
+        cancel_url: str = "",
     ) -> FalTaskRecord:
         with self._lock, _journal_process_lock(self.path):
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -211,6 +226,21 @@ class FalTaskJournal:
                     str(input_fingerprint)
                     if input_fingerprint
                     else (previous.input_fingerprint if previous else "")
+                ),
+                status_url=(
+                    str(status_url)
+                    if status_url
+                    else (previous.status_url if previous else "")
+                ),
+                response_url=(
+                    str(response_url)
+                    if response_url
+                    else (previous.response_url if previous else "")
+                ),
+                cancel_url=(
+                    str(cancel_url)
+                    if cancel_url
+                    else (previous.cancel_url if previous else "")
                 ),
             )
             records[record.request_id] = record
@@ -231,6 +261,9 @@ class FalTaskJournal:
                 created_at=previous.created_at,
                 updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 input_fingerprint=previous.input_fingerprint,
+                status_url=previous.status_url,
+                response_url=previous.response_url,
+                cancel_url=previous.cancel_url,
             )
             records[record.request_id] = record
             self._write(records)
@@ -250,6 +283,50 @@ _REQUEST_RE = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
 _TERMINAL_TASK_STATUSES = frozenset(
     {"completed", "completed_after_cancel", "cancelled", "failed"}
 )
+
+
+def _validate_lifecycle_url(value: str, request_id: str) -> str:
+    """Accept only credential-safe Fal queue URLs for the recorded task."""
+
+    url = str(value or "").strip()
+    if not url or "\r" in url or "\n" in url:
+        raise FalProviderError("Некорректный Fal.ai lifecycle URL")
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError as error:
+        raise FalProviderError("Некорректный Fal.ai lifecycle URL") from error
+    if (
+        parsed.scheme.lower() != "https"
+        or (parsed.hostname or "").casefold() != "queue.fal.run"
+        or port not in (None, 443)
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or str(request_id) not in parsed.path.split("/")
+    ):
+        raise FalProviderError("Небезопасный Fal.ai lifecycle URL")
+    return url
+
+
+def fal_lifecycle_urls(
+    payload: Mapping[str, Any] | None,
+    request_id: str,
+) -> dict[str, str]:
+    """Return validated provider-supplied queue URLs, omitting unsafe values."""
+
+    source = payload if isinstance(payload, Mapping) else {}
+    result: dict[str, str] = {}
+    for name in ("status_url", "response_url", "cancel_url"):
+        value = str(source.get(name) or "").strip()
+        if not value:
+            continue
+        try:
+            result[name] = _validate_lifecycle_url(value, request_id)
+        except FalProviderError:
+            continue
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -502,6 +579,7 @@ class FalClient:
         parameters: dict[str, Any] | None = None,
         is_cancelled: Callable[[], bool] | None = None,
         on_submitted: Callable[[str], None] | None = None,
+        on_submitted_task: Callable[[str, Mapping[str, str]], None] | None = None,
         on_status: Callable[[str], None] | None = None,
     ) -> dict[str, Any]:
         model_by_operation = {
@@ -540,8 +618,11 @@ class FalClient:
         )
         submitted = self.submit_task(request)
         request_id = str(submitted["request_id"])
+        lifecycle_urls = fal_lifecycle_urls(submitted, request_id)
         if on_submitted is not None:
             on_submitted(request_id)
+        if on_submitted_task is not None:
+            on_submitted_task(request_id, lifecycle_urls)
         terminal_status = {"value": ""}
 
         def relay_status(status: str) -> None:
@@ -556,6 +637,7 @@ class FalClient:
             poll_interval_seconds=2.0,
             is_cancelled=is_cancelled,
             on_status=relay_status,
+            **lifecycle_urls,
         )
         validate_fal_image_result(
             completed.get("result"),
@@ -568,24 +650,39 @@ class FalClient:
             )
         return completed
 
-    def status(self, request_id: str) -> dict[str, Any]:
+    def status(self, request_id: str, *, url: str = "") -> dict[str, Any]:
         request_id = str(request_id or "").strip()
         if not _REQUEST_RE.fullmatch(request_id):
             raise FalProviderError("Некорректный Fal.ai request ID")
-        return self._request(self._request_url(f"/requests/{request_id}/status"))
+        target = (
+            _validate_lifecycle_url(url, request_id)
+            if url
+            else self._request_url(f"/requests/{request_id}/status")
+        )
+        return self._request(target)
 
-    def result(self, request_id: str) -> dict[str, Any]:
+    def result(self, request_id: str, *, url: str = "") -> dict[str, Any]:
         request_id = str(request_id or "").strip()
         if not _REQUEST_RE.fullmatch(request_id):
             raise FalProviderError("Некорректный Fal.ai request ID")
-        return self._request(self._request_url(f"/requests/{request_id}/response"))
+        target = (
+            _validate_lifecycle_url(url, request_id)
+            if url
+            else self._request_url(f"/requests/{request_id}/response")
+        )
+        return self._request(target)
 
-    def cancel(self, request_id: str) -> dict[str, Any]:
+    def cancel(self, request_id: str, *, url: str = "") -> dict[str, Any]:
         request_id = str(request_id or "").strip()
         if not _REQUEST_RE.fullmatch(request_id):
             raise FalProviderError("Некорректный Fal.ai request ID")
+        target = (
+            _validate_lifecycle_url(url, request_id)
+            if url
+            else self._request_url(f"/requests/{request_id}/cancel")
+        )
         return self._request(
-            self._request_url(f"/requests/{request_id}/cancel"),
+            target,
             method="PUT",
             accepted_http_errors=(400, 404),
         )
@@ -599,6 +696,9 @@ class FalClient:
         sleep=time.sleep,
         is_cancelled: Callable[[], bool] | None = None,
         on_status: Callable[[str], None] | None = None,
+        status_url: str = "",
+        response_url: str = "",
+        cancel_url: str = "",
     ) -> dict[str, Any]:
         """Poll one already-submitted request and fetch its final result.
 
@@ -618,7 +718,11 @@ class FalClient:
                 and not cancellation_requested
             ):
                 try:
-                    cancel_response = self.cancel(request_id)
+                    cancel_response = (
+                        self.cancel(request_id, url=cancel_url)
+                        if cancel_url
+                        else self.cancel(request_id)
+                    )
                 except FalProviderError as error:
                     if on_status is not None:
                         on_status("cancel_failed")
@@ -627,7 +731,11 @@ class FalClient:
                     ) from error
                 cancel_kind = fal_status_kind(cancel_response)
                 if cancel_kind == "already_completed":
-                    result = self.result(request_id)
+                    result = (
+                        self.result(request_id, url=response_url)
+                        if response_url
+                        else self.result(request_id)
+                    )
                     if on_status is not None:
                         on_status("completed_after_cancel")
                     return {
@@ -638,10 +746,18 @@ class FalClient:
                 if on_status is not None:
                     on_status(cancel_kind or "cancel_requested")
                 cancellation_requested = True
-            status = self.status(request_id)
+            status = (
+                self.status(request_id, url=status_url)
+                if status_url
+                else self.status(request_id)
+            )
             kind = fal_status_kind(status)
             if kind == "completed":
-                result = self.result(request_id)
+                result = (
+                    self.result(request_id, url=response_url)
+                    if response_url
+                    else self.result(request_id)
+                )
                 if on_status is not None:
                     on_status(
                         "completed_after_cancel"
@@ -678,6 +794,7 @@ __all__ = [
     "fal_image_input",
     "fal_image_data_uri",
     "fal_image_url",
+    "fal_lifecycle_urls",
     "validate_fal_image_result",
     "fal_status_kind",
 ]
