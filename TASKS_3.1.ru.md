@@ -741,7 +741,9 @@ Goal:
 Acceptance:
 - [x] Fal key переживает restart; Fal/KIE journal синхронизирован между
   workers, сохраняет pending task IDs и продолжает их polling без повторного
-  paid POST. Redirect не переносит Authorization на другой host или downgrade.
+  paid POST для того же входа. Fingerprint локальных KIE upload не зависит от
+  временного URL, а journal защищён между процессами. Redirect не переносит
+  Authorization на другой host или downgrade.
 - [x] Каждый запуск изолирован в `.run/<run-id>`, резервирует имена всего batch
   и публикует только свои файлы. Прежний выбор workspace с `rough/` и `output/`
   сохранён без миграционного экрана; literal `output` нормализуется в parent.
@@ -752,19 +754,23 @@ Acceptance:
   business-сигналом, а проверка прозрачности видна также в Processing.
 - [x] Installer повторно проверяется перед launch, license outage отделён от
   permanent 4xx denial, CSV атомарен, delegated update `kid` сохранён верно,
-  output filename ограничен безопасным Windows budget. Существующий rollback
-  PNG/mask подтверждён тестом и не переписывался.
+  output filename ограничен безопасным Windows budget. На Windows installer
+  удерживается от записи/переименования от проверки до launch. PNG/mask
+  pair-транзакция восстанавливается также после остановки процесса.
 
 Verification:
 - [x] Focused paid-task/workspace gate: 213 tests and 22 subtests.
 - [x] Focused gates блоков: 269 tests + 47 subtests для Chroma/UI и 110 tests +
   18 subtests для release safety.
-- [x] Full offline suite: 1009 passed, 55 intentional skips, 2 deselected,
+- [x] Final high-risk focused suite: 225 tests and 36 subtests.
+- [x] Full offline suite: 1021 passed, 55 intentional skips, 2 deselected,
   140 subtests.
 - [x] Все tracked Python files компилируются; sensitive-artifact scan и
   `git diff --check` проходят.
-- [x] Automatic Chroma benchmark: 6 cases, 2048×2048 median `1.277 s`, peak RSS
-  `422.578 MiB`; все quality gates проходят при ceiling `448 MiB`.
+- [x] Automatic Chroma benchmark: 6 cases, 2048×2048 median `1.228 s`, peak RSS
+  `421.848 MiB`; все quality gates проходят при ceiling `448 MiB`.
+- [x] Повторное независимое ревью: `pass-with-nits`, новых blocking/important
+  дефектов после follow-up исправлений не найдено.
 - [ ] Manual Windows acceptance и replacement installer — только после
   отдельного разрешения владельца.
 
