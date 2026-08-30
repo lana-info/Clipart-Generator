@@ -47,6 +47,23 @@ class ProcessingContractTests(unittest.TestCase):
             self.assertIsInstance(ProcessingContext(raw, root, output, {}), ProcessingContext)
             self.assertEqual(run_workspace(output), output / ".run")
 
+    def test_non_overwrite_publication_never_replaces_a_late_collision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staged = root / "staged.png"
+            target = root / "output" / "source_ready.png"
+            staged.write_bytes(b"new result")
+            target.parent.mkdir()
+            target.write_bytes(b"external file created after reservation")
+
+            with self.assertRaises(FileExistsError):
+                publish_atomic(staged, target, overwrite=False)
+
+            self.assertEqual(
+                target.read_bytes(),
+                b"external file created after reservation",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

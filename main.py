@@ -3655,7 +3655,11 @@ class WorkerThread(QThread):
         with self._publish_lock:
             if not self.is_running:
                 raise ProcessingCancelled("Остановлено пользователем")
-            publish_atomic(stage_path, output_path)
+            publish_atomic(
+                stage_path,
+                output_path,
+                overwrite=self.overwrite_existing,
+            )
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
         self._ensure_running()

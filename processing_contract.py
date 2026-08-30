@@ -88,15 +88,31 @@ def run_workspace(output_dir: str | Path, run_id: str | None = None) -> Path:
     return transient_root / normalized_run_id if normalized_run_id else transient_root
 
 
-def publish_atomic(source_path: str | Path, output_path_value: str | Path) -> Path:
+def publish_atomic(
+    source_path: str | Path,
+    output_path_value: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
     """Copy a completed result into its final path without partial output."""
     source = Path(source_path)
     target = Path(output_path_value)
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
     os.close(fd)
+    claimed_stat = None
     try:
         shutil.copy2(source, temporary_name)
+        if not overwrite:
+            claim_fd = os.open(
+                target,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+            try:
+                claimed_stat = os.fstat(claim_fd)
+            finally:
+                os.close(claim_fd)
         os.replace(temporary_name, target)
         return target
     except BaseException:
@@ -104,4 +120,14 @@ def publish_atomic(source_path: str | Path, output_path_value: str | Path) -> Pa
             os.unlink(temporary_name)
         except OSError:
             pass
+        if claimed_stat is not None:
+            try:
+                current = target.stat()
+                if (
+                    current.st_dev == claimed_stat.st_dev
+                    and current.st_ino == claimed_stat.st_ino
+                ):
+                    target.unlink()
+            except OSError:
+                pass
         raise
