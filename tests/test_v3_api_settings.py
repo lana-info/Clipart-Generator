@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import main
@@ -9,6 +11,7 @@ from PyQt6.QtWidgets import QApplication
 from provider_clients import check_kie_balance, parse_kie_balance_response
 from v3_api_settings import (
     ApiSettingsDialog,
+    _fal_platform_request,
     check_fal_balance,
     estimate_fal_cost,
     fetch_fal_pricing,
@@ -17,6 +20,7 @@ from v3_api_settings import (
     load_credentials,
     save_credentials,
 )
+from network_security import HttpsOnlyRedirectHandler, NetworkSecurityError
 
 
 def test_credentials_round_trip(tmp_path: Path):
@@ -75,6 +79,51 @@ def test_fal_balance_and_pricing_use_platform_api(monkeypatch):
     assert fetch_fal_pricing("secret", ["fal-ai/birefnet/v2"])[0]["unit_price"] == 0.01
     assert estimate_fal_cost("secret", {"fal-ai/birefnet/v2": 5}) == (0.25, "USD")
     assert calls[2][2]["payload"]["estimate_type"] == "historical_api_price"
+
+
+@pytest.mark.parametrize(
+    "redirect_url",
+    (
+        "https://attacker.example/v1/account/billing",
+        "http://api.fal.ai/v1/account/billing",
+    ),
+)
+def test_fal_platform_api_blocks_redirect_without_forwarding_authorization(
+    monkeypatch, redirect_url
+):
+    observed = {}
+
+    class RedirectingOpener:
+        def __init__(self, handler):
+            self.handler = handler
+
+        def open(self, request, timeout):
+            observed["headers"] = dict(request.headers)
+            observed["unredirected_headers"] = dict(request.unredirected_hdrs)
+            return self.handler.redirect_request(
+                request,
+                None,
+                302,
+                "redirect",
+                {},
+                redirect_url,
+            )
+
+    def build_opener(*handlers):
+        redirect_handler = next(
+            handler
+            for handler in handlers
+            if isinstance(handler, HttpsOnlyRedirectHandler)
+        )
+        return RedirectingOpener(redirect_handler)
+
+    monkeypatch.setattr("v3_api_settings.urllib.request.build_opener", build_opener)
+
+    with pytest.raises(NetworkSecurityError):
+        _fal_platform_request("fal-secret", "account/billing")
+
+    assert "Authorization" not in observed["headers"]
+    assert observed["unredirected_headers"]["Authorization"] == "Key fal-secret"
 
 
 def test_api_dialog_exposes_only_supported_provider_concurrency_values(monkeypatch):

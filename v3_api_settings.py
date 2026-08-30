@@ -23,6 +23,7 @@ from v3_components import ButtonVariant, V3Button
 from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS, ProviderCredentialStore
 from provider_clients import check_kie_balance, check_photoroom_balance
 from app_identity import APP_NAME
+from network_security import HttpsOnlyRedirectHandler
 from runtime_settings import PROVIDER_CONCURRENCY_CHOICES, normalize_provider_concurrency
 
 
@@ -54,8 +55,12 @@ def _fal_platform_request(
         },
         method=method,
     )
+    authorization = request.get_header("Authorization")
+    if authorization:
+        request.remove_header("Authorization")
+        request.add_unredirected_header("Authorization", authorization)
     try:
-        opener = urllib.request.build_opener()
+        opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
         with opener.open(request, timeout=timeout) as response:
             raw = response.read(512 * 1024).decode("utf-8", "replace")
     except urllib.error.HTTPError as error:
