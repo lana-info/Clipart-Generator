@@ -14,6 +14,7 @@ Source-build и Windows packaging используют `release/VERSION.txt` к�
 
 ## Для пользователя
 
+- [USER_GUIDE.ru.md](USER_GUIDE.ru.md) — полное иллюстрированное руководство: API-ключи, промпты, CSV, Clipart, chroma key, прозрачность, Pinterest и Processing;
 - [USER_INSTALL_GUIDE.md](USER_INSTALL_GUIDE.md) — установка и первый запуск;
 - [MANUAL_SMOKE_TEST_3.0.md](MANUAL_SMOKE_TEST_3.0.md) — пользовательская проверка;
 - [KNOWN_LIMITATIONS_3.0.md](KNOWN_LIMITATIONS_3.0.md) — ограничения и ручные проверки;
@@ -31,6 +32,25 @@ python main.py
 Для локального тестирования используйте копии изображений и отдельную папку
 результатов. Реальные платные запросы к KIE, PhotoRoom, RunPod и другим
 провайдерам без явного разрешения не выполняются.
+
+## Сборка руководства
+
+Скриншоты и документы собираются локально без API-запросов:
+
+```powershell
+python scripts/capture_user_guide_screenshots.py
+python scripts/generate_user_guide_documents.py
+```
+
+Готовые файлы появятся в `output/pdf/Vibix_Images_User_Guide.ru.pdf` и
+`output/doc/Vibix_Images_User_Guide.ru.docx`. Каталог `output` не хранится в
+Git, поэтому для передачи документов используйте именно эти локальные файлы.
+Для PDF нужен Chrome, Chromium или Edge. Если браузер не найден автоматически,
+укажите его явно, например:
+
+```powershell
+python scripts/generate_user_guide_documents.py --browser "C:\Program Files\Google\Chrome\Application\chrome.exe"
+```
 
 ## Проверки
 

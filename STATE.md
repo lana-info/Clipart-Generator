@@ -1,7 +1,6 @@
 # Project state
 
 Updated: 2026-08-30
-
 ## Latest project checkpoint
 
 Technical review fixes, the prebuild source-acceptance follow-up and the
@@ -136,7 +135,6 @@ ratio preview добавлен в общий Clipart generation page и поэт
 `docs/ui/3.1/task-22-pinterest-prompt-no-chroma/`. Active prompt-only и
 focused Clipart/Pinterest tests прошли; Windows visual acceptance по-прежнему
 не выполнялась.
-
 ## Operating model
 
 - VDS is the primary development environment.
@@ -366,6 +364,21 @@ regression и полный offline suite проходят: 981 passed, 55 intent
 Не запускать платные запросы, Windows/macOS build, merge или публикацию до
 соответствующего отдельного разрешения. Готовая исходная 3.0.7 публикуется
 отдельно; текущая docs-ветка предназначена только для будущей 3.1.0.
+
+## Illustrated user guide checkpoint — 2026-08-30
+
+- `USER_GUIDE.ru.md` documents the complete current user route: provider API
+  keys, structured prompts and references, CSV mapping, Clipart generation,
+  local chroma key, background removal, Pinterest prompt-only generation and
+  standalone Processing.
+- Thirteen screenshots are captured from the real PyQt interface with
+  synthetic data and no credentials, provider calls or project draft writes.
+- Reproducible scripts create A4 PDF and DOCX editions. The PDF is rendered and
+  reviewed page by page; the DOCX package, relationships, XML and embedded
+  media are checked offline.
+- The guide states the two current release boundaries explicitly: Pinterest
+  has no product-upload/post-processing route in 3.0.7, and the implemented
+  alpha-mask editor is temporarily hidden in the stable client.
 
 ## Pinterest Pins Task 6 checkpoint — 2026-08-28
 
