@@ -4,9 +4,9 @@ Updated: 2026-08-30
 
 ## Latest project checkpoint
 
-Technical review fix branch `codex/fix-3.1-technical-review` is integrated into
-`develop/3.1` by fast-forward through `c40bbdb`. Reproducible tests confirmed
-and fixed paid-task persistence/recovery, cross-process journals, run/output
+Technical review fixes and the prebuild source-acceptance follow-up are
+integrated into `develop/3.1` by fast-forward through `7addeee`. Reproducible
+tests confirmed and fixed paid-task persistence/recovery, cross-process journals, run/output
 isolation and no-clobber publication, interrupted PNG/mask recovery, one
 enclosed near-key Chroma data-loss path, the 40 MP editor boundary, QThread
 signal lifecycle, Processing transparency action and release-safety defects.
@@ -15,12 +15,12 @@ contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
 The final independent source review verdict is `pass-with-nits`: no blocking or
-important defects remain. The merged branch passes 1021 offline tests, 55 intentional
-skips, 2 configured deselections and 140 subtests; the final high-risk focused
-gate passes 225 tests and 36 subtests. All tracked Python files compile;
-sensitive scan and `git diff --check` pass. The current automatic Chroma
-benchmark passes all gates: six cases, 2048×2048 median `1.228 s`, peak RSS
-`421.848 MiB` below the `448 MiB` ceiling. No paid request, Windows build,
+important defects remain. The merged source passes 1026 offline tests, 55
+intentional skips, 2 configured network deselections and 140 subtests. All
+tracked Python files compile; sensitive scan and `git diff --check` pass. The
+latest automatic Chroma benchmark passes all gates: alpha IoU `0.968704`, alpha
+MAE `0.018194`, 2048×2048 median `1.357 s`, peak RSS `421.465 MiB` below the
+`448 MiB` ceiling. No paid request, Windows build,
 version change or publication was performed. Remaining release work is manual
 Windows acceptance and a separately authorized replacement build.
 
@@ -33,16 +33,16 @@ yet persist KIE IDs, so its visually identical files cannot be attributed to
 task recovery without the original filenames/log. Windows evidence must retain
 output names, SHA-256 hashes and the diagnostic journal if the symptom recurs.
 
-Prebuild source-acceptance audit is active on
-`codex/chore-3.1-prebuild-acceptance`, created from synchronized
-`develop/3.1` commit `7b3d0d3`. Tasks 2–6 were checked against current code,
+The prebuild source-acceptance audit was completed on
+`codex/chore-3.1-prebuild-acceptance` and integrated into `develop/3.1` at
+`7addeee`. Tasks 2–6 were checked against current code,
 tests and rendered UI rather than their stale checkboxes. The audit confirmed
 Tasks 2, 3 and 6 in source and found two real UI contract gaps: the approved
 Task 5 clean-background helper had never been connected and its color control
 was still a combo instead of three visible buttons; the Task 4 Gemini action
 used a longer unapproved label. Regression tests reproduced both gaps before
 the fixes. The helper, three buttons, compact material wrapping and exact
-`Удалить водяной знак Gemini` copy are now implemented on the audit branch.
+`Удалить водяной знак Gemini` copy are now integrated.
 Implemented screenshots for Tasks 2, 3 and 5 are stored beside their approved
 mockups. The owner set the supported acceptance target to 1120×780 at Windows
 scaling 100%; at that size Task 5 has no horizontal overflow. Linux offscreen
@@ -62,8 +62,8 @@ Task 7 zoom presets are integrated in `develop/3.1` at `35931e3`:
 редактор прозрачности предлагает `Fit`, `50%`, `100%`, `150%`, `200%` и
 `300%`; прежний `400%` удалён. Выбранный масштаб сохраняется при переключении
 между файлами. Focused editor/queue/processing suite (92 tests), `py_compile`,
-`git diff --check` и sensitive scan прошли. Ручная Windows-проверка мышью и
-пером остаётся.
+`git diff --check` и sensitive scan прошли. Ручная Windows-проверка мышью
+остаётся; стилус проверяется только на целевом устройстве, где он используется.
 
 Task 6 output naming is integrated in `develop/3.1` at `6551011`:
 готовые PNG остаются в `output/`, а промежуточные этапы — в `rough/`.
@@ -121,7 +121,7 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 - Windows is the environment for Windows-specific behavior and visual verification.
 - GitHub is the source-code handoff point between environments. The last
   Windows 3.0.5 installer was built by the manual GitHub Actions workflow;
-  any future 3.0.7 build also requires a separate explicit command. Azure
+  the future 3.1.0 candidate also requires a separate explicit command. Azure
   remains historical/fallback infrastructure and is not queued here.
 - Only one side edits the active branch at a time.
 - Before changing sides, the active side runs relevant checks, commits, and pushes.
@@ -133,11 +133,10 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Current branch and handoff
 
-- Target 3.1 integration line: `develop/3.1` at synchronized commit `7b3d0d3`.
-  Active prebuild source-acceptance branch:
-  `codex/chore-3.1-prebuild-acceptance`, created from that exact commit. It is
-  not merged yet. No version, installer, paid request or publication change is
-  part of this branch.
+- Target 3.1 integration line: `develop/3.1` synchronized with GitHub at
+  `7addeee`. The retained branch `codex/chore-3.1-prebuild-acceptance` points to
+  the same integrated commit. `release/VERSION.txt` intentionally remains
+  `3.0.7`; no installer, paid request or publication was started.
 - Release baseline branch: `develop/3.0`
 - Current 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`;
   `release/VERSION.txt` is `3.0.7`. This branch contains
@@ -167,10 +166,10 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Immediate next action
 
-Finish review and verification of the prebuild source-acceptance branch, then
-present its actual Task 5 screenshots and request explicit merge approval. On
-Windows, run the manual UI/path/license/Chroma checklist from the integrated
-source before changing `release/VERSION.txt`. The one-prompt/one-variant KIE
+On Windows, run the manual UI, mouse-editor, path/output, license and Chroma
+checklist from integrated `develop/3.1` at 1120×780 and 100% display scaling
+before changing `release/VERSION.txt`. A stylus check is needed only when the
+target device and expected workflow use one. The one-prompt/one-variant KIE
 duplicate audit is a separately authorized paid request. Installer build and
 publication remain separate later decisions.
 

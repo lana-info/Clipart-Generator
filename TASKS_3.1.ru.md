@@ -797,8 +797,10 @@ Steps:
   1120×780 и scaling 100%: сравнить Tasks 2, 3 и 5 с implemented screenshots,
   проверить отсутствие наложений и доступность навигации. Меньшие окна и
   scaling выше 100% — best-effort; Remote Desktop не проверяется.
-- [ ] Проверить мышью и пером mask editor: Fit/50/100/150/200/300%, continuous
+- [ ] Проверить мышью mask editor: Fit/50/100/150/200/300%, continuous
   add/remove brush, hardness, пробел-pan, undo/redo/reset и atomic PNG/mask save.
+  Стилус проверяется дополнительно, только если целевое устройство и рабочий
+  процесс пользователя его предусматривают.
 - [ ] В новой пустой рабочей папке проверить `rough/`, `output/`, `.run/<run-id>`,
   короткие Windows-safe имена, collision numbering и отсутствие файлов
   предыдущего запуска; отдельно проверить старый сохранённый literal `output`.
@@ -822,8 +824,9 @@ Acceptance:
 
 Verification:
 - [x] History/merge-base audit and full VDS tests pass.
-- [x] Technical-review fix branch fast-forwarded without conflicts; merged
-  offline suite: 1021 passed, 55 intentional skips, 2 deselected, 140 subtests.
+- [x] Technical-review and prebuild source-acceptance branches fast-forwarded
+  without conflicts through `7addeee`; latest complete offline suite: 1026
+  passed, 55 intentional skips, 2 deselected, 140 subtests.
 - [ ] Replacement Windows candidate and manual Windows checklist remain.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
@@ -843,8 +846,9 @@ source-review checkpoint: `release/VERSION.txt` intentionally remains `3.0.7`,
 and no installer build or publication is started before the separate
 review/refactoring pass.
 
-Prebuild source-acceptance follow-up on
-`codex/chore-3.1-prebuild-acceptance`: Tasks 2–6 were reconciled against code,
+Prebuild source-acceptance follow-up from
+`codex/chore-3.1-prebuild-acceptance` is integrated into `develop/3.1` at
+`7addeee`: Tasks 2–6 were reconciled against code,
 tests and rendered UI. Missing Task 5 helper/three color buttons and the Task 4
 Gemini label mismatch were reproduced before repair. Current verification:
 1026 passed, 55 intentional skips, 2 network deselections and 140 subtests;
