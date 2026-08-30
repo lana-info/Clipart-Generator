@@ -1,6 +1,6 @@
 # Project state
 
-Updated: 2026-08-27
+Updated: 2026-08-30
 
 ## Operating model
 
@@ -54,6 +54,21 @@ softness без AI и без сетевых расходов. Нужно вып�
 Run owner acceptance on the replacement Windows 3.0.5 installer from GitHub
 Actions run `33032049521`. Do not publish it as an update before this
 target-machine acceptance.
+
+## Illustrated user guide checkpoint — 2026-08-30
+
+- `USER_GUIDE.ru.md` documents the complete current user route: provider API
+  keys, structured prompts and references, CSV mapping, Clipart generation,
+  local chroma key, background removal, Pinterest prompt-only generation and
+  standalone Processing.
+- Thirteen screenshots are captured from the real PyQt interface with
+  synthetic data and no credentials, provider calls or project draft writes.
+- Reproducible scripts create A4 PDF and DOCX editions. The PDF is rendered and
+  reviewed page by page; the DOCX package, relationships, XML and embedded
+  media are checked offline.
+- The guide states the two current release boundaries explicitly: Pinterest
+  has no product-upload/post-processing route in 3.0.7, and the implemented
+  alpha-mask editor is temporarily hidden in the stable client.
 
 ## Pinterest Pins Task 6 checkpoint — 2026-08-28
 
