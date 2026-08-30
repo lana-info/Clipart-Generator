@@ -778,9 +778,9 @@ Requirements: `CG31-FR-020`, `022`, `030`, `052`, `053`, `061`, `070`, `071`.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: In progress — all approved source fixes are integrated into
-`develop/3.1`; review/refactoring and replacement Windows candidate remain
-before acceptance/publication
+Status: In progress — technical-review fixes are verified on
+`codex/fix-3.1-technical-review`, but still require explicit integration
+approval; replacement Windows candidate remains before acceptance/publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый
@@ -790,6 +790,10 @@ Steps:
 - [x] Merge tasks in dependency order with verification after integration.
 - [x] Run focused, full offline, compile, sensitive-artifact and diff checks.
 - Провести manual Windows acceptance; build — только отдельной командой.
+- [ ] На Windows выполнить контрольный KIE-запуск в новой пустой рабочей папке:
+  один промпт, один вариант, один Task ID и ровно один ready-файл в `output/`.
+  При расхождении сохранить имена файлов, SHA-256 и диагностический журнал;
+  отдельно сверить ожидаемые stage-копии в `rough/`.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.

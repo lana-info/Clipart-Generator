@@ -25,6 +25,15 @@ version change or publication was performed. Remaining release work is explicit
 integration approval followed by manual Windows acceptance and a separately
 authorized replacement build.
 
+The Windows acceptance checklist now includes a clean-workspace duplicate
+audit prompted by the owner's earlier candidate observation: one KIE prompt,
+one requested variant and one provider task must produce exactly one ready
+output. Current source tests and a direct claim check show that one journaled
+KIE Task ID cannot be claimed twice within a worker; the old candidate did not
+yet persist KIE IDs, so its visually identical files cannot be attributed to
+task recovery without the original filenames/log. Windows evidence must retain
+output names, SHA-256 hashes and the diagnostic journal if the symptom recurs.
+
 Task 7 zoom presets are integrated in `develop/3.1` at `35931e3`:
 редактор прозрачности предлагает `Fit`, `50%`, `100%`, `150%`, `200%` и
 `300%`; прежний `400%` удалён. Выбранный масштаб сохраняется при переключении
