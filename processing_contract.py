@@ -81,9 +81,11 @@ def output_path(source_path: str | Path, output_dir: str | Path) -> Path:
     return Path(output_dir) / f"{Path(source_path).stem}.png"
 
 
-def run_workspace(output_dir: str | Path) -> Path:
-    """Keep transient intermediates in the selected workspace root."""
-    return Path(output_dir) / ".run"
+def run_workspace(output_dir: str | Path, run_id: str | None = None) -> Path:
+    """Return the transient root or one isolated run directory below it."""
+    transient_root = Path(output_dir) / ".run"
+    normalized_run_id = str(run_id or "").strip()
+    return transient_root / normalized_run_id if normalized_run_id else transient_root
 
 
 def publish_atomic(source_path: str | Path, output_path_value: str | Path) -> Path:

@@ -965,6 +965,8 @@ class WorkerThread(QThread):
         self._precleaned_paths: set[str] = set()
         self._item_context = threading.local()
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self.run_id = uuid.uuid4().hex
+        self._run_raw_dir = None
         self._diagnostic_context = threading.local()
         self._provider_lease_context = threading.local()
         self.fal_task_journal = FalTaskJournal(
@@ -2172,13 +2174,18 @@ class WorkerThread(QThread):
         invalid persisted workspace path. Final exports remain controlled by
         ``self.output_dir``.
         """
-        candidate = str(run_workspace(self.workspace_root or self.work_dir))
+        candidate = str(
+            run_workspace(self.workspace_root or self.work_dir, self.run_id)
+        )
         try:
             os.makedirs(candidate, exist_ok=True)
+            self._run_raw_dir = candidate
             return candidate
         except OSError:
             pass
-        return tempfile.mkdtemp(prefix="clipart-generator-raw-")
+        fallback = tempfile.mkdtemp(prefix="clipart-generator-raw-")
+        self._run_raw_dir = fallback
+        return fallback
 
     def _persist_rough_outputs(self, raw_dir):
         """Publish meaningful PNG intermediates with short stable names."""
@@ -2214,8 +2221,11 @@ class WorkerThread(QThread):
             shutil.copy2(source, target)
         transient = Path(self.workspace_root) / ".run"
         try:
-            if Path(raw_dir).resolve() == transient.resolve() and transient.is_dir():
-                shutil.rmtree(transient)
+            owned_run = Path(str(self._run_raw_dir or "")).resolve()
+            if Path(raw_dir).resolve() == owned_run and owned_run.is_dir():
+                shutil.rmtree(owned_run)
+                if transient.is_dir():
+                    transient.rmdir()
         except OSError:
             # Results are already published; stale transient data can be retried
             # on the next terminal run without affecting user files.

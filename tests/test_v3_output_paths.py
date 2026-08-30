@@ -141,6 +141,37 @@ class V3OutputPathsTests(unittest.TestCase):
             self.assertEqual(len(raw_dirs), 1)
             self.assertNotEqual(Path(raw_dirs[0]).parent, Path(state.common.work_dir))
 
+    def test_each_worker_owns_an_isolated_run_directory_and_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="processing-run-isolation-") as temp:
+            workspace = Path(temp) / "workspace"
+            output = workspace / "output"
+            output.mkdir(parents=True)
+            settings = {
+                "workspace_root": str(workspace),
+                "output_dir": str(output),
+            }
+            first = WorkerThread("mode2_process", str(workspace), settings)
+            second = WorkerThread("mode2_process", str(workspace), settings)
+
+            first_run = Path(first._create_run_raw_dir())
+            second_run = Path(second._create_run_raw_dir())
+
+            self.assertNotEqual(first_run, second_run)
+            self.assertEqual(first_run.parent, workspace / ".run")
+            self.assertEqual(second_run.parent, workspace / ".run")
+            Image.new("RGB", (4, 4), "red").save(first_run / "file_gen_001.png")
+            second_marker = second_run / "other_gen_001.png"
+            Image.new("RGB", (4, 4), "blue").save(second_marker)
+
+            first._persist_rough_outputs(first_run)
+
+            self.assertFalse(first_run.exists())
+            self.assertTrue(second_marker.exists())
+            self.assertEqual(
+                len(list((workspace / "rough").glob("*.png"))),
+                1,
+            )
+
     def test_invalid_work_dir_falls_back_to_writable_output_dir(self) -> None:
         with tempfile.TemporaryDirectory(prefix="processing-invalid-workspace-") as temp:
             output_dir = Path(temp) / "exports"
