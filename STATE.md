@@ -16,12 +16,19 @@ changing the current 3.1.0 candidate:
 - the icon-only CSV export is visually mixed with prompt/reference actions;
   the next-version direction is a separate `Экспорт:` group with a visibly
   labelled turquoise-accent `CSV` button and an explicit tooltip/accessibility
-  name.
+  name;
+- Fal.ai ESRGAN is correctly blocked after background removal because its
+  official contract supports PNG but does not guarantee alpha preservation.
+  Fal.ai now documents a separate `topaz/upscale/image/transparent` endpoint
+  that preserves alpha end-to-end and always returns PNG at a fixed, billed 4×
+  scale. Task 29 records it as the preferred next-version after-removal model;
+  ESRGAN remains a before-removal option unless separately proven alpha-safe.
 
-These requirements are recorded in Task 28 (3.2.0). They require approved full
-screen/state mockups before implementation. No runtime source, release version,
-installer or current acceptance criterion is changed by this documentation
-checkpoint.
+These requirements are recorded in Tasks 28–29 (3.2.0). They require approved
+full screen/state mockups before implementation. No runtime source, release
+version, installer or current acceptance criterion is changed by this
+documentation checkpoint. For 3.1.0, the safe after-removal path is Local
+Real-ESRGAN; Fal.ai ESRGAN can be used before removal.
 
 ## Latest project checkpoint
 

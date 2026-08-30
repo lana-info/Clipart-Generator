@@ -949,6 +949,67 @@ after refresh and an icon-only CSV action visually grouped with prompt/reference
 buttons. Scope: next-version UI/estimation clarity; no paid request required for
 the design stage.
 
+## Task 29 (3.2.0): Alpha-safe Fal.ai upscale после удаления фона
+
+Status: Deferred to the next version after 3.1.0 — root cause and provider
+candidate confirmed from official documentation; implementation and paid
+endpoint verification intentionally not started
+
+Goal:
+Разрешить облачный Fal.ai upscale прозрачного PNG после удаления фона, не
+предлагая модели, для которых сохранение alpha не гарантировано.
+
+Confirmed diagnosis:
+- Текущий `fal-ai/esrgan` принимает и возвращает PNG, но его официальная схема
+  не обещает сохранение alpha. В локальном capability catalog его
+  `preserves_alpha` поэтому остаётся `unknown`; текущая блокировка после
+  удаления фона является безопасным поведением, а не ошибкой выполнения.
+- Официальный Fal.ai endpoint `topaz/upscale/image/transparent` прямо обещает
+  end-to-end alpha preservation и всегда возвращает PNG. Он выполняет только
+  фиксированный upscale 4×; billing также считается по фактическому 4×
+  результату независимо от переданного scale.
+
+Approved direction:
+- Не ослаблять защиту и не разрешать обычный Fal.ai ESRGAN после удаления фона
+  без отдельного adversarial alpha test и явной гарантии провайдера.
+- Добавить `Topaz Transparent (4×)` как отдельную Fal.ai-модель для операции
+  `Апскейл после удаления фона`.
+- Фильтровать модели по конкретному endpoint capability, а не считать весь
+  провайдер Fal.ai одинаковым: после удаления фона показывать только модели с
+  подтверждённым `preserves_alpha=true`; до удаления фона ESRGAN может
+  оставаться доступным.
+- Рядом с Topaz Transparent явно показывать фиксированный масштаб `4×` и не
+  предлагать неработающий выбор 2×. Оценка стоимости должна учитывать
+  фактический 4× output и входить в раздельный Fal.ai subtotal из Task 28.
+- После загрузки результата проверять реальный PNG/alpha contract. Если ответ
+  оказался непрозрачным или повреждённым, не публиковать его как ready-файл и
+  сохранить исходный прозрачный результат предыдущего этапа.
+- В 3.1.0 пользовательский безопасный путь остаётся прежним: выбрать
+  `Local Real-ESRGAN` после удаления фона либо выполнять Fal.ai ESRGAN до
+  удаления фона.
+
+Acceptance before implementation:
+- [ ] Утверждён mockup выбора модели до/после удаления фона, включая скрытый
+  ESRGAN и видимый `Topaz Transparent (4×)` в alpha-required состоянии.
+- [ ] Capability catalog, payload, polling/recovery, price refresh и diagnostic
+  journal поддерживают новый endpoint без ослабления существующих проверок.
+- [ ] Offline contract tests подтверждают endpoint-specific filtering,
+  фиксированный 4× payload, PNG requirement и отказ от публикации flattened
+  результата.
+- [ ] Один минимальный платный Fal.ai test на synthetic RGBA fixture отдельно
+  разрешён владельцем и подтверждает сохранение полностью прозрачных,
+  полупрозрачных и непрозрачных областей после 4×.
+
+Official evidence:
+- `https://fal.ai/models/fal-ai/esrgan/api` — PNG output поддерживается, но
+  alpha preservation не заявлен.
+- `https://fal.ai/models/topaz/upscale/image/transparent/api` — alpha channel
+  сохраняется end-to-end, output всегда PNG, upscale и billing фиксированы 4×.
+
+Dependencies: Task 28 pricing breakdown and released 3.1.0 processing baseline.
+Scope: next-version provider capability; paid verification requires separate
+owner approval.
+
 ## Исторические задачи 3.0
 
 `NEXT-TASK-009B` и `NEXT-TASK-009C` в `TASKS_3.0.ru.md` остаются историческим
