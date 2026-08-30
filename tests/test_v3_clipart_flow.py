@@ -1240,6 +1240,18 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         self.assertEqual(missing_runtime_requirements(request), ("Fal.ai API Key",))
 
+    def test_fal_review_keeps_price_refresh_optional_without_confirmation(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-v3-fal-review-") as temp:
+            state = self.make_state(temp)
+            state.clipart.prompts = [PromptEntry("Baby whale")]
+            state.clipart.generation.model = "fal-ai/flux/schnell"
+            review = ClipartReviewRunPage(state)
+
+        self.assertFalse(review.findChildren(QCheckBox))
+        self.assertEqual(review.validation_issues(), ())
+        self.assertFalse(review.fal_cost_refresh_button.isHidden())
+        self.assertTrue(review.requirements_label.isHidden())
+
     def test_oversized_local_reference_is_rejected_when_attached(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-reference-size-") as temp:
             reference_path = Path(temp) / "too-large.png"

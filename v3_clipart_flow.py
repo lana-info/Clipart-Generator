@@ -581,8 +581,6 @@ def _worker_settings(
         )
         if isinstance((value := source.get(name)), str)
     }
-    if "fal_cost_confirmed" in source:
-        settings["fal_cost_confirmed"] = bool(source.get("fal_cost_confirmed"))
     settings.update(RuntimeData.from_dict(state.runtime.to_dict()).to_dict())
     generation = state.clipart.generation
     operations = state.clipart.operations
@@ -3760,31 +3758,31 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.requirements_label = QLabel()
         self.requirements_label.setWordWrap(True)
         self.requirements_label.setProperty("v3Status", True)
+        self.requirements_label.hide()
         self.run_status_label = QLabel()
         self.run_status_label.setWordWrap(True)
         self.run_status_label.setProperty("v3Small", True)
-        self.fal_cost_confirmation = QCheckBox(
-            "Я проверила актуальную цену Fal.ai и подтверждаю запуск"
-        )
         self.fal_cost_refresh_button = V3Button(
             "Обновить оценку Fal.ai", ButtonVariant.SECONDARY
         )
         self.fal_cost_refresh_button.clicked.connect(self.refresh_fal_cost)
-        self.fal_cost_confirmation.setAccessibleName(
-            "Подтверждение актуальной цены Fal.ai"
-        )
+        self.cost_row = QWidget()
+        cost_layout = QHBoxLayout(self.cost_row)
+        cost_layout.setContentsMargins(0, 0, 0, 0)
+        cost_layout.setSpacing(tokens.space_2)
+        cost_layout.addWidget(self.cost_breakdown_label)
+        cost_layout.addWidget(self.fal_cost_refresh_button)
+        cost_layout.addStretch(1)
         for widget in (
             self.output_label,
             self.summary_label,
             self.requests_label,
-            self.cost_breakdown_label,
+            self.cost_row,
             self.pipeline_label,
             self.requirements_label,
             self.run_status_label,
         ):
             self.add_widget(widget)
-        self.add_widget(self.fal_cost_confirmation)
-        self.add_widget(self.fal_cost_refresh_button)
         self.card.layout().setAlignment(Qt.AlignmentFlag.AlignTop)
         self.card.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.card.content.setSizePolicy(
@@ -3822,12 +3820,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         )
 
     def validation_issues(self) -> tuple[str, ...]:
-        if self._fal_selected() and not self.fal_cost_confirmation.isChecked():
-            return ("fal_cost_confirmation_required",)
         return ()
-
-    def fal_cost_confirmed(self) -> bool:
-        return self.fal_cost_confirmation.isChecked()
 
     def refresh_from_state(self) -> None:
         output_dir = self.state.output_dir_for_mode(ProjectMode.CLIPART)
@@ -3871,7 +3864,6 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         )
         has_fal = self._fal_selected()
         self.fal_cost_refresh_button.setVisible(has_fal)
-        self.fal_cost_confirmation.setVisible(has_fal)
 
     def refresh_fal_cost(self) -> None:
         if self.fal_cost_refresh is None:
@@ -4147,7 +4139,6 @@ class ClipartFlowController(QObject):
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError("Настройки запуска повреждены")
             runtime_settings = dict(runtime_settings)
-            runtime_settings["fal_cost_confirmed"] = self.review_page.fal_cost_confirmed()
             request = build_clipart_run_request(
                 self.shell.state,
                 runtime_settings,
@@ -4199,7 +4190,6 @@ class ClipartFlowController(QObject):
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError("Настройки запуска повреждены")
             runtime_settings = dict(runtime_settings)
-            runtime_settings["fal_cost_confirmed"] = self.review_page.fal_cost_confirmed()
             request = build_clipart_run_request(
                 self.shell.state,
                 runtime_settings,

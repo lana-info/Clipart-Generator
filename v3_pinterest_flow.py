@@ -1504,7 +1504,6 @@ class PinterestFlowController(QObject):
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             runtime_settings = dict(runtime_settings)
-            runtime_settings["fal_cost_confirmed"] = self.review_page.fal_cost_confirmed()
             request = self._request(runtime_settings)
             missing = missing_runtime_requirements(request)
         except (ClipartFlowError, OSError, TypeError, ValueError) as error:
@@ -1552,7 +1551,6 @@ class PinterestFlowController(QObject):
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             runtime_settings = dict(runtime_settings)
-            runtime_settings["fal_cost_confirmed"] = self.review_page.fal_cost_confirmed()
             request = self._request(runtime_settings)
             self._runtime_settings = runtime_settings
             missing = missing_runtime_requirements(request)
