@@ -1,4 +1,6 @@
 from pathlib import Path
+import tempfile
+import unittest
 
 from output_naming import generated_output_path, processed_output_path, workspace_layout
 
@@ -29,6 +31,31 @@ def test_generated_output_uses_short_ready_name_and_collision_number(tmp_path):
     assert generated_output_path(tmp_path, 1, "Blue watercolor flowers") == tmp_path / "blue_watercolor_flowers_01_ready.png"
     (tmp_path / "blue_watercolor_flowers_01_ready.png").touch()
     assert generated_output_path(tmp_path, 1, "Blue watercolor flowers") == tmp_path / "blue_watercolor_flowers_01_ready_2.png"
+
+
+class GeneratedOutputNameTests(unittest.TestCase):
+    def test_uses_only_the_object_name_without_prompt_labels(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prompt = "Object: fox. Scene: spring garden. Style: watercolor."
+            self.assertEqual(
+                generated_output_path(directory, 1, prompt),
+                Path(directory) / "fox_01_ready.png",
+            )
+
+    def test_translates_common_russian_subject_names_to_english(self):
+        with tempfile.TemporaryDirectory() as directory:
+            prompt = "Объект: лисёнок. Сцена: весенний сад. Стиль: акварель."
+            self.assertEqual(
+                generated_output_path(directory, 1, prompt),
+                Path(directory) / "fox_01_ready.png",
+            )
+
+    def test_keeps_a_short_free_form_english_subject(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                generated_output_path(directory, 2, "Teddy bear with a ribbon, isolated clipart"),
+                Path(directory) / "teddy_bear_with_02_ready.png",
+            )
 
 
 def test_generated_output_falls_back_without_manual_filename(tmp_path):
