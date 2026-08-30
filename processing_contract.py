@@ -100,34 +100,17 @@ def publish_atomic(
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
     os.close(fd)
-    claimed_stat = None
     try:
         shutil.copy2(source, temporary_name)
-        if not overwrite:
-            claim_fd = os.open(
-                target,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                0o600,
-            )
-            try:
-                claimed_stat = os.fstat(claim_fd)
-            finally:
-                os.close(claim_fd)
-        os.replace(temporary_name, target)
+        if overwrite:
+            os.replace(temporary_name, target)
+        else:
+            os.link(temporary_name, target)
+            os.unlink(temporary_name)
         return target
     except BaseException:
         try:
             os.unlink(temporary_name)
         except OSError:
             pass
-        if claimed_stat is not None:
-            try:
-                current = target.stat()
-                if (
-                    current.st_dev == claimed_stat.st_dev
-                    and current.st_ino == claimed_stat.st_ino
-                ):
-                    target.unlink()
-            except OSError:
-                pass
         raise

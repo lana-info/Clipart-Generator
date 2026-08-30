@@ -2,6 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
+
+import processing_contract
 
 from processing_contract import (
     ProcessingContext,
@@ -62,6 +65,53 @@ class ProcessingContractTests(unittest.TestCase):
             self.assertEqual(
                 target.read_bytes(),
                 b"external file created after reservation",
+            )
+
+    def test_non_overwrite_publication_survives_collision_at_final_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            staged = root / "staged.png"
+            target = root / "output" / "source_ready.png"
+            staged.write_bytes(b"new result")
+            target.parent.mkdir()
+            real_replace = processing_contract.os.replace
+            real_link = processing_contract.os.link
+            collision_created = False
+
+            def create_collision():
+                nonlocal collision_created
+                if collision_created:
+                    return
+                collision_created = True
+                target.unlink(missing_ok=True)
+                target.write_bytes(b"external file created during publication")
+
+            def replace_with_collision(source, destination):
+                if Path(destination) == target:
+                    create_collision()
+                return real_replace(source, destination)
+
+            def link_with_collision(source, destination):
+                if Path(destination) == target:
+                    create_collision()
+                return real_link(source, destination)
+
+            with patch.object(
+                processing_contract.os,
+                "replace",
+                side_effect=replace_with_collision,
+            ), patch.object(
+                processing_contract.os,
+                "link",
+                side_effect=link_with_collision,
+            ):
+                with self.assertRaises(FileExistsError):
+                    publish_atomic(staged, target, overwrite=False)
+
+            self.assertTrue(collision_created)
+            self.assertEqual(
+                target.read_bytes(),
+                b"external file created during publication",
             )
 
 
