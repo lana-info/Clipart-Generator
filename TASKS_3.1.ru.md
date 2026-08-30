@@ -784,8 +784,9 @@ Requirements: `CG31-FR-020`, `022`, `030`, `052`, `053`, `061`, `070`, `071`.
 ## Task 13: Интегрировать и принять 3.1.0
 
 Status: In progress — source acceptance is complete; release candidate
-`codex/release-3.1.0-final-candidate` is prepared for the authorized manual
-Windows build, after which the checklist remains before publication
+`codex/release-3.1.0-final-candidate` is prepared and pushed through `fefbde1`.
+The authorized manual Windows build awaits GitHub Actions dispatch, after which
+the checklist remains before publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый
@@ -847,7 +848,9 @@ checklist подготовлены в `codex/release-3.1.0-final-candidate`. Wor
 release tree: 1029 passed, 57 skipped, 2 network deselected, 140 subtests;
 компиляция, sensitive scan, startup smoke и diff check прошли. Automatic Chroma:
 alpha IoU `0.968704`, alpha MAE `0.018194`, median `1.319 s`, peak RSS
-`421.207 MiB` при ceiling `448 MiB`.
+`421.207 MiB` при ceiling `448 MiB`. VDS не смог отправить workflow dispatch:
+SSH-доступ к GitHub есть, но GitHub CLI и Azure API здесь не авторизованы;
+ветка готова к ручному запуску без изменения кода.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration

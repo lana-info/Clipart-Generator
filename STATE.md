@@ -33,8 +33,10 @@ Windows installer. Release preparation is isolated on
 `codex/release-3.1.0-final-candidate`: `release/VERSION.txt` and the fallback
 Azure default are 3.1.0, release notes and the Windows acceptance checklist are
 present, and the GitHub workflow must run the real Windows DPAPI and
-installer-lock contracts before PyInstaller. The build has not yet been
-dispatched. It remains an unpublished acceptance artifact; the paid KIE
+installer-lock contracts before PyInstaller. The candidate was pushed to
+GitHub through `fefbde1`. The build has not yet been dispatched because this
+VDS has SSH Git access but neither GitHub CLI nor Azure API authorization. It
+remains an unpublished acceptance artifact; the paid KIE
 duplicate audit and publication still require separate approval.
 
 The Windows acceptance checklist now includes a clean-workspace duplicate
@@ -180,8 +182,9 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Immediate next action
 
-Push `codex/release-3.1.0-final-candidate`, start the authorized manual Windows
-workflow for version 3.1.0 and record its commit, run, artifact and checksum in
+In GitHub Actions, start the authorized manual `Release Windows Installer`
+workflow from `codex/release-3.1.0-final-candidate` with `app_version=3.1.0`,
+then record its commit, run, artifact and checksum in
 `docs/testing/windows-3.1.0-acceptance-checklist.ru.md`. Then perform the manual
 UI, mouse-editor, install/upgrade, path/output, license and Chroma checks at
 1120×780 and 100% display scaling. A stylus check is needed only when the target
