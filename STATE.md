@@ -51,25 +51,50 @@ never trigger an automatic paid retry.
 
 The owner reproduced the same terminal `Fal.ai HTTP 405` during generation with
 two independent Fal.ai models: `fal-ai/flux/schnell` and
-`ideogram/v4/fast`. This cross-model reproduction makes a model-specific outage
-or bad prompt unlikely and points to the shared Fal request lifecycle in the
-current Windows candidate. Both failures are also rendered through the already
-confirmed misleading `item_finished` information-level event.
+`ideogram/v4/fast`. Both items in both runs failed identically. This cross-model
+reproduction makes a model-specific outage or bad prompt unlikely and points to
+the shared Fal request lifecycle in the current Windows candidate. Both failures
+are also rendered through the already confirmed misleading `item_finished`
+information-level event.
 
-Source inspection confirms that all Fal generation models share `FalClient`:
-submission uses POST to the model queue endpoint, while status and response use
-GET request-specific endpoints. The official queue endpoint accepts POST (an
-unauthenticated diagnostic POST reaches authentication with HTTP 401, whereas
-GET to the model queue root returns HTTP 405). The terminal item record alone
-does not establish whether the candidate received 405 during submission or a
-later request, because it omits the preceding provider lifecycle events and
-request ID. The exact root cause therefore remains open pending the complete
-event sequence; no speculative runtime change is allowed.
+The exported full diagnostic sequence narrows the failure boundary. Fal accepts
+each POST submission and returns a distinct request ID; the application records
+`provider_task_submitted`, then fails before the first
+`provider_task_polled`. Source tracing shows that the next shared-client action
+is the first GET status request. Therefore the 405 is not a submit rejection and
+is localized to Fal status polling (provider route/transport compatibility),
+although the exact HTTP contract mismatch still requires a regression test and
+must not be guessed. Official Fal queue documentation continues to describe GET
+status polling and returns provider-supplied `status_url`, `response_url` and
+`cancel_url`; the current client discards those URLs and reconstructs routes
+from model ID and request ID.
+
+The same report exposes a separate diagnostics defect:
+`v3_run_queue._provider_model_routes()` hard-codes `generation:kie` for every
+generation run, so both Fal runs are incorrectly announced as KIE even though
+their model and actual worker are Fal. This does not cause HTTP 405, but it makes
+provider preflight, cost interpretation and support evidence misleading.
 
 Further paid Fal.ai attempts are stopped for this candidate. Task 13 records a
 post-observation regression test and root-cause fix before the replacement
 installer. Runtime source remains unchanged during the owner's observation
 pass.
+
+## Windows acceptance evidence: KIE GPT Image 2 succeeds — 2026-08-30
+
+The owner supplied the sanitized run report and full diagnostic package for a
+successful `gpt-image-2-text-to-image` KIE run. Two prompts produced two distinct
+KIE task IDs; both submissions returned HTTP 200, both tasks reached `success`,
+each downloaded exactly one PNG, Local Chroma Key completed, and the run ended
+with `succeeded=2`, `failed=0`. The ready filenames are distinct. This evidence
+confirms that KIE credentials, submission, concurrent polling, result download
+and final export work in the same Windows candidate, and that the earlier
+`flux-2/flex-text-to-image` 422 is not a candidate-wide KIE integration outage.
+
+The report alone does not provide pixel-level transparency quality evidence or
+filesystem hashes, so it does not close Chroma fidelity or duplicate-content
+acceptance. It does confirm that this run did not create duplicate task IDs or
+duplicate ready filenames.
 
 ## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
 
