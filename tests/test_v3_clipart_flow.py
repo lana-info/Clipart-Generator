@@ -640,6 +640,41 @@ class V3ClipartFlowTests(unittest.TestCase):
         )
         self.assertFalse(hasattr(page, "chroma_key_custom_color"))
 
+    def test_clipart_chroma_sources_use_three_visible_color_buttons(self):
+        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
+
+        self.assertEqual(
+            tuple(page.chroma_key_color_buttons),
+            ("blue", "red", "green"),
+        )
+        self.assertEqual(
+            tuple(page.paste_chroma_color_buttons),
+            ("blue", "red", "green"),
+        )
+        self.assertTrue(page.chroma_key_color.isHidden())
+        self.assertTrue(page.paste_chroma_color.isHidden())
+
+        page.paste_chroma_color_buttons["red"].click()
+
+        self.assertEqual(page.paste_chroma_color.currentData(), "red")
+        self.assertTrue(page.paste_chroma_color_buttons["red"].isChecked())
+
+    def test_series_color_buttons_restore_and_update_draft_and_prompt(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompt_generator.theme = "Watercolor fox"
+        state.clipart.prompt_generator.subjects = ["Fox"]
+        state.clipart.prompt_generator.chroma_key_enabled = True
+        state.clipart.prompt_generator.chroma_key_color = "red"
+        page = ClipartPromptInputPage(state, lambda: None)
+
+        self.assertTrue(page.chroma_key_color_buttons["red"].isChecked())
+
+        page.chroma_key_color_buttons["green"].click()
+
+        self.assertEqual(page.chroma_key_color.currentData(), "green")
+        self.assertEqual(state.clipart.prompt_generator.chroma_key_color, "green")
+        self.assertIn("#00FF00", page.preview_label.text())
+
     def test_series_chroma_controls_default_to_blue_and_limit_materials_to_three(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
 
@@ -662,6 +697,57 @@ class V3ClipartFlowTests(unittest.TestCase):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
 
         self.assertTrue(page.chroma_material_buttons[0].property("v3ChromaMaterial"))
+
+    def test_clipart_chroma_sources_show_approved_clean_background_advisor(self):
+        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
+
+        copy = " ".join(
+            label.text() for label in page.chroma_advisor.findChildren(QLabel)
+        )
+        self.assertTrue(page.chroma_advisor.is_expanded)
+        self.assertEqual(
+            page.chroma_advisor.toggle_button.text().replace("\n", " "),
+            "Помощник чистого фона",
+        )
+        self.assertIn("Синий подходит", copy)
+        self.assertIn("Выберите красный фон", copy)
+        self.assertIn("выберите зелёный фон", copy)
+        self.assertIn("выбираются слева", copy)
+        self.assertTrue(
+            page.chroma_advisor.content_layout.alignment()
+            & Qt.AlignmentFlag.AlignTop
+        )
+        self.assertFalse(page.chroma_advisor.isHidden())
+
+        page._select_source(0)
+        self.assertFalse(page.chroma_advisor.isHidden())
+
+        page._select_source(2)
+        self.assertTrue(page.chroma_advisor.isHidden())
+
+    def test_chroma_material_controls_wrap_without_widening_the_prompt_page(self):
+        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
+
+        generator_layout = page.chroma_material_buttons[0].parentWidget().layout()
+        paste_layout = next(iter(page.paste_chroma_material_buttons.values())).parentWidget().layout()
+
+        self.assertEqual(generator_layout.columnCount(), 2)
+        self.assertEqual(paste_layout.columnCount(), 2)
+
+    def test_chroma_advisor_fits_the_normal_window_without_horizontal_scroll(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.set_step(StepId.PROMPTS)
+        shell = AppShell(state)
+        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        page = controller.pages[StepId.PROMPTS]
+        page._select_source(1)
+        shell.resize(1120, 780)
+        shell.show()
+        self.app.processEvents()
+
+        self.assertEqual(page.horizontalScrollBar().maximum(), 0)
+
+        shell.close()
 
     def test_paste_can_append_selected_chroma_material_clause(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

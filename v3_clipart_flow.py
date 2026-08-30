@@ -1815,7 +1815,17 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             self.csv_widget,
         ):
             self.source_stack.addWidget(widget)
-        self.add_widget(self.source_stack)
+        if self.supports_prompt_chroma:
+            source_area = QWidget()
+            source_layout = QHBoxLayout(source_area)
+            source_layout.setContentsMargins(0, 0, 0, 0)
+            source_layout.setSpacing(tokens.space_3)
+            source_layout.addWidget(self.source_stack, 2)
+            self.chroma_advisor = self._build_chroma_advisor()
+            source_layout.addWidget(self.chroma_advisor, 1)
+            self.add_widget(source_area)
+        else:
+            self.add_widget(self.source_stack)
         self.source_combo.currentIndexChanged.connect(self._select_source)
         self.source_combo.setCurrentIndex(1)
         self._select_source(1)
@@ -1837,6 +1847,73 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             self.source_combo.blockSignals(False)
         for button_index, button in enumerate(self.source_buttons):
             button.setChecked(button_index == index)
+        if hasattr(self, "chroma_advisor"):
+            self.chroma_advisor.setVisible(index in (0, 1))
+
+    def _build_chroma_advisor(self) -> AdvancedSection:
+        advisor = AdvancedSection("Помощник чистого фона", tokens=self.tokens)
+        advisor.setMinimumWidth(214)
+        advisor.setMaximumWidth(280)
+        advisor.toggle_button.setText("Помощник\nчистого фона")
+        advisor.toggle_button.setStyleSheet("font-size: 12px;")
+        advisor.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        for text in (
+            "Синий подходит для растений и большинства обычных клип-артов.",
+            "Синий или фиолетовый предмет? Выберите красный фон.",
+            "Синий и красный не подходят? Тогда выберите зелёный фон.",
+            (
+                "Материалы и детали выбираются слева и автоматически "
+                "добавляют нужную фразу."
+            ),
+        ):
+            label = QLabel(text)
+            label.setWordWrap(True)
+            label.setProperty("v3Description", True)
+            advisor.add_widget(label)
+        advisor.set_expanded(True)
+        return advisor
+
+    def _build_chroma_color_buttons(
+        self,
+        combo: QComboBox,
+    ) -> tuple[QWidget, dict[str, QPushButton]]:
+        colors = {
+            "blue": QColor("#0000FF"),
+            "red": QColor("#FF0000"),
+            "green": QColor("#00FF00"),
+        }
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(self.tokens.space_2)
+        group = QButtonGroup(widget)
+        group.setExclusive(True)
+        buttons: dict[str, QPushButton] = {}
+        for label, value in CHROMA_KEY_COLOR_OPTIONS:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setProperty("v3ChromaMaterial", True)
+            swatch = QPixmap(14, 14)
+            swatch.fill(colors[value])
+            button.setIcon(QIcon(swatch))
+            button.setChecked(combo.currentData() == value)
+            button.clicked.connect(
+                lambda checked=False, selected=value: combo.setCurrentIndex(
+                    combo.findData(selected)
+                )
+            )
+            group.addButton(button)
+            buttons[value] = button
+            layout.addWidget(button)
+
+        def sync_buttons() -> None:
+            current = combo.currentData()
+            if current in buttons:
+                buttons[current].setChecked(True)
+
+        combo.currentIndexChanged.connect(sync_buttons)
+        combo.hide()
+        return widget, buttons
 
     def _build_generator(self) -> QWidget:
         draft = self.state.clipart.prompt_generator
@@ -1918,22 +1995,24 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         index = self.chroma_key_color.findData(draft.chroma_key_color)
         self.chroma_key_color.setCurrentIndex(index if index >= 0 else 0)
         self.chroma_key_color.setAccessibleName("Цвет chroma-key фона")
+        color_buttons_widget, self.chroma_key_color_buttons = (
+            self._build_chroma_color_buttons(self.chroma_key_color)
+        )
         materials_widget = QWidget()
-        materials_layout = QHBoxLayout(materials_widget)
+        materials_layout = QGridLayout(materials_widget)
         materials_layout.setContentsMargins(0, 0, 0, 0)
         materials_layout.setSpacing(self.tokens.space_2)
         self.chroma_material_buttons: list[QPushButton] = []
-        for label, value in CHROMA_KEY_MATERIAL_OPTIONS:
+        for index, (label, value) in enumerate(CHROMA_KEY_MATERIAL_OPTIONS):
             button = QPushButton(label)
             button.setCheckable(True)
             button.setProperty("chromaMaterial", value)
             button.setChecked(value in draft.chroma_key_materials)
             self.chroma_material_buttons.append(button)
-            materials_layout.addWidget(button)
+            materials_layout.addWidget(button, index // 2, index % 2)
         configure_chroma_material_buttons(self.chroma_material_buttons)
-        materials_layout.addStretch(1)
         key_form.addRow(self.chroma_key_enabled)
-        key_form.addRow("Цвет фона для удаления", self.chroma_key_color)
+        key_form.addRow("Цвет фона для удаления", color_buttons_widget)
         key_form.addRow("Материалы и детали", materials_widget)
         layout.addWidget(key_group)
 
@@ -2115,21 +2194,24 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         color = QComboBox()
         for label, value in CHROMA_KEY_COLOR_OPTIONS:
             color.addItem(label, value)
+        color_buttons_widget, color_buttons = self._build_chroma_color_buttons(color)
         materials = QWidget()
-        material_layout = QHBoxLayout(materials)
+        material_layout = QGridLayout(materials)
         material_layout.setContentsMargins(0, 0, 0, 0)
+        material_layout.setSpacing(self.tokens.space_2)
         buttons: dict[str, QPushButton] = {}
-        for label, value in CHROMA_KEY_MATERIAL_OPTIONS:
+        for index, (label, value) in enumerate(CHROMA_KEY_MATERIAL_OPTIONS):
             button = QPushButton(label)
             button.setCheckable(True)
             buttons[value] = button
-            material_layout.addWidget(button)
+            material_layout.addWidget(button, index // 2, index % 2)
         configure_chroma_material_buttons(tuple(buttons.values()))
         form.addRow(enabled)
-        form.addRow("Цвет фона", color)
+        form.addRow("Цвет фона", color_buttons_widget)
         form.addRow("Материалы и детали", materials)
         setattr(self, f"{prefix}_chroma_enabled", enabled)
         setattr(self, f"{prefix}_chroma_color", color)
+        setattr(self, f"{prefix}_chroma_color_buttons", color_buttons)
         setattr(self, f"{prefix}_chroma_material_buttons", buttons)
         layout.addWidget(group)
 
