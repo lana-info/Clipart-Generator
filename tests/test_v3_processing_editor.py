@@ -108,6 +108,10 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertNotIn("текстовые комментарии", copy)
         self.assertNotIn("встроенную миниатюру", copy)
         self.assertNotIn("Очистка следов ИИ", copy)
+        self.assertEqual(
+            editor.operation_widgets["visible_mark_cleanup"].text(),
+            "Удалить водяной знак Gemini",
+        )
 
     def test_shared_steps_match_current_pipeline_contract(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)

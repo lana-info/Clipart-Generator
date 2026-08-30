@@ -234,7 +234,7 @@ class ProcessingPipelineEditor(QScrollArea):
     }
     _STAGE_ORDER = tuple(_STAGE_TITLES)
     _BOOL_LABELS = {
-        "visible_mark_cleanup": "Удалить обнаруженную видимую метку Gemini",
+        "visible_mark_cleanup": "Удалить водяной знак Gemini",
         "invisible_watermark_cleanup": "Обработать скрытые водяные знаки (SynthID)",
         "upscale_before": "Апскейл до удаления фона",
         "upscale_after": "Апскейл после удаления фона",
