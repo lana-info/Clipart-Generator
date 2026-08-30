@@ -301,12 +301,6 @@ class UpdateController(QObject):
                 "Скачанный файл изменился или повреждён и не будет запущен.",
             )
             return
-        self._record(
-            "update_download_verified",
-            "Обновление скачано и проверено.",
-            outcome="success",
-            details={"filename": installer.name, "status": "verified"},
-        )
         try:
             self.installer_launcher(installer)
         except (OSError, UpdateError) as error:
@@ -323,6 +317,12 @@ class UpdateController(QObject):
                 "Обновление скачано, но файл не удалось открыть.",
             )
             return
+        self._record(
+            "update_download_verified",
+            "Обновление скачано и проверено.",
+            outcome="success",
+            details={"filename": installer.name, "status": "verified"},
+        )
         self._record(
             "update_installer_launched",
             "Установщик обновления запущен; приложение закрывается.",

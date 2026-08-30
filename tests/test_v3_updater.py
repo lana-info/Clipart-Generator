@@ -204,6 +204,32 @@ class V3UpdaterTests(unittest.TestCase):
 
             self.assertEqual(launched, [])
 
+    def test_prelaunch_recheck_and_launch_are_adjacent_before_journal_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            installer = Path(temp) / "VibixImages-Setup-3.1.exe"
+            installer.write_bytes(b"verified")
+            timeline = []
+            client = FakeUpdateClient(self.release(), installer)
+            client.verify_download = lambda _release, _path: timeline.append("verify")
+            controller = UpdateController(
+                QWidget(),
+                client,
+                prompt=lambda _release: True,
+                check_worker_factory=ImmediateCheckWorker,
+                download_worker_factory=ImmediateDownloadWorker,
+                installer_launcher=lambda _path: timeline.append("launch"),
+            )
+            controller._record = lambda event, *_args, **_kwargs: timeline.append(event)
+
+            controller.start_check()
+
+            verify_index = timeline.index("verify")
+            self.assertEqual(timeline[verify_index : verify_index + 3], [
+                "verify",
+                "launch",
+                "update_download_verified",
+            ])
+
     def test_macos_update_reveals_verified_zip_in_finder(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             archive = Path(temp) / "VibixImages-macOS-3.1.0-arm64.zip"
