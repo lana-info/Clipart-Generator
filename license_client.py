@@ -455,9 +455,13 @@ class LicenseClient:
             with opener.open(req, timeout=self.timeout) as response:
                 raw = self._read_response_limited(response)
         except error.HTTPError as exc:
-            if exc.code in {400, 401, 403, 409, 422}:
+            if 400 <= exc.code < 500 and exc.code not in {408, 425, 429}:
                 raise LicenseError("Лицензия отклонена сервером") from None
-            raise LicenseUnavailableError("Сервер лицензий временно недоступен") from None
+            if exc.code in {408, 425, 429} or 500 <= exc.code < 600:
+                raise LicenseUnavailableError(
+                    "Сервер лицензий временно недоступен"
+                ) from None
+            raise LicenseError("Лицензионный сервер вернул недопустимый ответ") from None
         except (error.URLError, TimeoutError, OSError):
             raise LicenseUnavailableError(
                 "Не удалось связаться с сервером лицензий"

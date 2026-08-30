@@ -298,6 +298,10 @@ class LicenseClientSecurityTests(unittest.TestCase):
         for status, expected_type in (
             (401, license_client.LicenseError),
             (403, license_client.LicenseError),
+            (404, license_client.LicenseError),
+            (405, license_client.LicenseError),
+            (408, license_client.LicenseUnavailableError),
+            (429, license_client.LicenseUnavailableError),
             (500, license_client.LicenseUnavailableError),
             (503, license_client.LicenseUnavailableError),
         ):
@@ -316,7 +320,7 @@ class LicenseClientSecurityTests(unittest.TestCase):
                 ):
                     with self.assertRaises(expected_type) as raised:
                         client.validate()
-                if status in {401, 403}:
+                if status in {401, 403, 404, 405}:
                     self.assertNotIsInstance(
                         raised.exception,
                         license_client.LicenseUnavailableError,
