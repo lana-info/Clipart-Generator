@@ -42,8 +42,14 @@ MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
         "or reflection."
     ),
     "transparent_details": (
-        " Translucent details have crisp defined edges, no background-colour "
-        "reflection, tint or glow."
+        " Translucent details such as tulle, veils and glass are genuinely "
+        "semi-transparent at a stable partial opacity. Whatever lies behind "
+        "them — the subject or the exact chroma-key background — remains "
+        "clearly visible through their entire area. The chroma-key colour "
+        "seen through exposed parts matches the surrounding background "
+        "continuously. Keep crisp defined edges and sparse material texture; "
+        "never render translucent areas as opaque pastel, white or key-coloured "
+        "shapes, haze or glow."
     ),
     "snow_ice": (
         " Snow and ice are opaque with crisp defined edges, no mist, haze, "
