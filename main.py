@@ -970,6 +970,9 @@ class WorkerThread(QThread):
         self.fal_task_journal = FalTaskJournal(
             os.path.join(self.work_dir, ".vibix_fal_tasks.json")
         )
+        self.kie_task_journal = FalTaskJournal(
+            os.path.join(self.work_dir, ".vibix_kie_tasks.json")
+        )
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
         self._secret_values = tuple(
@@ -2954,6 +2957,32 @@ class WorkerThread(QThread):
             # provider result into a false failure.
             return
 
+    def _record_kie_task(self, task_id, *, operation="", model_id="", status):
+        task_id = str(task_id or "").strip()
+        if not task_id:
+            return
+        try:
+            if operation and model_id:
+                self.kie_task_journal.upsert(
+                    task_id,
+                    str(operation),
+                    str(model_id),
+                    str(status),
+                )
+            else:
+                self.kie_task_journal.update_status(task_id, str(status))
+        except (OSError, ValueError, FalProviderError):
+            return
+
+    def _has_pending_kie_task(self, task_id):
+        try:
+            return any(
+                record.request_id == str(task_id)
+                for record in self.kie_task_journal.pending()
+            )
+        except (OSError, ValueError, FalProviderError):
+            return False
+
     def recover_pending_fal_tasks(self):
         """Resume polling recorded tasks without submitting them again."""
 
@@ -4237,6 +4266,12 @@ class WorkerThread(QThread):
                 elapsed_ms=round((time.monotonic() - started) * 1000),
             )
             raise RuntimeError("KIE createTask не вернул taskId")
+        self._record_kie_task(
+            task_id,
+            operation=str(getattr(self._diagnostic_context, "stage", "") or "kie"),
+            model_id=model,
+            status="queued",
+        )
         self._emit_diagnostic(
             "provider_task_submitted",
             provider="kie",
@@ -4640,6 +4675,12 @@ class WorkerThread(QThread):
         task_id = (result.get("data") or {}).get("taskId")
         if not task_id:
             raise RuntimeError("4o Image не вернул taskId")
+        self._record_kie_task(
+            task_id,
+            operation="gpt4o_generation",
+            model_id="gpt4o-image",
+            status="queued",
+        )
         self.progress.emit(f"  4o Task ID: {task_id}")
         return self._kie_wait_4o_result(task_id)
 
@@ -4810,15 +4851,27 @@ class WorkerThread(QThread):
             try:
                 result = self._request_json(url, method="GET", headers=headers, timeout=30)
             except Exception as error:
+                http_status = getattr(self._diagnostic_context, "last_http_status", None)
+                can_defer = (
+                    self._has_pending_kie_task(task_id)
+                    and not isinstance(error, (ProcessingCancelled, ResponseLimitError))
+                    and http_status not in {400, 401, 402, 403, 404}
+                )
                 self._emit_diagnostic(
-                    "provider_task_failed",
+                    "provider_task_recovery_deferred"
+                    if can_defer
+                    else "provider_task_failed",
                     provider="kie",
                     task=task_id,
-                    http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                    http_status=http_status,
                     error_message=self._safe_error_text(error),
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
-                raise
+                if not can_defer:
+                    raise
+                self._record_kie_task(task_id, status="poll_deferred")
+                time.sleep(self.status_poll_interval)
+                continue
             if int(result.get("code", 0)) != 200:
                 raise RuntimeError(f"KIE 4o status failed (code {result.get('code', '-')})")
 
@@ -4834,6 +4887,7 @@ class WorkerThread(QThread):
                 elapsed_ms=round((time.monotonic() - started) * 1000),
             )
             self.progress.emit(f"  4o статус: {status}")
+            self._record_kie_task(task_id, status=status.lower() or "unknown")
             if status == "SUCCESS":
                 urls = ((data.get("response") or {}).get("resultUrls") or [])
                 if urls:
@@ -4845,6 +4899,7 @@ class WorkerThread(QThread):
                         result_count=len(urls),
                         elapsed_ms=round((time.monotonic() - started) * 1000),
                     )
+                    self._record_kie_task(task_id, status="completed")
                     return urls[0]
                 raise RuntimeError("4o Image не вернул resultUrls")
             if status in {"FAILED", "FAIL", "ERROR"}:
@@ -4859,6 +4914,7 @@ class WorkerThread(QThread):
                     error_message=fail_message,
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
+                self._record_kie_task(task_id, status="failed")
                 raise RuntimeError(fail_message)
             time.sleep(self.status_poll_interval)
         self._emit_diagnostic(
@@ -4870,6 +4926,7 @@ class WorkerThread(QThread):
             error_message="Превышено время ожидания 4o Image",
             elapsed_ms=round((time.monotonic() - started) * 1000),
         )
+        self._record_kie_task(task_id, status="timeout")
         raise TimeoutError("Превышено время ожидания 4o Image")
 
     def _kie_wait_result(self, task_id):
@@ -4886,15 +4943,27 @@ class WorkerThread(QThread):
             try:
                 result = self._request_json(url, method="GET", headers=headers, timeout=30)
             except Exception as error:
+                http_status = getattr(self._diagnostic_context, "last_http_status", None)
+                can_defer = (
+                    self._has_pending_kie_task(task_id)
+                    and not isinstance(error, (ProcessingCancelled, ResponseLimitError))
+                    and http_status not in {400, 401, 402, 403, 404}
+                )
                 self._emit_diagnostic(
-                    "provider_task_failed",
+                    "provider_task_recovery_deferred"
+                    if can_defer
+                    else "provider_task_failed",
                     provider="kie",
                     task=task_id,
-                    http_status=getattr(self._diagnostic_context, "last_http_status", None),
+                    http_status=http_status,
                     error_message=self._safe_error_text(error),
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
-                raise
+                if not can_defer:
+                    raise
+                self._record_kie_task(task_id, status="poll_deferred")
+                time.sleep(self.status_poll_interval)
+                continue
             if int(result.get("code", 0)) != 200:
                 raise RuntimeError(f"KIE status failed (code {result.get('code', '-')})")
 
@@ -4910,6 +4979,7 @@ class WorkerThread(QThread):
                 elapsed_ms=round((time.monotonic() - started) * 1000),
             )
             self.progress.emit(f"  Статус: {state}")
+            self._record_kie_task(task_id, status=state or "unknown")
             if state in {"success", "succeeded"}:
                 self._emit_diagnostic(
                     "provider_task_succeeded",
@@ -4919,6 +4989,7 @@ class WorkerThread(QThread):
                     result_count=count_provider_results(data.get("resultJson")),
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
+                self._record_kie_task(task_id, status="completed")
                 return self._extract_result_url(data.get("resultJson"))
             if state in {"fail", "failed", "error"}:
                 error_code = data.get("failCode") or data.get("errorCode") or "unknown"
@@ -4932,6 +5003,7 @@ class WorkerThread(QThread):
                     error_message=fail_message,
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
+                self._record_kie_task(task_id, status="failed")
                 raise RuntimeError(
                     f"KIE task failed [taskId={task_id}; errorCode={error_code}; "
                     f"message={fail_message}]"
@@ -4946,6 +5018,7 @@ class WorkerThread(QThread):
             error_message="Превышено время ожидания результата KIE",
             elapsed_ms=round((time.monotonic() - started) * 1000),
         )
+        self._record_kie_task(task_id, status="timeout")
         raise TimeoutError("Превышено время ожидания результата KIE")
 
     def _extract_result_url(self, result_json_raw):

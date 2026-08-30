@@ -137,6 +137,24 @@ class FalTaskJournal:
             self._write(records)
             return record
 
+    def update_status(self, request_id: str, status: str) -> FalTaskRecord | None:
+        with self._lock:
+            records = self._read()
+            previous = records.get(str(request_id))
+            if previous is None:
+                return None
+            record = FalTaskRecord(
+                request_id=previous.request_id,
+                operation=previous.operation,
+                model_id=previous.model_id,
+                status=str(status),
+                created_at=previous.created_at,
+                updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            )
+            records[record.request_id] = record
+            self._write(records)
+            return record
+
     def pending(self) -> tuple[FalTaskRecord, ...]:
         with self._lock:
             return tuple(

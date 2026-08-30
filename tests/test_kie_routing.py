@@ -442,6 +442,54 @@ class KieRoutingTests(unittest.TestCase):
         self.assertNotIn("private prompt", encoded)
         self.assertNotIn(DUMMY_KIE_KEY, encoded)
 
+    def test_kie_task_id_is_journaled_and_polling_resumes_without_resubmit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(kie_api_key=DUMMY_KIE_KEY),
+            )
+            worker.status_poll_interval = 0
+            worker.generation_wait_timeout = 5
+            create_calls = 0
+            polled_urls = []
+
+            def fake_request_json(worker_self, url, *, method, **_kwargs):
+                nonlocal create_calls
+                if method == "POST":
+                    create_calls += 1
+                    return {"code": 200, "data": {"taskId": "task-resume-1"}}
+                polled_urls.append(url)
+                if len(polled_urls) == 1:
+                    worker_self._diagnostic_context.last_http_status = None
+                    raise RuntimeError("temporary polling transport failure")
+                return {
+                    "code": 200,
+                    "data": {
+                        "state": "success",
+                        "resultJson": json.dumps(
+                            {"resultUrls": ["https://cdn.example/result.png"]}
+                        ),
+                    },
+                }
+
+            worker._request_json = types.MethodType(fake_request_json, worker)
+
+            result = worker._kie_generate_generic_model("z-image", "private prompt")
+
+            self.assertEqual(result, "https://cdn.example/result.png")
+            self.assertEqual(create_calls, 1)
+            self.assertEqual(len(polled_urls), 2)
+            self.assertTrue(
+                all("taskId=task-resume-1" in url for url in polled_urls)
+            )
+            self.assertEqual(worker.kie_task_journal.pending(), ())
+            journal_text = (Path(temp) / ".vibix_kie_tasks.json").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("task-resume-1", journal_text)
+            self.assertNotIn("private prompt", journal_text)
+
     def test_status_transport_errors_emit_failure_without_masking_original_error(self):
         worker = main.WorkerThread(
             "mode1_generate_only",

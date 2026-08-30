@@ -17,6 +17,7 @@ env/
 raw/
 output/
 .vibix_fal_tasks.json
+.vibix_kie_tasks.json
 
 # Локальные секреты и конфиг пользователя
 config.json
