@@ -44,12 +44,12 @@ used a longer unapproved label. Regression tests reproduced both gaps before
 the fixes. The helper, three buttons, compact material wrapping and exact
 `Удалить водяной знак Gemini` copy are now implemented on the audit branch.
 Implemented screenshots for Tasks 2, 3 and 5 are stored beside their approved
-mockups. Task 5 is not yet visually accepted at the 980×700 minimum: Linux
-offscreen measurement shows `140 px` horizontal overflow, and the third source
-button plus the right helper cannot be seen together without horizontal
-scrolling. Windows 100%/125% scaling remains an explicit gate; a responsive
-layout change requires visual approval rather than being invented during code
-cleanup. The focused Clipart/Pinterest/Processing/output gate passes 215 tests,
+mockups. The owner set the supported acceptance target to 1120×780 at Windows
+scaling 100%; at that size Task 5 has no horizontal overflow. Linux offscreen
+still measures `140 px` overflow at 980×700, but smaller windows and scaling
+above 100% are accepted best-effort behavior and no longer block merge/release.
+Remote Desktop is unsupported and outside acceptance. The focused
+Clipart/Pinterest/Processing/output gate passes 215 tests,
 55 intentional deferred Pinterest skips and 32 subtests; the unavailable local
 Windows Real-ESRGAN binary accounts for one additional environment skip. The
 complete offline suite passes 1026 tests, 55 skips, 2 network deselections and
@@ -559,10 +559,12 @@ regression и полный offline suite проходят: 981 passed, 55 intent
   navigation to review; there is no duplicate preview table.
 - The review step gives the prompt text two thirds of a larger table, supports
   search across hundreds of rows, and keeps compact prompt/reference actions.
-- Offscreen screenshots were reviewed at 1400×900 and the supported 980×700
-  minimum. The variable text fields are aligned and the 200-row review table
-  uses internal scrolling.
-- The whole V3 application now starts at 1120×780, cannot shrink below 980×700,
+- At that historical checkpoint offscreen screenshots were reviewed at
+  1400×900 and 980×700. The current product decision supersedes 980×700 as a
+  supported acceptance minimum; the variable text fields remain aligned and
+  the 200-row review table uses internal scrolling.
+- The whole V3 application starts at 1120×780 and technically can shrink to
+  980×700 for best-effort use,
   preserves a user-resized window across menu and every route step, and gives
   large pages internal vertical/horizontal scrolling instead of resizing the
   top-level window.

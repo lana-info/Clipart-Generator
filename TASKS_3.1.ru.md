@@ -18,8 +18,9 @@ Task Set Key: `CG31-TASKSET-001`
 
 - [ ] Простыми словами подтверждены цель, пользовательское действие, scope и
   неизменяемые части текущего экрана.
-- [ ] Показан visual mockup в полном контексте приложения, включая 1120×780 и
-  пригодность при 980×700.
+- [ ] Показан visual mockup в полном контексте приложения при поддерживаемом
+  размере 1120×780 и Windows scaling 100%; меньшие окна/scaling выше 100%
+  считаются best-effort, Remote Desktop не входит в acceptance.
 - [ ] Показаны applicable states: default/empty, populated/enabled,
   provider/model variants, validation/error и hidden/disabled.
 - [ ] Для существующего экрана показано сравнение `Сейчас` / `Предлагается`.
@@ -157,10 +158,10 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
 ## Task 5: Добавить chroma modifier к созданию Clipart prompt
 
-Status: Source behavior fixed — prebuild audit restored the approved helper and
-three visible color buttons; 980×700 responsive layout and Windows acceptance
-remain open in Task 13. Linux offscreen currently measures `140 px` horizontal
-overflow at 980×700, so Task 5 is not yet visually accepted at the minimum size.
+Status: Done in source — prebuild audit restored the approved helper and three
+visible color buttons. At the supported 1120×780 size there is no horizontal
+overflow; the measured `140 px` overflow at 980×700 is accepted best-effort
+behavior under the updated product boundary and does not block Task 13.
 
 Goal:
 Добавлять утверждённый chroma block к series и ready prompt без изменения
@@ -792,11 +793,10 @@ Steps:
 - [x] Merge tasks in dependency order with verification after integration.
 - [x] Run focused, full offline, compile, sensitive-artifact and diff checks.
 - Провести manual Windows acceptance; build — только отдельной командой.
-- [ ] До build открыть интегрированный source на Windows при 1120×780 и
-  980×700: сравнить Tasks 2, 3 и 5 с сохранёнными implemented screenshots,
-  проверить 100%/125% scaling, отсутствие наложений и доступность навигации.
-  Для Task 5 отдельно решить известный Linux-offscreen `140 px` horizontal
-  overflow: явно принять прокрутку либо утвердить responsive-макет и исправить.
+- [ ] До build открыть интегрированный source на Windows при поддерживаемом
+  1120×780 и scaling 100%: сравнить Tasks 2, 3 и 5 с implemented screenshots,
+  проверить отсутствие наложений и доступность навигации. Меньшие окна и
+  scaling выше 100% — best-effort; Remote Desktop не проверяется.
 - [ ] Проверить мышью и пером mask editor: Fit/50/100/150/200/300%, continuous
   add/remove brush, hardness, пробел-pan, undo/redo/reset и atomic PNG/mask save.
 - [ ] В новой пустой рабочей папке проверить `rough/`, `output/`, `.run/<run-id>`,

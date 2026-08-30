@@ -43,10 +43,12 @@
   unchanged and which user action the screen must support.
 - The mockup must use the actual Vibix dark visual language and show the full
   screen context rather than an isolated control when surrounding layout affects
-  understanding. Show at least the normal target size 1120×780 and verify the
-  design remains usable at the 980×700 minimum. Early alternatives may be rough,
-  but the version submitted for final approval must be visually close to the
-  intended implementation, not only a text diagram.
+  understanding. The supported acceptance target is 1120×780 at 100% Windows
+  display scaling. Smaller windows and scaling above 100% are best-effort and
+  may use internal scrolling; they do not block release while all controls stay
+  reachable. Remote-desktop use is unsupported and outside acceptance. Early
+  alternatives may be rough, but the version submitted for final approval must
+  be visually close to the intended implementation, not only a text diagram.
 - Show all materially different states before implementation: default/empty,
   enabled or populated, relevant provider/model choice, validation/error, and
   disabled/hidden behavior where applicable. For a redesign, include a clear
