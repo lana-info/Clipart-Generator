@@ -783,9 +783,9 @@ Requirements: `CG31-FR-020`, `022`, `030`, `052`, `053`, `061`, `070`, `071`.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: In progress — technical-review fixes are integrated into
-`develop/3.1`; replacement Windows candidate remains before
-acceptance/publication
+Status: In progress — source acceptance is complete; release candidate
+`codex/release-3.1.0-final-candidate` is prepared for the authorized manual
+Windows build, after which the checklist remains before publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый
@@ -794,7 +794,12 @@ Windows candidate только после полной source acceptance.
 Steps:
 - [x] Merge tasks in dependency order with verification after integration.
 - [x] Run focused, full offline, compile, sensitive-artifact and diff checks.
-- Провести manual Windows acceptance; build — только отдельной командой.
+- [x] Подготовить отдельную release-candidate ветку и версию 3.1.0 после
+  явного разрешения владельца на Windows build.
+- [x] Добавить в Windows workflow обязательные нативные DPAPI и installer-lock
+  gates до PyInstaller/Inno Setup.
+- Провести manual Windows acceptance по
+  `docs/testing/windows-3.1.0-acceptance-checklist.ru.md`.
 - [ ] До build открыть интегрированный source на Windows при поддерживаемом
   1120×780 и scaling 100%: сравнить Tasks 2, 3 и 5 с implemented screenshots,
   проверить отсутствие наложений и доступность навигации. Меньшие окна и
@@ -824,7 +829,7 @@ Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
 - [ ] Для всех UI-задач выполнен `CG31-AC-010`: approved mockup существует до
   первого implementation commit, итоговые screenshots ему соответствуют.
-- [ ] Release/version меняется на `3.1.0` только в release-preparation task.
+- [x] Release/version меняется на `3.1.0` только в release-preparation task.
 - [ ] Update не публикуется автоматически.
 
 Verification:
@@ -833,7 +838,16 @@ Verification:
   without conflicts through `7addeee`; latest complete offline suite: 1026
   passed, 57 intentional/environment skips, 2 deselected, 140 subtests. Two of
   those skips are the new Windows-only DPAPI and native installer-lock tests.
-- [ ] Replacement Windows candidate and manual Windows checklist remain.
+- [ ] Replacement Windows artifact and manual Windows checklist remain.
+
+Release preparation 2026-08-30: версия 3.1.0, release notes и полный Windows
+checklist подготовлены в `codex/release-3.1.0-final-candidate`. Workflow теперь
+обязан выполнить оба нативных security contract test до сборки. Публикация и
+платный KIE duplicate audit не разрешены этим шагом. Финальная Linux-проверка
+release tree: 1029 passed, 57 skipped, 2 network deselected, 140 subtests;
+компиляция, sensitive scan, startup smoke и diff check прошли. Automatic Chroma:
+alpha IoU `0.968704`, alpha MAE `0.018194`, median `1.319 s`, peak RSS
+`421.207 MiB` при ceiling `448 MiB`.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration

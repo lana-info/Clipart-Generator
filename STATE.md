@@ -4,8 +4,9 @@ Updated: 2026-08-30
 
 ## Latest project checkpoint
 
-Technical review fixes and the prebuild source-acceptance follow-up are
-integrated into `develop/3.1` by fast-forward through `7addeee`. Reproducible
+Technical review fixes, the prebuild source-acceptance follow-up and the
+Windows-native test handoff are integrated into `develop/3.1` by fast-forward
+through `f90f04a`. Reproducible
 tests confirmed and fixed paid-task persistence/recovery, cross-process journals, run/output
 isolation and no-clobber publication, interrupted PNG/mask recovery, one
 enclosed near-key Chroma data-loss path, the 40 MP editor boundary, QThread
@@ -15,16 +16,26 @@ contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
 The final independent source review verdict is `pass-with-nits`: no blocking or
-important defects remain. The current handoff passes 1026 offline tests, 57
+important defects remain. The release-preparation tree passes 1029 offline tests, 57
 intentional/environment skips, 2 configured network deselections and 140
 subtests. The two additional skips are the new Windows-only DPAPI and native
 installer-lock contracts; they remain explicit Windows acceptance gates. All
 tracked Python files compile; sensitive scan and `git diff --check` pass. The
 latest automatic Chroma benchmark passes all gates: alpha IoU `0.968704`, alpha
 MAE `0.018194`, 2048×2048 median `1.357 s`, peak RSS `421.465 MiB` below the
-`448 MiB` ceiling. No paid request, Windows build,
-version change or publication was performed. Remaining release work is manual
-Windows acceptance and a separately authorized replacement build.
+`448 MiB` ceiling. Release-candidate re-verification keeps the same quality
+summary with 2048×2048 median `1.319 s` and peak RSS `421.207 MiB`. All tracked
+Python files compile; sensitive scan, offscreen startup smoke and
+`git diff --check` pass. No paid request or publication was performed.
+
+The owner has now authorized preparation and creation of the replacement
+Windows installer. Release preparation is isolated on
+`codex/release-3.1.0-final-candidate`: `release/VERSION.txt` and the fallback
+Azure default are 3.1.0, release notes and the Windows acceptance checklist are
+present, and the GitHub workflow must run the real Windows DPAPI and
+installer-lock contracts before PyInstaller. The build has not yet been
+dispatched. It remains an unpublished acceptance artifact; the paid KIE
+duplicate audit and publication still require separate approval.
 
 The Windows acceptance checklist now includes a clean-workspace duplicate
 audit prompted by the owner's earlier candidate observation: one KIE prompt,
@@ -136,13 +147,14 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 ## Current branch and handoff
 
 - Target 3.1 integration line: `develop/3.1` synchronized with GitHub at
-  `7addeee`. The retained branch `codex/chore-3.1-prebuild-acceptance` points to
-  the same integrated commit. `release/VERSION.txt` intentionally remains
-  `3.0.7`; no installer, paid request or publication was started.
-- Windows-native acceptance follow-up is isolated on
-  `codex/fix-3.1-windows-native-tests`, stacked on the integrated source and
-  documentation checkpoints. It adds only real DPAPI and installer-lock tests;
-  production code is unchanged.
+  `f90f04a`. The retained source branches are not deleted.
+- Windows-native acceptance follow-up `codex/fix-3.1-windows-native-tests` is
+  integrated. It added real DPAPI and installer-lock tests without production
+  code changes.
+- Active release-preparation branch:
+  `codex/release-3.1.0-final-candidate`, based on `f90f04a`. Version 3.1.0 is
+  changed only there. The intended manual GitHub artifact is `windows-3.1.0`;
+  Azure is fallback infrastructure.
 - Release baseline branch: `develop/3.0`
 - Frozen 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`.
   Its relevant history is already incorporated into the 3.1 ancestry; it is a
@@ -168,13 +180,13 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Immediate next action
 
-On Windows, run the manual UI, mouse-editor, path/output, license and Chroma
-checklist from integrated `develop/3.1` at 1120×780 and 100% display scaling
-and run the native DPAPI round-trip and installer-lock tests before changing
-`release/VERSION.txt`. A stylus check is needed only when the target device and
-expected workflow use one. The one-prompt/one-variant KIE
-duplicate audit is a separately authorized paid request. Installer build and
-publication remain separate later decisions.
+Push `codex/release-3.1.0-final-candidate`, start the authorized manual Windows
+workflow for version 3.1.0 and record its commit, run, artifact and checksum in
+`docs/testing/windows-3.1.0-acceptance-checklist.ru.md`. Then perform the manual
+UI, mouse-editor, install/upgrade, path/output, license and Chroma checks at
+1120×780 and 100% display scaling. A stylus check is needed only when the target
+device uses one. The one-prompt/one-variant KIE duplicate audit is a separately
+authorized paid request. Publication remains a separate later decision.
 
 The owner approved a post-3.1 product direction for the 3.2.0 mask editor.
 Task 27 records visible zoom/brush shortcuts and a base «Умный контур» that
