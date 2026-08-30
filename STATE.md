@@ -173,6 +173,16 @@ target device and expected workflow use one. The one-prompt/one-variant KIE
 duplicate audit is a separately authorized paid request. Installer build and
 publication remain separate later decisions.
 
+The owner approved a post-3.1 product direction for the 3.2.0 mask editor.
+Task 27 records visible zoom/brush shortcuts and a base «Умный контур» that
+automatically draws a smooth closed curve through movable user nodes without
+Bézier handles or image-edge snapping. The applied contour remains editable by
+the existing brush and is one undoable mask operation. Optional magnetic edge
+snapping with an on/off switch is a later stage so that hair, translucency and
+low-contrast failures always have a predictable manual fallback. No 3.2 UI
+mockup or implementation starts before 3.1.0 acceptance and a separate visual
+approval.
+
 ## Historical implementation notes
 
 Task 14 implements a seven-calendar-day offline grace only for a previously
