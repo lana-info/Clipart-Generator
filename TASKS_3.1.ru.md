@@ -247,8 +247,8 @@ Dependencies: None. Scope: M. Requirements: `CG31-FR-020`–`CG31-FR-022`.
 
 ## Task 7: Сделать mask editor отдельным рабочим пространством
 
-Status: In progress — visual approved; implementation checkpoint `1724c76`,
-manual Windows mouse/pen acceptance pending
+Status: In progress — visual approved; implementation checkpoints `1724c76`,
+`35931e3`; manual Windows mouse/pen acceptance pending
 
 Goal:
 Открывать один result на крупном canvas с предсказуемой кистью и zoom.
@@ -258,7 +258,7 @@ Steps:
   canvas слева и прокручиваемым file list/инструментами в компактной правой
   панели; на Results дать кнопку `Проверить прозрачность`, double click оставить
   shortcut.
-- Реализовать Fit/50/100/150/200/400%, полноэкранный canvas и pan удержанием
+- Реализовать Fit/50/100/150/200/300%, полноэкранный canvas и pan удержанием
   `Пробел` без отдельного переключателя инструмента; во время удержания
   показывать только иконку ладони.
 - Добавить visible footprint, radius, hardness, continuous stroke, add/remove,
@@ -275,6 +275,8 @@ Acceptance:
 - [x] `Сохранить PNG` — единственное primary action; `К результатам` — secondary.
 - [x] Пробел срабатывает и после фокуса на панели инструментов, а не только
   после клика по canvas.
+- [x] Доступны только утверждённые presets `Fit`, `50%`, `100%`, `150%`,
+  `200%`, `300%`; выбранный масштаб сохраняется при переключении файлов.
 
 Verification:
 - [x] Unit tests interpolation, hardness, bounded history, mask isolation,

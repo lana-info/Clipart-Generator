@@ -4,6 +4,13 @@ Updated: 2026-08-30
 
 ## Latest integrated checkpoint
 
+Task 7 zoom presets are integrated in `develop/3.1` at `35931e3`:
+редактор прозрачности предлагает `Fit`, `50%`, `100%`, `150%`, `200%` и
+`300%`; прежний `400%` удалён. Выбранный масштаб сохраняется при переключении
+между файлами. Focused editor/queue/processing suite (92 tests), `py_compile`,
+`git diff --check` и sensitive scan прошли. Ручная Windows-проверка мышью и
+пером остаётся.
+
 Task 6 output naming is integrated in `develop/3.1` at `6551011`:
 готовые PNG остаются в `output/`, а промежуточные этапы — в `rough/`.
 Генерируемый файл берёт короткое имя только из значения `Object`/`Объект`,
