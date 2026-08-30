@@ -104,6 +104,40 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("Microsoft Corporation", workflow)
         self.assertIn("build-prerequisites", workflow)
 
+    def test_github_runs_native_windows_security_contracts_before_build(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+            encoding="utf-8"
+        )
+        credential_test = (
+            "tests/test_api_credentials.py::ApiCredentialKeysTests::"
+            "test_fal_key_round_trips_through_dpapi_after_store_restart"
+        )
+        installer_lock_test = (
+            "tests/test_update_client.py::UpdateClientTests::"
+            "test_verified_installer_is_immutable_until_protected_context_closes"
+        )
+
+        self.assertIn(credential_test, workflow)
+        self.assertIn(installer_lock_test, workflow)
+        self.assertLess(workflow.index(credential_test), workflow.index("Build app (PyInstaller)"))
+        self.assertLess(workflow.index(installer_lock_test), workflow.index("Build app (PyInstaller)"))
+
+    def test_azure_fallback_runs_native_windows_security_contracts_before_build(self):
+        pipeline = Path("azure-pipelines.yml").read_text(encoding="utf-8")
+        credential_test = (
+            "tests/test_api_credentials.py::ApiCredentialKeysTests::"
+            "test_fal_key_round_trips_through_dpapi_after_store_restart"
+        )
+        installer_lock_test = (
+            "tests/test_update_client.py::UpdateClientTests::"
+            "test_verified_installer_is_immutable_until_protected_context_closes"
+        )
+
+        self.assertIn(credential_test, pipeline)
+        self.assertIn(installer_lock_test, pipeline)
+        self.assertLess(pipeline.index(credential_test), pipeline.index("Build Windows application"))
+        self.assertLess(pipeline.index(installer_lock_test), pipeline.index("Build Windows application"))
+
     def test_github_packaged_smoke_requires_rendered_mode_artwork(self):
         workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
             encoding="utf-8"
@@ -119,32 +153,45 @@ class WindowsInstallerContractTests(unittest.TestCase):
         )
 
         self.assertIn("Verify installed Windows application", workflow)
-        self.assertIn("$installedExe", workflow)
-        self.assertIn("--release-entrypoint-smoke", workflow)
+        self.assertIn("scripts\\verify_installed_windows_artifact.ps1", workflow)
+
+        verifier = Path("scripts/verify_installed_windows_artifact.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("--release-entrypoint-smoke", verifier)
+        self.assertIn("--local-processing-smoke", verifier)
+        self.assertIn("RUNNER_TEMP", verifier)
+
+    def test_azure_fallback_preserves_build_provenance_inputs_and_artifact(self):
+        pipeline = Path("azure-pipelines.yml").read_text(encoding="utf-8")
+
+        self.assertIn("task.setvariable variable=REAL_ESRGAN_ARCHIVE_URL", pipeline)
+        self.assertIn("task.setvariable variable=REAL_ESRGAN_ARCHIVE_SHA256", pipeline)
+        self.assertIn("$env:GITHUB_SHA = '$(Build.SourceVersion)'", pipeline)
+        self.assertIn("$env:INSTALLER_SHA256 = $hash", pipeline)
+        self.assertIn("release/build-provenance.json", pipeline)
+        self.assertIn("release/VERSION.txt", pipeline)
 
     def test_github_waits_for_gui_installer_and_installed_smoke_processes(self):
-        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+        verifier = Path("scripts/verify_installed_windows_artifact.ps1").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn(
-            "Start-Process -FilePath $setupPath -ArgumentList $setupArguments -Wait -PassThru",
-            workflow,
-        )
-        self.assertIn(
-            "Start-Process -FilePath $installedExe -ArgumentList $smokeArguments -Wait -PassThru",
-            workflow,
-        )
+        self.assertIn("Start-Process", verifier)
+        self.assertIn("WaitForExit", verifier)
+        self.assertIn("-TimeoutSeconds 600", verifier)
+        self.assertIn("-TimeoutSeconds 1200", verifier)
 
     def test_github_captures_windows_ui_with_native_font_rendering(self):
         workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
             encoding="utf-8"
         )
-        installed_step = workflow.split(
-            "- name: Verify installed Windows application", 1
-        )[1].split("- name: Calculate setup hash", 1)[0]
+        verifier = Path("scripts/verify_installed_windows_artifact.ps1").read_text(
+            encoding="utf-8"
+        )
 
-        self.assertIn('$env:QT_QPA_PLATFORM = "windows"', installed_step)
+        self.assertIn("scripts\\verify_installed_windows_artifact.ps1", workflow)
+        self.assertIn('$env:QT_QPA_PLATFORM = "windows"', verifier)
 
 
 if __name__ == "__main__":

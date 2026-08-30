@@ -8,7 +8,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$installRoot = Join-Path $env:AGENT_TEMPDIRECTORY "vibix-installed-smoke"
+$temporaryRoot = if ($env:AGENT_TEMPDIRECTORY) {
+    $env:AGENT_TEMPDIRECTORY
+} elseif ($env:RUNNER_TEMP) {
+    $env:RUNNER_TEMP
+} else {
+    [System.IO.Path]::GetTempPath()
+}
+$installRoot = Join-Path $temporaryRoot "vibix-installed-smoke"
 $internalRoot = Join-Path $installRoot "_internal"
 $markerPath = Join-Path $internalRoot "stale-runtime-marker.txt"
 
@@ -67,7 +74,7 @@ foreach ($evidenceName in @(
 }
 
 $env:QT_QPA_PLATFORM = "offscreen"
-$smokeReport = Join-Path $env:AGENT_TEMPDIRECTORY "windows-local-processing-smoke.txt"
+$smokeReport = Join-Path $temporaryRoot "windows-local-processing-smoke.txt"
 try {
     Invoke-BoundedProcess `
         -FilePath $installedExe `

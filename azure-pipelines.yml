@@ -5,7 +5,7 @@ parameters:
   - name: appVersion
     displayName: App version
     type: string
-    default: '3.0.7'
+    default: '3.1.0'
 
 pool:
   vmImage: windows-latest
@@ -34,6 +34,10 @@ steps:
       $env:QT_QPA_PLATFORM = 'offscreen'
       python -m unittest tests.test_branding tests.test_v3_components tests.test_license_client_security tests.test_v3_license_gate tests.test_v3_license_flow_gate tests.test_v3_run_queue tests.test_v3_diagnostics tests.test_v3_project_state tests.test_v3_provider_registry tests.test_local_processing_acceptance tests.test_windows_realesrgan_bundle tests.test_release_entrypoint tests.test_license_service_contract -v
       if ($LASTEXITCODE -ne 0) { throw "Release gate tests failed with exit code $LASTEXITCODE" }
+      python -m pytest -q `
+        tests/test_api_credentials.py::ApiCredentialKeysTests::test_fal_key_round_trips_through_dpapi_after_store_restart `
+        tests/test_update_client.py::UpdateClientTests::test_verified_installer_is_immutable_until_protected_context_closes
+      if ($LASTEXITCODE -ne 0) { throw "Native Windows security contracts failed with exit code $LASTEXITCODE" }
       python scripts/check_sensitive_artifacts.py --git-tracked `
         --allow-path scripts/check_sensitive_artifacts.py `
         --allow-path tests/test_security_redaction.py
@@ -51,6 +55,8 @@ steps:
         --target $targetPath `
         --sha256 $expectedSha256
       if ($LASTEXITCODE -ne 0) { throw "Real-ESRGAN runtime preparation failed with exit code $LASTEXITCODE" }
+      Write-Host "##vso[task.setvariable variable=REAL_ESRGAN_ARCHIVE_URL]$archiveUrl"
+      Write-Host "##vso[task.setvariable variable=REAL_ESRGAN_ARCHIVE_SHA256]$expectedSha256"
     displayName: Download verified Real-ESRGAN runtime
 
   - powershell: |
@@ -102,6 +108,8 @@ steps:
       $hash = (Get-FileHash -LiteralPath $setupPath -Algorithm SHA256).Hash
       "$hash  $(Split-Path -Leaf $setupPath)" | Out-File -FilePath $checksumPath -Encoding ascii
 
+      $env:GITHUB_SHA = '$(Build.SourceVersion)'
+      $env:INSTALLER_SHA256 = $hash
       python -m build_provenance
       python release_contract.py `
         --version-file release/VERSION.txt `
@@ -111,7 +119,7 @@ steps:
 
       $staging = '$(Build.ArtifactStagingDirectory)'
       New-Item -ItemType Directory -Force -Path $staging | Out-Null
-      Copy-Item -LiteralPath $setupPath, $checksumPath -Destination $staging
+      Copy-Item -LiteralPath $setupPath, $checksumPath, 'release/VERSION.txt', 'release/build-provenance.json' -Destination $staging
     displayName: Validate and stage installer artifact
 
   - task: PublishPipelineArtifact@1
