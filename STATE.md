@@ -24,6 +24,29 @@ the observation pass continues. The issue is recorded against Task 4 and Task
 decision is a small tested restoration plus replacement installer before
 publication, unless the owner later explicitly accepts deferral.
 
+## Windows acceptance regression: failed KIE item shown as information — 2026-08-30
+
+During a two-item KIE generation with the valid documented model
+`flux-2/flex-text-to-image`, item 2 returned terminal provider error `422` and
+the generic provider message asking to retry or change the input/prompt. The
+single response does not identify whether the cause was transient provider
+failure or that particular prompt; no automatic or additional paid retry was
+performed.
+
+The journal then displayed `Уровень: информация`, event `item_finished` and
+`Обработка изображения завершена.` while retaining the failure text. This
+misclassification is reproducible from source: the worker emits
+`item_finished` with `outcome=failed`; event severity is inferred only from an
+event name ending in `_failed`, and the journal summary is selected from the
+generic `item_finished` label without considering outcome. Provider failure
+itself is already recorded separately as `provider_task_failed`.
+
+This is an important current-candidate diagnostics defect, recorded in Task 13
+without changing runtime source during the owner's observation pass. The later
+fix must produce an error-level, failure-specific terminal item event, preserve
+the safe KIE task/error evidence, avoid a ready output for the failed item and
+never trigger an automatic paid retry.
+
 ## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
 
 The owner has started manual Windows acceptance and has not found a critical

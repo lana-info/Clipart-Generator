@@ -838,6 +838,16 @@ Steps:
   workflow-level visibility/state regression. Это ранее утверждённая функция,
   поэтому рекомендуемый release decision — исправить и пересобрать 3.1.0 до
   публикации, а не переносить молча в 3.2.0.
+- [ ] Исправить terminal diagnostics для неуспешной задачи: событие
+  `item_finished` с `outcome=failed` не может иметь уровень `info` и описание
+  `Обработка изображения завершена.`. Оно должно отображаться как ошибка с
+  однозначным текстом `Обработка изображения завершилась с ошибкой` либо
+  нормализоваться в `item_failed`, сохраняя safe task ID, provider error code,
+  модель, этап и номер элемента.
+- [ ] Добавить regression для KIE terminal fail: `provider_task_failed`
+  сопровождается одним failed item, не создаёт ready-файл, не помечается как
+  success/info и остаётся доступным для явного `Повторить ошибки` без
+  автоматической повторной платной отправки.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
@@ -853,6 +863,17 @@ Verification:
   passed, 57 intentional/environment skips, 2 deselected, 140 subtests. Two of
   those skips are the new Windows-only DPAPI and native installer-lock tests.
 - [ ] Replacement Windows candidate and manual Windows checklist remain.
+
+Windows observation 2026-08-30: KIE
+`flux-2/flex-text-to-image` item 2/2 returned provider task failure code `422`
+with the generic message `Please try again, or change your input files or
+prompt.`. The model ID and request fields remain present in the official KIE
+contract, so this single response does not prove a stale model or invalid local
+payload. The confirmed application defect is diagnostic classification:
+`main.py` emits `item_finished(outcome=failed)`, while
+`build_provider_event()` derives severity only from the event name and
+`DiagnosticJournal.record_structured()` selects the generic successful-sounding
+summary. No paid retry or runtime fix was started during observation gathering.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration
