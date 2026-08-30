@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -104,9 +105,16 @@ def publish_atomic(
         shutil.copy2(source, temporary_name)
         if overwrite:
             os.replace(temporary_name, target)
+        elif sys.platform == "win32":
+            # Windows rename is atomic and refuses to replace an existing file.
+            os.rename(temporary_name, target)
         else:
             os.link(temporary_name, target)
-            os.unlink(temporary_name)
+            try:
+                os.unlink(temporary_name)
+            except OSError:
+                # The target is already a complete hard link to the staged data.
+                pass
         return target
     except BaseException:
         try:
