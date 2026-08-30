@@ -31,6 +31,14 @@ from fal_model_catalog import fal_endpoint_profile
 
 MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_TASK_JOURNAL_RECORDS = 1000
+_JOURNAL_LOCKS_GUARD = threading.Lock()
+_JOURNAL_LOCKS: dict[str, threading.RLock] = {}
+
+
+def _journal_lock(path: Path) -> threading.RLock:
+    key = os.path.normcase(str(path.resolve(strict=False)))
+    with _JOURNAL_LOCKS_GUARD:
+        return _JOURNAL_LOCKS.setdefault(key, threading.RLock())
 
 
 class FalProviderError(RuntimeError):
@@ -72,7 +80,7 @@ class FalTaskJournal:
 
     def __init__(self, path: str | os.PathLike[str]) -> None:
         self.path = Path(path)
-        self._lock = threading.RLock()
+        self._lock = _journal_lock(self.path)
 
     @staticmethod
     def _bounded_records(

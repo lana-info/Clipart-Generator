@@ -422,6 +422,41 @@ class FalProviderTests(unittest.TestCase):
                 {f"req-{index}" for index in range(8)},
             )
 
+    def test_task_journal_synchronizes_separate_instances_for_same_path(self):
+        class SlowReadJournal(FalTaskJournal):
+            def _read(self):
+                records = super()._read()
+                time.sleep(0.01)
+                return records
+
+        with tempfile.TemporaryDirectory() as temp:
+            journal_path = f"{temp}/shared-tasks.json"
+            journals = [SlowReadJournal(journal_path), SlowReadJournal(journal_path)]
+            start = threading.Barrier(8)
+            threads = []
+            for index in range(8):
+                thread = threading.Thread(
+                    target=lambda item=index: (
+                        start.wait(),
+                        journals[item % 2].upsert(
+                            f"shared-{item}",
+                            "generation",
+                            "fal-ai/flux/schnell",
+                            "queued",
+                        ),
+                    )
+                )
+                threads.append(thread)
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2)
+                self.assertFalse(thread.is_alive())
+
+            self.assertEqual(
+                {record.request_id for record in journals[0].pending()},
+                {f"shared-{index}" for index in range(8)},
+            )
+
     def test_task_journal_retains_new_pending_after_terminal_history_limit(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = FalTaskJournal(f"{temp}/fal-tasks.json")
