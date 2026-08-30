@@ -280,6 +280,10 @@ class V3RunQueueTests(unittest.TestCase):
             controller.run_queue.session = session
             controller.run_queue.page.set_session(session)
 
+            self.assertFalse(
+                controller.run_queue.page.check_transparency_button.isHidden()
+            )
+
             controller.run_queue.page.transparency_requested.emit(0)
 
             editor = controller.pages[StepId.TRANSPARENCY]

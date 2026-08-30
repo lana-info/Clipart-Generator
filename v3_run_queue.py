@@ -1771,7 +1771,7 @@ class RunResultsPage(QWidget):
             self.save_corrected_button.hide()
             self.save_mask_button.hide()
         self.check_transparency_button.setVisible(
-            self.state.mode is ProjectMode.CLIPART
+            self.state.mode in {ProjectMode.CLIPART, ProjectMode.PROCESSING}
             and self.session is not None
             and not self.session.running
             and item.status is RunItemStatus.SUCCEEDED
