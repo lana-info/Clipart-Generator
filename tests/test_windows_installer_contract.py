@@ -104,6 +104,19 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("Microsoft Corporation", workflow)
         self.assertIn("build-prerequisites", workflow)
 
+    def test_github_stages_complete_pinned_realesrgan_runtime(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("realesrgan-ncnn-vulkan-v0.2.5.0-windows.zip", workflow)
+        self.assertIn(
+            "ABC02804E17982A3BE33675E4D471E91EA374E65B70167ABC09E31ACB412802D",
+            workflow,
+        )
+        self.assertIn("python scripts/prepare_realesrgan_runtime.py", workflow)
+        self.assertNotIn("Copy-Item -LiteralPath $exe.Directory.FullName", workflow)
+
     def test_github_runs_native_windows_security_contracts_before_build(self):
         workflow = Path(".github/workflows/release-multi-platform.yml").read_text(
             encoding="utf-8"

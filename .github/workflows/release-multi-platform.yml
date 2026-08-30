@@ -74,22 +74,15 @@ jobs:
       - name: Download bundled Local Real-ESRGAN
         shell: powershell
         run: |
-          $archiveUrl = "https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan/releases/download/v0.2.0/realesrgan-ncnn-vulkan-v0.2.0-windows.zip"
-          $archivePath = Join-Path $env:RUNNER_TEMP "realesrgan-ncnn-vulkan-v0.2.0-windows.zip"
-          $expectedSha256 = "1BBBDB12D470AF80B035C773682E144C6C2F6ECE9210832A289AF0A48CE3FA9A"
-          $extractPath = Join-Path $env:RUNNER_TEMP "realesrgan"
+          $archiveUrl = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-windows.zip"
+          $archivePath = Join-Path $env:RUNNER_TEMP "realesrgan-ncnn-vulkan-v0.2.5.0-windows.zip"
+          $expectedSha256 = "ABC02804E17982A3BE33675E4D471E91EA374E65B70167ABC09E31ACB412802D"
           $targetPath = ".\realesrgan-ncnn-vulkan-20211212-windows"
           Invoke-WebRequest -Uri $archiveUrl -OutFile $archivePath
-          $actualSha256 = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
-          if ($actualSha256 -ne $expectedSha256) {
-            throw "Real-ESRGAN archive SHA-256 mismatch: $actualSha256"
-          }
-          Expand-Archive -LiteralPath $archivePath -DestinationPath $extractPath -Force
-          $exe = Get-ChildItem -LiteralPath $extractPath -Recurse -Filter "realesrgan-ncnn-vulkan.exe" | Select-Object -First 1
-          if (-not $exe) {
-            throw "Bundled Local Real-ESRGAN executable was not found after extraction."
-          }
-          Copy-Item -LiteralPath $exe.Directory.FullName -Destination $targetPath -Recurse -Force
+          python scripts/prepare_realesrgan_runtime.py `
+            --archive $archivePath `
+            --target $targetPath `
+            --sha256 $expectedSha256
           "REAL_ESRGAN_ARCHIVE_URL=$archiveUrl" | Out-File -FilePath $env:GITHUB_ENV -Append
           "REAL_ESRGAN_ARCHIVE_SHA256=$expectedSha256" | Out-File -FilePath $env:GITHUB_ENV -Append
 
