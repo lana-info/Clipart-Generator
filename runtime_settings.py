@@ -41,6 +41,7 @@ def build_runtime_settings(
     for key in (
         "kie_api_key",
         "photoroom_api_key",
+        "fal_api_key",
         "runpod_api_key",
         "runpod_endpoint_id",
     ):

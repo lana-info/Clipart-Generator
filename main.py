@@ -8893,7 +8893,10 @@ def create_v3_application_window():
     # V3 uses this raw config directly; keep the bundled local provider available
     # even when the legacy config is absent or predates the provider setting.
     config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
-    secrets = EnvCredentialStore(ENV_FILE).load()
+    secrets = ProviderCredentialStore(
+        ENV_FILE,
+        os.path.join(USER_DATA_DIR, "fal_api_key.bin"),
+    ).load()
 
     app_data = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.AppDataLocation

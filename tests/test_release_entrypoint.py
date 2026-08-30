@@ -74,6 +74,25 @@ class ReleaseEntrypointTests(unittest.TestCase):
             finally:
                 window.close()
 
+    def test_v3_restart_loads_fal_key_from_protected_credential_store(self):
+        with tempfile.TemporaryDirectory(prefix="vibix-credentials-") as temp_dir:
+            root = Path(temp_dir)
+            credential_store = Mock()
+            credential_store.load.return_value = {
+                "kie_api_key": "kie-restored",
+                "fal_api_key": "fal-restored",
+            }
+            with patch("main.CONFIG_FILE", str(root / "missing-config.json")), patch.object(
+                main.QStandardPaths, "writableLocation", return_value=str(root)
+            ), patch("main.ProviderCredentialStore", return_value=credential_store):
+                window = create_v3_application_window()
+            try:
+                settings = window._runtime_settings()
+                self.assertEqual(settings["kie_api_key"], "kie-restored")
+                self.assertEqual(settings["fal_api_key"], "fal-restored")
+            finally:
+                window.close()
+
     def test_production_entrypoint_seeds_new_v3_project_from_legacy_settings(self):
         with tempfile.TemporaryDirectory(prefix="vibix-legacy-config-") as temp_dir:
             root = Path(temp_dir)
