@@ -18,6 +18,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 from urllib.parse import quote
@@ -39,6 +40,35 @@ def _journal_lock(path: Path) -> threading.RLock:
     key = os.path.normcase(str(path.resolve(strict=False)))
     with _JOURNAL_LOCKS_GUARD:
         return _JOURNAL_LOCKS.setdefault(key, threading.RLock())
+
+
+@contextmanager
+def _journal_process_lock(path: Path):
+    """Serialize journal read-modify-write across application processes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(f".{path.name}.lock")
+    with lock_path.open("a+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            handle.seek(0)
+            if os.name == "nt":
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 class FalProviderError(RuntimeError):
@@ -166,7 +196,7 @@ class FalTaskJournal:
         *,
         input_fingerprint: str = "",
     ) -> FalTaskRecord:
-        with self._lock:
+        with self._lock, _journal_process_lock(self.path):
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             records = self._read()
             previous = records.get(str(request_id))
@@ -188,7 +218,7 @@ class FalTaskJournal:
             return record
 
     def update_status(self, request_id: str, status: str) -> FalTaskRecord | None:
-        with self._lock:
+        with self._lock, _journal_process_lock(self.path):
             records = self._read()
             previous = records.get(str(request_id))
             if previous is None:
@@ -207,7 +237,7 @@ class FalTaskJournal:
             return record
 
     def pending(self) -> tuple[FalTaskRecord, ...]:
-        with self._lock:
+        with self._lock, _journal_process_lock(self.path):
             return tuple(
                 record
                 for record in self._read().values()

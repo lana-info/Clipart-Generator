@@ -1,4 +1,5 @@
 import json
+import multiprocessing
 import tempfile
 import threading
 import time
@@ -20,6 +21,24 @@ from fal_provider import (
 )
 from fal_model_catalog import fal_endpoint_profile
 from provider_contract import ProviderTaskRequest
+
+
+class _SlowProcessJournal(FalTaskJournal):
+    def _read(self):
+        records = super()._read()
+        time.sleep(0.1)
+        return records
+
+
+def _upsert_paid_task_in_process(path, request_id, start):
+    journal = _SlowProcessJournal(path)
+    start.wait()
+    journal.upsert(
+        request_id,
+        "generation",
+        "fal-ai/flux/schnell",
+        "queued",
+    )
 
 
 class _Response:
@@ -480,6 +499,29 @@ class FalProviderTests(unittest.TestCase):
             self.assertEqual(
                 {record.request_id for record in journals[0].pending()},
                 {f"shared-{index}" for index in range(8)},
+            )
+
+    def test_task_journal_synchronizes_separate_processes_for_same_path(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal_path = f"{temp}/shared-process-tasks.json"
+            context = multiprocessing.get_context("spawn")
+            start = context.Barrier(2)
+            processes = [
+                context.Process(
+                    target=_upsert_paid_task_in_process,
+                    args=(journal_path, f"process-{index}", start),
+                )
+                for index in range(2)
+            ]
+            for process in processes:
+                process.start()
+            for process in processes:
+                process.join(timeout=5)
+                self.assertEqual(process.exitcode, 0)
+
+            self.assertEqual(
+                {record.request_id for record in FalTaskJournal(journal_path).pending()},
+                {"process-0", "process-1"},
             )
 
     def test_task_journal_retains_new_pending_after_terminal_history_limit(self):
