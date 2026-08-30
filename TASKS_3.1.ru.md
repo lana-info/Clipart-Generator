@@ -132,8 +132,10 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-012`.
 
 ## Task 4: Исправить cleanup, 300 DPI и chroma presets
 
-Status: Done in source — approved copy and implementation checkpoint `46f11ba`;
-shared editor screenshots recorded, Windows scaling remains in Task 13
+Status: Windows candidate regression confirmed — implementation exists, but
+the shared workflow allow-list hides and disables 300 DPI in both Clipart and
+Processing; source repair is pending until the owner finishes the current
+observation pass
 
 Goal:
 Закрепить короткие подписи и один безопасный набор key colors.
@@ -147,12 +149,24 @@ Acceptance:
 - [x] Нет обещания удалить скрытый SynthID.
 - [x] Exact actions: `Удалить служебные данные изображения` и
   `Удалить водяной знак Gemini`.
-- [x] 300 DPI меняет metadata и не скрыт в applicable workflow.
+- [ ] 300 DPI меняет metadata и не скрыт в applicable workflow. Windows
+  acceptance 2026-08-30 confirmed that the current candidate hides it in both
+  Clipart and Processing.
 - [x] Prompt/removal используют один закрытый набор трёх цветов.
 
 Verification:
 - [x] UI string/visibility tests.
 - [x] DPI metadata round-trip и draft migration tests.
+- [ ] Добавить workflow-level regression test: `export_300_dpi` разрешён,
+  видим и не сбрасывается для Clipart и Processing. Existing tests covered the
+  editor/runtime in isolation but did not exercise the workflow allow-list.
+
+Root cause checkpoint 2026-08-30: commit `5163b1e` introduced
+`_CLIPART_OPERATIONS` without `export_300_dpi`; both active workflows reuse
+that tuple, and `ProcessingPipelineEditor._apply_workflow_visibility()` hides
+the checkbox and changes an existing `True` value to `False`. The DPI writer,
+runtime stages, state field and metadata verification remain implemented. No
+runtime fix was made while the owner continues Windows observation gathering.
 
 Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
@@ -819,6 +833,11 @@ Steps:
   При расхождении сохранить имена файлов, SHA-256 и диагностический журнал;
   отдельно сверить ожидаемые stage-копии в `rough/`. Это paid request и требует
   отдельного явного разрешения владельца.
+- [ ] После завершения текущего Windows observation pass восстановить
+  `Установить 300 DPI` в Clipart и Processing, сначала добавив failing
+  workflow-level visibility/state regression. Это ранее утверждённая функция,
+  поэтому рекомендуемый release decision — исправить и пересобрать 3.1.0 до
+  публикации, а не переносить молча в 3.2.0.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.

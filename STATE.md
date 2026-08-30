@@ -2,6 +2,28 @@
 
 Updated: 2026-08-30
 
+## Windows acceptance regression: 300 DPI hidden — 2026-08-30
+
+The owner confirmed that `Установить 300 DPI` is absent from both Clipart and
+Processing in the current Windows candidate. This is a real UI/state regression,
+not an intentional product removal: DPI writing, final-save verification,
+project state and runtime stages remain implemented.
+
+The root cause is the workflow contract introduced by commit `5163b1e`:
+`_CLIPART_OPERATIONS` omits `export_300_dpi`, and both Clipart and Processing
+reuse that allow-list. `ProcessingPipelineEditor._apply_workflow_visibility()`
+therefore hides the existing checkbox and resets an already enabled value to
+`False`. A direct offscreen reproduction confirms `allowed=False`,
+`hidden=True`, `state=False` in both modes. Existing DPI tests exercised the
+editor/runtime without this workflow boundary and did not detect the omission.
+
+Per the owner's current testing instruction, no runtime source is changed while
+the observation pass continues. The issue is recorded against Task 4 and Task
+13 as an important current-candidate regression. Because 300 DPI is an approved
+3.1.0 capability and an existing user workflow, the recommended release
+decision is a small tested restoration plus replacement installer before
+publication, unless the owner later explicitly accepts deferral.
+
 ## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
 
 The owner has started manual Windows acceptance and has not found a critical
