@@ -2,6 +2,27 @@
 
 Updated: 2026-08-30
 
+## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
+
+The owner has started manual Windows acceptance and has not found a critical
+error so far. Two non-blocking clarity issues are deliberately deferred without
+changing the current 3.1.0 candidate:
+
+- a mixed KIE/Fal.ai pipeline can show only the refreshed Fal.ai estimate, so
+  it is unclear whether KIE is included; the next-version direction is a
+  provider breakdown (`KIE`, `Fal.ai`, `Итого`) where Fal.ai refresh changes
+  only its own row and an incomplete subtotal is never presented as a complete
+  total;
+- the icon-only CSV export is visually mixed with prompt/reference actions;
+  the next-version direction is a separate `Экспорт:` group with a visibly
+  labelled turquoise-accent `CSV` button and an explicit tooltip/accessibility
+  name.
+
+These requirements are recorded in Task 28 (3.2.0). They require approved full
+screen/state mockups before implementation. No runtime source, release version,
+installer or current acceptance criterion is changed by this documentation
+checkpoint.
+
 ## Latest project checkpoint
 
 Technical review fixes and the prebuild source-acceptance follow-up are

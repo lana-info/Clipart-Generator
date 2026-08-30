@@ -901,6 +901,54 @@ Acceptance before implementation:
 
 Dependencies: released 3.1.0 mask editor baseline. Scope: next-version feature.
 
+## Task 28 (3.2.0): Понятная стоимость нескольких провайдеров и явный CSV-экспорт
+
+Status: Deferred to the next version after 3.1.0 — owner feedback recorded
+during Windows acceptance; visual mockup and implementation intentionally not
+started
+
+Goal:
+Убрать неоднозначность в смешанном KIE/Fal.ai pipeline и сделать экспорт всей
+таблицы промптов заметным без угадывания назначения иконки.
+
+Approved direction:
+- Не изменять кандидат 3.1.0: при текущей проверке критическая ошибка не
+  подтверждена, замечания относятся к понятности интерфейса.
+- Для pipeline с несколькими платными провайдерами показывать раздельную
+  оценку: `KIE — …`, `Fal.ai — …`, `Итого — …` под общим заголовком
+  `Ориентировочная стоимость`.
+- Кнопка `Обновить оценку Fal.ai` обновляет только строку Fal.ai; уже известная
+  оценка KIE остаётся видимой и не подменяется числом Fal.ai.
+- Если оценка одного провайдера недоступна или устарела, явно показывать это у
+  соответствующей строки. Частичную сумму нельзя выдавать за полную итоговую
+  стоимость; итог помечается как неполный до получения всех используемых
+  оценок.
+- Не показывать отдельную строку провайдера, который не используется выбранным
+  pipeline.
+- В панели таблицы отделить экспорт от групп `Промпты` и `Референсы`: добавить
+  отдельную группу `Экспорт:` и кнопку с видимой надписью `CSV` бирюзовым
+  акцентом. Иконку можно сохранить как вспомогательную, но она не заменяет
+  текст.
+- Для кнопки CSV использовать tooltip/accessibility name
+  `Экспортировать все строки в CSV`; существующий формат и round-trip CSV не
+  менять в рамках этой UI-задачи.
+
+Acceptance before implementation:
+- [ ] Утверждены mockups для KIE-only, Fal.ai-only, mixed, refreshing,
+  unavailable/stale estimate и incomplete-total states.
+- [ ] Утверждён полный mockup панели промптов/референсов с отдельной группой
+  `Экспорт:` и текстовой кнопкой `CSV`.
+- [ ] Зафиксировано, какие цены являются локальной оценкой, а какие требуют
+  запроса к провайдеру, и когда значение считается устаревшим.
+- [ ] Регрессионные тесты подтверждают, что refresh Fal.ai не скрывает KIE,
+  частичная сумма не маркируется как полный итог, а CSV экспортирует те же
+  строки и референсы без изменения данных.
+
+Evidence: owner Windows screenshots from 2026-08-30 show a single Fal.ai value
+after refresh and an icon-only CSV action visually grouped with prompt/reference
+buttons. Scope: next-version UI/estimation clarity; no paid request required for
+the design stage.
+
 ## Исторические задачи 3.0
 
 `NEXT-TASK-009B` и `NEXT-TASK-009C` в `TASKS_3.0.ru.md` остаются историческим
