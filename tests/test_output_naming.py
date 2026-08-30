@@ -2,7 +2,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from output_naming import generated_output_path, processed_output_path, workspace_layout
+from output_naming import (
+    BatchOutputNameReservation,
+    generated_output_path,
+    processed_output_path,
+    workspace_layout,
+)
 
 
 def test_processed_output_uses_stable_name_when_overwriting():
@@ -60,3 +65,24 @@ class GeneratedOutputNameTests(unittest.TestCase):
 
 def test_generated_output_falls_back_without_manual_filename(tmp_path):
     assert generated_output_path(tmp_path, 3, "!!!") == tmp_path / "clipart_03_ready.png"
+
+
+def test_batch_reservation_prevents_processing_name_collisions(tmp_path):
+    (tmp_path / "same_ready.png").touch()
+    reservation = BatchOutputNameReservation(tmp_path)
+
+    first = reservation.reserve_processed("one/same.jpg", overwrite=False)
+    second = reservation.reserve_processed("two/same.png", overwrite=False)
+
+    assert first == tmp_path / "same_ready_2.png"
+    assert second == tmp_path / "same_ready_3.png"
+
+
+def test_batch_reservation_never_reuses_overwrite_destination(tmp_path):
+    reservation = BatchOutputNameReservation(tmp_path)
+
+    first = reservation.reserve_processed("one/same.jpg", overwrite=True)
+    second = reservation.reserve_processed("two/same.png", overwrite=True)
+
+    assert first == tmp_path / "same_ready.png"
+    assert second == tmp_path / "same_ready_2.png"

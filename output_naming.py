@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,6 +47,53 @@ class WorkspaceLayout:
     rough: Path
     output: Path
     transient: Path
+
+
+class BatchOutputNameReservation:
+    """Reserve final names before concurrent batch work starts."""
+
+    def __init__(self, output_dir: str | Path) -> None:
+        self.output_dir = Path(output_dir)
+        self._reserved_names: set[str] = set()
+        self._lock = threading.Lock()
+
+    def _is_unavailable(self, path: Path) -> bool:
+        return path.exists() or path.name.casefold() in self._reserved_names
+
+    def _reserve(self, path: Path) -> Path:
+        self._reserved_names.add(path.name.casefold())
+        return path
+
+    def reserve_processed(
+        self,
+        source_path: str | Path,
+        *,
+        overwrite: bool,
+    ) -> Path:
+        base = Path(source_path).stem
+        destination = self.output_dir / f"{base}_ready.png"
+        with self._lock:
+            if overwrite and destination.name.casefold() not in self._reserved_names:
+                return self._reserve(destination)
+            if not self._is_unavailable(destination):
+                return self._reserve(destination)
+            suffix = 2
+            while True:
+                candidate = destination.with_name(f"{base}_ready_{suffix}.png")
+                if not self._is_unavailable(candidate):
+                    return self._reserve(candidate)
+                suffix += 1
+
+    def reserve_generated(self, row_index: int, prompt: str = "") -> Path:
+        prompt_stem = _generated_prompt_stem(prompt)
+        base = f"{prompt_stem}_{max(1, int(row_index)):02d}_ready"
+        destination = self.output_dir / f"{base}.png"
+        with self._lock:
+            suffix = 2
+            while self._is_unavailable(destination):
+                destination = self.output_dir / f"{base}_{suffix}.png"
+                suffix += 1
+            return self._reserve(destination)
 
 
 def workspace_layout(saved_path: str | Path) -> WorkspaceLayout:

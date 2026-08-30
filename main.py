@@ -67,7 +67,11 @@ from visible_mark_cleanup import (
     visible_mark_region_key,
 )
 from v3_api_settings import check_photoroom_balance as check_photoroom_balance_api
-from output_naming import generated_output_path, processed_output_path
+from output_naming import (
+    BatchOutputNameReservation,
+    generated_output_path,
+    processed_output_path,
+)
 from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
 from runtime_settings import normalize_kie_concurrency, normalize_provider_concurrency
@@ -1539,7 +1543,7 @@ class WorkerThread(QThread):
         total: int,
         entry: dict[str, Any],
         raw_dir: str,
-        output_dir: str,
+        out_path: str,
         process_generated: bool,
     ) -> str:
         self._set_diagnostic_context(idx, total, "generation")
@@ -1602,7 +1606,6 @@ class WorkerThread(QThread):
             self._emit_file_progress(idx, total, 84)
         else:
             self._emit_file_progress(idx, total, 70)
-        out_path = str(generated_output_path(output_dir, idx, prompt_text))
         self._save_final_output(
             final_url,
             gen_path,
@@ -1634,7 +1637,16 @@ class WorkerThread(QThread):
         total = len(entries)
         done_count = 0
         self._next_generation_launch_at = 0.0
-        pending = iter(enumerate(entries, start=1))
+        output_names = BatchOutputNameReservation(output_dir)
+        planned_entries = [
+            (
+                idx,
+                entry,
+                str(output_names.reserve_generated(idx, entry.get("prompt", ""))),
+            )
+            for idx, entry in enumerate(entries, start=1)
+        ]
+        pending = iter(planned_entries)
         active = {}
         worker_limit = self._remote_worker_limit(
             include_generation=True,
@@ -1646,7 +1658,7 @@ class WorkerThread(QThread):
                 if not self.is_running or self.stop_after_current_requested:
                     return False
                 try:
-                    idx, entry = next(pending)
+                    idx, entry, out_path = next(pending)
                 except StopIteration:
                     return False
                 future = executor.submit(
@@ -1656,7 +1668,7 @@ class WorkerThread(QThread):
                     total,
                     entry,
                     raw_dir,
-                    output_dir,
+                    out_path,
                     process_generated,
                 )
                 active[future] = idx
@@ -1917,7 +1929,7 @@ class WorkerThread(QThread):
         total: int,
         file_path: str,
         raw_dir: str,
-        output_dir: str,
+        out_path: str,
     ) -> str:
         self._set_diagnostic_context(idx, total, "processing")
         self.progress.emit(
@@ -1964,14 +1976,6 @@ class WorkerThread(QThread):
 
         self._emit_file_progress(idx, total, 80)
         self._ensure_running()
-        out_path = str(
-            processed_output_path(
-                output_dir,
-                file_path,
-                self.run_stamp,
-                overwrite=self.overwrite_existing,
-            )
-        )
         self._save_final_output(
             final_url,
             source_path,
@@ -1998,9 +2002,23 @@ class WorkerThread(QThread):
     ) -> None:
         total = len(self.selected_files)
         done_count = 0
+        output_names = BatchOutputNameReservation(output_dir)
+        planned_files = [
+            (
+                idx,
+                file_path,
+                str(
+                    output_names.reserve_processed(
+                        file_path,
+                        overwrite=self.overwrite_existing,
+                    )
+                ),
+            )
+            for idx, file_path in enumerate(self.selected_files, start=1)
+        ]
         worker_limit = self._remote_worker_limit()
         if worker_limit == 1:
-            for idx, file_path in enumerate(self.selected_files, start=1):
+            for idx, file_path, out_path in planned_files:
                 if not self.is_running:
                     break
                 try:
@@ -2010,7 +2028,7 @@ class WorkerThread(QThread):
                         total,
                         file_path,
                         raw_dir,
-                        output_dir,
+                        out_path,
                     )
                 except ProcessingCancelled:
                     self._emit_item_progress(
@@ -2072,7 +2090,7 @@ class WorkerThread(QThread):
                     self.finished.emit(f"Mode 2: Готово ({done_count}/{total})")
             return
 
-        pending = iter(enumerate(self.selected_files, start=1))
+        pending = iter(planned_files)
         active: dict[Any, int] = {}
 
         with ThreadPoolExecutor(max_workers=worker_limit) as executor:
@@ -2080,7 +2098,7 @@ class WorkerThread(QThread):
                 if not self.is_running or self.stop_after_current_requested:
                     return False
                 try:
-                    idx, file_path = next(pending)
+                    idx, file_path, out_path = next(pending)
                 except StopIteration:
                     return False
                 future = executor.submit(
@@ -2090,7 +2108,7 @@ class WorkerThread(QThread):
                     total,
                     file_path,
                     raw_dir,
-                    output_dir,
+                    out_path,
                 )
                 active[future] = idx
                 return True
