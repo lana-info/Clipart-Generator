@@ -80,6 +80,19 @@ class ProviderDiagnosticsTests(unittest.TestCase):
         self.assertEqual(event["severity"], "warning")
         self.assertNotIn(SIGNED_URL, json.dumps(event))
 
+    def test_failed_item_finished_is_an_error_with_failure_summary(self):
+        event = build_provider_event(
+            "item_finished",
+            outcome="failed",
+            provider="kie",
+            model="flux-2/flex-text-to-image",
+            error_code="422",
+            error_message="Please try again",
+        )
+
+        self.assertEqual(event["severity"], "error")
+        self.assertEqual(event["summary"], "Обработка изображения завершилась с ошибкой.")
+
     def test_provider_message_is_bounded_and_redacted(self):
         message = safe_provider_message(
             f"KIE failed api_key={SECRET} at C:\\Users\\Owner\\input.png " + "x" * 1000

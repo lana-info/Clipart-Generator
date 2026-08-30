@@ -93,6 +93,28 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             self.assertNotIn("sk-secret-value", exported)
             self.assertNotIn("example.test", exported)
 
+    def test_failed_item_finished_is_not_persisted_as_successful_information(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.1")
+            journal.record_structured(
+                {
+                    "event": "item_finished",
+                    "outcome": "failed",
+                    "provider": "kie",
+                    "model": "flux-2/flex-text-to-image",
+                    "stage": "generation",
+                    "error_code": "422",
+                    "error_message": "Please try again",
+                }
+            )
+
+            event = journal.read_events()[0]
+            self.assertEqual(event["severity"], "error")
+            self.assertEqual(
+                event["summary"],
+                "Обработка изображения завершилась с ошибкой.",
+            )
+
     def test_detailed_journal_limits_cover_large_image_batches(self) -> None:
         self.assertEqual(DEFAULT_SESSION_MAX_BYTES, 8 * 1024 * 1024)
         self.assertEqual(DEFAULT_TOTAL_MAX_BYTES, 24 * 1024 * 1024)

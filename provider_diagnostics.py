@@ -216,7 +216,12 @@ def build_provider_event(event: str, **values: object) -> dict[str, object]:
                 safe = safe_provider_message(value)[:limit]
             if safe:
                 result[name] = safe
-    if "severity" not in result:
+    outcome = str(result.get("outcome") or "").casefold()
+    if outcome == "failed":
+        result["severity"] = "error"
+        if event_name == "item_finished":
+            result["summary"] = "Обработка изображения завершилась с ошибкой."
+    elif "severity" not in result:
         result["severity"] = "error" if event_name.endswith("_failed") else "info"
     return result
 

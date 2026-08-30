@@ -40,11 +40,12 @@ event name ending in `_failed`, and the journal summary is selected from the
 generic `item_finished` label without considering outcome. Provider failure
 itself is already recorded separately as `provider_task_failed`.
 
-This is an important current-candidate diagnostics defect, recorded in Task 13
-without changing runtime source during the owner's observation pass. The later
-fix must produce an error-level, failure-specific terminal item event, preserve
-the safe KIE task/error evidence, avoid a ready output for the failed item and
-never trigger an automatic paid retry.
+This diagnostics defect is fixed on the release-blocker branch. Any structured
+event with `outcome=failed` is forced to error severity, and failed
+`item_finished` receives the unambiguous summary
+`Обработка изображения завершилась с ошибкой.` Existing provider/task/model,
+stage and bounded error fields remain available. The new builder and persisted
+journal regressions first reproduced the old info/success wording and now pass.
 
 ## Windows acceptance regression: Fal.ai HTTP 405 across models — 2026-08-30
 
