@@ -2131,8 +2131,11 @@ class RunQueueSupport:
                     event,
                 )
             )
-        if hasattr(worker, "finished"):
-            worker.finished.connect(
+        completion_signal = getattr(worker, "completed", None)
+        if completion_signal is None:
+            completion_signal = getattr(worker, "finished", None)
+        if completion_signal is not None:
+            completion_signal.connect(
                 lambda message, source=worker, token=generation: self._dispatch_finished(
                     source,
                     token,

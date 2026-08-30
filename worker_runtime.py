@@ -15,7 +15,10 @@ def wire_worker_signals(
 ) -> None:
     worker.progress.connect(on_progress)
     worker.progress_value.connect(on_progress_value)
-    worker.finished.connect(on_finished)
+    completion_signal = getattr(worker, "completed", None)
+    if completion_signal is None:
+        completion_signal = worker.finished
+    completion_signal.connect(on_finished)
     worker.error.connect(on_error)
 
 

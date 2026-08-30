@@ -62,7 +62,7 @@ class KieRoutingTests(unittest.TestCase):
         progress = []
         finished = []
         worker.progress.connect(progress.append)
-        worker.finished.connect(finished.append)
+        worker.completed.connect(finished.append)
         return progress, finished
 
     def assert_secret_not_logged(self, progress, finished=()):

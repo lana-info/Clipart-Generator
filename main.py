@@ -948,7 +948,7 @@ def is_schema_required_error_message(message):
 class WorkerThread(QThread):
     progress = pyqtSignal(str)
     item_progress = pyqtSignal(object)
-    finished = pyqtSignal(str)
+    completed = pyqtSignal(str)
     error = pyqtSignal(str)
     progress_value = pyqtSignal(int)
     diagnostic = pyqtSignal(object)
@@ -1396,7 +1396,7 @@ class WorkerThread(QThread):
         entries = self._normalize_prompt_entries(self.generated_prompts)
         if not entries:
             if emit_final:
-                self.finished.emit("Mode 1: Нет записей. Добавьте промпты")
+                self.completed.emit("Mode 1: Нет записей. Добавьте промпты")
             return
 
         total = len(entries)
@@ -1490,9 +1490,9 @@ class WorkerThread(QThread):
         self.progress_value.emit(100)
         if emit_final:
             if done == 0:
-                self.finished.emit(f"Mode 1: Готово (0/{total}). Изображения не созданы.")
+                self.completed.emit(f"Mode 1: Готово (0/{total}). Изображения не созданы.")
             else:
-                self.finished.emit(f"Mode 1: Готово ({done}/{total})")
+                self.completed.emit(f"Mode 1: Готово ({done}/{total})")
 
     def _wait_for_generation_launch_slot(self) -> None:
         while True:
@@ -1633,7 +1633,7 @@ class WorkerThread(QThread):
         entries = self._normalize_prompt_entries(self.generated_prompts)
         if not entries:
             if emit_final:
-                self.finished.emit("Mode 1: Нет записей. Добавьте промпты")
+                self.completed.emit("Mode 1: Нет записей. Добавьте промпты")
             return
 
         total = len(entries)
@@ -1748,11 +1748,11 @@ class WorkerThread(QThread):
         self.progress_value.emit(100)
         if emit_final:
             if done_count == 0:
-                self.finished.emit(
+                self.completed.emit(
                     f"Mode 1: Готово (0/{total}). Изображения не созданы."
                 )
             else:
-                self.finished.emit(f"Mode 1: Готово ({done_count}/{total})")
+                self.completed.emit(f"Mode 1: Готово ({done_count}/{total})")
 
     def _emit_file_progress(
         self,
@@ -1818,7 +1818,7 @@ class WorkerThread(QThread):
 
         if not self.selected_files:
             if emit_final:
-                self.finished.emit("Mode 2: Файлы не выбраны")
+                self.completed.emit("Mode 2: Файлы не выбраны")
             return
 
         raw_dir = self._create_run_raw_dir()
@@ -1921,9 +1921,9 @@ class WorkerThread(QThread):
         self.progress_value.emit(100)
         if emit_final:
             if done == 0:
-                self.finished.emit(f"Mode 2: Готово (0/{total}). Изображения не созданы.")
+                self.completed.emit(f"Mode 2: Готово (0/{total}). Изображения не созданы.")
             else:
-                self.finished.emit(f"Mode 2: Готово ({done}/{total})")
+                self.completed.emit(f"Mode 2: Готово ({done}/{total})")
 
     def _process_file_entry(
         self,
@@ -2085,11 +2085,11 @@ class WorkerThread(QThread):
             self.progress_value.emit(100)
             if emit_final:
                 if done_count == 0:
-                    self.finished.emit(
+                    self.completed.emit(
                         f"Mode 2: Готово (0/{total}). Изображения не созданы."
                     )
                 else:
-                    self.finished.emit(f"Mode 2: Готово ({done_count}/{total})")
+                    self.completed.emit(f"Mode 2: Готово ({done_count}/{total})")
             return
 
         pending = iter(planned_files)
@@ -2181,11 +2181,11 @@ class WorkerThread(QThread):
         self.progress_value.emit(100)
         if emit_final:
             if done_count == 0:
-                self.finished.emit(
+                self.completed.emit(
                     f"Mode 2: Готово (0/{total}). Изображения не созданы."
                 )
             else:
-                self.finished.emit(f"Mode 2: Готово ({done_count}/{total})")
+                self.completed.emit(f"Mode 2: Готово ({done_count}/{total})")
 
     def _create_run_raw_dir(self):
         """Create an isolated intermediate directory for this run.

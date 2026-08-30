@@ -1478,7 +1478,7 @@ class V3RunQueueTests(unittest.TestCase):
             worker = WorkerThread(**request.worker_kwargs())
             worker.progress.connect(session.handle_progress)
             worker.progress_value.connect(session.handle_progress_value)
-            worker.finished.connect(session.handle_finished)
+            worker.completed.connect(session.handle_finished)
             worker.error.connect(session.handle_fatal_error)
 
             worker.start()
@@ -1492,6 +1492,32 @@ class V3RunQueueTests(unittest.TestCase):
             with Image.open(output) as result:
                 self.assertEqual(result.size, (6, 8))
                 self.assertAlmostEqual(result.info["dpi"][0], 300, delta=1)
+
+    def test_real_worker_keeps_business_completion_separate_from_qthread_finished(self):
+        from main import WorkerThread
+
+        with tempfile.TemporaryDirectory(prefix="v3-worker-lifecycle-") as temp:
+            worker = WorkerThread(
+                mode="mode2_process",
+                work_dir=temp,
+                settings={
+                    "upscale": False,
+                    "remove_bg": False,
+                    "trim_enabled": True,
+                },
+                selected_files=[],
+            )
+            completions = []
+            thread_stops = []
+            worker.completed.connect(completions.append)
+            worker.finished.connect(lambda: thread_stops.append(True))
+
+            worker.start()
+            self.assertTrue(worker.wait(10_000))
+            self.app.processEvents()
+
+            self.assertEqual(len(completions), 1)
+            self.assertEqual(thread_stops, [True])
 
     def test_open_folder_uses_only_the_session_output_directory(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-open-") as temp:
