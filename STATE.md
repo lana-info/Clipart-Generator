@@ -50,9 +50,10 @@ Windows visual acceptance по-прежнему ожидается.
 Task 22 is integrated in `develop/3.1` at `f00cec4`:
 Pinterest готовые промпты больше не показывают Chroma Key-helper; Pinterest
 получает отдельный plain selector модели с референсом только для batch с
-референсами, при общих proportion/resolution/variants; технические пояснения
-скрыты. Наглядный ratio preview добавлен в общий Clipart generation page и
-поэтому доступен также Pinterest. Approved mockups находятся в
+референсами. Task 24 позднее разделил также proportion/resolution, оставив
+общим только количество вариантов; технические пояснения скрыты. Наглядный
+ratio preview добавлен в общий Clipart generation page и поэтому доступен
+также Pinterest. Approved mockups находятся в
 `docs/ui/3.1/task-22-pinterest-prompt-no-chroma/`. Active prompt-only и
 focused Clipart/Pinterest tests прошли; Windows visual acceptance по-прежнему
 не выполнялась.
@@ -232,10 +233,9 @@ regression и полный offline suite проходят: 981 passed, 55 intent
 контекстные действия для края или внутренних просветов. До этого основной
 режим остаётся автоматическим и не показывает технические ползунки.
 
-- генерация использует один общий selector `KIE — модель` / `Fal.ai — модель`;
-  существующие модели не удаляются, а пропорция, разрешение и число вариантов
-  общие для обычных и reference prompts. При референсах остаются только
-  совместимые модели;
+- обычная и reference-генерация используют отдельные selectors модели,
+  пропорции и разрешения; существующие модели не удаляются, несовместимые
+  варианты не предлагаются, а количество вариантов остаётся общим;
 - общая настройка параллельности `35` отклонена: KIE, PhotoRoom и Fal.ai имеют
   независимый выбор 1/2/3 с default 3, а общий remote cap для всех трёх
   providers равен 6;
