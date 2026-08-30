@@ -71,7 +71,7 @@ class UpdateClientTests(unittest.TestCase):
         )
         self.installer = b"windows-installer-3.1"
 
-    def manifest_response(self, req, *, mutate=None):
+    def manifest_response(self, req, *, mutate=None, key_id="updates-v1"):
         requested = json.loads(req.data.decode("utf-8"))
         is_macos = requested["platform"].startswith("macos-")
         filename = "VibixImages-macOS-3.1.0-x64.zip" if is_macos else "VibixImages-Setup-3.1.exe"
@@ -100,17 +100,17 @@ class UpdateClientTests(unittest.TestCase):
         envelope = {
             "schema_version": 1,
             "algorithm": "Ed25519",
-            "kid": "updates-v1",
+            "kid": key_id,
             "payload": payload,
             "signature": encode(self.update_key.sign(rfc8785.dumps(payload))),
         }
         return Response(json.dumps(envelope).encode("utf-8"))
 
-    def delegated_key_response(self):
+    def delegated_key_response(self, key_id="updates-v1"):
         payload = {
             "purpose": "clipart-update-manifest",
             "algorithm": "Ed25519",
-            "kid": "updates-v1",
+            "kid": key_id,
             "public_key": encode(self.update_key.public_key().public_bytes_raw()),
         }
         envelope = {
@@ -178,6 +178,25 @@ class UpdateClientTests(unittest.TestCase):
             release = client.check()
         self.assertEqual(release.version, "3.1.0")
         self.assertEqual(len(opener.requests), 2)
+
+    def test_delegated_v2_key_is_stored_under_its_signed_key_id(self) -> None:
+        client = UpdateClient(
+            self.license,
+            current_version="3.0",
+            download_directory=self.root / "updates-v2",
+        )
+
+        def responder(req):
+            if req.full_url.endswith("/api/v1/releases/key"):
+                return self.delegated_key_response("updates-v2")
+            return self.manifest_response(req, key_id="updates-v2")
+
+        opener = Opener(responder)
+        with patch.object(license_client.request, "build_opener", return_value=opener):
+            release = client.check()
+
+        self.assertEqual(release.version, "3.1.0")
+        self.assertIn("updates-v2", client._public_keys)
 
     def test_manifest_rejects_wrong_nonce_and_external_download_url(self) -> None:
         mutations = (

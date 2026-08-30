@@ -167,7 +167,9 @@ class UpdateClient:
             or not isinstance(payload.get("public_key"), str)
         ):
             raise UpdateError("Сервер вернул некорректный ключ обновлений")
-        self._public_keys["updates-v1"] = _decode_public_key(payload["public_key"])
+        self._public_keys[str(payload["kid"])] = _decode_public_key(
+            payload["public_key"]
+        )
 
     def _verify_manifest(self, envelope: object) -> dict[str, object]:
         if not isinstance(envelope, dict) or envelope.get("schema_version") != 1 or envelope.get("algorithm") != "Ed25519":
