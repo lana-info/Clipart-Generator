@@ -204,7 +204,7 @@ Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 ## Task 6: Разделить `rough` и `output` и нормализовать имена
 
 Status: In progress — implementation checkpoints `ec31203`, `ba95ba0`,
-`99ea7eb`; final workspace migration/manual Windows acceptance pending
+`99ea7eb`, `6551011`; final workspace migration/manual Windows acceptance pending
 
 Goal:
 Хранить intermediates отдельно от готовых файлов с короткими говорящими names.
@@ -219,6 +219,9 @@ Steps:
 - Использовать один suffix последнего stage и различать
   `_upscaled-before-2x`/`_upscaled-after-2x`.
 - Нормализовать source/structured/free-form/CSV stem и collision numbering.
+  Для structured prompt имя берётся из значения `Object`/`Объект`, без слов
+  `object`/`scene`; известные русские названия клипартов получают короткий
+  английский эквивалент (`лисенок` → `fox`).
 
 Acceptance:
 - [ ] В `output/` нет intermediates, в `rough/` нет final `_ready`.
@@ -226,6 +229,8 @@ Acceptance:
   не создаёт молча `output/output`.
 - [ ] Нет timestamp/UUID/цепочек suffix и silent overwrite.
 - [ ] Пользователь не вводит имя вручную.
+- [x] Generated output не содержит служебных label `object`/`scene`: например,
+  `Object: fox. Scene: …` сохраняется как `fox_01_ready.png`.
 
 Verification:
 - [ ] Clipart, Pinterest prompt-only и Processing integration tests всех

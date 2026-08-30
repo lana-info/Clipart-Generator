@@ -1,8 +1,18 @@
 # Project state
 
-Updated: 2026-08-29
+Updated: 2026-08-30
 
 ## Latest integrated checkpoint
+
+Task 6 output naming is integrated in `develop/3.1` at `6551011`:
+готовые PNG остаются в `output/`, а промежуточные этапы — в `rough/`.
+Генерируемый файл берёт короткое имя только из значения `Object`/`Объект`,
+поэтому служебные слова `object` и `scene` больше не попадают в имя:
+`Object: fox. Scene: …` даёт `fox_01_ready.png`; частые русские названия
+переводятся в английские (`лисенок` → `fox`). Collision-safe suffix и
+`_ready` сохранены. Focused output suite (35 tests), `py_compile`,
+`git diff --check` и sensitive scan прошли. Остаётся ручная Windows-проверка
+workspace migration и реальных имён на пользовательских промптах.
 
 Task 25 is integrated in `develop/3.1` at `bdf6823`:
 Fal.ai price refresh на Review & Run необязателен; подтверждающая галочка
