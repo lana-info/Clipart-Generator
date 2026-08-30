@@ -259,7 +259,7 @@ Dependencies: None. Scope: M. Requirements: `CG31-FR-020`–`CG31-FR-022`.
 ## Task 7: Сделать mask editor отдельным рабочим пространством
 
 Status: In progress — visual approved; implementation checkpoints `1724c76`,
-`35931e3`; manual Windows mouse/pen acceptance pending
+`35931e3`; manual Windows mouse acceptance pending, stylus optional when used
 
 Goal:
 Открывать один result на крупном canvas с предсказуемой кистью и zoom.
@@ -293,7 +293,8 @@ Verification:
 - [x] Unit tests interpolation, hardness, bounded history, mask isolation,
   300-DPI round-trip и rollback парного сохранения.
 - [x] Offscreen interaction smoke и screenshot при 980×700.
-- [ ] Manual Windows mouse/pen acceptance.
+- [ ] Manual Windows mouse acceptance; stylus additionally only when the target
+  device and expected workflow use one.
 
 Implementation evidence: feature commit `1724c76`; 83 focused offscreen tests,
 `py_compile` и `git diff --check` прошли. Замер одного движения кисти на 4K —
@@ -466,9 +467,10 @@ Dependencies: Tasks 5, 7, 9. Scope: M. Requirements: `CG31-FR-041`.
 
 ## Checkpoint C: Alpha quality
 
-- [ ] Tasks 7–10 проходят golden benchmark и full offline regression.
+- [x] Tasks 7–10 проходят golden benchmark и full offline regression.
 - [ ] Owner accepts representative failures/successes on target Windows UI.
-- [ ] Continue decision записан; при stop engine не включается молча.
+- [x] Continue decision записан; automatic Chroma включён только после
+  зафиксированных quality gates и проверенных follow-ups.
 
 ## Task 11: Добавить массовое редактирование prompt
 
@@ -557,9 +559,9 @@ Goal:
 сети, сохраняя ограниченную и проверяемую лицензионную границу.
 
 Steps:
-- До source/UI работы согласовать точный offline grace period (рекомендуется 7
-  календарных дней) и простой текст статуса; для нового либо заметно
-  переработанного окна сначала подготовить visual mockup по `CG31-UX-001`–`007`.
+- Утверждён и реализован offline grace period 7 календарных дней с простым
+  текстом статуса; visual mockup согласован до реализации по
+  `CG31-UX-001`–`007`.
 - После успешной signed online authorization атомарно сохранять только нужные
   проверяемые данные: подписанное подтверждение, device binding, время
   последней проверки и защищённый маркер времени. Лицензионный ключ не хранить
@@ -809,6 +811,9 @@ Steps:
   остаётся фоном, поэтому для такого предмета выбирается другой preset.
 - [ ] С заранее активированной тестовой лицензией проверить разрешённый outage
   grace и fail-closed denial/revocation/expiry/clock rollback.
+- [ ] Запустить Windows-only tests настоящих OS-контрактов: Fal.ai key
+  `save → новый store → load` через DPAPI и запрет overwrite/rename проверенного
+  installer до закрытия protected context с разрешением операции после него.
 - [ ] На Windows выполнить контрольный KIE-запуск в новой пустой рабочей папке:
   один промпт, один вариант, один Task ID и ровно один ready-файл в `output/`.
   При расхождении сохранить имена файлов, SHA-256 и диагностический журнал;
@@ -826,7 +831,8 @@ Verification:
 - [x] History/merge-base audit and full VDS tests pass.
 - [x] Technical-review and prebuild source-acceptance branches fast-forwarded
   without conflicts through `7addeee`; latest complete offline suite: 1026
-  passed, 55 intentional skips, 2 deselected, 140 subtests.
+  passed, 57 intentional/environment skips, 2 deselected, 140 subtests. Two of
+  those skips are the new Windows-only DPAPI and native installer-lock tests.
 - [ ] Replacement Windows candidate and manual Windows checklist remain.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to

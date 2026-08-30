@@ -15,8 +15,10 @@ contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
 The final independent source review verdict is `pass-with-nits`: no blocking or
-important defects remain. The merged source passes 1026 offline tests, 55
-intentional skips, 2 configured network deselections and 140 subtests. All
+important defects remain. The current handoff passes 1026 offline tests, 57
+intentional/environment skips, 2 configured network deselections and 140
+subtests. The two additional skips are the new Windows-only DPAPI and native
+installer-lock contracts; they remain explicit Windows acceptance gates. All
 tracked Python files compile; sensitive scan and `git diff --check` pass. The
 latest automatic Chroma benchmark passes all gates: alpha IoU `0.968704`, alpha
 MAE `0.018194`, 2048×2048 median `1.357 s`, peak RSS `421.465 MiB` below the
@@ -137,16 +139,16 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
   `7addeee`. The retained branch `codex/chore-3.1-prebuild-acceptance` points to
   the same integrated commit. `release/VERSION.txt` intentionally remains
   `3.0.7`; no installer, paid request or publication was started.
+- Windows-native acceptance follow-up is isolated on
+  `codex/fix-3.1-windows-native-tests`, stacked on the integrated source and
+  documentation checkpoints. It adds only real DPAPI and installer-lock tests;
+  production code is unchanged.
 - Release baseline branch: `develop/3.0`
-- Current 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`;
-  `release/VERSION.txt` is `3.0.7`. This branch contains
-  `codex/feature-generation-fal-localization` and is a strict descendant of
-  `develop/3.0` (73 commits ahead at the audit point), so it can later be
-  integrated without rewriting history after explicit merge approval.
-- Current documentation branch: `codex/docs-3.1.0-feedback-prd`, created from
-  that exact 3.0.7 source line. It defines the next 3.1.0 scope without changing
-  `release/VERSION.txt` or 3.0 source contracts and tracks the same branch name
-  on GitHub.
+- Frozen 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`.
+  Its relevant history is already incorporated into the 3.1 ancestry; it is a
+  historical reference and must not be integrated into `develop/3.1` again.
+- The older `codex/docs-3.1.0-feedback-prd` branch is historical planning input,
+  not the current handoff or implementation base.
 - The older `codex/fix-windows-acceptance-ux-3.0.5` branch is not an
   implementation base: its 14 feedback commits diverged from current
   `develop/3.0`. Their product requirements are being consolidated manually
@@ -168,8 +170,9 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 On Windows, run the manual UI, mouse-editor, path/output, license and Chroma
 checklist from integrated `develop/3.1` at 1120×780 and 100% display scaling
-before changing `release/VERSION.txt`. A stylus check is needed only when the
-target device and expected workflow use one. The one-prompt/one-variant KIE
+and run the native DPAPI round-trip and installer-lock tests before changing
+`release/VERSION.txt`. A stylus check is needed only when the target device and
+expected workflow use one. The one-prompt/one-variant KIE
 duplicate audit is a separately authorized paid request. Installer build and
 publication remain separate later decisions.
 
@@ -634,9 +637,11 @@ acceptance are approved.
   evidence gates. The downloaded `VibixImages-Setup-3.0.5.exe` is `191362608`
   bytes with SHA-256
   `6c3f4837b381f2da44cd0d54fa4b8fce8ec03b047227efc9e3b57c226d8daba6`.
-- The deployed license service and signed online desktop contract are active;
-  availability of VDS, DNS, TLS, and PostgreSQL is therefore a direct
-  application-availability dependency.
+- The deployed license service and signed desktop contract are active. VDS,
+  DNS, TLS and PostgreSQL availability is a direct dependency for first
+  activation, explicit server decisions and continued work after the bounded
+  seven-calendar-day grace expires; a qualifying temporary outage does not
+  immediately block a previously verified license within that grace.
 - The local legacy `licenses.db` is ignored and no longer tracked in source
   control; server-side license state must use the configured external database.
 - Automated packaged checks passed, but final installation, production-license

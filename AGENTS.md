@@ -2,17 +2,15 @@
 
 ## Branches
 
-- `develop/3.0` is the development and integration branch.
-- `codex/fix-pinterest-prompt-only` at the verified 3.0.7 checkpoint remains
-  the frozen source candidate until it is explicitly integrated/released.
-- After 3.0.7 is frozen and the owner approves the transition, create
-  `develop/3.1` from the exact published 3.0.7 commit. All 3.1 implementation
-  branches must start from current `develop/3.1`, not from an older 3.0 task
-  branch. The 3.1 PRD/docs alone do not authorize this branch creation.
+- `develop/3.1` is the current development and integration branch for 3.1.0.
+- `develop/3.0` and `codex/fix-pinterest-prompt-only` remain frozen historical
+  3.0.x lines and are not implementation bases for current work.
+- All 3.1 implementation branches start from synchronized `develop/3.1`, not
+  from an older 3.0 task or release-candidate branch.
 - `release/3.x` is the stabilization branch for release preparation.
-- `main` is not part of routine 3.0 development.
+- `main` is not part of routine development.
 - Create task branches from the current development branch for the target
-  release (`develop/3.0` now; `develop/3.1` only after the approved transition):
+  release (`develop/3.1` for current 3.1 work):
   - `codex/fix-*` for bug fixes;
   - `codex/ui-*` for visual or usability changes;
   - `codex/license-*` for licensing and registration;

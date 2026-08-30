@@ -26,9 +26,9 @@ Windows activation is `.venv\\Scripts\\Activate.ps1`.
 
 ## Workflow boundary
 
-Development is VDS-first. `develop/3.0` remains active through the 3.0.7
-freeze; after the approved transition, 3.1 work uses `develop/3.1` created from
-the exact published 3.0.7 commit. Windows remains the clean clone for
+Development is VDS-first. `develop/3.1` is the current integration line for
+3.1.0; frozen 3.0.x and old release-candidate branches are historical and must
+not be used as implementation bases. Windows remains the clean clone for
 Windows-specific behavior and visual checks. GitHub is the only handoff point;
 do not edit the same branch from both machines simultaneously.
 
@@ -42,10 +42,12 @@ The ordered MVP and cleanup acceptance work is complete. The product is branded
 as `Vibix Images` with the subtitle `AI Image Generation & Processing`; the
 approved shared mark is integrated into the runtime and Windows packaging
 configuration. The self-hosted license
-service is deployed, and the desktop client uses its signed online-only license
-contract. Protected operations and retries require fresh authorization. A
-startup-gate hotfix is implemented so the main interface also remains closed
-until a saved license is validated online or a new key is activated.
+service is deployed, and the desktop client uses signed online validation with
+a bounded seven-calendar-day offline grace for a previously verified license
+during transport or server outage. First activation, explicit denial,
+revocation, expiry, tampering and clock rollback remain fail-closed. The main
+interface stays closed until online validation/new activation or a valid signed
+local proof within that grace.
 The first screen exposes safe license status, license replacement, and API
 settings. New projects use a Pictures-based default and retain the last selected
 work and result folders in user-data preferences.
