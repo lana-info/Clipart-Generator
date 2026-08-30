@@ -553,6 +553,64 @@ def _neutralize_opaque_key_spill(
     return result
 
 
+def _neutralize_translucent_complement(
+    source: Image.Image,
+    result: Image.Image,
+    key_color: object,
+) -> Image.Image:
+    """Remove complementary colour created by over-subtracting a key channel."""
+    requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
+    key_channel = int(np.argmax(requested_key))
+    other_channels = [index for index in range(3) if index != key_channel]
+    source_rgb = np.asarray(source.convert("RGB"), dtype=np.float32)
+    pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8).copy()
+    rgb = pixels[..., :3].astype(np.float32)
+    alpha = pixels[..., 3]
+    other_floor = np.minimum(
+        rgb[..., other_channels[0]],
+        rgb[..., other_channels[1]],
+    )
+    source_other = np.maximum(
+        source_rgb[..., other_channels[0]],
+        source_rgb[..., other_channels[1]],
+    )
+    over_removed_key = (
+        source_rgb[..., key_channel] >= rgb[..., key_channel] + 20.0
+    )
+    severe_complement = rgb[..., key_channel] < 0.90 * other_floor
+    source_still_key_dominant = (
+        source_rgb[..., key_channel] >= source_other + 8.0
+    )
+    mild_complement_from_key = source_still_key_dominant & (
+        rgb[..., key_channel] < 1.05 * other_floor
+    )
+    translucent = (alpha > 0) & (alpha < 255)
+    wide_translucent_core = cv2.erode(
+        translucent.astype(np.uint8),
+        np.ones((9, 9), dtype=np.uint8),
+        iterations=1,
+    ).astype(bool)
+    translucent_neighborhood = cv2.dilate(
+        wide_translucent_core.astype(np.uint8),
+        np.ones((25, 25), dtype=np.uint8),
+        iterations=1,
+    ).astype(bool)
+    visible = alpha > 0
+    repair = (
+        over_removed_key
+        & (severe_complement | mild_complement_from_key)
+        & translucent_neighborhood
+        & visible
+    )
+    if not np.any(repair):
+        return result
+
+    restored_key = other_floor
+    np.copyto(rgb[..., key_channel], restored_key, where=repair)
+    pixels[..., :3] = np.rint(np.clip(rgb, 0.0, 255.0)).astype(np.uint8)
+    return Image.fromarray(pixels, mode="RGBA")
+
+
 def _remove_chroma_key_staged(
     image: Image.Image,
     key_color: object,
@@ -900,9 +958,11 @@ def remove_chroma_key_automatic(
         except ChromaKeyAmbiguousError:
             pass
         else:
-            return _neutralize_opaque_key_spill(image, result, key_color)
+            result = _neutralize_opaque_key_spill(image, result, key_color)
+            return _neutralize_translucent_complement(image, result, key_color)
     result = _remove_chroma_key_staged(image, key_color)
-    return _neutralize_opaque_key_spill(image, result, key_color)
+    result = _neutralize_opaque_key_spill(image, result, key_color)
+    return _neutralize_translucent_complement(image, result, key_color)
 
 
 def chroma_key_prompt_block(

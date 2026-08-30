@@ -299,7 +299,50 @@ def _soft_shape_on_rendered_key(
     )
 
 
+def _layered_translucent_strip(key_name: str) -> Image.Image:
+    key = np.asarray(KEY_COLORS["blue"], dtype=np.float32)
+    orange_subject = np.asarray((230, 120, 40), dtype=np.float32)
+    translucent_pink = np.asarray((240, 180, 210), dtype=np.float32)
+    pixels = np.broadcast_to(key, (160, 160, 3)).copy()
+    pixels[30:145, 70:100] = orange_subject
+    strip = np.s_[55:120, 20:140]
+    pixels[strip] = 0.40 * translucent_pink + 0.60 * pixels[strip]
+    for y in range(58, 120, 8):
+        line = np.s_[y : y + 1, 20:140]
+        pixels[line] = 0.65 * translucent_pink + 0.35 * pixels[line]
+    permutations = {
+        "blue": (0, 1, 2),
+        "green": (0, 2, 1),
+        "red": (2, 0, 1),
+    }
+    return Image.fromarray(
+        np.rint(pixels[..., permutations[key_name]]).astype(np.uint8),
+        mode="RGB",
+    )
+
+
 class ChromaFineDetailTests(unittest.TestCase):
+    def test_translucent_interior_does_not_gain_complementary_key_colour(self):
+        for key_name in ("blue", "green", "red"):
+            with self.subTest(key_name=key_name):
+                result = remove_chroma_key_automatic(
+                    _layered_translucent_strip(key_name),
+                    key_name,
+                )
+                pixel = np.asarray(result, dtype=np.uint8)[80, 120]
+                key_channel = int(np.argmax(KEY_COLORS[key_name]))
+                other_channels = [index for index in range(3) if index != key_channel]
+
+                self.assertEqual(int(pixel[3]), 126)
+                self.assertGreaterEqual(
+                    int(pixel[key_channel]),
+                    0.90
+                    * min(
+                        int(pixel[other_channels[0]]),
+                        int(pixel[other_channels[1]]),
+                    ),
+                )
+
     def test_rendered_key_edges_are_recovered_without_complementary_halo(self):
         for key_name in ("blue", "green", "red"):
             with self.subTest(key_name=key_name):
