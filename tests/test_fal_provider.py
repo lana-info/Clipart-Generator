@@ -376,6 +376,31 @@ class FalProviderTests(unittest.TestCase):
 
         self.assertNotIn("completed", statuses)
 
+    def test_image_operation_is_not_completed_until_result_schema_is_valid(self):
+        model_id = "fal-ai/bria/background/remove"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        client.submit_task = lambda _request: {"request_id": "req-invalid-result"}
+
+        def invalid_result(_request_id, *, on_status, **_kwargs):
+            on_status("completed")
+            return {
+                "request_id": "req-invalid-result",
+                "status": "completed",
+                "result": {},
+            }
+
+        client.wait_for_result = invalid_result
+        statuses = []
+
+        with self.assertRaises(FalProviderError):
+            client.run_image_operation(
+                "remove_background",
+                "https://cdn.example/input.png",
+                on_status=statuses.append,
+            )
+
+        self.assertNotIn("completed", statuses)
+
     def test_task_journal_does_not_recover_completed_after_cancel(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = FalTaskJournal(f"{temp}/fal-tasks.json")

@@ -129,7 +129,13 @@ class KieRoutingTests(unittest.TestCase):
                     if request_id == "req-timeout":
                         raise TimeoutError("temporary polling outage")
                     on_status("completed")
-                    return {"request_id": request_id, "status": "completed"}
+                    return {
+                        "request_id": request_id,
+                        "status": "completed",
+                        "result": {
+                            "images": [{"url": "https://cdn.example/recovered.png"}]
+                        },
+                    }
 
             with patch("main.FalClient", FakeFalClient):
                 recovered = worker.recover_pending_fal_tasks()
@@ -137,12 +143,67 @@ class KieRoutingTests(unittest.TestCase):
             self.assertEqual(polled, ["req-timeout", "req-complete"])
             self.assertEqual(
                 recovered,
-                ({"request_id": "req-complete", "status": "completed"},),
+                (
+                    {
+                        "request_id": "req-complete",
+                        "status": "completed",
+                        "result": {
+                            "images": [{"url": "https://cdn.example/recovered.png"}]
+                        },
+                    },
+                ),
             )
             self.assertEqual(
                 {record.request_id for record in worker.fal_task_journal.pending()},
                 {"req-timeout"},
             )
+
+    def test_new_worker_resumes_existing_fal_task_without_submit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            model_id = "fal-ai/flux/schnell"
+            first = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            first.fal_task_journal.upsert(
+                "existing-fal-task",
+                "generation",
+                model_id,
+                "queued",
+            )
+            restarted = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            restarted._set_diagnostic_context(1, 1, "generation")
+            calls = []
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    calls.append("POST")
+                    raise AssertionError("restart must not submit another paid task")
+
+                def wait_for_result(self, request_id, *, on_status, **_kwargs):
+                    calls.append(("GET", request_id))
+                    on_status("completed")
+                    return {
+                        "request_id": request_id,
+                        "status": "completed",
+                        "result": {
+                            "images": [{"url": "https://cdn.example/recovered.png"}]
+                        },
+                    }
+
+            with patch("main.FalClient", FakeFalClient):
+                result = restarted._fal_generate_image("same prompt", model_id)
+
+            self.assertEqual(result, "https://cdn.example/recovered.png")
+            self.assertEqual(calls, [("GET", "existing-fal-task")])
 
     def test_ideogram_generation_sends_selected_aspect_ratio(self):
         worker = main.WorkerThread(
@@ -489,6 +550,50 @@ class KieRoutingTests(unittest.TestCase):
             )
             self.assertIn("task-resume-1", journal_text)
             self.assertNotIn("private prompt", journal_text)
+
+    def test_new_worker_resumes_existing_kie_task_without_post(self):
+        with tempfile.TemporaryDirectory() as temp:
+            model_id = main.resolve_kie_generation_model("z-image", False)
+            first = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(kie_api_key=DUMMY_KIE_KEY),
+            )
+            first.kie_task_journal.upsert(
+                "existing-task",
+                "generation",
+                model_id,
+                "queued",
+            )
+            restarted = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(kie_api_key=DUMMY_KIE_KEY),
+            )
+            restarted.status_poll_interval = 0
+            restarted._set_diagnostic_context(1, 1, "generation")
+            methods = []
+
+            def fake_request_json(_self, _url, *, method, **_kwargs):
+                methods.append(method)
+                if method == "POST":
+                    raise AssertionError("restart must not submit another paid task")
+                return {
+                    "code": 200,
+                    "data": {
+                        "state": "success",
+                        "resultJson": json.dumps(
+                            {"resultUrls": ["https://cdn.example/recovered.png"]}
+                        ),
+                    },
+                }
+
+            restarted._request_json = types.MethodType(fake_request_json, restarted)
+
+            result = restarted._kie_generate_generic_model("z-image", "same prompt")
+
+            self.assertEqual(result, "https://cdn.example/recovered.png")
+            self.assertEqual(methods, ["GET"])
 
     def test_kie_result_parse_failure_keeps_completed_task_recoverable(self):
         with tempfile.TemporaryDirectory() as temp:

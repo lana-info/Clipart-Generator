@@ -491,18 +491,30 @@ class FalClient:
         request_id = str(submitted["request_id"])
         if on_submitted is not None:
             on_submitted(request_id)
+        terminal_status = {"value": ""}
+
+        def relay_status(status: str) -> None:
+            if status in {"completed", "completed_after_cancel"}:
+                terminal_status["value"] = status
+            elif on_status is not None:
+                on_status(status)
+
         completed = self.wait_for_result(
             request_id,
             timeout_seconds=300.0,
             poll_interval_seconds=2.0,
             is_cancelled=is_cancelled,
-            on_status=on_status,
+            on_status=relay_status,
         )
         validate_fal_image_result(
             completed.get("result"),
             operation=operation,
             model_id=selected_model_id,
         )
+        if on_status is not None:
+            on_status(
+                str(completed.get("status") or terminal_status["value"] or "completed")
+            )
         return completed
 
     def status(self, request_id: str) -> dict[str, Any]:
