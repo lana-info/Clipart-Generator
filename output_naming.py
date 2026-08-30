@@ -39,6 +39,45 @@ _CYRILLIC_TRANSLITERATION = str.maketrans(
         "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
     }
 )
+MAX_OUTPUT_FILENAME_UTF16_UNITS = 240
+MAX_OUTPUT_FILENAME_UTF8_BYTES = 240
+
+
+def _utf16_units(value: str) -> int:
+    return len(value.encode("utf-16-le")) // 2
+
+
+def _truncate_filename_stem(
+    value: str,
+    utf16_limit: int,
+    utf8_limit: int,
+) -> str:
+    kept: list[str] = []
+    used_utf16 = 0
+    used_utf8 = 0
+    for character in value:
+        utf16_units = 2 if ord(character) > 0xFFFF else 1
+        utf8_bytes = len(character.encode("utf-8"))
+        if (
+            used_utf16 + utf16_units > utf16_limit
+            or used_utf8 + utf8_bytes > utf8_limit
+        ):
+            break
+        kept.append(character)
+        used_utf16 += utf16_units
+        used_utf8 += utf8_bytes
+    return "".join(kept)
+
+
+def _budgeted_filename(stem: str, suffix: str) -> str:
+    available_utf16 = MAX_OUTPUT_FILENAME_UTF16_UNITS - _utf16_units(suffix)
+    available_utf8 = MAX_OUTPUT_FILENAME_UTF8_BYTES - len(suffix.encode("utf-8"))
+    shortened = _truncate_filename_stem(
+        stem,
+        max(1, available_utf16),
+        max(1, available_utf8),
+    )
+    return f"{shortened}{suffix}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +110,7 @@ class BatchOutputNameReservation:
         overwrite: bool,
     ) -> Path:
         base = Path(source_path).stem
-        destination = self.output_dir / f"{base}_ready.png"
+        destination = self.output_dir / _budgeted_filename(base, "_ready.png")
         with self._lock:
             if overwrite and destination.name.casefold() not in self._reserved_names:
                 return self._reserve(destination)
@@ -79,7 +118,9 @@ class BatchOutputNameReservation:
                 return self._reserve(destination)
             suffix = 2
             while True:
-                candidate = destination.with_name(f"{base}_ready_{suffix}.png")
+                candidate = destination.with_name(
+                    _budgeted_filename(base, f"_ready_{suffix}.png")
+                )
                 if not self._is_unavailable(candidate):
                     return self._reserve(candidate)
                 suffix += 1
@@ -87,11 +128,14 @@ class BatchOutputNameReservation:
     def reserve_generated(self, row_index: int, prompt: str = "") -> Path:
         prompt_stem = _generated_prompt_stem(prompt)
         base = f"{prompt_stem}_{max(1, int(row_index)):02d}_ready"
-        destination = self.output_dir / f"{base}.png"
+        destination = self.output_dir / _budgeted_filename(base, ".png")
         with self._lock:
             suffix = 2
             while self._is_unavailable(destination):
-                destination = self.output_dir / f"{base}_{suffix}.png"
+                destination = self.output_dir / _budgeted_filename(
+                    base,
+                    f"_{suffix}.png",
+                )
                 suffix += 1
             return self._reserve(destination)
 
@@ -111,12 +155,14 @@ def workspace_layout(saved_path: str | Path) -> WorkspaceLayout:
 def processed_output_path(output_dir: str | Path, source_path: str | Path, run_stamp: str, *, overwrite: bool) -> Path:
     """Return a destination, preserving existing files unless overwrite is enabled."""
     base = Path(source_path).stem
-    destination = Path(output_dir) / f"{base}_ready.png"
+    destination = Path(output_dir) / _budgeted_filename(base, "_ready.png")
     if overwrite or not destination.exists():
         return destination
     suffix = 2
     while True:
-        candidate = destination.with_name(f"{base}_ready_{suffix}.png")
+        candidate = destination.with_name(
+            _budgeted_filename(base, f"_ready_{suffix}.png")
+        )
         if not candidate.exists():
             return candidate
         suffix += 1
@@ -157,9 +203,9 @@ def generated_output_path(
 ) -> Path:
     prompt_stem = _generated_prompt_stem(prompt)
     base = f"{prompt_stem}_{max(1, int(row_index)):02d}_ready"
-    destination = Path(output_dir) / f"{base}.png"
+    destination = Path(output_dir) / _budgeted_filename(base, ".png")
     suffix = 2
     while destination.exists():
-        destination = Path(output_dir) / f"{base}_{suffix}.png"
+        destination = Path(output_dir) / _budgeted_filename(base, f"_{suffix}.png")
         suffix += 1
     return destination

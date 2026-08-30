@@ -4,10 +4,15 @@ import unittest
 
 from output_naming import (
     BatchOutputNameReservation,
+    MAX_OUTPUT_FILENAME_UTF16_UNITS,
     generated_output_path,
     processed_output_path,
     workspace_layout,
 )
+
+
+def utf16_units(value):
+    return len(value.encode("utf-16-le")) // 2
 
 
 def test_processed_output_uses_stable_name_when_overwriting():
@@ -97,3 +102,18 @@ def test_batch_reservation_never_reuses_overwrite_destination(tmp_path):
 
     assert first == tmp_path / "same_ready.png"
     assert second == tmp_path / "same_ready_2.png"
+
+
+def test_processed_names_keep_suffix_and_fit_the_windows_component_budget(tmp_path):
+    source = f"{'😀' * 180}{'a' * 180}.png"
+
+    first = processed_output_path(tmp_path, source, "run-1", overwrite=False)
+    first.touch()
+    second = processed_output_path(tmp_path, source, "run-1", overwrite=False)
+
+    assert first.name.endswith("_ready.png")
+    assert second.name.endswith("_ready_2.png")
+    assert utf16_units(first.name) <= MAX_OUTPUT_FILENAME_UTF16_UNITS
+    assert utf16_units(second.name) <= MAX_OUTPUT_FILENAME_UTF16_UNITS
+    assert len(first.name.encode("utf-8")) <= MAX_OUTPUT_FILENAME_UTF16_UNITS
+    assert len(second.name.encode("utf-8")) <= MAX_OUTPUT_FILENAME_UTF16_UNITS
