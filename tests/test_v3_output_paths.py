@@ -159,8 +159,10 @@ class V3OutputPathsTests(unittest.TestCase):
             self.assertNotEqual(first_run, second_run)
             self.assertEqual(first_run.parent, workspace / ".run")
             self.assertEqual(second_run.parent, workspace / ".run")
-            Image.new("RGB", (4, 4), "red").save(first_run / "file_gen_001.png")
-            second_marker = second_run / "other_gen_001.png"
+            Image.new("RGB", (4, 4), "red").save(
+                first_run / f"gen_001_{first.run_stamp}.png"
+            )
+            second_marker = second_run / f"gen_001_{second.run_stamp}.png"
             Image.new("RGB", (4, 4), "blue").save(second_marker)
 
             first._persist_rough_outputs(first_run)
@@ -170,6 +172,39 @@ class V3OutputPathsTests(unittest.TestCase):
             self.assertEqual(
                 len(list((workspace / "rough").glob("*.png"))),
                 1,
+            )
+
+    def test_rough_generation_stage_excludes_internal_pipeline_copies(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="rough-stage-classification-") as temp:
+            workspace = Path(temp) / "workspace"
+            output = workspace / "output"
+            output.mkdir(parents=True)
+            worker = WorkerThread(
+                "mode1_generate_and_process",
+                str(workspace),
+                {"workspace_root": str(workspace), "output_dir": str(output)},
+            )
+            raw_dir = Path(worker._create_run_raw_dir())
+            stamp = worker.run_stamp
+            files = {
+                f"gen_001_{stamp}.png": "red",
+                f"gen_002_{stamp}.png": "blue",
+                f"gen_metadata_001_{stamp}.png": "red",
+                f"gen_existing_alpha_002_{stamp}.png": "blue",
+                f"gen_chroma_key_nobg_001_{stamp}.png": "green",
+            }
+            for name, color in files.items():
+                Image.new("RGBA", (4, 4), color).save(raw_dir / name)
+
+            worker._persist_rough_outputs(raw_dir)
+
+            self.assertEqual(
+                sorted(path.name for path in (workspace / "rough").glob("*.png")),
+                [
+                    "rough_01_bg-removed.png",
+                    "rough_01_generated.png",
+                    "rough_02_generated.png",
+                ],
             )
 
     def test_invalid_work_dir_falls_back_to_writable_output_dir(self) -> None:

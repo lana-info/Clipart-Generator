@@ -865,7 +865,7 @@ Steps:
   должен определять KIE/Fal по выбранным text/reference моделям, а не всегда
   писать `generation:kie`. Добавить mixed-model regression, чтобы preflight,
   стоимость и диагностика использовали один фактический route resolver.
-- [ ] Исправить публикацию стадий в `rough/` без изменения утверждённой модели
+- [x] Исправить публикацию стадий в `rough/` без изменения утверждённой модели
   папок `rough/` + `output/`: один provider result должен публиковаться как один
   `*_generated`, а `gen_metadata_*` и `gen_existing_alpha_*` не должны попадать
   в `generated` только из-за общего префикса `gen`. Сначала добавить regression

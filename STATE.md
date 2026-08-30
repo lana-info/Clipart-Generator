@@ -128,10 +128,12 @@ labelled raccoon `bg-removed` stage. The current tests assert that rough files
 exist and use collision numbering, but do not require one published generated
 stage per actual provider result or reject semantic duplicates.
 
-This is a confirmed current-candidate file-publication/diagnostics regression,
-not a reason to remove the approved `rough/` and `output/` folders. Task 13 now
-requires a stage-aware regression and minimal classifier repair after the owner
-finishes observation testing.
+This confirmed file-publication regression is fixed without changing the
+approved `rough/` and `output/` folders. The `generated` classifier now accepts
+only the exact provider-download filename for the current run; metadata-cleaned
+and existing-alpha copies are no longer relabelled as new generations. A
+five-file reproduction now publishes exactly two generated stages and one
+meaningful background-removal stage, and the focused output-path suite passes.
 
 The same pixel evidence resolves the blue-background question. The raccoon KIE
 download is an opaque RGB image with the requested blue background, and Local

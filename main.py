@@ -2224,7 +2224,10 @@ class WorkerThread(QThread):
             ("nobg", "bg-removed"),
             ("unsharp", "sharpened"),
             ("pretrim", "pre-trim"),
-            ("gen", "generated"),
+        )
+        generated_name = re.compile(
+            rf"^gen_\d{{3}}_{re.escape(self.run_stamp)}\.png$",
+            re.IGNORECASE,
         )
         counters = {}
         for source in sorted(Path(raw_dir).glob("*.png")):
@@ -2233,6 +2236,8 @@ class WorkerThread(QThread):
                 (label for marker, label in stage_markers if marker in lower_name),
                 None,
             )
+            if stage is None and generated_name.fullmatch(source.name):
+                stage = "generated"
             if stage is None:
                 continue
             counters[stage] = counters.get(stage, 0) + 1
