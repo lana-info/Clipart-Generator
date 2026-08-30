@@ -145,12 +145,11 @@ Isolated on a completely flat, uniform, solid pure blue (#0000FF) digital chroma
   создаёт user-visible `rough/` для сохраняемых промежуточных stage outputs и
   `output/` только для готовых `_ready`. Внутренняя transient `.run/` не
   считается `rough`, не показывается как результат и очищается best-effort
-  после terminal run. Старый сохранённый путь с basename `output` мигрирует в
-  его parent как workspace root с одноразовым уведомлением. Для любого другого
-  legacy path до первого 3.1 run требуется одноразовый выбор: подтвердить эту
-  папку как workspace root (готовые файлы далее пойдут в её `output/`) или
-  выбрать другой root. Без подтверждения фактическая папка результатов не
-  меняется, поэтому `output/output` и неожиданный перенос не возникают молча.
+  после terminal run. Прежний алгоритм выбора рабочей папки сохраняется без
+  новой миграционной страницы. Если в старых настройках записан путь с
+  basename `output`, приложение автоматически использует его parent как
+  workspace root и не создаёт `output/output`; любой другой сохранённый путь
+  остаётся выбранным workspace root.
 - `CG31-FR-021` — промежуточное имя содержит один suffix последнего этапа:
   `_generated`, `_upscaled-before-2x`, `_bg-removed`,
   `_upscaled-after-2x`, `_trimmed` или `_edge-cleaned`.

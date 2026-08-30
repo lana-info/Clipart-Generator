@@ -18,8 +18,11 @@ Task 6 output naming is integrated in `develop/3.1` at `6551011`:
 `Object: fox. Scene: …` даёт `fox_01_ready.png`; частые русские названия
 переводятся в английские (`лисенок` → `fox`). Collision-safe suffix и
 `_ready` сохранены. Focused output suite (35 tests), `py_compile`,
-`git diff --check` и sensitive scan прошли. Остаётся ручная Windows-проверка
-workspace migration и реальных имён на пользовательских промптах.
+`git diff --check` и sensitive scan прошли. Владелец подтвердил сохранение
+прежнего выбора рабочей папки без миграционной страницы: `rough/` и `output/`
+остаются внутри выбранного root, а старый literal `output` автоматически
+нормализуется в parent. Остаётся ручная Windows-проверка путей и реальных имён
+на пользовательских промптах.
 
 Task 25 is integrated in `develop/3.1` at `bdf6823`:
 Fal.ai price refresh на Review & Run необязателен; подтверждающая галочка

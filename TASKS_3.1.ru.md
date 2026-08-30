@@ -211,7 +211,7 @@ Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 ## Task 6: Разделить `rough` и `output` и нормализовать имена
 
 Status: In progress — implementation checkpoints `ec31203`, `ba95ba0`,
-`99ea7eb`, `6551011`; final workspace migration/manual Windows acceptance pending
+`99ea7eb`, `6551011`; final automatic compatibility/manual Windows acceptance pending
 
 Goal:
 Хранить intermediates отдельно от готовых файлов с короткими говорящими names.
@@ -219,8 +219,8 @@ Goal:
 Steps:
 - Считать выбранный путь workspace root и создавать внутри `rough/`, `output/`
   и transient hidden `.run/`; мигрировать literal legacy `output` path в parent.
-- Для другого legacy path требовать одноразовый выбор workspace root до смены
-  фактического output location; не продолжать молча.
+- Не добавлять миграционную страницу: любой другой сохранённый путь продолжает
+  использоваться как workspace root без изменения привычного алгоритма.
 - Очищать `.run/` best-effort после terminal run; persistent `rough/` не удалять
   без отдельного пользовательского действия.
 - Использовать один suffix последнего stage и различать
@@ -232,8 +232,9 @@ Steps:
 
 Acceptance:
 - [ ] В `output/` нет intermediates, в `rough/` нет final `_ready`.
-- [ ] `.run/` не показывается как пользовательский intermediate, а legacy path
-  не создаёт молча `output/output`.
+- [x] `.run/` не показывается как пользовательский intermediate, literal legacy
+  `output` path автоматически нормализуется в parent и не создаёт
+  `output/output`; дополнительной страницы нет.
 - [ ] Нет timestamp/UUID/цепочек suffix и silent overwrite.
 - [ ] Пользователь не вводит имя вручную.
 - [x] Generated output не содержит служебных label `object`/`scene`: например,

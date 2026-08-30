@@ -32,6 +32,17 @@ def test_workspace_layout_migrates_legacy_output_path_to_parent(tmp_path):
     assert layout.transient == tmp_path / ".run"
 
 
+def test_workspace_layout_preserves_any_other_selected_root(tmp_path):
+    selected_root = tmp_path / "my-vibix-workspace"
+
+    layout = workspace_layout(selected_root)
+
+    assert layout.root == selected_root
+    assert layout.output == selected_root / "output"
+    assert layout.rough == selected_root / "rough"
+    assert layout.transient == selected_root / ".run"
+
+
 def test_generated_output_uses_short_ready_name_and_collision_number(tmp_path):
     assert generated_output_path(tmp_path, 1, "Blue watercolor flowers") == tmp_path / "blue_watercolor_flowers_01_ready.png"
     (tmp_path / "blue_watercolor_flowers_01_ready.png").touch()
