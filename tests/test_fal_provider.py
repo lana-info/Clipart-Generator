@@ -1,5 +1,7 @@
 import json
 import tempfile
+import threading
+import time
 import unittest
 import urllib.error
 from io import BytesIO
@@ -353,6 +355,40 @@ class FalProviderTests(unittest.TestCase):
             payload = open(f"{temp}/fal-tasks.json", encoding="utf-8").read()
             self.assertNotIn("secret", payload.lower())
             self.assertIn("req-123", payload)
+
+    def test_task_journal_keeps_all_concurrent_request_updates(self):
+        class SlowReadJournal(FalTaskJournal):
+            def _read(self):
+                records = super()._read()
+                time.sleep(0.01)
+                return records
+
+        with tempfile.TemporaryDirectory() as temp:
+            journal = SlowReadJournal(f"{temp}/fal-tasks.json")
+            start = threading.Barrier(8)
+            threads = []
+            for index in range(8):
+                thread = threading.Thread(
+                    target=lambda item=index: (
+                        start.wait(),
+                        journal.upsert(
+                            f"req-{item}",
+                            "generation",
+                            "fal-ai/flux/schnell",
+                            "queued",
+                        ),
+                    )
+                )
+                threads.append(thread)
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2)
+                self.assertFalse(thread.is_alive())
+
+            self.assertEqual(
+                {record.request_id for record in journal.pending()},
+                {f"req-{index}" for index in range(8)},
+            )
 
 
 if __name__ == "__main__":

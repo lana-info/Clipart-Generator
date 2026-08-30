@@ -13,6 +13,7 @@ import mimetypes
 import os
 import re
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -70,6 +71,7 @@ class FalTaskJournal:
 
     def __init__(self, path: str | os.PathLike[str]) -> None:
         self.path = Path(path)
+        self._lock = threading.RLock()
 
     def _read(self) -> dict[str, FalTaskRecord]:
         try:
@@ -119,27 +121,29 @@ class FalTaskJournal:
                 pass
 
     def upsert(self, request_id: str, operation: str, model_id: str, status: str) -> FalTaskRecord:
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        records = self._read()
-        previous = records.get(str(request_id))
-        record = FalTaskRecord(
-            request_id=str(request_id),
-            operation=str(operation),
-            model_id=str(model_id),
-            status=str(status),
-            created_at=previous.created_at if previous else now,
-            updated_at=now,
-        )
-        records[record.request_id] = record
-        self._write(records)
-        return record
+        with self._lock:
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            records = self._read()
+            previous = records.get(str(request_id))
+            record = FalTaskRecord(
+                request_id=str(request_id),
+                operation=str(operation),
+                model_id=str(model_id),
+                status=str(status),
+                created_at=previous.created_at if previous else now,
+                updated_at=now,
+            )
+            records[record.request_id] = record
+            self._write(records)
+            return record
 
     def pending(self) -> tuple[FalTaskRecord, ...]:
-        return tuple(
-            record
-            for record in self._read().values()
-            if record.status not in {"completed", "cancelled", "failed"}
-        )
+        with self._lock:
+            return tuple(
+                record
+                for record in self._read().values()
+                if record.status not in {"completed", "cancelled", "failed"}
+            )
 
 
 _MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$")
