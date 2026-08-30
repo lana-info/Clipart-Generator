@@ -23,7 +23,7 @@ if str(ROOT) not in sys.path:
 
 from PIL import Image, ImageDraw
 from PyQt6.QtCore import QEvent
-from PyQt6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QWidget
 
 from v3_api_settings import ApiSettingsDialog
 from v3_clipart_flow import install_clipart_flow
@@ -40,7 +40,7 @@ from v3_project_state import (
     StepId,
 )
 from v3_prompt_csv_import import PromptCsvImportDialog
-from v3_transparency_preview import ClipartTransparencyPreview
+from v3_transparency_preview import ClipartTransparencyEditorPage
 from v3_wizard import AppShell
 
 
@@ -116,9 +116,15 @@ def clipart_state(work_dir: Path) -> ProjectState:
         restrictions=["текст", "рамки", "водяные знаки", "обрезанные уши"],
         chroma_key_enabled=True,
         chroma_key_color="blue",
+        chroma_key_materials=["watercolor", "thin_leaves", "transparent_details"],
     )
+    reference_path = work_dir / "licensed-fox-reference.png"
+    create_demo_image(reference_path)
     state.clipart.prompts = [
-        PromptEntry("Акварельная лиса сидит, один объект целиком, по центру"),
+        PromptEntry(
+            "Акварельная лиса сидит, один объект целиком, по центру",
+            [str(reference_path)],
+        ),
         PromptEntry("Акварельный медвежонок держит букет полевых цветов"),
         PromptEntry("Акварельный заяц сидит, мягкая природная палитра"),
     ]
@@ -141,6 +147,16 @@ def capture_clipart_pages(work_dir: Path) -> None:
     page.source_buttons[0].click()
     shell.refresh()
     capture(shell, "03-clipart-prompt-generator.png")
+
+    shell = AppShell(state)
+    controller = install_clipart_flow(shell, runtime_settings_provider=lambda: {})
+    state.set_step(StepId.PROMPTS)
+    page = controller.pages[StepId.PROMPTS]
+    page.source_buttons[0].click()
+    shell.refresh()
+    page.verticalScrollBar().setValue(max(0, page.verticalScrollBar().maximum() - 520))
+    process_events()
+    capture(shell, "14-clipart-chroma-controls.png")
 
     shell = AppShell(state)
     controller = install_clipart_flow(shell, runtime_settings_provider=lambda: {})
@@ -261,22 +277,13 @@ def capture_processing_pages(work_dir: Path) -> None:
 
 def capture_transparency_editor(work_dir: Path) -> None:
     image_path = work_dir / "transparent-fox.png"
-    image = create_demo_image(image_path, transparent=True)
-    preview = ClipartTransparencyPreview()
-    preview.set_image(image)
-    preview.background_combo.setCurrentText("Ярко-розовый")
-    preview.zoom_spin.setValue(75)
-    container = QWidget()
-    apply_v3_theme(container)
-    layout = QVBoxLayout(container)
-    title = QLabel("Редактор прозрачности клипарта")
-    title.setProperty("v3Title", True)
-    subtitle = QLabel("Проверьте края на контрастном фоне и исправьте alpha-маску кистью.")
-    subtitle.setWordWrap(True)
-    layout.addWidget(title)
-    layout.addWidget(subtitle)
-    layout.addWidget(preview, 1)
-    capture(container, "13-transparency-editor.png", size=(980, 820))
+    create_demo_image(image_path, transparent=True)
+    editor = ClipartTransparencyEditorPage()
+    apply_v3_theme(editor)
+    editor.set_files([image_path], rough_dir=work_dir / "rough")
+    editor.background_buttons["Ярко-розовый"].click()
+    editor.zoom_buttons[150].click()
+    capture(editor, "13-transparency-editor.png", size=(1120, 780))
 
 
 def main(argv: list[str] | None = None) -> int:

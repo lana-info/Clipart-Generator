@@ -1,4 +1,4 @@
-# Vibix Images 3.0
+# Vibix Images 3.1
 
 Desktop-приложение для трёх рабочих сценариев:
 
@@ -16,9 +16,10 @@ Source-build и Windows packaging используют `release/VERSION.txt` к�
 
 - [USER_GUIDE.ru.md](USER_GUIDE.ru.md) — полное иллюстрированное руководство: API-ключи, промпты, CSV, Clipart, chroma key, прозрачность, Pinterest и Processing;
 - [USER_INSTALL_GUIDE.md](USER_INSTALL_GUIDE.md) — установка и первый запуск;
+- [RELEASE_NOTES_3.1.md](RELEASE_NOTES_3.1.md) — изменения версии 3.1.0;
 - [MANUAL_SMOKE_TEST_3.0.md](MANUAL_SMOKE_TEST_3.0.md) — пользовательская проверка;
 - [KNOWN_LIMITATIONS_3.0.md](KNOWN_LIMITATIONS_3.0.md) — ограничения и ручные проверки;
-- [RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md) — изменения версии 3.0.
+- [RELEASE_NOTES_3.0.md](RELEASE_NOTES_3.0.md) — история версии 3.0.
 
 ## Быстрый старт из исходников
 
@@ -62,6 +63,8 @@ git diff --check
 
 ## Документы проекта
 
+- [PRD_3.1.ru.md](PRD_3.1.ru.md) — требования версии 3.1;
+- [TASKS_3.1.ru.md](TASKS_3.1.ru.md) — реализация и проверки версии 3.1;
 - [PRD_3.0.ru.md](PRD_3.0.ru.md) — требования;
 - [TASKS_3.0.ru.md](TASKS_3.0.ru.md) — задачи и evidence;
 - [UI_WIZARD_3.0.ru.md](UI_WIZARD_3.0.ru.md) — UX-контракт wizard;
@@ -73,6 +76,6 @@ git diff --check
 
 ## Ветки и контрольные точки
 
-- `develop/3.0` — текущая подготовка source-релиза;
-- `release/3.x` — стабильная контрольная ветка;
-- `v3.0.0-rc1` — неизменяемая контрольная точка.
+- `develop/3.1` — интеграционная линия версии 3.1;
+- `codex/release-3.1.0-final-candidate` — проверенный источник релизного кандидата 3.1.0;
+- ветки и теги 3.0.x — исторические контрольные точки.

@@ -27,6 +27,7 @@ PDF_OUTPUT = ROOT / "output" / "pdf" / "Vibix_Images_User_Guide.ru.pdf"
 DOCX_OUTPUT = ROOT / "output" / "doc" / "Vibix_Images_User_Guide.ru.docx"
 TEMP_HTML = ROOT / "tmp" / "pdfs" / "Vibix_Images_User_Guide.ru.html"
 GUIDE_CREATED_AT = "2026-08-30T00:00:00Z"
+GUIDE_APP_VERSION = "3.1.0"
 
 
 @dataclass(frozen=True)
@@ -179,11 +180,17 @@ def html_document(blocks: list[Block]) -> str:
                 f"<h1>{inline_html(str(block.value))}</h1>"
                 '<p class="lead">От API-ключей и промптов до прозрачных PNG, '
                 "Pinterest и обработки готовых изображений.</p>"
-                '<div class="cover-meta">Версия 3.0.7 · 30 августа 2026 года</div>'
+                f'<div class="cover-meta">Версия {GUIDE_APP_VERSION} · 30 августа 2026 года</div>'
                 "</section>"
             )
         elif block.kind == "heading2":
-            body.append(f'<h2 class="section">{inline_html(str(block.value))}</h2>')
+            heading = str(block.value)
+            section_class = (
+                "section section-flow"
+                if heading.startswith(("4. ", "10. ", "15. "))
+                else "section"
+            )
+            body.append(f'<h2 class="{section_class}">{inline_html(heading)}</h2>')
         elif block.kind == "heading3":
             body.append(f"<h3>{inline_html(str(block.value))}</h3>")
         elif block.kind == "paragraph":
@@ -227,6 +234,7 @@ a { color: #087f78; text-decoration: none; overflow-wrap: anywhere; }
 h1 { margin: 15mm 0 8mm; max-width: 155mm; color: #fff; font-size: 31pt; line-height: 1.08; }
 h2 { margin: 0 0 4mm; color: #0d4f57; font-size: 19pt; line-height: 1.2; break-after: avoid; }
 h2.section { break-before: page; }
+h2.section-flow { break-before: auto; margin-top: 9mm; }
 h3 { margin: 7mm 0 2.5mm; color: #14666b; font-size: 13.5pt; line-height: 1.25; break-after: avoid; }
 p { margin: 0 0 3.2mm; orphans: 3; widows: 3; }
 ol, ul { margin: 0 0 4mm 5mm; padding-left: 5mm; }
@@ -473,7 +481,7 @@ def build_docx(blocks: list[Block], destination: Path) -> None:
                 "От API-ключей и промптов до прозрачных PNG, Pinterest и обработки готовых изображений.",
                 "Subtitle",
             )
-            builder.paragraph("Версия 3.0.7 · 30 августа 2026 года")
+            builder.paragraph(f"Версия {GUIDE_APP_VERSION} · 30 августа 2026 года")
             builder.page_break()
         elif block.kind == "heading2":
             builder.paragraph(str(block.value), "Heading1")

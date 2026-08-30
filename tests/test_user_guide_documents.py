@@ -13,6 +13,7 @@ from xml.etree import ElementTree as ET
 from scripts.generate_user_guide_documents import (
     SOURCE,
     TEMP_HTML,
+    GUIDE_APP_VERSION,
     build_docx,
     build_pdf,
     find_browser,
@@ -32,7 +33,7 @@ class UserGuideDocumentTests(unittest.TestCase):
     def test_guide_contains_real_screenshots_and_required_workflows(self):
         validate_inputs(self.blocks)
         images = [block for block in self.blocks if block.kind == "image"]
-        self.assertEqual(len(images), 13)
+        self.assertEqual(len(images), 14)
         self.assertTrue(all(resolve_asset(str(block.value)).is_file() for block in images))
         source = SOURCE.read_text(encoding="utf-8")
         for required in (
@@ -43,8 +44,18 @@ class UserGuideDocumentTests(unittest.TestCase):
             "Редактирование прозрачности",
             "Режим Pinterest",
             "Режим Processing",
+            "Версия приложения: 3.1.0",
+            "Проверить прозрачность",
         ):
             self.assertIn(required, source)
+        self.assertNotIn("Версия приложения: 3.0.7", source)
+        self.assertNotIn("редактор alpha-маски **временно скрыт**", source)
+
+        release_version = (SOURCE.parent / "release" / "VERSION.txt").read_text(
+            encoding="utf-8"
+        ).strip()
+        self.assertEqual(GUIDE_APP_VERSION, release_version)
+        self.assertIn(f"Версия приложения: {release_version}", source)
 
         section_count = sum(block.kind == "heading2" for block in self.blocks)
         contents = source.split("## 1. Что умеет приложение", 1)[0]
@@ -53,7 +64,8 @@ class UserGuideDocumentTests(unittest.TestCase):
 
     def test_html_contains_every_image_and_print_footer(self):
         document = html_document(self.blocks)
-        self.assertEqual(document.count("<figure>"), 13)
+        self.assertEqual(document.count("<figure>"), 14)
+        self.assertIn("Версия 3.1.0", document)
         self.assertIn("counter(pages)", document)
         self.assertIn("Vibix Images · Руководство пользователя", document)
 
@@ -65,7 +77,7 @@ class UserGuideDocumentTests(unittest.TestCase):
                 self.assertIsNone(archive.testzip())
                 names = set(archive.namelist())
                 media = [name for name in names if name.startswith("word/media/image")]
-                self.assertEqual(len(media), 13)
+                self.assertEqual(len(media), 14)
                 for name in names:
                     if name.endswith(".xml") or name.endswith(".rels"):
                         ET.fromstring(archive.read(name))
@@ -89,7 +101,7 @@ class UserGuideDocumentTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             images = sorted(destination.glob("*.png"))
-            self.assertEqual(len(images), 13)
+            self.assertEqual(len(images), 14)
             self.assertTrue(all(width >= 900 and height >= 650 for width, height in map(png_size, images)))
 
     def test_pdf_render_smoke(self):
