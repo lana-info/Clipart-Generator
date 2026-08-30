@@ -55,6 +55,7 @@ class FalTaskRecord:
     status: str = "queued"
     created_at: str = ""
     updated_at: str = ""
+    input_fingerprint: str = ""
 
     def __post_init__(self) -> None:
         if not _REQUEST_RE.fullmatch(str(self.request_id or "")):
@@ -63,6 +64,10 @@ class FalTaskRecord:
             raise FalProviderError("Некорректная модель Fal.ai в журнале")
         if not str(self.operation or "").strip():
             raise FalProviderError("Не указана операция Fal.ai в журнале")
+        if self.input_fingerprint and not re.fullmatch(
+            r"[0-9a-f]{64}", self.input_fingerprint
+        ):
+            raise FalProviderError("Некорректный fingerprint задачи в журнале")
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -72,6 +77,7 @@ class FalTaskRecord:
             "status": self.status,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "input_fingerprint": self.input_fingerprint,
         }
 
 
@@ -121,6 +127,7 @@ class FalTaskJournal:
                         status=str(entry.get("status") or "unknown"),
                         created_at=str(entry.get("created_at") or ""),
                         updated_at=str(entry.get("updated_at") or ""),
+                        input_fingerprint=str(entry.get("input_fingerprint") or ""),
                     )
                 except FalProviderError:
                     continue
@@ -150,7 +157,15 @@ class FalTaskJournal:
             except FileNotFoundError:
                 pass
 
-    def upsert(self, request_id: str, operation: str, model_id: str, status: str) -> FalTaskRecord:
+    def upsert(
+        self,
+        request_id: str,
+        operation: str,
+        model_id: str,
+        status: str,
+        *,
+        input_fingerprint: str = "",
+    ) -> FalTaskRecord:
         with self._lock:
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             records = self._read()
@@ -162,6 +177,11 @@ class FalTaskJournal:
                 status=str(status),
                 created_at=previous.created_at if previous else now,
                 updated_at=now,
+                input_fingerprint=(
+                    str(input_fingerprint)
+                    if input_fingerprint
+                    else (previous.input_fingerprint if previous else "")
+                ),
             )
             records[record.request_id] = record
             self._write(records)
@@ -180,6 +200,7 @@ class FalTaskJournal:
                 status=str(status),
                 created_at=previous.created_at,
                 updated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                input_fingerprint=previous.input_fingerprint,
             )
             records[record.request_id] = record
             self._write(records)

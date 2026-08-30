@@ -2956,16 +2956,30 @@ class WorkerThread(QThread):
         )
         self.progress.emit(f"  Fal.ai операция: {operation}; модель={model_id}")
         task = {"request_id": ""}
+        input_fingerprint = self._paid_task_fingerprint(
+            {
+                "image_url": image_url,
+                "scale": scale,
+                "parameters": parameters or {},
+            }
+        )
 
         def record_submission(request_id):
             task["request_id"] = str(request_id or "")
-            self._record_fal_task(task["request_id"], operation, model_id, "queued")
+            self._record_fal_task(
+                task["request_id"],
+                operation,
+                model_id,
+                "queued",
+                input_fingerprint=input_fingerprint,
+            )
 
         pending_task = self._claim_pending_task(
             self.fal_task_journal,
             operation,
             model_id,
             self._claimed_fal_task_ids,
+            input_fingerprint=input_fingerprint,
         )
         if pending_task is not None:
             task["request_id"] = pending_task.request_id
@@ -2978,7 +2992,11 @@ class WorkerThread(QThread):
                 poll_interval_seconds=float(self.status_poll_interval),
                 is_cancelled=lambda: not self.is_running,
                 on_status=lambda status: self._record_fal_poll_status(
-                    task["request_id"], pending_task.operation, model_id, status
+                    task["request_id"],
+                    pending_task.operation,
+                    model_id,
+                    status,
+                    input_fingerprint=input_fingerprint,
                 ),
             )
         else:
@@ -2991,7 +3009,11 @@ class WorkerThread(QThread):
                 is_cancelled=lambda: not self.is_running,
                 on_submitted=record_submission,
                 on_status=lambda status: self._record_fal_task(
-                    task["request_id"], operation, model_id, status
+                    task["request_id"],
+                    operation,
+                    model_id,
+                    status,
+                    input_fingerprint=input_fingerprint,
                 ),
             )
         self._ensure_running()
@@ -3005,10 +3027,19 @@ class WorkerThread(QThread):
                 if completed.get("status") == "completed_after_cancel"
                 else "completed"
             ),
+            input_fingerprint=input_fingerprint,
         )
         return result_url
 
-    def _record_fal_task(self, request_id, operation, model_id, status):
+    def _record_fal_task(
+        self,
+        request_id,
+        operation,
+        model_id,
+        status,
+        *,
+        input_fingerprint="",
+    ):
         request_id = str(request_id or "").strip()
         if not request_id:
             return
@@ -3018,18 +3049,41 @@ class WorkerThread(QThread):
                 self._task_operation_key(operation),
                 model_id,
                 status,
+                input_fingerprint=str(input_fingerprint or ""),
             )
         except (OSError, ValueError, FalProviderError):
             # A journal failure must not expose secrets or turn a successful
             # provider result into a false failure.
             return
 
-    def _record_fal_poll_status(self, request_id, operation, model_id, status):
+    def _record_fal_poll_status(
+        self,
+        request_id,
+        operation,
+        model_id,
+        status,
+        *,
+        input_fingerprint="",
+    ):
         if str(status) in {"completed", "completed_after_cancel"}:
             return
-        self._record_fal_task(request_id, operation, model_id, status)
+        self._record_fal_task(
+            request_id,
+            operation,
+            model_id,
+            status,
+            input_fingerprint=input_fingerprint,
+        )
 
-    def _record_kie_task(self, task_id, *, operation="", model_id="", status):
+    def _record_kie_task(
+        self,
+        task_id,
+        *,
+        operation="",
+        model_id="",
+        status,
+        input_fingerprint="",
+    ):
         task_id = str(task_id or "").strip()
         if not task_id:
             return
@@ -3040,6 +3094,7 @@ class WorkerThread(QThread):
                     self._task_operation_key(operation),
                     str(model_id),
                     str(status),
+                    input_fingerprint=str(input_fingerprint or ""),
                 )
             else:
                 self.kie_task_journal.update_status(task_id, str(status))
@@ -3056,7 +3111,25 @@ class WorkerThread(QThread):
             item_index = 0
         return f"{operation}:{item_index}" if item_index > 0 else operation
 
-    def _claim_pending_task(self, journal, operation, model_id, claimed_ids):
+    @staticmethod
+    def _paid_task_fingerprint(input_payload):
+        canonical = json.dumps(
+            input_payload,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()
+
+    def _claim_pending_task(
+        self,
+        journal,
+        operation,
+        model_id,
+        claimed_ids,
+        *,
+        input_fingerprint,
+    ):
         desired_operation = self._task_operation_key(operation)
         base_operation = desired_operation.rsplit(":", 1)[0]
         with self._shared_state_lock:
@@ -3070,6 +3143,7 @@ class WorkerThread(QThread):
                 if task.request_id not in claimed_ids
                 and task.model_id == str(model_id)
                 and task.operation == desired_operation
+                and task.input_fingerprint == str(input_fingerprint)
             ]
             legacy = [
                 task
@@ -3077,6 +3151,7 @@ class WorkerThread(QThread):
                 if task.request_id not in claimed_ids
                 and task.model_id == str(model_id)
                 and task.operation == base_operation
+                and task.input_fingerprint == str(input_fingerprint)
             ]
             candidates = exact or legacy
             if not candidates:
@@ -4340,6 +4415,7 @@ class WorkerThread(QThread):
             ) from error
 
     def _kie_create_task(self, model, input_payload):
+        input_fingerprint = self._paid_task_fingerprint(input_payload)
         self._wait_for_generation_launch_slot()
         started = time.monotonic()
         self._diagnostic_context.model = str(model or "")
@@ -4393,6 +4469,7 @@ class WorkerThread(QThread):
             operation=str(getattr(self._diagnostic_context, "stage", "") or "kie"),
             model_id=model,
             status="queued",
+            input_fingerprint=input_fingerprint,
         )
         self._emit_diagnostic(
             "provider_task_submitted",
@@ -4414,6 +4491,7 @@ class WorkerThread(QThread):
             input_payload = {} if model == KIE_TOPAZ_MODEL_ID else {"image": image_url}
             if isinstance(extra_input, dict):
                 input_payload.update(extra_input)
+            input_fingerprint = self._paid_task_fingerprint(input_payload)
             operation = str(
                 getattr(self._diagnostic_context, "stage", "") or "kie"
             )
@@ -4422,6 +4500,7 @@ class WorkerThread(QThread):
                 operation,
                 model,
                 self._claimed_kie_task_ids,
+                input_fingerprint=input_fingerprint,
             )
             task_id = (
                 pending_task.request_id
@@ -4539,6 +4618,7 @@ class WorkerThread(QThread):
         )
         ratio, resolution = self._get_generation_profile(False)
         payload = fal_generation_payload(model_id, str(prompt or ""), ratio, resolution)
+        input_fingerprint = self._paid_task_fingerprint(payload)
         request = ProviderTaskRequest(
             provider_id="fal",
             operation="generation",
@@ -4550,6 +4630,7 @@ class WorkerThread(QThread):
             "generation",
             model_id,
             self._claimed_fal_task_ids,
+            input_fingerprint=input_fingerprint,
         )
         if pending_task is not None:
             request_id = pending_task.request_id
@@ -4559,7 +4640,13 @@ class WorkerThread(QThread):
             submitted = client.submit_task(request)
             request_id = str(submitted.get("request_id") or "").strip()
             task_operation = "generation"
-            self._record_fal_task(request_id, task_operation, model_id, "queued")
+            self._record_fal_task(
+                request_id,
+                task_operation,
+                model_id,
+                "queued",
+                input_fingerprint=input_fingerprint,
+            )
             self.progress.emit(f"  Fal.ai Request ID: {request_id}")
             self._emit_diagnostic(
                 "provider_task_submitted",
@@ -4574,7 +4661,11 @@ class WorkerThread(QThread):
             poll_interval_seconds=float(self.status_poll_interval),
             is_cancelled=lambda: not self.is_running,
             on_status=lambda status: self._record_fal_poll_status(
-                request_id, task_operation, model_id, status
+                request_id,
+                task_operation,
+                model_id,
+                status,
+                input_fingerprint=input_fingerprint,
             ),
         )
         self._ensure_running()
@@ -4591,6 +4682,7 @@ class WorkerThread(QThread):
                 if completed.get("status") == "completed_after_cancel"
                 else "completed"
             ),
+            input_fingerprint=input_fingerprint,
         )
         return result_url
 
@@ -4817,11 +4909,15 @@ class WorkerThread(QThread):
         return model
 
     def _kie_generate_4o_image(self, prompt):
+        ratio, _ = self._get_generation_profile(False)
+        payload = {"prompt": prompt, "size": ratio}
+        input_fingerprint = self._paid_task_fingerprint(payload)
         pending_task = self._claim_pending_task(
             self.kie_task_journal,
             "gpt4o_generation",
             "gpt4o-image",
             self._claimed_kie_task_ids,
+            input_fingerprint=input_fingerprint,
         )
         if pending_task is not None:
             self.progress.emit(f"  Продолжаем 4o Task ID: {pending_task.request_id}")
@@ -4829,8 +4925,6 @@ class WorkerThread(QThread):
         self._wait_for_generation_launch_slot()
         headers = self._kie_headers()
         headers["Content-Type"] = "application/json"
-        ratio, _ = self._get_generation_profile(False)
-        payload = {"prompt": prompt, "size": ratio}
         result = self._request_json(
             "https://api.kie.ai/api/v1/gpt4o-image/generate",
             method="POST",
@@ -4849,6 +4943,7 @@ class WorkerThread(QThread):
             operation="gpt4o_generation",
             model_id="gpt4o-image",
             status="queued",
+            input_fingerprint=input_fingerprint,
         )
         self.progress.emit(f"  4o Task ID: {task_id}")
         return self._kie_wait_4o_result(task_id)
@@ -4856,6 +4951,7 @@ class WorkerThread(QThread):
     def _kie_generate_generic_model(self, model_name, prompt, reference_urls=None):
         reference_urls = reference_urls or []
         payload = self._build_documented_model_input(model_name, prompt, reference_urls)
+        input_fingerprint = self._paid_task_fingerprint(payload)
         task_model = resolve_kie_generation_model(model_name, bool(reference_urls))
         operation = str(
             getattr(self._diagnostic_context, "stage", "") or "generation"
@@ -4865,6 +4961,7 @@ class WorkerThread(QThread):
             operation,
             task_model,
             self._claimed_kie_task_ids,
+            input_fingerprint=input_fingerprint,
         )
         task_id = (
             pending_task.request_id

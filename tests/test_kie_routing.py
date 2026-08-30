@@ -171,6 +171,13 @@ class KieRoutingTests(unittest.TestCase):
                 "generation",
                 model_id,
                 "queued",
+                input_fingerprint=first._paid_task_fingerprint(
+                    main.fal_generation_payload(
+                        model_id,
+                        "same prompt",
+                        *first._get_generation_profile(False),
+                    )
+                ),
             )
             restarted = main.WorkerThread(
                 "mode1_generate_only",
@@ -204,6 +211,53 @@ class KieRoutingTests(unittest.TestCase):
 
             self.assertEqual(result, "https://cdn.example/recovered.png")
             self.assertEqual(calls, [("GET", "existing-fal-task")])
+
+    def test_fal_restart_never_reuses_a_task_for_a_changed_prompt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            model_id = "fal-ai/flux/schnell"
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            ratio, resolution = worker._get_generation_profile(False)
+            worker.fal_task_journal.upsert(
+                "stale-cat-task",
+                "generation:1",
+                model_id,
+                "queued",
+                input_fingerprint=worker._paid_task_fingerprint(
+                    main.fal_generation_payload(
+                        model_id, "cat", ratio, resolution
+                    )
+                ),
+            )
+            calls = []
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    calls.append("POST")
+                    return {"request_id": "new-dog-task"}
+
+                def wait_for_result(self, request_id, **_kwargs):
+                    calls.append(("GET", request_id))
+                    return {
+                        "request_id": request_id,
+                        "status": "completed",
+                        "result": {
+                            "images": [{"url": "https://cdn.example/dog.png"}]
+                        },
+                    }
+
+            with patch("main.FalClient", FakeFalClient):
+                result = worker._fal_generate_image("DOG", model_id)
+
+            self.assertEqual(result, "https://cdn.example/dog.png")
+            self.assertEqual(calls, ["POST", ("GET", "new-dog-task")])
 
     def test_ideogram_generation_sends_selected_aspect_ratio(self):
         worker = main.WorkerThread(
@@ -564,6 +618,11 @@ class KieRoutingTests(unittest.TestCase):
                 "generation",
                 model_id,
                 "queued",
+                input_fingerprint=first._paid_task_fingerprint(
+                    first._build_documented_model_input(
+                        "z-image", "same prompt", []
+                    )
+                ),
             )
             restarted = main.WorkerThread(
                 "mode1_generate_only",
@@ -594,6 +653,48 @@ class KieRoutingTests(unittest.TestCase):
 
             self.assertEqual(result, "https://cdn.example/recovered.png")
             self.assertEqual(methods, ["GET"])
+
+    def test_kie_restart_never_reuses_a_task_for_a_changed_prompt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            model_id = main.resolve_kie_generation_model("z-image", False)
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(kie_api_key=DUMMY_KIE_KEY),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            old_payload = worker._build_documented_model_input(
+                "z-image", "cat", []
+            )
+            worker.kie_task_journal.upsert(
+                "stale-cat-task",
+                "generation:1",
+                model_id,
+                "queued",
+                input_fingerprint=worker._paid_task_fingerprint(old_payload),
+            )
+            methods = []
+
+            def fake_request_json(_self, _url, *, method, **_kwargs):
+                methods.append(method)
+                if method == "POST":
+                    return {"code": 200, "data": {"taskId": "new-dog-task"}}
+                return {
+                    "code": 200,
+                    "data": {
+                        "state": "success",
+                        "resultJson": json.dumps(
+                            {"resultUrls": ["https://cdn.example/dog.png"]}
+                        ),
+                    },
+                }
+
+            worker._request_json = types.MethodType(fake_request_json, worker)
+
+            result = worker._kie_generate_generic_model("z-image", "DOG")
+
+            self.assertEqual(result, "https://cdn.example/dog.png")
+            self.assertEqual(methods, ["POST", "GET"])
 
     def test_kie_result_parse_failure_keeps_completed_task_recoverable(self):
         with tempfile.TemporaryDirectory() as temp:
