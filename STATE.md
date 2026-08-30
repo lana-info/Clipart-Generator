@@ -131,6 +131,17 @@ then correctly follows the existing `skip_remover_for_alpha` rule and preserves
 the provider alpha instead of running Chroma. The UI/journal should make this
 decision visible, but flattening valid provider alpha onto blue is not approved.
 
+The owner verified the KIE account history and confirmed exactly those two paid
+tasks. The supplied ballerina request also removes payload ambiguity: its inner
+prompt is exactly 1301 characters, matching `item_input_inspected`, and the
+request uses `aspect_ratio=1:1` and `resolution=1K`. Source inspection confirms
+that the GPT Image 2 payload contains only those documented fields and does not
+request a transparent background. The prompt repeatedly and unambiguously asks
+for an edge-to-edge opaque blue canvas; therefore the provider result failed
+that prompt constraint. A Chroma acceptance run must report this source as
+inconclusive/skipped rather than count provider alpha as evidence of Chroma
+quality, and it must not perform an automatic paid regeneration.
+
 ## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
 
 The owner has started manual Windows acceptance and has not found a critical

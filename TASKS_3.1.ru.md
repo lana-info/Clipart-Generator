@@ -874,7 +874,9 @@ Steps:
   если KIE уже вернул usable alpha, явно сообщать, что Chroma не запускалась и
   прозрачность пришла от провайдера. Не превращать такой PNG принудительно в
   синий фон и не менять утверждённое сохранение provider alpha без отдельного
-  продуктового решения.
+  продуктового решения. В Chroma acceptance такой случай должен считаться
+  `inconclusive/skipped`, а не успешной проверкой keyer, без автоматической
+  повторной платной генерации.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
@@ -930,7 +932,10 @@ both `rough_03_generated` and `rough_05_generated`. Source tracing proves that
 The original raccoon is opaque RGB on blue and its separate Chroma result has
 alpha; the original ballerina arrived from KIE as RGBA with usable alpha, so the
 existing skip-remover rule preserved it and KIE—not Chroma—omitted the requested
-blue background.
+blue background. The owner's KIE account confirms exactly two paid tasks. The
+ballerina prompt length (1301) matches the diagnostic, and the actual GPT Image
+2 payload contains no transparent-background parameter, so this is provider
+prompt non-adherence rather than a conflicting application request.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration
