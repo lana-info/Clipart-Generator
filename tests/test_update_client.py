@@ -203,6 +203,23 @@ class UpdateClientTests(unittest.TestCase):
         self.assertEqual(progress[-1], (len(self.installer), len(self.installer)))
         self.assertFalse(any(path.parent.glob("*.part")))
 
+    def test_prelaunch_verification_rejects_a_tampered_download(self) -> None:
+        release = update_client.UpdateRelease(
+            version="3.1.0",
+            filename="VibixImages-Setup-3.1.exe",
+            size=len(self.installer),
+            sha256=hashlib.sha256(self.installer).hexdigest(),
+            download_url="https://license.example/downloads/token-1",
+        )
+        path = self.root / "updates" / release.filename
+        path.parent.mkdir()
+        path.write_bytes(self.installer)
+        self.client.verify_download(release, path)
+        path.write_bytes(b"tampered")
+
+        with self.assertRaisesRegex(UpdateError, "проверку"):
+            self.client.verify_download(release, path)
+
     def test_cancel_and_checksum_mismatch_remove_partial_file(self) -> None:
         manifest_opener = Opener(self.manifest_response)
         with patch.object(license_client.request, "build_opener", return_value=manifest_opener):

@@ -295,3 +295,21 @@ class UpdateClient:
             temporary.unlink(missing_ok=True)
             final.unlink(missing_ok=True)
             raise UpdateError("Не удалось скачать обновление") from None
+
+    def verify_download(self, release: UpdateRelease, path: str | Path) -> None:
+        """Repeat the artifact size and digest checks immediately before launch."""
+        artifact = Path(path)
+        expected = self.download_directory / release.filename
+        try:
+            if artifact != expected or artifact.is_symlink() or not artifact.is_file():
+                raise UpdateError("Файл обновления не прошёл повторную проверку")
+            if artifact.stat().st_size != release.size:
+                raise UpdateError("Файл обновления не прошёл повторную проверку")
+            digest = hashlib.sha256()
+            with artifact.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError:
+            raise UpdateError("Файл обновления не прошёл повторную проверку") from None
+        if not hmac.compare_digest(digest.hexdigest(), release.sha256):
+            raise UpdateError("Файл обновления не прошёл повторную проверку")

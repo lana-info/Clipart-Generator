@@ -7,7 +7,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QWidget
 
 from diagnostics import DiagnosticJournal
-from update_client import UpdateRelease
+from update_client import UpdateError, UpdateRelease
 import v3_updater
 from v3_updater import UpdateController, launch_update_artifact
 
@@ -52,6 +52,10 @@ class FakeUpdateClient:
     def __init__(self, release, installer_path):
         self.release = release
         self.installer_path = installer_path
+        self.verifications = []
+
+    def verify_download(self, release, path):
+        self.verifications.append((release, path))
 
 
 class V3UpdaterTests(unittest.TestCase):
@@ -170,10 +174,35 @@ class V3UpdaterTests(unittest.TestCase):
             controller.start_check()
             self.assertEqual(ImmediateDownloadWorker.starts, 1)
             self.assertEqual(launched, [installer])
+            self.assertEqual(controller.client.verifications, [(controller.client.release, installer)])
             events = [item["event"] for item in journal.read_events()]
             self.assertIn("update_accepted", events)
             self.assertIn("update_download_verified", events)
             self.assertIn("update_installer_launched", events)
+
+    def test_failed_prelaunch_recheck_never_starts_installer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            installer = root / "VibixImages-Setup-3.1.exe"
+            installer.write_bytes(b"tampered")
+            client = FakeUpdateClient(self.release(), installer)
+            client.verify_download = lambda _release, _path: (_ for _ in ()).throw(
+                UpdateError("Файл обновления не прошёл повторную проверку")
+            )
+            launched = []
+            controller = UpdateController(
+                QWidget(),
+                client,
+                prompt=lambda _release: True,
+                check_worker_factory=ImmediateCheckWorker,
+                download_worker_factory=ImmediateDownloadWorker,
+                installer_launcher=launched.append,
+            )
+
+            with patch("v3_updater.QMessageBox.warning"):
+                controller.start_check()
+
+            self.assertEqual(launched, [])
 
     def test_macos_update_reveals_verified_zip_in_finder(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

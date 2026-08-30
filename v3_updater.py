@@ -182,6 +182,7 @@ class UpdateController(QObject):
         self.installer_launcher = installer_launcher
         self.check_worker = None
         self.download_worker = None
+        self.download_release: UpdateRelease | None = None
         self.progress_dialog = None
         self._check_started = False
 
@@ -261,6 +262,7 @@ class UpdateController(QObject):
         worker = self.download_worker_factory(self.client, release, self)
         self.progress_dialog = dialog
         self.download_worker = worker
+        self.download_release = release
         dialog.canceled.connect(worker.cancel)
         worker.progress.connect(self._download_progress)
         worker.completed.connect(self._download_completed)
@@ -280,6 +282,25 @@ class UpdateController(QObject):
         if self.progress_dialog is not None:
             self.progress_dialog.close()
         installer = Path(path)
+        release = self.download_release
+        try:
+            if release is None:
+                raise UpdateError("Неизвестна версия скачанного обновления")
+            self.client.verify_download(release, installer)
+        except UpdateError as error:
+            self._record(
+                "update_prelaunch_verification_failed",
+                "Повторная проверка обновления перед запуском не пройдена.",
+                severity="error",
+                outcome="failed",
+                details={"error_message": str(error)},
+            )
+            QMessageBox.warning(
+                self.parent_widget,
+                "Обновление",
+                "Скачанный файл изменился или повреждён и не будет запущен.",
+            )
+            return
         self._record(
             "update_download_verified",
             "Обновление скачано и проверено.",
