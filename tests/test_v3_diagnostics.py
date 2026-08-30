@@ -329,6 +329,68 @@ class V3DiagnosticJournalTests(unittest.TestCase):
                 ],
             )
 
+    def test_generation_run_reports_actual_fal_provider_for_nonprefixed_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.1")
+            request = SimpleNamespace(
+                mode="mode1_generate_only",
+                work_dir=str(root),
+                settings={
+                    "text_generation_model": "ideogram/v4/fast",
+                    "reference_generation_model": "gpt-image-2-image-to-image",
+                },
+                generated_prompts=[{"prompt": "private", "references": []}],
+                selected_files=[],
+            )
+
+            RunQueueSession(
+                request,
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+
+            started = next(
+                event
+                for event in journal.read_events()
+                if event["event"] == "run_started"
+            )
+            self.assertEqual(started["details"]["provider_routes"], ["generation:fal"])
+
+    def test_mixed_generation_run_reports_both_actual_providers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.1")
+            request = SimpleNamespace(
+                mode="mode1_generate_only",
+                work_dir=str(root),
+                settings={
+                    "text_generation_model": "gpt-image-2",
+                    "reference_generation_model": "fal-ai/flux/schnell",
+                },
+                generated_prompts=[
+                    {"prompt": "plain", "references": []},
+                    {"prompt": "reference", "references": ["https://example.test/ref.png"]},
+                ],
+                selected_files=[],
+            )
+
+            RunQueueSession(
+                request,
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+
+            started = next(
+                event
+                for event in journal.read_events()
+                if event["event"] == "run_started"
+            )
+            self.assertEqual(
+                started["details"]["provider_routes"],
+                ["generation:kie", "generation:fal"],
+            )
+
     def test_trim_print_run_records_configuration_stages_output_and_terminal_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

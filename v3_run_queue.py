@@ -39,6 +39,7 @@ from v3_components import (
 from security_redaction import redact_text
 from provider_diagnostics import build_provider_event
 from provider_error_messages import friendly_provider_error
+from fal_model_catalog import is_fal_generation_model
 from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
@@ -255,12 +256,31 @@ def _enabled_run_stages(settings: Any, mode: ProjectMode) -> list[str]:
 def _provider_model_routes(
     settings: Any,
     mode: ProjectMode,
+    items: list[RunItem] | None = None,
 ) -> tuple[list[str], list[str]]:
     source = settings if isinstance(settings, dict) else dict(settings or {})
     providers: list[str] = []
     models: list[str] = []
     if mode is not ProjectMode.PROCESSING:
-        providers.append("generation:kie")
+        generation_models: list[str] = []
+        for item in items or ():
+            payload = item.payload if isinstance(item.payload, dict) else {}
+            model_key = (
+                "reference_generation_model"
+                if payload.get("references")
+                else "text_generation_model"
+            )
+            model = str(source.get(model_key) or "").strip()
+            if model and model not in generation_models:
+                generation_models.append(model)
+        if not generation_models:
+            fallback_model = str(source.get("text_generation_model") or "").strip()
+            if fallback_model:
+                generation_models.append(fallback_model)
+        for model in generation_models:
+            route = f"generation:{'fal' if is_fal_generation_model(model) else 'kie'}"
+            if route not in providers:
+                providers.append(route)
         for route, key in (
             ("text_generation", "text_generation_model"),
             ("reference_generation", "reference_generation_model"),
@@ -416,7 +436,11 @@ class RunQueueSession(QObject):
         self._technical_events: list[str] = []
         self._diagnostic_journal = diagnostic_journal
         self.operation_id = uuid.uuid4().hex
-        provider_routes, model_routes = _provider_model_routes(settings, mode)
+        provider_routes, model_routes = _provider_model_routes(
+            settings,
+            mode,
+            self.items,
+        )
         self._event(
             "run_started",
             count=len(self.items),

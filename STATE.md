@@ -83,6 +83,11 @@ generation run, so both Fal runs are incorrectly announced as KIE even though
 their model and actual worker are Fal. This does not cause HTTP 405, but it makes
 provider preflight, cost interpretation and support evidence misleading.
 
+The fix branch now derives the generation provider from the actual text or
+reference model used by each run item. Fal-only, KIE-only and mixed KIE/Fal
+batches have separate regressions, including a Fal model ID without the
+`fal-ai/` prefix.
+
 Further paid Fal.ai attempts remain stopped until the source gate and review are
 green and the owner separately authorizes a controlled acceptance request.
 

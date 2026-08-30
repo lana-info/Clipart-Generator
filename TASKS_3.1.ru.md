@@ -861,7 +861,7 @@ Steps:
 - [ ] После всех offline gates отдельно разрешить один минимальный Windows Fal
   smoke. Без него исправленный lifecycle contract доказан локально, но исчезновение
   фактического HTTP 405 у провайдера ещё не является подтверждённым.
-- [ ] Исправить provider evidence для генерации: `run_started.provider_routes`
+- [x] Исправить provider evidence для генерации: `run_started.provider_routes`
   должен определять KIE/Fal по выбранным text/reference моделям, а не всегда
   писать `generation:kie`. Добавить mixed-model regression, чтобы preflight,
   стоимость и диагностика использовали один фактический route resolver.
