@@ -165,6 +165,36 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             with Image.open(mask) as restored_mask:
                 self.assertEqual(restored_mask.getpixel((0, 0)), 77)
 
+    def test_next_start_recovers_pair_after_process_stops_mid_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output" / "ready.png"
+            mask = root / "rough" / "ready_alpha-mask.png"
+            output.parent.mkdir()
+            mask.parent.mkdir()
+            Image.new("RGBA", (4, 4), (1, 2, 3, 255)).save(output)
+            Image.new("L", (4, 4), 77).save(mask)
+            marker, backups = MaskEditDocument._pair_transaction_paths(output, mask)
+            MaskEditDocument._write_pair_transaction(
+                marker,
+                phase="prepared",
+                existed=(True, True),
+            )
+            os.replace(output, backups[0])
+            os.replace(mask, backups[1])
+            Image.new("RGBA", (8, 8), (200, 0, 0, 255)).save(output)
+
+            recovered = MaskEditDocument.recover_pair(output, mask)
+
+            self.assertTrue(recovered)
+            with Image.open(output) as restored_output:
+                self.assertEqual(restored_output.size, (4, 4))
+                self.assertEqual(restored_output.getpixel((0, 0)), (1, 2, 3, 255))
+            with Image.open(mask) as restored_mask:
+                self.assertEqual(restored_mask.getpixel((0, 0)), 77)
+            self.assertFalse(marker.exists())
+            self.assertFalse(any(backup.exists() for backup in backups))
+
     def test_document_history_is_bounded_by_memory_not_only_step_count(self):
         document = MaskEditDocument(
             Image.new("RGBA", (512, 512), (10, 20, 30, 255))

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from io import BytesIO
+import hashlib
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -202,6 +204,7 @@ class MaskEditDocument:
             raise ValueError("Исправленный результат нужно сохранять в PNG")
         destination.parent.mkdir(parents=True, exist_ok=True)
         mask_destination.parent.mkdir(parents=True, exist_ok=True)
+        self.recover_pair(destination, mask_destination)
         output_temporary = self._stage_png(
             self.corrected_image(),
             destination,
@@ -243,7 +246,112 @@ class MaskEditDocument:
         return temporary_path
 
     @staticmethod
+    def _pair_transaction_paths(
+        output_destination: Path,
+        mask_destination: Path,
+    ) -> tuple[Path, tuple[Path, Path]]:
+        identity = hashlib.sha256(
+            (
+                str(output_destination.resolve(strict=False))
+                + "\0"
+                + str(mask_destination.resolve(strict=False))
+            ).encode("utf-8")
+        ).hexdigest()[:16]
+        marker = output_destination.parent / f".vibix-pair-{identity}.json"
+        backups = (
+            output_destination.with_name(
+                f".{output_destination.name}.{identity}.backup"
+            ),
+            mask_destination.with_name(
+                f".{mask_destination.name}.{identity}.backup"
+            ),
+        )
+        return marker, backups
+
+    @staticmethod
+    def _write_pair_transaction(
+        marker: Path,
+        *,
+        phase: str,
+        existed: tuple[bool, bool],
+    ) -> None:
+        payload = json.dumps(
+            {
+                "schema_version": 1,
+                "phase": phase,
+                "existed": list(existed),
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=f".{marker.name}.",
+            suffix=".tmp",
+            dir=marker.parent,
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, marker)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    @classmethod
+    def recover_pair(
+        cls,
+        output_destination: str | Path,
+        mask_destination: str | Path,
+    ) -> bool:
+        """Recover an interrupted PNG/mask commit before opening or saving it."""
+        destinations = (Path(output_destination), Path(mask_destination))
+        marker, backups = cls._pair_transaction_paths(*destinations)
+        if not marker.is_file():
+            return False
+        try:
+            payload = json.loads(marker.read_text(encoding="utf-8"))
+            existed_raw = payload.get("existed")
+            if (
+                payload.get("schema_version") != 1
+                or payload.get("phase") not in {"prepared", "committed"}
+                or not isinstance(existed_raw, list)
+                or len(existed_raw) != 2
+                or not all(isinstance(value, bool) for value in existed_raw)
+            ):
+                raise ValueError("Повреждён журнал сохранения PNG/mask")
+            existed = (existed_raw[0], existed_raw[1])
+            committed = payload["phase"] == "committed"
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+            raise OSError("Не удалось восстановить прерванное сохранение PNG/mask")
+
+        if committed and all(destination.is_file() for destination in destinations):
+            for backup in backups:
+                backup.unlink(missing_ok=True)
+            marker.unlink(missing_ok=True)
+            return True
+
+        for destination, backup, previously_existed in zip(
+            destinations,
+            backups,
+            existed,
+        ):
+            if previously_existed:
+                if backup.exists():
+                    destination.unlink(missing_ok=True)
+                    os.replace(backup, destination)
+            else:
+                destination.unlink(missing_ok=True)
+                backup.unlink(missing_ok=True)
+        for backup in backups:
+            backup.unlink(missing_ok=True)
+        marker.unlink(missing_ok=True)
+        return True
+
+    @classmethod
     def _replace_pair(
+        cls,
         output_temporary: Path,
         output_destination: Path,
         mask_temporary: Path,
@@ -251,34 +359,31 @@ class MaskEditDocument:
     ) -> None:
         destinations = (output_destination, mask_destination)
         temporaries = (output_temporary, mask_temporary)
-        backups: dict[Path, Path] = {}
-        replaced: list[Path] = []
+        marker, backups = cls._pair_transaction_paths(*destinations)
+        existed = (output_destination.exists(), mask_destination.exists())
+        cls._write_pair_transaction(marker, phase="prepared", existed=existed)
         try:
-            for destination in destinations:
-                if destination.exists():
-                    fd, backup_name = tempfile.mkstemp(
-                        prefix=f".{destination.stem}.",
-                        suffix=".backup",
-                        dir=destination.parent,
-                    )
-                    os.close(fd)
-                    backup = Path(backup_name)
-                    backup.unlink()
+            for destination, backup, previously_existed in zip(
+                destinations,
+                backups,
+                existed,
+            ):
+                backup.unlink(missing_ok=True)
+                if previously_existed:
                     os.replace(destination, backup)
-                    backups[destination] = backup
             for temporary, destination in zip(temporaries, destinations):
                 os.replace(temporary, destination)
-                replaced.append(destination)
-        except Exception:
-            for destination in replaced:
-                destination.unlink(missing_ok=True)
-            for destination, backup in backups.items():
-                if backup.exists():
-                    os.replace(backup, destination)
+            cls._write_pair_transaction(
+                marker,
+                phase="committed",
+                existed=existed,
+            )
+        except BaseException:
+            cls.recover_pair(output_destination, mask_destination)
             raise
-        finally:
-            for backup in backups.values():
-                backup.unlink(missing_ok=True)
+        for backup in backups:
+            backup.unlink(missing_ok=True)
+        marker.unlink(missing_ok=True)
 
 
 class _MaskPreviewLabel(QLabel):
@@ -1072,6 +1177,9 @@ class ClipartTransparencyEditorPage(QWidget):
             return
         path = self._paths[row]
         try:
+            rough_dir = self._rough_dir or path.parent.parent / "rough"
+            mask_path = rough_dir / f"{path.stem}_alpha-mask.png"
+            MaskEditDocument.recover_pair(path, mask_path)
             with Image.open(path) as image:
                 _validate_editor_image_size(image.size)
                 document = MaskEditDocument(image.copy())
