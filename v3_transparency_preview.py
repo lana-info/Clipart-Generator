@@ -820,7 +820,14 @@ class ClipartTransparencyEditorPage(QWidget):
         zoom_grid.setSpacing(4)
         self.zoom_buttons: dict[str | int, QPushButton] = {}
         for index, (key, text) in enumerate(
-            (("fit", "Fit"), (50, "50"), (100, "100"), (150, "150"), (200, "200"), (400, "400"))
+            (
+                ("fit", "Fit"),
+                (50, "50%"),
+                (100, "100%"),
+                (150, "150%"),
+                (200, "200%"),
+                (300, "300%"),
+            )
         ):
             button = QPushButton(text)
             button.setCheckable(True)

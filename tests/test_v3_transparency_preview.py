@@ -195,7 +195,7 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             page.title_label.text(),
             "Проверка и корректировка прозрачности",
         )
-        self.assertEqual(set(page.zoom_buttons), {"fit", 50, 100, 150, 200, 400})
+        self.assertEqual(set(page.zoom_buttons), {"fit", 50, 100, 150, 200, 300})
         self.assertNotIn("25%", button_texts)
         self.assertNotIn("Alpha-маска", button_texts)
         self.assertIn("Сохранить PNG", button_texts)
@@ -262,13 +262,26 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
                 paths.append(path)
             page = ClipartTransparencyEditorPage()
             page.set_files(paths)
-            page.zoom_buttons[400].click()
+            page.zoom_buttons[300].click()
 
             page.file_list.setCurrentRow(1)
 
-            self.assertEqual(page.canvas.zoom_percent, 400)
-            self.assertTrue(page.zoom_buttons[400].isChecked())
+            self.assertEqual(page.canvas.zoom_percent, 300)
+            self.assertTrue(page.zoom_buttons[300].isChecked())
             page.deleteLater()
+
+    def test_editor_offers_only_the_approved_zoom_presets(self):
+        page = ClipartTransparencyEditorPage()
+
+        self.assertEqual(
+            list(page.zoom_buttons),
+            ["fit", 50, 100, 150, 200, 300],
+        )
+        self.assertEqual(
+            [button.text() for button in page.zoom_buttons.values()],
+            ["Fit", "50%", "100%", "150%", "200%", "300%"],
+        )
+        page.deleteLater()
 
     def test_editor_reports_save_errors_instead_of_ignoring_them(self):
         page = ClipartTransparencyEditorPage()
