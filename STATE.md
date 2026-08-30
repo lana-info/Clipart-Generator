@@ -16,7 +16,7 @@ contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
 The final independent source review verdict is `pass-with-nits`: no blocking or
-important defects remain. The release-preparation tree passes 1029 offline tests, 57
+important defects remain. The release-preparation tree passes 1030 offline tests, 57
 intentional/environment skips, 2 configured network deselections and 140
 subtests. The two additional skips are the new Windows-only DPAPI and native
 installer-lock contracts; they remain explicit Windows acceptance gates. All
@@ -33,10 +33,13 @@ Windows installer. Release preparation is isolated on
 `codex/release-3.1.0-final-candidate`: `release/VERSION.txt` and the fallback
 Azure default are 3.1.0, release notes and the Windows acceptance checklist are
 present, and the GitHub workflow must run the real Windows DPAPI and
-installer-lock contracts before PyInstaller. The candidate was pushed to
-GitHub through `fefbde1`. The build has not yet been dispatched because this
-VDS has SSH Git access but neither GitHub CLI nor Azure API authorization. It
-remains an unpublished acceptance artifact; the paid KIE
+installer-lock contracts before PyInstaller. GitHub CLI is now authorized for
+the owner account. Windows run `33323248601` confirmed both native security
+contracts, PyInstaller startup and installer creation, then correctly failed
+the installed local-processing gate: the older pinned Real-ESRGAN v0.2.0
+archive contained no models. The candidate now uses the complete pinned
+v0.2.5.0 archive through the existing SHA-256 and required-file validator; a
+replacement run is pending. It remains an unpublished acceptance artifact; the paid KIE
 duplicate audit and publication still require separate approval.
 
 The Windows acceptance checklist now includes a clean-workspace duplicate
@@ -182,9 +185,9 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Immediate next action
 
-In GitHub Actions, start the authorized manual `Release Windows Installer`
-workflow from `codex/release-3.1.0-final-candidate` with `app_version=3.1.0`,
-then record its commit, run, artifact and checksum in
+Push the complete Real-ESRGAN runtime fix, rerun the authorized manual
+`Release Windows Installer` workflow with `app_version=3.1.0`, then record its
+commit, run, artifact and checksum in
 `docs/testing/windows-3.1.0-acceptance-checklist.ru.md`. Then perform the manual
 UI, mouse-editor, install/upgrade, path/output, license and Chroma checks at
 1120×780 and 100% display scaling. A stylus check is needed only when the target
