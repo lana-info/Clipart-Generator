@@ -407,14 +407,15 @@ def _fill_far_subject_reference(
     np.copyto(reference_weight, far_weight, where=use_far)
 
 
-def _apply_multiscale_subject_ratio(
+def _apply_multiscale_subject_reference(
     rgb: np.ndarray,
     subject_mask: np.ndarray,
     key_channel: int,
     other_channels: list[int],
+    reference: np.ndarray,
     ratio: np.ndarray,
 ) -> None:
-    """Replace edge ratios with the deepest available clean subject samples."""
+    """Replace edge references with the deepest available subject samples."""
     interior_depth = cv2.distanceTransform(
         subject_mask.astype(np.uint8),
         cv2.DIST_L2,
@@ -435,34 +436,29 @@ def _apply_multiscale_subject_ratio(
         if not np.any(usable):
             continue
 
-        reference_other = np.maximum(
-            rgb[..., other_channels[0]],
-            rgb[..., other_channels[1]],
-        )
-        np.multiply(reference_other, deep_mask, out=reference_other)
-        cv2.GaussianBlur(
-            reference_other,
-            (0, 0),
-            10.0,
-            dst=reference_other,
-            borderType=cv2.BORDER_REFLECT,
-        )
-        np.divide(
-            reference_other,
-            weight,
-            out=reference_other,
-            where=weight > 1e-6,
-        )
+        for channel in range(3):
+            channel_reference = rgb[..., channel] * deep_mask
+            cv2.GaussianBlur(
+                channel_reference,
+                (0, 0),
+                10.0,
+                dst=channel_reference,
+                borderType=cv2.BORDER_REFLECT,
+            )
+            np.divide(
+                channel_reference,
+                weight,
+                out=channel_reference,
+                where=weight > 1e-6,
+            )
+            np.copyto(reference[..., channel], channel_reference, where=usable)
+            del channel_reference
 
-        np.multiply(rgb[..., key_channel], deep_mask, out=deep_mask)
-        cv2.GaussianBlur(
-            deep_mask,
-            (0, 0),
-            10.0,
-            dst=deep_mask,
-            borderType=cv2.BORDER_REFLECT,
+        reference_other = np.maximum(
+            reference[..., other_channels[0]],
+            reference[..., other_channels[1]],
         )
-        np.divide(deep_mask, weight, out=deep_mask, where=weight > 1e-6)
+        np.copyto(deep_mask, reference[..., key_channel], where=usable)
         np.divide(
             deep_mask,
             np.maximum(reference_other, 1.0),
@@ -563,6 +559,64 @@ def _neutralize_opaque_key_spill(
     return result
 
 
+def _neutralize_translucent_complement(
+    source: Image.Image,
+    result: Image.Image,
+    key_color: object,
+) -> Image.Image:
+    """Remove complementary colour created by over-subtracting a key channel."""
+    requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
+    key_channel = int(np.argmax(requested_key))
+    other_channels = [index for index in range(3) if index != key_channel]
+    source_rgb = np.asarray(source.convert("RGB"), dtype=np.float32)
+    pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8).copy()
+    rgb = pixels[..., :3].astype(np.float32)
+    alpha = pixels[..., 3]
+    other_floor = np.minimum(
+        rgb[..., other_channels[0]],
+        rgb[..., other_channels[1]],
+    )
+    source_other = np.maximum(
+        source_rgb[..., other_channels[0]],
+        source_rgb[..., other_channels[1]],
+    )
+    over_removed_key = (
+        source_rgb[..., key_channel] >= rgb[..., key_channel] + 20.0
+    )
+    severe_complement = rgb[..., key_channel] < 0.90 * other_floor
+    source_still_key_dominant = (
+        source_rgb[..., key_channel] >= source_other + 8.0
+    )
+    mild_complement_from_key = source_still_key_dominant & (
+        rgb[..., key_channel] < 1.05 * other_floor
+    )
+    translucent = (alpha > 0) & (alpha < 255)
+    wide_translucent_core = cv2.erode(
+        translucent.astype(np.uint8),
+        np.ones((9, 9), dtype=np.uint8),
+        iterations=1,
+    ).astype(bool)
+    translucent_neighborhood = cv2.dilate(
+        wide_translucent_core.astype(np.uint8),
+        np.ones((25, 25), dtype=np.uint8),
+        iterations=1,
+    ).astype(bool)
+    visible = alpha > 0
+    repair = (
+        over_removed_key
+        & (severe_complement | mild_complement_from_key)
+        & translucent_neighborhood
+        & visible
+    )
+    if not np.any(repair):
+        return result
+
+    restored_key = other_floor
+    np.copyto(rgb[..., key_channel], restored_key, where=repair)
+    pixels[..., :3] = np.rint(np.clip(rgb, 0.0, 255.0)).astype(np.uint8)
+    return Image.fromarray(pixels, mode="RGBA")
+
+
 def _remove_chroma_key_staged(
     image: Image.Image,
     key_color: object,
@@ -608,9 +662,15 @@ def _remove_chroma_key_staged(
         rgb[..., other_channels[1]],
     )
     key_ratio = measured_key[key_channel] / max(measured_other, 1.0)
-    background_ratio = float(np.clip(0.75 * key_ratio, 1.65, 2.7))
+    background_ratio = float(np.clip(0.80 * key_ratio, 1.70, 2.5))
     hard_background = (dominant >= background_ratio * other) & (dominant >= 55.0)
-    confident_subject = (~hard_background) & (dominant <= 1.2 * other + 10.0)
+    edge_background = hard_background & cv2.dilate(
+        (~hard_background).astype(np.uint8),
+        np.ones((3, 3), dtype=np.uint8),
+        iterations=1,
+    ).astype(bool)
+    hard_background &= ~edge_background
+    confident_subject = (~hard_background) & (dominant <= 1.15 * other + 8.0)
     transition = ~hard_background & ~confident_subject
 
     distance_from_background = cv2.distanceTransform(
@@ -621,12 +681,12 @@ def _remove_chroma_key_staged(
     promoted = (
         transition
         & (distance_from_background > 6.0)
-        & (dominant <= 1.7 * other + 10.0)
+        & (dominant <= 1.6 * other + 8.0)
     )
     confident_subject |= promoted
     del distance_from_background, promoted
 
-    bright_background = hard_background & (dominant >= 145.0)
+    bright_background = hard_background & (dominant >= 150.0)
     background_density = cv2.blur(
         bright_background.astype(np.float32),
         (41, 41),
@@ -634,7 +694,7 @@ def _remove_chroma_key_staged(
     dark_detail = (
         (np.max(rgb, axis=2) < 58.0)
         & ~confident_subject
-        & (background_density > 0.32)
+        & (background_density > 0.35)
     )
     dark_halo = None
     if np.any(dark_detail):
@@ -761,12 +821,13 @@ def _remove_chroma_key_staged(
         out=edge_reference_ratio,
     )
     np.clip(edge_reference_ratio, 0.05, 1.2, out=edge_reference_ratio)
-    del reference_other, reference
-    _apply_multiscale_subject_ratio(
+    del reference_other
+    _apply_multiscale_subject_reference(
         rgb,
         confident_subject,
         key_channel,
         other_channels,
+        reference,
         edge_reference_ratio,
     )
     del confident_subject
@@ -778,6 +839,12 @@ def _remove_chroma_key_staged(
         iterations=max(8, min(height, width) // 128),
     ).astype(bool) & (alpha > 0.0)
     del soft_edge
+    key_luminance = float(
+        0.299 * measured_key[0]
+        + 0.587 * measured_key[1]
+        + 0.114 * measured_key[2]
+    )
+    key_strength = max(float(measured_key[key_channel]), 1.0)
     for y0 in range(0, height, tile_size):
         y1 = min(y0 + tile_size, height)
         for x0 in range(0, width, tile_size):
@@ -788,19 +855,52 @@ def _remove_chroma_key_staged(
                 continue
             reference_ratio = edge_reference_ratio[tile]
             tile_rgb = rgb[tile]
+            tile_reference = reference[tile]
             current_other = np.maximum(
                 tile_rgb[..., other_channels[0]],
                 tile_rgb[..., other_channels[1]],
             )
-            spill = np.maximum(
+            excess = np.maximum(
                 tile_rgb[..., key_channel]
-                - (0.84 * reference_ratio * current_other + 2.0),
+                - (reference_ratio * current_other + 4.0),
                 0.0,
             )
-            tile_rgb[..., key_channel][tile_edge] -= spill[tile_edge]
-            for channel in other_channels:
-                tile_rgb[..., channel][tile_edge] += 0.12 * spill[tile_edge]
-    del edge_ring, edge_reference_ratio
+            mixture = excess / key_strength
+            neutral_luminance = 0.5 * mixture * key_luminance
+            corrected = tile_rgb.copy()
+            for channel in range(3):
+                correction = (
+                    -mixture * measured_key[channel]
+                    + neutral_luminance
+                )
+                corrected[..., channel] += correction
+
+            direction = measured_key[None, None, :] - tile_reference
+            denominator = np.sum(direction * direction, axis=2)
+            projected_mix = np.divide(
+                np.sum((tile_rgb - tile_reference) * direction, axis=2),
+                denominator,
+                out=np.zeros(denominator.shape, dtype=np.float32),
+                where=denominator > 1e-6,
+            )
+            projected_mix = np.clip(projected_mix, 0.0, 0.70)
+            predicted = (
+                (1.0 - projected_mix[..., None]) * tile_reference
+                + projected_mix[..., None] * measured_key[None, None, :]
+            )
+            projection_residual = np.linalg.norm(tile_rgb - predicted, axis=2)
+            use_projection = (
+                tile_edge
+                & (projected_mix >= 0.025)
+                & (projection_residual <= 18.0)
+            )
+            projected = (
+                tile_rgb
+                - projected_mix[..., None] * measured_key[None, None, :]
+            ) / np.maximum(1.0 - projected_mix[..., None], 0.30)
+            corrected[use_projection] = projected[use_projection]
+            tile_rgb[tile_edge] = corrected[tile_edge]
+    del edge_ring, edge_reference_ratio, reference
 
     alpha = np.where(alpha < 0.025, 0.0, (alpha - 0.025) / 0.975)
     alpha = np.clip(alpha, 0.0, 1.0)
@@ -820,6 +920,23 @@ def _remove_chroma_key_staged(
     return Image.fromarray(pixels, mode="RGBA")
 
 
+def _measured_border_key(image: Image.Image) -> np.ndarray:
+    """Measure the actual rendered key from the outer two-percent frame."""
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    height, width = rgb.shape[:2]
+    frame = max(4, int(0.02 * min(width, height)))
+    border = np.concatenate(
+        (
+            rgb[:frame, :, :].reshape(-1, 3),
+            rgb[-frame:, :, :].reshape(-1, 3),
+            rgb[:, :frame, :].reshape(-1, 3),
+            rgb[:, -frame:, :].reshape(-1, 3),
+        ),
+        axis=0,
+    )
+    return np.median(border, axis=0).astype(np.float32)
+
+
 def remove_chroma_key_automatic(
     image: Image.Image,
     key_color: object = "blue",
@@ -829,17 +946,29 @@ def remove_chroma_key_automatic(
         raise TypeError("image must be a PIL image")
     if image.width < 1 or image.height < 1:
         raise ValueError("image dimensions must be positive")
-    try:
-        result = _remove_chroma_key_precise(image, key_color)
-    except ChromaKeyAmbiguousError:
-        # Leave the exception scope before starting the fallback. Otherwise its
-        # traceback keeps the precise engine's large NumPy arrays alive while
-        # the staged engine allocates its own working buffers.
-        pass
-    else:
-        return _neutralize_opaque_key_spill(image, result, key_color)
+    requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
+    key_channel = int(np.argmax(requested_key))
+    measured_key = _measured_border_key(image)
+    if int(np.argmax(measured_key)) != key_channel:
+        raise ChromaKeyAmbiguousError(
+            "Фон по краям не совпадает с выбранным Chroma Key цветом"
+        )
+    other_channels = [index for index in range(3) if index != key_channel]
+    measured_other = max(
+        measured_key[other_channels[0]],
+        measured_key[other_channels[1]],
+    )
+    if measured_other <= 36.0:
+        try:
+            result = _remove_chroma_key_precise(image, key_color)
+        except ChromaKeyAmbiguousError:
+            pass
+        else:
+            result = _neutralize_opaque_key_spill(image, result, key_color)
+            return _neutralize_translucent_complement(image, result, key_color)
     result = _remove_chroma_key_staged(image, key_color)
-    return _neutralize_opaque_key_spill(image, result, key_color)
+    result = _neutralize_opaque_key_spill(image, result, key_color)
+    return _neutralize_translucent_complement(image, result, key_color)
 
 
 def chroma_key_prompt_block(

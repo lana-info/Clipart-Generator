@@ -339,7 +339,7 @@ Dependencies: Task 4. Scope: S. Requirements: `CG31-FR-040`–`CG31-FR-043`.
 
 ## Task 9: Реализовать собственный automatic chroma engine
 
-Status: Done (VDS checkpoint; Windows visual/performance acceptance pending)
+Status: Done (quality follow-up verified on owner series; Windows acceptance pending)
 
 Goal:
 Заменить RGB-distance собственным алгоритмом, выбранным по Task 8.
@@ -377,14 +377,46 @@ review pass завершены; blocking/important findings закрыты. Не
 другой preset. Canonical report и contact sheet находятся в
 `benchmarks/chroma/automatic-v1/`.
 
-Remaining quality follow-up: контрольная генерация настоящей полупрозрачной
+Контрольная генерация настоящей полупрозрачной
 тюлевой юбки показала, что улучшенный prompt создаёт пригодный measurable
-input, но текущая candidate-реализация Vibix местами восстанавливает внутри
-ткани жёлто-зелёные пятна. Clipbrook на том же input чище по цвету, хотя сильнее
-прореживает сетку. Это отдельная bounded-задача после prompt change: исправлять
-только реконструкцию цвета в genuine translucent interior и принимать её лишь
-при отсутствии ореола/ложного оттенка без потери mesh, лап, хвоста и обычных
-краёв. Presets и новые UI-controls для этого не добавлять.
+input и выявляет жёлто-зелёные пятна прежней candidate-реализации Vibix внутри
+ткани. Clipbrook на том же input сильнее прореживает сетку. Отдельная
+bounded-задача после prompt change закрыта через реконструкцию только цвета в
+genuine translucent interior без потери mesh, лап, хвоста и обычных краёв.
+Presets и новые UI-controls для этого не добавлялись.
+
+Quality follow-up 2026-08-30: восемь исходных 2048×2048 PNG владельца выявили
+пробел синтетического benchmark — генераторы отдают не математически чистый
+key, а насыщенный оттенок вроде `#087CF3`. Старый staged de-spill вычитал key
+channel слишком агрессивно и добавлял два остальных канала, создавая жёлтый
+контур; alpha также теряла часть различимой полупрозрачной кромки. Исправленный
+движок измеряет фактический border key, выбирает единый detailed path для
+окрашенного rendered key, использует полный RGB-образец с нескольких глубин
+предмета, восстанавливает смесь с сохранением яркости и отдельно решает первый
+пограничный ряд. На увеличенных black/white comparisons всех восьми файлов
+жёлтый ореол исчез, шерсть, лапы, юбки и иголки сохраняются не хуже Clipbrook;
+на детерминированном rendered-key regression с blue/green/red средняя ошибка
+RGB кромки не превышает `18/255`, complementary bias — `12/255`, а потеря
+различимой кромки ограничена 64 пикселями. Изолированный PNG 2048×2048
+использует `420.9 MiB`, оставаясь ниже ceiling `448 MiB`. Пользовательские
+изображения и исследовательские outputs остаются локальными и в git не входят.
+Full offline suite: 980 passed, 55 intentional skips, 3 deselected и 130
+subtests. Третье исключение — уже существующий stale route-test Processing,
+который ожидает отсутствие ранее утверждённого экрана Transparency; на чистом
+`develop/3.1` он падает так же и исправляется отдельной задачей.
+
+Дополнительная проверка полупрозрачной юбки выявила второй частный случай:
+staged de-spill мог слишком сильно вычесть канал фона не только из обычной
+полупрозрачной сетки, но и из локальных непрозрачных точек внутри неё. Из-за
+этого появлялись жёлто-оливковые островки, хотя сама alpha-маска сохраняла
+ткань лучше Clipbrook. Исправление меняет только цвет в окрестности широкой
+полупрозрачной области, не изменяет alpha и не затрагивает обычные мягкие края.
+Детерминированный regression покрывает blue/green/red; полный offline suite:
+981 passed, 55 intentional skips, 3 deselected и 133 subtests. Automatic
+benchmark 2048×2048: median `1.373 s`, peak RSS `421.402 MiB` при ceiling
+`448 MiB`. На увеличенном сравнении нижняя кромка юбки сохраняется непрерывнее
+старого Vibix и Clipbrook; окончательный Windows smoke на других реальных
+полупрозрачных материалах остаётся обязательным.
 
 Dependencies: Task 8. Scope: M на один bounded prototype cycle; если выбранная
 архитектура требует больше пяти файлов, до coding разбить реализацию ещё раз.
@@ -698,8 +730,8 @@ Verification:
 ## Task 13: Интегрировать и принять 3.1.0
 
 Status: In progress — source integrated into `develop/3.1`; candidate `3.1.0`
-собран, но после visual review требует approved Chroma follow-up и replacement
-Windows candidate before acceptance/publication
+собран, approved Chroma quality follow-up реализован в отдельной ветке и после
+интеграции требует replacement Windows candidate before acceptance/publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый

@@ -186,11 +186,36 @@ smoke на пользовательских сериях; Pinterest этим р�
 вуаль или стекло должны оставаться видны предмет либо тот же chroma-фон, а
 непрозрачная pastel/key-coloured имитация запрещена. Контрольная генерация
 подтвердила, что такой prompt действительно создаёт полупрозрачную сетку.
-Одновременно comparison выявил оставшийся отдельный defect: candidate Vibix
-иногда создаёт жёлто-зелёные участки внутри genuine translucent ткани, тогда
-как Clipbrook на том же source чище по цвету, но сильнее удаляет тонкую сетку.
-Prompt change не меняет remover; targeted translucent-colour reconstruction
-остаётся отдельным следующим quality fix без новых UI-controls.
+Comparison также выявил отдельный defect: candidate Vibix местами создавал
+жёлто-зелёные участки внутри genuine translucent ткани, тогда как Clipbrook
+сильнее удалял тонкую сетку. Prompt change не меняет remover; defect закрыт
+отдельной targeted translucent-colour reconstruction без новых UI-controls.
+
+Повторная проверка 2026-08-30 на восьми исходных owner PNG 2048×2048 выявила
+и закрыла реальную причину жёлтой каймы: прежний staged de-spill искусственно
+добавлял complementary channels после вычитания синего, а тестовый набор не
+моделировал фактический rendered blue (`примерно #087CF3`). Follow-up branch
+`codex/fix-3.1-chroma-quality` измеряет реальный border key, использует полный
+multi-depth RGB reference предмета, восстанавливает key mixture без
+противоположного оттенка и сохраняет первый различимый полупрозрачный ряд.
+Blue/green/red regression, 43 focused tests и увеличенные black/white
+comparisons проходят; изолированный 2048×2048 peak RSS `420.9 MiB` при ceiling
+`448 MiB`. Full offline suite: 980 passed, 55 intentional skips, 3 deselected,
+130 subtests. Дополнительный deselect — существующий stale Processing route
+test, воспроизводимый без chroma change на чистом `develop/3.1`. User ZIP и
+comparison outputs не добавляются в репозиторий.
+
+Stacked follow-up `codex/fix-3.1-translucent-chroma-colour` закрывает жёлто-
+оливковые островки внутри широкой полупрозрачной сетки. Коррекция ограничена
+окрестностью подтверждённой полупрозрачной области и меняет только RGB:
+alpha-маска, тонкие края и два остальных цветовых канала сохраняются. На
+owner-approved юбке новый вариант оставляет больше непрерывной сетки, чем
+Clipbrook, без прежнего жёлтого обрыва по нижнему правому краю. Blue/green/red
+regression и полный offline suite проходят: 981 passed, 55 intentional skips,
+3 deselected, 133 subtests. Automatic benchmark 2048×2048: `1.373 s`,
+`421.402 MiB` при лимите `448 MiB`. Нужна Windows-проверка ещё на нескольких
+реальных полупрозрачных материалах и разных preset-фонах.
+
 Пресеты коррекции chroma-key не входят в текущую версию 3.1.0. В одной из
 следующих версий после Windows-проверки и накопления повторяемых дефектов можно
 отдельно оценить понятные варианты `Бережно` / `Обычно` / `Сильнее` и
