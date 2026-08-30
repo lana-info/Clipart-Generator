@@ -17,12 +17,11 @@ therefore hides the existing checkbox and resets an already enabled value to
 `hidden=True`, `state=False` in both modes. Existing DPI tests exercised the
 editor/runtime without this workflow boundary and did not detect the omission.
 
-Per the owner's current testing instruction, no runtime source is changed while
-the observation pass continues. The issue is recorded against Task 4 and Task
-13 as an important current-candidate regression. Because 300 DPI is an approved
-3.1.0 capability and an existing user workflow, the recommended release
-decision is a small tested restoration plus replacement installer before
-publication, unless the owner later explicitly accepts deferral.
+The regression is fixed on `codex/fix-3.1-windows-acceptance-blockers` by adding
+the existing operation back to the shared workflow allow-list. A workflow-level
+offscreen regression proves that Clipart and Processing both expose the control
+and preserve an enabled value; the focused workflow/editor/final-save suite
+passes 28 tests. Replacement Windows acceptance remains required before release.
 
 ## Windows acceptance regression: failed KIE item shown as information — 2026-08-30
 

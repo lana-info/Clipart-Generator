@@ -132,10 +132,9 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-012`.
 
 ## Task 4: Исправить cleanup, 300 DPI и chroma presets
 
-Status: Windows candidate regression confirmed — implementation exists, but
-the shared workflow allow-list hides and disables 300 DPI in both Clipart and
-Processing; source repair is pending until the owner finishes the current
-observation pass
+Status: Fixed on `codex/fix-3.1-windows-acceptance-blockers` — the shared
+workflow allow-list again exposes 300 DPI in both Clipart and Processing;
+replacement Windows acceptance remains in Task 13
 
 Goal:
 Закрепить короткие подписи и один безопасный набор key colors.
@@ -149,15 +148,14 @@ Acceptance:
 - [x] Нет обещания удалить скрытый SynthID.
 - [x] Exact actions: `Удалить служебные данные изображения` и
   `Удалить водяной знак Gemini`.
-- [ ] 300 DPI меняет metadata и не скрыт в applicable workflow. Windows
-  acceptance 2026-08-30 confirmed that the current candidate hides it in both
-  Clipart and Processing.
+- [x] 300 DPI меняет metadata и не скрыт в applicable workflow. Regression
+  test covers the active workflow boundary for both Clipart and Processing.
 - [x] Prompt/removal используют один закрытый набор трёх цветов.
 
 Verification:
 - [x] UI string/visibility tests.
 - [x] DPI metadata round-trip и draft migration tests.
-- [ ] Добавить workflow-level regression test: `export_300_dpi` разрешён,
+- [x] Добавить workflow-level regression test: `export_300_dpi` разрешён,
   видим и не сбрасывается для Clipart и Processing. Existing tests covered the
   editor/runtime in isolation but did not exercise the workflow allow-list.
 
@@ -833,7 +831,7 @@ Steps:
   При расхождении сохранить имена файлов, SHA-256 и диагностический журнал;
   отдельно сверить ожидаемые stage-копии в `rough/`. Это paid request и требует
   отдельного явного разрешения владельца.
-- [ ] После завершения текущего Windows observation pass восстановить
+- [x] После завершения текущего Windows observation pass восстановить
   `Установить 300 DPI` в Clipart и Processing, сначала добавив failing
   workflow-level visibility/state regression. Это ранее утверждённая функция,
   поэтому рекомендуемый release decision — исправить и пересобрать 3.1.0 до

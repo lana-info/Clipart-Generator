@@ -123,6 +123,7 @@ _CLIPART_OPERATIONS: Final[tuple[str, ...]] = (
     "upscale_after",
     "edge_shrink",
     "trim",
+    "export_300_dpi",
     "metadata_cleanup",
 )
 

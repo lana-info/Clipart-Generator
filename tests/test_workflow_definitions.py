@@ -85,6 +85,33 @@ class WorkflowDefinitionTests(unittest.TestCase):
         self.assertFalse(pinterest.allows_processing_operation("remove_background"))
         self.assertFalse(pinterest.allows_processing_operation("upscale_before"))
 
+    def test_clipart_and_processing_allow_300_dpi_export(self):
+        for mode in (ProjectMode.CLIPART, ProjectMode.PROCESSING):
+            with self.subTest(mode=mode.value):
+                workflow = workflow_for_mode(mode)
+                self.assertTrue(
+                    workflow.allows_processing_operation("export_300_dpi")
+                )
+
+                owner = type("Owner", (), {})()
+                owner.operations = __import__("v3_project_state").ImageOperationData(
+                    export_300_dpi=True
+                )
+                editor = ProcessingPipelineEditor(
+                    owner,
+                    lambda: None,
+                    title="Processing",
+                    description="Test",
+                    include_cleanup=True,
+                    allowed_operations=workflow.processing_operations,
+                )
+                editor.show()
+                self.app.processEvents()
+
+                self.assertTrue(editor.operation_widgets["export_300_dpi"].isVisible())
+                self.assertTrue(owner.operations.export_300_dpi)
+                editor.close()
+
     def test_pinterest_declares_prompt_only_generation_pages_and_operations(self):
         """Pinterest accepts prompts/CSV and shares generation, not processing."""
         pinterest = workflow_for_mode(ProjectMode.PINTEREST)
