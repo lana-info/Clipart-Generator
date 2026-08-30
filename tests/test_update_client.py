@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +71,30 @@ class UpdateClientTests(unittest.TestCase):
             download_directory=self.root / "updates",
         )
         self.installer = b"windows-installer-3.1"
+
+    @unittest.skipUnless(os.name == "nt", "native Windows file-sharing contract")
+    def test_verified_installer_is_immutable_until_protected_context_closes(self):
+        payload = b"verified-installer"
+        self.client.download_directory.mkdir(parents=True)
+        artifact = self.client.download_directory / "VibixImages-Setup-3.1.exe"
+        renamed = artifact.with_name("renamed-installer.exe")
+        artifact.write_bytes(payload)
+        release = update_client.UpdateRelease(
+            version="3.1.0",
+            filename=artifact.name,
+            size=len(payload),
+            sha256=hashlib.sha256(payload).hexdigest(),
+            download_url="https://license.example/downloads/token",
+        )
+
+        with self.client.protected_download(release, artifact):
+            with self.assertRaises(OSError):
+                artifact.write_bytes(b"tampered")
+            with self.assertRaises(OSError):
+                os.replace(artifact, renamed)
+
+        os.replace(artifact, renamed)
+        self.assertEqual(renamed.read_bytes(), payload)
 
     def manifest_response(self, req, *, mutate=None, key_id="updates-v1"):
         requested = json.loads(req.data.decode("utf-8"))
