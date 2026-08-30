@@ -62,6 +62,10 @@ class ChromaKeyAmbiguousError(ValueError):
     """Raised when the image border is not a safe match for the selected key."""
 
 
+class ChromaKeySubjectColorError(ChromaKeyAmbiguousError):
+    """Raised when removing the key would erase an enclosed subject detail."""
+
+
 def parse_key_color(value: object) -> tuple[int, int, int]:
     """Parse a named or hex RGB key color."""
     normalized = str(value or "").strip().lower()
@@ -262,7 +266,12 @@ def _remove_chroma_key_precise(
             touches_subject = np.any(local_subject & ring)
             local_protected = protected_interior_detail[y0:y1, x0:x1]
             if touches_subject and suspicious_edge_detail:
-                raise ChromaKeyAmbiguousError(
+                error_type = (
+                    ChromaKeySubjectColorError
+                    if enclosed
+                    else ChromaKeyAmbiguousError
+                )
+                raise error_type(
                     "Предмет содержит выбранный Chroma Key цвет; выберите другой цвет фона"
                 )
             if touches_subject and enclosed:
@@ -961,6 +970,8 @@ def remove_chroma_key_automatic(
     if measured_other <= 36.0:
         try:
             result = _remove_chroma_key_precise(image, key_color)
+        except ChromaKeySubjectColorError:
+            raise
         except ChromaKeyAmbiguousError:
             pass
         else:
@@ -1002,6 +1013,7 @@ def chroma_key_prompt_block(
 
 __all__ = [
     "ChromaKeyAmbiguousError",
+    "ChromaKeySubjectColorError",
     "KEY_COLORS",
     "MATERIAL_PROMPT_CLAUSES",
     "chroma_key_prompt_block",

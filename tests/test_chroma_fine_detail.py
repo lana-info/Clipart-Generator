@@ -6,7 +6,11 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from chroma_key import KEY_COLORS, remove_chroma_key_automatic
+from chroma_key import (
+    KEY_COLORS,
+    ChromaKeyAmbiguousError,
+    remove_chroma_key_automatic,
+)
 
 
 SUPERSAMPLE = 3
@@ -322,6 +326,28 @@ def _layered_translucent_strip(key_name: str) -> Image.Image:
 
 
 class ChromaFineDetailTests(unittest.TestCase):
+    def test_broad_near_key_detail_is_rejected_instead_of_silently_erased(self):
+        for key_name, permutation in {
+            "blue": (0, 1, 2),
+            "green": (0, 2, 1),
+            "red": (2, 0, 1),
+        }.items():
+            with self.subTest(key_name=key_name):
+                key = np.asarray((0, 0, 255), dtype=np.uint8)[list(permutation)]
+                detail = np.asarray((0, 80, 200), dtype=np.uint8)[list(permutation)]
+                pixels = np.broadcast_to(key, (41, 41, 3)).copy()
+                pixels[8:33, 8:33] = (180, 180, 180)
+                pixels[18:23, 18:23] = detail
+
+                with self.assertRaisesRegex(
+                    ChromaKeyAmbiguousError,
+                    "выберите другой цвет фона",
+                ):
+                    remove_chroma_key_automatic(
+                        Image.fromarray(pixels, mode="RGB"),
+                        key_name,
+                    )
+
     def test_translucent_interior_does_not_gain_complementary_key_colour(self):
         for key_name in ("blue", "green", "red"):
             with self.subTest(key_name=key_name):
