@@ -783,11 +783,8 @@ Requirements: `CG31-FR-020`, `022`, `030`, `052`, `053`, `061`, `070`, `071`.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: In progress — source acceptance is complete; release candidate
-`codex/release-3.1.0-final-candidate` is prepared. First Windows run
-`33323248601` exposed a missing packaged Real-ESRGAN models directory; the
-root-cause fix is prepared for a replacement run, after which the checklist
-remains before publication
+Status: In progress — Windows candidate artifact is built and automated gates
+pass; manual acceptance remains before publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый
@@ -802,7 +799,7 @@ Steps:
   gates до PyInstaller/Inno Setup.
 - Провести manual Windows acceptance по
   `docs/testing/windows-3.1.0-acceptance-checklist.ru.md`.
-- [ ] До build открыть интегрированный source на Windows при поддерживаемом
+- [ ] Открыть установленный candidate на Windows при поддерживаемом
   1120×780 и scaling 100%: сравнить Tasks 2, 3 и 5 с implemented screenshots,
   проверить отсутствие наложений и доступность навигации. Меньшие окна и
   scaling выше 100% — best-effort; Remote Desktop не проверяется.
@@ -818,7 +815,7 @@ Steps:
   остаётся фоном, поэтому для такого предмета выбирается другой preset.
 - [ ] С заранее активированной тестовой лицензией проверить разрешённый outage
   grace и fail-closed denial/revocation/expiry/clock rollback.
-- [ ] Запустить Windows-only tests настоящих OS-контрактов: Fal.ai key
+- [x] Запустить Windows-only tests настоящих OS-контрактов: Fal.ai key
   `save → новый store → load` через DPAPI и запрет overwrite/rename проверенного
   installer до закрытия protected context с разрешением операции после него.
 - [ ] На Windows выполнить контрольный KIE-запуск в новой пустой рабочей папке:
@@ -840,7 +837,8 @@ Verification:
   without conflicts through `7addeee`; latest complete offline suite: 1026
   passed, 57 intentional/environment skips, 2 deselected, 140 subtests. Two of
   those skips are the new Windows-only DPAPI and native installer-lock tests.
-- [ ] Replacement Windows artifact and manual Windows checklist remain.
+- [x] Replacement Windows artifact built with all automated gates green.
+- [ ] Manual Windows checklist remains.
 
 Release preparation 2026-08-30: версия 3.1.0, release notes и полный Windows
 checklist подготовлены в `codex/release-3.1.0-final-candidate`. Workflow теперь
@@ -855,6 +853,13 @@ alpha IoU `0.968704`, alpha MAE `0.018194`, median `1.319 s`, peak RSS
 installed local-processing smoke: старый Real-ESRGAN v0.2.0 archive не содержал
 models. Regression contract сначала воспроизвёл ошибку; GitHub workflow
 переведён на полный v0.2.5.0 archive с SHA-256 и required-file validation.
+
+Replacement run `33323775508` from commit `8c8c51c` passed all Windows gates,
+including native DPAPI/installer lock, installed startup/UI and local processing.
+Artifact `windows-3.1.0` contains installer `231576596` bytes with SHA-256
+`421aae337715057bbd44a808c0078d08689c04443225b2b1b1a19269a85b7f80`,
+matching provenance. It is an unpublished acceptance artifact; manual visual,
+install/upgrade, workspace, Chroma and license checks remain.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration

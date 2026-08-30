@@ -8,31 +8,37 @@
 
 ## 1. Идентификация кандидата
 
-- [ ] Source branch: `codex/release-3.1.0-final-candidate`.
-- [ ] Source commit записан: `________________`.
-- [ ] GitHub Actions run записан: `________________`.
-- [ ] Artifact: `windows-3.1.0`.
-- [ ] Installer: `VibixImages-Setup-3.1.0.exe`.
-- [ ] Размер installer записан: `________________` байт.
-- [ ] SHA-256 из artifact записан и повторно вычислен локально:
-  `_______________________________________________________________`.
-- [ ] `release/build-provenance.json` указывает тот же commit, а приложенный
+- [x] Source branch: `codex/release-3.1.0-final-candidate`.
+- [x] Source commit записан: `8c8c51cc95c8e3e61657988d0641f7a010b48f75`.
+- [x] GitHub Actions run записан: `33323775508`.
+- [x] Artifact: `windows-3.1.0`.
+- [x] Installer: `VibixImages-Setup-3.1.0.exe`.
+- [x] Размер installer записан: `231576596` байт.
+- [x] SHA-256 из artifact записан и повторно вычислен локально:
+  `421aae337715057bbd44a808c0078d08689c04443225b2b1b1a19269a85b7f80`.
+- [x] `release/build-provenance.json` указывает тот же commit, а приложенный
   `release/VERSION.txt` — версию 3.1.0.
-- [ ] Использован новый artifact этого run, а не старая ветка или прежний файл.
+- [x] Использован новый artifact этого run, а не старая ветка или прежний файл.
 
 ## 2. Автоматические Windows gates
 
-- [ ] Нативный DPAPI round-trip Fal.ai key: `1 passed`, не `skipped`.
-- [ ] Нативная блокировка installer: `1 passed`, не `skipped`.
-- [ ] License/run gates, compilation и sensitive scan прошли.
-- [ ] PyInstaller executable сообщает версию 3.1.0.
-- [ ] Inno Setup завершился успешно с закреплённой версией 6.7.1.
-- [ ] Microsoft Visual C++ runtime имеет действительную подпись Microsoft.
-- [ ] Установка в чистую временную папку и packaged startup smoke прошли.
-- [ ] Installed local-processing smoke с bundled Real-ESRGAN прошёл.
-- [ ] В artifact есть `mode-selection.png`, `clipart-prompts.png` и
+- [x] Нативный DPAPI round-trip Fal.ai key: `1 passed`, не `skipped`.
+- [x] Нативная блокировка installer: `1 passed`, не `skipped`.
+- [x] License/run gates, compilation и sensitive scan прошли.
+- [x] PyInstaller executable сообщает версию 3.1.0.
+- [x] Inno Setup завершился успешно с закреплённой версией 6.7.1.
+- [x] Microsoft Visual C++ runtime имеет действительную подпись Microsoft.
+- [x] Установка в чистую временную папку и packaged startup smoke прошли.
+- [x] Installed local-processing smoke с bundled Real-ESRGAN прошёл.
+- [x] В artifact есть `mode-selection.png`, `clipart-prompts.png` и
   `clipart-prompt-review.png` с нативным Windows rendering.
-- [ ] Release contract, installer checksum и build provenance прошли.
+- [x] Release contract, installer checksum и build provenance прошли.
+
+Evidence: [GitHub Actions run 33323775508](https://github.com/lana-info/Clipart-Generator/actions/runs/33323775508),
+artifact ID `9735781326`, срок хранения до `2026-09-02T17:06:52Z`.
+Автоматические screenshots сняты runner'ом при размере меньше поддерживаемого
+1120×780 и подтверждают только наличие/rendering; visual acceptance раздела 4
+остаётся ручным.
 
 Команда для повторения двух нативных тестов на целевом Windows-компьютере:
 

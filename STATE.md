@@ -38,8 +38,12 @@ the owner account. Windows run `33323248601` confirmed both native security
 contracts, PyInstaller startup and installer creation, then correctly failed
 the installed local-processing gate: the older pinned Real-ESRGAN v0.2.0
 archive contained no models. The candidate now uses the complete pinned
-v0.2.5.0 archive through the existing SHA-256 and required-file validator; a
-replacement run is pending. It remains an unpublished acceptance artifact; the paid KIE
+v0.2.5.0 archive through the existing SHA-256 and required-file validator.
+Replacement run `33323775508` from commit `8c8c51c` passed every automated
+Windows gate, including installed startup/UI and local processing. Artifact
+`windows-3.1.0` contains `VibixImages-Setup-3.1.0.exe` (`231576596` bytes),
+SHA-256 `421aae337715057bbd44a808c0078d08689c04443225b2b1b1a19269a85b7f80`;
+downloaded checksum and provenance match. It remains an unpublished acceptance artifact; the paid KIE
 duplicate audit and publication still require separate approval.
 
 The Windows acceptance checklist now includes a clean-workspace duplicate
@@ -185,10 +189,8 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Immediate next action
 
-Push the complete Real-ESRGAN runtime fix, rerun the authorized manual
-`Release Windows Installer` workflow with `app_version=3.1.0`, then record its
-commit, run, artifact and checksum in
-`docs/testing/windows-3.1.0-acceptance-checklist.ru.md`. Then perform the manual
+Download artifact `windows-3.1.0` from run `33323775508` before its three-day
+retention expires, then perform the manual
 UI, mouse-editor, install/upgrade, path/output, license and Chroma checks at
 1120×780 and 100% display scaling. A stylus check is needed only when the target
 device uses one. The one-prompt/one-variant KIE duplicate audit is a separately
