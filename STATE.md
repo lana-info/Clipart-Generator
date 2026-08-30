@@ -4,6 +4,14 @@ Updated: 2026-08-29
 
 ## Latest integrated checkpoint
 
+Task 25 is integrated in `develop/3.1` at `bdf6823`:
+Fal.ai price refresh на Review & Run необязателен; подтверждающая галочка
+удалена, а устаревший флаг подтверждения больше не передаётся worker. Кнопка
+обновления цены расположена рядом со стоимостью и видна только при Fal.ai.
+Успешная preflight-проверка не показывает техническую строку о ключе. Focused
+suite (165 tests, 54 deferred skips), `py_compile`, `git diff --check` и
+sensitive scan прошли.
+
 Task 24 is integrated in `develop/3.1` at `aaf6a4f`:
 Clipart и Pinterest ведут отдельные профили text/reference generation. Если
 есть референсы, для их модели появляются отдельные списки модели, пропорции и
@@ -103,16 +111,13 @@ verified, create a replacement Windows candidate, then continue manual
 acceptance for the image/mask editor, output/rough paths, chroma quality and
 offline-license startup/run. Publication remains a separate owner decision.
 
-The requested Fal.ai text-to-image catalogue expansion is implemented on a
-separate checkpoint branch: Recraft V4, Ideogram V4 Fast, FLUX.2 Klein 4B,
-Kling O3 Image and Bria Fibo Gen 1.5. All remain text-only choices; attaching
-references keeps only models that explicitly support them. Endpoint routing is
-registry-based so `ideogram/v4/fast` and `bria/fibo-gen-1.5/text-to-image`
-correctly require and use the Fal.ai key despite their IDs lacking `fal-ai/`.
-No live or paid provider request was made. The next UI task is an approved
-redesign of Review & Run: price refresh becomes optional, the price-confirmation
-checkbox is removed, and a saved Fal.ai key must no longer produce a false
-missing-key warning.
+The requested Fal.ai text-to-image catalogue expansion is integrated: Recraft
+V4, Ideogram V4 Fast, FLUX.2 Klein 4B, Kling O3 Image and Bria Fibo Gen 1.5.
+All remain text-only choices; attaching references keeps only models that
+explicitly support them. Endpoint routing is registry-based so
+`ideogram/v4/fast` and `bria/fibo-gen-1.5/text-to-image` correctly require
+and use the Fal.ai key despite their IDs lacking `fal-ai/`. No live or paid
+provider request was made.
 
 Task 15 adds the approved compact «Что нового» block to the signed update
 prompt and is integrated in `develop/3.1` at `ea57e12`. It does not add any

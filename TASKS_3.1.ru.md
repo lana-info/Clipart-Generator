@@ -650,6 +650,29 @@ Verification:
   и `tests.test_v3_run_queue` (185 tests; 54 deferred skips).
 - [x] `py_compile`, `git diff --check` и tracked sensitive-artifact scan.
 
+## Task 25: Упростить проверку и запуск Fal.ai
+
+Status: Done — integrated in `develop/3.1` at `bdf6823`
+
+Goal:
+Не требовать подтверждения цены для запуска и не показывать предупреждение о
+ключе Fal.ai, когда ключ уже задан.
+
+Acceptance:
+
+- [x] Нет галочки подтверждения цены и цена не блокирует запуск.
+- [x] «Обновить оценку Fal.ai» показывается только для Fal.ai и располагается
+  рядом со строкой стоимости; нажатие остаётся необязательным.
+- [x] Не передаётся устаревший флаг `fal_cost_confirmed`, который мог бы
+  остановить worker без действия пользователя.
+- [x] При успешной preflight-проверке строка с техническим статусом ключа
+  скрыта; ошибка остаётся только для действительно отсутствующего ключа.
+
+Verification:
+
+- [x] Focused Clipart/Pinterest/Fal suites (165 tests; 54 deferred skips).
+- [x] `py_compile`, `git diff --check` и tracked sensitive-artifact scan.
+
 ## Task 13: Интегрировать и принять 3.1.0
 
 Status: In progress — source integrated into `develop/3.1`; candidate `3.1.0`
