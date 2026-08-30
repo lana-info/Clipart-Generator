@@ -383,14 +383,22 @@ class RunQueueSession(QObject):
         self.work_dir = Path(str(getattr(request, "work_dir", ""))).resolve(
             strict=False
         )
+        settings = getattr(request, "settings", {}) or {}
         requested_output = str(
-            (getattr(request, "settings", {}) or {}).get("output_dir") or ""
+            settings.get("output_dir") or ""
         ).strip()
         self.output_dir = (
             Path(requested_output).resolve(strict=False)
             if requested_output
             else self.work_dir / "output"
         )
+        requested_workspace = str(settings.get("workspace_root") or "").strip()
+        self.workspace_root = (
+            Path(requested_workspace).resolve(strict=False)
+            if requested_workspace
+            else self.output_dir.parent
+        )
+        self.transient_dir = self.workspace_root / ".run"
         self.items = _request_items(request, mode)
         self.active_order = list(range(len(self.items)))
         self.current_index: int | None = None
@@ -408,7 +416,6 @@ class RunQueueSession(QObject):
         self._technical_events: list[str] = []
         self._diagnostic_journal = diagnostic_journal
         self.operation_id = uuid.uuid4().hex
-        settings = getattr(request, "settings", {}) or {}
         provider_routes, model_routes = _provider_model_routes(settings, mode)
         self._event(
             "run_started",
@@ -686,7 +693,7 @@ class RunQueueSession(QObject):
             if stage:
                 item.stage_statuses[stage] = "complete"
             if event.source_path:
-                trusted = _trusted_worker_path(event.source_path, self.output_dir / ".run")
+                trusted = _trusted_worker_path(event.source_path, self.transient_dir)
                 if trusted:
                     item.source_path = trusted
                 else:
@@ -858,10 +865,7 @@ class RunQueueSession(QObject):
 
         if text.startswith(_GENERATED_PREFIX) and item is not None:
             raw = text[len(_GENERATED_PREFIX) :].strip()
-            # The worker's current intermediate-file contract is
-            # ``<output_dir>/.run``.  Trusting the legacy ``work_dir/raw``
-            # location makes valid generated paths look missing to the UI.
-            trusted = _trusted_worker_path(raw, self.output_dir / ".run")
+            trusted = _trusted_worker_path(raw, self.transient_dir)
             if trusted:
                 item.source_path = trusted
                 item.stage_statuses["generation"] = "complete"

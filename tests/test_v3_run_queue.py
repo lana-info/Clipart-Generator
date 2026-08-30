@@ -506,7 +506,7 @@ class V3RunQueueTests(unittest.TestCase):
     def test_generated_output_run_workspace_is_trusted(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-generated-path-") as temp:
             root = Path(temp)
-            run_dir = root / "output" / ".run"
+            run_dir = root / ".run" / "current-run"
             run_dir.mkdir(parents=True)
             generated = run_dir / "gen_001.png"
             Image.new("RGB", (4, 4), "purple").save(generated)
