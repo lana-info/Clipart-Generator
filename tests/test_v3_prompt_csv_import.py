@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -10,6 +11,7 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 from v3_prompt_csv_import import (  # noqa: E402
     PromptCsvImportDialog,
     parse_prompt_csv,
+    write_prompt_csv_atomic,
 )
 
 
@@ -42,6 +44,24 @@ class PromptCsvImportTests(unittest.TestCase):
             }
         ])
         self.assertEqual(result.issues, [])
+
+    def test_atomic_export_preserves_existing_csv_when_commit_fails(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-csv-export-") as temp_dir:
+            destination = Path(temp_dir) / "prompts.csv"
+            destination.write_text("previous data", encoding="utf-8")
+
+            with patch(
+                "v3_prompt_csv_import.os.replace",
+                side_effect=OSError("simulated replace failure"),
+            ):
+                with self.assertRaises(OSError):
+                    write_prompt_csv_atomic(
+                        destination,
+                        [{"prompt": "bird", "references": ["bird.png"]}],
+                    )
+
+            self.assertEqual(destination.read_text(encoding="utf-8"), "previous data")
+            self.assertEqual(list(destination.parent.glob(".prompts.*.tmp")), [])
 
     def test_parse_keeps_references_optional_and_reports_row_numbers(self):
         with tempfile.TemporaryDirectory(prefix="clipart-csv-issues-") as temp_dir:

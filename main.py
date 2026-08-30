@@ -7907,13 +7907,9 @@ class MainWindow(QMainWindow):
             file_path = f"{file_path}.csv"
 
         try:
-            with open(file_path, "w", encoding="utf-8-sig", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow(["Prompt", "References"])
-                for entry in entries:
-                    prompt_text = str(entry.get("prompt", "")).strip()
-                    references_text = join_references(entry.get("references", []))
-                    writer.writerow([prompt_text, references_text])
+            from v3_prompt_csv_import import write_prompt_csv_atomic
+
+            write_prompt_csv_atomic(file_path, entries)
             self.log(f"CSV экспортирован: {file_path}")
             QMessageBox.information(
                 self,

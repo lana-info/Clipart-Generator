@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import os
+import tempfile
 from dataclasses import dataclass
 from io import StringIO
 from pathlib import Path
@@ -39,6 +41,42 @@ def split_references(raw_value: Any) -> list[str]:
 
 def join_references(references: Any) -> str:
     return " | ".join(split_references(references))
+
+
+def write_prompt_csv_atomic(
+    destination: str | Path,
+    entries: list[dict[str, Any]],
+) -> None:
+    """Write an import-compatible CSV without exposing a partial destination."""
+    target = Path(destination)
+    fd, temporary_name = tempfile.mkstemp(
+        prefix=f".{target.stem}.",
+        suffix=".tmp",
+        dir=target.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        handle = os.fdopen(fd, "w", encoding="utf-8-sig", newline="")
+        fd = -1
+        with handle:
+            writer = csv.writer(handle)
+            writer.writerow(["Prompt", "References"])
+            for entry in entries:
+                writer.writerow(
+                    [
+                        str(entry.get("prompt", "")).strip(),
+                        join_references(entry.get("references", [])),
+                    ]
+                )
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except Exception:
+        if fd >= 0:
+            os.close(fd)
+        raise
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 @dataclass(slots=True)
