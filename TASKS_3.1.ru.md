@@ -848,6 +848,16 @@ Steps:
   сопровождается одним failed item, не создаёт ready-файл, не помечается как
   success/info и остаётся доступным для явного `Повторить ошибки` без
   автоматической повторной платной отправки.
+- [ ] После observation pass локализовать общий Fal.ai HTTP 405, подтверждённый
+  на `fal-ai/flux/schnell` и `ideogram/v4/fast`: восстановить полную
+  последовательность provider events/request ID, определить, возник ли 405 при
+  submit, status или result, и не считать причиной конкретную модель или
+  промпт без evidence.
+- [ ] До исправления не выполнять новые платные Fal.ai проверки. Для найденной
+  корневой причины сначала добавить минимальный regression на фактический HTTP
+  method/URL и безопасное redirect-поведение, затем проверить обе модели через
+  общий клиент; один failed item не должен создавать ready-файл или запускать
+  автоматическую платную повторную отправку.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
@@ -874,6 +884,15 @@ payload. The confirmed application defect is diagnostic classification:
 `build_provider_event()` derives severity only from the event name and
 `DiagnosticJournal.record_structured()` selects the generic successful-sounding
 summary. No paid retry or runtime fix was started during observation gathering.
+
+Windows observation 2026-08-30: Fal.ai generation returned the same terminal
+`HTTP 405` for two different models, `fal-ai/flux/schnell` and
+`ideogram/v4/fast`. Because both routes share `FalClient`, this is treated as a
+candidate-wide Fal integration regression rather than a model-specific failure.
+The final `item_finished` record does not contain enough lifecycle evidence to
+distinguish submit from status/result failure, so the exact root cause remains
+open until the preceding provider events and request ID are inspected. Further
+paid Fal attempts are stopped; no runtime fix was made during observation.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration

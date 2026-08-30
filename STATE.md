@@ -47,6 +47,30 @@ fix must produce an error-level, failure-specific terminal item event, preserve
 the safe KIE task/error evidence, avoid a ready output for the failed item and
 never trigger an automatic paid retry.
 
+## Windows acceptance regression: Fal.ai HTTP 405 across models — 2026-08-30
+
+The owner reproduced the same terminal `Fal.ai HTTP 405` during generation with
+two independent Fal.ai models: `fal-ai/flux/schnell` and
+`ideogram/v4/fast`. This cross-model reproduction makes a model-specific outage
+or bad prompt unlikely and points to the shared Fal request lifecycle in the
+current Windows candidate. Both failures are also rendered through the already
+confirmed misleading `item_finished` information-level event.
+
+Source inspection confirms that all Fal generation models share `FalClient`:
+submission uses POST to the model queue endpoint, while status and response use
+GET request-specific endpoints. The official queue endpoint accepts POST (an
+unauthenticated diagnostic POST reaches authentication with HTTP 401, whereas
+GET to the model queue root returns HTTP 405). The terminal item record alone
+does not establish whether the candidate received 405 during submission or a
+later request, because it omits the preceding provider lifecycle events and
+request ID. The exact root cause therefore remains open pending the complete
+event sequence; no speculative runtime change is allowed.
+
+Further paid Fal.ai attempts are stopped for this candidate. Task 13 records a
+post-observation regression test and root-cause fix before the replacement
+installer. Runtime source remains unchanged during the owner's observation
+pass.
+
 ## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
 
 The owner has started manual Windows acceptance and has not found a critical
