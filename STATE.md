@@ -2,7 +2,24 @@
 
 Updated: 2026-08-30
 
-## Latest integrated checkpoint
+## Latest project checkpoint
+
+Technical review fix branch `codex/fix-3.1-technical-review` is complete but
+not yet integrated into `develop/3.1`. Reproducible tests confirmed and fixed
+paid-task persistence/recovery, run/output isolation, one enclosed near-key
+Chroma data-loss path, the 40 MP editor boundary, QThread signal lifecycle,
+Processing transparency action and release-safety defects. The established
+workspace remains unchanged for the user: selected root contains `rough/` and
+`output/`; a saved literal `output` path resolves automatically to its parent,
+with no migration page.
+
+The branch passes 1009 offline tests, 55 intentional skips, 2 configured
+deselections and 140 subtests. All tracked Python files compile; sensitive scan
+and `git diff --check` pass. The current automatic Chroma benchmark passes all
+gates: six cases, 2048×2048 median `1.277 s`, peak RSS `422.578 MiB` below the
+`448 MiB` ceiling. No paid request, Windows build, version change or publication
+was performed. Remaining release work is independent review plus manual Windows
+acceptance after integration approval.
 
 Task 7 zoom presets are integrated in `develop/3.1` at `35931e3`:
 редактор прозрачности предлагает `Fit`, `50%`, `100%`, `150%`, `200%` и

@@ -729,6 +729,47 @@ Verification:
 - [x] Focused Clipart/Pinterest/Fal suites (165 tests; 54 deferred skips).
 - [x] `py_compile`, `git diff --check` и tracked sensitive-artifact scan.
 
+## Task 26: Закрыть техническое ревью source checkpoint
+
+Status: Done in `codex/fix-3.1-technical-review`; integration and Windows
+acceptance remain under Task 13
+
+Goal:
+Проверить замечания к checkpoint `879d746` воспроизводимыми тестами и закрыть
+подтверждённые корневые причины без архитектурной переделки.
+
+Acceptance:
+- [x] Fal key переживает restart; Fal/KIE journal синхронизирован между
+  workers, сохраняет pending task IDs и продолжает их polling без повторного
+  paid POST. Redirect не переносит Authorization на другой host или downgrade.
+- [x] Каждый запуск изолирован в `.run/<run-id>`, резервирует имена всего batch
+  и публикует только свои файлы. Прежний выбор workspace с `rough/` и `output/`
+  сохранён без миграционного экрана; literal `output` нормализуется в parent.
+- [x] Adversarial Chroma test подтвердил потерю enclosed near-key детали;
+  automatic mode теперь останавливается с понятной ошибкой вместо стирающего
+  fallback. Правило exact selected key не менялось.
+- [x] Редактор ограничен 40 Мп, `QThread.finished` больше не подменён строковым
+  business-сигналом, а проверка прозрачности видна также в Processing.
+- [x] Installer повторно проверяется перед launch, license outage отделён от
+  permanent 4xx denial, CSV атомарен, delegated update `kid` сохранён верно,
+  output filename ограничен безопасным Windows budget. Существующий rollback
+  PNG/mask подтверждён тестом и не переписывался.
+
+Verification:
+- [x] Focused paid-task/workspace gate: 213 tests and 22 subtests.
+- [x] Focused gates блоков: 269 tests + 47 subtests для Chroma/UI и 110 tests +
+  18 subtests для release safety.
+- [x] Full offline suite: 1009 passed, 55 intentional skips, 2 deselected,
+  140 subtests.
+- [x] Все tracked Python files компилируются; sensitive-artifact scan и
+  `git diff --check` проходят.
+- [x] Automatic Chroma benchmark: 6 cases, 2048×2048 median `1.277 s`, peak RSS
+  `422.578 MiB`; все quality gates проходят при ceiling `448 MiB`.
+- [ ] Manual Windows acceptance и replacement installer — только после
+  отдельного разрешения владельца.
+
+Requirements: `CG31-FR-020`, `022`, `030`, `052`, `053`, `061`, `070`, `071`.
+
 ## Task 13: Интегрировать и принять 3.1.0
 
 Status: In progress — all approved source fixes are integrated into
