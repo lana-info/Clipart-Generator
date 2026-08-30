@@ -182,6 +182,21 @@ Release 3.0.7 и development 3.1 разделены:
 Полный offline pytest: 939 passed,
 56 intentional skips, 2 deselected и 123 subtests. Нужен финальный Windows UI
 smoke на пользовательских сериях; Pinterest этим режимом не пользуется.
+
+Повторная проверка 2026-08-30 на восьми исходных owner PNG 2048×2048 выявила
+и закрыла реальную причину жёлтой каймы: прежний staged de-spill искусственно
+добавлял complementary channels после вычитания синего, а тестовый набор не
+моделировал фактический rendered blue (`примерно #087CF3`). Follow-up branch
+`codex/fix-3.1-chroma-quality` измеряет реальный border key, использует полный
+multi-depth RGB reference предмета, восстанавливает key mixture без
+противоположного оттенка и сохраняет первый различимый полупрозрачный ряд.
+Blue/green/red regression, 43 focused tests и увеличенные black/white
+comparisons проходят; изолированный 2048×2048 peak RSS `420.9 MiB` при ceiling
+`448 MiB`. Full offline suite: 980 passed, 55 intentional skips, 3 deselected,
+130 subtests. Дополнительный deselect — существующий stale Processing route
+test, воспроизводимый без chroma change на чистом `develop/3.1`. User ZIP и
+comparison outputs не добавляются в репозиторий.
+
 Пресеты коррекции chroma-key не входят в текущую версию 3.1.0. В одной из
 следующих версий после Windows-проверки и накопления повторяемых дефектов можно
 отдельно оценить понятные варианты `Бережно` / `Обычно` / `Сильнее` и

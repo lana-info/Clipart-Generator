@@ -253,7 +253,88 @@ def _soft_shape_with_blue_edge_spill() -> tuple[Image.Image, Image.Image]:
     return input_image, expected
 
 
+def _soft_shape_on_rendered_key(
+    key_name: str,
+) -> tuple[Image.Image, Image.Image]:
+    """Model rendered key colors instead of mathematically pure presets."""
+    mask = Image.new("L", (SIZE, SIZE), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((64, 48, 320, 336), fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(1.4))
+    alpha = np.asarray(mask, dtype=np.float32) / 255.0
+
+    clean_colors = {
+        "blue": (230, 155, 112),
+        "green": (185, 95, 205),
+        "red": (70, 165, 220),
+    }
+    rendered_keys = {
+        "blue": (8, 124, 243),
+        "green": (76, 236, 28),
+        "red": (241, 42, 28),
+    }
+    clean_color = np.asarray(clean_colors[key_name], dtype=np.float32)
+    rendered_key = np.asarray(rendered_keys[key_name], dtype=np.float32)
+    inside_distance = cv2.distanceTransform(
+        (alpha > 0.01).astype(np.uint8),
+        cv2.DIST_L2,
+        3,
+    )
+    spill = np.clip((12.0 - inside_distance) / 12.0, 0.0, 1.0) * 0.28
+    contaminated = (
+        clean_color[None, None, :] * (1.0 - spill[..., None])
+        + rendered_key[None, None, :] * spill[..., None]
+    )
+    flattened = np.rint(
+        contaminated * alpha[..., None]
+        + rendered_key[None, None, :] * (1.0 - alpha[..., None])
+    ).astype(np.uint8)
+
+    expected_pixels = np.empty((SIZE, SIZE, 4), dtype=np.uint8)
+    expected_pixels[..., :3] = clean_color.astype(np.uint8)
+    expected_pixels[..., 3] = np.rint(alpha * 255.0).astype(np.uint8)
+    return (
+        Image.fromarray(flattened, mode="RGB"),
+        Image.fromarray(expected_pixels, mode="RGBA"),
+    )
+
+
 class ChromaFineDetailTests(unittest.TestCase):
+    def test_rendered_key_edges_are_recovered_without_complementary_halo(self):
+        for key_name in ("blue", "green", "red"):
+            with self.subTest(key_name=key_name):
+                input_image, expected = _soft_shape_on_rendered_key(key_name)
+
+                result = remove_chroma_key_automatic(input_image, key_name)
+                actual = np.asarray(result.convert("RGBA"), dtype=np.float32)
+                reference = np.asarray(expected.convert("RGBA"), dtype=np.float32)
+                expected_alpha = reference[..., 3] / 255.0
+                visible_edge = (expected_alpha >= 0.40) & (expected_alpha < 0.98)
+                edge_error = actual[..., :3] - reference[..., :3]
+                key_channel = int(np.argmax(KEY_COLORS[key_name]))
+                other_channels = [index for index in range(3) if index != key_channel]
+                complementary_bias = (
+                    edge_error[..., other_channels[0]]
+                    + edge_error[..., other_channels[1]]
+                    - 2.0 * edge_error[..., key_channel]
+                )
+
+                self.assertLessEqual(
+                    float(np.mean(np.abs(edge_error[visible_edge]))),
+                    18.0,
+                )
+                self.assertLessEqual(
+                    abs(float(np.mean(complementary_bias[visible_edge]))),
+                    12.0,
+                )
+                lost_visible_edge = (reference[..., 3] >= 48.0) & (
+                    actual[..., 3] == 0.0
+                )
+                self.assertLessEqual(
+                    int(np.count_nonzero(lost_visible_edge)),
+                    64,
+                )
+
     def test_multiscale_reference_cleans_blue_spill_from_soft_edge(self):
         input_image, expected = _soft_shape_with_blue_edge_spill()
 
