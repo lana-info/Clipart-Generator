@@ -52,7 +52,7 @@ layout change requires visual approval rather than being invented during code
 cleanup. The focused Clipart/Pinterest/Processing/output gate passes 215 tests,
 55 intentional deferred Pinterest skips and 32 subtests; the unavailable local
 Windows Real-ESRGAN binary accounts for one additional environment skip. The
-complete offline suite passes 1025 tests, 55 skips, 2 network deselections and
+complete offline suite passes 1026 tests, 55 skips, 2 network deselections and
 140 subtests. All tracked Python files compile, the sensitive-artifact scan and
 `git diff --check` pass. The fresh automatic Chroma benchmark remains within
 its gates: alpha IoU `0.968704`, alpha MAE `0.018194`, 2048×2048 median

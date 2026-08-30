@@ -847,7 +847,7 @@ Prebuild source-acceptance follow-up on
 `codex/chore-3.1-prebuild-acceptance`: Tasks 2–6 were reconciled against code,
 tests and rendered UI. Missing Task 5 helper/three color buttons and the Task 4
 Gemini label mismatch were reproduced before repair. Current verification:
-1025 passed, 55 intentional skips, 2 network deselections and 140 subtests;
+1026 passed, 55 intentional skips, 2 network deselections and 140 subtests;
 tracked Python compilation, sensitive scan and `git diff --check` pass. Fresh
 automatic Chroma metrics: alpha IoU `0.968704`, alpha MAE `0.018194`, median
 2048×2048 runtime `1.357 s`, peak RSS `421.465 MiB` under `448 MiB`.
