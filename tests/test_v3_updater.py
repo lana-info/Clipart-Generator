@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -56,6 +57,11 @@ class FakeUpdateClient:
 
     def verify_download(self, release, path):
         self.verifications.append((release, path))
+
+    @contextmanager
+    def protected_download(self, release, path):
+        self.verify_download(release, path)
+        yield path
 
 
 class V3UpdaterTests(unittest.TestCase):
@@ -229,6 +235,42 @@ class V3UpdaterTests(unittest.TestCase):
                 "launch",
                 "update_download_verified",
             ])
+
+    def test_installer_stays_protected_from_verification_through_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            installer = Path(temp) / "VibixImages-Setup-3.1.exe"
+            installer.write_bytes(b"verified")
+            client = FakeUpdateClient(self.release(), installer)
+            client.protected = False
+
+            @contextmanager
+            def protected_download(_release, _path):
+                client.verify_download(_release, _path)
+                client.protected = True
+                try:
+                    yield
+                finally:
+                    client.protected = False
+
+            client.protected_download = protected_download
+            launched = []
+
+            def launch(path):
+                launched.append((path, client.protected))
+
+            controller = UpdateController(
+                QWidget(),
+                client,
+                prompt=lambda _release: True,
+                check_worker_factory=ImmediateCheckWorker,
+                download_worker_factory=ImmediateDownloadWorker,
+                installer_launcher=launch,
+            )
+
+            controller.start_check()
+
+            self.assertEqual(launched, [(installer, True)])
+            self.assertFalse(client.protected)
 
     def test_macos_update_reveals_verified_zip_in_finder(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

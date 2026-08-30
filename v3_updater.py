@@ -283,39 +283,31 @@ class UpdateController(QObject):
             self.progress_dialog.close()
         installer = Path(path)
         release = self.download_release
-        try:
-            if release is None:
-                raise UpdateError("Неизвестна версия скачанного обновления")
-            self.client.verify_download(release, installer)
-        except UpdateError as error:
-            self._record(
-                "update_prelaunch_verification_failed",
-                "Повторная проверка обновления перед запуском не пройдена.",
-                severity="error",
-                outcome="failed",
-                details={"error_message": str(error)},
-            )
-            QMessageBox.warning(
-                self.parent_widget,
-                "Обновление",
-                "Скачанный файл изменился или повреждён и не будет запущен.",
+        if release is None:
+            self._prelaunch_verification_failed(
+                UpdateError("Неизвестна версия скачанного обновления")
             )
             return
         try:
-            self.installer_launcher(installer)
-        except (OSError, UpdateError) as error:
-            self._record(
-                "update_installer_launch_failed",
-                "Не удалось запустить установщик обновления.",
-                severity="error",
-                outcome="failed",
-                details={"error_message": str(error)},
-            )
-            QMessageBox.warning(
-                self.parent_widget,
-                "Обновление",
-                "Обновление скачано, но файл не удалось открыть.",
-            )
+            with self.client.protected_download(release, installer):
+                try:
+                    self.installer_launcher(installer)
+                except (OSError, UpdateError) as error:
+                    self._record(
+                        "update_installer_launch_failed",
+                        "Не удалось запустить установщик обновления.",
+                        severity="error",
+                        outcome="failed",
+                        details={"error_message": str(error)},
+                    )
+                    QMessageBox.warning(
+                        self.parent_widget,
+                        "Обновление",
+                        "Обновление скачано, но файл не удалось открыть.",
+                    )
+                    return
+        except UpdateError as error:
+            self._prelaunch_verification_failed(error)
             return
         self._record(
             "update_download_verified",
@@ -330,6 +322,20 @@ class UpdateController(QObject):
             details={"filename": installer.name},
         )
         QApplication.instance().quit()
+
+    def _prelaunch_verification_failed(self, error: UpdateError) -> None:
+        self._record(
+            "update_prelaunch_verification_failed",
+            "Повторная проверка обновления перед запуском не пройдена.",
+            severity="error",
+            outcome="failed",
+            details={"error_message": str(error)},
+        )
+        QMessageBox.warning(
+            self.parent_widget,
+            "Обновление",
+            "Скачанный файл изменился или повреждён и не будет запущен.",
+        )
 
     def _download_failed(self, message: str) -> None:
         if self.progress_dialog is not None:

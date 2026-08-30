@@ -11,6 +11,7 @@ import platform
 import re
 import sys
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping
@@ -48,6 +49,58 @@ class UpdateRelease:
     download_url: str
     notes: str = ""
     correlation_id: str = ""
+
+
+@contextmanager
+def _open_protected_artifact(path: Path):
+    """Keep a Windows artifact locked against writes/rename through launch."""
+    if os.name != "nt":
+        with path.open("rb") as handle:
+            yield handle
+        return
+
+    import ctypes
+    import msvcrt
+
+    generic_read = 0x80000000
+    file_share_read = 0x00000001
+    open_existing = 3
+    file_attribute_normal = 0x00000080
+    file_flag_open_reparse_point = 0x00200000
+    file_flag_sequential_scan = 0x08000000
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    )
+    create_file.restype = ctypes.c_void_p
+    raw_handle = create_file(
+        str(path),
+        generic_read,
+        file_share_read,
+        None,
+        open_existing,
+        file_attribute_normal
+        | file_flag_open_reparse_point
+        | file_flag_sequential_scan,
+        None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if raw_handle in (None, invalid_handle):
+        raise OSError(ctypes.get_last_error(), "Cannot lock update artifact")
+    try:
+        descriptor = msvcrt.open_osfhandle(raw_handle, os.O_RDONLY)
+    except BaseException:
+        kernel32.CloseHandle(ctypes.c_void_p(raw_handle))
+        raise
+    with os.fdopen(descriptor, "rb") as handle:
+        yield handle
 
 
 def current_platform_id() -> str:
@@ -300,18 +353,25 @@ class UpdateClient:
 
     def verify_download(self, release: UpdateRelease, path: str | Path) -> None:
         """Repeat the artifact size and digest checks immediately before launch."""
+        with self.protected_download(release, path):
+            pass
+
+    @contextmanager
+    def protected_download(self, release: UpdateRelease, path: str | Path):
+        """Verify and hold the artifact immutable until its launcher returns."""
         artifact = Path(path)
         expected = self.download_directory / release.filename
         try:
             if artifact != expected or artifact.is_symlink() or not artifact.is_file():
                 raise UpdateError("Файл обновления не прошёл повторную проверку")
-            if artifact.stat().st_size != release.size:
-                raise UpdateError("Файл обновления не прошёл повторную проверку")
-            digest = hashlib.sha256()
-            with artifact.open("rb") as handle:
+            with _open_protected_artifact(artifact) as handle:
+                if os.fstat(handle.fileno()).st_size != release.size:
+                    raise UpdateError("Файл обновления не прошёл повторную проверку")
+                digest = hashlib.sha256()
                 for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                     digest.update(chunk)
+                if not hmac.compare_digest(digest.hexdigest(), release.sha256):
+                    raise UpdateError("Файл обновления не прошёл повторную проверку")
+                yield artifact
         except OSError:
             raise UpdateError("Файл обновления не прошёл повторную проверку") from None
-        if not hmac.compare_digest(digest.hexdigest(), release.sha256):
-            raise UpdateError("Файл обновления не прошёл повторную проверку")
