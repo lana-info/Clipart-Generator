@@ -4,9 +4,9 @@ Updated: 2026-08-30
 
 ## Latest project checkpoint
 
-Technical review fix branch `codex/fix-3.1-technical-review` is source-complete
-but not yet integrated into `develop/3.1`. Reproducible tests confirmed and
-fixed paid-task persistence/recovery, cross-process journals, run/output
+Technical review fix branch `codex/fix-3.1-technical-review` is integrated into
+`develop/3.1` by fast-forward through `c40bbdb`. Reproducible tests confirmed
+and fixed paid-task persistence/recovery, cross-process journals, run/output
 isolation and no-clobber publication, interrupted PNG/mask recovery, one
 enclosed near-key Chroma data-loss path, the 40 MP editor boundary, QThread
 signal lifecycle, Processing transparency action and release-safety defects.
@@ -15,15 +15,14 @@ contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
 The final independent source review verdict is `pass-with-nits`: no blocking or
-important defects remain. The branch passes 1021 offline tests, 55 intentional
+important defects remain. The merged branch passes 1021 offline tests, 55 intentional
 skips, 2 configured deselections and 140 subtests; the final high-risk focused
 gate passes 225 tests and 36 subtests. All tracked Python files compile;
 sensitive scan and `git diff --check` pass. The current automatic Chroma
 benchmark passes all gates: six cases, 2048×2048 median `1.228 s`, peak RSS
 `421.848 MiB` below the `448 MiB` ceiling. No paid request, Windows build,
-version change or publication was performed. Remaining release work is explicit
-integration approval followed by manual Windows acceptance and a separately
-authorized replacement build.
+version change or publication was performed. Remaining release work is manual
+Windows acceptance and a separately authorized replacement build.
 
 The Windows acceptance checklist now includes a clean-workspace duplicate
 audit prompted by the owner's earlier candidate observation: one KIE prompt,

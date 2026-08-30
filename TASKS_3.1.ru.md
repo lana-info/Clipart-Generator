@@ -731,8 +731,8 @@ Verification:
 
 ## Task 26: Закрыть техническое ревью source checkpoint
 
-Status: Done in `codex/fix-3.1-technical-review`; integration and Windows
-acceptance remain under Task 13
+Status: Done — integrated into `develop/3.1` by fast-forward through `c40bbdb`;
+Windows acceptance remains under Task 13
 
 Goal:
 Проверить замечания к checkpoint `879d746` воспроизводимыми тестами и закрыть
@@ -778,9 +778,9 @@ Requirements: `CG31-FR-020`, `022`, `030`, `052`, `053`, `061`, `070`, `071`.
 
 ## Task 13: Интегрировать и принять 3.1.0
 
-Status: In progress — technical-review fixes are verified on
-`codex/fix-3.1-technical-review`, but still require explicit integration
-approval; replacement Windows candidate remains before acceptance/publication
+Status: In progress — technical-review fixes are integrated into
+`develop/3.1`; replacement Windows candidate remains before
+acceptance/publication
 
 Goal:
 Интегрировать task branches по одной в `develop/3.1` и подготовить проверяемый
@@ -804,6 +804,8 @@ Acceptance:
 
 Verification:
 - [x] History/merge-base audit and full VDS tests pass.
+- [x] Technical-review fix branch fast-forwarded without conflicts; merged
+  offline suite: 1021 passed, 55 intentional skips, 2 deselected, 140 subtests.
 - [ ] Replacement Windows candidate and manual Windows checklist remain.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
