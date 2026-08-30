@@ -96,6 +96,41 @@ filesystem hashes, so it does not close Chroma fidelity or duplicate-content
 acceptance. It does confirm that this run did not create duplicate task IDs or
 duplicate ready filenames.
 
+## Windows acceptance regression: duplicate/mislabelled rough stages — 2026-08-30
+
+The owner supplied all six PNGs published to `rough/` by the successful
+two-item KIE GPT Image 2 run. Hash and decoded-pixel comparison proves that the
+five files labelled `rough_*_generated.png` are only two unique provider
+results: `rough_01_generated` and `rough_04_generated` are pixel-identical
+raccoon images; `rough_02_generated`, `rough_03_generated` and
+`rough_05_generated` are pixel-identical ballerina images. The KIE lifecycle
+still contains exactly two paid task IDs, so this is not repeated paid
+generation.
+
+The root cause is `_persist_rough_outputs()`. It classifies every raw PNG by a
+substring search, with the generic marker `gen` falling back to stage
+`generated`. Pipeline files keep `gen` as their item prefix, so
+`gen_metadata_*` and `gen_existing_alpha_*` are incorrectly republished as new
+generated images. In this run, the exact mapping is the original two downloads,
+two metadata-cleaned copies and one existing-alpha copy, plus the correctly
+labelled raccoon `bg-removed` stage. The current tests assert that rough files
+exist and use collision numbering, but do not require one published generated
+stage per actual provider result or reject semantic duplicates.
+
+This is a confirmed current-candidate file-publication/diagnostics regression,
+not a reason to remove the approved `rough/` and `output/` folders. Task 13 now
+requires a stage-aware regression and minimal classifier repair after the owner
+finishes observation testing.
+
+The same pixel evidence resolves the blue-background question. The raccoon KIE
+download is an opaque RGB image with the requested blue background, and Local
+Chroma Key produces the separate alpha result. The ballerina KIE download is
+already RGBA with usable transparency before background removal; KIE did not
+follow the requested blue-background instruction for that item. The application
+then correctly follows the existing `skip_remover_for_alpha` rule and preserves
+the provider alpha instead of running Chroma. The UI/journal should make this
+decision visible, but flattening valid provider alpha onto blue is not approved.
+
 ## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
 
 The owner has started manual Windows acceptance and has not found a critical

@@ -864,6 +864,17 @@ Steps:
   должен определять KIE/Fal по выбранным text/reference моделям, а не всегда
   писать `generation:kie`. Добавить mixed-model regression, чтобы preflight,
   стоимость и диагностика использовали один фактический route resolver.
+- [ ] Исправить публикацию стадий в `rough/` без изменения утверждённой модели
+  папок `rough/` + `output/`: один provider result должен публиковаться как один
+  `*_generated`, а `gen_metadata_*` и `gen_existing_alpha_*` не должны попадать
+  в `generated` только из-за общего префикса `gen`. Сначала добавить regression
+  на реальный двухэлементный набор: 2 provider results, 2 generated rough,
+  отдельный meaningful `bg-removed`, без семантических дублей generated.
+- [ ] Сделать решение `skip_remover_for_alpha` понятным в результате/журнале:
+  если KIE уже вернул usable alpha, явно сообщать, что Chroma не запускалась и
+  прозрачность пришла от провайдера. Не превращать такой PNG принудительно в
+  синий фон и не менять утверждённое сохранение provider alpha без отдельного
+  продуктового решения.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
@@ -908,6 +919,18 @@ task, Local Chroma Key, two distinct ready filenames and terminal counts
 rules out a candidate-wide KIE outage; the earlier FLUX.2 Flex 422 remains a
 model/task failure. Pixel fidelity and content-duplicate acceptance still need
 visual/hash evidence.
+
+Follow-up PNG evidence resolves the apparent five KIE duplicates in `rough/`.
+There are only two unique generated pixel sets and exactly two paid task IDs.
+`rough_01_generated` equals `rough_04_generated`; `rough_02_generated` equals
+both `rough_03_generated` and `rough_05_generated`. Source tracing proves that
+`_persist_rough_outputs()` misclassifies `gen_metadata_*` and
+`gen_existing_alpha_*` as `generated` because it matches the generic substring
+`gen`. This is a rough-stage publication bug, not repeated provider submission.
+The original raccoon is opaque RGB on blue and its separate Chroma result has
+alpha; the original ballerina arrived from KIE as RGBA with usable alpha, so the
+existing skip-remover rule preserved it and KIE—not Chroma—omitted the requested
+blue background.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration
