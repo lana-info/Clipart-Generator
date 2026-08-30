@@ -30,6 +30,7 @@ from fal_model_catalog import fal_endpoint_profile
 
 
 MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_TASK_JOURNAL_RECORDS = 1000
 
 
 class FalProviderError(RuntimeError):
@@ -73,6 +74,26 @@ class FalTaskJournal:
         self.path = Path(path)
         self._lock = threading.RLock()
 
+    @staticmethod
+    def _bounded_records(
+        records: Mapping[str, FalTaskRecord],
+    ) -> dict[str, FalTaskRecord]:
+        values = list(records.values())
+        pending = [
+            record
+            for record in values
+            if record.status not in _TERMINAL_TASK_STATUSES
+        ]
+        terminal = [
+            record
+            for record in values
+            if record.status in _TERMINAL_TASK_STATUSES
+        ]
+        terminal_budget = max(0, MAX_TASK_JOURNAL_RECORDS - len(pending))
+        retained = terminal[-terminal_budget:] if terminal_budget else []
+        retained.extend(pending)
+        return {record.request_id: record for record in retained}
+
     def _read(self) -> dict[str, FalTaskRecord]:
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -81,7 +102,7 @@ class FalTaskJournal:
         entries = raw.get("tasks", []) if isinstance(raw, Mapping) else []
         result: dict[str, FalTaskRecord] = {}
         if isinstance(entries, list):
-            for entry in entries[:1000]:
+            for entry in entries:
                 if not isinstance(entry, Mapping):
                     continue
                 try:
@@ -96,10 +117,11 @@ class FalTaskJournal:
                 except FalProviderError:
                     continue
                 result[record.request_id] = record
-        return result
+        return self._bounded_records(result)
 
     def _write(self, records: Mapping[str, FalTaskRecord]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        records = self._bounded_records(records)
         payload = json.dumps(
             {"tasks": [record.to_dict() for record in records.values()]},
             ensure_ascii=False,

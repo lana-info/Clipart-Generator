@@ -422,6 +422,30 @@ class FalProviderTests(unittest.TestCase):
                 {f"req-{index}" for index in range(8)},
             )
 
+    def test_task_journal_retains_new_pending_after_terminal_history_limit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = FalTaskJournal(f"{temp}/fal-tasks.json")
+            for index in range(1000):
+                journal.upsert(
+                    f"completed-{index}",
+                    "generation",
+                    "fal-ai/flux/schnell",
+                    "completed",
+                )
+
+            journal.upsert(
+                "paid-new",
+                "generation",
+                "fal-ai/flux/schnell",
+                "queued",
+            )
+
+            self.assertEqual(
+                {record.request_id for record in journal.pending()},
+                {"paid-new"},
+            )
+            self.assertIsNotNone(journal.update_status("paid-new", "running"))
+
 
 if __name__ == "__main__":
     unittest.main()
