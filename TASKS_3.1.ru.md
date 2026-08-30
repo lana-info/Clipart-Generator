@@ -199,6 +199,12 @@ tests generator/paste и prompt-state проходят. Visual screenshot соп
 утверждённым compact layout; лимит сериализуется, поэтому старый draft с
 лишними materials безопасно сохраняет первые три.
 
+Follow-up 2026-08-30: clause `Прозрачные детали` отдельно усиливается на ветке
+`codex/fix-3.1-transparent-material-prompt`. Он требует genuine partial opacity,
+видимость предмета или того же chroma-фона сквозь весь материал и запрещает
+непрозрачную pastel/key-coloured имитацию прозрачности. Focused prompt suite:
+119 tests и 16 subtests проходят; остальные material clauses не меняются.
+
 Dependencies: Task 4. Scope: M. Requirements: `CG31-FR-002`–`CG31-FR-006`.
 
 ## Task 6: Разделить `rough` и `output` и нормализовать имена
@@ -370,6 +376,15 @@ review pass завершены; blocking/important findings закрыты. Не
 фоном/openings; если предмет содержит этот точный цвет, пользователь выбирает
 другой preset. Canonical report и contact sheet находятся в
 `benchmarks/chroma/automatic-v1/`.
+
+Remaining quality follow-up: контрольная генерация настоящей полупрозрачной
+тюлевой юбки показала, что улучшенный prompt создаёт пригодный measurable
+input, но текущая candidate-реализация Vibix местами восстанавливает внутри
+ткани жёлто-зелёные пятна. Clipbrook на том же input чище по цвету, хотя сильнее
+прореживает сетку. Это отдельная bounded-задача после prompt change: исправлять
+только реконструкцию цвета в genuine translucent interior и принимать её лишь
+при отсутствии ореола/ложного оттенка без потери mesh, лап, хвоста и обычных
+краёв. Presets и новые UI-controls для этого не добавлять.
 
 Dependencies: Task 8. Scope: M на один bounded prototype cycle; если выбранная
 архитектура требует больше пяти файлов, до coding разбить реализацию ещё раз.
