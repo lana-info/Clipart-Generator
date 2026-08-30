@@ -18,6 +18,8 @@ raw/
 output/
 .vibix_fal_tasks.json
 .vibix_kie_tasks.json
+.vibix_fal_tasks.json.lock
+.vibix_kie_tasks.json.lock
 
 # Локальные секреты и конфиг пользователя
 config.json

@@ -6,6 +6,7 @@ import time
 import unittest
 import urllib.error
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 from fal_provider import (
@@ -522,6 +523,19 @@ class FalProviderTests(unittest.TestCase):
             self.assertEqual(
                 {record.request_id for record in FalTaskJournal(journal_path).pending()},
                 {"process-0", "process-1"},
+            )
+
+    def test_hidden_journal_uses_a_single_dot_lock_name(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal_path = Path(temp) / ".vibix_fal_tasks.json"
+
+            FalTaskJournal(journal_path).pending()
+
+            self.assertTrue(
+                journal_path.with_name(".vibix_fal_tasks.json.lock").is_file()
+            )
+            self.assertFalse(
+                journal_path.with_name("..vibix_fal_tasks.json.lock").exists()
             )
 
     def test_task_journal_retains_new_pending_after_terminal_history_limit(self):

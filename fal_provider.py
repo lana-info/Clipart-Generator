@@ -46,7 +46,7 @@ def _journal_lock(path: Path) -> threading.RLock:
 def _journal_process_lock(path: Path):
     """Serialize journal read-modify-write across application processes."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = path.with_name(f".{path.name}.lock")
+    lock_path = path.with_name(f"{path.name}.lock")
     with lock_path.open("a+b") as handle:
         if os.name == "nt":
             import msvcrt
