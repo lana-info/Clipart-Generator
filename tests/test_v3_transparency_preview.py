@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from PIL import Image
 from PyQt6.QtCore import QEvent, Qt
@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox, QPushButton
 from v3_components import ButtonVariant
 
 from v3_transparency_preview import (
+    MAX_EDITOR_IMAGE_PIXELS,
     ClipartTransparencyEditorPage,
     ClipartTransparencyPreview,
     MaskEditDocument,
@@ -290,6 +291,25 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
                 page._save_clicked()
 
         critical.assert_called_once()
+        page.deleteLater()
+
+    def test_editor_rejects_an_oversized_image_before_decoding_it(self):
+        page = ClipartTransparencyEditorPage()
+        page._paths = [Path("oversized.png")]
+        page.file_list.addItem("oversized.png")
+        source = MagicMock()
+        source.__enter__.return_value = source
+        source.__exit__.return_value = False
+        source.size = (MAX_EDITOR_IMAGE_PIXELS + 1, 1)
+
+        with patch("v3_transparency_preview.Image.open", return_value=source):
+            with patch("v3_transparency_preview.QMessageBox.warning") as warning:
+                page._select_file(0)
+
+        source.copy.assert_not_called()
+        warning.assert_called_once()
+        self.assertIn("слишком большое", warning.call_args.args[2].casefold())
+        self.assertIn("40", warning.call_args.args[2])
         page.deleteLater()
 
     def test_canvas_does_not_join_a_stroke_across_the_outside_of_image(self):

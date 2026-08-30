@@ -53,6 +53,24 @@ from background_preview import PREVIEW_BACKGROUND_OPTIONS, composite_on_preview
 from v3_components import ButtonVariant, V3Button
 
 
+MAX_EDITOR_IMAGE_PIXELS = 40_000_000
+
+
+class EditorImageTooLargeError(ValueError):
+    pass
+
+
+def _validate_editor_image_size(size: tuple[int, int]) -> None:
+    width, height = size
+    if width > 0 and height > 0 and width * height > MAX_EDITOR_IMAGE_PIXELS:
+        megapixels = width * height / 1_000_000
+        raise EditorImageTooLargeError(
+            "Изображение слишком большое для редактора прозрачности "
+            f"({megapixels:.1f} Мп). Максимум — 40 Мп. "
+            "Уменьшите изображение и повторите проверку."
+        )
+
+
 class MaskEditDocument:
     """One image, its editable alpha mask, and bounded undo/redo history."""
 
@@ -1055,11 +1073,21 @@ class ClipartTransparencyEditorPage(QWidget):
         path = self._paths[row]
         try:
             with Image.open(path) as image:
+                _validate_editor_image_size(image.size)
                 document = MaskEditDocument(image.copy())
             draft = self._draft_masks.get(path)
             if draft is not None:
                 with Image.open(BytesIO(draft)) as mask:
                     document.mask = mask.convert("L").copy()
+        except EditorImageTooLargeError as error:
+            self.canvas.set_document(None)
+            QMessageBox.warning(
+                self,
+                "Изображение не открыто",
+                str(error),
+            )
+            self._refresh_history_buttons()
+            return
         except (OSError, UnidentifiedImageError):
             self.canvas.set_document(None)
             self._refresh_history_buttons()
