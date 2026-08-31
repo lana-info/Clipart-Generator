@@ -159,9 +159,20 @@ class UpscalePositionTests(unittest.TestCase):
                 remove_bg=False,
             ),
         )
+        recraft = main.WorkerThread(
+            "mode2_process",
+            ".",
+            processing_settings(
+                upscale_provider="fal",
+                fal_upscale_model="fal-ai/recraft/upscale/crisp",
+                fal_upscale_scale=2,
+                remove_bg=False,
+            ),
+        )
 
         self.assertEqual(bria._combined_upscale_factor(), 2)
         self.assertEqual(topaz._combined_upscale_factor(), 4)
+        self.assertEqual(recraft._combined_upscale_factor(), 4)
 
     def test_fal_ui_total_factor_matches_selected_endpoint_contract(self):
         fal_provider = types.SimpleNamespace(currentData=lambda: "fal")
@@ -179,6 +190,12 @@ class UpscalePositionTests(unittest.TestCase):
                 "fal_upscale_scale": 4,
             }
         )
+        recraft_window = types.SimpleNamespace(
+            config={
+                "fal_upscale_model": "fal-ai/recraft/upscale/crisp",
+                "fal_upscale_scale": 2,
+            }
+        )
 
         self.assertEqual(
             main.MainWindow._ui_upscale_pass_factor(
@@ -192,6 +209,15 @@ class UpscalePositionTests(unittest.TestCase):
         self.assertEqual(
             main.MainWindow._ui_upscale_pass_factor(
                 topaz_window,
+                fal_provider,
+                unused_combo,
+                unused_combo,
+            ),
+            4,
+        )
+        self.assertEqual(
+            main.MainWindow._ui_upscale_pass_factor(
+                recraft_window,
                 fal_provider,
                 unused_combo,
                 unused_combo,

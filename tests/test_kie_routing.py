@@ -692,6 +692,99 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(output_url, "https://cdn.example/upscaled.png")
         self.assertFalse(local_result)
 
+    def test_fal_recraft_crisp_routes_fixed_four_x_without_scale_payload(self):
+        with tempfile.TemporaryDirectory(prefix="fal-recraft-upscale-") as temp:
+            source = Path(temp) / "source.png"
+            create_rgb_source(source, size=(64, 64))
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    fal_concurrency=1,
+                    fal_upscale_model="fal-ai/recraft/upscale/crisp",
+                    fal_upscale_scale=2,
+                ),
+            )
+            calls = {}
+            worker._fal_process_image = types.MethodType(
+                lambda _self, image_url, **kwargs: calls.update(
+                    {"image_url": image_url, **kwargs}
+                ) or "https://cdn.example/upscaled.png",
+                worker,
+            )
+            worker._download_file = types.MethodType(
+                lambda _self, _url, output_path: shutil.copyfile(source, output_path),
+                worker,
+            )
+
+            worker._run_upscale_pass(
+                str(source),
+                None,
+                temp,
+                1,
+                "gen",
+                "upscaled_before",
+                "fal",
+                2,
+                "ignored",
+            )
+
+        self.assertEqual(calls["model_id"], "fal-ai/recraft/upscale/crisp")
+        self.assertEqual(calls["scale"], 4)
+        self.assertIsNone(calls.get("parameters"))
+
+    def test_fal_recraft_crisp_rejects_transparent_input_before_paid_call(self):
+        with tempfile.TemporaryDirectory(prefix="fal-recraft-alpha-") as temp:
+            source = Path(temp) / "source.png"
+            image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+            ImageDraw.Draw(image).rectangle((4, 4, 27, 27), fill=(180, 70, 100, 255))
+            image.save(source, format="PNG")
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    fal_upscale_model="fal-ai/recraft/upscale/crisp",
+                ),
+            )
+            worker._fal_process_image = types.MethodType(
+                lambda *_args, **_kwargs: self.fail("paid Fal call must not start"),
+                worker,
+            )
+
+            with self.assertRaisesRegex(RuntimeError, "Bria"):
+                worker._run_upscale_pass(
+                    str(source),
+                    None,
+                    temp,
+                    1,
+                    "gen",
+                    "upscaled_before",
+                    "fal",
+                    2,
+                    "ignored",
+                )
+            self.assertEqual(worker._diagnostic_context.stage, "upscale_before")
+            self.assertEqual(worker._diagnostic_context.provider, "fal")
+            self.assertEqual(
+                worker._diagnostic_context.model,
+                "fal-ai/recraft/upscale/crisp",
+            )
+
+    def test_fal_recraft_crisp_normalizes_opaque_jpeg_to_png(self):
+        with tempfile.TemporaryDirectory(prefix="fal-recraft-jpeg-") as temp:
+            source = Path(temp) / "source.jpg"
+            output = Path(temp) / "prepared.png"
+            Image.new("RGB", (64, 48), (180, 70, 100)).save(source, format="JPEG")
+
+            result = main.prepare_fal_recraft_crisp_input(source, output)
+
+            self.assertEqual(Path(result), output)
+            with Image.open(output) as prepared:
+                self.assertEqual(prepared.format, "PNG")
+                self.assertEqual(prepared.mode, "RGB")
+
     def test_bria_usable_alpha_skips_following_paid_background_remover(self):
         with tempfile.TemporaryDirectory(prefix="fal-bria-alpha-") as temp:
             source = Path(temp) / "source.png"

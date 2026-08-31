@@ -258,6 +258,11 @@ class ProcessingEditorTests(unittest.TestCase):
         upscale_model.setCurrentIndex(upscale_model.findData("bria/upscale/creative"))
         self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
 
+        upscale_model.setCurrentIndex(
+            upscale_model.findData("fal-ai/recraft/upscale/crisp")
+        )
+        self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
+
         model = editor.operation_widgets["fal_remove_bg_model"]
         model.setCurrentIndex(model.findData("fal-ai/bria/background/remove"))
         self.assertTrue(editor.operation_widgets["fal_birefnet_model"].isHidden())

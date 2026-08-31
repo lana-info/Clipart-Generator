@@ -9,8 +9,13 @@ from chroma_key import KEY_COLORS
 KIE_TOPAZ_MODEL_ID: Final = "topaz/image-upscale"
 FAL_BRIA_UPSCALE_MODEL_ID: Final = "bria/upscale/creative"
 FAL_TOPAZ_PRECISION_MODEL_ID: Final = "topaz/upscale/image/precision"
+FAL_RECRAFT_CRISP_MODEL_ID: Final = "fal-ai/recraft/upscale/crisp"
 FAL_UPSCALE_MODEL_IDS: Final = frozenset(
-    {FAL_BRIA_UPSCALE_MODEL_ID, FAL_TOPAZ_PRECISION_MODEL_ID}
+    {
+        FAL_BRIA_UPSCALE_MODEL_ID,
+        FAL_TOPAZ_PRECISION_MODEL_ID,
+        FAL_RECRAFT_CRISP_MODEL_ID,
+    }
 )
 LEGACY_FAL_UPSCALE_MODEL_IDS: Final = frozenset({"fal-ai/esrgan"})
 LEGACY_KIE_TOPAZ_MODEL_IDS: Final = frozenset({"topaz/upscale"})
@@ -40,8 +45,11 @@ def normalize_fal_upscale_model(model_id: object) -> str:
 
 
 def normalize_fal_upscale_factor(model_id: object, value: object) -> int:
-    if normalize_fal_upscale_model(model_id) == FAL_BRIA_UPSCALE_MODEL_ID:
+    model_id = normalize_fal_upscale_model(model_id)
+    if model_id == FAL_BRIA_UPSCALE_MODEL_ID:
         return 2
+    if model_id == FAL_RECRAFT_CRISP_MODEL_ID:
+        return 4
     return normalize_topaz_upscale_factor(value)
 
 
@@ -205,6 +213,7 @@ FAL_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
 FAL_UPSCALE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Bria Creative 2× — сохраняет прозрачность", FAL_BRIA_UPSCALE_MODEL_ID),
     ("Topaz Precision", FAL_TOPAZ_PRECISION_MODEL_ID),
+    ("Recraft Crisp 4× — без прозрачности", FAL_RECRAFT_CRISP_MODEL_ID),
 )
 FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Общая — Light", "General Use (Light)"),

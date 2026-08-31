@@ -4,11 +4,17 @@ Updated: 2026-08-31
 
 ## Windows acceptance follow-up: Fal.ai replacement upscalers — 2026-08-31
 
-The owner approved two replacements for the rejected Fal ESRGAN in the first
+The owner approved three replacements for the rejected Fal ESRGAN in the first
 upscale stage. `Bria Creative 2×` is wired to `bria/upscale/creative` with an
 explicit `preserve_alpha=true`; its fixed scale does not expose a scale control.
 `Topaz Precision` is wired to `topaz/upscale/image/precision` with `Standard V2`,
-PNG output and the existing 2×/4× selector. Fal remains unavailable in the
+PNG output and the existing 2×/4× selector. `Recraft Crisp 4×` is wired to
+`fal-ai/recraft/upscale/crisp` as the low-cost opaque-image option. Its source is
+normalized to PNG and checked for documented size/dimension limits before a
+paid submit; usable alpha is rejected with a Bria recommendation because
+Recraft does not preserve transparency. Bria keeps `preserve_alpha=true` for
+both opaque and transparent inputs because the parameter does not alter price.
+Fal remains unavailable in the
 hidden second upscale-after-background-removal stage. Legacy `fal-ai/esrgan`
 selections normalize to Bria and ESRGAN is absent from the visible and runtime
 capability catalogs.
@@ -25,7 +31,7 @@ the edge is not processed twice and no redundant paid task is created. No paid F
 request was made; Windows quality/alpha acceptance is intentionally assigned to
 the owner inside the application.
 
-Verification after the review fixes: 361 focused tests and the complete 1066
+Verification after the review fixes: 367 focused tests and the complete 1072
 test offline suite pass, with 58 documented skips. Compilation, sensitive scan
 and diff check pass. The fresh automatic Chroma benchmark is unchanged at alpha
 IoU `0.968704`, alpha MAE `0.018194`, zero background leakage and zero opaque

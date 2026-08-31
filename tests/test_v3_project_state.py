@@ -51,6 +51,16 @@ class ProjectRoutesTests(unittest.TestCase):
         self.assertEqual(operations.upscale_before_provider, "fal")
         self.assertEqual(operations.fal_upscale_model, "bria/upscale/creative")
 
+    def test_fal_recraft_upscale_round_trips_as_fixed_four_x(self):
+        operations = ImageOperationData(
+            upscale_before_provider="fal",
+            fal_upscale_model="fal-ai/recraft/upscale/crisp",
+            fal_upscale_scale=2,
+        )
+
+        self.assertEqual(operations.fal_upscale_model, "fal-ai/recraft/upscale/crisp")
+        self.assertEqual(operations.fal_upscale_scale, 4)
+
     def test_legacy_topaz_settings_migrate_to_current_contract(self):
         operations = ImageOperationData(
             upscale_factor=8,

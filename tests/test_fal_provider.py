@@ -546,6 +546,34 @@ class FalProviderTests(unittest.TestCase):
             },
         )
 
+    def test_recraft_crisp_upscale_submits_documented_image_only_payload(self):
+        model_id = "fal-ai/recraft/upscale/crisp"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        captured = {}
+
+        def submit(request):
+            captured.update(request.input_payload)
+            return {"request_id": "req-recraft-upscale"}
+
+        client.submit_task = submit
+        client.wait_for_result = lambda *_args, **_kwargs: {
+            "request_id": "req-recraft-upscale",
+            "status": "completed",
+            "result": {"image": {"url": "https://cdn.example/recraft.png"}},
+        }
+
+        client.run_image_operation(
+            "upscale",
+            "https://cdn.example/input.png",
+            model_id=model_id,
+            scale=2,
+        )
+
+        self.assertEqual(
+            captured,
+            {"image_url": "https://cdn.example/input.png"},
+        )
+
     def test_topaz_precision_upscale_submits_documented_png_payload(self):
         model_id = "topaz/upscale/image/precision"
         client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))

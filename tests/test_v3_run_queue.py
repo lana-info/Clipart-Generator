@@ -1181,6 +1181,22 @@ class V3RunQueueTests(unittest.TestCase):
 
         self.assertEqual(report["settings"]["fal_upscale_scale"], "2")
 
+    def test_safe_report_normalizes_recraft_to_fixed_four_x(self):
+        request = processing_request(".", ["source.png"])
+        request.settings.update(
+            {
+                "upscale": True,
+                "upscale_provider": "fal",
+                "fal_upscale_model": "fal-ai/recraft/upscale/crisp",
+                "fal_upscale_scale": 2,
+            }
+        )
+        session = RunQueueSession(request, ProjectMode.PROCESSING)
+
+        report = build_safe_run_report(session)
+
+        self.assertEqual(report["settings"]["fal_upscale_scale"], "4")
+
     def test_controller_opens_results_and_retries_only_error(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-controller-") as temp:
             state = ProjectState(

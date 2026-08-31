@@ -157,6 +157,14 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         price_note="$0.08 per started 24 MP of output; refresh before live use",
         parameter_names=("model", "upscale_factor", "output_format"),
     ),
+    FalEndpointProfile(
+        model_id="fal-ai/recraft/upscale/crisp",
+        operation="upscale",
+        supports_references=True,
+        preserves_alpha=False,
+        output_formats=("png",),
+        price_note="$0.004 per image; refresh before live use",
+    ),
 )
 
 

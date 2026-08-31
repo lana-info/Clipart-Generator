@@ -1183,6 +1183,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         operations = state.clipart.operations
         operations.upscale_before = True
         operations.upscale_before_provider = "fal"
+        operations.fal_upscale_model = "fal-ai/recraft/upscale/crisp"
         operations.remove_background = True
         operations.remove_background_provider = "fal"
         operations.fal_remove_bg_model = "fal-ai/birefnet/v2"
@@ -1191,7 +1192,7 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         assert fal_endpoint_quantities(state) == {
             "fal-ai/flux/schnell": 4,
-            "bria/upscale/creative": 4,
+            "fal-ai/recraft/upscale/crisp": 4,
             "fal-ai/birefnet/v2": 4,
         }
 

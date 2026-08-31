@@ -123,6 +123,7 @@ from model_catalog import (
 )
 from v3_provider_registry import (
     FAL_BRIA_UPSCALE_MODEL_ID,
+    FAL_RECRAFT_CRISP_MODEL_ID,
     KIE_TOPAZ_MODEL_ID,
     TOPAZ_MAX_FILE_BYTES,
     TOPAZ_MAX_OUTPUT_SIDE,
@@ -207,6 +208,10 @@ MAX_API_UPLOAD_BYTES = 128 * 1024 * 1024
 MAX_PROVIDER_IMAGE_DIMENSION = 32_768
 MAX_PROVIDER_IMAGE_PIXELS = 70_000_000
 RECRAFT_CRISP_MAX_BYTES = 10 * 1024 * 1024
+FAL_RECRAFT_CRISP_MAX_BYTES = 5 * 1024 * 1024
+FAL_RECRAFT_CRISP_MAX_DIMENSION = 4096
+FAL_RECRAFT_CRISP_MAX_PIXELS = 4_000_000
+FAL_RECRAFT_CRISP_MIN_DIMENSION = 32
 RECRAFT_REMOVE_BG_MAX_BYTES = 5 * 1024 * 1024
 RECRAFT_REMOVE_BG_MAX_DIMENSION = 4096
 RECRAFT_REMOVE_BG_MAX_PIXELS = 16 * 1024 * 1024
@@ -781,6 +786,45 @@ def validate_recraft_crisp_upscale_input(image_path):
         raise
     except (OSError, UnidentifiedImageError) as exc:
         raise RuntimeError("Recraft Crisp input image is invalid") from exc
+
+
+def prepare_fal_recraft_crisp_input(image_path, output_path):
+    """Create the opaque PNG required by Fal.ai Recraft Crisp before billing."""
+    try:
+        with Image.open(image_path) as image:
+            if getattr(image, "n_frames", 1) != 1:
+                raise RuntimeError("Fal.ai Recraft Crisp принимает только один кадр")
+            if min(image.size) < FAL_RECRAFT_CRISP_MIN_DIMENSION:
+                raise RuntimeError(
+                    "Fal.ai Recraft Crisp: минимальная сторона изображения — 32 px"
+                )
+            if max(image.size) > FAL_RECRAFT_CRISP_MAX_DIMENSION:
+                raise RuntimeError(
+                    "Fal.ai Recraft Crisp: максимальная сторона изображения — 4096 px"
+                )
+            if image.width * image.height > FAL_RECRAFT_CRISP_MAX_PIXELS:
+                raise RuntimeError(
+                    "Fal.ai Recraft Crisp: исходное изображение превышает 4 MP"
+                )
+            if has_usable_alpha(image):
+                raise RuntimeError(
+                    "Fal.ai Recraft Crisp не сохраняет прозрачность. "
+                    "Для прозрачного PNG выберите Bria Creative."
+                )
+            image.convert("RGB").save(output_path, format="PNG")
+        if os.path.getsize(output_path) > FAL_RECRAFT_CRISP_MAX_BYTES:
+            try:
+                os.unlink(output_path)
+            except OSError:
+                pass
+            raise RuntimeError(
+                "Fal.ai Recraft Crisp: PNG после подготовки превышает 5 MB"
+            )
+        return output_path
+    except RuntimeError:
+        raise
+    except (OSError, UnidentifiedImageError) as exc:
+        raise RuntimeError("Fal.ai Recraft Crisp: исходное изображение повреждено") from exc
 
 
 def validate_recraft_remove_background_input(image_path):
@@ -2903,9 +2947,25 @@ class WorkerThread(QThread):
             else self._resolve_upscale_factor(kie_model)
         )
         self._set_provider_diagnostic_context(stage, provider, upscale_model)
-        upscale_parameters = {
-            "scale": effective_scale
-        }
+        if provider == "fal" and upscale_model == FAL_RECRAFT_CRISP_MODEL_ID:
+            current_path = self._ensure_local_path(
+                current_path,
+                current_url,
+                raw_dir,
+                idx,
+                prefix,
+                f"{step_name}_fal_source",
+            )
+            recraft_input = os.path.join(
+                raw_dir,
+                f"{prefix}_{step_name}_recraft_input_{idx:03d}_{self.run_stamp}.png",
+            )
+            current_path = prepare_fal_recraft_crisp_input(
+                current_path,
+                recraft_input,
+            )
+            current_url = None
+        upscale_parameters = {"scale": effective_scale}
         self._emit_diagnostic(
             "stage_started",
             provider=provider,

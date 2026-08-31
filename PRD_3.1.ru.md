@@ -264,7 +264,11 @@ Isolated on a completely flat, uniform, solid pure blue (#0000FF) digital chroma
 - `CG31-FR-054` — `fal-ai/esrgan` не предлагается ни для первого, ни для
   второго upscale и не входит в текущую оценку стоимости. Для первого upscale
   Fal.ai предлагает `Bria Creative 2×` с обязательным `preserve_alpha=true` и
-  `Topaz Precision` (`Standard V2`, 2×/4×, PNG). Старый ESRGAN-выбор безопасно
+  `Topaz Precision` (`Standard V2`, 2×/4×, PNG), а также дешёвый фиксированный
+  `Recraft Crisp 4×`. Recraft Crisp доступен только для непрозрачного входа:
+  прозрачный файл отклоняется до платного запроса с предложением выбрать Bria.
+  Bria всегда получает `preserve_alpha=true`, поскольку цена от этого параметра
+  не меняется и непрозрачному файлу он не вредит. Старый ESRGAN-выбор безопасно
   мигрирует на Bria. Второй upscale после удаления фона остаётся скрытым и не
   предлагает Fal.ai до отдельной alpha-safe acceptance. Fal generation и Fal
   background removal не меняются; стоимость новых моделей обновляется через

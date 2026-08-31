@@ -1326,7 +1326,7 @@ Verification:
   146 subtests; compilation, sensitive scan, diff check и Chroma benchmark green.
 - [ ] Windows installed smoke.
 
-## Task 33 (3.1.1 acceptance follow-up): Fal.ai Bria и Topaz Precision для первого upscale
+## Task 33 (3.1.1 acceptance follow-up): Fal.ai Bria, Topaz Precision и Recraft Crisp для первого upscale
 
 Status: Done in source — offline contract/integration tests green; owner-paid
 Windows quality acceptance pending
@@ -1342,6 +1342,10 @@ Acceptance:
   отправляет `preserve_alpha=true` и не показывает фиктивный выбор масштаба.
 - [x] `Topaz Precision` использует endpoint
   `topaz/upscale/image/precision`, модель `Standard V2`, PNG и выбранный 2×/4×.
+- [x] `Recraft Crisp 4×` использует endpoint
+  `fal-ai/recraft/upscale/crisp` и входит в динамическую оценку Fal.ai. Вход
+  нормализуется в PNG и проверяется до платного submit; прозрачный файл не
+  отправляется и предлагает Bria.
 - [x] `fal-ai/esrgan` отсутствует в UI и capability catalog; старое сохранённое
   значение мигрирует на Bria.
 - [x] Выбор модели/масштаба сохраняется, передаётся worker, входит в Fal task
@@ -1350,13 +1354,13 @@ Acceptance:
   он честно сообщает, что стоимость Fal.ai не рассчитана.
 - [x] Processing preflight требует именно Fal.ai API Key, а run report и
   structured diagnostics фиксируют выбранную модель и фактический масштаб
-  (Bria 2×, Topaz 2×/4×).
+  (Bria 2×, Topaz 2×/4×, Recraft Crisp 4×).
 - [x] Если Bria уже вернула пригодную alpha-маску, следующий remover
   пропускается: край не обрабатывается повторно и новая платная задача не
   создаётся.
 - [x] Offline tests проверяют catalog, payload, UI visibility, state migration,
   cost quantities и worker routing без платного запроса.
-- [ ] Владелец отдельно проверяет Bria и Topaz на Windows на своих изображениях;
+- [ ] Владелец отдельно проверяет Bria, Topaz и Recraft на Windows на своих изображениях;
   автоматический или серверный платный acceptance не запускать.
 
 Official evidence:
@@ -1364,10 +1368,14 @@ Official evidence:
   `preserve_alpha` default true, PNG result.
 - `https://fal.ai/models/topaz/upscale/image/precision/api` — Standard V2,
   upscale 1×–4×, PNG/JPEG; цена зависит от started 24 MP output.
+- `https://fal.ai/models/fal-ai/recraft/upscale/crisp/api` — обязательный PNG
+  input, фиксированный вызов без параметра масштаба, PNG result.
+- `https://www.recraft.ai/docs/recraft-studio/format-conversions-and-scaling/upscaling`
+  — прозрачный input не поддерживается и получает белый фон.
 
 Verification:
-- [x] Focused provider/state/UI/runtime/recovery suite: 361 tests passed.
-- [x] Full offline suite: 1066 passed, 58 documented skips.
+- [x] Focused provider/state/UI/runtime/recovery suite: 367 tests passed.
+- [x] Full offline suite: 1072 passed, 58 documented skips.
 - [x] Compilation, sensitive-artifact scan и `git diff --check` прошли.
 - [x] Fresh automatic Chroma benchmark unchanged: alpha IoU `0.968704`,
   alpha MAE `0.018194`, background leakage `0`, opaque subject loss `0`.

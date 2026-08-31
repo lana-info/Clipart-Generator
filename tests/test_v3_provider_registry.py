@@ -59,6 +59,9 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertFalse(
             upscale_model_preserves_alpha("fal", "topaz/upscale/image/precision")
         )
+        self.assertFalse(
+            upscale_model_preserves_alpha("fal", "fal-ai/recraft/upscale/crisp")
+        )
 
     def test_field_options_are_shared_and_deterministic(self) -> None:
         self.assertEqual(
@@ -90,6 +93,7 @@ class ProviderRegistryTests(unittest.TestCase):
             (
                 ("Bria Creative 2× — сохраняет прозрачность", "bria/upscale/creative"),
                 ("Topaz Precision", "topaz/upscale/image/precision"),
+                ("Recraft Crisp 4× — без прозрачности", "fal-ai/recraft/upscale/crisp"),
             ),
         )
         self.assertNotIn(

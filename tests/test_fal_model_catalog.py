@@ -26,11 +26,18 @@ class FalModelCatalogTests(unittest.TestCase):
                 "topaz/upscale/image/precision", "upscale"
             ).preserves_alpha
         )
+        recraft = fal_endpoint_profile("fal-ai/recraft/upscale/crisp", "upscale")
+        self.assertFalse(recraft.preserves_alpha)
+        self.assertEqual(recraft.output_formats, ("png",))
 
     def test_profiles_can_be_filtered_without_exposing_unknown_models(self):
         self.assertEqual(
             [profile.model_id for profile in fal_endpoint_profiles("upscale")],
-            ["bria/upscale/creative", "topaz/upscale/image/precision"],
+            [
+                "bria/upscale/creative",
+                "topaz/upscale/image/precision",
+                "fal-ai/recraft/upscale/crisp",
+            ],
         )
         with self.assertRaises(KeyError):
             fal_endpoint_profile("fal-ai/unknown", "generation")
