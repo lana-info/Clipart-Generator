@@ -140,6 +140,40 @@ class V3RunQueueTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_auto_recovered_item_keeps_attempt_count_in_success_message(self):
+        with tempfile.TemporaryDirectory(prefix="v3-auto-recovery-") as temp:
+            session = RunQueueSession(
+                processing_request(temp, ["source.png"]),
+                ProjectMode.PROCESSING,
+            )
+            output = Path(temp) / "output" / "source_ready.png"
+            output.parent.mkdir(parents=True)
+            Image.new("RGBA", (8, 8), (20, 30, 40, 255)).save(output)
+
+            session.handle_item_progress(
+                {
+                    "item_index": 1,
+                    "total_items": 1,
+                    "stage": "export",
+                    "status": "auto_recovered",
+                    "recovery_attempts": 3,
+                }
+            )
+            session.handle_item_progress(
+                {
+                    "item_index": 1,
+                    "total_items": 1,
+                    "stage": "export",
+                    "status": "succeeded",
+                    "output_path": str(output),
+                }
+            )
+
+            item = session.items[0]
+            self.assertIs(item.status, RunItemStatus.SUCCEEDED)
+            self.assertEqual(item.recovery_attempts, 3)
+            self.assertIn("3-й попытки", item.short_message)
+
     def tearDown(self):
         self.app.processEvents()
 

@@ -98,6 +98,7 @@ class ProgressEvent:
     indeterminate: bool = False
     source_path: str = ""
     output_path: str = ""
+    recovery_attempts: int = 0
 
 
 class RunItemStatus(str, Enum):
@@ -124,6 +125,7 @@ class RunItem:
     status: RunItemStatus = RunItemStatus.PENDING
     short_message: str = "Ожидает запуска."
     attempts: int = 1
+    recovery_attempts: int = 0
     stage_statuses: dict[str, str] = field(default_factory=dict)
     source_path: str = field(default="", repr=False)
     output_path: str = field(default="", repr=False)
@@ -678,6 +680,11 @@ class RunQueueSession(QObject):
             return (
                 "Результат сохранён; проверьте и исправьте прозрачность вручную."
             )
+        if item.recovery_attempts > 1:
+            return (
+                "Результат сохранён автоматически "
+                f"с {item.recovery_attempts}-й попытки."
+            )
         return "Результат сохранён."
     def _active_item(self, local_index: int) -> RunItem | None:
         if local_index < 1 or local_index > len(self.active_order):
@@ -698,6 +705,7 @@ class RunQueueSession(QObject):
                 indeterminate=bool(event.get("indeterminate", False)),
                 source_path=str(event.get("source_path") or ""),
                 output_path=str(event.get("output_path") or ""),
+                recovery_attempts=event.get("recovery_attempts", 0),
             )
         if not isinstance(event, ProgressEvent):
             self._event("worker_progress_rejected", reason="invalid_event")
@@ -753,6 +761,24 @@ class RunQueueSession(QObject):
                         item=item.index,
                         kind="generated",
                     )
+        elif status == "auto_recovered":
+            try:
+                recovery_attempts = max(2, int(event.recovery_attempts))
+            except (TypeError, ValueError, OverflowError):
+                recovery_attempts = 2
+            item.status = RunItemStatus.RUNNING
+            item.recovery_attempts = max(
+                item.recovery_attempts,
+                recovery_attempts,
+            )
+            item.short_message = (
+                "Файл автоматически восстановлен; завершается проверка результата."
+            )
+            self._event(
+                "item_auto_recovered",
+                item=item.index,
+                recovery_attempts=item.recovery_attempts,
+            )
         elif status == "stage_skipped":
             item.status = RunItemStatus.RUNNING
             if stage:
@@ -1215,6 +1241,7 @@ class RunQueueSession(QObject):
             item.failure_code = ""
             item.short_message = "Ожидает повторного запуска."
             item.output_path = ""
+            item.recovery_attempts = 0
             item.stage_statuses.clear()
             if isinstance(item.payload, dict):
                 item.source_path = ""
@@ -1304,6 +1331,7 @@ def build_safe_run_report(session: RunQueueSession) -> dict[str, Any]:
                 "display_name": item.display_name[:260],
                 "processing": item.status.value,
                 "attempts": item.attempts,
+                "automatic_recovery_attempts": item.recovery_attempts,
                 "message": redact_text(item.short_message, limit=500),
                 "stages": dict(sorted(item.stage_statuses.items())),
                 "file_hints": "not_inferred",

@@ -2,6 +2,25 @@
 
 Updated: 2026-08-31
 
+## Verified-output automatic recovery — 2026-08-31
+
+Final PNG publication now retries a transient local write/verification failure
+up to three times from the completed staging image. Success requires a nonempty,
+fully decodable PNG with the expected dimensions and preserved usable alpha.
+The shared Results queue records when recovery succeeded and the successful
+attempt number separately from user-triggered retry attempts.
+
+Fal.ai and KIE tasks now remain nonterminal as `result_ready` after the provider
+has produced a URL. They become `completed` only after the corresponding final
+PNG is verified on disk. If download or publication still fails, restart/retry
+claims the existing fingerprinted request/task ID and polls its result without
+issuing a new paid POST. No automatic paid resubmission was added.
+
+Verification: the focused output/provider/queue suite passes 194 tests and 19
+subtests. The complete offline suite passes 1133 tests and 146 subtests, with 58
+documented skips and two intentional deselections. No live provider request,
+Windows build or Windows locked-file acceptance was performed.
+
 ## Processing acceptance fixes integrated — 2026-08-31
 
 The seven owner-approved checkpoints are combined on

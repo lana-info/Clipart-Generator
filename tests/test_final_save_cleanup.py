@@ -5,7 +5,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from PIL import Image, PngImagePlugin
 
@@ -203,6 +203,214 @@ class FinalSaveCleanupTests(unittest.TestCase):
                     1,
                     "file",
                 )
+
+    def test_final_save_retries_transient_publish_and_reports_recovery(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-final-retry-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+            worker._set_diagnostic_context(1, 1, "export")
+            real_publish = worker._publish_final_output
+            calls = []
+            events = []
+            worker.item_progress.connect(events.append)
+
+            def transient_publish(stage_path, output_path, source_inspection=None):
+                calls.append(output_path)
+                if len(calls) < 3:
+                    raise PermissionError("temporary file lock")
+                return real_publish(stage_path, output_path, source_inspection)
+
+            worker._publish_final_output = transient_publish
+            with patch.object(worker, "_wait_before_output_recovery"):
+                worker._save_final_output(
+                    None,
+                    str(source),
+                    str(output),
+                    str(raw_dir),
+                    1,
+                    "file",
+                )
+
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(image_signature(output), image_signature(source))
+            recovered = [event for event in events if event["status"] == "auto_recovered"]
+            self.assertEqual(len(recovered), 1)
+            self.assertEqual(recovered[0]["recovery_attempts"], 3)
+
+    def test_final_save_stops_after_three_transient_publish_failures(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-final-retry-limit-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+            calls = []
+
+            def locked_publish(*_args, **_kwargs):
+                calls.append(True)
+                raise PermissionError("file remains locked")
+
+            worker._publish_final_output = locked_publish
+            with patch.object(worker, "_wait_before_output_recovery"):
+                with self.assertRaises(PermissionError):
+                    worker._save_final_output(
+                        None,
+                        str(source),
+                        str(output),
+                        str(raw_dir),
+                        1,
+                        "file",
+                    )
+
+            self.assertEqual(len(calls), 3)
+            self.assertFalse(output.exists())
+
+    def test_final_save_republishes_wrong_dimensions_from_valid_stage(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-final-dimensions-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+            real_publish = worker._publish_final_output
+            calls = []
+
+            def wrong_size_once(stage_path, output_path, source_inspection=None):
+                calls.append(True)
+                if len(calls) == 1:
+                    Image.new("RGBA", (2, 2), (10, 20, 30, 120)).save(output_path)
+                    return None
+                return real_publish(stage_path, output_path, source_inspection)
+
+            worker._publish_final_output = wrong_size_once
+            with patch.object(worker, "_wait_before_output_recovery"):
+                worker._save_final_output(
+                    None,
+                    str(source),
+                    str(output),
+                    str(raw_dir),
+                    1,
+                    "file",
+                )
+
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(image_signature(output), image_signature(source))
+
+    def test_final_save_republishes_when_transparency_is_lost(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-final-alpha-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+            real_publish = worker._publish_final_output
+            calls = []
+
+            def opaque_once(stage_path, output_path, source_inspection=None):
+                calls.append(True)
+                if len(calls) == 1:
+                    Image.new("RGB", (18, 14), (30, 90, 150)).save(output_path)
+                    return None
+                return real_publish(stage_path, output_path, source_inspection)
+
+            worker._publish_final_output = opaque_once
+            with patch.object(worker, "_wait_before_output_recovery"):
+                worker._save_final_output(
+                    None,
+                    str(source),
+                    str(output),
+                    str(raw_dir),
+                    1,
+                    "file",
+                )
+
+            self.assertEqual(len(calls), 2)
+            with Image.open(output) as image:
+                self.assertIn("A", image.getbands())
+
+    def test_paid_results_become_terminal_only_after_verified_output(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-paid-finalize-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+            worker._set_diagnostic_context(1, 1, "export")
+            worker.fal_task_journal.upsert(
+                "fal-result-ready",
+                "upscale:1",
+                "fal-ai/esrgan",
+                "result_ready",
+            )
+            worker.kie_task_journal.upsert(
+                "kie-result-ready",
+                "background_removal:1",
+                "recraft/remove-background",
+                "result_ready",
+            )
+            worker._register_paid_result_ready("fal", "fal-result-ready")
+            worker._register_paid_result_ready("kie", "kie-result-ready")
+
+            worker._save_final_output(
+                None,
+                str(source),
+                str(output),
+                str(raw_dir),
+                1,
+                "file",
+            )
+
+            self.assertEqual(worker.fal_task_journal.pending(), ())
+            self.assertEqual(worker.kie_task_journal.pending(), ())
+
+    def test_failed_output_keeps_paid_result_recoverable(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-paid-recoverable-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+            worker._set_diagnostic_context(1, 1, "export")
+            worker.fal_task_journal.upsert(
+                "fal-result-ready",
+                "upscale:1",
+                "fal-ai/esrgan",
+                "result_ready",
+            )
+            worker._register_paid_result_ready("fal", "fal-result-ready")
+            worker._publish_final_output = Mock(
+                side_effect=PermissionError("file remains locked")
+            )
+
+            with patch.object(worker, "_wait_before_output_recovery"):
+                with self.assertRaises(PermissionError):
+                    worker._save_final_output(
+                        None,
+                        str(source),
+                        str(output),
+                        str(raw_dir),
+                        1,
+                        "file",
+                    )
+
+            pending = worker.fal_task_journal.pending()
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0].status, "result_ready")
 
     def test_process_only_cleanup_preserves_unselected_source_metadata(self):
         with tempfile.TemporaryDirectory(prefix="clipart-final-cleanup-process-only-") as temp_dir:

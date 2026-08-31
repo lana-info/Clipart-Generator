@@ -1457,6 +1457,41 @@ Verification:
 - [x] Compilation и `git diff --check` прошли.
 - [ ] Windows installed UI acceptance.
 
+## Task 35 (3.1.1 acceptance follow-up): Автовосстановление сохранения без повторной оплаты
+
+Status: Done in source — offline regression suite green; Windows filesystem
+acceptance and live provider recovery remain pending
+
+Goal:
+При временной ошибке скачивания или локальной записи довести каждый файл до
+проверенного PNG, не создавая автоматически новую платную задачу.
+
+Acceptance:
+- [x] Итоговая публикация автоматически повторяется до трёх раз при временной
+  ошибке файловой системы или при исчезнувшем/пустом/повреждённом результате.
+- [x] Перед success проверяются наличие, ненулевой размер, полное декодирование
+  PNG, ожидаемые размеры и сохранение фактической прозрачности.
+- [x] Fal/KIE task остаётся `result_ready` до подтверждённого сохранения; после
+  перезапуска тот же request/task ID опрашивается повторно без нового POST.
+- [x] Только после проверенного итогового PNG связанные paid tasks становятся
+  terminal `completed`.
+- [x] Results показывает, что файл восстановлен автоматически, и номер
+  успешной попытки; safe run report сохраняет это число отдельно от ручных
+  повторных запусков.
+- [x] После трёх неудачных локальных попыток файл остаётся ошибкой, а готовый
+  provider result сохраняется в recovery journal для следующего запуска.
+- [x] Новая платная задача не создаётся автоматически; она по-прежнему требует
+  обычного пользовательского запуска и подтверждения стоимости.
+
+Verification:
+- [x] Focused output/provider/queue suite: 194 tests and 19 subtests passed.
+- [x] Full offline suite: 1133 passed, 58 documented skips, 2 deselected and
+  146 subtests passed.
+- [x] Python compilation and `git diff --check` pass.
+- [ ] Windows test with a temporarily locked destination file.
+- [ ] Controlled Fal/KIE test: provider result ready, local save interrupted,
+  restart resumes the same task ID without a second paid submit.
+
 ## Исторические задачи 3.0
 
 `NEXT-TASK-009B` и `NEXT-TASK-009C` в `TASKS_3.0.ru.md` остаются историческим

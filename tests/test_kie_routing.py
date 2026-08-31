@@ -129,7 +129,8 @@ class KieRoutingTests(unittest.TestCase):
             calls["lifecycle_urls"]["status_url"],
             "https://queue.fal.run/custom/poll/fal-request-1",
         )
-        self.assertEqual(pending, ())
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0].status, "result_ready")
         self.assertIn("https://queue.fal.run/custom/poll/fal-request-1", journal_payload)
 
     def test_fal_polling_emits_structured_state_events(self):
@@ -371,7 +372,7 @@ class KieRoutingTests(unittest.TestCase):
             )
             self.assertEqual(
                 {record.request_id for record in worker.fal_task_journal.pending()},
-                {"req-timeout"},
+                {"req-timeout", "req-complete"},
             )
 
     def test_new_worker_resumes_existing_fal_task_without_submit(self):
@@ -453,6 +454,10 @@ class KieRoutingTests(unittest.TestCase):
                     ),
                 ],
             )
+            pending = restarted.fal_task_journal.pending()
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0].request_id, "existing-fal-task")
+            self.assertEqual(pending[0].status, "result_ready")
 
     def test_bria_upscale_recovery_uses_fixed_two_x_fingerprint(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -561,9 +566,11 @@ class KieRoutingTests(unittest.TestCase):
             self.assertEqual(calls, ["POST", ("GET", "new-dog-task")])
 
     def test_ideogram_generation_sends_selected_aspect_ratio(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
         worker = main.WorkerThread(
             "mode1_generate_only",
-            ".",
+            temp.name,
             kie_settings(
                 fal_api_key="fal-test-secret",
                 text_generation_model="fal-ai/ideogram/v3",
@@ -596,9 +603,11 @@ class KieRoutingTests(unittest.TestCase):
         )
 
     def test_nonprefixed_fal_generation_model_routes_to_fal_with_image_size(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
         worker = main.WorkerThread(
             "mode1_generate_only",
-            ".",
+            temp.name,
             kie_settings(
                 fal_api_key="fal-test-secret",
                 text_generation_model="ideogram/v4/fast",
@@ -1172,7 +1181,9 @@ class KieRoutingTests(unittest.TestCase):
             self.assertTrue(
                 all("taskId=task-resume-1" in url for url in polled_urls)
             )
-            self.assertEqual(worker.kie_task_journal.pending(), ())
+            pending = worker.kie_task_journal.pending()
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0].status, "result_ready")
             journal_text = (Path(temp) / ".vibix_kie_tasks.json").read_text(
                 encoding="utf-8"
             )

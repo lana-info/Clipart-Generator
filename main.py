@@ -1324,6 +1324,7 @@ class WorkerThread(QThread):
         self._diagnostic_context.item_index = max(1, int(item_index))
         self._diagnostic_context.item_total = max(1, int(item_total))
         self._diagnostic_context.stage = str(stage or "")
+        self._item_context.paid_results_ready = []
 
     def _set_provider_diagnostic_context(self, stage, provider, model):
         self._diagnostic_context.stage = str(stage or "")
@@ -1368,6 +1369,7 @@ class WorkerThread(QThread):
             "indeterminate",
             "source_path",
             "output_path",
+            "recovery_attempts",
         ):
             if key in values and values[key] not in (None, ""):
                 event[key] = values[key]
@@ -3249,13 +3251,10 @@ class WorkerThread(QThread):
             task["request_id"],
             pending_task.operation if pending_task is not None else operation,
             model_id,
-            (
-                "completed_after_cancel"
-                if completed.get("status") == "completed_after_cancel"
-                else "completed"
-            ),
+            "result_ready",
             input_fingerprint=input_fingerprint,
         )
+        self._register_paid_result_ready("fal", task["request_id"])
         return result_url
 
     def _record_fal_task(
@@ -3517,11 +3516,7 @@ class WorkerThread(QThread):
                 task.request_id,
                 task.operation,
                 task.model_id,
-                (
-                    "completed_after_cancel"
-                    if result.get("status") == "completed_after_cancel"
-                    else "completed"
-                ),
+                "result_ready",
             )
             recovered.append(result)
         return tuple(recovered)
@@ -3977,8 +3972,62 @@ class WorkerThread(QThread):
                 self._ensure_running()
             if self.export_300_dpi:
                 self._verify_png_dpi(stage_path, dpi=300)
-            self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
-            self._validate_published_png(output_path)
+            self._validate_published_png(stage_path)
+            for attempt in range(1, 4):
+                self._ensure_running()
+                target_existed = os.path.exists(output_path)
+                try:
+                    self._publish_final_output(
+                        stage_path,
+                        output_path,
+                        source_inspection=source_inspection,
+                    )
+                    self._validate_published_png(
+                        output_path,
+                        expected_path=stage_path,
+                    )
+                    break
+                except ProcessingCancelled:
+                    raise
+                except (OSError, RuntimeError) as error:
+                    if attempt >= 3 or not self._is_recoverable_output_error(error):
+                        raise
+                    if not target_existed:
+                        try:
+                            os.remove(output_path)
+                        except FileNotFoundError:
+                            pass
+                        except OSError:
+                            pass
+                    self.progress.emit(
+                        f"  Сохранение не удалось, автоматический повтор {attempt + 1}/3"
+                    )
+                    self._emit_diagnostic(
+                        "output_recovery_retry",
+                        provider="local",
+                        attempt=attempt,
+                        error_message=self._safe_error_text(error),
+                        outcome="retrying",
+                    )
+                    self._wait_before_output_recovery(attempt)
+            if attempt > 1:
+                self.progress.emit(
+                    f"  Файл автоматически восстановлен и сохранён с {attempt}-й попытки"
+                )
+                self._emit_item_progress(
+                    idx,
+                    int(getattr(self._diagnostic_context, "item_total", 1) or 1),
+                    "export",
+                    "auto_recovered",
+                    recovery_attempts=attempt,
+                )
+                self._emit_diagnostic(
+                    "output_recovered",
+                    provider="local",
+                    attempt=attempt,
+                    outcome="succeeded",
+                )
+            self._finalize_paid_results()
             if self.export_300_dpi:
                 self.progress.emit(
                     f"  Установлен DPI 300 для {os.path.basename(output_path)}"
@@ -3990,7 +4039,58 @@ class WorkerThread(QThread):
                 except OSError:
                     pass
 
-    def _validate_published_png(self, output_path):
+    @staticmethod
+    def _is_recoverable_output_error(error):
+        if isinstance(error, OSError):
+            return True
+        return str(error) in {
+            "Итоговый PNG не сохранён",
+            "Итоговый PNG недоступен для проверки",
+            "Итоговый PNG повреждён",
+            "Итоговый PNG повреждён: файл пуст",
+            "Итоговый PNG имеет неверный размер",
+            "Итоговый PNG потерял прозрачность",
+        }
+
+    @staticmethod
+    def _wait_before_output_recovery(attempt):
+        time.sleep(0.15 * max(1, int(attempt)))
+
+    def _register_paid_result_ready(self, provider, task_id):
+        task_id = str(task_id or "").strip()
+        if not task_id:
+            return
+        records = getattr(self._item_context, "paid_results_ready", None)
+        if records is None:
+            records = []
+            self._item_context.paid_results_ready = records
+        record = (str(provider or "").strip().lower(), task_id)
+        if record not in records:
+            records.append(record)
+
+    def _finalize_paid_results(self):
+        records = tuple(getattr(self._item_context, "paid_results_ready", ()) or ())
+        for provider, task_id in records:
+            if provider == "fal":
+                try:
+                    self.fal_task_journal.update_status(task_id, "completed")
+                except (OSError, ValueError, FalProviderError):
+                    continue
+            elif provider == "kie":
+                self._record_kie_task(task_id, status="completed")
+        self._item_context.paid_results_ready = []
+
+    def _validate_published_png(self, output_path, *, expected_path=None):
+        expected_size = None
+        expected_alpha = False
+        if expected_path:
+            try:
+                with Image.open(expected_path) as expected_image:
+                    expected_size = expected_image.size
+                    expected_alpha = has_usable_alpha(expected_image)
+                    expected_image.load()
+            except (OSError, UnidentifiedImageError, ValueError) as error:
+                raise RuntimeError("Итоговый PNG повреждён") from error
         try:
             if os.path.getsize(output_path) <= 0:
                 raise RuntimeError("Итоговый PNG повреждён: файл пуст")
@@ -4003,6 +4103,10 @@ class WorkerThread(QThread):
             with Image.open(output_path) as image:
                 if image.format != "PNG" or image.width <= 0 or image.height <= 0:
                     raise RuntimeError("Итоговый PNG повреждён")
+                if expected_size is not None and image.size != expected_size:
+                    raise RuntimeError("Итоговый PNG имеет неверный размер")
+                if expected_alpha and not has_usable_alpha(image):
+                    raise RuntimeError("Итоговый PNG потерял прозрачность")
                 image.load()
         except RuntimeError:
             raise
@@ -4086,6 +4190,8 @@ class WorkerThread(QThread):
             message = str(error).strip() or "неизвестная ошибка проверки"
             self.progress.emit(f"  Очистка файла: ошибка — {message}; итог не опубликован")
             raise RuntimeError(f"Очистка файла не выполнена: {message}") from error
+        except OSError:
+            raise
         except Exception as error:
             self.progress.emit("  Очистка файла: непредвиденная ошибка; итог не опубликован")
             raise RuntimeError("Очистка файла не выполнена; итог не опубликован") from error
@@ -5114,13 +5220,10 @@ class WorkerThread(QThread):
             request_id,
             task_operation,
             model_id,
-            (
-                "completed_after_cancel"
-                if completed.get("status") == "completed_after_cancel"
-                else "completed"
-            ),
+            "result_ready",
             input_fingerprint=input_fingerprint,
         )
+        self._register_paid_result_ready("fal", request_id)
         return result_url
 
     def _ensure_fal_cost_confirmed(self):
@@ -5617,7 +5720,8 @@ class WorkerThread(QThread):
                         result_count=len(urls),
                         elapsed_ms=round((time.monotonic() - started) * 1000),
                     )
-                    self._record_kie_task(task_id, status="completed")
+                    self._record_kie_task(task_id, status="result_ready")
+                    self._register_paid_result_ready("kie", task_id)
                     return urls[0]
                 raise RuntimeError("4o Image не вернул resultUrls")
             if status in {"FAILED", "FAIL", "ERROR"}:
@@ -5708,7 +5812,8 @@ class WorkerThread(QThread):
                     result_count=count_provider_results(data.get("resultJson")),
                     elapsed_ms=round((time.monotonic() - started) * 1000),
                 )
-                self._record_kie_task(task_id, status="completed")
+                self._record_kie_task(task_id, status="result_ready")
+                self._register_paid_result_ready("kie", task_id)
                 return result_url
             if state in {"fail", "failed", "error"}:
                 error_code = data.get("failCode") or data.get("errorCode") or "unknown"
