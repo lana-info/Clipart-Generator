@@ -217,6 +217,13 @@ MAE `0.018194`, 2048×2048 median `1.357 s`, peak RSS `421.465 MiB` below the
 version change or publication was performed. Remaining release work is manual
 Windows acceptance and a separately authorized replacement build.
 
+The Windows observation pass subsequently confirmed a current-source Chroma
+colour regression: fully opaque light-blue subject detail could be reconstructed
+as green/teal. A synthetic adversarial test failed before the fix. Chroma now
+preserves source RGB in the fully opaque subject interior while retaining edge
+despill and all existing benchmark gates; the approved 3.2 per-item Auto key
+selection remains deferred.
+
 The Windows acceptance checklist now includes a clean-workspace duplicate
 audit prompted by the owner's earlier candidate observation: one KIE prompt,
 one requested variant and one provider task must produce exactly one ready

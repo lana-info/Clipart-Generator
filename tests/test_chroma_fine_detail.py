@@ -326,7 +326,23 @@ def _layered_translucent_strip(key_name: str) -> Image.Image:
 
 
 class ChromaFineDetailTests(unittest.TestCase):
-    def test_broad_near_key_detail_is_rejected_instead_of_silently_erased(self):
+    def test_broad_light_blue_subject_detail_is_preserved_without_colour_shift(self):
+        pixels = np.full((128, 128, 3), KEY_COLORS["blue"], dtype=np.uint8)
+        pixels[20:108, 20:108] = (185, 175, 155)
+        pixels[48:80, 48:80] = (120, 170, 230)
+
+        result = remove_chroma_key_automatic(
+            Image.fromarray(pixels, mode="RGB"),
+            "blue",
+        )
+
+        result_pixels = np.asarray(result, dtype=np.uint8)
+        np.testing.assert_array_equal(
+            result_pixels[48:80, 48:80],
+            np.broadcast_to((120, 170, 230, 255), (32, 32, 4)),
+        )
+
+    def test_broad_near_key_detail_is_preserved_inside_subject(self):
         for key_name, permutation in {
             "blue": (0, 1, 2),
             "green": (0, 2, 1),
@@ -339,14 +355,15 @@ class ChromaFineDetailTests(unittest.TestCase):
                 pixels[8:33, 8:33] = (180, 180, 180)
                 pixels[18:23, 18:23] = detail
 
-                with self.assertRaisesRegex(
-                    ChromaKeyAmbiguousError,
-                    "выберите другой цвет фона",
-                ):
-                    remove_chroma_key_automatic(
-                        Image.fromarray(pixels, mode="RGB"),
-                        key_name,
-                    )
+                result = remove_chroma_key_automatic(
+                    Image.fromarray(pixels, mode="RGB"),
+                    key_name,
+                )
+
+                self.assertEqual(
+                    result.getpixel((20, 20)),
+                    (*detail.tolist(), 255),
+                )
 
     def test_translucent_interior_does_not_gain_complementary_key_colour(self):
         for key_name in ("blue", "green", "red"):
@@ -423,28 +440,19 @@ class ChromaFineDetailTests(unittest.TestCase):
 
         self.assertLessEqual(float(np.mean(blue_bias[visible_edge])), 0.08)
 
-    def test_opaque_blue_spill_inside_a_light_subject_is_neutralized(self):
+    def test_opaque_blue_detail_is_preserved_when_spill_is_not_provable(self):
         input_image, expected, spill = _opaque_subject_with_interior_blue_spill()
 
         result = remove_chroma_key_automatic(input_image, "blue")
         actual = np.asarray(result.convert("RGBA"), dtype=np.float32)
+        source = np.asarray(input_image.convert("RGB"), dtype=np.float32)
         reference = np.asarray(expected.convert("RGBA"), dtype=np.float32)
         subject = reference[..., 3] == 255
 
-        self.assertLessEqual(
-            float(np.mean(np.abs(actual[..., :3][spill] - reference[..., :3][spill]))),
-            8.0,
-        )
-        self.assertLessEqual(
-            float(
-                np.mean(
-                    np.abs(
-                        actual[..., :3][subject & ~spill]
-                        - reference[..., :3][subject & ~spill]
-                    )
-                )
-            ),
-            2.0,
+        np.testing.assert_array_equal(actual[..., :3][spill], source[spill])
+        np.testing.assert_array_equal(
+            actual[..., :3][subject & ~spill],
+            source[subject & ~spill],
         )
         self.assertGreaterEqual(float(np.mean(actual[..., 3][spill])), 254.0)
 

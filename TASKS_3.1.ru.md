@@ -764,9 +764,10 @@ Acceptance:
 - [x] Каждый запуск изолирован в `.run/<run-id>`, резервирует имена всего batch
   и публикует только свои файлы. Прежний выбор workspace с `rough/` и `output/`
   сохранён без миграционного экрана; literal `output` нормализуется в parent.
-- [x] Adversarial Chroma test подтвердил потерю enclosed near-key детали;
-  automatic mode теперь останавливается с понятной ошибкой вместо стирающего
-  fallback. Правило exact selected key не менялось.
+- [x] Adversarial Chroma tests подтвердили потерю и цветовой сдвиг enclosed
+  near-key деталей. Automatic mode сохраняет RGB полностью непрозрачной
+  внутренней части предмета и ограничивает despill зоной смешанной кромки;
+  exact selected key по-прежнему неотличим от фона без отдельной маски.
 - [x] Редактор ограничен 40 Мп, `QThread.finished` больше не подменён строковым
   business-сигналом, а проверка прозрачности видна также в Processing.
 - [x] Installer повторно проверяется перед launch, license outage отделён от
@@ -1116,8 +1117,8 @@ owner approval.
 ## Task 30 (3.2.0): Chroma «Авто» и цвет фона для каждого изображения
 
 Status: Deferred to the next version after 3.1.0 — product direction approved;
-visual mockup, current-candidate reproduction and implementation intentionally
-not started
+visual mockup and per-item Auto implementation intentionally not started;
+current 3.1 candidate colour-shift reproduction completed separately
 
 Goal:
 Снизить повреждение многоцветных предметов Chroma Key и однозначно хранить,
@@ -1152,10 +1153,11 @@ Evidence and boundary:
   primary key. В предоставленном результате blue key фон удалён и тонкие
   детали в основном сохранены, но часть собственных синих деталей визуально
   уходит в зелёный/бирюзовый, что согласуется с риском чрезмерного despill.
-- Файл датирован 2026-08-28, поэтому это продуктовое adversarial evidence, но
-  не доказательство регрессии актуального Windows candidate. До изменения
-  Chroma нужно воспроизвести сдвиг на текущем source/candidate и создать
-  минимальный synthetic test; без подтверждения алгоритм не менять.
+- Текущий source воспроизвёл тот же сдвиг на предоставленном файле. Минимальный
+  synthetic regression также подтвердил превращение непрозрачной светло-синей
+  детали в зелёно-бирюзовую. Узкая release-fix сохраняет RGB непрозрачного
+  интерьера и оставляет despill только у смешанной кромки; Auto, четвёртый цвет
+  и per-item key остаются в 3.2.0.
 - Действующее правило сохраняется: точный выбранный key внутри предмета
   неотличим от фона без дополнительной маски. `Авто` снижает и объясняет риск,
   но не отменяет это ограничение.
