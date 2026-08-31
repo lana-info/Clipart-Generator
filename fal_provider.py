@@ -31,6 +31,7 @@ from fal_model_catalog import fal_endpoint_profile
 
 
 MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
+MAX_FAL_LOCAL_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_TASK_JOURNAL_RECORDS = 1000
 _JOURNAL_LOCKS_GUARD = threading.Lock()
 _JOURNAL_LOCKS: dict[str, threading.RLock] = {}
@@ -380,7 +381,7 @@ def fal_image_input(image_url: str) -> dict[str, str]:
     return {"image_url": value}
 
 
-def fal_image_data_uri(path: str, *, max_bytes: int = 8 * 1024 * 1024) -> str:
+def fal_image_data_uri(path: str, *, max_bytes: int = MAX_FAL_LOCAL_IMAGE_BYTES) -> str:
     """Encode a bounded local image for Fal file inputs without uploading silently."""
 
     source = str(path or "").strip()
@@ -795,6 +796,7 @@ class FalClient:
 
 __all__ = [
     "MAX_FAL_RESPONSE_BYTES",
+    "MAX_FAL_LOCAL_IMAGE_BYTES",
     "FalClient",
     "FalConfig",
     "FalProviderError",

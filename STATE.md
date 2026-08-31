@@ -70,6 +70,18 @@ one controlled KIE generation, one controlled Fal generation, and paid quality
 checks for Bria (transparent and opaque), Topaz 2x/4x and Recraft on an opaque
 PNG. Recraft must continue to reject usable transparency before paid submit.
 
+Owner acceptance exposed a Fal.ai background-removal preflight mismatch: the
+Processing file screen accepted PNGs up to 100 MiB while the local Fal data-URI
+boundary accepts at most 8 MiB. A three-file Ideogram run therefore submitted
+and charged only the 5.99 MB file, while the 11.96 MB and 9.55 MB inputs failed
+locally after the batch began. The source fix now checks the complete direct
+local batch on `Проверка и запуск`, lists oversized basenames and sizes, disables
+the whole run, and repeats the same guard immediately before worker creation.
+Existing usable alpha and a preceding KIE upscale HTTPS result are exempt because
+they are not uploaded to the remover as local payloads. Returning to the pipeline
+re-enables navigation. Offline focused verification is green; no live Fal call,
+Windows rebuild or installed-app visual acceptance has been performed.
+
 ## Windows acceptance follow-up: Fal.ai replacement upscalers — 2026-08-31
 
 The owner approved three replacements for the rejected Fal ESRGAN in the first
