@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, UnidentifiedImageError
-from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QImageReader, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -75,6 +75,7 @@ MAX_LOCAL_FILE_BYTES = 100 * 1024 * 1024
 MAX_LOCAL_IMAGE_DIMENSION = 32_768
 MAX_LOCAL_IMAGE_PIXELS = 70_000_000
 MAX_PROCESSING_FILES = 200
+IMMEDIATE_THUMBNAIL_LIMIT = 20
 
 
 class ProcessingFlowError(ValueError):
@@ -467,7 +468,11 @@ def missing_processing_runtime_requirements(
             missing.append(local_error)
     return tuple(missing)
 
-def inspect_local_image(path: str | os.PathLike[str]) -> LocalImageInfo:
+def inspect_local_image(
+    path: str | os.PathLike[str],
+    *,
+    decode_pixels: bool = True,
+) -> LocalImageInfo:
     source = Path(path).expanduser()
     try:
         if not source.is_file():
@@ -494,7 +499,8 @@ def inspect_local_image(path: str | os.PathLike[str]) -> LocalImageInfo:
                 dpi = int(round(float(raw_dpi))) if raw_dpi else None
             except (TypeError, ValueError):
                 dpi = None
-            image.load()
+            if decode_pixels:
+                image.load()
     except ProcessingFlowError:
         raise
     except (OSError, UnidentifiedImageError) as error:
@@ -529,6 +535,11 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.changed = changed
         self.setAcceptDrops(True)
         self.file_infos: list[LocalImageInfo] = []
+        self._file_info_cache: dict[
+            str,
+            tuple[tuple[int, int], LocalImageInfo],
+        ] = {}
+        self._thumbnail_generation = 0
 
         row = QWidget()
         row_layout = QHBoxLayout(row)
@@ -627,11 +638,12 @@ class ProcessingFilesPage(_ScrollableStepPage):
             if normalized in existing:
                 continue
             try:
-                info = inspect_local_image(raw_path)
+                info = inspect_local_image(raw_path, decode_pixels=False)
             except ProcessingFlowError as error:
                 errors.append(str(error))
                 continue
             accepted.append(info)
+            self._remember_file_info(info)
             existing.add(normalized)
             self.state.processing.selected_files.append(info.path)
         if accepted:
@@ -646,6 +658,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.state.processing.selected_files.clear()
         self.state.processing.verification_records.clear()
         self.file_infos.clear()
+        self._file_info_cache.clear()
         self.error_label.clear()
         self.changed()
         self.refresh_from_state()
@@ -664,8 +677,68 @@ class ProcessingFilesPage(_ScrollableStepPage):
             if os.path.normcase(os.path.abspath(record.file_path)) != target
         ]
         if len(self.state.processing.selected_files) != before:
+            self._file_info_cache.pop(target, None)
             self.changed()
         self.refresh_from_state()
+
+    @staticmethod
+    def _file_cache_key(path: str | os.PathLike[str]) -> str:
+        return os.path.normcase(os.path.abspath(os.fspath(path)))
+
+    @staticmethod
+    def _file_signature(path: str | os.PathLike[str]) -> tuple[int, int]:
+        stat = Path(path).stat()
+        return int(stat.st_size), int(stat.st_mtime_ns)
+
+    def _remember_file_info(self, info: LocalImageInfo) -> None:
+        key = self._file_cache_key(info.path)
+        try:
+            signature = self._file_signature(info.path)
+        except OSError:
+            return
+        self._file_info_cache[key] = signature, info
+
+    def _file_info(self, path: str) -> LocalImageInfo:
+        key = self._file_cache_key(path)
+        try:
+            signature = self._file_signature(path)
+        except OSError as error:
+            raise ProcessingFlowError("Файл недоступен") from error
+        cached = self._file_info_cache.get(key)
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+        info = inspect_local_image(path, decode_pixels=False)
+        self._file_info_cache[key] = signature, info
+        return info
+
+    @staticmethod
+    def _load_thumbnail(thumbnail: QLabel, info: LocalImageInfo) -> None:
+        reader = QImageReader(info.path)
+        target = reader.size().scaled(
+            QSize(72, 72),
+            Qt.AspectRatioMode.KeepAspectRatio,
+        )
+        if target.isValid():
+            reader.setScaledSize(target)
+        image = reader.read()
+        if not image.isNull():
+            thumbnail.setPixmap(QPixmap.fromImage(image))
+            thumbnail.setAccessibleName(f"Миниатюра {info.name}")
+        else:
+            thumbnail.setText("Нет preview")
+
+    def _load_thumbnail_if_current(
+        self,
+        thumbnail: QLabel,
+        info: LocalImageInfo,
+        generation: int,
+    ) -> None:
+        if generation != self._thumbnail_generation:
+            return
+        try:
+            self._load_thumbnail(thumbnail, info)
+        except RuntimeError:
+            return
 
     def dragEnterEvent(self, event: Any) -> None:
         mime = event.mimeData()
@@ -699,9 +772,18 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.overwrite_checkbox.blockSignals(False)
         infos: list[LocalImageInfo] = []
         errors: list[str] = []
+        active_cache_keys = {
+            self._file_cache_key(path)
+            for path in self.state.processing.selected_files
+        }
+        self._file_info_cache = {
+            key: value
+            for key, value in self._file_info_cache.items()
+            if key in active_cache_keys
+        }
         for path in self.state.processing.selected_files:
             try:
-                infos.append(inspect_local_image(path))
+                infos.append(self._file_info(path))
             except ProcessingFlowError:
                 errors.append(Path(path).name or "неизвестный файл")
         self.file_infos = infos
@@ -711,26 +793,26 @@ class ProcessingFilesPage(_ScrollableStepPage):
             if widget is not None:
                 widget.deleteLater()
         self.thumbnail_labels = []
+        self._thumbnail_generation += 1
+        thumbnail_generation = self._thumbnail_generation
+        defer_thumbnails = len(infos) > IMMEDIATE_THUMBNAIL_LIMIT
         if infos:
-            for info in infos:
+            for position, info in enumerate(infos):
                 card = QGroupBox()
                 row = QHBoxLayout(card)
                 thumbnail = QLabel()
                 thumbnail.setFixedSize(76, 76)
                 thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                reader = QImageReader(info.path)
-                target = reader.size().scaled(
-                    QSize(72, 72),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                )
-                if target.isValid():
-                    reader.setScaledSize(target)
-                image = reader.read()
-                if not image.isNull():
-                    thumbnail.setPixmap(QPixmap.fromImage(image))
-                    thumbnail.setAccessibleName(f"Миниатюра {info.name}")
+                if defer_thumbnails:
+                    thumbnail.setText("Загрузка…")
+                    QTimer.singleShot(
+                        position * 10,
+                        lambda target=thumbnail, item=info, current=thumbnail_generation: (
+                            self._load_thumbnail_if_current(target, item, current)
+                        ),
+                    )
                 else:
-                    thumbnail.setText("Нет preview")
+                    self._load_thumbnail(thumbnail, info)
                 remove_button = QToolButton()
                 remove_button.setIcon(
                     self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
@@ -1227,7 +1309,7 @@ def build_processing_run_request(
             + ", ".join(duplicates[:3])
         )
     for path in state.processing.selected_files:
-        inspect_local_image(path)
+        inspect_local_image(path, decode_pixels=False)
     validate_processing_providers(state.processing.operations)
     if uses_external_processing(state.processing.operations) and not external_transfer_consent:
         raise ProcessingFlowError(
