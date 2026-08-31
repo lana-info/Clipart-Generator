@@ -217,7 +217,7 @@ contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
 The prior independent source review verdict was `pass-with-nits`. The current
-blocker-fix handoff passes 1037 offline tests, 57 intentional/environment
+blocker-fix handoff passes 1039 offline tests, 57 intentional/environment
 skips, 2 configured network deselections and 146 subtests. The Windows-only
 DPAPI and native installer-lock contracts remain explicit Windows acceptance
 gates. All

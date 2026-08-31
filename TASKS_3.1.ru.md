@@ -898,7 +898,7 @@ Verification:
 - [x] History/merge-base audit and full VDS tests pass.
 - [x] Technical-review and prebuild source-acceptance branches fast-forwarded
   without conflicts through `7addeee`; current blocker-fix branch latest
-  complete offline suite: 1037 passed, 57 intentional/environment skips,
+  complete offline suite: 1039 passed, 57 intentional/environment skips,
   2 deselected, 146 subtests. Two skips are the Windows-only DPAPI and native
   installer-lock contracts; focused review-follow-up suite passes 103 tests.
 - [ ] Replacement Windows candidate and manual Windows checklist remain.
