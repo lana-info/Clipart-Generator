@@ -39,7 +39,9 @@ valid ready PNGs.
 The focused fix keeps the action available after terminal Clipart and Processing
 runs whenever `output/` contains a final `_ready*.png`. Current-run successes
 remain first and preserve selection; selecting a failed row falls back to the
-first final result. The scan is non-recursive and never includes `rough/` or
+first final result. This rule does not depend on provider, stage or error cause;
+regressions cover both a provider HTTP failure and a local decode failure. The
+scan is non-recursive and never includes `rough/` or
 `.run/`; direct symlinks and resolved paths outside `output/` are rejected.
 The file list no longer decodes every thumbnail synchronously: it renders names
 immediately and decodes only the selected image after checking the 40 MP cap.

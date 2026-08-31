@@ -275,7 +275,7 @@ class V3RunQueueTests(unittest.TestCase):
                 generation_request(temp, count=1), ProjectMode.CLIPART
             )
             session.items[0].status = RunItemStatus.FAILED
-            session.items[0].short_message = "Фон не совпадает с Chroma Key цветом"
+            session.items[0].short_message = "Fal.ai HTTP 503"
             session.handle_finished()
             controller.run_queue.session = session
             controller.run_queue.page.set_session(session)
@@ -364,7 +364,7 @@ class V3RunQueueTests(unittest.TestCase):
                 processing_request(temp, [source]), ProjectMode.PROCESSING
             )
             session.items[0].status = RunItemStatus.FAILED
-            session.items[0].short_message = "Фон не совпадает с Chroma Key цветом"
+            session.items[0].short_message = "Не удалось декодировать входной файл"
             session.handle_finished()
             controller.run_queue.session = session
             controller.run_queue.page.set_session(session)

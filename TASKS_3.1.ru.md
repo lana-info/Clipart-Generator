@@ -700,7 +700,8 @@ Verification:
 - [x] `py_compile`, `git diff --check` и tracked sensitive-artifact scan.
 - [x] Windows regression 2026-08-31 воспроизведён двумя TDD-тестами для
   Clipart и Processing; file-boundary regression также зафиксирован;
-  focused run-queue suite: 55 tests, 5 subtests.
+  причина ошибки не привязана к Chroma/provider/stage; focused run-queue suite:
+  55 tests, 5 subtests.
 
 ## Task 24: Раздельные профили генерации для обычных и reference-промптов
 
