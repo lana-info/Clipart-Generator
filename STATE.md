@@ -76,6 +76,10 @@ the backward-compatible reconstructed fallback. The focused Fal/KIE/concurrency
 and redirect-security suite passes 116 tests. This removes the confirmed client
 contract defect without another paid submission; one controlled Windows Fal
 run remains necessary to prove that the observed provider-side 405 is gone.
+Final review also reproduced a cancel-recovery double read: accepted HTTP
+400/404 bodies were consumed while extracting an error detail and then parsed
+again as empty. The response is now bounded and parsed once, so
+`ALREADY_COMPLETED` remains a valid late-cancel outcome.
 
 The same report exposes a separate diagnostics defect:
 `v3_run_queue._provider_model_routes()` hard-codes `generation:kie` for every
@@ -212,14 +216,14 @@ The established workspace remains unchanged for the user: selected root
 contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
-The final independent source review verdict is `pass-with-nits`: no blocking or
-important defects remain. The current handoff passes 1026 offline tests, 57
-intentional/environment skips, 2 configured network deselections and 140
-subtests. The two additional skips are the new Windows-only DPAPI and native
-installer-lock contracts; they remain explicit Windows acceptance gates. All
+The prior independent source review verdict was `pass-with-nits`. The current
+blocker-fix handoff passes 1037 offline tests, 57 intentional/environment
+skips, 2 configured network deselections and 146 subtests. The Windows-only
+DPAPI and native installer-lock contracts remain explicit Windows acceptance
+gates. All
 tracked Python files compile; sensitive scan and `git diff --check` pass. The
 latest automatic Chroma benchmark passes all gates: alpha IoU `0.968704`, alpha
-MAE `0.018194`, 2048×2048 median `1.357 s`, peak RSS `421.465 MiB` below the
+MAE `0.018194`, 2048×2048 median `1.530 s`, peak RSS `420.941 MiB` below the
 `448 MiB` ceiling. No paid request, Windows build,
 version change or publication was performed. Remaining release work is manual
 Windows acceptance and a separately authorized replacement build.

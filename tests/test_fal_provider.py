@@ -178,6 +178,28 @@ class FalProviderTests(unittest.TestCase):
             "https://queue.fal.run/fal-ai/flux/schnell/requests/req-123/response",
         )
 
+    def test_cancel_accepts_already_completed_http_error_body(self):
+        class AlreadyCompletedOpener:
+            def open(self, request, timeout):
+                raise urllib.error.HTTPError(
+                    request.full_url,
+                    400,
+                    "already completed",
+                    {},
+                    BytesIO(b'{"status":"ALREADY_COMPLETED"}'),
+                )
+
+        client = FalClient(
+            FalConfig(api_key="fal-secret", model_id="fal-ai/flux/schnell")
+        )
+        with patch(
+            "fal_provider.urllib.request.build_opener",
+            return_value=AlreadyCompletedOpener(),
+        ):
+            result = client.cancel("req-123")
+
+        self.assertEqual(result, {"status": "ALREADY_COMPLETED"})
+
     def test_paid_submit_is_not_retried_after_transient_http_failure(self):
         class FailingOpener:
             calls = 0

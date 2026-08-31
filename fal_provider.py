@@ -503,8 +503,12 @@ class FalClient:
                 break
             except urllib.error.HTTPError as error:
                 detail = ""
+                parsed_body: Any = None
                 try:
-                    error_body = error.read(16 * 1024).decode("utf-8", "replace")
+                    error_raw = error.read(MAX_FAL_RESPONSE_BYTES + 1)
+                    if len(error_raw) > MAX_FAL_RESPONSE_BYTES:
+                        raise FalProviderError("Fal.ai response слишком большой")
+                    error_body = error_raw.decode("utf-8", "replace")
                     parsed_body = json.loads(error_body)
                     if isinstance(parsed_body, dict):
                         detail = str(
@@ -516,12 +520,9 @@ class FalClient:
                 except (OSError, UnicodeError, ValueError):
                     detail = ""
                 if error.code in accepted_http_errors:
-                    try:
-                        result = json.loads(error.read(256 * 1024).decode("utf-8", "replace"))
-                    except (OSError, UnicodeError, ValueError) as parse_error:
-                        raise FalProviderError("Fal.ai вернул некорректный ответ отмены") from parse_error
-                    if isinstance(result, dict):
-                        return result
+                    if isinstance(parsed_body, dict):
+                        return parsed_body
+                    raise FalProviderError("Fal.ai вернул некорректный ответ отмены")
                 retryable_request = request.method.upper() in {"GET", "HEAD"} or (
                     request.method.upper() == "POST" and error.code == 429
                 )

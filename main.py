@@ -2692,7 +2692,8 @@ class WorkerThread(QThread):
                 "stage_finished",
                 provider=remove_provider,
                 model=remove_model,
-                outcome="succeeded",
+                outcome="skipped" if reuse_alpha else "succeeded",
+                status="already_alpha" if reuse_alpha else None,
                 elapsed_ms=round((time.monotonic() - remove_started) * 1000),
                 **(
                     inspect_diagnostic_image(current_path)

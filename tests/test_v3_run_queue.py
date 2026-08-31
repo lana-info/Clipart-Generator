@@ -795,6 +795,32 @@ class V3RunQueueTests(unittest.TestCase):
                 session.technical_log,
             )
 
+    def test_existing_alpha_skip_marker_reaches_structured_journal(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-alpha-skip-") as temp:
+            journal = Mock()
+            session = RunQueueSession(
+                generation_request(temp, count=1),
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+
+            session.handle_diagnostic(
+                {
+                    "event": "stage_finished",
+                    "item_index": 1,
+                    "item_total": 1,
+                    "stage": "background_removal",
+                    "provider": "local_chroma_key",
+                    "model": "chroma-key",
+                    "outcome": "skipped",
+                    "status": "already_alpha",
+                }
+            )
+
+            persisted = journal.record_structured.call_args.args[0]
+            self.assertEqual(persisted["outcome"], "skipped")
+            self.assertEqual(persisted["status"], "already_alpha")
+
     def test_terminal_kie_failure_has_no_output_and_requires_explicit_retry(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-kie-terminal-") as temp:
             root = Path(temp)

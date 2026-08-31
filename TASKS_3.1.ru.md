@@ -851,9 +851,12 @@ Steps:
   `fal-ai/flux/schnell` и `ideogram/v4/fast`. Полная последовательность уже
   локализует сбой: Fal возвращает отдельный request ID для каждого POST submit,
   после чего 405 возникает при первом lifecycle read до события
-  `provider_task_polled`. Клиент теперь использует и журналирует фактические
+  `provider_task_polled`; archive не различает immediate status и result read.
+  Клиент теперь использует и журналирует фактические
   provider-supplied status/response/cancel URL вместо их реконструкции; точное
   устранение Windows 405 подтверждается отдельным контролируемым Fal smoke.
+  Cancel recovery читает accepted 400/404 body один раз и корректно сохраняет
+  `ALREADY_COMPLETED`, не превращая его в ошибку разбора.
 - [x] До исправления не выполнять новые платные Fal.ai проверки. Для найденной
   корневой причины сначала добавить минимальный regression на фактический HTTP
   method/URL, provider-supplied lifecycle URLs и безопасное redirect-поведение,
@@ -881,6 +884,8 @@ Steps:
   повторной платной генерации. Worker теперь безопасно включает reuse alpha по
   умолчанию, даже если вызывающий flow не передал флаг; явное `False` остаётся
   только для внутренних сценариев, которым действительно нужен remover.
+  Structured `stage_finished` сохраняет `outcome=skipped` и
+  `status=already_alpha`, поэтому журнал не утверждает, что Chroma запускалась.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
@@ -892,9 +897,10 @@ Acceptance:
 Verification:
 - [x] History/merge-base audit and full VDS tests pass.
 - [x] Technical-review and prebuild source-acceptance branches fast-forwarded
-  without conflicts through `7addeee`; latest complete offline suite: 1026
-  passed, 57 intentional/environment skips, 2 deselected, 140 subtests. Two of
-  those skips are the new Windows-only DPAPI and native installer-lock tests.
+  without conflicts through `7addeee`; current blocker-fix branch latest
+  complete offline suite: 1037 passed, 57 intentional/environment skips,
+  2 deselected, 146 subtests. Two skips are the Windows-only DPAPI and native
+  installer-lock contracts; focused review-follow-up suite passes 103 tests.
 - [ ] Replacement Windows candidate and manual Windows checklist remain.
 
 Windows observation 2026-08-30: KIE
@@ -912,11 +918,13 @@ Windows observation 2026-08-30: Fal.ai generation returned the same terminal
 `HTTP 405` for both items with two different models, `fal-ai/flux/schnell` and
 `ideogram/v4/fast`. The exported lifecycle shows four accepted submissions with
 distinct request IDs, followed by failure before any `provider_task_polled`;
-source tracing localizes 405 to the first status GET, not POST submit. The
-client currently reconstructs queue lifecycle routes instead of retaining the
-provider-supplied URLs. The same report proves that `run_started` mislabels Fal
-generation as `generation:kie` due to a hard-coded diagnostic route. Further
-paid Fal attempts are stopped; no runtime fix was made during observation.
+source tracing localizes 405 to the first lifecycle read, not POST submit. If
+status is immediately complete, that read can be the result URL, so the archive
+does not distinguish status from result. The client currently reconstructs
+queue lifecycle routes instead of retaining the provider-supplied URLs. The
+same report proves that `run_started` mislabels Fal generation as
+`generation:kie` due to a hard-coded diagnostic route. Further paid Fal
+attempts are stopped; no runtime fix was made during observation.
 
 Windows evidence 2026-08-30: a later KIE `gpt-image-2-text-to-image` run
 completed two prompts with two distinct task IDs, one downloaded result per

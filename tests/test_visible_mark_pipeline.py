@@ -415,7 +415,9 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                 "remover must not run for an existing alpha mask"
             )
             progress_messages = []
+            diagnostic_events = []
             worker.progress.connect(progress_messages.append)
+            worker.diagnostic.connect(diagnostic_events.append)
 
             result_path = worker._run_processing_pipeline(
                 str(source), None, str(raw_dir), 1, "file"
@@ -427,6 +429,14 @@ class VisibleMarkPipelineTests(unittest.TestCase):
             self.assertTrue(
                 any("alpha-маска" in message for message in progress_messages)
             )
+            stage_finished = next(
+                event
+                for event in diagnostic_events
+                if event["event"] == "stage_finished"
+                and event.get("stage") == "background_removal"
+            )
+            self.assertEqual(stage_finished["outcome"], "skipped")
+            self.assertEqual(stage_finished["status"], "already_alpha")
 
     def test_ui_passes_confirmed_regions_only_to_current_run(self):
         with tempfile.TemporaryDirectory(prefix="clipart-visible-ui-run-") as temp_dir:
