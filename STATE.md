@@ -112,9 +112,17 @@ The run queue also rejects the worker-start race and names a missing last file
 instead of reporting false batch success. Paid Fal.ai and Windows visual/
 packaged acceptance were not run and remain release blockers.
 
-Verification on Linux/offscreen Qt: 1109 unittest tests passed with 59
+Verification on Linux/offscreen Qt: 1112 unittest tests passed with 59
 documented skips; the 348-test focused processing/provider/metadata suite,
 Python compilation, diff check and sensitive-artifact scan also passed.
+
+The shared Results page now exposes a plain-language problem-file list for all
+workflows. Failed and cancelled items are separated; each row records the safe
+display name, failed stage, user-facing reason and attempt count. The same text
+can be copied or atomically exported as a UTF-8 `.txt`; existing retry, restart,
+folder and diagnostic controls remain in place.
+The focused shared-results and three-workflow regression gate passes 293 tests
+with 55 documented skips.
 
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 

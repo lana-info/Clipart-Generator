@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import v3_run_queue
+
 from PIL import Image
 from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
@@ -31,7 +33,9 @@ from v3_run_queue import (
     RunQueueError,
     RunQueueSession,
     RunResultsPage,
+    build_problem_file_report,
     build_safe_run_report,
+    export_problem_file_report,
     export_safe_run_report,
     format_elapsed_duration,
     transparency_candidate_paths,
@@ -138,6 +142,100 @@ class V3RunQueueTests(unittest.TestCase):
 
     def tearDown(self):
         self.app.processEvents()
+
+    def test_problem_file_report_separates_failures_from_cancelled_items(self):
+        session = RunQueueSession(
+            processing_request(
+                ".",
+                ["flower.png", "bird.png", "leaf.png"],
+            ),
+            ProjectMode.PROCESSING,
+        )
+        failed_remove, failed_save, cancelled = session.items
+        failed_remove.status = RunItemStatus.FAILED
+        failed_remove.short_message = "Сервис не сохранил прозрачность."
+        failed_remove.stage_statuses = {"background_removal": "failed"}
+        failed_remove.attempts = 2
+        failed_save.status = RunItemStatus.FAILED
+        failed_save.short_message = "Файл временно недоступен."
+        failed_save.stage_statuses = {"export": "failed"}
+        cancelled.status = RunItemStatus.CANCELLED
+        cancelled.short_message = "Не выполнялся после остановки."
+
+        report = build_problem_file_report(session)
+
+        self.assertIn("ОШИБКИ — 2", report)
+        self.assertIn("flower.png", report)
+        self.assertIn("Этап: удаление фона", report)
+        self.assertIn("Причина: Сервис не сохранил прозрачность.", report)
+        self.assertIn("Попыток: 2", report)
+        self.assertIn("bird.png", report)
+        self.assertIn("Этап: сохранение результата", report)
+        self.assertIn("НЕ ОБРАБОТАНЫ — 1", report)
+        self.assertIn("leaf.png", report)
+        self.assertNotIn("source_path", report)
+
+    def test_problem_file_report_exports_utf8_text_atomically(self):
+        with tempfile.TemporaryDirectory(prefix="v3-problem-report-") as temp:
+            root = Path(temp)
+            session = RunQueueSession(
+                processing_request(root, [root / "flower.png"]),
+                ProjectMode.PROCESSING,
+            )
+            session.items[0].status = RunItemStatus.FAILED
+            session.items[0].short_message = "Не удалось завершить обработку файла."
+            destination = root / "problem-files.txt"
+            destination.write_text("old", encoding="utf-8")
+            export_problem_file_report(session, destination)
+
+            self.assertTrue(destination.read_bytes().startswith(b"\xef\xbb\xbf"))
+            self.assertIn(
+                "flower.png",
+                destination.read_text(encoding="utf-8-sig"),
+            )
+            self.assertEqual(list(root.glob("*.tmp")), [])
+            with self.assertRaises(RunQueueError):
+                export_problem_file_report(session, root / "problem-files.json")
+
+    def test_results_page_shows_copies_and_saves_problem_file_list(self):
+        with tempfile.TemporaryDirectory(prefix="v3-problem-report-ui-") as temp:
+            root = Path(temp)
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            session = RunQueueSession(
+                processing_request(root, [root / "flower.png"]),
+                ProjectMode.PROCESSING,
+            )
+            session.items[0].status = RunItemStatus.FAILED
+            session.items[0].short_message = "Удаление фона не выполнено."
+            session.items[0].stage_statuses = {"background_removal": "failed"}
+            session.running = False
+            session.finished_at = session.started_at + 1
+            page = RunResultsPage(state)
+            page.set_session(session)
+            page.show()
+            self.app.processEvents()
+
+            self.assertTrue(hasattr(page, "problem_report_view"))
+            self.assertIn("flower.png", page.problem_report_view.toPlainText())
+            self.assertTrue(page.copy_problem_report_button.isVisible())
+            self.assertTrue(page.save_problem_report_button.isVisible())
+
+            page.copy_problem_report_button.click()
+            self.assertIn("flower.png", QApplication.clipboard().text())
+
+            destination = root / "failed-files.txt"
+            with patch.object(
+                v3_run_queue.QFileDialog,
+                "getSaveFileName",
+                return_value=(str(destination), "Text (*.txt)"),
+            ):
+                page.save_problem_report_button.click()
+            self.assertIn(
+                "flower.png",
+                destination.read_text(encoding="utf-8-sig"),
+            )
+            page.close()
+            page.deleteLater()
 
     def test_clipart_results_temporarily_hide_alpha_brush_editor(self):
         with tempfile.TemporaryDirectory(prefix="v3-results-alpha-hidden-") as temp:

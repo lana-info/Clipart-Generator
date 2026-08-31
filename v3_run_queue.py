@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QProgressBar,
+    QPlainTextEdit,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -1353,6 +1354,114 @@ def export_safe_run_report(
     return path
 
 
+_PROBLEM_STAGE_LABELS: dict[str, str] = {
+    "generation": "генерация",
+    "processing": "обработка изображения",
+    "visible_mark_cleanup": "удаление видимой метки",
+    "invisible_watermark_cleanup": "очистка невидимой метки",
+    "upscale_before": "апскейл до удаления фона",
+    "background_removal": "удаление фона",
+    "upscale_after": "апскейл после удаления фона",
+    "edge_cleanup": "очистка края",
+    "trim": "обрезка пустых краёв",
+    "unsharp": "резкость",
+    "metadata_cleanup": "очистка служебных данных",
+    "export_300_dpi": "установка 300 DPI",
+    "export": "сохранение результата",
+}
+
+
+def _problem_item_stage(item: RunItem) -> str:
+    failed = next(
+        (
+            stage
+            for stage, status in item.stage_statuses.items()
+            if status == "failed"
+        ),
+        "",
+    )
+    if not failed and item.failure_code in {
+        "missing_completion",
+        "output_path_rejected",
+    }:
+        failed = "export"
+    return _PROBLEM_STAGE_LABELS.get(failed, "завершение обработки")
+
+
+def build_problem_file_report(session: RunQueueSession) -> str:
+    """Build a plain-language list of failed and intentionally skipped items."""
+    if not isinstance(session, RunQueueSession):
+        raise TypeError("session must be a RunQueueSession")
+    failed = [item for item in session.items if item.status is RunItemStatus.FAILED]
+    cancelled = [
+        item for item in session.items if item.status is RunItemStatus.CANCELLED
+    ]
+    if not failed and not cancelled:
+        return ""
+
+    lines = [
+        "ПРОБЛЕМНЫЕ ФАЙЛЫ",
+        f"Всего в запуске: {len(session.items)}",
+        f"Ошибки: {len(failed)}",
+        f"Не обработаны: {len(cancelled)}",
+    ]
+
+    def append_section(title: str, items: list[RunItem]) -> None:
+        if not items:
+            return
+        lines.extend(("", f"{title} — {len(items)}"))
+        for number, item in enumerate(items, start=1):
+            lines.extend(
+                (
+                    f"{number}. {item.display_name}",
+                    f"   Этап: {_problem_item_stage(item)}",
+                    f"   Причина: {item.short_message}",
+                    f"   Попыток: {item.attempts}",
+                )
+            )
+
+    append_section("ОШИБКИ", failed)
+    append_section("НЕ ОБРАБОТАНЫ", cancelled)
+    return "\n".join(lines) + "\n"
+
+
+def export_problem_file_report(
+    session: RunQueueSession,
+    destination: str | os.PathLike[str],
+) -> Path:
+    path = Path(destination)
+    if path.suffix.casefold() != ".txt":
+        raise RunQueueError("Problem file report must use the .txt extension")
+    report = build_problem_file_report(session)
+    if not report:
+        raise RunQueueError("Run has no problem files")
+    payload = report.encode("utf-8-sig")
+    if len(payload) > MAX_REPORT_BYTES:
+        raise RunQueueError("Problem file report exceeds the supported size")
+    parent = path.parent.resolve(strict=False)
+    if not parent.is_dir():
+        raise RunQueueError("Problem file report parent directory must already exist")
+    path = parent / path.name
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=str(parent),
+    )
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temp_name, path)
+    except Exception:
+        try:
+            os.unlink(temp_name)
+        except OSError:
+            pass
+        raise
+    return path
+
+
 class RunQueue(QListWidget):
     def __init__(self, *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
         super().__init__()
@@ -1573,6 +1682,11 @@ class RunResultsPage(QWidget):
         self.queue.setMinimumHeight(360)
         self.queue.currentRowChanged.connect(self._selection_changed)
         self.queue.itemDoubleClicked.connect(self._open_transparency_item)
+        self.problem_report_view = QPlainTextEdit()
+        self.problem_report_view.setReadOnly(True)
+        self.problem_report_view.setMaximumHeight(220)
+        self.problem_report_view.setAccessibleName("Проблемные файлы")
+        self.problem_report_view.hide()
         self.viewer = BeforeAfterViewer()
         self.viewer.hide()
         self.transparency_preview = ClipartTransparencyPreview()
@@ -1696,7 +1810,33 @@ class RunResultsPage(QWidget):
         utility_primary_layout.addWidget(self.save_corrected_button)
         utility_primary_layout.addWidget(self.save_mask_button)
         utility_primary_layout.addStretch()
+        utility_problem = QWidget()
+        utility_problem_layout = QHBoxLayout(utility_problem)
+        utility_problem_layout.setContentsMargins(0, 0, 0, 0)
+        self.save_problem_report_button = V3Button(
+            "Сохранить список ошибок",
+            ButtonVariant.SECONDARY,
+        )
+        self.save_problem_report_button.clicked.connect(
+            self._save_problem_report
+        )
+        self.copy_problem_report_button = V3Button(
+            "Скопировать список",
+            ButtonVariant.SECONDARY,
+        )
+        self.copy_problem_report_button.clicked.connect(
+            self._copy_problem_report
+        )
+        self.problem_report_status = QLabel()
+        self.problem_report_status.setProperty("v3Small", True)
+        utility_problem_layout.addWidget(self.save_problem_report_button)
+        utility_problem_layout.addWidget(self.copy_problem_report_button)
+        utility_problem_layout.addWidget(self.problem_report_status)
+        utility_problem_layout.addStretch()
+        self.problem_report_actions = utility_problem
+        self.problem_report_actions.hide()
         utility_layout.addWidget(utility_primary)
+        utility_layout.addWidget(utility_problem)
         actions_layout.addWidget(workflow_actions)
         actions_layout.addWidget(utility_actions)
         self.workflow_actions = workflow_actions
@@ -1707,6 +1847,7 @@ class RunResultsPage(QWidget):
             self.progress_bar,
             self.current_label,
             self.queue,
+            self.problem_report_view,
             self.transparency_preview,
             self.processing_label,
             self.stages_label,
@@ -1725,6 +1866,7 @@ class RunResultsPage(QWidget):
             raise TypeError("session must be a RunQueueSession")
         self.session = session
         self._completion_shown_at = None
+        self.problem_report_status.clear()
         session.changed.connect(self.refresh_from_state)
         self.refresh_from_state()
 
@@ -1741,6 +1883,9 @@ class RunResultsPage(QWidget):
             self.check_transparency_button.hide()
             self.save_corrected_button.hide()
             self.save_mask_button.hide()
+            self.problem_report_view.clear()
+            self.problem_report_view.hide()
+            self.problem_report_actions.hide()
             self._selection_changed(-1)
             return
         self._transparency_paths = (
@@ -1793,6 +1938,14 @@ class RunResultsPage(QWidget):
         self.retry_button.setEnabled(retry_visible)
         self.finish_button.setEnabled(finish_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
+        problem_report = (
+            build_problem_file_report(session) if not session.running else ""
+        )
+        self.problem_report_view.setPlainText(problem_report)
+        self.problem_report_view.setVisible(bool(problem_report))
+        self.problem_report_actions.setVisible(bool(problem_report))
+        self.save_problem_report_button.setEnabled(bool(problem_report))
+        self.copy_problem_report_button.setEnabled(bool(problem_report))
         self._selection_changed(self.queue.currentRow())
         self._show_completion_if_needed(session)
 
@@ -2055,6 +2208,41 @@ class RunResultsPage(QWidget):
             QUrl.fromLocalFile(str(self.session.output_dir))
         ):
             self.summary_label.setText("Не удалось открыть папку результата.")
+
+    def _copy_problem_report(self) -> None:
+        report = self.problem_report_view.toPlainText()
+        if not report:
+            return
+        clipboard = QApplication.clipboard()
+        if clipboard is None:
+            self.problem_report_status.setText("Не удалось открыть буфер обмена.")
+            return
+        clipboard.setText(report)
+        self.problem_report_status.setText("Список скопирован.")
+
+    def _save_problem_report(self) -> None:
+        if self.session is None or not self.problem_report_view.toPlainText():
+            return
+        default = self.session.output_dir / (
+            f"problem-files-{self.session.operation_id[:8]}.txt"
+        )
+        destination, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить список ошибок",
+            str(default),
+            "Text (*.txt)",
+        )
+        if not destination:
+            return
+        try:
+            saved = export_problem_file_report(self.session, destination)
+            self.problem_report_status.setText(
+                f"Список сохранён: {saved.name}"
+            )
+        except (OSError, RunQueueError) as error:
+            self.problem_report_status.setText(
+                f"Не удалось сохранить список: {error}"
+            )
 
     def _save_corrected_png(self) -> None:
         if self.session is None or self.state.mode is not ProjectMode.CLIPART:
