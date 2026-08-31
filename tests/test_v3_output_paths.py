@@ -207,6 +207,30 @@ class V3OutputPathsTests(unittest.TestCase):
                 ],
             )
 
+    def test_rough_upscale_excludes_recraft_preparation_copy(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="rough-upscale-classification-") as temp:
+            workspace = Path(temp) / "workspace"
+            output = workspace / "output"
+            output.mkdir(parents=True)
+            worker = WorkerThread(
+                "mode2_process",
+                str(workspace),
+                {"workspace_root": str(workspace), "output_dir": str(output)},
+            )
+            raw_dir = Path(worker._create_run_raw_dir())
+            stamp = worker.run_stamp
+            prepared = raw_dir / f"file_upscaled_before_recraft_input_001_{stamp}.png"
+            provider_result = raw_dir / f"file_upscaled_before_fal_001_{stamp}.png"
+            Image.new("RGB", (4, 4), "red").save(prepared)
+            Image.new("RGB", (8, 8), "blue").save(provider_result)
+
+            worker._persist_rough_outputs(raw_dir)
+
+            published = sorted((workspace / "rough").glob("*.png"))
+            self.assertEqual([path.name for path in published], ["rough_01_upscaled-before.png"])
+            with Image.open(published[0]) as image:
+                self.assertEqual(image.size, (8, 8))
+
     def test_invalid_work_dir_falls_back_to_writable_output_dir(self) -> None:
         with tempfile.TemporaryDirectory(prefix="processing-invalid-workspace-") as temp:
             output_dir = Path(temp) / "exports"
