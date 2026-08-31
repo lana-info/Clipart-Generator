@@ -1392,6 +1392,31 @@ Verification:
   for owner acceptance.
 - [ ] Платный Windows quality test выполняет владелец в приложении.
 
+## Task 34 (3.1.1 acceptance follow-up): Preflight лимита Fal.ai Background Remover
+
+Status: Done in source — offline regression tests green; Windows rebuild not started
+
+Goal:
+Не начинать частичный платный batch, если выбранный Fal.ai Background Remover
+не сможет принять один или несколько локальных файлов из-за лимита 8 МиБ.
+
+Acceptance:
+- [x] До создания worker проверяется весь прямой local-input batch.
+- [x] Сообщение показывает число проблемных файлов, безопасные имена, размеры,
+  лимит и варианты действий без раскрытия полных путей.
+- [x] При одном oversized-файле блокируется весь запуск; ни один подходящий файл
+  не отправляется автоматически и Fal task не создаётся.
+- [x] Та же проверка повторяется непосредственно перед worker boundary.
+- [x] Уже пригодная alpha-маска и HTTPS-результат предыдущего KIE upscale не
+  блокируются, потому что remover не получает их как локальный data URI.
+- [x] После возврата с failed preflight кнопка «Далее» снова доступна.
+
+Verification:
+- [x] Новые regression tests были красными до соответствующих исправлений.
+- [x] Focused Processing/Fal suite: 71 passed и 4 subtests.
+- [x] Compilation и `git diff --check` прошли.
+- [ ] Windows installed UI acceptance.
+
 ## Исторические задачи 3.0
 
 `NEXT-TASK-009B` и `NEXT-TASK-009C` в `TASKS_3.0.ru.md` остаются историческим

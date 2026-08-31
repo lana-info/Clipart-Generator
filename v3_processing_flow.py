@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, UnidentifiedImageError
+
+from background_mask import has_usable_alpha
+from fal_provider import MAX_FAL_LOCAL_IMAGE_BYTES
 from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QImageReader, QPixmap
 from PyQt6.QtWidgets import (
@@ -326,6 +329,51 @@ def validate_processing_providers(operations: ImageOperationData) -> None:
         raise ProcessingFlowError(
             f"\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440: {error.args[0]}"
         ) from error
+
+
+def validate_processing_provider_inputs(
+    operations: ImageOperationData,
+    paths: Sequence[str],
+) -> None:
+    if not (
+        operations.remove_background
+        and operations.remove_background_provider == "fal"
+    ):
+        return
+    if operations.upscale_before and operations.upscale_before_provider == "kie":
+        return
+    oversized: list[tuple[str, int]] = []
+    for path in paths:
+        try:
+            size = Path(path).stat().st_size
+        except OSError as error:
+            raise ProcessingFlowError(
+                f"Файл недоступен: {Path(path).name or 'неизвестный файл'}"
+            ) from error
+        if size <= MAX_FAL_LOCAL_IMAGE_BYTES:
+            continue
+        with Image.open(path) as image:
+            if "A" in image.getbands() and has_usable_alpha(image):
+                continue
+        oversized.append((Path(path).name or "неизвестный файл", size))
+    if not oversized:
+        return
+    model_label = (
+        "Fal.ai Ideogram"
+        if operations.fal_remove_bg_model == "fal-ai/ideogram/remove-background"
+        else "Fal.ai"
+    )
+    shown = "; ".join(
+        f"{name} — {size / (1024 * 1024):.1f} МБ"
+        for name, size in oversized[:3]
+    )
+    remaining = len(oversized) - 3
+    suffix = f"; ещё {remaining}" if remaining > 0 else ""
+    raise ProcessingFlowError(
+        f"{model_label} не принимает {len(oversized)} из {len(paths)} файлов — "
+        f"они превышают 8 МБ: {shown}{suffix}. Уменьшите файлы, исключите их "
+        "или выберите другой удалитель фона."
+    )
 
 
 def duplicate_output_names(paths: Sequence[str]) -> tuple[str, ...]:
@@ -1229,6 +1277,10 @@ def build_processing_run_request(
     for path in state.processing.selected_files:
         inspect_local_image(path)
     validate_processing_providers(state.processing.operations)
+    validate_processing_provider_inputs(
+        state.processing.operations,
+        state.processing.selected_files,
+    )
     if uses_external_processing(state.processing.operations) and not external_transfer_consent:
         raise ProcessingFlowError(
             "Подтвердите разрешение на передачу файлов внешнему провайдеру"
@@ -1432,6 +1484,8 @@ class ProcessingFlowController(QObject):
             refresher()
         if StepId(step) is StepId.REVIEW_RUN:
             self._refresh_preflight()
+        else:
+            self.shell.next_button.setEnabled(True)
 
     def _request(self) -> ClipartRunRequest:
         file_issues = self.files_page.validation_issues()
@@ -1462,8 +1516,10 @@ class ProcessingFlowController(QObject):
                 )
         except Exception as error:
             self.review_page.set_preflight_status(str(error), ready=False)
+            self.shell.next_button.setEnabled(False)
             return
         self.review_page.set_preflight_status("Запуск готов.", ready=True)
+        self.shell.next_button.setEnabled(True)
 
     def _run_requested(self, mode: str) -> None:
         if mode == ProjectMode.PROCESSING.value:

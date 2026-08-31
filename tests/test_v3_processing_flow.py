@@ -469,6 +469,158 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 ("Fal.ai API Key",),
             )
 
+    def test_fal_remove_background_rejects_oversized_batch_before_worker(self):
+        with tempfile.TemporaryDirectory(prefix="processing-fal-size-") as temp:
+            root = Path(temp)
+            accepted = root / "accepted.png"
+            first_oversized = root / "rough_52_upscaled-before.png"
+            second_oversized = root / "rough_44_upscaled-before.png"
+            for path in (accepted, first_oversized, second_oversized):
+                Image.new("RGB", (12, 8), (120, 80, 30)).save(path)
+            with first_oversized.open("ab") as handle:
+                handle.truncate(9 * 1024 * 1024)
+            with second_oversized.open("ab") as handle:
+                handle.truncate(10 * 1024 * 1024)
+
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = temp
+            state.processing.selected_files = [
+                str(first_oversized),
+                str(accepted),
+                str(second_oversized),
+            ]
+            operations = state.processing.operations
+            operations.upscale_before = False
+            operations.unsharp = False
+            operations.remove_background = True
+            operations.remove_background_provider = "fal"
+            operations.fal_remove_bg_model = "fal-ai/ideogram/remove-background"
+
+            with self.assertRaises(ValueError) as raised:
+                build_processing_run_request(
+                    state,
+                    {"fal_api_key": "fal-test-key"},
+                    allow_full_image_changes=True,
+                    external_transfer_consent=True,
+                )
+
+            message = str(raised.exception)
+            self.assertIn("Fal.ai Ideogram", message)
+            self.assertIn("2 из 3", message)
+            self.assertIn(first_oversized.name, message)
+            self.assertIn(second_oversized.name, message)
+            self.assertIn("8 МБ", message)
+
+    def test_fal_oversized_preflight_disables_run_without_creating_worker(self):
+        with tempfile.TemporaryDirectory(prefix="processing-fal-preflight-") as temp:
+            source = Path(temp) / "oversized.png"
+            Image.new("RGB", (12, 8), (120, 80, 30)).save(source)
+            with source.open("ab") as handle:
+                handle.truncate(9 * 1024 * 1024)
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = temp
+            state.processing.selected_files = [str(source)]
+            state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
+            operations = state.processing.operations
+            operations.upscale_before = False
+            operations.remove_background = True
+            operations.remove_background_provider = "fal"
+            operations.fal_remove_bg_model = "fal-ai/ideogram/remove-background"
+            shell = AppShell(state)
+            factory = WorkerFactory()
+            controller = install_processing_flow(
+                shell,
+                runtime_settings_provider=lambda: {"fal_api_key": "fal-test-key"},
+                worker_factory=factory,
+            )
+
+            controller._refresh_preflight()
+
+            self.assertFalse(shell.next_button.isEnabled())
+            self.assertIn("oversized.png", controller.review_page.requirements_label.text())
+            self.assertIsNone(controller.start())
+            self.assertEqual(factory.workers, [])
+
+    def test_leaving_failed_fal_preflight_reenables_next_step(self):
+        with tempfile.TemporaryDirectory(prefix="processing-fal-back-") as temp:
+            source = Path(temp) / "oversized.png"
+            Image.new("RGB", (12, 8), (120, 80, 30)).save(source)
+            with source.open("ab") as handle:
+                handle.truncate(9 * 1024 * 1024)
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = temp
+            state.processing.selected_files = [str(source)]
+            state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
+            operations = state.processing.operations
+            operations.upscale_before = False
+            operations.remove_background = True
+            operations.remove_background_provider = "fal"
+            operations.fal_remove_bg_model = "fal-ai/ideogram/remove-background"
+            shell = AppShell(state)
+            controller = install_processing_flow(
+                shell,
+                runtime_settings_provider=lambda: {"fal_api_key": "fal-test-key"},
+                worker_factory=WorkerFactory(),
+            )
+            controller._refresh_preflight()
+            self.assertFalse(shell.next_button.isEnabled())
+
+            shell.go_back()
+
+            self.assertIs(state.current_step, StepId.PIPELINE)
+            self.assertTrue(shell.next_button.isEnabled())
+
+    def test_fal_size_preflight_allows_oversized_file_with_usable_alpha(self):
+        with tempfile.TemporaryDirectory(prefix="processing-fal-alpha-") as temp:
+            source = Path(temp) / "already-transparent.png"
+            image = Image.new("RGBA", (12, 8), (120, 80, 30, 255))
+            image.putpixel((0, 0), (120, 80, 30, 0))
+            image.save(source)
+            with source.open("ab") as handle:
+                handle.truncate(9 * 1024 * 1024)
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = temp
+            state.processing.selected_files = [str(source)]
+            operations = state.processing.operations
+            operations.upscale_before = False
+            operations.remove_background = True
+            operations.remove_background_provider = "fal"
+            operations.fal_remove_bg_model = "fal-ai/ideogram/remove-background"
+
+            request = build_processing_run_request(
+                state,
+                {"fal_api_key": "fal-test-key"},
+                allow_full_image_changes=True,
+                external_transfer_consent=True,
+            )
+
+            self.assertEqual(request.selected_files, [str(source)])
+
+    def test_fal_remove_size_preflight_allows_https_result_from_kie_upscale(self):
+        with tempfile.TemporaryDirectory(prefix="processing-kie-fal-size-") as temp:
+            source = Path(temp) / "large-source.png"
+            Image.new("RGB", (12, 8), (120, 80, 30)).save(source)
+            with source.open("ab") as handle:
+                handle.truncate(9 * 1024 * 1024)
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = temp
+            state.processing.selected_files = [str(source)]
+            operations = state.processing.operations
+            operations.upscale_before = True
+            operations.upscale_before_provider = "kie"
+            operations.remove_background = True
+            operations.remove_background_provider = "fal"
+            operations.fal_remove_bg_model = "fal-ai/ideogram/remove-background"
+
+            request = build_processing_run_request(
+                state,
+                {"kie_api_key": "kie-test-key", "fal_api_key": "fal-test-key"},
+                allow_full_image_changes=True,
+                external_transfer_consent=True,
+            )
+
+            self.assertEqual(request.selected_files, [str(source)])
+
     def test_processing_fal_cost_never_claims_zero(self):
         operations = ImageOperationData(
             upscale_before=True,
