@@ -11,6 +11,7 @@ import tempfile
 import threading
 import uuid
 import zipfile
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any, Callable, Mapping
@@ -23,7 +24,20 @@ DIAGNOSTIC_SCHEMA_VERSION = 2
 DEFAULT_SESSION_MAX_BYTES = 8 * 1024 * 1024
 DEFAULT_TOTAL_MAX_BYTES = 24 * 1024 * 1024
 DEFAULT_EVENT_MAX_BYTES = 16 * 1024
+DEFAULT_SESSION_MAX_EVENTS = 5_000
+DEFAULT_PRIORITY_EVENT_RESERVE = 1_024
 MAX_SESSIONS = 3
+
+_TERMINAL_EVENTS = frozenset(
+    {
+        "application_exit",
+        "run_cancelled",
+        "run_failed",
+        "run_finished",
+        "session_summary",
+        "unhandled_exception",
+    }
+)
 
 _ALLOWED_DETAILS = {
     "api_key",
@@ -125,6 +139,8 @@ class DiagnosticJournal:
         session_max_bytes: int = DEFAULT_SESSION_MAX_BYTES,
         total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
         event_max_bytes: int = DEFAULT_EVENT_MAX_BYTES,
+        session_max_events: int = DEFAULT_SESSION_MAX_EVENTS,
+        priority_event_reserve: int = DEFAULT_PRIORITY_EVENT_RESERVE,
     ) -> None:
         self.app_version = _safe_text(app_version, 64)
         self.directory = Path(app_data_root) / "diagnostics"
@@ -133,12 +149,26 @@ class DiagnosticJournal:
         self.session_max_bytes = max(512, int(session_max_bytes))
         self.total_max_bytes = max(self.session_max_bytes, int(total_max_bytes))
         self.event_max_bytes = max(512, min(int(event_max_bytes), self.session_max_bytes))
+        self.session_max_events = max(4, int(session_max_events))
+        self.priority_event_reserve = min(
+            max(1, int(priority_event_reserve)),
+            self.session_max_events - 2,
+        )
+        self._normal_event_limit = (
+            self.session_max_events - self.priority_event_reserve - 1
+        )
+        self._priority_byte_reserve = min(
+            512 * 1024,
+            self.session_max_bytes // 8,
+        )
         timestamp = self._now().astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         self.session_path: Path | None = self.directory / f"{timestamp}-{self.session_id}.jsonl"
         self._lock = threading.RLock()
         self._truncated = False
         self._dropped_events = 0
         self._sequence = 0
+        self._persisted_events = 0
+        self._poll_states: dict[tuple[str, ...], str] = {}
         self._memory_fallback: list[dict[str, Any]] = []
         try:
             self.directory.mkdir(parents=True, exist_ok=True)
@@ -186,25 +216,85 @@ class DiagnosticJournal:
             item["details"] = safe_details
         encoded = self._encode_bounded(item)
         with self._lock:
+            if not self._should_persist_event(item):
+                return item
             if self.session_path is None:
                 self._memory_fallback.append(item)
                 self._memory_fallback = self._memory_fallback[-200:]
                 return item
             try:
                 current_size = self.session_path.stat().st_size
-                reserve = 0 if self._truncated else len(self._truncated_marker_bytes())
-                if current_size + len(encoded) + reserve > self.session_max_bytes:
+                priority = self._is_priority_event(item)
+                marker_reserve = 0 if self._truncated else len(self._truncated_marker_bytes())
+                normal_capacity_reached = (
+                    not priority
+                    and (
+                        self._persisted_events >= self._normal_event_limit
+                        or current_size
+                        + len(encoded)
+                        + marker_reserve
+                        + self._priority_byte_reserve
+                        > self.session_max_bytes
+                    )
+                )
+                absolute_capacity_reached = (
+                    self._persisted_events + (0 if self._truncated else 1)
+                    >= self.session_max_events
+                    or current_size + len(encoded) + marker_reserve
+                    > self.session_max_bytes
+                )
+                if normal_capacity_reached or absolute_capacity_reached:
                     self._dropped_events += 1
                     self._write_truncated_marker(current_size)
                     return item
                 with self.session_path.open("ab") as handle:
                     handle.write(encoded)
                     handle.flush()
+                self._persisted_events += 1
                 self._prune()
             except OSError:
                 self._memory_fallback.append(item)
                 self._memory_fallback = self._memory_fallback[-200:]
         return item
+
+    @staticmethod
+    def _is_priority_event(item: Mapping[str, Any]) -> bool:
+        return (
+            str(item.get("severity") or "") in {"warning", "error"}
+            or str(item.get("outcome") or "") in {"failed", "cancelled"}
+            or str(item.get("event") or "") in _TERMINAL_EVENTS
+        )
+
+    def _should_persist_event(self, item: Mapping[str, Any]) -> bool:
+        if item.get("event") != "provider_task_polled":
+            return True
+        details = item.get("details")
+        if not isinstance(details, Mapping):
+            return True
+        key = tuple(
+            str(value or "")
+            for value in (
+                item.get("operation_id"),
+                details.get("provider"),
+                details.get("task"),
+                details.get("item_index"),
+                details.get("stage"),
+                details.get("model"),
+            )
+        )
+        state = str(details.get("provider_state") or details.get("status") or "")
+        previous_state = self._poll_states.get(key)
+        self._poll_states[key] = state
+        try:
+            attempt = int(details.get("poll_attempt") or 0)
+        except (TypeError, ValueError, OverflowError):
+            attempt = 0
+        return (
+            previous_state is None
+            or previous_state != state
+            or attempt <= 1
+            or attempt % 10 == 0
+        )
 
     def record_structured(
         self,
@@ -230,6 +320,7 @@ class DiagnosticJournal:
                     "provider_upload_finished": "Загрузка изображения провайдеру завершена.",
                     "provider_task_submitted": "Задача передана внешнему сервису.",
                     "provider_task_polled": "Получено состояние задачи внешнего сервиса.",
+                    "provider_task_recovery_deferred": "Восстановление задачи внешнего сервиса временно отложено.",
                     "provider_task_succeeded": "Внешний сервис успешно завершил задачу.",
                     "provider_task_failed": "Внешний сервис завершил задачу с ошибкой.",
                     "provider_result_downloaded": "Результат внешнего сервиса загружен.",
@@ -321,9 +412,13 @@ class DiagnosticJournal:
             return
         self._truncated = True
         encoded = self._truncated_marker_bytes()
-        if current_size + len(encoded) <= self.session_max_bytes:
+        if (
+            self._persisted_events < self.session_max_events
+            and current_size + len(encoded) <= self.session_max_bytes
+        ):
             with self.session_path.open("ab") as handle:
                 handle.write(encoded)
+            self._persisted_events += 1
 
     def _truncated_marker_bytes(self) -> bytes:
         marker = {
@@ -367,6 +462,7 @@ class DiagnosticJournal:
         events: list[dict[str, Any]] = []
         paths = sorted(self.directory.glob("*.jsonl"), reverse=True) if self.directory.is_dir() else []
         for path in paths[:MAX_SESSIONS]:
+            recent: deque[dict[str, Any]] = deque(maxlen=self.session_max_events)
             try:
                 with path.open("r", encoding="utf-8") as handle:
                     for line in handle:
@@ -375,9 +471,10 @@ class DiagnosticJournal:
                         except (ValueError, UnicodeError):
                             continue
                         if isinstance(item, dict) and item.get("schema_version") in {1, 2}:
-                            events.append(item)
+                            recent.append(item)
             except OSError:
                 continue
+            events.extend(recent)
         events.extend(self._memory_fallback)
         return sorted(
             events,
@@ -387,7 +484,7 @@ class DiagnosticJournal:
                 _event_sequence(item),
             ),
             reverse=True,
-        )
+        )[: self.session_max_events * MAX_SESSIONS]
 
     @staticmethod
     def format_event(event: Mapping[str, Any]) -> str:

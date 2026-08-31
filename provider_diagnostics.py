@@ -22,6 +22,7 @@ _EVENTS = frozenset(
         "provider_upload_finished",
         "provider_task_submitted",
         "provider_task_polled",
+        "provider_task_recovery_deferred",
         "provider_task_succeeded",
         "provider_task_failed",
         "provider_result_downloaded",
@@ -221,6 +222,9 @@ def build_provider_event(event: str, **values: object) -> dict[str, object]:
         result["severity"] = "error"
         if event_name == "item_finished":
             result["summary"] = "Обработка изображения завершилась с ошибкой."
+    elif event_name == "provider_task_recovery_deferred":
+        result["severity"] = "warning"
+        result["summary"] = "Восстановление задачи внешнего сервиса временно отложено."
     elif "severity" not in result:
         result["severity"] = "error" if event_name.endswith("_failed") else "info"
     return result

@@ -98,6 +98,121 @@ class DiagnosticJournalTests(unittest.TestCase):
                 1,
             )
 
+    def test_event_count_limit_preserves_late_error_and_session_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(
+                Path(temp),
+                app_version="3.1",
+                session_max_bytes=64 * 1024,
+                total_max_bytes=64 * 1024,
+                session_max_events=8,
+                priority_event_reserve=3,
+            )
+            for attempt in range(30):
+                journal.record(
+                    "stage_updated",
+                    "Изменилось состояние обработки.",
+                    details={"poll_attempt": attempt, "status": "running"},
+                )
+            journal.record(
+                "provider_task_failed",
+                "Внешний сервис завершил задачу с ошибкой.",
+                severity="error",
+                outcome="failed",
+                details={"provider": "kie", "error_code": "422"},
+            )
+            journal.close()
+
+            events = journal.read_events()
+
+            self.assertLessEqual(len(events), 8)
+            self.assertTrue(any(item["event"] == "log_truncated" for item in events))
+            self.assertTrue(any(item["event"] == "provider_task_failed" for item in events))
+            self.assertTrue(any(item["event"] == "session_summary" for item in events))
+
+    def test_repeated_polling_is_sampled_but_state_changes_are_kept(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.1")
+            for attempt in range(1, 13):
+                journal.record_structured(
+                    {
+                        "event": "provider_task_polled",
+                        "provider": "kie",
+                        "task": "task-sampled",
+                        "provider_state": "waiting",
+                        "poll_attempt": attempt,
+                    }
+                )
+            journal.record_structured(
+                {
+                    "event": "provider_task_polled",
+                    "provider": "kie",
+                    "task": "task-sampled",
+                    "provider_state": "processing",
+                    "poll_attempt": 13,
+                }
+            )
+
+            attempts = [
+                item["details"]["poll_attempt"]
+                for item in journal.read_events()
+                if item["event"] == "provider_task_polled"
+            ]
+
+            self.assertEqual(sorted(attempts), [1, 10, 13])
+
+    def test_recovery_deferred_keeps_provider_task_and_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.1")
+            journal.record_structured(
+                {
+                    "event": "provider_task_recovery_deferred",
+                    "provider": "fal",
+                    "model": "fal-ai/flux/schnell",
+                    "task": "safe-task-id",
+                    "outcome": "deferred",
+                    "error_message": "temporary transport failure",
+                }
+            )
+
+            event = journal.read_events()[0]
+
+            self.assertEqual(event["event"], "provider_task_recovery_deferred")
+            self.assertEqual(event["severity"], "warning")
+            self.assertEqual(event["details"]["provider"], "fal")
+            self.assertEqual(event["details"]["task"], "safe-task-id")
+
+    def test_read_events_bounds_oversized_journal_from_older_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(
+                Path(temp),
+                app_version="3.1",
+                session_max_events=8,
+                priority_event_reserve=3,
+            )
+            journal.session_path.write_text(
+                "".join(
+                    json.dumps(
+                        {
+                            "schema_version": 2,
+                            "timestamp": f"2030-01-01T00:00:{index:02d}+00:00",
+                            "sequence": index,
+                            "event": "legacy_poll",
+                            "summary": "old",
+                            "session_id": "old-session",
+                        }
+                    )
+                    + "\n"
+                    for index in range(30)
+                ),
+                encoding="utf-8",
+            )
+
+            events = journal.read_events()
+
+            self.assertEqual(len(events), 8)
+            self.assertEqual(events[0]["sequence"], 29)
+
     def test_unwritable_journal_falls_back_to_memory_without_blocking(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.object(
             Path, "mkdir", side_effect=PermissionError("denied")
