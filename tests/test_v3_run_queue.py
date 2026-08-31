@@ -287,7 +287,7 @@ class V3RunQueueTests(unittest.TestCase):
 
             editor = controller.pages[StepId.TRANSPARENCY]
             self.assertIs(shell.current_page, editor)
-            self.assertEqual(editor.current_path, existing_output)
+            self.assertTrue(os.path.samefile(editor.current_path, existing_output))
             shell.deleteLater()
 
     def test_transparency_candidates_reject_ready_symlink_outside_output(self):
@@ -376,7 +376,7 @@ class V3RunQueueTests(unittest.TestCase):
 
             editor = controller.pages[StepId.TRANSPARENCY]
             self.assertIs(shell.current_page, editor)
-            self.assertEqual(editor.current_path, existing_output)
+            self.assertTrue(os.path.samefile(editor.current_path, existing_output))
             shell.deleteLater()
 
     def test_elapsed_duration_is_human_readable(self):
