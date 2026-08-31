@@ -1145,6 +1145,42 @@ class V3RunQueueTests(unittest.TestCase):
                     root / "missing" / "run-report.json",
                 )
 
+    def test_safe_report_keeps_selected_fal_upscale_model_and_scale(self):
+        request = processing_request(".", ["source.png"])
+        request.settings.update(
+            {
+                "upscale": True,
+                "upscale_provider": "fal",
+                "fal_upscale_model": "topaz/upscale/image/precision",
+                "fal_upscale_scale": 4,
+            }
+        )
+        session = RunQueueSession(request, ProjectMode.PROCESSING)
+
+        report = build_safe_run_report(session)
+
+        self.assertEqual(
+            report["settings"]["fal_upscale_model"],
+            "topaz/upscale/image/precision",
+        )
+        self.assertEqual(report["settings"]["fal_upscale_scale"], "4")
+
+    def test_safe_report_normalizes_bria_to_fixed_two_x(self):
+        request = processing_request(".", ["source.png"])
+        request.settings.update(
+            {
+                "upscale": True,
+                "upscale_provider": "fal",
+                "fal_upscale_model": "bria/upscale/creative",
+                "fal_upscale_scale": 4,
+            }
+        )
+        session = RunQueueSession(request, ProjectMode.PROCESSING)
+
+        report = build_safe_run_report(session)
+
+        self.assertEqual(report["settings"]["fal_upscale_scale"], "2")
+
     def test_controller_opens_results_and_retries_only_error(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-controller-") as temp:
             state = ProjectState(

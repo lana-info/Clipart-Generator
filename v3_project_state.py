@@ -11,7 +11,10 @@ from typing import Any, Mapping, Sequence
 
 from chroma_key import KEY_COLORS
 from v3_provider_registry import (
+    FAL_BRIA_UPSCALE_MODEL_ID,
     KIE_TOPAZ_MODEL_ID,
+    normalize_fal_upscale_model,
+    normalize_fal_upscale_factor,
     normalize_kie_upscale_model,
     normalize_topaz_upscale_factor,
 )
@@ -477,8 +480,8 @@ class ImageOperationData:
     upscale_factor: int = 4
     kie_upscale_model: str = KIE_TOPAZ_MODEL_ID
     kie_upscale_after_model: str = KIE_TOPAZ_MODEL_ID
-    fal_upscale_model: str = "fal-ai/esrgan"
-    fal_upscale_after_model: str = "fal-ai/esrgan"
+    fal_upscale_model: str = FAL_BRIA_UPSCALE_MODEL_ID
+    fal_upscale_after_model: str = FAL_BRIA_UPSCALE_MODEL_ID
     fal_upscale_scale: int = 4
     fal_upscale_after_scale: int = 4
     local_realesrgan_profile: str = "clipart"
@@ -533,8 +536,6 @@ class ImageOperationData:
             self.upscale_before_provider,
             limit=100,
         ) or "kie"
-        if self.upscale_before_provider == "fal":
-            self.upscale_before_provider = "kie"
         self.upscale_after_provider = _text(
             self.upscale_after_provider,
             limit=100,
@@ -548,9 +549,14 @@ class ImageOperationData:
         self.kie_upscale_after_model = normalize_kie_upscale_model(
             _text(self.kie_upscale_after_model, limit=200)
         )
-        self.fal_upscale_model = "fal-ai/esrgan"
-        self.fal_upscale_after_model = "fal-ai/esrgan"
-        self.fal_upscale_scale = self._realesrgan_scale(self.fal_upscale_scale)
+        self.fal_upscale_model = normalize_fal_upscale_model(
+            _text(self.fal_upscale_model, limit=200)
+        )
+        self.fal_upscale_after_model = FAL_BRIA_UPSCALE_MODEL_ID
+        self.fal_upscale_scale = normalize_fal_upscale_factor(
+            self.fal_upscale_model,
+            self.fal_upscale_scale,
+        )
         self.fal_upscale_after_scale = self._realesrgan_scale(
             self.fal_upscale_after_scale
         )
@@ -694,9 +700,11 @@ class ImageOperationData:
                 "kie_upscale_after_model",
                 config.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID),
             ),
-            fal_upscale_model=config.get("fal_upscale_model", "fal-ai/esrgan"),
+            fal_upscale_model=config.get(
+                "fal_upscale_model", FAL_BRIA_UPSCALE_MODEL_ID
+            ),
             fal_upscale_after_model=config.get(
-                "fal_upscale_after_model", "fal-ai/esrgan"
+                "fal_upscale_after_model", FAL_BRIA_UPSCALE_MODEL_ID
             ),
             fal_upscale_scale=config.get("fal_upscale_scale", 4),
             fal_upscale_after_scale=config.get("fal_upscale_after_scale", 4),

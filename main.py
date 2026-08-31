@@ -122,10 +122,13 @@ from model_catalog import (
     validate_generation_contract,
 )
 from v3_provider_registry import (
+    FAL_BRIA_UPSCALE_MODEL_ID,
     KIE_TOPAZ_MODEL_ID,
     TOPAZ_MAX_FILE_BYTES,
     TOPAZ_MAX_OUTPUT_SIDE,
     normalize_kie_upscale_model,
+    normalize_fal_upscale_model,
+    normalize_fal_upscale_factor,
     normalize_topaz_upscale_factor,
 )
 
@@ -1085,12 +1088,15 @@ class WorkerThread(QThread):
         self.kie_upscale_after_model = normalize_kie_upscale_model(
             settings.get("kie_upscale_after_model", self.kie_upscale_model)
         )
-        self.fal_upscale_model = "fal-ai/esrgan"
-        self.fal_upscale_after_model = "fal-ai/esrgan"
+        self.fal_upscale_model = normalize_fal_upscale_model(
+            settings.get("fal_upscale_model", FAL_BRIA_UPSCALE_MODEL_ID)
+        )
+        self.fal_upscale_after_model = FAL_BRIA_UPSCALE_MODEL_ID
         self._has_fal_upscale_scale = "fal_upscale_scale" in settings
         self._has_fal_upscale_after_scale = "fal_upscale_after_scale" in settings
-        self.fal_upscale_scale = normalize_local_realesrgan_scale(
-            settings.get("fal_upscale_scale", 4)
+        self.fal_upscale_scale = normalize_fal_upscale_factor(
+            self.fal_upscale_model,
+            settings.get("fal_upscale_scale", 4),
         )
         self.fal_upscale_after_scale = normalize_local_realesrgan_scale(
             settings.get("fal_upscale_after_scale", 4)
@@ -2289,9 +2295,18 @@ class WorkerThread(QThread):
     def _uses_any_fal_upscale(self):
         return self._uses_fal_upscale() or self._uses_fal_upscale_after()
 
-    def _upscale_pass_factor(self, provider, local_scale, kie_model):
+    def _upscale_pass_factor(
+        self,
+        provider,
+        local_scale,
+        kie_model,
+        fal_model,
+        fal_scale,
+    ):
         if provider == "local_realesrgan":
             return normalize_local_realesrgan_scale(local_scale)
+        if provider == "fal":
+            return normalize_fal_upscale_factor(fal_model, fal_scale)
         return self._resolve_upscale_factor(kie_model)
 
     def _combined_upscale_factor(self):
@@ -2301,12 +2316,16 @@ class WorkerThread(QThread):
                 self.upscale_provider,
                 self.local_realesrgan_scale,
                 self.kie_upscale_model,
+                self.fal_upscale_model,
+                self.fal_upscale_scale,
             )
         if self.upscale_after:
             factor *= self._upscale_pass_factor(
                 self.upscale_after_provider,
                 self.local_realesrgan_after_scale,
                 self.kie_upscale_after_model,
+                self.fal_upscale_after_model,
+                self.fal_upscale_after_scale,
             )
         return factor
 
@@ -2572,7 +2591,6 @@ class WorkerThread(QThread):
                 reuse_alpha = False
                 if (
                     self.skip_remover_for_alpha
-                    and not current_url
                     and current_path
                     and os.path.isfile(current_path)
                 ):
@@ -2871,11 +2889,22 @@ class WorkerThread(QThread):
             if provider == "fal"
             else kie_model
         )
+        fal_scale = local_scale
+        if provider == "fal":
+            if stage == "upscale_after" and self._has_fal_upscale_after_scale:
+                fal_scale = self.fal_upscale_after_scale
+            elif stage != "upscale_after" and self._has_fal_upscale_scale:
+                fal_scale = self.fal_upscale_scale
+        effective_scale = (
+            normalize_fal_upscale_factor(upscale_model, fal_scale)
+            if provider == "fal"
+            else local_scale
+            if provider == "local_realesrgan"
+            else self._resolve_upscale_factor(kie_model)
+        )
         self._set_provider_diagnostic_context(stage, provider, upscale_model)
         upscale_parameters = {
-            "scale": local_scale
-            if provider in {"local_realesrgan", "fal"}
-            else self._resolve_upscale_factor(kie_model)
+            "scale": effective_scale
         }
         self._emit_diagnostic(
             "stage_started",
@@ -2886,18 +2915,13 @@ class WorkerThread(QThread):
         )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "fal":
-            fal_scale = local_scale
-            if stage == "upscale_after" and self._has_fal_upscale_after_scale:
-                fal_scale = self.fal_upscale_after_scale
-            elif stage != "upscale_after" and self._has_fal_upscale_scale:
-                fal_scale = self.fal_upscale_scale
             current_url = self._fal_source_url(current_path, current_url)
             with self._provider_lease("fal"):
                 current_url = self._fal_process_image(
                     current_url,
                     operation="upscale",
                     model_id=upscale_model,
-                    scale=fal_scale,
+                    scale=effective_scale,
                 )
             current_path = os.path.join(
                 raw_dir, f"{prefix}_{step_name}_fal_{idx:03d}_{self.run_stamp}.png"
@@ -2998,6 +3022,8 @@ class WorkerThread(QThread):
         return {}
 
     def _fal_process_image(self, image_url, *, operation, model_id, scale=2, parameters=None):
+        if operation == "upscale":
+            scale = normalize_fal_upscale_factor(model_id, scale)
         self._ensure_fal_cost_confirmed()
         client = FalClient(
             FalConfig(
@@ -7698,6 +7724,11 @@ class MainWindow(QMainWindow):
     def _ui_upscale_pass_factor(self, provider_combo, local_scale_combo, kie_model_combo):
         if provider_combo.currentData() == "local_realesrgan":
             return normalize_local_realesrgan_scale(local_scale_combo.currentData() or 4)
+        if provider_combo.currentData() == "fal":
+            return normalize_fal_upscale_factor(
+                self.config.get("fal_upscale_model", FAL_BRIA_UPSCALE_MODEL_ID),
+                self.config.get("fal_upscale_scale", 2),
+            )
         model_name = kie_model_combo.currentText().strip()
         if model_name == KIE_TOPAZ_MODEL_ID:
             return normalize_topaz_upscale_factor(

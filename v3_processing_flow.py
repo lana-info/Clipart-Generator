@@ -350,10 +350,13 @@ def estimate_processing_cost(
     }
     total = Decimal("0")
     complete = True
+    fal_selected = False
     if operations.upscale_before and operations.upscale_before_provider == "kie":
         price = prices.get(operations.kie_upscale_model)
         complete = complete and price is not None
         total += (price or Decimal("0")) * file_count
+    elif operations.upscale_before and operations.upscale_before_provider == "fal":
+        fal_selected = True
     if operations.upscale_after and operations.upscale_after_provider == "kie":
         price = prices.get(operations.kie_upscale_after_model)
         complete = complete and price is not None
@@ -365,8 +368,12 @@ def estimate_processing_cost(
             total += (price or Decimal("0")) * file_count
         elif operations.remove_background_provider == "photoroom":
             total += Decimal("0.02") * file_count
+        elif operations.remove_background_provider == "fal":
+            fal_selected = True
     if not uses_external_processing(operations):
         return "локально, без оплаты API"
+    if fal_selected:
+        return "Fal.ai: стоимость не рассчитана"
     if not complete:
         return "стоимость рассчитана не полностью"
     return f"ориентировочно ${total:.3f}"
@@ -425,10 +432,20 @@ def missing_processing_runtime_requirements(
         if not settings.get(enabled_field):
             continue
         provider_id = str(settings.get(provider_field) or "")
-        api_key_name = "photoroom_api_key" if provider_id == "photoroom" else "kie_api_key"
+        api_key_name = (
+            "photoroom_api_key"
+            if provider_id == "photoroom"
+            else "fal_api_key"
+            if provider_id == "fal"
+            else "kie_api_key"
+        )
         if provider_requires_api_key(provider_id) and not str(settings.get(api_key_name) or "").strip():
             add_missing(
-                "KIE API Key" if api_key_name == "kie_api_key" else "PhotoRoom API Key"
+                "KIE API Key"
+                if api_key_name == "kie_api_key"
+                else "PhotoRoom API Key"
+                if api_key_name == "photoroom_api_key"
+                else "Fal.ai API Key"
             )
     needs_local_upscale = bool(
         (

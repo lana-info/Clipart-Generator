@@ -140,12 +140,22 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         price_note="model pricing must be refreshed before live use",
     ),
     FalEndpointProfile(
-        model_id="fal-ai/esrgan",
+        model_id="bria/upscale/creative",
         operation="upscale",
         supports_references=True,
-        preserves_alpha=None,
+        preserves_alpha=True,
+        output_formats=("png",),
+        price_note="$0.04 per image; refresh before live use",
+        parameter_names=("preserve_alpha",),
+    ),
+    FalEndpointProfile(
+        model_id="topaz/upscale/image/precision",
+        operation="upscale",
+        supports_references=True,
+        preserves_alpha=False,
         output_formats=("png", "jpeg"),
-        price_note="model pricing must be refreshed before live use",
+        price_note="$0.08 per started 24 MP of output; refresh before live use",
+        parameter_names=("model", "upscale_factor", "output_format"),
     ),
 )
 

@@ -138,6 +138,67 @@ class UpscalePositionTests(unittest.TestCase):
         self.assertFalse(old_disabled.upscale)
         self.assertFalse(old_disabled.upscale_after)
 
+    def test_fal_combined_factor_matches_selected_endpoint_contract(self):
+        bria = main.WorkerThread(
+            "mode2_process",
+            ".",
+            processing_settings(
+                upscale_provider="fal",
+                fal_upscale_model="bria/upscale/creative",
+                fal_upscale_scale=4,
+                remove_bg=False,
+            ),
+        )
+        topaz = main.WorkerThread(
+            "mode2_process",
+            ".",
+            processing_settings(
+                upscale_provider="fal",
+                fal_upscale_model="topaz/upscale/image/precision",
+                fal_upscale_scale=4,
+                remove_bg=False,
+            ),
+        )
+
+        self.assertEqual(bria._combined_upscale_factor(), 2)
+        self.assertEqual(topaz._combined_upscale_factor(), 4)
+
+    def test_fal_ui_total_factor_matches_selected_endpoint_contract(self):
+        fal_provider = types.SimpleNamespace(currentData=lambda: "fal")
+        unused_combo = types.SimpleNamespace()
+
+        bria_window = types.SimpleNamespace(
+            config={
+                "fal_upscale_model": "bria/upscale/creative",
+                "fal_upscale_scale": 4,
+            }
+        )
+        topaz_window = types.SimpleNamespace(
+            config={
+                "fal_upscale_model": "topaz/upscale/image/precision",
+                "fal_upscale_scale": 4,
+            }
+        )
+
+        self.assertEqual(
+            main.MainWindow._ui_upscale_pass_factor(
+                bria_window,
+                fal_provider,
+                unused_combo,
+                unused_combo,
+            ),
+            2,
+        )
+        self.assertEqual(
+            main.MainWindow._ui_upscale_pass_factor(
+                topaz_window,
+                fal_provider,
+                unused_combo,
+                unused_combo,
+            ),
+            4,
+        )
+
     def test_after_pass_can_use_kie_and_requires_only_its_selected_key(self):
         with tempfile.TemporaryDirectory(prefix="clipart-upscale-after-kie-") as temp_dir:
             temp_path = Path(temp_dir)

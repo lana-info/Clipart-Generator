@@ -20,6 +20,7 @@ from v3_processing_flow import (
     ProcessingReviewRunPage,
     apply_processing_recipe,
     build_processing_run_request,
+    estimate_processing_cost,
     inspect_local_image,
     install_processing_flow,
     missing_processing_runtime_requirements,
@@ -439,6 +440,47 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 missing_processing_runtime_requirements(request),
                 ("KIE API Key",),
             )
+
+    def test_fal_upscale_requires_fal_key_in_processing_mode(self):
+        with tempfile.TemporaryDirectory(prefix="processing-fal-key-") as temp:
+            state, _ = self.make_state(temp)
+            operations = state.processing.operations
+            operations.upscale_before = True
+            operations.upscale_before_provider = "fal"
+            operations.fal_upscale_model = "bria/upscale/creative"
+            operations.remove_background = False
+            request = build_processing_run_request(
+                state,
+                {"fal_api_key": "fal-test-key"},
+                allow_full_image_changes=True,
+                external_transfer_consent=True,
+            )
+
+            self.assertEqual(missing_processing_runtime_requirements(request), ())
+
+            missing = build_processing_run_request(
+                state,
+                {"kie_api_key": "kie-test-key"},
+                allow_full_image_changes=True,
+                external_transfer_consent=True,
+            )
+            self.assertEqual(
+                missing_processing_runtime_requirements(missing),
+                ("Fal.ai API Key",),
+            )
+
+    def test_processing_fal_cost_never_claims_zero(self):
+        operations = ImageOperationData(
+            upscale_before=True,
+            upscale_before_provider="fal",
+            fal_upscale_model="topaz/upscale/image/precision",
+            remove_background=False,
+        )
+
+        text = estimate_processing_cost(operations, 3)
+
+        self.assertEqual(text, "Fal.ai: стоимость не рассчитана")
+        self.assertNotIn("$0.000", text)
 
     def test_visible_mark_cleanup_is_local_but_requires_full_image_opt_in(self):
         with tempfile.TemporaryDirectory(prefix="processing-visible-mark-") as temp:

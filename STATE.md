@@ -2,6 +2,35 @@
 
 Updated: 2026-08-31
 
+## Windows acceptance follow-up: Fal.ai replacement upscalers — 2026-08-31
+
+The owner approved two replacements for the rejected Fal ESRGAN in the first
+upscale stage. `Bria Creative 2×` is wired to `bria/upscale/creative` with an
+explicit `preserve_alpha=true`; its fixed scale does not expose a scale control.
+`Topaz Precision` is wired to `topaz/upscale/image/precision` with `Standard V2`,
+PNG output and the existing 2×/4× selector. Fal remains unavailable in the
+hidden second upscale-after-background-removal stage. Legacy `fal-ai/esrgan`
+selections normalize to Bria and ESRGAN is absent from the visible and runtime
+capability catalogs.
+
+Project state, worker routing, Fal task fingerprint/recovery and the Clipart
+Fal cost-quantity refresh include the selected replacement model. Processing
+preflight now checks the Fal key rather than the KIE key; until a dedicated
+Processing pricing refresh is designed, its review says that Fal cost is not
+calculated instead of promising `$0.000`. Structured stage diagnostics and the
+safe run report retain the selected model and effective scale. Contract,
+payload, state, UI and worker integration were verified offline. When Bria
+already returns usable alpha, the following background remover is skipped so
+the edge is not processed twice and no redundant paid task is created. No paid Fal
+request was made; Windows quality/alpha acceptance is intentionally assigned to
+the owner inside the application.
+
+Verification after the review fixes: 361 focused tests and the complete 1066
+test offline suite pass, with 58 documented skips. Compilation, sensitive scan
+and diff check pass. The fresh automatic Chroma benchmark is unchanged at alpha
+IoU `0.968704`, alpha MAE `0.018194`, zero background leakage and zero opaque
+subject loss. No Windows build or live provider request was started.
+
 ## Windows acceptance follow-up: recoverable Chroma and Fal ESRGAN retirement — 2026-08-31
 
 A safe Local Chroma ambiguity previously escaped through the fatal stage
@@ -13,11 +42,11 @@ final trim are bypassed, and the ready result asks for manual correction.
 Read/write/corrupt-image failures remain fatal. Indexed progress keeps this
 status attached to the correct item in a parallel batch.
 
-The only Fal upscale endpoint was `fal-ai/esrgan`; the owner rejected its
-Windows output quality. Fal is removed from both upscale provider lists and
-legacy saved selections migrate to KIE before removal or Local Real-ESRGAN
-after removal. Fal generation and Fal background removal are unchanged. No new
-paid endpoint was added without a comparative test.
+The only Fal upscale endpoint at this checkpoint was `fal-ai/esrgan`; the owner
+rejected its Windows output quality. It was removed from both upscale provider
+lists. This historical state is superseded for the first upscale by the Bria
+and Topaz Precision follow-up above; the second upscale remains hidden. Fal
+generation and Fal background removal are unchanged.
 
 Verification: focused suite 274 passed plus 40 subtests with one expected
 missing-binary skip; full offline suite 1069 passed plus 146 subtests, 57

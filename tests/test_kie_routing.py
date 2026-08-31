@@ -454,6 +454,65 @@ class KieRoutingTests(unittest.TestCase):
                 ],
             )
 
+    def test_bria_upscale_recovery_uses_fixed_two_x_fingerprint(self):
+        with tempfile.TemporaryDirectory() as temp:
+            model_id = "bria/upscale/creative"
+            image_url = "https://cdn.example/input.png"
+            first = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            first.fal_task_journal.upsert(
+                "existing-bria-task",
+                "upscale",
+                model_id,
+                "queued",
+                input_fingerprint=first._paid_task_fingerprint(
+                    {
+                        "image_url": image_url,
+                        "scale": 2,
+                        "parameters": {},
+                    }
+                ),
+            )
+            restarted = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            calls = []
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def run_image_operation(self, *_args, **_kwargs):
+                    calls.append("POST")
+                    raise AssertionError("restart must not submit another paid task")
+
+                def wait_for_result(self, request_id, *, on_status, **_kwargs):
+                    calls.append(("GET", request_id))
+                    on_status("completed")
+                    return {
+                        "request_id": request_id,
+                        "status": "completed",
+                        "result": {
+                            "image": {"url": "https://cdn.example/recovered.png"}
+                        },
+                    }
+
+            with patch("main.FalClient", FakeFalClient):
+                result = restarted._fal_process_image(
+                    image_url,
+                    operation="upscale",
+                    model_id=model_id,
+                    scale=4,
+                )
+
+            self.assertEqual(result, "https://cdn.example/recovered.png")
+            self.assertEqual(calls, [("GET", "existing-bria-task")])
+
     def test_fal_restart_never_reuses_a_task_for_a_changed_prompt(self):
         with tempfile.TemporaryDirectory() as temp:
             model_id = "fal-ai/flux/schnell"
@@ -587,7 +646,7 @@ class KieRoutingTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "подтвердите актуальную цену"):
             worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
 
-    def test_fal_upscale_processing_pass_uses_fal_endpoint_and_downloads_result(self):
+    def test_fal_bria_upscale_pass_uses_alpha_safe_endpoint_and_downloads_result(self):
         with tempfile.TemporaryDirectory(prefix="fal-upscale-") as temp:
             source = Path(temp) / "source.png"
             create_rgb_source(source)
@@ -607,6 +666,11 @@ class KieRoutingTests(unittest.TestCase):
                 lambda _self, _url, output_path: Path(output_path).write_bytes(b"result"),
                 worker,
             )
+            diagnostics = []
+            worker._emit_diagnostic = types.MethodType(
+                lambda _self, event, **fields: diagnostics.append((event, fields)),
+                worker,
+            )
 
             output_path, output_url, local_result = worker._run_upscale_pass(
                 str(source),
@@ -621,11 +685,110 @@ class KieRoutingTests(unittest.TestCase):
             )
 
         self.assertEqual(calls["operation"], "upscale")
-        self.assertEqual(calls["model_id"], "fal-ai/esrgan")
+        self.assertEqual(calls["model_id"], "bria/upscale/creative")
         self.assertEqual(calls["scale"], 2)
+        self.assertEqual(diagnostics[0][1]["parameters"]["scale"], 2)
         self.assertTrue(output_path.endswith(".png"))
         self.assertEqual(output_url, "https://cdn.example/upscaled.png")
         self.assertFalse(local_result)
+
+    def test_bria_usable_alpha_skips_following_paid_background_remover(self):
+        with tempfile.TemporaryDirectory(prefix="fal-bria-alpha-") as temp:
+            source = Path(temp) / "source.png"
+            create_rgb_source(source)
+            raw_dir = Path(temp) / "raw"
+            raw_dir.mkdir()
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    upscale=True,
+                    upscale_provider="fal",
+                    fal_upscale_model="bria/upscale/creative",
+                    remove_bg=True,
+                    remove_bg_provider="fal",
+                    skip_remover_for_alpha=True,
+                ),
+            )
+            operations = []
+            worker._fal_source_url = types.MethodType(
+                lambda _self, _path, current_url: current_url
+                or "https://cdn.example/source.png",
+                worker,
+            )
+            worker._fal_process_image = types.MethodType(
+                lambda _self, _url, *, operation, **_kwargs: operations.append(operation)
+                or f"https://cdn.example/{operation}.png",
+                worker,
+            )
+
+            def download_alpha(_self, _url, output_path):
+                image = Image.new("RGBA", (32, 24), (0, 0, 0, 0))
+                ImageDraw.Draw(image).rectangle((6, 4, 25, 19), fill=(180, 70, 100, 255))
+                image.save(output_path, format="PNG")
+
+            worker._download_file = types.MethodType(download_alpha, worker)
+
+            result_path = worker._run_processing_pipeline(
+                str(source),
+                None,
+                str(raw_dir),
+                1,
+                "gen",
+            )
+
+            with Image.open(result_path) as result:
+                self.assertTrue(main.has_usable_alpha(result))
+
+        self.assertEqual(operations, ["upscale"])
+
+    def test_fal_topaz_upscale_pass_keeps_selected_model_and_scale(self):
+        with tempfile.TemporaryDirectory(prefix="fal-topaz-upscale-") as temp:
+            source = Path(temp) / "source.png"
+            create_rgb_source(source)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    fal_concurrency=1,
+                    fal_upscale_model="topaz/upscale/image/precision",
+                    fal_upscale_scale=4,
+                ),
+            )
+            calls = {}
+            worker._fal_process_image = types.MethodType(
+                lambda _self, image_url, **kwargs: calls.update(
+                    {"image_url": image_url, **kwargs}
+                ) or "https://cdn.example/upscaled.png",
+                worker,
+            )
+            worker._download_file = types.MethodType(
+                lambda _self, _url, output_path: Path(output_path).write_bytes(b"result"),
+                worker,
+            )
+            diagnostics = []
+            worker._emit_diagnostic = types.MethodType(
+                lambda _self, event, **fields: diagnostics.append((event, fields)),
+                worker,
+            )
+
+            worker._run_upscale_pass(
+                str(source),
+                None,
+                temp,
+                1,
+                "gen",
+                "upscaled_before",
+                "fal",
+                2,
+                "ignored",
+            )
+
+        self.assertEqual(calls["model_id"], "topaz/upscale/image/precision")
+        self.assertEqual(calls["scale"], 4)
+        self.assertEqual(diagnostics[0][1]["parameters"]["scale"], 4)
 
     def test_topaz_uses_current_model_and_documented_payload(self):
         worker = main.WorkerThread(

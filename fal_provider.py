@@ -585,7 +585,7 @@ class FalClient:
     ) -> dict[str, Any]:
         model_by_operation = {
             "remove_background": "fal-ai/bria/background/remove",
-            "upscale": "fal-ai/esrgan",
+            "upscale": "bria/upscale/creative",
         }
         try:
             selected_model_id = model_id or model_by_operation[operation]
@@ -609,8 +609,16 @@ class FalClient:
                 )
             arguments.update(parameters)
         if operation == "upscale":
-            arguments["scale"] = str(max(2, min(int(scale), 4)))
-            arguments["output_format"] = "png"
+            if selected_model_id == "bria/upscale/creative":
+                arguments["preserve_alpha"] = True
+            elif selected_model_id == "topaz/upscale/image/precision":
+                arguments.update(
+                    {
+                        "model": "Standard V2",
+                        "upscale_factor": max(2, min(int(scale), 4)),
+                        "output_format": "png",
+                    }
+                )
         request = ProviderTaskRequest(
             provider_id="fal",
             operation=operation,

@@ -1165,8 +1165,9 @@ Approved direction:
   сохранить исходный прозрачный результат предыдущего этапа.
 - В текущем 3.1 follow-up весь второй upscale после удаления фона временно
   скрыт и выключен, чтобы пользователь не мог выбрать неподходящую модель.
-  Апскейл до удаления фона остаётся доступным через KIE и Local Real-ESRGAN;
-  второй этап не предлагает Fal до отдельной проверенной alpha-safe модели.
+  Апскейл до удаления фона теперь также предлагает отдельно одобренные Bria
+  Creative и Topaz Precision из Task 33; второй этап не предлагает Fal до
+  отдельной проверенной alpha-safe модели.
 
 Acceptance before implementation:
 - [ ] Утверждён mockup выбора модели до/после удаления фона, включая скрытый
@@ -1324,6 +1325,53 @@ Verification:
 - [x] Full offline suite: 1069 passed, 57 documented skips, 2 deselected,
   146 subtests; compilation, sensitive scan, diff check и Chroma benchmark green.
 - [ ] Windows installed smoke.
+
+## Task 33 (3.1.1 acceptance follow-up): Fal.ai Bria и Topaz Precision для первого upscale
+
+Status: Done in source — offline contract/integration tests green; owner-paid
+Windows quality acceptance pending
+
+Goal:
+Вернуть качественные Fal.ai варианты только для первого upscale, не возвращая
+отклонённый ESRGAN и не открывая скрытый второй upscale после удаления фона.
+
+Acceptance:
+- [x] В первом provider selector снова доступен Fal.ai; второй selector Fal.ai
+  не предлагает.
+- [x] `Bria Creative 2×` использует endpoint `bria/upscale/creative`, всегда
+  отправляет `preserve_alpha=true` и не показывает фиктивный выбор масштаба.
+- [x] `Topaz Precision` использует endpoint
+  `topaz/upscale/image/precision`, модель `Standard V2`, PNG и выбранный 2×/4×.
+- [x] `fal-ai/esrgan` отсутствует в UI и capability catalog; старое сохранённое
+  значение мигрирует на Bria.
+- [x] Выбор модели/масштаба сохраняется, передаётся worker, входит в Fal task
+  fingerprint/recovery и отдельную динамическую оценку количества Fal-вызовов
+  в Clipart. Processing не показывает ложный `$0.000`: до отдельного pricing UI
+  он честно сообщает, что стоимость Fal.ai не рассчитана.
+- [x] Processing preflight требует именно Fal.ai API Key, а run report и
+  structured diagnostics фиксируют выбранную модель и фактический масштаб
+  (Bria 2×, Topaz 2×/4×).
+- [x] Если Bria уже вернула пригодную alpha-маску, следующий remover
+  пропускается: край не обрабатывается повторно и новая платная задача не
+  создаётся.
+- [x] Offline tests проверяют catalog, payload, UI visibility, state migration,
+  cost quantities и worker routing без платного запроса.
+- [ ] Владелец отдельно проверяет Bria и Topaz на Windows на своих изображениях;
+  автоматический или серверный платный acceptance не запускать.
+
+Official evidence:
+- `https://fal.ai/models/bria/upscale/creative/api` — фиксированный 2×,
+  `preserve_alpha` default true, PNG result.
+- `https://fal.ai/models/topaz/upscale/image/precision/api` — Standard V2,
+  upscale 1×–4×, PNG/JPEG; цена зависит от started 24 MP output.
+
+Verification:
+- [x] Focused provider/state/UI/runtime/recovery suite: 361 tests passed.
+- [x] Full offline suite: 1066 passed, 58 documented skips.
+- [x] Compilation, sensitive-artifact scan и `git diff --check` прошли.
+- [x] Fresh automatic Chroma benchmark unchanged: alpha IoU `0.968704`,
+  alpha MAE `0.018194`, background leakage `0`, opaque subject loss `0`.
+- [ ] Платный Windows quality test выполняет владелец в приложении.
 
 ## Исторические задачи 3.0
 

@@ -18,12 +18,19 @@ class FalModelCatalogTests(unittest.TestCase):
             fal_endpoint_profile("fal-ai/bria/background/remove", "remove_background").output_formats,
             ("png",),
         )
-        self.assertIsNone(fal_endpoint_profile("fal-ai/esrgan", "upscale").preserves_alpha)
+        self.assertTrue(
+            fal_endpoint_profile("bria/upscale/creative", "upscale").preserves_alpha
+        )
+        self.assertFalse(
+            fal_endpoint_profile(
+                "topaz/upscale/image/precision", "upscale"
+            ).preserves_alpha
+        )
 
     def test_profiles_can_be_filtered_without_exposing_unknown_models(self):
         self.assertEqual(
             [profile.model_id for profile in fal_endpoint_profiles("upscale")],
-            ["fal-ai/esrgan"],
+            ["bria/upscale/creative", "topaz/upscale/image/precision"],
         )
         with self.assertRaises(KeyError):
             fal_endpoint_profile("fal-ai/unknown", "generation")

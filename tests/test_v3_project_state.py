@@ -29,17 +29,27 @@ from v3_project_state import (
 
 
 class ProjectRoutesTests(unittest.TestCase):
-    def test_legacy_fal_upscale_selections_migrate_to_supported_providers(self):
+    def test_fal_upscale_before_is_supported_but_after_stays_local(self):
         operations = ImageOperationData(
             upscale_before_provider="fal",
             upscale_after_provider="fal",
         )
 
-        self.assertEqual(operations.upscale_before_provider, "kie")
+        self.assertEqual(operations.upscale_before_provider, "fal")
+        self.assertEqual(operations.fal_upscale_model, "bria/upscale/creative")
         self.assertEqual(
             operations.upscale_after_provider,
             "local_realesrgan",
         )
+
+    def test_retired_fal_esrgan_selection_migrates_to_bria(self):
+        operations = ImageOperationData(
+            upscale_before_provider="fal",
+            fal_upscale_model="fal-ai/esrgan",
+        )
+
+        self.assertEqual(operations.upscale_before_provider, "fal")
+        self.assertEqual(operations.fal_upscale_model, "bria/upscale/creative")
 
     def test_legacy_topaz_settings_migrate_to_current_contract(self):
         operations = ImageOperationData(

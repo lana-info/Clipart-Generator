@@ -7,6 +7,12 @@ from chroma_key import KEY_COLORS
 
 
 KIE_TOPAZ_MODEL_ID: Final = "topaz/image-upscale"
+FAL_BRIA_UPSCALE_MODEL_ID: Final = "bria/upscale/creative"
+FAL_TOPAZ_PRECISION_MODEL_ID: Final = "topaz/upscale/image/precision"
+FAL_UPSCALE_MODEL_IDS: Final = frozenset(
+    {FAL_BRIA_UPSCALE_MODEL_ID, FAL_TOPAZ_PRECISION_MODEL_ID}
+)
+LEGACY_FAL_UPSCALE_MODEL_IDS: Final = frozenset({"fal-ai/esrgan"})
 LEGACY_KIE_TOPAZ_MODEL_IDS: Final = frozenset({"topaz/upscale"})
 TOPAZ_UPSCALE_FACTORS: Final = (2, 4)
 TOPAZ_MAX_FILE_BYTES: Final = 10_000_000
@@ -22,6 +28,21 @@ def normalize_kie_upscale_model(model_id: object) -> str:
     if not value or value in LEGACY_KIE_TOPAZ_MODEL_IDS:
         return KIE_TOPAZ_MODEL_ID
     return value
+
+
+def normalize_fal_upscale_model(model_id: object) -> str:
+    value = str(model_id or "").strip()
+    if not value or value in LEGACY_FAL_UPSCALE_MODEL_IDS:
+        return FAL_BRIA_UPSCALE_MODEL_ID
+    if value in FAL_UPSCALE_MODEL_IDS:
+        return value
+    return FAL_BRIA_UPSCALE_MODEL_ID
+
+
+def normalize_fal_upscale_factor(model_id: object, value: object) -> int:
+    if normalize_fal_upscale_model(model_id) == FAL_BRIA_UPSCALE_MODEL_ID:
+        return 2
+    return normalize_topaz_upscale_factor(value)
 
 
 def normalize_topaz_upscale_factor(value: object) -> int:
@@ -54,12 +75,14 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
     "fal": ProviderSpec(
         provider_id="fal",
         label="Fal.ai",
-        operations=("remove_background",),
+        operations=("upscale_before", "remove_background"),
         requires_network=True,
         requires_cost=True,
         preserves_alpha=False,
         requires_api_key=True,
         visible_controls=(
+            "fal_upscale_model",
+            "fal_upscale_scale",
             "fal_remove_bg_model",
             "fal_birefnet_model",
             "fal_birefnet_resolution",
@@ -148,6 +171,7 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
 PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
     "upscale_before_provider": (
         ("KIE", "kie"),
+        ("Fal.ai", "fal"),
         ("Local Real-ESRGAN", "local_realesrgan"),
     ),
     "upscale_after_provider": (
@@ -179,7 +203,8 @@ FAL_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("rembg", "fal-ai/imageutils/rembg"),
 )
 FAL_UPSCALE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
-    ("ESRGAN", "fal-ai/esrgan"),
+    ("Bria Creative 2× — сохраняет прозрачность", FAL_BRIA_UPSCALE_MODEL_ID),
+    ("Topaz Precision", FAL_TOPAZ_PRECISION_MODEL_ID),
 )
 FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Общая — Light", "General Use (Light)"),
@@ -256,6 +281,8 @@ def upscale_model_preserves_alpha(provider_id: str, model_id: str) -> bool:
     """Return whether a selected upscale model can receive transparent input."""
     if provider_id == "kie" and model_id == "recraft/crisp-upscale":
         return False
+    if provider_id == "fal":
+        return model_id == FAL_BRIA_UPSCALE_MODEL_ID
     return provider_preserves_alpha(provider_id)
 
 

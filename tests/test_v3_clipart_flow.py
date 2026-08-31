@@ -1191,6 +1191,7 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         assert fal_endpoint_quantities(state) == {
             "fal-ai/flux/schnell": 4,
+            "bria/upscale/creative": 4,
             "fal-ai/birefnet/v2": 4,
         }
 
@@ -1735,7 +1736,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("Fal.ai — не удалось обновить: timeout", text)
         self.assertIn("Итого — не рассчитано полностью", text)
 
-    def test_retired_fal_upscale_is_not_counted_from_stale_in_memory_state(self):
+    def test_supported_fal_upscale_before_is_counted_but_after_is_not(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox")]
         operations = state.clipart.operations
@@ -1747,9 +1748,9 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         estimate = estimate_clipart_cost(state)
 
-        self.assertEqual(estimate.processing_request_count, 0)
-        self.assertNotIn("fal", estimate.provider_usd)
-        self.assertNotIn("fal", estimate.incomplete_providers)
+        self.assertEqual(estimate.processing_request_count, 1)
+        self.assertIn("fal", estimate.provider_usd)
+        self.assertIn("fal", estimate.incomplete_providers)
 
     def test_fal_cost_error_is_cleared_when_endpoint_selection_changes(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

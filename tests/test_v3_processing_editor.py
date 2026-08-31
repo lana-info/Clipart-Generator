@@ -239,7 +239,23 @@ class ProcessingEditorTests(unittest.TestCase):
             include_cleanup=True,
         )
 
-        self.assertTrue(editor.operation_widgets["fal_upscale_model"].isHidden())
+        self.assertFalse(editor.operation_widgets["fal_upscale_model"].isHidden())
+        self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
+
+        upscale_model = editor.operation_widgets["fal_upscale_model"]
+        upscale_model.setCurrentIndex(
+            upscale_model.findData("topaz/upscale/image/precision")
+        )
+        self.assertFalse(editor.operation_widgets["fal_upscale_scale"].isHidden())
+        self.assertEqual(
+            tuple(
+                editor.operation_widgets["fal_upscale_scale"].itemData(index)
+                for index in range(editor.operation_widgets["fal_upscale_scale"].count())
+            ),
+            (2, 4),
+        )
+
+        upscale_model.setCurrentIndex(upscale_model.findData("bria/upscale/creative"))
         self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
 
         model = editor.operation_widgets["fal_remove_bg_model"]

@@ -5,6 +5,7 @@ import unittest
 from chroma_key import KEY_COLORS
 from v3_provider_registry import (
     CHROMA_KEY_COLOR_OPTIONS,
+    FAL_UPSCALE_MODEL_OPTIONS,
     KIE_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
     LOCAL_REMBG_MODEL_OPTIONS,
@@ -41,7 +42,7 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertTrue(provider_supports_operation("local_realesrgan", "upscale_after"))
         self.assertFalse(provider_supports_operation("local_realesrgan", "remove_background"))
         self.assertTrue(provider_supports_operation("fal", "remove_background"))
-        self.assertFalse(provider_supports_operation("fal", "upscale_before"))
+        self.assertTrue(provider_supports_operation("fal", "upscale_before"))
         self.assertFalse(provider_supports_operation("fal", "upscale_after"))
         self.assertTrue(provider_requires_api_key("kie"))
         self.assertTrue(provider_requires_api_key("photoroom"))
@@ -54,11 +55,19 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertFalse(upscale_model_preserves_alpha("kie", "recraft/crisp-upscale"))
         self.assertTrue(upscale_model_preserves_alpha("kie", "topaz/image-upscale"))
         self.assertTrue(upscale_model_preserves_alpha("local_realesrgan", ""))
+        self.assertTrue(upscale_model_preserves_alpha("fal", "bria/upscale/creative"))
+        self.assertFalse(
+            upscale_model_preserves_alpha("fal", "topaz/upscale/image/precision")
+        )
 
     def test_field_options_are_shared_and_deterministic(self) -> None:
         self.assertEqual(
             processing_provider_options("upscale_before_provider"),
-            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+            (
+                ("KIE", "kie"),
+                ("Fal.ai", "fal"),
+                ("Local Real-ESRGAN", "local_realesrgan"),
+            ),
         )
         self.assertNotIn(
             ("Fal.ai", "fal"),
@@ -76,6 +85,17 @@ class ProviderRegistryTests(unittest.TestCase):
             ),
         )
         self.assertEqual(KIE_MODEL_OPTIONS, (("Topaz", "topaz/image-upscale"), ("Recraft Crisp", "recraft/crisp-upscale")))
+        self.assertEqual(
+            FAL_UPSCALE_MODEL_OPTIONS,
+            (
+                ("Bria Creative 2× — сохраняет прозрачность", "bria/upscale/creative"),
+                ("Topaz Precision", "topaz/upscale/image/precision"),
+            ),
+        )
+        self.assertNotIn(
+            ("ESRGAN", "fal-ai/esrgan"),
+            FAL_UPSCALE_MODEL_OPTIONS,
+        )
         self.assertEqual(
             KIE_REMOVE_BG_MODEL_OPTIONS,
             (("Recraft Remove Background", "recraft/remove-background"),),

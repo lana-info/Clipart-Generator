@@ -26,6 +26,7 @@ from v3_provider_registry import (
     CHROMA_KEY_COLOR_OPTIONS,
     FAL_BIREFNET_MODEL_OPTIONS,
     FAL_BIREFNET_RESOLUTION_OPTIONS,
+    FAL_TOPAZ_PRECISION_MODEL_ID,
     FAL_REMOVE_BG_MODEL_OPTIONS,
     FAL_UPSCALE_MODEL_OPTIONS,
     KIE_TOPAZ_MODEL_ID,
@@ -883,7 +884,11 @@ class ProcessingPipelineEditor(QScrollArea):
             and "fal_upscale_model" in before_controls,
             "fal_upscale_after_model": operations.upscale_after
             and "fal_upscale_after_model" in after_controls,
-            "fal_upscale_scale": False,
+            "fal_upscale_scale": (
+                operations.upscale_before
+                and operations.upscale_before_provider == "fal"
+                and operations.fal_upscale_model == FAL_TOPAZ_PRECISION_MODEL_ID
+            ),
             "fal_upscale_after_scale": False,
             "upscale_factor": (
                 operations.upscale_before

@@ -39,6 +39,7 @@ from security_redaction import redact_text
 from provider_diagnostics import build_provider_event
 from provider_error_messages import friendly_provider_error
 from fal_model_catalog import is_fal_generation_model
+from v3_provider_registry import normalize_fal_upscale_factor
 from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
@@ -309,6 +310,8 @@ def _provider_model_routes(
             model_key = (
                 "kie_upscale_after_model"
                 if provider == "kie"
+                else "fal_upscale_after_model"
+                if provider == "fal"
                 else "local_realesrgan_after_scale"
                 if provider == "local_realesrgan"
                 else ""
@@ -317,6 +320,8 @@ def _provider_model_routes(
             model_key = (
                 "kie_upscale_model"
                 if provider == "kie"
+                else "fal_upscale_model"
+                if provider == "fal"
                 else "local_realesrgan_profile"
                 if provider == "local_realesrgan"
                 else ""
@@ -331,6 +336,18 @@ def _provider_model_routes(
             )
             scale = str(source.get(scale_key) or "").strip()
             model = f"{profile}-{scale}x" if scale else profile
+        elif provider == "fal" and stage in {"upscale_before", "upscale_after"}:
+            scale_key = (
+                "fal_upscale_after_scale"
+                if stage == "upscale_after"
+                else "fal_upscale_scale"
+            )
+            scale = (
+                "2"
+                if model == "bria/upscale/creative"
+                else str(source.get(scale_key) or "").strip()
+            )
+            model = f"{model}-{scale}x" if model and scale else model
         if model:
             models.append(f"{stage}:{model}")
     return providers, models
@@ -1231,10 +1248,19 @@ def build_safe_run_report(session: RunQueueSession) -> dict[str, Any]:
             "remove_bg_provider",
             "kie_upscale_model",
             "kie_upscale_after_model",
+            "fal_upscale_model",
+            "fal_upscale_scale",
             "kie_remove_bg_model",
         )
         if key in settings and settings[key] not in (None, "")
     }
+    if diagnostic_settings.get("fal_upscale_model"):
+        diagnostic_settings["fal_upscale_scale"] = str(
+            normalize_fal_upscale_factor(
+                diagnostic_settings["fal_upscale_model"],
+                settings.get("fal_upscale_scale"),
+            )
+        )
     return {
         "schema_version": 1,
         "mode": session.mode.value,

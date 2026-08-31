@@ -98,6 +98,7 @@ from v3_provider_registry import (
     FAL_REMOVE_BG_MODEL_OPTIONS,
     KIE_MODEL_OPTIONS,
     KIE_REMOVE_BG_MODEL_OPTIONS,
+    normalize_fal_upscale_factor,
     processing_provider_options,
     provider_requires_api_key,
     provider_supports_operation,
@@ -502,6 +503,10 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
     if operations.upscale_before and operations.upscale_before_provider == "kie":
         use_provider("kie")
         processing_models.append(operations.kie_upscale_model)
+    elif operations.upscale_before and operations.upscale_before_provider == "fal":
+        use_provider("fal")
+        incomplete_providers.add("fal")
+        processing_request_count += output_count
     if operations.remove_background:
         if operations.remove_background_provider == "kie":
             use_provider("kie")
@@ -644,7 +649,10 @@ def _worker_settings(
             "kie_upscale_after_model": operations.kie_upscale_after_model,
             "fal_upscale_model": operations.fal_upscale_model,
             "fal_upscale_after_model": operations.fal_upscale_after_model,
-            "fal_upscale_scale": operations.fal_upscale_scale,
+            "fal_upscale_scale": normalize_fal_upscale_factor(
+                operations.fal_upscale_model,
+                operations.fal_upscale_scale,
+            ),
             "fal_upscale_after_scale": operations.fal_upscale_after_scale,
             "local_realesrgan_profile": operations.local_realesrgan_profile,
             "local_realesrgan_scale": operations.local_realesrgan_scale,
@@ -3851,6 +3859,8 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
         )
     operations = state.clipart.operations
     output_count = len(state.clipart.prompts) * variants
+    if operations.upscale_before and operations.upscale_before_provider == "fal":
+        add(operations.fal_upscale_model, output_count)
     if operations.remove_background and operations.remove_background_provider == "fal":
         add(operations.fal_remove_bg_model, output_count)
     return quantities

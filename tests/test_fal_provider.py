@@ -515,6 +515,70 @@ class FalProviderTests(unittest.TestCase):
 
         self.assertNotIn("completed", statuses)
 
+    def test_bria_upscale_submits_alpha_safe_fixed_2x_payload(self):
+        model_id = "bria/upscale/creative"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        captured = {}
+
+        def submit(request):
+            captured.update(request.input_payload)
+            return {"request_id": "req-bria-upscale"}
+
+        client.submit_task = submit
+        client.wait_for_result = lambda *_args, **_kwargs: {
+            "request_id": "req-bria-upscale",
+            "status": "completed",
+            "result": {"image": {"url": "https://cdn.example/bria.png"}},
+        }
+
+        client.run_image_operation(
+            "upscale",
+            "https://cdn.example/input.png",
+            model_id=model_id,
+            scale=4,
+        )
+
+        self.assertEqual(
+            captured,
+            {
+                "image_url": "https://cdn.example/input.png",
+                "preserve_alpha": True,
+            },
+        )
+
+    def test_topaz_precision_upscale_submits_documented_png_payload(self):
+        model_id = "topaz/upscale/image/precision"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        captured = {}
+
+        def submit(request):
+            captured.update(request.input_payload)
+            return {"request_id": "req-topaz-upscale"}
+
+        client.submit_task = submit
+        client.wait_for_result = lambda *_args, **_kwargs: {
+            "request_id": "req-topaz-upscale",
+            "status": "completed",
+            "result": {"image": {"url": "https://cdn.example/topaz.png"}},
+        }
+
+        client.run_image_operation(
+            "upscale",
+            "https://cdn.example/input.png",
+            model_id=model_id,
+            scale=4,
+        )
+
+        self.assertEqual(
+            captured,
+            {
+                "image_url": "https://cdn.example/input.png",
+                "model": "Standard V2",
+                "upscale_factor": 4,
+                "output_format": "png",
+            },
+        )
+
     def test_task_journal_does_not_recover_completed_after_cancel(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = FalTaskJournal(f"{temp}/fal-tasks.json")
