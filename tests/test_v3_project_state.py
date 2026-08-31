@@ -29,6 +29,18 @@ from v3_project_state import (
 
 
 class ProjectRoutesTests(unittest.TestCase):
+    def test_legacy_fal_upscale_selections_migrate_to_supported_providers(self):
+        operations = ImageOperationData(
+            upscale_before_provider="fal",
+            upscale_after_provider="fal",
+        )
+
+        self.assertEqual(operations.upscale_before_provider, "kie")
+        self.assertEqual(
+            operations.upscale_after_provider,
+            "local_realesrgan",
+        )
+
     def test_legacy_topaz_settings_migrate_to_current_contract(self):
         operations = ImageOperationData(
             upscale_factor=8,

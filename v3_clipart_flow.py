@@ -502,10 +502,6 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
     if operations.upscale_before and operations.upscale_before_provider == "kie":
         use_provider("kie")
         processing_models.append(operations.kie_upscale_model)
-    elif operations.upscale_before and operations.upscale_before_provider == "fal":
-        use_provider("fal")
-        incomplete_providers.add("fal")
-        processing_request_count += output_count
     if operations.remove_background:
         if operations.remove_background_provider == "kie":
             use_provider("kie")
@@ -522,10 +518,6 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
     if operations.upscale_after and operations.upscale_after_provider == "kie":
         use_provider("kie")
         processing_models.append(operations.kie_upscale_after_model)
-    elif operations.upscale_after and operations.upscale_after_provider == "fal":
-        use_provider("fal")
-        incomplete_providers.add("fal")
-        processing_request_count += output_count
 
     processing_request_count += len(processing_models) * output_count
     for model_id in processing_models:
@@ -3859,12 +3851,8 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
         )
     operations = state.clipart.operations
     output_count = len(state.clipart.prompts) * variants
-    if operations.upscale_before and operations.upscale_before_provider == "fal":
-        add(operations.fal_upscale_model, output_count)
     if operations.remove_background and operations.remove_background_provider == "fal":
         add(operations.fal_remove_bg_model, output_count)
-    if operations.upscale_after and operations.upscale_after_provider == "fal":
-        add(operations.fal_upscale_after_model, output_count)
     return quantities
 
 

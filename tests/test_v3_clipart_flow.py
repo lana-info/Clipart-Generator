@@ -1191,7 +1191,6 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         assert fal_endpoint_quantities(state) == {
             "fal-ai/flux/schnell": 4,
-            "fal-ai/esrgan": 8,
             "fal-ai/birefnet/v2": 4,
         }
 
@@ -1692,9 +1691,9 @@ class V3ClipartFlowTests(unittest.TestCase):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox")]
         operations = state.clipart.operations
-        operations.upscale_before = True
-        operations.upscale_before_provider = "fal"
-        operations.remove_background = False
+        operations.upscale_before = False
+        operations.remove_background = True
+        operations.remove_background_provider = "fal"
         operations.upscale_after = False
         operations.unsharp = False
         operations.edge_shrink = False
@@ -1721,9 +1720,9 @@ class V3ClipartFlowTests(unittest.TestCase):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox")]
         operations = state.clipart.operations
-        operations.upscale_before = True
-        operations.upscale_before_provider = "fal"
-        operations.remove_background = False
+        operations.upscale_before = False
+        operations.remove_background = True
+        operations.remove_background_provider = "fal"
         review = ClipartReviewRunPage(
             state,
             fal_cost_refresh=lambda: (_ for _ in ()).throw(RuntimeError("timeout")),
@@ -1735,6 +1734,22 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("KIE — 0.020 USD", text)
         self.assertIn("Fal.ai — не удалось обновить: timeout", text)
         self.assertIn("Итого — не рассчитано полностью", text)
+
+    def test_retired_fal_upscale_is_not_counted_from_stale_in_memory_state(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        operations = state.clipart.operations
+        operations.upscale_before = True
+        operations.upscale_before_provider = "fal"
+        operations.upscale_after = True
+        operations.upscale_after_provider = "fal"
+        operations.remove_background = False
+
+        estimate = estimate_clipart_cost(state)
+
+        self.assertEqual(estimate.processing_request_count, 0)
+        self.assertNotIn("fal", estimate.provider_usd)
+        self.assertNotIn("fal", estimate.incomplete_providers)
 
     def test_fal_cost_error_is_cleared_when_endpoint_selection_changes(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

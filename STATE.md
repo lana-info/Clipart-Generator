@@ -2,6 +2,30 @@
 
 Updated: 2026-08-31
 
+## Windows acceptance follow-up: recoverable Chroma and Fal ESRGAN retirement — 2026-08-31
+
+A safe Local Chroma ambiguity previously escaped through the fatal stage
+handler, so the valid pre-Chroma image was not available for manual correction.
+`ChromaKeyAmbiguousError` is now handled at its exact boundary: source pixels
+are preserved, background removal is recorded as
+`skipped/manual_transparency_required`, alpha-dependent remaining stages and
+final trim are bypassed, and the ready result asks for manual correction.
+Read/write/corrupt-image failures remain fatal. Indexed progress keeps this
+status attached to the correct item in a parallel batch.
+
+The only Fal upscale endpoint was `fal-ai/esrgan`; the owner rejected its
+Windows output quality. Fal is removed from both upscale provider lists and
+legacy saved selections migrate to KIE before removal or Local Real-ESRGAN
+after removal. Fal generation and Fal background removal are unchanged. No new
+paid endpoint was added without a comparative test.
+
+Verification: focused suite 274 passed plus 40 subtests with one expected
+missing-binary skip; full offline suite 1069 passed plus 146 subtests, 57
+documented skips and two intentional deselections. Compilation, sensitive scan,
+diff check and automatic Chroma benchmark pass (alpha IoU `0.968704`, alpha MAE
+`0.018194`, median 2048×2048 runtime `1.038 s`, peak RSS `421.012 MiB` below
+`448 MiB`). Windows rebuild/installed smoke remains pending.
+
 ## Windows acceptance regression: transparency editor blocked after error — 2026-08-31
 
 The owner reported that a local Chroma failure prevented entering the
@@ -238,12 +262,14 @@ runtime contracts:
 
 The following product improvements remain deliberately deferred:
 
-- Fal.ai ESRGAN is correctly blocked after background removal because its
+- Historical note, superseded by the acceptance follow-up above: Fal.ai ESRGAN
+  was correctly blocked after background removal because its
   official contract supports PNG but does not guarantee alpha preservation.
   Fal.ai now documents a separate `topaz/upscale/image/transparent` endpoint
   that preserves alpha end-to-end and always returns PNG at a fixed, billed 4×
   scale. Task 29 records it as the preferred next-version after-removal model;
-  ESRGAN remains a before-removal option unless separately proven alpha-safe.
+  Windows acceptance later rejected its visible quality before removal too, so
+  ESRGAN is now retired from both upscale stages.
 - a complex multicolour subject demonstrated that no single blue/red/green key
   is universally safe and that blue subject details can visually shift toward
   green/teal under despill. Task 30 records the approved future direction:

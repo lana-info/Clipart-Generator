@@ -239,8 +239,8 @@ class ProcessingEditorTests(unittest.TestCase):
             include_cleanup=True,
         )
 
-        self.assertFalse(editor.operation_widgets["fal_upscale_model"].isHidden())
-        self.assertFalse(editor.operation_widgets["fal_upscale_scale"].isHidden())
+        self.assertTrue(editor.operation_widgets["fal_upscale_model"].isHidden())
+        self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
 
         model = editor.operation_widgets["fal_remove_bg_model"]
         model.setCurrentIndex(model.findData("fal-ai/bria/background/remove"))

@@ -533,10 +533,14 @@ class ImageOperationData:
             self.upscale_before_provider,
             limit=100,
         ) or "kie"
+        if self.upscale_before_provider == "fal":
+            self.upscale_before_provider = "kie"
         self.upscale_after_provider = _text(
             self.upscale_after_provider,
             limit=100,
         ) or "local_realesrgan"
+        if self.upscale_after_provider == "fal":
+            self.upscale_after_provider = "local_realesrgan"
         self.upscale_factor = normalize_topaz_upscale_factor(self.upscale_factor)
         self.kie_upscale_model = normalize_kie_upscale_model(
             _text(self.kie_upscale_model, limit=200)

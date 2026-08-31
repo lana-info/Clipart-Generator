@@ -1153,9 +1153,9 @@ Approved direction:
 - Добавить `Topaz Transparent (4×)` как отдельную Fal.ai-модель для операции
   `Апскейл после удаления фона`.
 - Фильтровать модели по конкретному endpoint capability, а не считать весь
-  провайдер Fal.ai одинаковым: после удаления фона показывать только модели с
-  подтверждённым `preserves_alpha=true`; до удаления фона ESRGAN может
-  оставаться доступным.
+  провайдер Fal.ai одинаковым. Windows acceptance отклонил качество ESRGAN
+  также до удаления фона, поэтому текущий endpoint полностью убран из обоих
+  пользовательских upscale; KIE и Local Real-ESRGAN остаются доступными.
 - Рядом с Topaz Transparent явно показывать фиксированный масштаб `4×` и не
   предлагать неработающий выбор 2×. Оценка стоимости должна учитывать
   фактический 4× output и входить в раздельный Fal.ai subtotal из Task 28.
@@ -1164,8 +1164,8 @@ Approved direction:
   сохранить исходный прозрачный результат предыдущего этапа.
 - В текущем 3.1 follow-up весь второй upscale после удаления фона временно
   скрыт и выключен, чтобы пользователь не мог выбрать неподходящую модель.
-  Апскейл до удаления фона остаётся доступным; второй этап вернётся только с
-  отдельной проверенной alpha-safe моделью.
+  Апскейл до удаления фона остаётся доступным через KIE и Local Real-ESRGAN;
+  второй этап не предлагает Fal до отдельной проверенной alpha-safe модели.
 
 Acceptance before implementation:
 - [ ] Утверждён mockup выбора модели до/после удаления фона, включая скрытый
@@ -1297,6 +1297,32 @@ Acceptance before implementation:
 Dependencies: Task 13 diagnostics, Task 28 provider cost breakdown and stable
 provider capability contracts.
 Scope: next-version provider observability and preflight UX.
+
+## Task 32 (3.1.1 acceptance follow-up): Chroma recovery и retirement Fal ESRGAN
+
+Status: Done in source — offline tests and review green; Windows rebuild not started
+
+Goal:
+Не оставлять пользователя в тупике после безопасного отказа Local Chroma и не
+предлагать Fal.ai ESRGAN, качество которого владелец отклонил на Windows.
+
+Acceptance:
+- [x] `ChromaKeyAmbiguousError` не скрывает ошибки файловой системы: исходное
+  изображение сохраняется без изменения, этап помечен
+  `skipped/manual_transparency_required`, item публикуется и доступен редактору.
+- [x] После skipped Chroma не выполняются alpha-зависимые upscale-after, edge
+  cleanup и итоговый trim; параллельный batch относит статус к верному item.
+- [x] Fal.ai удалён только из обоих списков upscale. KIE и Local Real-ESRGAN
+  остаются; Fal generation и background removal продолжают работать.
+- [x] Старые значения `fal` мигрируют на `kie` для первого upscale и
+  `local_realesrgan` для второго; Fal ESRGAN не входит в cost quantity.
+
+Verification:
+- [x] Regression tests были красными до исправлений.
+- [x] Focused suite: 274 passed, 1 environment skip, 40 subtests.
+- [x] Full offline suite: 1069 passed, 57 documented skips, 2 deselected,
+  146 subtests; compilation, sensitive scan, diff check и Chroma benchmark green.
+- [ ] Windows installed smoke.
 
 ## Исторические задачи 3.0
 

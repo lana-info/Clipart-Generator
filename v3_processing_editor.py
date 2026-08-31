@@ -883,10 +883,8 @@ class ProcessingPipelineEditor(QScrollArea):
             and "fal_upscale_model" in before_controls,
             "fal_upscale_after_model": operations.upscale_after
             and "fal_upscale_after_model" in after_controls,
-            "fal_upscale_scale": operations.upscale_before
-            and operations.upscale_before_provider == "fal",
-            "fal_upscale_after_scale": operations.upscale_after
-            and operations.upscale_after_provider == "fal",
+            "fal_upscale_scale": False,
+            "fal_upscale_after_scale": False,
             "upscale_factor": (
                 operations.upscale_before
                 and operations.upscale_before_provider == "kie"

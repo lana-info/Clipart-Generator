@@ -1,6 +1,6 @@
 # ADR-002: Fal.ai integration boundary and initial endpoint profiles
 
-Status: Accepted for implementation in the 3.1 phase
+Status: Accepted for implementation in the 3.1 phase; amended 2026-08-31
 
 ## Decision
 
@@ -19,6 +19,18 @@ The first endpoint profiles to validate are:
 These profiles are candidates, not a claim that every endpoint has identical
 inputs, pricing, retention, alpha behavior or cancellation guarantees. Each
 endpoint must have its own capability record before appearing in a workflow.
+
+## 2026-08-31 amendment: ESRGAN retirement
+
+Windows acceptance testing rejected the visible quality of `fal-ai/esrgan`.
+It is retired from both user-selectable upscale stages and from the current
+cost estimate. Existing saved selections migrate to KIE before background
+removal and Local Real-ESRGAN after background removal. Fal image generation
+and Fal background removal remain available.
+
+The ESRGAN adapter/profile may remain internally for recovery and compatibility
+with already-recorded tasks, but must not appear as a new selectable operation.
+Another paid Fal upscale requires separate endpoint validation and acceptance.
 
 ## Authentication and transport
 

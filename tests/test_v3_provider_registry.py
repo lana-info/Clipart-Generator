@@ -40,6 +40,9 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertFalse(provider_supports_operation("photoroom", "upscale_before"))
         self.assertTrue(provider_supports_operation("local_realesrgan", "upscale_after"))
         self.assertFalse(provider_supports_operation("local_realesrgan", "remove_background"))
+        self.assertTrue(provider_supports_operation("fal", "remove_background"))
+        self.assertFalse(provider_supports_operation("fal", "upscale_before"))
+        self.assertFalse(provider_supports_operation("fal", "upscale_after"))
         self.assertTrue(provider_requires_api_key("kie"))
         self.assertTrue(provider_requires_api_key("photoroom"))
         self.assertFalse(provider_requires_api_key("local_rembg"))
@@ -55,7 +58,11 @@ class ProviderRegistryTests(unittest.TestCase):
     def test_field_options_are_shared_and_deterministic(self) -> None:
         self.assertEqual(
             processing_provider_options("upscale_before_provider"),
-            (("KIE", "kie"), ("Fal.ai", "fal"), ("Local Real-ESRGAN", "local_realesrgan")),
+            (("KIE", "kie"), ("Local Real-ESRGAN", "local_realesrgan")),
+        )
+        self.assertNotIn(
+            ("Fal.ai", "fal"),
+            processing_provider_options("upscale_after_provider"),
         )
         self.assertEqual(
             processing_provider_options("remove_background_provider"),
