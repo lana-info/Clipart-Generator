@@ -73,6 +73,15 @@ subtests, with 58 documented skips and two intentional deselections. Compile,
 sensitive-artifact and diff checks pass. No live provider request, Windows build
 or release action was performed.
 
+## Next-version final sharpness decision — 2026-08-31
+
+The owner approved final sharpness for the next version. Task 29A records it
+after every resize/background/alpha-edge/trim operation and before metadata,
+DPI and export. RGBA processing must be alpha-aware/premultiplied and preserve
+the alpha channel so transparent borders do not acquire dark or white halos.
+The current 3.1 pipeline remains unchanged until the Processing control mockup,
+migration behavior and golden alpha fixtures are approved.
+
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 
 The approved acceptance fixes and Fal.ai Bria Creative, Topaz Precision and
@@ -105,6 +114,12 @@ Existing usable alpha and a preceding KIE upscale HTTPS result are exempt becaus
 they are not uploaded to the remover as local payloads. Returning to the pipeline
 re-enables navigation. Offline focused verification is green; no live Fal call,
 Windows rebuild or installed-app visual acceptance has been performed.
+
+The apparent duplicate `result_058..._ready`/`ready_2` pair was traced to two
+separate runs around 12:41 and 12:49 local time. The same input fingerprint was
+submitted again under a new Fal request ID, and the no-clobber collision policy
+added `_2`. This was not a duplicate publication inside one run. It remains to
+confirm whether the second two-file run was intentionally started by the owner.
 
 ## Windows acceptance follow-up: Fal.ai replacement upscalers — 2026-08-31
 

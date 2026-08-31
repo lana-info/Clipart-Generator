@@ -1202,6 +1202,41 @@ Dependencies: Task 28 pricing breakdown and released 3.1.0 processing baseline.
 Scope: next-version provider capability; paid verification requires separate
 owner approval.
 
+## Task 29A (3.2.0): Финальная alpha-aware резкость
+
+Status: Deferred to the next version after 3.1.0 — product order approved;
+implementation and visual controls intentionally not started
+
+Goal:
+Применять резкость в самом конце пиксельного pipeline, когда итоговый размер и
+alpha-контур уже определены, без цветных/белых ореолов на прозрачных краях.
+
+Approved order:
+- Все операции изменения геометрии и размера выполняются раньше: upscale до
+  remover → удаление фона → alpha-safe upscale после remover → очистка alpha
+  края → trim.
+- Финальная резкость выполняется после них и до непиксельных стадий: очистки
+  метаданных, установки DPI и атомарного экспорта PNG.
+- Для RGBA нельзя независимо sharpen-ить скрытый RGB прозрачных пикселей.
+  Использовать premultiplied/alpha-aware обработку RGB, alpha не изменять.
+- Текущий ранний `Unsharp Mask` не переносить молча: в UI явно различать
+  прежний промежуточный этап и новый рекомендуемый `Финальная резкость` либо
+  мигрировать настройку с понятным описанием порядка.
+
+Acceptance before implementation:
+- [ ] Утверждён mockup положения и названия финальной резкости в Processing.
+- [ ] Порядок stages и Review summary однозначно ставят её после последнего
+  resize/alpha/trim и до metadata/DPI/export.
+- [ ] Golden fixtures для opaque, hard-alpha, soft-alpha, watercolor и thin
+  lines подтверждают неизменную alpha и отсутствие RGB halo вне объекта.
+- [ ] Настройки amount/radius/threshold сохраняются и мигрируют без скрытой
+  смены результата существующих проектов.
+- [ ] Batch и повтор запуска дают детерминированный PNG с теми же параметрами.
+
+Dependencies: Task 29 alpha-safe upscale-after contract and approved Processing
+pipeline mockup. Scope: next-version pixel pipeline; current 3.1 order remains
+unchanged.
+
 ## Task 30 (3.2.0): Chroma «Авто» и цвет фона для каждого изображения
 
 Status: Deferred to the next version after 3.1.0 — product direction approved;
