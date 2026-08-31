@@ -22,7 +22,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
-    QPlainTextEdit,
     QProgressBar,
     QScrollArea,
     QVBoxLayout,
@@ -1431,7 +1430,6 @@ class RunResultsPage(QWidget):
         super().__init__()
         self.state = state
         self.session: RunQueueSession | None = None
-        self._log_dialog: QDialog | None = None
         self._completion_dialog: RunCompletionDialog | None = None
         self._completion_shown_at: float | None = None
         self._preview_item_index: int | None = None
@@ -1490,7 +1488,10 @@ class RunResultsPage(QWidget):
         self.file_hints_label = QLabel()
         self.pixel_evidence_label = QLabel()
         self.handoff_label = QLabel()
-        self.technical_note = QLabel("Подробности запуска доступны в «Диагностике».")
+        self.technical_note = QLabel(
+            "Подробности текущего и предыдущих запусков доступны по кнопке "
+            "«Диагностика» в правом верхнем углу."
+        )
         self.technical_note.setWordWrap(True)
         self.technical_note.setProperty("v3Small", True)
         for label in (
@@ -1518,9 +1519,6 @@ class RunResultsPage(QWidget):
         utility_primary = QWidget()
         utility_primary_layout = QHBoxLayout(utility_primary)
         utility_primary_layout.setContentsMargins(0, 0, 0, 0)
-        utility_secondary = QWidget()
-        utility_secondary_layout = QHBoxLayout(utility_secondary)
-        utility_secondary_layout.setContentsMargins(0, 0, 0, 0)
         self.stop_button = V3Button(
             "Остановить после текущего файла",
             ButtonVariant.SECONDARY,
@@ -1571,11 +1569,6 @@ class RunResultsPage(QWidget):
         )
         self.save_mask_button.clicked.connect(self._save_mask)
         self.save_mask_button.hide()
-        self.log_button = V3Button(
-            "Диагностика",
-            ButtonVariant.GHOST,
-        )
-        self.log_button.clicked.connect(self._show_log)
         for button in (
             self.stop_button,
             self.immediate_stop_button,
@@ -1590,10 +1583,7 @@ class RunResultsPage(QWidget):
         utility_primary_layout.addWidget(self.save_corrected_button)
         utility_primary_layout.addWidget(self.save_mask_button)
         utility_primary_layout.addStretch()
-        utility_secondary_layout.addWidget(self.log_button)
-        utility_secondary_layout.addStretch()
         utility_layout.addWidget(utility_primary)
-        utility_layout.addWidget(utility_secondary)
         actions_layout.addWidget(workflow_actions)
         actions_layout.addWidget(utility_actions)
         self.workflow_actions = workflow_actions
@@ -1637,7 +1627,6 @@ class RunResultsPage(QWidget):
             self.check_transparency_button.hide()
             self.save_corrected_button.hide()
             self.save_mask_button.hide()
-            self.log_button.setEnabled(False)
             self._selection_changed(-1)
             return
         counts = session.counts()
@@ -1687,7 +1676,6 @@ class RunResultsPage(QWidget):
         self.retry_button.setEnabled(retry_visible)
         self.finish_button.setEnabled(finish_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
-        self.log_button.setEnabled(True)
         self._selection_changed(self.queue.currentRow())
         self._show_completion_if_needed(session)
 
@@ -2002,48 +1990,6 @@ class RunResultsPage(QWidget):
             )
         except (OSError, ValueError) as error:
             self.summary_label.setText(f"Не удалось сохранить alpha-маску: {error}")
-
-    def _show_log(self) -> None:
-        if self.session is None:
-            return
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Диагностика")
-        dialog.resize(720, 420)
-        layout = QVBoxLayout(dialog)
-        text = QPlainTextEdit()
-        text.setReadOnly(True)
-        text.setPlainText(self.session.technical_log)
-        layout.addWidget(text)
-        save_button = V3Button("Сохранить диагностический отчёт", ButtonVariant.PRIMARY)
-        save_button.clicked.connect(lambda: self._choose_report_path(dialog))
-        layout.addWidget(save_button)
-        close_button = V3Button("Закрыть", ButtonVariant.SECONDARY)
-        close_button.clicked.connect(dialog.close)
-        layout.addWidget(close_button)
-        self._log_dialog = dialog
-        dialog.show()
-
-    def _choose_report_path(self, dialog: QDialog | None = None) -> None:
-        if self.session is None:
-            return
-        destination, _ = QFileDialog.getSaveFileName(
-            self,
-            "Экспортировать отчёт выполнения",
-            "run-report.json",
-            "JSON (*.json)",
-        )
-        if not destination:
-            return
-        try:
-            export_safe_run_report(self.session, destination)
-        except (OSError, RunQueueError) as error:
-            self.summary_label.setText(
-                f"Не удалось экспортировать отчёт: {error}"
-            )
-            return
-        self.summary_label.setText("Отчёт выполнения сохранён.")
-        if dialog is not None:
-            dialog.close()
 
 def _safe_progress_text(message: Any) -> str:
     text = str(message or "").strip()

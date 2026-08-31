@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import QApplication
 
 from license_client import LicenseError
 from v3_clipart_flow import ClipartRunRequest, install_clipart_flow
+from v3_components import V3Button
 from v3_processing_flow import install_processing_flow
 from v3_project_state import (
     CommonProjectData,
@@ -1462,7 +1463,10 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertIn("⏱ Время:", page.summary_label.text())
             self.assertIn("идёт обработка", page._stage_label("processing"))
             self.assertFalse(page.viewer.isVisible())
-            self.assertEqual(page.log_button.text(), "Диагностика")
+            result_button_texts = {
+                button.text() for button in page.findChildren(V3Button)
+            }
+            self.assertNotIn("Диагностика", result_button_texts)
             self.assertEqual(page.queue.minimumHeight(), 360)
             self.assertEqual(page.open_folder_button.accessibleName(), "Открыть папку с результатами")
             page.close()

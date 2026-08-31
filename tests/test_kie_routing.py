@@ -132,6 +132,195 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(pending, ())
         self.assertIn("https://queue.fal.run/custom/poll/fal-request-1", journal_payload)
 
+    def test_fal_polling_emits_structured_state_events(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            worker._record_fal_poll_status(
+                "fal-task-1", "generation", "fal-ai/flux/schnell", "waiting"
+            )
+            worker._record_fal_poll_status(
+                "fal-task-1", "generation", "fal-ai/flux/schnell", "running"
+            )
+            worker._record_fal_poll_status(
+                "fal-task-1", "generation", "fal-ai/flux/schnell", "completed"
+            )
+
+            self.assertEqual(
+                [event["event"] for event in events],
+                [
+                    "provider_task_polled",
+                    "provider_task_polled",
+                    "provider_task_polled",
+                ],
+            )
+            self.assertEqual(
+                [event["poll_attempt"] for event in events],
+                [1, 2, 3],
+            )
+            self.assertTrue(all(event["provider"] == "fal" for event in events))
+            self.assertTrue(all(event["task"] == "fal-task-1" for event in events))
+
+    def test_fal_completed_without_valid_image_is_not_journaled_as_success(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    text_generation_model="fal-ai/flux/schnell",
+                ),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    return {"request_id": "fal-task-malformed"}
+
+                def wait_for_result(self, _request_id, *, on_status, **_kwargs):
+                    on_status("completed")
+                    return {
+                        "request_id": "fal-task-malformed",
+                        "status": "completed",
+                        "result": {},
+                    }
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                with self.assertRaises(main.FalProviderError):
+                    worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
+
+            event_names = [event["event"] for event in events]
+            self.assertNotIn("provider_task_succeeded", event_names)
+            self.assertEqual(event_names.count("provider_task_failed"), 1)
+            self.assertEqual(worker.fal_task_journal.pending(), ())
+
+    def test_fal_processing_completed_without_valid_image_is_terminal_failed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            worker._set_diagnostic_context(1, 1, "upscale")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def run_image_operation(
+                    self,
+                    _operation,
+                    _image_url,
+                    *,
+                    on_submitted_task,
+                    on_status,
+                    **_kwargs,
+                ):
+                    on_submitted_task("fal-process-malformed", {})
+                    on_status("completed")
+                    return {
+                        "request_id": "fal-process-malformed",
+                        "status": "completed",
+                        "result": {},
+                    }
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                with self.assertRaises(main.FalProviderError):
+                    worker._fal_process_image(
+                        "https://cdn.example/source.png",
+                        operation="upscale",
+                        model_id="fal-ai/esrgan",
+                    )
+
+            event_names = [event["event"] for event in events]
+            self.assertNotIn("provider_task_succeeded", event_names)
+            self.assertEqual(event_names.count("provider_task_failed"), 1)
+            self.assertEqual(worker.fal_task_journal.pending(), ())
+
+    def test_two_fal_submit_failures_without_task_id_are_both_journaled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    text_generation_model="fal-ai/flux/schnell",
+                ),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    raise main.FalProviderError("Fal.ai submit unavailable")
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                for _attempt in range(2):
+                    with self.assertRaises(main.FalProviderError):
+                        worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
+
+            failures = [
+                event for event in events
+                if event["event"] == "provider_task_failed"
+            ]
+            self.assertEqual(len(failures), 2)
+
+    def test_fal_poll_http_failure_emits_safe_provider_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    text_generation_model="fal-ai/flux/schnell",
+                ),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    return {"request_id": "fal-task-405"}
+
+                def wait_for_result(self, _request_id, **_kwargs):
+                    raise main.FalProviderError("Fal.ai HTTP 405")
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                with self.assertRaisesRegex(main.FalProviderError, "HTTP 405"):
+                    worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
+
+            failed = next(
+                event for event in events
+                if event["event"] == "provider_task_failed"
+            )
+            self.assertEqual(failed["provider"], "fal")
+            self.assertEqual(failed["model"], "fal-ai/flux/schnell")
+            self.assertEqual(failed["task"], "fal-task-405")
+            self.assertIn("HTTP 405", failed["error_message"])
+            self.assertNotIn("fal-test-secret", json.dumps(failed))
+
     def test_fal_recovery_continues_after_one_transient_poll_failure(self):
         with tempfile.TemporaryDirectory() as temp:
             worker = main.WorkerThread(

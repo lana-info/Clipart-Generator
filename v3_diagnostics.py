@@ -116,6 +116,7 @@ class DiagnosticJournalDialog(QDialog):
     def _populate_filter_options(self) -> None:
         source_labels = {
             "kie": "KIE",
+            "fal": "Fal.ai",
             "photoroom": "PhotoRoom",
             "runpod": "RunPod",
             "local": "Локальная обработка",
@@ -173,6 +174,7 @@ class DiagnosticJournalDialog(QDialog):
         self.event_list.clear()
         source_labels = {
             "kie": "KIE",
+            "fal": "Fal.ai",
             "photoroom": "PhotoRoom",
             "runpod": "RunPod",
             "local": "Локально",

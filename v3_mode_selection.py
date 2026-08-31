@@ -166,7 +166,7 @@ class ModeSelectionScreen(QWidget):
         self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         account_layout.addWidget(self.api_settings_button)
-        self.diagnostics_button = V3Button("Журнал диагностики", ButtonVariant.GHOST)
+        self.diagnostics_button = V3Button("Диагностика", ButtonVariant.GHOST)
         self.diagnostics_button.clicked.connect(self.diagnostics_requested.emit)
         account_layout.addWidget(self.diagnostics_button)
         layout.addWidget(self.account_card)
@@ -406,6 +406,8 @@ class V3ApplicationView(QWidget):
                     "configured": {
                         "kie": bool(dialog.settings.get("kie_api_key")),
                         "photoroom": bool(dialog.settings.get("photoroom_api_key")),
+                        "fal": bool(dialog.settings.get("fal_api_key")),
+                        "runpod": bool(dialog.settings.get("runpod_api_key")),
                     }
                 },
             )
