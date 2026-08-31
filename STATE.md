@@ -18,6 +18,13 @@ without claiming an unsupported filesystem root cause. Full offline verification
 passes: 1091 tests, 146 subtests, 57 documented skips and 2 deselections. No
 live provider request, Windows build or release was started.
 
+## Processing DPI-only checkpoint — 2026-08-31
+
+`Экспорт для печати (300 DPI)` теперь является достаточным самостоятельным
+локальным этапом Processing. Пакет не отклоняется предварительной проверкой,
+если апскейл, remover, trim и очистка метаданных выключены. Итоговый PNG
+сохраняет исходные пиксели и получает значение 300 DPI; API-ключ не требуется.
+
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 
 The approved acceptance fixes and Fal.ai Bria Creative, Topaz Precision and

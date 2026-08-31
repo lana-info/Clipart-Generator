@@ -1861,10 +1861,11 @@ class WorkerThread(QThread):
             or self.trim_enabled
             or self.edge_shrink_enabled
             or self._metadata_cleanup_requested()
+            or self.export_300_dpi
         ):
             raise ValueError(
                 "Включите хотя бы один этап: удаление видимой метки, апскейл, "
-                "удаление фона, trim или очистку файла"
+                "удаление фона, trim, 300 DPI или очистку файла"
             )
 
         if (self._uses_any_kie_upscale() or self._uses_kie_remove_bg()) and not self.kie_api_key:
