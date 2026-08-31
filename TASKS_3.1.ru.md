@@ -843,7 +843,7 @@ Steps:
   однозначным текстом `Обработка изображения завершилась с ошибкой` либо
   нормализоваться в `item_failed`, сохраняя safe task ID, provider error code,
   модель, этап и номер элемента.
-- [ ] Добавить regression для KIE terminal fail: `provider_task_failed`
+- [x] Добавить regression для KIE terminal fail: `provider_task_failed`
   сопровождается одним failed item, не создаёт ready-файл, не помечается как
   success/info и остаётся доступным для явного `Повторить ошибки` без
   автоматической повторной платной отправки.
@@ -1176,6 +1176,53 @@ Acceptance before implementation:
 
 Dependencies: released 3.1.0 Chroma baseline and Task 13 diagnostics fixes.
 Scope: next-version per-item state/UI and key-selection feature.
+
+## Task 31 (3.2.0): Проверка доступности выбранных provider/model routes
+
+Status: Deferred to the next version after 3.1.0 — product direction approved;
+provider contracts and UI states require separate design and validation
+
+Goal:
+Перед запуском понятнее показывать, доступны ли выбранные KIE/Fal модели на
+каждом платном этапе, не выполняя платную генерацию и не обещая доступность,
+которую provider API не может гарантировать.
+
+Approved direction:
+- В шаге проверки действий показывать отдельный статус для каждой фактически
+  выбранной пары provider/model: generation, reference generation, upscale
+  before/after и background removal.
+- Использовать состояния `Доступна`, `Недоступна`, `Не удалось проверить` и
+  время последней проверки. Серый/неизвестный статус не считать ошибкой и не
+  показывать как подтверждённую доступность.
+- Различать неверный credential, отсутствующий model route, временный outage,
+  неподдерживаемую операцию/формат и неопределённый ответ. Не отправлять prompt,
+  references или paid inference ради preflight.
+- Общий preflight должен использовать тот же route resolver, что run plan,
+  стоимость и диагностика; mixed KIE/Fal pipeline проверяется по этапам.
+- Если provider не даёт надёжного capability endpoint, показывать
+  `Не удалось проверить` и разрешать осознанный запуск, а не ложный зелёный
+  статус. Результат реальной задачи остаётся окончательным источником истины.
+
+Evidence and boundary:
+- Успех `gpt-image/1.5-text-to-image` подтверждает работоспособность KIE в
+  целом, но terminal 422 у `flux-2/flex-text-to-image` не доказывает, что модель
+  постоянно недоступна: задача была принята и могла отклонить конкретный input.
+- Fal HTTP 405 воспроизводился на двух моделях после submit и исправлен на
+  уровне lifecycle URL contract; один разрешённый Windows smoke остаётся
+  обязательным перед тем, как показывать маршрут зелёным.
+
+Acceptance before implementation:
+- [ ] Проверены официальные capability/status contracts KIE и Fal без paid
+  inference; отсутствие такого контракта явно отражено в UX.
+- [ ] Утверждён макет списка этапов и четырёх состояний до UI implementation.
+- [ ] Offline tests покрывают mixed routes, auth denial, model-not-found,
+  outage, timeout, stale cache и неизвестный ответ без утечки credentials.
+- [ ] Preflight не создаёт task ID, не списывает средства и не меняет recovery
+  journal; запуск никогда не повторяется автоматически после failed preflight.
+
+Dependencies: Task 13 diagnostics, Task 28 provider cost breakdown and stable
+provider capability contracts.
+Scope: next-version provider observability and preflight UX.
 
 ## Исторические задачи 3.0
 

@@ -795,6 +795,49 @@ class V3RunQueueTests(unittest.TestCase):
                 session.technical_log,
             )
 
+    def test_terminal_kie_failure_has_no_output_and_requires_explicit_retry(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-kie-terminal-") as temp:
+            root = Path(temp)
+            session = RunQueueSession(
+                generation_request(root, count=1),
+                ProjectMode.CLIPART,
+            )
+            session.handle_progress("[1/1] Генерация")
+            session.handle_diagnostic(
+                {
+                    "schema_version": 2,
+                    "event": "provider_task_failed",
+                    "severity": "error",
+                    "outcome": "failed",
+                    "summary": "Внешний сервис завершил задачу с ошибкой.",
+                    "task": "task-terminal-422",
+                    "provider": "kie",
+                    "model": "flux-2/flex-text-to-image",
+                    "stage": "generation",
+                    "error_code": "422",
+                    "error_message": "Please try again, or change your input files or prompt.",
+                    "item_index": 1,
+                    "item_total": 1,
+                }
+            )
+            session.handle_fatal_error(
+                "KIE task failed [taskId=task-terminal-422; errorCode=422; "
+                "message=Please try again, or change your input files or prompt.]"
+            )
+
+            self.assertFalse(session.running)
+            self.assertEqual(session.failed_indices, [0])
+            self.assertIs(session.items[0].status, RunItemStatus.FAILED)
+            self.assertEqual(session.items[0].output_path, "")
+            self.assertFalse((root / "output").exists())
+            self.assertEqual(session.items[0].attempts, 1)
+
+            retry = session.prepare_retry()
+
+            self.assertIsNotNone(retry)
+            self.assertEqual(len(retry.generated_prompts), 1)
+            self.assertEqual(session.items[0].attempts, 2)
+
     def test_technical_error_keeps_the_cause_but_redacts_secrets_and_paths(self):
         with tempfile.TemporaryDirectory(prefix="v3-safe-error-") as temp:
             private_path = Path(temp) / "private" / "model.onnx"

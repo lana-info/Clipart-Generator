@@ -187,11 +187,18 @@ candidate:
   predates the current candidate, so current-source reproduction and a minimal
   adversarial test remain mandatory before changing Chroma.
 
-These requirements are recorded in Tasks 28–30 (3.2.0). They require approved
+These requirements are recorded in Tasks 28–31 (3.2.0). They require approved
 full screen/state mockups before implementation. No runtime source, release
 version, installer or current acceptance criterion is changed by this
 documentation checkpoint. For 3.1.0, the safe after-removal path is Local
 Real-ESRGAN; Fal.ai ESRGAN can be used before removal.
+
+Task 31 records the approved future provider/model availability check. It must
+show separate KIE/Fal route states per paid stage, distinguish unavailable from
+unknown and never create a paid task for preflight. A KIE terminal 422 after a
+task was accepted is not sufficient evidence that the model route is globally
+unavailable; likewise, Fal routes must not be shown as confirmed until the
+corrected lifecycle contract passes the remaining controlled Windows smoke.
 
 ## Latest project checkpoint
 
