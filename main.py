@@ -25,6 +25,8 @@ from urllib import request, parse
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import numpy as np
+
 
 _GUI_NULL_STREAMS = []
 
@@ -124,6 +126,7 @@ from model_catalog import (
 from v3_provider_registry import (
     FAL_BRIA_UPSCALE_MODEL_ID,
     FAL_RECRAFT_CRISP_MODEL_ID,
+    FAL_TOPAZ_TRANSPARENT_MODEL_ID,
     KIE_TOPAZ_MODEL_ID,
     TOPAZ_MAX_FILE_BYTES,
     TOPAZ_MAX_OUTPUT_SIDE,
@@ -131,6 +134,7 @@ from v3_provider_registry import (
     normalize_fal_upscale_model,
     normalize_fal_upscale_factor,
     normalize_topaz_upscale_factor,
+    upscale_model_preserves_alpha,
 )
 
 try:
@@ -874,17 +878,13 @@ def validate_photoroom_input(image_path):
 
 
 def validate_upscale_after_background_order(remove_bg, upscale_after, provider, model):
-    if (
-        remove_bg
-        and upscale_after
-        and str(provider or "").strip() == "kie"
-        and str(model or "").strip() == "recraft/crisp-upscale"
-    ):
+    provider_id = str(provider or "").strip()
+    model_id = str(model or "").strip()
+    if remove_bg and upscale_after and not upscale_model_preserves_alpha(provider_id, model_id):
         return (
-            "Recraft Crisp нельзя использовать после удаления фона: "
-            "удаление фона создаёт прозрачное изображение, а модель не поддерживает "
-            "прозрачный вход. Используйте Local Real-ESRGAN после удаления фона "
-            "или перенесите Recraft Crisp до удаления фона."
+            "Выбранный апскейлер нельзя использовать после удаления фона: "
+            "модель не поддерживает прозрачный вход. Выберите апскейлер с "
+            "поддержкой прозрачности или перенесите его до удаления фона."
         )
     return ""
 
@@ -1137,15 +1137,21 @@ class WorkerThread(QThread):
         self.fal_upscale_model = normalize_fal_upscale_model(
             settings.get("fal_upscale_model", FAL_BRIA_UPSCALE_MODEL_ID)
         )
-        self.fal_upscale_after_model = FAL_BRIA_UPSCALE_MODEL_ID
+        self.fal_upscale_after_model = normalize_fal_upscale_model(
+            settings.get(
+                "fal_upscale_after_model",
+                FAL_TOPAZ_TRANSPARENT_MODEL_ID,
+            )
+        )
         self._has_fal_upscale_scale = "fal_upscale_scale" in settings
         self._has_fal_upscale_after_scale = "fal_upscale_after_scale" in settings
         self.fal_upscale_scale = normalize_fal_upscale_factor(
             self.fal_upscale_model,
             settings.get("fal_upscale_scale", 4),
         )
-        self.fal_upscale_after_scale = normalize_local_realesrgan_scale(
-            settings.get("fal_upscale_after_scale", 4)
+        self.fal_upscale_after_scale = normalize_fal_upscale_factor(
+            self.fal_upscale_after_model,
+            settings.get("fal_upscale_after_scale", 4),
         )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.fal_remove_bg_model = settings.get("fal_remove_bg_model", "fal-ai/bria/background/remove")
@@ -1164,7 +1170,7 @@ class WorkerThread(QThread):
             settings.get("upscale_factor", 4)
         )
         self.upscale_provider = settings.get("upscale_provider", "kie")
-        self.upscale_after_provider = settings.get("upscale_after_provider", "local_realesrgan")
+        self.upscale_after_provider = settings.get("upscale_after_provider", "fal")
         self.unsharp_enabled = bool(settings.get("unsharp_enabled", False))
         self.unsharp_amount = normalize_unsharp_amount(settings.get("unsharp_amount", 30))
         self.unsharp_radius = normalize_unsharp_radius(settings.get("unsharp_radius", 100))
@@ -2471,7 +2477,11 @@ class WorkerThread(QThread):
             self.remove_bg,
             self.upscale_after,
             self.upscale_after_provider,
-            self.kie_upscale_after_model,
+            (
+                self.fal_upscale_after_model
+                if self.upscale_after_provider == "fal"
+                else self.kie_upscale_after_model
+            ),
         )
         if order_error:
             raise ValueError(order_error)
@@ -2584,35 +2594,6 @@ class WorkerThread(QThread):
                 provider=self.upscale_provider,
                 local_scale=self.local_realesrgan_scale,
                 kie_model=self.kie_upscale_model,
-            )
-            self._ensure_running()
-
-        if self.unsharp_enabled:
-            self._diagnostic_context.stage = "unsharp"
-            unsharp_started = time.monotonic()
-            self._emit_diagnostic(
-                "stage_started",
-                provider="local",
-                model="pillow-unsharp-mask",
-                parameters={
-                    "amount": self.unsharp_amount,
-                    "radius": self.unsharp_radius,
-                    "threshold": self.unsharp_threshold,
-                },
-                outcome="started",
-            )
-            with self._local_operation_lock:
-                current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "unsharp_source")
-                current_path = self._unsharp_mask_pipeline_step(current_path, raw_dir, idx, prefix)
-            current_url = None
-            local_result = True
-            self._emit_diagnostic(
-                "stage_finished",
-                provider="local",
-                model="pillow-unsharp-mask",
-                outcome="succeeded",
-                elapsed_ms=round((time.monotonic() - unsharp_started) * 1000),
-                **inspect_diagnostic_image(current_path),
             )
             self._ensure_running()
 
@@ -2986,6 +2967,34 @@ class WorkerThread(QThread):
         )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "fal":
+            alpha_source_path = ""
+            alpha_safe_after = (
+                stage == "upscale_after"
+                and upscale_model_preserves_alpha(provider, upscale_model)
+            )
+            if alpha_safe_after:
+                alpha_source_path = self._ensure_local_path(
+                    current_path,
+                    current_url,
+                    raw_dir,
+                    idx,
+                    prefix,
+                    f"{step_name}_transparent_source",
+                )
+                try:
+                    with Image.open(alpha_source_path) as source_image:
+                        if not has_usable_alpha(source_image):
+                            raise RuntimeError(
+                                "Апскейл после удаления фона требует PNG с прозрачностью"
+                            )
+                except RuntimeError:
+                    raise
+                except (OSError, UnidentifiedImageError) as error:
+                    raise RuntimeError(
+                        "Не удалось проверить прозрачный PNG перед апскейлом"
+                    ) from error
+                current_path = alpha_source_path
+                current_url = None
             current_url = self._fal_source_url(current_path, current_url)
             with self._provider_lease("fal"):
                 current_url = self._fal_process_image(
@@ -2998,6 +3007,12 @@ class WorkerThread(QThread):
                 raw_dir, f"{prefix}_{step_name}_fal_{idx:03d}_{self.run_stamp}.png"
             )
             self._download_file(current_url, current_path)
+            if alpha_safe_after:
+                self._validate_alpha_safe_upscale_output(
+                    alpha_source_path,
+                    current_path,
+                    effective_scale,
+                )
             self.progress.emit(f"  Промежуточный Fal.ai апскейл: {current_path}")
             self.progress.emit(f"  Этап обработки: {stage}; status=complete")
             self._emit_diagnostic(
@@ -3074,6 +3089,31 @@ class WorkerThread(QThread):
             elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
         )
         return current_path, current_url, False
+
+    @staticmethod
+    def _validate_alpha_safe_upscale_output(source_path, output_path, scale):
+        try:
+            with Image.open(source_path) as source_image:
+                expected_size = (
+                    source_image.width * int(scale),
+                    source_image.height * int(scale),
+                )
+            with Image.open(output_path) as output_image:
+                if output_image.format != "PNG":
+                    raise RuntimeError("Fal.ai вернул не PNG после прозрачного апскейла")
+                if output_image.size != expected_size:
+                    raise RuntimeError("Fal.ai вернул неверный размер прозрачного апскейла")
+                if not has_usable_alpha(output_image):
+                    raise RuntimeError(
+                        "Fal.ai не сохранил прозрачность после апскейла"
+                    )
+                output_image.load()
+        except RuntimeError:
+            raise
+        except (OSError, UnidentifiedImageError) as error:
+            raise RuntimeError(
+                "Fal.ai вернул повреждённый прозрачный PNG"
+            ) from error
 
     def _fal_source_url(self, current_path, current_url):
         if current_url and str(current_url).startswith("https://"):
@@ -3592,11 +3632,11 @@ class WorkerThread(QThread):
     def _unsharp_mask_pipeline_step(self, input_path, raw_dir, idx, prefix):
         output_path = os.path.join(raw_dir, f"{prefix}_unsharp_{idx:03d}_{self.run_stamp}.png")
         self.progress.emit(
-            f"  Unsharp Mask: amount {self.unsharp_amount}, radius {self.unsharp_radius:g}, "
+            f"  Резкость: amount {self.unsharp_amount}, radius {self.unsharp_radius:g}, "
             f"threshold {self.unsharp_threshold}..."
         )
         self._apply_unsharp_mask_file(input_path, output_path)
-        self.progress.emit(f"  Промежуточная резкость: {output_path}")
+        self.progress.emit(f"  Резкость применена: {output_path}")
         return output_path
 
     def _run_local_realesrgan(self, input_path, output_path, scale=None):
@@ -3691,14 +3731,36 @@ class WorkerThread(QThread):
 
     def _apply_unsharp_mask_file(self, input_path, output_path):
         with Image.open(input_path) as img:
-            image = img.convert("RGBA") if "A" in img.getbands() else img.convert("RGB")
-            sharpened = image.filter(
-                ImageFilter.UnsharpMask(
-                    radius=self.unsharp_radius,
-                    percent=self.unsharp_amount,
-                    threshold=self.unsharp_threshold,
-                )
+            unsharp = ImageFilter.UnsharpMask(
+                radius=self.unsharp_radius,
+                percent=self.unsharp_amount,
+                threshold=self.unsharp_threshold,
             )
+            if "A" not in img.getbands():
+                sharpened = img.convert("RGB").filter(unsharp)
+            else:
+                rgba = np.asarray(img.convert("RGBA"), dtype=np.uint8)
+                alpha_bytes = rgba[:, :, 3].copy()
+                alpha = alpha_bytes.astype(np.float32) / 255.0
+                premultiplied = np.rint(
+                    rgba[:, :, :3].astype(np.float32) * alpha[:, :, None]
+                ).astype(np.uint8)
+                sharpened_premultiplied = np.asarray(
+                    Image.fromarray(premultiplied, mode="RGB").filter(unsharp),
+                    dtype=np.float32,
+                )
+                restored = np.zeros_like(sharpened_premultiplied, dtype=np.float32)
+                visible = alpha > 0
+                restored[visible] = (
+                    sharpened_premultiplied[visible]
+                    / alpha[visible, None]
+                )
+                restored = np.clip(np.rint(restored), 0, 255).astype(np.uint8)
+                sharpened = Image.fromarray(
+                    np.dstack((restored, alpha_bytes)),
+                    mode="RGBA",
+                )
+            sharpened.info.update(dict(getattr(img, "info", {}) or {}))
             self._save_image_object_as_png(sharpened, output_path)
         return output_path
 
@@ -3882,6 +3944,37 @@ class WorkerThread(QThread):
                 self._save_image_as_png(source_path, stage_path)
 
             self._ensure_running()
+            if self.unsharp_enabled:
+                self._diagnostic_context.stage = "unsharp"
+                unsharp_started = time.monotonic()
+                self._emit_diagnostic(
+                    "stage_started",
+                    provider="local",
+                    model="pillow-unsharp-mask-alpha-aware",
+                    parameters={
+                        "amount": self.unsharp_amount,
+                        "radius": self.unsharp_radius,
+                        "threshold": self.unsharp_threshold,
+                    },
+                    outcome="started",
+                )
+                with self._local_operation_lock:
+                    sharpened_path = self._unsharp_mask_pipeline_step(
+                        stage_path,
+                        raw_dir,
+                        idx,
+                        prefix,
+                    )
+                    shutil.copyfile(sharpened_path, stage_path)
+                self._emit_diagnostic(
+                    "stage_finished",
+                    provider="local",
+                    model="pillow-unsharp-mask-alpha-aware",
+                    outcome="succeeded",
+                    elapsed_ms=round((time.monotonic() - unsharp_started) * 1000),
+                    **inspect_diagnostic_image(stage_path),
+                )
+                self._ensure_running()
             if self.export_300_dpi:
                 self._verify_png_dpi(stage_path, dpi=300)
             self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
@@ -6829,7 +6922,7 @@ class MainWindow(QMainWindow):
         self.chk_remove_bg.setChecked(self.config.get("remove_bg", True))
         self.chk_trim = QCheckBox("Trim (обрезка пустых краёв)")
         self.chk_trim.setChecked(bool(self.config.get("trim_enabled", False)))
-        self.chk_unsharp = QCheckBox("Unsharp Mask")
+        self.chk_unsharp = QCheckBox("Резкость")
         self.chk_unsharp.setChecked(bool(self.config.get("unsharp_enabled", False)))
         self.chk_export_300_dpi = QCheckBox("Экспорт для печати (300 DPI)")
         self.chk_export_300_dpi.setChecked(bool(self.config.get("export_300_dpi", False)))
@@ -8810,7 +8903,11 @@ class MainWindow(QMainWindow):
             self.chk_remove_bg.isChecked(),
             self.chk_upscale_after.isChecked(),
             self.upscale_after_provider_combo.currentData(),
-            self.kie_upscale_after_model_combo.currentText(),
+            (
+                self.fal_upscale_after_model_combo.currentData()
+                if self.upscale_after_provider_combo.currentData() == "fal"
+                else self.kie_upscale_after_model_combo.currentText()
+            ),
         )
         if order_error:
             return order_error

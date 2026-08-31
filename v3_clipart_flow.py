@@ -520,9 +520,14 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
             use_provider("fal")
             incomplete_providers.add("fal")
             processing_request_count += output_count
-    if operations.upscale_after and operations.upscale_after_provider == "kie":
-        use_provider("kie")
-        processing_models.append(operations.kie_upscale_after_model)
+    if operations.upscale_after:
+        if operations.upscale_after_provider == "kie":
+            use_provider("kie")
+            processing_models.append(operations.kie_upscale_after_model)
+        elif operations.upscale_after_provider == "fal":
+            use_provider("fal")
+            incomplete_providers.add("fal")
+            processing_request_count += output_count
 
     processing_request_count += len(processing_models) * output_count
     for model_id in processing_models:
@@ -561,8 +566,6 @@ def clipart_pipeline_steps(
         steps.append("Удаление видимой метки")
     if operations.upscale_before:
         steps.append("Апскейл до удаления фона")
-    if operations.unsharp:
-        steps.append("Unsharp Mask")
     if operations.remove_background:
         steps.append("Удаление фона")
     if operations.upscale_after:
@@ -571,6 +574,8 @@ def clipart_pipeline_steps(
         steps.append("Очистка края alpha")
     if operations.trim:
         steps.append("Trim")
+    if operations.unsharp:
+        steps.append("Резкость")
     if any(
         (
             operations.remove_exif,
@@ -778,7 +783,11 @@ def _validate_alpha_safe_upscale(operations: ImageOperationData) -> None:
         return
     if upscale_model_preserves_alpha(
         operations.upscale_after_provider,
-        operations.kie_upscale_after_model,
+        (
+            operations.fal_upscale_after_model
+            if operations.upscale_after_provider == "fal"
+            else operations.kie_upscale_after_model
+        ),
     ):
         return
     if (
@@ -3440,7 +3449,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
         "fal_birefnet_refine_foreground": "Fal.ai BiRefNet: уточнить foreground",
         "fal_rembg_crop_to_bbox": "Fal.ai rembg: обрезать по объекту",
         "local_ben2_refine_foreground": "BEN2: уточнить foreground",
-        "unsharp": "Unsharp Mask",
+        "unsharp": "Резкость",
         "edge_shrink": "Очистить край alpha",
         "trim": "Trim",
         "export_300_dpi": "Экспорт 300 DPI",
@@ -3948,6 +3957,8 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
         add(operations.fal_upscale_model, output_count)
     if operations.remove_background and operations.remove_background_provider == "fal":
         add(operations.fal_remove_bg_model, output_count)
+    if operations.upscale_after and operations.upscale_after_provider == "fal":
+        add(operations.fal_upscale_after_model, output_count)
     return quantities
 
 

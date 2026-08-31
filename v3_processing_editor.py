@@ -28,6 +28,7 @@ from v3_provider_registry import (
     FAL_BIREFNET_RESOLUTION_OPTIONS,
     FAL_TOPAZ_PRECISION_MODEL_ID,
     FAL_REMOVE_BG_MODEL_OPTIONS,
+    FAL_UPSCALE_AFTER_MODEL_OPTIONS,
     FAL_UPSCALE_MODEL_OPTIONS,
     KIE_TOPAZ_MODEL_ID,
     KIE_REMOVE_BG_MODEL_OPTIONS,
@@ -50,7 +51,7 @@ SYNTHID_UNAVAILABLE_TOOLTIP = (
     "Функция не включена: нет подтверждённого production-контракта "
     "обнаружения и удаления SynthID."
 )
-UPSCALE_AFTER_UI_ENABLED = False
+UPSCALE_AFTER_UI_ENABLED = True
 CLEANUP_OPERATION_LABELS = {
     "remove_exif": "Удалить EXIF",
     "remove_xmp": "Удалить XMP",
@@ -194,8 +195,6 @@ def processing_pipeline_steps(
         steps.append("Экспериментальная очистка невидимого watermark")
     if operations.upscale_before:
         steps.append("Апскейл до удаления фона")
-    if operations.unsharp:
-        steps.append("Unsharp Mask")
     if operations.remove_background:
         steps.append("Удаление фона")
     if operations.upscale_after:
@@ -204,6 +203,8 @@ def processing_pipeline_steps(
         steps.append("Очистка края alpha")
     if operations.trim:
         steps.append("Trim")
+    if operations.unsharp:
+        steps.append("Резкость")
     if operations.export_300_dpi:
         steps.append("Экспорт 300 DPI")
     if steps:
@@ -227,11 +228,11 @@ class RunPlanBuilder:
 class ProcessingPipelineEditor(QScrollArea):
     _STAGE_TITLES = {
         "upscale_before": "Апскейл до удаления фона",
-        "unsharp": "Unsharp Mask",
         "remove_background": "Удалить фон",
         "upscale_after": "Апскейл после удаления фона",
         "edge_shrink": "Очистить край alpha",
         "trim": "Trim",
+        "unsharp": "Резкость",
         "export_300_dpi": "Установить 300 DPI",
     }
     _STAGE_ORDER = tuple(_STAGE_TITLES)
@@ -244,7 +245,7 @@ class ProcessingPipelineEditor(QScrollArea):
         "fal_birefnet_refine_foreground": "Fal.ai BiRefNet: уточнить foreground",
         "fal_rembg_crop_to_bbox": "Fal.ai rembg: обрезать по объекту",
         "local_ben2_refine_foreground": "BEN2: уточнить foreground",
-        "unsharp": "Unsharp Mask",
+        "unsharp": "Резкость",
         "edge_shrink": "Очистить край alpha",
         "trim": "Trim",
         "export_300_dpi": "Экспорт 300 DPI",
@@ -316,11 +317,11 @@ class ProcessingPipelineEditor(QScrollArea):
         form = QFormLayout(self._control_staging)
         operation_names = (
             "upscale_before",
-            "unsharp",
             "remove_background",
             "upscale_after",
             "edge_shrink",
             "trim",
+            "unsharp",
             "export_300_dpi",
         )
         operation_checkboxes: list[tuple[str, QCheckBox]] = []
@@ -418,7 +419,7 @@ class ProcessingPipelineEditor(QScrollArea):
             advanced_form,
             "fal_upscale_after_model",
             "Fal.ai модель апскейла после",
-            FAL_UPSCALE_MODEL_OPTIONS,
+            FAL_UPSCALE_AFTER_MODEL_OPTIONS,
             operations,
         )
         self._add_combo(

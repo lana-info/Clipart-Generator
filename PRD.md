@@ -25,7 +25,7 @@ Clipart Generator должен помогать автору быстро ген
   локальное удаление по цвету без AI и без сетевого запроса; движок автоматически
   измеряет фактический цвет фона, восстанавливает RGB полупрозрачного края и
   убирает цветной ореол.
-- Опциональный Unsharp Mask после апскейла.
+- Опциональная alpha-aware `Резкость` после последнего resize/edge/trim.
 - Опциональное удаление края/контура объекта на `1/2/3 px`.
 - Финальный trim пустых краёв.
 - Сохранение PNG, включая прозрачность и 300 DPI при включённой настройке.
@@ -36,7 +36,7 @@ Clipart Generator должен помогать автору быстро ген
 
 1. Автор выбирает рабочую папку, вводит промпты, выбирает модель генерации, пропорции и качество, запускает генерацию и получает результаты в `output/`.
 2. Автор выбирает существующие изображения, включает нужные шаги обработки, запускает process-only режим и получает обработанные PNG в `output/`.
-3. Автор выбирает локальный pipeline: optional visible-mark cleanup -> optional Real-ESRGAN до фона -> Unsharp Mask -> Local rembg -> optional Real-ESRGAN после фона -> edge shrink -> trim.
+3. Автор выбирает локальный pipeline: optional visible-mark cleanup -> optional Real-ESRGAN до фона -> Local rembg -> optional alpha-safe upscale после фона -> edge shrink -> trim -> Резкость.
 4. Автор выбирает смешанный pipeline, когда часть шагов выполняется локально, а часть через KIE.
 5. Автор проверяет промежуточные файлы в `raw/`, если результат выглядит неправильно.
 6. Только после явного решения автора о готовности приложения поддержка вручную запускает release workflow и не смешивает основной repo с repo обновлений. Обычный push не запускает сборку или релиз.
@@ -47,11 +47,11 @@ Clipart Generator должен помогать автору быстро ген
 
 1. Optional local visible-mark cleanup.
 2. Optional upscale before background removal.
-3. Optional Unsharp Mask.
-4. Remove background.
-5. Optional upscale after background removal.
-6. Edge contour removal.
-7. Final trim.
+3. Remove background.
+4. Optional alpha-safe upscale after background removal.
+5. Edge contour removal.
+6. Final trim.
+7. Optional alpha-aware sharpness (`Резкость`).
 8. Optional final metadata/C2PA inspection and cleanup.
 9. Atomic save PNG.
 

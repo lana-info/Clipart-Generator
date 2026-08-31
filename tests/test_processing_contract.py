@@ -27,9 +27,10 @@ class ProcessingContractTests(unittest.TestCase):
             remove_embedded_c2pa=False, export_300_dpi=True,
         )
         self.assertEqual(pipeline_steps(operations), (
-            "Апскейл до удаления фона", "Unsharp Mask", "Удаление фона",
+            "Апскейл до удаления фона", "Удаление фона",
             "Апскейл после удаления фона", "Очистка края alpha", "Trim",
-            "Очистка данных файла", "Экспорт 300 DPI", "Экспорт нового PNG",
+            "Резкость", "Очистка данных файла", "Экспорт 300 DPI",
+            "Экспорт нового PNG",
         ))
 
     def test_cancel_and_workspace_failures_are_classified(self):

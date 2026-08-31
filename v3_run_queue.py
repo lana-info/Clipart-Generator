@@ -227,11 +227,11 @@ def _enabled_run_stages(settings: Any, mode: ProjectMode) -> list[str]:
         (source.get("visible_mark_cleanup_enabled"), "visible_mark_cleanup"),
         (source.get("invisible_watermark_cleanup_enabled"), "invisible_watermark_cleanup"),
         (source.get("upscale"), "upscale_before"),
-        (source.get("unsharp_enabled"), "unsharp"),
         (source.get("remove_bg"), "background_removal"),
         (source.get("upscale_after"), "upscale_after"),
         (source.get("edge_shrink_enabled"), "edge_cleanup"),
         (source.get("trim_enabled"), "trim"),
+        (source.get("unsharp_enabled"), "unsharp"),
         (
             any(
                 source.get(name)

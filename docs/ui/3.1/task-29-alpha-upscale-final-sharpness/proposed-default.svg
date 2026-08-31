@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="780" viewBox="0 0 1120 780">
+  <rect width="1120" height="780" fill="#0b1628"/>
+  <rect x="24" y="24" width="1072" height="66" rx="8" fill="#1e2a3a" stroke="#33475f"/>
+  <text x="41" y="64" fill="#f6f8fb" font-family="Arial" font-size="21" font-weight="700">Обработка изображений</text>
+  <rect x="654" y="38" width="142" height="40" rx="8" fill="none" stroke="#55a8ff" stroke-width="2"/>
+  <text x="671" y="62" fill="#f6f8fb" font-family="Arial" font-size="14" font-weight="700">Сменить режим</text>
+  <text x="826" y="63" fill="#f6f8fb" font-family="Arial" font-size="14" font-weight="700">Настройки API</text>
+  <text x="973" y="63" fill="#f6f8fb" font-family="Arial" font-size="14" font-weight="700">Диагностика</text>
+
+  <rect x="24" y="106" width="240" height="568" rx="8" fill="#1e2a3a" stroke="#33475f"/>
+  <text x="41" y="141" fill="#f6f8fb" font-family="Arial" font-size="20" font-weight="700">Шаги</text>
+  <g font-family="Arial" font-size="15">
+    <text x="41" y="168" fill="#20d2c0" font-weight="700">✓ 1. Файлы</text>
+    <text x="41" y="192" fill="#20d2c0" font-weight="700">✓ 2. Цель обработки</text>
+    <text x="41" y="216" fill="#20d2c0" font-weight="700">● 3. Обработка изображений</text>
+    <text x="41" y="240" fill="#9ab0cb">○ 4. Проверка и запуск</text>
+    <text x="41" y="264" fill="#9ab0cb">○ 5. Результаты</text>
+    <text x="41" y="288" fill="#9ab0cb">○ 6. Проверка прозрачности</text>
+  </g>
+
+  <rect x="280" y="106" width="816" height="568" fill="#0b1628" stroke="#14233a"/>
+  <text x="297" y="126" fill="#f6f8fb" font-family="Arial" font-size="21" font-weight="700">Обработка изображений</text>
+  <text x="297" y="155" fill="#dbe7f5" font-family="Arial" font-size="14">Операции выполняются сверху вниз; рецепт можно полностью изменить.</text>
+  <rect x="297" y="174" width="782" height="244" rx="8" fill="#0c192b" stroke="#33475f"/>
+  <rect x="310" y="166" width="84" height="20" fill="#0b1628"/>
+  <text x="315" y="181" fill="#dbe7f5" font-family="Arial" font-size="13">Операции</text>
+
+  <g font-family="Arial" font-size="14" fill="#e8eef7">
+    <rect x="310" y="199" width="15" height="15" fill="#31d4c5"/><text x="334" y="212">Апскейл до удаления фона</text>
+    <rect x="310" y="230" width="15" height="15" fill="#31d4c5"/><text x="334" y="243">Удалить фон</text>
+    <rect x="310" y="261" width="15" height="15" fill="#1e2a3a" stroke="#4a607a"/><text x="334" y="274">Апскейл после удаления фона</text>
+    <rect x="310" y="292" width="15" height="15" fill="#1e2a3a" stroke="#4a607a"/><text x="334" y="305">Очистить край alpha</text>
+    <rect x="310" y="323" width="15" height="15" fill="#1e2a3a" stroke="#4a607a"/><text x="334" y="336">Trim</text>
+    <rect x="310" y="354" width="15" height="15" fill="#1e2a3a" stroke="#4a607a"/><text x="334" y="367">Резкость</text>
+    <rect x="310" y="385" width="15" height="15" fill="#1e2a3a" stroke="#4a607a"/><text x="334" y="398">Экспорт 300 DPI</text>
+
+    <rect x="676" y="199" width="15" height="15" fill="#1e2a3a" stroke="#4a607a"/><text x="700" y="212">Удалить служебные данные</text>
+    <rect x="676" y="230" width="15" height="15" fill="#1e2a3a" stroke="#4a607a"/><text x="700" y="243">Удалить видимый знак Gemini</text>
+  </g>
+
+  <text x="297" y="451" fill="#f6f8fb" font-family="Arial" font-size="15" font-weight="700">Порядок обработки</text>
+  <text x="297" y="478" fill="#a9bdd5" font-family="Arial" font-size="13">Апскейл → Удаление фона → Очистка края → Trim → Экспорт PNG</text>
+  <rect x="297" y="502" width="782" height="89" rx="8" fill="#142238" stroke="#33475f"/>
+  <text x="315" y="528" fill="#f6f8fb" font-family="Arial" font-size="14" font-weight="700">Новые операции выключены</text>
+  <text x="315" y="552" fill="#a9bdd5" font-family="Arial" font-size="13">Старые проекты и рецепты открываются без изменения результата.</text>
+  <text x="315" y="574" fill="#a9bdd5" font-family="Arial" font-size="13">Настройки появятся ниже только после включения соответствующей операции.</text>
+
+  <rect x="24" y="690" width="1072" height="66" rx="8" fill="#1e2a3a" stroke="#33475f"/>
+  <rect x="912" y="703" width="77" height="42" rx="8" fill="#162337" stroke="#33475f"/>
+  <text x="930" y="729" fill="#f6f8fb" font-family="Arial" font-size="14" font-weight="700">Назад</text>
+  <rect x="1001" y="703" width="78" height="42" rx="8" fill="#22d1c1"/>
+  <text x="1019" y="729" fill="#ffffff" font-family="Arial" font-size="14" font-weight="700">Далее</text>
+</svg>

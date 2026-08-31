@@ -12,11 +12,13 @@ from typing import Any, Mapping, Sequence
 from chroma_key import KEY_COLORS
 from v3_provider_registry import (
     FAL_BRIA_UPSCALE_MODEL_ID,
+    FAL_TOPAZ_TRANSPARENT_MODEL_ID,
     KIE_TOPAZ_MODEL_ID,
     normalize_fal_upscale_model,
     normalize_fal_upscale_factor,
     normalize_kie_upscale_model,
     normalize_topaz_upscale_factor,
+    upscale_model_preserves_alpha,
 )
 
 
@@ -476,12 +478,12 @@ class ImageOperationData:
     upscale_before: bool = True
     upscale_before_provider: str = "kie"
     upscale_after: bool = False
-    upscale_after_provider: str = "local_realesrgan"
+    upscale_after_provider: str = "fal"
     upscale_factor: int = 4
     kie_upscale_model: str = KIE_TOPAZ_MODEL_ID
     kie_upscale_after_model: str = KIE_TOPAZ_MODEL_ID
     fal_upscale_model: str = FAL_BRIA_UPSCALE_MODEL_ID
-    fal_upscale_after_model: str = FAL_BRIA_UPSCALE_MODEL_ID
+    fal_upscale_after_model: str = FAL_TOPAZ_TRANSPARENT_MODEL_ID
     fal_upscale_scale: int = 4
     fal_upscale_after_scale: int = 4
     local_realesrgan_profile: str = "clipart"
@@ -536,12 +538,21 @@ class ImageOperationData:
             self.upscale_before_provider,
             limit=100,
         ) or "kie"
-        self.upscale_after_provider = _text(
+        requested_after_provider = _text(
             self.upscale_after_provider,
             limit=100,
-        ) or "local_realesrgan"
-        if self.upscale_after_provider == "fal":
-            self.upscale_after_provider = "local_realesrgan"
+        ) or "fal"
+        requested_after_model = _text(self.fal_upscale_after_model, limit=200)
+        alpha_safe_after = (
+            requested_after_provider == "fal"
+            and upscale_model_preserves_alpha(
+                requested_after_provider,
+                requested_after_model,
+            )
+        )
+        if self.upscale_after and not alpha_safe_after:
+            self.upscale_after = False
+        self.upscale_after_provider = "fal"
         self.upscale_factor = normalize_topaz_upscale_factor(self.upscale_factor)
         self.kie_upscale_model = normalize_kie_upscale_model(
             _text(self.kie_upscale_model, limit=200)
@@ -552,13 +563,16 @@ class ImageOperationData:
         self.fal_upscale_model = normalize_fal_upscale_model(
             _text(self.fal_upscale_model, limit=200)
         )
-        self.fal_upscale_after_model = FAL_BRIA_UPSCALE_MODEL_ID
+        self.fal_upscale_after_model = normalize_fal_upscale_model(
+            requested_after_model or FAL_TOPAZ_TRANSPARENT_MODEL_ID
+        )
         self.fal_upscale_scale = normalize_fal_upscale_factor(
             self.fal_upscale_model,
             self.fal_upscale_scale,
         )
-        self.fal_upscale_after_scale = self._realesrgan_scale(
-            self.fal_upscale_after_scale
+        self.fal_upscale_after_scale = normalize_fal_upscale_factor(
+            self.fal_upscale_after_model,
+            self.fal_upscale_after_scale,
         )
         self.local_realesrgan_profile = _text(
             self.local_realesrgan_profile,

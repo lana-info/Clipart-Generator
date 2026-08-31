@@ -26,6 +26,7 @@ from v3_project_state import (
     route_for_mode,
 )
 from v3_run_queue import (
+    ProgressEvent,
     RunItemStatus,
     RunQueueError,
     RunQueueSession,
@@ -718,6 +719,39 @@ class V3RunQueueTests(unittest.TestCase):
                 "event=run_failed reason=missing_completion",
                 session.technical_log,
             )
+
+    def test_seventeen_file_run_names_missing_last_file_and_retries_only_it(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-seventeen-") as temp:
+            root = Path(temp)
+            sources = [root / f"source_{index:02d}.png" for index in range(1, 18)]
+            session = RunQueueSession(
+                processing_request(root, sources),
+                ProjectMode.PROCESSING,
+            )
+            output_dir = root / "output"
+            output_dir.mkdir()
+            for index in range(1, 17):
+                output = output_dir / f"source_{index:02d}_ready.png"
+                Image.new("RGB", (4, 4), "green").save(output)
+                session.handle_item_progress(
+                    ProgressEvent(
+                        item_index=index,
+                        total_items=17,
+                        stage="export",
+                        status="succeeded",
+                        output_path=str(output),
+                    )
+                )
+
+            session.handle_finished()
+
+            self.assertEqual(session.counts()["succeeded"], 16)
+            self.assertEqual(session.failed_indices, [16])
+            self.assertEqual(session.items[16].display_name, "source_17.png")
+            self.assertEqual(session.items[16].failure_code, "missing_completion")
+            retry = session.prepare_retry()
+            self.assertIsNotNone(retry)
+            self.assertEqual(retry.selected_files, [str(sources[16])])
 
     def test_fatal_error_preserves_success_and_marks_only_remaining(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-fatal-") as temp:

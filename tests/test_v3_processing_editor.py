@@ -79,7 +79,7 @@ class ProcessingEditorTests(unittest.TestCase):
         profile = editor.operation_widgets["local_rembg_profile"]
         profile.setCurrentIndex(profile.findData("anime"))
         self.assertEqual(state.processing.operations.local_rembg_model, "isnet-anime")
-        self.assertTrue(editor.operation_widgets["upscale_after"].isHidden())
+        self.assertFalse(editor.operation_widgets["upscale_after"].isHidden())
         self.assertTrue(
             editor.operation_widgets["kie_upscale_after_model"].isHidden()
         )
@@ -120,7 +120,7 @@ class ProcessingEditorTests(unittest.TestCase):
             ),
         )
 
-    def test_ui_hides_and_disables_upscale_after_but_keeps_other_operations(self) -> None:
+    def test_ui_shows_alpha_safe_upscale_after_without_hiding_other_operations(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations
         operations.upscale_before = True
@@ -135,15 +135,68 @@ class ProcessingEditorTests(unittest.TestCase):
             include_cleanup=True,
         )
 
-        self.assertFalse(operations.upscale_after)
-        self.assertTrue(editor.operation_widgets["upscale_after"].isHidden())
-        self.assertTrue(
-            editor.operation_widgets["upscale_after_provider"].isHidden()
-        )
+        self.assertTrue(operations.upscale_after)
+        self.assertFalse(editor.operation_widgets["upscale_after"].isHidden())
+        self.assertFalse(editor.operation_widgets["upscale_after_provider"].isHidden())
         self.assertFalse(editor.operation_widgets["upscale_before"].isHidden())
         self.assertFalse(editor.operation_widgets["remove_background"].isHidden())
         self.assertTrue(operations.upscale_before)
         self.assertTrue(operations.remove_background)
+
+    def test_alpha_safe_after_upscale_and_sharpness_are_visible_in_final_order(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        operations = state.processing.operations
+        operations.upscale_before = True
+        operations.remove_background = True
+        operations.upscale_after = False
+        operations.edge_shrink = True
+        operations.trim = True
+        operations.unsharp = True
+
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+
+        self.assertFalse(editor.operation_widgets["upscale_after"].isHidden())
+        editor.operation_widgets["upscale_after"].setChecked(True)
+        self.assertEqual(
+            tuple(
+                editor.operation_widgets["upscale_after_provider"].itemData(index)
+                for index in range(
+                    editor.operation_widgets["upscale_after_provider"].count()
+                )
+            ),
+            ("fal",),
+        )
+        self.assertEqual(
+            tuple(
+                editor.operation_widgets["fal_upscale_after_model"].itemData(index)
+                for index in range(
+                    editor.operation_widgets["fal_upscale_after_model"].count()
+                )
+            ),
+            (
+                "topaz/upscale/image/transparent",
+                "bria/upscale/creative",
+            ),
+        )
+        self.assertTrue(editor.operation_widgets["fal_upscale_after_scale"].isHidden())
+        self.assertEqual(editor.operation_widgets["unsharp"].text(), "Резкость")
+        self.assertEqual(
+            editor.visible_stage_keys(),
+            (
+                "upscale_before",
+                "remove_background",
+                "upscale_after",
+                "edge_shrink",
+                "trim",
+                "unsharp",
+            ),
+        )
 
     def test_stage_sections_follow_enabled_pipeline_order(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
@@ -163,7 +216,7 @@ class ProcessingEditorTests(unittest.TestCase):
 
         self.assertEqual(
             editor.visible_stage_keys(),
-            ("upscale_before", "unsharp", "remove_background", "edge_shrink", "trim"),
+            ("upscale_before", "remove_background", "edge_shrink", "trim", "unsharp"),
         )
         self.assertTrue(editor.stage_sections["upscale_after"].isHidden())
 
@@ -186,7 +239,7 @@ class ProcessingEditorTests(unittest.TestCase):
 
         state.processing.operations.unsharp = True
         editor.refresh_from_state()
-        self.assertFalse(editor.stage_dividers["trim"].isHidden())
+        self.assertFalse(editor.stage_dividers["unsharp"].isHidden())
         self.assertNotIn("upscale_before", editor.stage_dividers)
 
     def test_operations_are_arranged_in_three_columns(self) -> None:

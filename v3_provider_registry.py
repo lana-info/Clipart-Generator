@@ -9,12 +9,14 @@ from chroma_key import KEY_COLORS
 KIE_TOPAZ_MODEL_ID: Final = "topaz/image-upscale"
 FAL_BRIA_UPSCALE_MODEL_ID: Final = "bria/upscale/creative"
 FAL_TOPAZ_PRECISION_MODEL_ID: Final = "topaz/upscale/image/precision"
+FAL_TOPAZ_TRANSPARENT_MODEL_ID: Final = "topaz/upscale/image/transparent"
 FAL_RECRAFT_CRISP_MODEL_ID: Final = "fal-ai/recraft/upscale/crisp"
 FAL_UPSCALE_MODEL_IDS: Final = frozenset(
     {
         FAL_BRIA_UPSCALE_MODEL_ID,
         FAL_TOPAZ_PRECISION_MODEL_ID,
         FAL_RECRAFT_CRISP_MODEL_ID,
+        FAL_TOPAZ_TRANSPARENT_MODEL_ID,
     }
 )
 LEGACY_FAL_UPSCALE_MODEL_IDS: Final = frozenset({"fal-ai/esrgan"})
@@ -50,6 +52,8 @@ def normalize_fal_upscale_factor(model_id: object, value: object) -> int:
         return 2
     if model_id == FAL_RECRAFT_CRISP_MODEL_ID:
         return 4
+    if model_id == FAL_TOPAZ_TRANSPARENT_MODEL_ID:
+        return 4
     return normalize_topaz_upscale_factor(value)
 
 
@@ -83,7 +87,7 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
     "fal": ProviderSpec(
         provider_id="fal",
         label="Fal.ai",
-        operations=("upscale_before", "remove_background"),
+        operations=("upscale_before", "upscale_after", "remove_background"),
         requires_network=True,
         requires_cost=True,
         preserves_alpha=False,
@@ -91,6 +95,7 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
         visible_controls=(
             "fal_upscale_model",
             "fal_upscale_scale",
+            "fal_upscale_after_model",
             "fal_remove_bg_model",
             "fal_birefnet_model",
             "fal_birefnet_resolution",
@@ -183,8 +188,7 @@ PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
         ("Local Real-ESRGAN", "local_realesrgan"),
     ),
     "upscale_after_provider": (
-        ("KIE", "kie"),
-        ("Local Real-ESRGAN", "local_realesrgan"),
+        ("Fal.ai", "fal"),
     ),
     "remove_background_provider": (
         ("KIE", "kie"),
@@ -214,6 +218,10 @@ FAL_UPSCALE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Bria Creative 2× — сохраняет прозрачность", FAL_BRIA_UPSCALE_MODEL_ID),
     ("Topaz Precision", FAL_TOPAZ_PRECISION_MODEL_ID),
     ("Recraft Crisp 4× — без прозрачности", FAL_RECRAFT_CRISP_MODEL_ID),
+)
+FAL_UPSCALE_AFTER_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
+    ("Topaz Transparent (4×)", FAL_TOPAZ_TRANSPARENT_MODEL_ID),
+    ("Bria Creative 2× — сохраняет прозрачность", FAL_BRIA_UPSCALE_MODEL_ID),
 )
 FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Общая — Light", "General Use (Light)"),
@@ -291,7 +299,10 @@ def upscale_model_preserves_alpha(provider_id: str, model_id: str) -> bool:
     if provider_id == "kie" and model_id == "recraft/crisp-upscale":
         return False
     if provider_id == "fal":
-        return model_id == FAL_BRIA_UPSCALE_MODEL_ID
+        return model_id in {
+            FAL_BRIA_UPSCALE_MODEL_ID,
+            FAL_TOPAZ_TRANSPARENT_MODEL_ID,
+        }
     return provider_preserves_alpha(provider_id)
 
 

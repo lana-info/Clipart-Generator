@@ -48,8 +48,6 @@ def pipeline_steps(operations: Any) -> tuple[str, ...]:
         steps.append("Удаление видимой метки")
     if operations.upscale_before:
         steps.append("Апскейл до удаления фона")
-    if operations.unsharp:
-        steps.append("Unsharp Mask")
     if operations.remove_background:
         steps.append("Удаление фона")
     if operations.upscale_after:
@@ -58,6 +56,8 @@ def pipeline_steps(operations: Any) -> tuple[str, ...]:
         steps.append("Очистка края alpha")
     if operations.trim:
         steps.append("Trim")
+    if operations.unsharp:
+        steps.append("Резкость")
     if any(getattr(operations, name, False) for name in (
         "remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text",
         "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa",

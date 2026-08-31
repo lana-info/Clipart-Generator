@@ -1141,9 +1141,8 @@ layout and provider breakdown; no paid request was used. Final focused gate:
 
 ## Task 29 (3.2.0): Alpha-safe Fal.ai upscale после удаления фона
 
-Status: Deferred to the next version after 3.1.0 — root cause and provider
-candidate confirmed from official documentation; implementation and paid
-endpoint verification intentionally not started
+Status: Source implementation completed on a feature branch; offline contract
+verification completed, paid endpoint and Windows acceptance remain pending
 
 Goal:
 Разрешить облачный Fal.ai upscale прозрачного PNG после удаления фона, не
@@ -1162,8 +1161,9 @@ Confirmed diagnosis:
 Approved direction:
 - Не ослаблять защиту и не разрешать обычный Fal.ai ESRGAN после удаления фона
   без отдельного adversarial alpha test и явной гарантии провайдера.
-- Добавить `Topaz Transparent (4×)` как отдельную Fal.ai-модель для операции
-  `Апскейл после удаления фона`.
+- Добавить alpha-safe Fal.ai-модели для операции `Апскейл после удаления
+  фона`: `Topaz Transparent (4×)` и `Bria Creative (2×)`. Список строить по
+  capability конкретной модели, поэтому его можно безопасно расширять.
 - Фильтровать модели по конкретному endpoint capability, а не считать весь
   провайдер Fal.ai одинаковым. Windows acceptance отклонил качество ESRGAN
   также до удаления фона, поэтому текущий endpoint полностью убран из обоих
@@ -1174,18 +1174,16 @@ Approved direction:
 - После загрузки результата проверять реальный PNG/alpha contract. Если ответ
   оказался непрозрачным или повреждённым, не публиковать его как ready-файл и
   сохранить исходный прозрачный результат предыдущего этапа.
-- В текущем 3.1 follow-up весь второй upscale после удаления фона временно
-  скрыт и выключен, чтобы пользователь не мог выбрать неподходящую модель.
-  Апскейл до удаления фона теперь также предлагает отдельно одобренные Bria
-  Creative и Topaz Precision из Task 33; второй этап не предлагает Fal до
-  отдельной проверенной alpha-safe модели.
+- Старые проекты с другим провайдером второго upscale не переводить молча на
+  платный Fal.ai: этап отключается при миграции. Новый выбор после удаления
+  фона показывает только модели с подтверждённым `preserves_alpha`.
 
 Acceptance before implementation:
-- [ ] Утверждён mockup выбора модели до/после удаления фона, включая скрытый
-  ESRGAN и видимый `Topaz Transparent (4×)` в alpha-required состоянии.
-- [ ] Capability catalog, payload, polling/recovery, price refresh и diagnostic
+- [x] Утверждён mockup выбора модели до/после удаления фона, включая скрытый
+  ESRGAN и видимые alpha-safe модели в alpha-required состоянии.
+- [x] Capability catalog, payload, polling/recovery, price refresh и diagnostic
   journal поддерживают новый endpoint без ослабления существующих проверок.
-- [ ] Offline contract tests подтверждают endpoint-specific filtering,
+- [x] Offline contract tests подтверждают endpoint-specific filtering,
   фиксированный 4× payload, PNG requirement и отказ от публикации flattened
   результата.
 - [ ] Один минимальный платный Fal.ai test на synthetic RGBA fixture отдельно
@@ -1202,10 +1200,10 @@ Dependencies: Task 28 pricing breakdown and released 3.1.0 processing baseline.
 Scope: next-version provider capability; paid verification requires separate
 owner approval.
 
-## Task 29A (3.2.0): Финальная alpha-aware резкость
+## Task 29A (3.2.0): Alpha-aware резкость
 
-Status: Deferred to the next version after 3.1.0 — product order approved;
-implementation and visual controls intentionally not started
+Status: Source implementation completed on a feature branch; offline alpha,
+pipeline-order and UI regression verification completed
 
 Goal:
 Применять резкость в самом конце пиксельного pipeline, когда итоговый размер и
@@ -1215,27 +1213,27 @@ Approved order:
 - Все операции изменения геометрии и размера выполняются раньше: upscale до
   remover → удаление фона → alpha-safe upscale после remover → очистка alpha
   края → trim.
-- Финальная резкость выполняется после них и до непиксельных стадий: очистки
+- `Резкость` выполняется после них и до непиксельных стадий: очистки
   метаданных, установки DPI и атомарного экспорта PNG.
 - Для RGBA нельзя независимо sharpen-ить скрытый RGB прозрачных пикселей.
   Использовать premultiplied/alpha-aware обработку RGB, alpha не изменять.
-- Текущий ранний `Unsharp Mask` не переносить молча: в UI явно различать
-  прежний промежуточный этап и новый рекомендуемый `Финальная резкость` либо
-  мигрировать настройку с понятным описанием порядка.
+- Существующая настройка `Unsharp Mask` мигрирует в тот же этап без потери
+  параметров amount/radius/threshold; пользовательское название — `Резкость`.
 
 Acceptance before implementation:
-- [ ] Утверждён mockup положения и названия финальной резкости в Processing.
-- [ ] Порядок stages и Review summary однозначно ставят её после последнего
+- [x] Утверждён mockup положения и названия `Резкость` в Processing.
+- [x] Порядок stages и Review summary однозначно ставят её после последнего
   resize/alpha/trim и до metadata/DPI/export.
-- [ ] Golden fixtures для opaque, hard-alpha, soft-alpha, watercolor и thin
-  lines подтверждают неизменную alpha и отсутствие RGB halo вне объекта.
-- [ ] Настройки amount/radius/threshold сохраняются и мигрируют без скрытой
+- [x] Автоматические fixtures для opaque и RGBA подтверждают неизменную alpha,
+  premultiplied RGB и отсутствие скрытого RGB вне объекта. Расширенная ручная
+  Windows-проверка watercolor/thin-lines остаётся перед релизом.
+- [x] Настройки amount/radius/threshold сохраняются и мигрируют без скрытой
   смены результата существующих проектов.
-- [ ] Batch и повтор запуска дают детерминированный PNG с теми же параметрами.
+- [x] Batch, полнота 17 файлов и защита от повторного запуска покрыты offline
+  regression tests; Windows acceptance остаётся отдельным release gate.
 
 Dependencies: Task 29 alpha-safe upscale-after contract and approved Processing
-pipeline mockup. Scope: next-version pixel pipeline; current 3.1 order remains
-unchanged.
+pipeline mockup. Scope: source candidate; release requires Windows acceptance.
 
 ## Task 30 (3.2.0): Chroma «Авто» и цвет фона для каждого изображения
 

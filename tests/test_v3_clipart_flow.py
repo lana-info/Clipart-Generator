@@ -1083,11 +1083,11 @@ class V3ClipartFlowTests(unittest.TestCase):
                 "Генерация изображения",
                 "Удаление видимой метки",
                 "Апскейл до удаления фона",
-                "Unsharp Mask",
                 "Удаление фона",
                 "Апскейл после удаления фона",
                 "Очистка края alpha",
                 "Trim",
+                "Резкость",
                 "Очистка данных файла",
                 "Экспорт 300 DPI",
                 "Экспорт PNG",
@@ -1194,6 +1194,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             "fal-ai/flux/schnell": 4,
             "fal-ai/recraft/upscale/crisp": 4,
             "fal-ai/birefnet/v2": 4,
+            "topaz/upscale/image/transparent": 4,
         }
 
     def test_gpt_image_two_exposes_all_documented_ratios(self):
@@ -1744,7 +1745,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("Fal.ai — не удалось обновить: timeout", text)
         self.assertIn("Итого — не рассчитано полностью", text)
 
-    def test_supported_fal_upscale_before_is_counted_but_after_is_not(self):
+    def test_supported_fal_upscale_before_and_after_are_both_counted(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox")]
         operations = state.clipart.operations
@@ -1756,7 +1757,7 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         estimate = estimate_clipart_cost(state)
 
-        self.assertEqual(estimate.processing_request_count, 1)
+        self.assertEqual(estimate.processing_request_count, 2)
         self.assertIn("fal", estimate.provider_usd)
         self.assertIn("fal", estimate.incomplete_providers)
 
@@ -1798,7 +1799,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertTrue(review.fal_cost_refresh_button.isHidden())
         self.assertNotIn("Fal.ai", review.cost_breakdown_label.text())
 
-    def test_upscale_after_is_hidden_and_disabled_without_affecting_upscale_before(self):
+    def test_upscale_after_is_visible_without_affecting_upscale_before(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         operations = state.clipart.operations
         operations.upscale_before = True
@@ -1806,11 +1807,9 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         page = ClipartProcessingPage(state, lambda: None)
 
-        self.assertFalse(operations.upscale_after)
-        self.assertTrue(page.operation_widgets["upscale_after"].isHidden())
-        self.assertTrue(
-            page.operation_widgets["upscale_after_provider"].isHidden()
-        )
+        self.assertTrue(operations.upscale_after)
+        self.assertFalse(page.operation_widgets["upscale_after"].isHidden())
+        self.assertFalse(page.operation_widgets["upscale_after_provider"].isHidden())
         self.assertFalse(page.operation_widgets["upscale_before"].isHidden())
         self.assertTrue(operations.upscale_before)
 

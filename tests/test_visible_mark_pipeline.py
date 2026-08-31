@@ -361,7 +361,7 @@ class VisibleMarkPipelineTests(unittest.TestCase):
             self.assertTrue(Path(result_path).is_file())
             self.assertEqual(
                 order,
-                ["visible", "upscaled_before", "unsharp", "background", "upscaled_after", "edge"],
+                ["visible", "upscaled_before", "background", "upscaled_after", "edge"],
             )
 
     def test_process_only_visible_cleanup_runs_without_kie(self):

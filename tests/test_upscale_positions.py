@@ -174,6 +174,92 @@ class UpscalePositionTests(unittest.TestCase):
         self.assertEqual(topaz._combined_upscale_factor(), 4)
         self.assertEqual(recraft._combined_upscale_factor(), 4)
 
+    def test_topaz_transparent_after_upscale_rejects_flattened_download(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-transparent-upscale-") as temp_dir:
+            temp_path = Path(temp_dir)
+            raw_dir = temp_path / "raw"
+            raw_dir.mkdir()
+            source = temp_path / "source.png"
+            rgba = Image.new("RGBA", (4, 3), (180, 70, 100, 255))
+            rgba.putpixel((0, 0), (180, 70, 100, 0))
+            rgba.save(source, format="PNG")
+            worker = main.WorkerThread(
+                "mode2_process",
+                str(temp_path),
+                processing_settings(
+                    fal_api_key="test-key",
+                    upscale=False,
+                    upscale_after=True,
+                    upscale_after_provider="fal",
+                    fal_upscale_after_model="topaz/upscale/image/transparent",
+                    fal_upscale_after_scale=4,
+                    remove_bg=False,
+                ),
+                selected_files=[str(source)],
+            )
+            worker._fal_process_image = lambda *_args, **_kwargs: "https://cdn.example/result.png"
+
+            def flattened_download(_url, output_path):
+                Image.new("RGB", (16, 12), "white").save(output_path, format="PNG")
+
+            worker._download_file = flattened_download
+
+            with self.assertRaisesRegex(RuntimeError, "прозрач"):
+                worker._run_upscale_pass(
+                    current_path=str(source),
+                    current_url=None,
+                    raw_dir=str(raw_dir),
+                    idx=1,
+                    prefix="file",
+                    step_name="upscaled_after",
+                    provider="fal",
+                    local_scale=4,
+                    kie_model="topaz/image-upscale",
+                )
+
+    def test_bria_after_upscale_also_rejects_flattened_download(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-alpha-upscale-") as temp_dir:
+            temp_path = Path(temp_dir)
+            raw_dir = temp_path / "raw"
+            raw_dir.mkdir()
+            source = temp_path / "source.png"
+            rgba = Image.new("RGBA", (4, 3), (180, 70, 100, 255))
+            rgba.putpixel((0, 0), (180, 70, 100, 0))
+            rgba.save(source, format="PNG")
+            worker = main.WorkerThread(
+                "mode2_process",
+                str(temp_path),
+                processing_settings(
+                    fal_api_key="test-key",
+                    upscale=False,
+                    upscale_after=True,
+                    upscale_after_provider="fal",
+                    fal_upscale_after_model="bria/upscale/creative",
+                    fal_upscale_after_scale=2,
+                    remove_bg=False,
+                ),
+                selected_files=[str(source)],
+            )
+            worker._fal_process_image = lambda *_args, **_kwargs: "https://cdn.example/result.png"
+
+            def flattened_download(_url, output_path):
+                Image.new("RGB", (8, 6), "white").save(output_path, format="PNG")
+
+            worker._download_file = flattened_download
+
+            with self.assertRaisesRegex(RuntimeError, "прозрач"):
+                worker._run_upscale_pass(
+                    current_path=str(source),
+                    current_url=None,
+                    raw_dir=str(raw_dir),
+                    idx=1,
+                    prefix="file",
+                    step_name="upscaled_after",
+                    provider="fal",
+                    local_scale=2,
+                    kie_model="topaz/image-upscale",
+                )
+
     def test_fal_ui_total_factor_matches_selected_endpoint_contract(self):
         fal_provider = types.SimpleNamespace(currentData=lambda: "fal")
         unused_combo = types.SimpleNamespace()
@@ -299,6 +385,35 @@ class UpscalePositionTests(unittest.TestCase):
             ),
             "",
         )
+
+    def test_fal_after_background_removal_requires_alpha_safe_model(self):
+        self.assertEqual(
+            main.validate_upscale_after_background_order(
+                remove_bg=True,
+                upscale_after=True,
+                provider="fal",
+                model=main.FAL_TOPAZ_TRANSPARENT_MODEL_ID,
+            ),
+            "",
+        )
+
+        self.assertEqual(
+            main.validate_upscale_after_background_order(
+                remove_bg=True,
+                upscale_after=True,
+                provider="fal",
+                model=main.FAL_BRIA_UPSCALE_MODEL_ID,
+            ),
+            "",
+        )
+
+        message = main.validate_upscale_after_background_order(
+            remove_bg=True,
+            upscale_after=True,
+            provider="fal",
+            model="topaz/upscale/image/precision",
+        )
+        self.assertIn("прозрач", message.lower())
 
     def test_ui_saves_independent_passes_and_combined_multiplier(self):
         with tempfile.TemporaryDirectory(prefix="clipart-upscale-ui-") as temp_dir:

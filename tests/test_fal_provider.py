@@ -607,6 +607,55 @@ class FalProviderTests(unittest.TestCase):
             },
         )
 
+    def test_topaz_transparent_upscale_submits_fixed_png_payload_without_scale(self):
+        model_id = "topaz/upscale/image/transparent"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        captured = {}
+
+        def submit(request):
+            captured.update(request.input_payload)
+            return {"request_id": "req-topaz-transparent"}
+
+        client.submit_task = submit
+        client.wait_for_result = lambda *_args, **_kwargs: {
+            "request_id": "req-topaz-transparent",
+            "status": "completed",
+            "result": {
+                "image": {
+                    "url": "https://cdn.example/topaz-transparent.png",
+                    "content_type": "image/png",
+                }
+            },
+        }
+
+        client.run_image_operation(
+            "upscale",
+            "https://cdn.example/input.png",
+            model_id=model_id,
+            scale=2,
+        )
+
+        self.assertEqual(
+            captured,
+            {
+                "image_url": "https://cdn.example/input.png",
+                "output_format": "png",
+            },
+        )
+
+    def test_topaz_transparent_result_rejects_non_png_content_type(self):
+        with self.assertRaisesRegex(FalProviderError, "формат"):
+            validate_fal_image_result(
+                {
+                    "image": {
+                        "url": "https://cdn.example/flattened.jpg",
+                        "content_type": "image/jpeg",
+                    }
+                },
+                operation="upscale",
+                model_id="topaz/upscale/image/transparent",
+            )
+
     def test_task_journal_does_not_recover_completed_after_cancel(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = FalTaskJournal(f"{temp}/fal-tasks.json")

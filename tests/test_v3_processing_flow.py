@@ -35,6 +35,7 @@ from v3_processing_flow import (
     processing_fal_endpoint_quantities,
     processing_pipeline_steps,
     uses_external_processing,
+    validate_processing_providers,
 )
 from v3_project_state import (
     ImageOperationData,
@@ -111,6 +112,19 @@ class WorkerFactory:
 
 
 class V3ProcessingFlowTests(unittest.TestCase):
+    def test_processing_validation_rejects_after_model_without_alpha_support(self):
+        operations = ImageOperationData()
+        operations.remove_background = True
+        operations.upscale_after = True
+        operations.upscale_after_provider = "fal"
+        operations.fal_upscale_after_model = "topaz/upscale/image/precision"
+
+        with self.assertRaisesRegex(
+            v3_processing_flow.ProcessingFlowError,
+            "прозрач",
+        ):
+            validate_processing_providers(operations)
+
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -254,6 +268,42 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 ("selected_files_required",),
             )
             self.assertEqual(len(controller.files_page.thumbnail_labels), 0)
+
+    def test_processing_start_rejects_second_signal_while_session_is_already_running(self):
+        """Catch a second start signal before the worker reports isRunning()."""
+        with tempfile.TemporaryDirectory(prefix="processing-start-race-") as temp:
+            state, _ = self.make_state(temp)
+            state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
+            shell = AppShell(state)
+
+            class DeferredStartWorker(FakeWorker):
+                def start(self):
+                    self.started = False
+
+            class DeferredStartFactory(WorkerFactory):
+                def __call__(self, **kwargs):
+                    worker = DeferredStartWorker(**kwargs)
+                    self.workers.append(worker)
+                    return worker
+
+            factory = DeferredStartFactory()
+            controller = install_processing_flow(
+                shell,
+                worker_factory=factory,
+                authorization_provider=lambda: None,
+            )
+            shell._run_request_key = (ProjectMode.PROCESSING, StepId.REVIEW_RUN)
+
+            first = controller.start()
+            second = controller.start()
+
+            self.assertIsNotNone(first)
+            self.assertIsNone(second)
+            self.assertEqual(len(factory.workers), 1)
+            self.assertIn(
+                "уже выполняется",
+                controller.review_page.run_status_label.text(),
+            )
 
     def test_standalone_synthid_consent_is_disabled_and_marked_unavailable(self):
         state = ProjectState(mode=ProjectMode.PROCESSING)
@@ -754,6 +804,9 @@ class V3ProcessingFlowTests(unittest.TestCase):
             upscale_before=True,
             upscale_before_provider="fal",
             fal_upscale_model="topaz/upscale/image/precision",
+            upscale_after=True,
+            upscale_after_provider="fal",
+            fal_upscale_after_model="topaz/upscale/image/transparent",
             remove_background=False,
         )
 
@@ -803,6 +856,9 @@ class V3ProcessingFlowTests(unittest.TestCase):
             upscale_before=True,
             upscale_before_provider="fal",
             fal_upscale_model="topaz/upscale/image/precision",
+            upscale_after=True,
+            upscale_after_provider="fal",
+            fal_upscale_after_model="topaz/upscale/image/transparent",
             remove_background=True,
             remove_background_provider="fal",
             fal_remove_bg_model="fal-ai/bria/background/remove",
@@ -812,6 +868,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             processing_fal_endpoint_quantities(operations, 17),
             {
                 "topaz/upscale/image/precision": 17,
+                "topaz/upscale/image/transparent": 17,
                 "fal-ai/bria/background/remove": 17,
             },
         )

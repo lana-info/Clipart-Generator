@@ -95,14 +95,26 @@ subtests, with 58 documented skips and two intentional deselections. Compile,
 sensitive-artifact and diff checks pass. No live provider request, Windows build
 or release action was performed.
 
-## Next-version final sharpness decision — 2026-08-31
+## Alpha-safe upscale-after and sharpness implementation — 2026-08-31
 
-The owner approved final sharpness for the next version. Task 29A records it
-after every resize/background/alpha-edge/trim operation and before metadata,
-DPI and export. RGBA processing must be alpha-aware/premultiplied and preserve
-the alpha channel so transparent borders do not acquire dark or white halos.
-The current 3.1 pipeline remains unchanged until the Processing control mockup,
-migration behavior and golden alpha fixtures are approved.
+The owner approved immediate source implementation and the user-facing name
+`Резкость`. Processing now orders it after every resize/background/alpha-edge/
+trim operation and before metadata, DPI and atomic PNG export. RGBA sharpening
+uses premultiplied RGB, preserves alpha byte-for-byte and retains the selected
+ICC/DPI metadata policy.
+
+Fal.ai upscale after background removal is visible again, filtered by model
+capability rather than provider name. The current alpha-safe choices are Topaz
+Transparent 4× and Bria Creative 2×; downloaded output is rejected if PNG,
+dimensions or usable alpha violate the selected contract. Legacy non-Fal
+after-upscale settings are disabled instead of silently becoming a paid run.
+The run queue also rejects the worker-start race and names a missing last file
+instead of reporting false batch success. Paid Fal.ai and Windows visual/
+packaged acceptance were not run and remain release blockers.
+
+Verification on Linux/offscreen Qt: 1109 unittest tests passed with 59
+documented skips; the 348-test focused processing/provider/metadata suite,
+Python compilation, diff check and sensitive-artifact scan also passed.
 
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 

@@ -578,7 +578,10 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
 
             worker._mode2_process_files(emit_final=False)
 
-            self.assertEqual(order, ["upscale", "unsharp", "remove_bg", "edge_shrink", "trim", "save"])
+            self.assertEqual(
+                order,
+                ["upscale", "remove_bg", "edge_shrink", "trim", "save", "unsharp"],
+            )
             outputs = list((temp_path / "output").glob("*.png"))
             rough_outputs = list((temp_path / "rough").glob("*.png"))
             self.assertEqual(len(outputs), 1)
@@ -645,6 +648,33 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             with Image.open(output_path) as result:
                 self.assertEqual(result.getchannel("A").getextrema(), (255, 255))
                 self.assertNotEqual(result.convert("RGB").tobytes(), image.convert("RGB").tobytes())
+
+    def test_unsharp_uses_premultiplied_rgb_for_transparent_edges(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-alpha-unsharp-") as temp_dir:
+            source_path = Path(temp_dir) / "source.png"
+            output_path = Path(temp_dir) / "output.png"
+            image = Image.new("RGBA", (9, 9), (255, 255, 255, 0))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((2, 2, 6, 6), fill=(80, 140, 210, 128))
+            draw.rectangle((3, 3, 5, 5), fill=(180, 70, 90, 255))
+            original_alpha = image.getchannel("A").tobytes()
+            image.save(source_path, format="PNG")
+            worker = self.make_worker(
+                temp_dir,
+                unsharp_amount=180,
+                unsharp_radius=2,
+            )
+
+            worker._apply_unsharp_mask_file(str(source_path), str(output_path))
+
+            with Image.open(output_path) as result:
+                rgba = result.convert("RGBA")
+                self.assertEqual(rgba.getchannel("A").tobytes(), original_alpha)
+                self.assertEqual(rgba.getpixel((0, 0)), (0, 0, 0, 0))
+                self.assertNotEqual(
+                    rgba.convert("RGB").tobytes(),
+                    image.convert("RGB").tobytes(),
+                )
 
     def test_background_edge_controls_are_deterministic(self):
         alpha = Image.new("L", (9, 9), 0)

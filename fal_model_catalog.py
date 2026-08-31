@@ -165,6 +165,15 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         output_formats=("png",),
         price_note="$0.004 per image; refresh before live use",
     ),
+    FalEndpointProfile(
+        model_id="topaz/upscale/image/transparent",
+        operation="upscale",
+        supports_references=True,
+        preserves_alpha=True,
+        output_formats=("png",),
+        price_note="fixed 4x output; refresh before live use",
+        parameter_names=("output_format",),
+    ),
 )
 
 

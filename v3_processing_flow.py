@@ -61,6 +61,7 @@ from v3_provider_registry import (
     provider_requires_api_key,
     provider_requires_network,
     provider_supports_operation,
+    upscale_model_preserves_alpha,
 )
 from v3_project_state import (
     GenerationData,
@@ -240,8 +241,6 @@ def _legacy_processing_pipeline_steps(
         steps.append("Удаление видимой метки")
     if operations.upscale_before:
         steps.append("Апскейл до удаления фона")
-    if operations.unsharp:
-        steps.append("Unsharp Mask")
     if operations.remove_background:
         steps.append("Удаление фона")
     if operations.upscale_after:
@@ -250,6 +249,8 @@ def _legacy_processing_pipeline_steps(
         steps.append("Очистка края alpha")
     if operations.trim:
         steps.append("Trim")
+    if operations.unsharp:
+        steps.append("Резкость")
     if any(
         (
             operations.remove_exif,
@@ -331,6 +332,21 @@ def validate_processing_providers(operations: ImageOperationData) -> None:
             "remove_background",
         ):
             raise ProcessingFlowError("Провайдер не поддерживает удаление фона")
+        if (
+            operations.remove_background
+            and operations.upscale_after
+            and not upscale_model_preserves_alpha(
+                operations.upscale_after_provider,
+                (
+                    operations.fal_upscale_after_model
+                    if operations.upscale_after_provider == "fal"
+                    else operations.kie_upscale_after_model
+                ),
+            )
+        ):
+            raise ProcessingFlowError(
+                "Апскейл после удаления фона должен сохранять прозрачность"
+            )
     except KeyError as error:
         raise ProcessingFlowError(
             f"\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440: {error.args[0]}"
@@ -1024,7 +1040,7 @@ class _LegacyProcessingPipelinePage(_ScrollableStepPage):
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить видимую метку — локальная реконструкция пикселей",
         "upscale_before": "Апскейл до удаления фона — увеличит изображение",
-        "unsharp": "Unsharp Mask — усилит резкость",
+        "unsharp": "Резкость — применяется к готовому размеру",
         "remove_background": "Удалить фон — создаст прозрачность",
         "upscale_after": "Апскейл после удаления фона — увеличит PNG",
         "edge_shrink": "Очистить край alpha — уменьшит цветную кайму",
@@ -1822,6 +1838,9 @@ class ProcessingFlowController(QObject):
             message = "Сначала завершите текущее задание в другом режиме"
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
+            return None
+        if self.run_queue.session is not None and self.run_queue.session.running:
+            self.review_page.set_run_status("Запуск уже выполняется", error=True)
             return None
         if self.worker is not None and self.runtime_adapter.is_running(self.worker):
             self.review_page.set_run_status("Запуск уже выполняется", error=True)

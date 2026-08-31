@@ -6,11 +6,11 @@
 
 1. опциональное локальное удаление небольшой видимой метки;
 2. опциональный апскейл до удаления фона;
-3. опциональный Unsharp Mask;
-4. удаление фона;
-5. опциональный апскейл после удаления фона;
-6. удаление белого/грязного контура по краю объекта;
-7. trim пустых краев;
+3. удаление фона;
+4. опциональный alpha-safe апскейл после удаления фона;
+5. удаление белого/грязного контура по краю объекта;
+6. trim пустых краев;
+7. опциональная `Резкость` (alpha-aware Unsharp Mask);
 8. сохранение готового PNG.
 
 Главная цель - получить качественные PNG-клипарты для Etsy/маркетплейсов дешевле, стабильнее и с большим контролем, чем при полностью облачной обработке.
@@ -120,11 +120,11 @@ KIE остается fallback, если локальная модель дает
 1. Исходник.
 2. Опциональное локальное удаление небольшой видимой метки.
 3. Опциональный апскейл до удаления фона.
-4. Опциональный Unsharp Mask.
-5. Удаление фона.
-6. Опциональный апскейл после удаления фона.
-7. Удаление контура 1-3 px.
-8. Trim пустых краев.
+4. Удаление фона.
+5. Опциональный alpha-safe апскейл после удаления фона.
+6. Удаление контура 1-3 px.
+7. Trim пустых краев.
+8. Опциональная `Резкость`.
 9. Сохранение PNG.
 
 Почему апскейл до удаления фона:
@@ -507,21 +507,22 @@ save PNG
 
 Это даст максимум пользы без полной переработки приложения.
 
-## 13. Addendum: Fixed Order and Unsharp Mask
+## 13. Addendum: Fixed Order and Sharpness
 
 The processing order is fixed:
 
 1. optional local visible-mark cleanup;
 2. optional upscale before background removal;
-3. optional Unsharp Mask;
-4. remove background;
-5. optional upscale after background removal;
-6. edge contour removal;
-7. final trim.
+3. remove background;
+4. optional alpha-safe upscale after background removal;
+5. edge contour removal;
+6. final trim;
+7. optional alpha-aware sharpness.
 
 The trim timing selector is removed from the UI. Trim always runs at the end.
 
-Unsharp Mask runs after the optional first upscale and before background removal. Manual settings are available:
+The UI calls this final pixel stage `Резкость`; it runs after every resize,
+background, edge and trim operation. Manual Unsharp Mask settings remain:
 
 - `Amount`;
 - `Radius`;
