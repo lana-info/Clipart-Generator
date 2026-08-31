@@ -14,7 +14,6 @@ from PyQt6.QtGui import (
     QColor,
     QIcon,
     QImage,
-    QImageReader,
     QKeySequence,
     QPainter,
     QPen,
@@ -1140,20 +1139,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self.file_list.blockSignals(True)
         self.file_list.clear()
         for path in self._paths:
-            item = QListWidgetItem(path.name)
-            reader = QImageReader(str(path))
-            source_size = reader.size()
-            if source_size.isValid():
-                source_size.scale(
-                    QSize(28, 28),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                )
-                reader.setScaledSize(source_size)
-            image = reader.read()
-            if not image.isNull():
-                pixmap = QPixmap.fromImage(image)
-                item.setIcon(QIcon(pixmap))
-            self.file_list.addItem(item)
+            self.file_list.addItem(QListWidgetItem(path.name))
         self.file_list.blockSignals(False)
         if self._paths:
             self.file_list.setCurrentRow(
@@ -1202,6 +1188,15 @@ class ClipartTransparencyEditorPage(QWidget):
             return
         self._document = document
         self._loaded_path = path
+        item = self.file_list.item(row)
+        if item is not None and item.icon().isNull():
+            width, height = document.image.size
+            scale = min(28 / width, 28 / height)
+            thumbnail = document.image.resize(
+                (max(1, round(width * scale)), max(1, round(height * scale))),
+                Image.Resampling.LANCZOS,
+            )
+            item.setIcon(QIcon(_pixmap_for_pil(thumbnail)))
         self.canvas.set_document(document)
         self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
         self._refresh_history_buttons()

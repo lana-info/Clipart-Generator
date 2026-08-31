@@ -2,6 +2,28 @@
 
 Updated: 2026-08-31
 
+## Windows acceptance regression: transparency editor blocked after error — 2026-08-31
+
+The owner reported that a local Chroma failure prevented entering the
+transparency-correction step for other files. The attached diagnostic run had
+one item and failed safely because the border did not match the selected Chroma
+Key colour; its provider task journals were terminal and unrelated. The UI was
+scoped only to successful outputs of the latest session, so an all-failed run
+hid `Проверить прозрачность` even when the selected workspace already contained
+valid ready PNGs.
+
+The focused fix keeps the action available after terminal Clipart and Processing
+runs whenever `output/` contains a final `_ready*.png`. Current-run successes
+remain first and preserve selection; selecting a failed row falls back to the
+first final result. The scan is non-recursive and never includes `rough/` or
+`.run/`; direct symlinks and resolved paths outside `output/` are rejected.
+The file list no longer decodes every thumbnail synchronously: it renders names
+immediately and decodes only the selected image after checking the 40 MP cap.
+TDD reproductions failed before the corresponding controller and lazy-list
+fixes. The focused Clipart/Processing/editor suite passes 192 tests and 5
+subtests. A replacement Windows build and installed UI confirmation have not
+yet been performed.
+
 ## Unified bounded diagnostics — 2026-08-31
 
 The owner approved one visually persistent `Диагностика` action at the top
@@ -384,8 +406,11 @@ scan прошли. Windows visual acceptance по-прежнему ожидае�
 
 Task 23 is integrated in `develop/3.1` at `ea08918`:
 режим обработки файлов после Results открывает тот же утверждённый редактор
-прозрачности, что и Clipart. В список попадают только успешные PNG текущего
-запуска; выбранный файл открывается сразу, а «Назад» возвращает к Results.
+прозрачности, что и Clipart. Успешные PNG текущего запуска идут первыми;
+готовые `_ready*.png` из `output/` также остаются доступны после ошибки.
+`rough/` и `.run/` автоматически не подмешиваются. Выбранный успешный файл
+открывается сразу, а при ошибочной строке открывается первый готовый результат;
+«Назад» возвращает к Results.
 Отдельного нового дизайна нет: используются кисть, pan пробелом, масштаб и
 экспорт существующего редактора. Focused offscreen suite для очереди и режима
 обработки (75 tests), `py_compile`, `git diff --check` и sensitive scan прошли.

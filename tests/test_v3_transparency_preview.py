@@ -283,6 +283,28 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
                 self.assertEqual(corrected.getpixel((8, 8))[-1], 0)
             page.deleteLater()
 
+    def test_editor_loads_only_the_selected_file_thumbnail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "output"
+            first = root / "flowers_ready.png"
+            second = root / "leaves_ready.png"
+            root.mkdir(parents=True)
+            Image.new("RGBA", (16, 16), (10, 20, 30, 255)).save(first)
+            Image.new("RGBA", (16, 16), (40, 50, 60, 255)).save(second)
+            page = ClipartTransparencyEditorPage()
+
+            page.set_files((first, second), selected_index=0)
+
+            self.assertEqual(page.current_path, first)
+            self.assertEqual(page.document.image.size, (16, 16))
+            self.assertFalse(page.file_list.item(0).icon().isNull())
+            self.assertTrue(page.file_list.item(1).icon().isNull())
+
+            page.file_list.setCurrentRow(1)
+
+            self.assertFalse(page.file_list.item(1).icon().isNull())
+            page.deleteLater()
+
     def test_editor_keeps_selected_zoom_when_switching_files(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

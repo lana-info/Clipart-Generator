@@ -65,6 +65,7 @@ _STOP_MARKERS = (
 )
 _LOG_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\[^\r\n,;]+")
 _LOG_POSIX_PATH = re.compile(r"(?<![:/])/(?:[^/\s;]+/)+([^/\s;]+)")
+_READY_OUTPUT_NAME = re.compile(r"_ready(?:_\d+)?\.png$", re.IGNORECASE)
 
 
 class RunQueueError(ValueError):
@@ -1408,6 +1409,45 @@ class RunCompletionDialog(QDialog):
         layout.addLayout(actions)
 
 
+def transparency_candidate_paths(session: RunQueueSession) -> list[Path]:
+    """Return editable final PNGs without exposing transient workspace files."""
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+    output_root = session.output_dir.resolve(strict=False)
+
+    def add(path: str | Path) -> None:
+        candidate = Path(path)
+        canonical = candidate.resolve(strict=False)
+        if (
+            not _READY_OUTPUT_NAME.search(candidate.name)
+            or candidate.is_symlink()
+            or not _is_within(canonical, output_root)
+            or canonical in seen
+            or not candidate.is_file()
+        ):
+            return
+        seen.add(canonical)
+        candidates.append(candidate)
+
+    for item in session.items:
+        if item.status is RunItemStatus.SUCCEEDED and item.output_path:
+            add(item.output_path)
+    try:
+        ready_outputs = sorted(
+            (
+                path
+                for path in session.output_dir.iterdir()
+                if _READY_OUTPUT_NAME.search(path.name)
+            ),
+            key=lambda path: path.name.casefold(),
+        )
+    except OSError:
+        ready_outputs = []
+    for path in ready_outputs:
+        add(path)
+    return candidates
+
+
 class RunResultsPage(QWidget):
     # The alpha/brush editor is implemented but intentionally hidden in the
     # stable client release. It will return in the dedicated image-processing
@@ -1433,6 +1473,7 @@ class RunResultsPage(QWidget):
         self._completion_dialog: RunCompletionDialog | None = None
         self._completion_shown_at: float | None = None
         self._preview_item_index: int | None = None
+        self._transparency_paths: list[Path] = []
         page_layout = QVBoxLayout(self)
         page_layout.setContentsMargins(0, 0, 0, 0)
         self.scroll_area = QScrollArea()
@@ -1618,6 +1659,7 @@ class RunResultsPage(QWidget):
     def refresh_from_state(self) -> None:
         session = self.session
         if session is None:
+            self._transparency_paths = []
             self.stop_button.hide()
             self.immediate_stop_button.hide()
             self.retry_button.hide()
@@ -1629,6 +1671,9 @@ class RunResultsPage(QWidget):
             self.save_mask_button.hide()
             self._selection_changed(-1)
             return
+        self._transparency_paths = (
+            transparency_candidate_paths(session) if not session.running else []
+        )
         counts = session.counts()
         self.summary_label.setText(self._summary_text(session, counts))
         summary_state = "error" if counts["failed"] else "warning" if counts["cancelled"] else ""
@@ -1732,14 +1777,11 @@ class RunResultsPage(QWidget):
 
     def _request_selected_transparency(self) -> None:
         row = self.queue.currentRow()
-        item = self._selected_item(row)
         if (
             self.state.mode not in {ProjectMode.CLIPART, ProjectMode.PROCESSING}
             or self.session is None
             or self.session.running
-            or item is None
-            or item.status is not RunItemStatus.SUCCEEDED
-            or not item.output_path
+            or not self._transparency_paths
         ):
             return
         self.transparency_requested.emit(row)
@@ -1786,8 +1828,7 @@ class RunResultsPage(QWidget):
             self.state.mode in {ProjectMode.CLIPART, ProjectMode.PROCESSING}
             and self.session is not None
             and not self.session.running
-            and item.status is RunItemStatus.SUCCEEDED
-            and bool(item.output_path)
+            and bool(self._transparency_paths)
         )
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),

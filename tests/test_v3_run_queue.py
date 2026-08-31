@@ -33,6 +33,7 @@ from v3_run_queue import (
     build_safe_run_report,
     export_safe_run_report,
     format_elapsed_duration,
+    transparency_candidate_paths,
     _failure_reason,
 )
 from v3_wizard import AppShell
@@ -258,6 +259,57 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertFalse(shell.sidebar.isHidden())
             shell.deleteLater()
 
+    def test_clipart_failed_run_can_open_existing_ready_outputs_in_transparency_editor(self):
+        with tempfile.TemporaryDirectory(prefix="v3-alpha-after-error-") as temp:
+            root = Path(temp)
+            existing_output = root / "output" / "previous_ready.png"
+            existing_output.parent.mkdir(parents=True)
+            Image.new("RGBA", (20, 20), (10, 20, 30, 128)).save(existing_output)
+            state = ProjectState(
+                mode=ProjectMode.CLIPART,
+                common=CommonProjectData(work_dir=temp),
+            )
+            shell = AppShell(state)
+            controller = install_clipart_flow(shell)
+            session = RunQueueSession(
+                generation_request(temp, count=1), ProjectMode.CLIPART
+            )
+            session.items[0].status = RunItemStatus.FAILED
+            session.items[0].short_message = "Фон не совпадает с Chroma Key цветом"
+            session.handle_finished()
+            controller.run_queue.session = session
+            controller.run_queue.page.set_session(session)
+
+            self.assertFalse(
+                controller.run_queue.page.check_transparency_button.isHidden()
+            )
+            controller.run_queue.page.check_transparency_button.click()
+
+            editor = controller.pages[StepId.TRANSPARENCY]
+            self.assertIs(shell.current_page, editor)
+            self.assertEqual(editor.current_path, existing_output)
+            shell.deleteLater()
+
+    def test_transparency_candidates_reject_ready_symlink_outside_output(self):
+        with tempfile.TemporaryDirectory(prefix="v3-alpha-output-boundary-") as temp:
+            root = Path(temp)
+            output = root / "output"
+            output.mkdir()
+            external = root / "external.png"
+            Image.new("RGBA", (20, 20), (10, 20, 30, 128)).save(external)
+            escape = output / "escape_ready.png"
+            try:
+                escape.symlink_to(external)
+            except OSError as error:
+                self.skipTest(f"symlink is unavailable: {error}")
+            session = RunQueueSession(
+                generation_request(temp, count=1), ProjectMode.CLIPART
+            )
+            session.items[0].status = RunItemStatus.FAILED
+            session.handle_finished()
+
+            self.assertEqual(transparency_candidate_paths(session), [])
+
     def test_processing_controller_opens_the_same_transparency_editor(self):
         with tempfile.TemporaryDirectory(prefix="v3-processing-alpha-controller-") as temp:
             root = Path(temp)
@@ -292,6 +344,39 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(editor.current_path, output)
             editor.back_button.click()
             self.assertIs(shell.state.current_step, StepId.RESULTS)
+            shell.deleteLater()
+
+    def test_processing_failed_run_can_open_existing_ready_outputs_in_transparency_editor(self):
+        with tempfile.TemporaryDirectory(prefix="v3-processing-alpha-after-error-") as temp:
+            root = Path(temp)
+            source = root / "source.png"
+            existing_output = root / "output" / "previous_ready.png"
+            existing_output.parent.mkdir(parents=True)
+            Image.new("RGB", (20, 20), (10, 20, 30)).save(source)
+            Image.new("RGBA", (20, 20), (10, 20, 30, 128)).save(existing_output)
+            state = ProjectState(
+                mode=ProjectMode.PROCESSING,
+                common=CommonProjectData(work_dir=temp),
+            )
+            shell = AppShell(state)
+            controller = install_processing_flow(shell)
+            session = RunQueueSession(
+                processing_request(temp, [source]), ProjectMode.PROCESSING
+            )
+            session.items[0].status = RunItemStatus.FAILED
+            session.items[0].short_message = "Фон не совпадает с Chroma Key цветом"
+            session.handle_finished()
+            controller.run_queue.session = session
+            controller.run_queue.page.set_session(session)
+
+            self.assertFalse(
+                controller.run_queue.page.check_transparency_button.isHidden()
+            )
+            controller.run_queue.page.check_transparency_button.click()
+
+            editor = controller.pages[StepId.TRANSPARENCY]
+            self.assertIs(shell.current_page, editor)
+            self.assertEqual(editor.current_path, existing_output)
             shell.deleteLater()
 
     def test_elapsed_duration_is_human_readable(self):

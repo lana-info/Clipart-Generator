@@ -1296,24 +1296,23 @@ class ProcessingFlowController(QObject):
         session = self.run_queue.session
         if session is None or session.running:
             return
-        successful = [
-            item
-            for item in session.items
-            if getattr(item.status, "value", "") == "succeeded" and item.output_path
-        ]
+        from v3_run_queue import transparency_candidate_paths
+
         selected_item = (
             session.items[item_index]
             if 0 <= item_index < len(session.items)
             else None
         )
-        paths = [Path(item.output_path) for item in successful]
-        if selected_item is None or not selected_item.output_path or not paths:
+        paths = transparency_candidate_paths(session)
+        if not paths:
             return
-        selected_path = Path(selected_item.output_path)
-        try:
-            selected = paths.index(selected_path)
-        except ValueError:
-            return
+        selected = 0
+        if selected_item is not None and selected_item.output_path:
+            selected_path = Path(selected_item.output_path)
+            try:
+                selected = paths.index(selected_path)
+            except ValueError:
+                pass
         page = self.pages[StepId.TRANSPARENCY]
         if not isinstance(page, ClipartTransparencyEditorPage):
             return
