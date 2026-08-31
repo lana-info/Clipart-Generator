@@ -223,7 +223,7 @@ DPAPI and native installer-lock contracts remain explicit Windows acceptance
 gates. All
 tracked Python files compile; sensitive scan and `git diff --check` pass. The
 latest automatic Chroma benchmark passes all gates: alpha IoU `0.968704`, alpha
-MAE `0.018194`, 2048×2048 median `1.530 s`, peak RSS `420.941 MiB` below the
+MAE `0.018194`, 2048×2048 median `1.662 s`, peak RSS `421.074 MiB` below the
 `448 MiB` ceiling. No paid request, Windows build,
 version change or publication was performed. Remaining release work is manual
 Windows acceptance and a separately authorized replacement build.
