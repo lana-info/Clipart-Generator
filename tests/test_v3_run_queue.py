@@ -669,6 +669,56 @@ class V3RunQueueTests(unittest.TestCase):
                 "failed",
             )
 
+    def test_finished_run_keeps_existing_item_failure_reason(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-failure-reason-") as temp:
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "input.png"]),
+                ProjectMode.PROCESSING,
+            )
+            session.handle_progress("[1/1] Обработка файла: input.png")
+            session.handle_progress("Ошибка: Не указан KIE API Key")
+
+            session.handle_finished()
+
+            self.assertIn("event=run_failed reason=configuration", session.technical_log)
+            self.assertNotIn("event=run_failed reason=missing_completion", session.technical_log)
+
+    def test_finished_run_reports_multiple_existing_failure_reasons(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-mixed-reasons-") as temp:
+            session = RunQueueSession(
+                processing_request(
+                    temp,
+                    [Path(temp) / "first.png", Path(temp) / "second.png"],
+                ),
+                ProjectMode.PROCESSING,
+            )
+            session.handle_progress("[1/2] Обработка файла: first.png")
+            session.handle_progress("Ошибка: Не указан KIE API Key")
+            session.handle_progress("[2/2] Обработка файла: second.png")
+            session.handle_progress("Ошибка: provider timed out")
+
+            session.handle_finished()
+
+            self.assertIn(
+                "event=run_failed reason=multiple_item_failures",
+                session.technical_log,
+            )
+
+    def test_finished_run_uses_missing_completion_only_for_unfinished_items(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-missing-completion-") as temp:
+            session = RunQueueSession(
+                processing_request(temp, [Path(temp) / "input.png"]),
+                ProjectMode.PROCESSING,
+            )
+            session.handle_progress("[1/1] Обработка файла: input.png")
+
+            session.handle_finished()
+
+            self.assertIn(
+                "event=run_failed reason=missing_completion",
+                session.technical_log,
+            )
+
     def test_fatal_error_preserves_success_and_marks_only_remaining(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-fatal-") as temp:
             root = Path(temp)

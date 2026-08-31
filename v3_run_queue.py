@@ -126,6 +126,7 @@ class RunItem:
     stage_statuses: dict[str, str] = field(default_factory=dict)
     source_path: str = field(default="", repr=False)
     output_path: str = field(default="", repr=False)
+    failure_code: str = field(default="", repr=False)
     payload: Any = field(default=None, repr=False)
 
 
@@ -766,6 +767,7 @@ class RunQueueSession(QObject):
             if not trusted:
                 self._close_running_stages(item, "failed")
                 item.status = RunItemStatus.FAILED
+                item.failure_code = "output_path_rejected"
                 item.short_message = "Worker вернул недопустимый путь результата."
                 self._event(
                     "item_failed",
@@ -786,6 +788,7 @@ class RunQueueSession(QObject):
                 )
                 if failed_stage:
                     item.status = RunItemStatus.FAILED
+                    item.failure_code = "stage_failed"
                     item.short_message = (
                         "Файл создан, но один из выбранных этапов завершился ошибкой."
                     )
@@ -798,6 +801,7 @@ class RunQueueSession(QObject):
                     )
                 else:
                     item.status = RunItemStatus.SUCCEEDED
+                    item.failure_code = ""
                     item.short_message = self._successful_item_message(item)
                     self._event(
                         "item_succeeded",
@@ -814,6 +818,7 @@ class RunQueueSession(QObject):
             if stage:
                 item.stage_statuses[stage] = "failed"
             item.status = RunItemStatus.FAILED
+            item.failure_code = code
             item.short_message = user_message
             self._event(
                 "item_failed",
@@ -958,6 +963,7 @@ class RunQueueSession(QObject):
                     self._close_running_stages(item, "failed")
                     item.stage_statuses["export"] = "complete"
                     item.status = RunItemStatus.FAILED
+                    item.failure_code = "stage_failed"
                     item.short_message = (
                         "Файл создан, но один из выбранных этапов завершился ошибкой."
                     )
@@ -973,6 +979,7 @@ class RunQueueSession(QObject):
                     self._close_running_stages(item, "complete")
                     item.stage_statuses["export"] = "complete"
                     item.status = RunItemStatus.SUCCEEDED
+                    item.failure_code = ""
                     item.short_message = self._successful_item_message(item)
                     self._event(
                         "item_succeeded",
@@ -983,6 +990,7 @@ class RunQueueSession(QObject):
             else:
                 self._close_running_stages(item, "failed")
                 item.status = RunItemStatus.FAILED
+                item.failure_code = "output_path_rejected"
                 item.short_message = "Worker вернул недопустимый путь результата."
                 self._event(
                     "item_failed",
@@ -1000,6 +1008,7 @@ class RunQueueSession(QObject):
             code, user_message = _failure_reason(technical_message)
             self._close_running_stages(item, "failed")
             item.status = RunItemStatus.FAILED
+            item.failure_code = code
             item.short_message = user_message
             self._event(
                 "item_failed",
@@ -1014,6 +1023,7 @@ class RunQueueSession(QObject):
         if text.startswith(_MISSING_PREFIX) and item is not None:
             self._close_running_stages(item, "failed")
             item.status = RunItemStatus.FAILED
+            item.failure_code = "file_unavailable"
             item.short_message = "Исходный файл недоступен."
             self._event(
                 "item_failed",
@@ -1125,24 +1135,40 @@ class RunQueueSession(QObject):
     def handle_finished(self) -> None:
         if not self.running and self.finished_at is not None:
             return
+        missing_completion = False
         for item in self.items:
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
+                missing_completion = True
                 self._close_running_stages(item, "failed")
                 item.status = RunItemStatus.FAILED
+                item.failure_code = "missing_completion"
                 item.short_message = "Worker не подтвердил сохранение результата."
                 self._event(
                     "item_failed",
                     item=item.index,
                     reason="missing_completion",
                 )
-        incomplete = any(item.status is RunItemStatus.FAILED for item in self.items)
-        self.lifecycle.finish(error_code="missing_completion" if incomplete else "")
+        failure_codes = {
+            item.failure_code or "processing_error"
+            for item in self.items
+            if item.status is RunItemStatus.FAILED
+        }
+        incomplete = bool(failure_codes)
+        if missing_completion:
+            run_reason = "missing_completion"
+        elif len(failure_codes) == 1:
+            run_reason = next(iter(failure_codes))
+        elif failure_codes:
+            run_reason = "multiple_item_failures"
+        else:
+            run_reason = ""
+        self.lifecycle.finish(error_code=run_reason)
         self.current_index = None
         self.running = False
         self.finished_at = time.monotonic()
         self._event(
             "run_failed" if incomplete else "run_finished",
-            reason="missing_completion" if incomplete else "",
+            reason=run_reason,
             counts=self.counts(),
             elapsed_ms=round((self.finished_at - self.started_at) * 1000),
         )
@@ -1157,6 +1183,7 @@ class RunQueueSession(QObject):
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
                 self._close_running_stages(item, "failed")
                 item.status = RunItemStatus.FAILED
+                item.failure_code = code
                 item.short_message = user_message
                 self._event(
                     "item_failed",
@@ -1184,6 +1211,7 @@ class RunQueueSession(QObject):
         for index in failed:
             item = self.items[index]
             item.status = RunItemStatus.PENDING
+            item.failure_code = ""
             item.short_message = "Ожидает повторного запуска."
             item.output_path = ""
             item.stage_statuses.clear()
