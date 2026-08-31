@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PyQt6.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QAbstractButton, QLabel
 
 import v3_localization
@@ -1444,6 +1444,22 @@ class V3PinterestFlowTests(unittest.TestCase):
             controller.pages[StepId.REVIEW_RUN],
             PinterestReviewRunPage,
         )
+
+    def test_pinterest_review_uses_shared_approved_launch_layout(self):
+        state = ProjectState(mode=ProjectMode.PINTEREST)
+        page = PinterestReviewRunPage(state)
+        page.resize(980, 700)
+        page.show()
+        self.app.processEvents()
+
+        section_copy = " ".join(
+            label.text() for label in page.findChildren(QLabel)
+        )
+        self.assertTrue(page.card.layout().alignment() & Qt.AlignmentFlag.AlignTop)
+        self.assertIn("Файлы и результат", section_copy)
+        self.assertIn("Порядок", section_copy)
+        self.assertIn("API-вызовы и стоимость", section_copy)
+        self.assertLess(page.files_section_label.geometry().top(), 40)
 
     def test_pinterest_route_omits_legacy_prompt_review_page(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)

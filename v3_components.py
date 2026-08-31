@@ -158,6 +158,13 @@ QLabel[v3Description="true"] {{
     background: transparent;
     border: none;
 }}
+QLabel[v3SectionTitle="true"] {{
+    color: {tokens.text};
+    font-size: {tokens.font_size_body}px;
+    font-weight: {tokens.font_weight_bold};
+    background: transparent;
+    border: none;
+}}
 QLabel[v3Small="true"] {{
     color: {tokens.text_muted};
     font-size: {tokens.font_size_small}px;

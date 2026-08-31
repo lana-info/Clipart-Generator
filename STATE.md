@@ -49,6 +49,30 @@ file, image or processing failures no longer rewrites the run reason to
 `missing_completion` is reserved for rows still pending/running when the worker
 claims it has finished. User-facing per-file messages remain unchanged.
 
+## Unified pre-run review and Processing cost estimate — 2026-08-31
+
+The owner approved one pre-run review direction for every active module.
+Clipart, Pinterest and Processing now share the same top-aligned content grid:
+the page title is level with the left `Шаги` heading, content starts at the top,
+and separate sections show files/results, operation order, API calls and cost.
+Internal `Mode 2` and `pipeline 2.0` wording is no longer used for successful
+Processing status; readiness is shown as `Готово к запуску`.
+
+Processing now has the provider-aware estimate previously available only in the
+generation flow. Known KIE and PhotoRoom amounts stay visible when Fal.ai is
+selected, the total remains explicitly incomplete until the optional live
+Fal.ai refresh succeeds, and the refresh sends the actual selected endpoint
+quantities. A local-only recipe explicitly says that it has no API charge.
+Shared formatting uses user-facing half-up rounding to three decimal places.
+
+Verification: approved-direction Qt render and full-shell offscreen render at
+1400×900 confirm the top alignment; a 760 px regression confirms no horizontal
+overflow. The focused three-module suite passes 131 tests with 55 documented
+Pinterest deferrals. The complete offline suite passes 1093 tests and 146
+subtests, with 58 documented skips and two intentional deselections. Compile,
+sensitive-artifact and diff checks pass. No live provider request, Windows build
+or release action was performed.
+
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 
 The approved acceptance fixes and Fal.ai Bria Creative, Topaz Precision and
@@ -101,9 +125,9 @@ capability catalogs.
 
 Project state, worker routing, Fal task fingerprint/recovery and the Clipart
 Fal cost-quantity refresh include the selected replacement model. Processing
-preflight now checks the Fal key rather than the KIE key; until a dedicated
-Processing pricing refresh is designed, its review says that Fal cost is not
-calculated instead of promising `$0.000`. Structured stage diagnostics and the
+preflight now checks the Fal key rather than the KIE key. Its former static
+Fal-cost limitation is superseded by the provider-aware refresh described
+above. Structured stage diagnostics and the
 safe run report retain the selected model and effective scale. Contract,
 payload, state, UI and worker integration were verified offline. When Bria
 already returns usable alpha, the following background remover is skipped so

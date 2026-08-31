@@ -2,6 +2,7 @@ import hashlib
 import os
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,7 +11,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PIL import Image
 from PyQt6.QtCore import QMimeData, QObject, QUrl, Qt, pyqtSignal
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication, QCheckBox
+from PyQt6.QtWidgets import QApplication, QCheckBox, QLabel
+
+import v3_processing_flow
 
 from v3_mode_selection import V3ApplicationView
 from v3_processing_flow import (
@@ -23,11 +26,13 @@ from v3_processing_flow import (
     apply_processing_recipe,
     build_processing_run_request,
     estimate_processing_cost,
+    estimate_processing_cost_breakdown,
     inspect_local_image,
     install_processing_flow,
     missing_processing_runtime_requirements,
     operation_validation_issues,
     processing_change_summary,
+    processing_fal_endpoint_quantities,
     processing_pipeline_steps,
     uses_external_processing,
 )
@@ -186,9 +191,40 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 checkbox.text() for checkbox in page.findChildren(QCheckBox)
             )
             self.assertNotIn("Разрешаю передачу файлов", checkbox_copy)
-            self.assertTrue(page.requirements_label.isHidden())
-            self.assertEqual(page.requirements_label.text(), "")
+            self.assertFalse(page.requirements_label.isHidden())
+            self.assertEqual(page.requirements_label.text(), "✓ Готово к запуску.")
             self.assertIn("внешнему сервису", page.warning_label.text())
+
+    def test_processing_review_uses_approved_top_aligned_sections(self):
+        with tempfile.TemporaryDirectory(prefix="processing-review-layout-") as temp:
+            state, _ = self.make_state(temp)
+            page = ProcessingReviewRunPage(
+                state,
+                ProcessingFilesPage(state, lambda: None),
+                ProcessingPipelinePage(state, lambda: None),
+            )
+            page.resize(980, 700)
+            page.show()
+            self.app.processEvents()
+
+            self.assertTrue(page.card.layout().alignment() & Qt.AlignmentFlag.AlignTop)
+            self.assertTrue(
+                page.card.content_layout.alignment() & Qt.AlignmentFlag.AlignTop
+            )
+            section_copy = " ".join(
+                label.text() for label in page.findChildren(QLabel)
+            )
+            self.assertIn("Файлы и результат", section_copy)
+            self.assertIn("Порядок", section_copy)
+            self.assertIn("API-вызовы и стоимость", section_copy)
+            self.assertLess(page.files_section_label.geometry().top(), 40)
+            self.assertNotIn("Mode 2", section_copy)
+            self.assertNotIn("pipeline 2.0", section_copy)
+            page.set_preflight_status("Mode 2: Готово (3/3)", ready=True)
+            self.assertEqual(page.requirements_label.text(), "✓ Готово к запуску.")
+            page.resize(760, 700)
+            self.app.processEvents()
+            self.assertEqual(page.horizontalScrollBar().maximum(), 0)
 
     def test_process_more_clears_old_inputs_and_returns_to_files_step(self):
         with tempfile.TemporaryDirectory(prefix="processing-more-") as temp:
@@ -725,6 +761,116 @@ class V3ProcessingFlowTests(unittest.TestCase):
 
         self.assertEqual(text, "Fal.ai: стоимость не рассчитана")
         self.assertNotIn("$0.000", text)
+
+    def test_processing_cost_breakdown_keeps_known_cost_with_fal_pending(self):
+        operations = ImageOperationData(
+            upscale_before=True,
+            upscale_before_provider="kie",
+            kie_upscale_model="recraft/crisp-upscale",
+            remove_background=True,
+            remove_background_provider="fal",
+            fal_remove_bg_model="fal-ai/bria/background/remove",
+        )
+
+        estimate = estimate_processing_cost_breakdown(operations, 4)
+
+        self.assertEqual(estimate.request_count, 8)
+        self.assertEqual(estimate.provider_usd["kie"], Decimal("0.0100"))
+        self.assertEqual(estimate.provider_usd["fal"], Decimal("0"))
+        self.assertEqual(estimate.incomplete_providers, ("fal",))
+        self.assertFalse(estimate.complete)
+
+    def test_processing_review_describes_local_work_without_api_charge(self):
+        with tempfile.TemporaryDirectory(prefix="processing-local-cost-") as temp:
+            state, _ = self.make_state(temp)
+            operations = state.processing.operations
+            operations.upscale_before = False
+            operations.remove_background = False
+            page = ProcessingReviewRunPage(
+                state,
+                ProcessingFilesPage(state, lambda: None),
+                ProcessingPipelinePage(state, lambda: None),
+            )
+
+            self.assertIn("всего: 0 вызовов", page.requests_label.text())
+            self.assertEqual(
+                page.cost_breakdown_label.text(),
+                "Локальная обработка — без оплаты API.",
+            )
+
+    def test_processing_fal_endpoint_quantities_include_every_selected_stage(self):
+        operations = ImageOperationData(
+            upscale_before=True,
+            upscale_before_provider="fal",
+            fal_upscale_model="topaz/upscale/image/precision",
+            remove_background=True,
+            remove_background_provider="fal",
+            fal_remove_bg_model="fal-ai/bria/background/remove",
+        )
+
+        self.assertEqual(
+            processing_fal_endpoint_quantities(operations, 17),
+            {
+                "topaz/upscale/image/precision": 17,
+                "fal-ai/bria/background/remove": 17,
+            },
+        )
+
+    def test_processing_review_refreshes_fal_and_keeps_kie_subtotal(self):
+        with tempfile.TemporaryDirectory(prefix="processing-review-cost-") as temp:
+            state, _ = self.make_state(temp)
+            operations = state.processing.operations
+            operations.upscale_before = True
+            operations.upscale_before_provider = "kie"
+            operations.kie_upscale_model = "recraft/crisp-upscale"
+            operations.remove_background = True
+            operations.remove_background_provider = "fal"
+            operations.fal_remove_bg_model = "fal-ai/bria/background/remove"
+            page = ProcessingReviewRunPage(
+                state,
+                ProcessingFilesPage(state, lambda: None),
+                ProcessingPipelinePage(state, lambda: None),
+                fal_cost_refresh=lambda: (0.033, "USD"),
+            )
+
+            before = page.cost_breakdown_label.text()
+            self.assertIn("KIE — 0.003 USD", before)
+            self.assertIn("Fal.ai — требуется обновить", before)
+            self.assertIn("Итого — не рассчитано полностью", before)
+
+            page.refresh_fal_cost()
+
+            after = page.cost_breakdown_label.text()
+            self.assertIn("KIE — 0.003 USD", after)
+            self.assertIn("Fal.ai — 0.033 USD", after)
+            self.assertIn("Итого — 0.036 USD", after)
+
+    def test_processing_controller_uses_live_fal_estimate_for_selected_endpoints(self):
+        with tempfile.TemporaryDirectory(prefix="processing-controller-cost-") as temp:
+            state, _ = self.make_state(temp)
+            operations = state.processing.operations
+            operations.upscale_before = True
+            operations.upscale_before_provider = "fal"
+            operations.fal_upscale_model = "topaz/upscale/image/precision"
+            operations.remove_background = False
+            shell = AppShell(state)
+            controller = install_processing_flow(
+                shell,
+                runtime_settings_provider=lambda: {"fal_api_key": "test-key"},
+            )
+
+            with patch.object(
+                v3_processing_flow,
+                "estimate_fal_cost",
+                return_value=(1.25, "USD"),
+            ) as estimate:
+                result = controller._refresh_fal_cost()
+
+            self.assertEqual(result, (1.25, "USD"))
+            estimate.assert_called_once_with(
+                "test-key",
+                {"topaz/upscale/image/precision": 1},
+            )
 
     def test_visible_mark_cleanup_is_local_but_requires_full_image_opt_in(self):
         with tempfile.TemporaryDirectory(prefix="processing-visible-mark-") as temp:

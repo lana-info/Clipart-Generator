@@ -1127,6 +1127,9 @@ Acceptance:
   `Экспорт:` и текстовой кнопкой `CSV`.
 - [x] Локальные KIE/PhotoRoom оценки отделены от Fal.ai, который требует
   явного обновления; изменение pipeline сбрасывает устаревшую Fal.ai оценку.
+- [x] Тот же provider-aware расчёт и кнопка обновления Fal.ai применены в
+  Processing; Clipart, Pinterest и Processing используют единый утверждённый
+  верхний review-layout с тремя смысловыми разделами.
 - [x] Регрессионные тесты подтверждают, что refresh Fal.ai не скрывает KIE,
   частичная сумма не маркируется как полный итог, а CSV экспортирует те же
   строки и референсы без изменения данных.
@@ -1358,8 +1361,8 @@ Acceptance:
   значение мигрирует на Bria.
 - [x] Выбор модели/масштаба сохраняется, передаётся worker, входит в Fal task
   fingerprint/recovery и отдельную динамическую оценку количества Fal-вызовов
-  в Clipart. Processing не показывает ложный `$0.000`: до отдельного pricing UI
-  он честно сообщает, что стоимость Fal.ai не рассчитана.
+  в Clipart. Processing не показывает ложный `$0.000`: provider-aware pricing
+  UI сохраняет известные суммы и помечает итог неполным до Fal.ai refresh.
 - [x] Processing preflight требует именно Fal.ai API Key, а run report и
   structured diagnostics фиксируют выбранную модель и фактический масштаб
   (Bria 2×, Topaz 2×/4×, Recraft Crisp 4×).
