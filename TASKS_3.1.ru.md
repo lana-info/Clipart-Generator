@@ -1459,8 +1459,8 @@ Verification:
 
 ## Task 35 (3.1.1 acceptance follow-up): Автовосстановление сохранения без повторной оплаты
 
-Status: Done in source — offline regression suite green; Windows filesystem
-acceptance and live provider recovery remain pending
+Status: Windows candidate built and automated installed-app gates green;
+manual locked-file and live provider recovery acceptance remain pending
 
 Goal:
 При временной ошибке скачивания или локальной записи довести каждый файл до
@@ -1488,6 +1488,15 @@ Verification:
 - [x] Full offline suite: 1133 passed, 58 documented skips, 2 deselected and
   146 subtests passed.
 - [x] Python compilation and `git diff --check` pass.
+- [x] Windows workflow run `33451296262` built and installed the application
+  from exact source commit `e99cade03204ffebbcba3ea966701c8d3543e3c6`.
+  All automated Windows gates passed; artifact `windows-3.1.1` has ID
+  `9780094005` and expires 2026-09-03.
+- [x] Downloaded installer is `231603072` bytes and its SHA-256 matches the
+  sidecar: `760C40223296D40AD348508DB2A9CD28B00E37EB50E35D26D3FA825037981F1C`.
+  Provenance reports Windows Server 2025, Python 3.12.10 and `secret_free: true`.
+- [x] Repository visibility was restored to private after artifact validation;
+  no release was published and no paid provider request was made.
 - [ ] Windows test with a temporarily locked destination file.
 - [ ] Controlled Fal/KIE test: provider result ready, local save interrupted,
   restart resumes the same task ID without a second paid submit.

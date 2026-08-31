@@ -18,8 +18,22 @@ issuing a new paid POST. No automatic paid resubmission was added.
 
 Verification: the focused output/provider/queue suite passes 194 tests and 19
 subtests. The complete offline suite passes 1133 tests and 146 subtests, with 58
-documented skips and two intentional deselections. No live provider request,
-Windows build or Windows locked-file acceptance was performed.
+documented skips and two intentional deselections.
+
+GitHub Windows run `33451296262` then built exact commit
+`e99cade03204ffebbcba3ea966701c8d3543e3c6`. Native security checks, PyInstaller,
+packaged startup, Inno Setup, installed-app verification, provenance, release
+contract and artifact upload all passed. Artifact `windows-3.1.1` has ID
+`9780094005` and expires 2026-09-03. The downloaded installer is `231603072`
+bytes; SHA-256 is
+`760C40223296D40AD348508DB2A9CD28B00E37EB50E35D26D3FA825037981F1C` and matches
+its sidecar. Provenance reports Windows Server 2025, Python 3.12.10 and
+`secret_free: true`. Repository visibility was returned to private after local
+artifact verification. No release or paid provider request was performed.
+
+Manual Windows acceptance still needs a temporarily locked destination and one
+controlled provider-result interruption/restart to prove reuse of the same task
+ID on the owner's filesystem and account.
 
 ## Processing acceptance fixes integrated — 2026-08-31
 
