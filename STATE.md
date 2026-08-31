@@ -1,6 +1,44 @@
 # Project state
 
-Updated: 2026-08-30
+Updated: 2026-08-31
+
+## Unified bounded diagnostics — 2026-08-31
+
+The owner approved one visually persistent `Диагностика` action at the top
+right. The duplicate Results-page technical-log button/dialog is removed; the
+top action opens the same application journal before mode selection and inside
+the wizard. That journal already correlates application, licence, workflow,
+run/item/stage, provider, retry/cancel, update and export events.
+
+The audit confirmed that byte-only retention could keep about 22,000 small
+events in one 8 MiB session and allocate about 40 MiB while reading it. It also
+confirmed that once the byte cap was reached a later provider error was lost,
+and that the emitted KIE/Fal `provider_task_recovery_deferred` event was rejected
+by the structured allow-list. The journal now retains at most 5,000 events per
+launch and reads at most that many from each of the newest three launches,
+including oversized legacy files. Repeated polling keeps the first sample,
+state transitions and every tenth sample. Normal events stop before the hard
+limit, reserving 1,024 event slots and a bounded byte tail for warnings, errors
+and run/session terminal records. Deferred recovery is a warning with safe
+provider/model/task context; API settings record only configured booleans for
+KIE, PhotoRoom, Fal and RunPod. Prompt, credential, image, URL and private-path
+exclusions are unchanged.
+Fal generation and processing now publish the lifecycle information already
+returned by their existing calls: accepted submission, sampled status changes,
+provider success and bounded wait/HTTP failure. No availability probe, retry or
+additional paid request was added; a recoverable polling outage remains the
+separate `provider_task_recovery_deferred` warning.
+
+Verification is green: the focused diagnostics/Fal/UI suite passes 208 tests
+and 24 subtests; the full offline suite passes 1049 tests and 146 subtests,
+with 57 documented platform/deferred skips and two intentional deselections.
+The bounded-journal benchmark retained the late provider error and terminal
+records while reducing peak legacy-read memory from about 40.7 MiB to 6.46 MiB.
+The fresh automatic Chroma benchmark also passes: alpha IoU `0.968704`, alpha
+MAE `0.018194`, median 2048×2048 runtime `1.400 s`, peak RSS `420.824 MiB`
+below the `448 MiB` ceiling. Compilation, sensitive-artifact scan,
+`git diff --check` and final independent review pass. Manual Windows UI and one
+controlled live Fal run remain release-acceptance checks.
 
 ## Windows acceptance regression: 300 DPI hidden — 2026-08-30
 
