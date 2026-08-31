@@ -49,6 +49,7 @@ SYNTHID_UNAVAILABLE_TOOLTIP = (
     "Функция не включена: нет подтверждённого production-контракта "
     "обнаружения и удаления SynthID."
 )
+UPSCALE_AFTER_UI_ENABLED = False
 CLEANUP_OPERATION_LABELS = {
     "remove_exif": "Удалить EXIF",
     "remove_xmp": "Удалить XMP",
@@ -302,6 +303,8 @@ class ProcessingPipelineEditor(QScrollArea):
         )
         self.operation_widgets: dict[str, QWidget] = {}
         operations = state_owner.operations
+        if not UPSCALE_AFTER_UI_ENABLED:
+            operations.upscale_after = False
 
         operations_group = QGroupBox("Операции")
         self.operations_grid = QGridLayout(operations_group)
@@ -952,13 +955,17 @@ class ProcessingPipelineEditor(QScrollArea):
             "upscale_before": operations.upscale_before,
             "unsharp": operations.unsharp,
             "remove_background": operations.remove_background,
-            "upscale_after": operations.upscale_after,
+            "upscale_after": (
+                UPSCALE_AFTER_UI_ENABLED and operations.upscale_after
+            ),
             "edge_shrink": operations.edge_shrink,
             "trim": operations.trim,
             "export_300_dpi": operations.export_300_dpi,
         }
         for key, section in self.stage_sections.items():
             section.setVisible(bool(enabled[key]))
+        if not UPSCALE_AFTER_UI_ENABLED:
+            self._set_control_visible("upscale_after", False)
         has_visible_stage = False
         for key in self._STAGE_ORDER:
             visible = bool(enabled[key])
@@ -991,6 +998,8 @@ class ProcessingPipelineEditor(QScrollArea):
                 name in self._CLEANUP_FIELDS
                 and "metadata_cleanup" in self.allowed_operations
             )
+            if name == "upscale_after" and not UPSCALE_AFTER_UI_ENABLED:
+                allowed = False
             self._set_control_visible(name, allowed)
             if not allowed and hasattr(operations, name):
                 setattr(operations, name, False)
@@ -1073,6 +1082,8 @@ class ProcessingPipelineEditor(QScrollArea):
 
     def refresh_from_state(self) -> None:
         operations = self.state_owner.operations
+        if not UPSCALE_AFTER_UI_ENABLED:
+            operations.upscale_after = False
         for name, control in self.operation_widgets.items():
             control.blockSignals(True)
             if isinstance(control, QCheckBox):

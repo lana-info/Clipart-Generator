@@ -70,40 +70,256 @@ class KieRoutingTests(unittest.TestCase):
         self.assertNotIn(DUMMY_KIE_KEY, messages)
 
     def test_fal_generation_uses_queue_adapter_and_returns_image_url(self):
-        worker = main.WorkerThread(
-            "mode1_generate_only",
-            ".",
-            kie_settings(
-                fal_api_key="fal-test-secret",
-                text_generation_model="fal-ai/flux/schnell",
-                reference_generation_model="gpt-image/1.5-image-to-image",
-            ),
-            generated_prompts=[{"prompt": "a fox", "references": []}],
-        )
-        calls = {}
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    text_generation_model="fal-ai/flux/schnell",
+                    reference_generation_model="gpt-image/1.5-image-to-image",
+                ),
+                generated_prompts=[{"prompt": "a fox", "references": []}],
+            )
+            calls = {}
 
-        class FakeFalClient:
-            def __init__(self, config):
-                calls["model"] = config.model_id
+            class FakeFalClient:
+                def __init__(self, config):
+                    calls["model"] = config.model_id
 
-            def submit_task(self, request):
-                calls["request"] = request
-                return {"request_id": "fal-request-1"}
+                def submit_task(self, request):
+                    calls["request"] = request
+                    return {
+                        "request_id": "fal-request-1",
+                        "status_url": (
+                            "https://queue.fal.run/custom/poll/fal-request-1"
+                        ),
+                        "response_url": (
+                            "https://queue.fal.run/custom/result/fal-request-1"
+                        ),
+                        "cancel_url": (
+                            "https://queue.fal.run/custom/cancel/fal-request-1"
+                        ),
+                    }
 
-            def wait_for_result(self, request_id, **_kwargs):
-                calls["request_id"] = request_id
-                return {
-                    "request_id": request_id,
-                    "result": {"images": [{"url": "https://cdn.example/fox.png"}]},
-                }
+                def wait_for_result(self, request_id, **kwargs):
+                    calls["request_id"] = request_id
+                    calls["lifecycle_urls"] = {
+                        name: kwargs[name]
+                        for name in ("status_url", "response_url", "cancel_url")
+                    }
+                    return {
+                        "request_id": request_id,
+                        "result": {
+                            "images": [{"url": "https://cdn.example/fox.png"}]
+                        },
+                    }
 
-        with patch.object(main, "FalClient", FakeFalClient):
-            result = worker._kie_generate_image("a fox")
+            with patch.object(main, "FalClient", FakeFalClient):
+                result = worker._kie_generate_image("a fox")
+
+            pending = worker.fal_task_journal.pending()
+            journal_payload = worker.fal_task_journal.path.read_text(encoding="utf-8")
 
         self.assertEqual(result, "https://cdn.example/fox.png")
         self.assertEqual(calls["model"], "fal-ai/flux/schnell")
         self.assertEqual(calls["request_id"], "fal-request-1")
         self.assertEqual(calls["request"].provider_id, "fal")
+        self.assertEqual(
+            calls["lifecycle_urls"]["status_url"],
+            "https://queue.fal.run/custom/poll/fal-request-1",
+        )
+        self.assertEqual(pending, ())
+        self.assertIn("https://queue.fal.run/custom/poll/fal-request-1", journal_payload)
+
+    def test_fal_polling_emits_structured_state_events(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            worker._record_fal_poll_status(
+                "fal-task-1", "generation", "fal-ai/flux/schnell", "waiting"
+            )
+            worker._record_fal_poll_status(
+                "fal-task-1", "generation", "fal-ai/flux/schnell", "running"
+            )
+            worker._record_fal_poll_status(
+                "fal-task-1", "generation", "fal-ai/flux/schnell", "completed"
+            )
+
+            self.assertEqual(
+                [event["event"] for event in events],
+                [
+                    "provider_task_polled",
+                    "provider_task_polled",
+                    "provider_task_polled",
+                ],
+            )
+            self.assertEqual(
+                [event["poll_attempt"] for event in events],
+                [1, 2, 3],
+            )
+            self.assertTrue(all(event["provider"] == "fal" for event in events))
+            self.assertTrue(all(event["task"] == "fal-task-1" for event in events))
+
+    def test_fal_completed_without_valid_image_is_not_journaled_as_success(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    text_generation_model="fal-ai/flux/schnell",
+                ),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    return {"request_id": "fal-task-malformed"}
+
+                def wait_for_result(self, _request_id, *, on_status, **_kwargs):
+                    on_status("completed")
+                    return {
+                        "request_id": "fal-task-malformed",
+                        "status": "completed",
+                        "result": {},
+                    }
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                with self.assertRaises(main.FalProviderError):
+                    worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
+
+            event_names = [event["event"] for event in events]
+            self.assertNotIn("provider_task_succeeded", event_names)
+            self.assertEqual(event_names.count("provider_task_failed"), 1)
+            self.assertEqual(worker.fal_task_journal.pending(), ())
+
+    def test_fal_processing_completed_without_valid_image_is_terminal_failed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(fal_api_key="fal-test-secret"),
+            )
+            worker._set_diagnostic_context(1, 1, "upscale")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def run_image_operation(
+                    self,
+                    _operation,
+                    _image_url,
+                    *,
+                    on_submitted_task,
+                    on_status,
+                    **_kwargs,
+                ):
+                    on_submitted_task("fal-process-malformed", {})
+                    on_status("completed")
+                    return {
+                        "request_id": "fal-process-malformed",
+                        "status": "completed",
+                        "result": {},
+                    }
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                with self.assertRaises(main.FalProviderError):
+                    worker._fal_process_image(
+                        "https://cdn.example/source.png",
+                        operation="upscale",
+                        model_id="fal-ai/esrgan",
+                    )
+
+            event_names = [event["event"] for event in events]
+            self.assertNotIn("provider_task_succeeded", event_names)
+            self.assertEqual(event_names.count("provider_task_failed"), 1)
+            self.assertEqual(worker.fal_task_journal.pending(), ())
+
+    def test_two_fal_submit_failures_without_task_id_are_both_journaled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    text_generation_model="fal-ai/flux/schnell",
+                ),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    raise main.FalProviderError("Fal.ai submit unavailable")
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                for _attempt in range(2):
+                    with self.assertRaises(main.FalProviderError):
+                        worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
+
+            failures = [
+                event for event in events
+                if event["event"] == "provider_task_failed"
+            ]
+            self.assertEqual(len(failures), 2)
+
+    def test_fal_poll_http_failure_emits_safe_provider_failure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = main.WorkerThread(
+                "mode1_generate_only",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    text_generation_model="fal-ai/flux/schnell",
+                ),
+            )
+            worker._set_diagnostic_context(1, 1, "generation")
+            events = []
+            worker.diagnostic.connect(events.append)
+
+            class FakeFalClient:
+                def __init__(self, _config):
+                    pass
+
+                def submit_task(self, _request):
+                    return {"request_id": "fal-task-405"}
+
+                def wait_for_result(self, _request_id, **_kwargs):
+                    raise main.FalProviderError("Fal.ai HTTP 405")
+
+            with patch.object(main, "FalClient", FakeFalClient):
+                with self.assertRaisesRegex(main.FalProviderError, "HTTP 405"):
+                    worker._fal_generate_image("a fox", "fal-ai/flux/schnell")
+
+            failed = next(
+                event for event in events
+                if event["event"] == "provider_task_failed"
+            )
+            self.assertEqual(failed["provider"], "fal")
+            self.assertEqual(failed["model"], "fal-ai/flux/schnell")
+            self.assertEqual(failed["task"], "fal-task-405")
+            self.assertIn("HTTP 405", failed["error_message"])
+            self.assertNotIn("fal-test-secret", json.dumps(failed))
 
     def test_fal_recovery_continues_after_one_transient_poll_failure(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -171,6 +387,15 @@ class KieRoutingTests(unittest.TestCase):
                 "generation",
                 model_id,
                 "queued",
+                status_url=(
+                    "https://queue.fal.run/custom/poll/existing-fal-task"
+                ),
+                response_url=(
+                    "https://queue.fal.run/custom/result/existing-fal-task"
+                ),
+                cancel_url=(
+                    "https://queue.fal.run/custom/cancel/existing-fal-task"
+                ),
                 input_fingerprint=first._paid_task_fingerprint(
                     main.fal_generation_payload(
                         model_id,
@@ -197,6 +422,13 @@ class KieRoutingTests(unittest.TestCase):
 
                 def wait_for_result(self, request_id, *, on_status, **_kwargs):
                     calls.append(("GET", request_id))
+                    calls.append(
+                        (
+                            _kwargs["status_url"],
+                            _kwargs["response_url"],
+                            _kwargs["cancel_url"],
+                        )
+                    )
                     on_status("completed")
                     return {
                         "request_id": request_id,
@@ -210,7 +442,17 @@ class KieRoutingTests(unittest.TestCase):
                 result = restarted._fal_generate_image("same prompt", model_id)
 
             self.assertEqual(result, "https://cdn.example/recovered.png")
-            self.assertEqual(calls, [("GET", "existing-fal-task")])
+            self.assertEqual(
+                calls,
+                [
+                    ("GET", "existing-fal-task"),
+                    (
+                        "https://queue.fal.run/custom/poll/existing-fal-task",
+                        "https://queue.fal.run/custom/result/existing-fal-task",
+                        "https://queue.fal.run/custom/cancel/existing-fal-task",
+                    ),
+                ],
+            )
 
     def test_fal_restart_never_reuses_a_task_for_a_changed_prompt(self):
         with tempfile.TemporaryDirectory() as temp:

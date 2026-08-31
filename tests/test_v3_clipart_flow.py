@@ -353,6 +353,23 @@ class V3ClipartFlowTests(unittest.TestCase):
             self.assertLessEqual(button.maximumWidth(), 64)
         self.assertEqual(page.progress_label.text(), "Шаг 2 из 2 · Проверка серии")
 
+    def test_prompt_review_separates_a_visible_csv_export_action(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+
+        self.assertEqual(page.export_actions_label.text(), "Экспорт:")
+        self.assertEqual(page.export_csv_button.text(), "CSV")
+        self.assertEqual(page.export_csv_button.property("variant"), "primary")
+        self.assertEqual(
+            page.export_csv_button.toolTip(),
+            "Экспортировать все строки в CSV",
+        )
+        self.assertEqual(
+            page.export_csv_button.accessibleName(),
+            "Экспортировать все строки в CSV",
+        )
+
     def test_prompt_review_exposes_one_batch_editor_and_one_step_undo(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
@@ -1640,7 +1657,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             self.assertEqual(label.property("v3Status"), True)
         self.assertLess(review.output_label.geometry().top(), 40)
 
-    def test_final_review_separates_generation_and_processing_costs(self):
+    def test_final_review_separates_request_counts_and_provider_costs(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry(f"Prompt {index}") for index in range(80)]
         operations = state.clipart.operations
@@ -1660,8 +1677,9 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("генерация 80", review.requests_label.text())
         self.assertIn("обработка 80", review.requests_label.text())
         self.assertIn("всего 160", review.requests_label.text())
-        self.assertIn("генерация", review.cost_breakdown_label.text())
-        self.assertIn("обработка", review.cost_breakdown_label.text())
+        self.assertIn("KIE — 17.600 USD", review.cost_breakdown_label.text())
+        self.assertIn("Итого — 17.600 USD", review.cost_breakdown_label.text())
+        self.assertNotIn("Fal.ai", review.cost_breakdown_label.text())
         review_copy = " ".join(
             label.text() for label in review.findChildren(QLabel)
         )
@@ -1669,6 +1687,108 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         review.set_preflight_status("Обязательные поля заполнены; запуск готов.", ready=True)
         self.assertTrue(review.requirements_label.isHidden())
+
+    def test_mixed_provider_cost_refresh_keeps_kie_and_marks_total_complete(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        operations = state.clipart.operations
+        operations.upscale_before = True
+        operations.upscale_before_provider = "fal"
+        operations.remove_background = False
+        operations.upscale_after = False
+        operations.unsharp = False
+        operations.edge_shrink = False
+        operations.trim = False
+        operations.export_300_dpi = False
+        review = ClipartReviewRunPage(
+            state,
+            fal_cost_refresh=lambda: (0.033, "USD"),
+        )
+
+        before = review.cost_breakdown_label.text()
+        self.assertIn("KIE — 0.020 USD", before)
+        self.assertIn("Fal.ai — требуется обновить", before)
+        self.assertIn("Итого — не рассчитано полностью", before)
+
+        review.refresh_fal_cost()
+
+        after = review.cost_breakdown_label.text()
+        self.assertIn("KIE — 0.020 USD", after)
+        self.assertIn("Fal.ai — 0.033 USD", after)
+        self.assertIn("Итого — 0.053 USD", after)
+
+    def test_fal_cost_refresh_error_keeps_known_kie_cost_visible(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        operations = state.clipart.operations
+        operations.upscale_before = True
+        operations.upscale_before_provider = "fal"
+        operations.remove_background = False
+        review = ClipartReviewRunPage(
+            state,
+            fal_cost_refresh=lambda: (_ for _ in ()).throw(RuntimeError("timeout")),
+        )
+
+        review.refresh_fal_cost()
+
+        text = review.cost_breakdown_label.text()
+        self.assertIn("KIE — 0.020 USD", text)
+        self.assertIn("Fal.ai — не удалось обновить: timeout", text)
+        self.assertIn("Итого — не рассчитано полностью", text)
+
+    def test_fal_cost_error_is_cleared_when_endpoint_selection_changes(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry("Fox")]
+        state.clipart.generation.model = "fal-ai/flux/schnell"
+        review = ClipartReviewRunPage(
+            state,
+            fal_cost_refresh=lambda: (0.011, "USD"),
+        )
+        review.refresh_fal_cost()
+        self.assertIn("Fal.ai — 0.011 USD", review.cost_breakdown_label.text())
+
+        state.clipart.generation.model = "ideogram/v4/fast"
+        review.refresh_from_state()
+        review.fal_cost_refresh = lambda: (_ for _ in ()).throw(
+            RuntimeError("endpoint unavailable")
+        )
+        review.refresh_fal_cost()
+        self.assertIn("endpoint unavailable", review.cost_breakdown_label.text())
+
+        state.clipart.generation.model = "fal-ai/flux/schnell"
+        review.refresh_from_state()
+
+        text = review.cost_breakdown_label.text()
+        self.assertIn("Fal.ai — требуется обновить", text)
+        self.assertNotIn("endpoint unavailable", text)
+
+    def test_fal_refresh_button_uses_actual_per_row_generation_routes(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.generation.model = "fal-ai/flux/schnell"
+        state.clipart.generation.reference_model = "gpt-image/1.5-image-to-image"
+        state.clipart.prompts = [PromptEntry("Fox", references=("fox.png",))]
+
+        review = ClipartReviewRunPage(state, fal_cost_refresh=lambda: (0.01, "USD"))
+
+        self.assertEqual(fal_endpoint_quantities(state), {})
+        self.assertTrue(review.fal_cost_refresh_button.isHidden())
+        self.assertNotIn("Fal.ai", review.cost_breakdown_label.text())
+
+    def test_upscale_after_is_hidden_and_disabled_without_affecting_upscale_before(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        operations = state.clipart.operations
+        operations.upscale_before = True
+        operations.upscale_after = True
+
+        page = ClipartProcessingPage(state, lambda: None)
+
+        self.assertFalse(operations.upscale_after)
+        self.assertTrue(page.operation_widgets["upscale_after"].isHidden())
+        self.assertTrue(
+            page.operation_widgets["upscale_after_provider"].isHidden()
+        )
+        self.assertFalse(page.operation_widgets["upscale_before"].isHidden())
+        self.assertTrue(operations.upscale_before)
 
     def test_clipart_processing_can_be_skipped(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

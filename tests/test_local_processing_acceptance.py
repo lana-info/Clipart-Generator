@@ -460,6 +460,7 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                     upscale=True,
                     unsharp_enabled=True,
                     remove_bg=True,
+                    skip_remover_for_alpha=False,
                     edge_shrink_enabled=True,
                     trim_enabled=True,
                 ),

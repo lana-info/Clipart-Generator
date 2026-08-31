@@ -94,6 +94,7 @@ from fal_provider import (
     FalTaskJournal,
     fal_image_data_uri,
     fal_image_url,
+    fal_lifecycle_urls,
 )
 from fal_model_catalog import (
     fal_generation_payload,
@@ -968,6 +969,7 @@ class WorkerThread(QThread):
         self._shared_state_lock = threading.Lock()
         self._claimed_fal_task_ids: set[str] = set()
         self._claimed_kie_task_ids: set[str] = set()
+        self._fal_poll_attempts: dict[str, int] = {}
         self._kie_uploaded_content_ids: dict[str, str] = {}
         self._precleaned_paths: set[str] = set()
         self._item_context = threading.local()
@@ -1118,7 +1120,7 @@ class WorkerThread(QThread):
             settings.get("local_realesrgan_after_scale", self.local_realesrgan_scale)
         )
         self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
-        self.skip_remover_for_alpha = bool(settings.get("skip_remover_for_alpha", False))
+        self.skip_remover_for_alpha = bool(settings.get("skip_remover_for_alpha", True))
         self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
         self.local_rembg_model = settings.get("local_rembg_model", "birefnet-general")
         self.local_rembg_edge_quality = normalize_local_rembg_edge_quality(
@@ -2223,7 +2225,10 @@ class WorkerThread(QThread):
             ("nobg", "bg-removed"),
             ("unsharp", "sharpened"),
             ("pretrim", "pre-trim"),
-            ("gen", "generated"),
+        )
+        generated_name = re.compile(
+            rf"^gen_\d{{3}}_{re.escape(self.run_stamp)}\.png$",
+            re.IGNORECASE,
         )
         counters = {}
         for source in sorted(Path(raw_dir).glob("*.png")):
@@ -2232,6 +2237,8 @@ class WorkerThread(QThread):
                 (label for marker, label in stage_markers if marker in lower_name),
                 None,
             )
+            if stage is None and generated_name.fullmatch(source.name):
+                stage = "generated"
             if stage is None:
                 continue
             counters[stage] = counters.get(stage, 0) + 1
@@ -2686,7 +2693,8 @@ class WorkerThread(QThread):
                 "stage_finished",
                 provider=remove_provider,
                 model=remove_model,
-                outcome="succeeded",
+                outcome="skipped" if reuse_alpha else "succeeded",
+                status="already_alpha" if reuse_alpha else None,
                 elapsed_ms=round((time.monotonic() - remove_started) * 1000),
                 **(
                     inspect_diagnostic_image(current_path)
@@ -2965,7 +2973,7 @@ class WorkerThread(QThread):
             }
         )
 
-        def record_submission(request_id):
+        def record_submission(request_id, lifecycle_urls):
             task["request_id"] = str(request_id or "")
             self._record_fal_task(
                 task["request_id"],
@@ -2973,6 +2981,14 @@ class WorkerThread(QThread):
                 model_id,
                 "queued",
                 input_fingerprint=input_fingerprint,
+                **dict(lifecycle_urls),
+            )
+            self._emit_diagnostic(
+                "provider_task_submitted",
+                provider="fal",
+                model=model_id,
+                task=task["request_id"],
+                provider_state="queued",
             )
 
         pending_task = self._claim_pending_task(
@@ -2982,43 +2998,70 @@ class WorkerThread(QThread):
             self._claimed_fal_task_ids,
             input_fingerprint=input_fingerprint,
         )
-        if pending_task is not None:
-            task["request_id"] = pending_task.request_id
-            self.progress.emit(
-                f"  Продолжаем Fal.ai Request ID: {pending_task.request_id}"
-            )
-            completed = client.wait_for_result(
-                pending_task.request_id,
-                timeout_seconds=float(self.generation_wait_timeout),
-                poll_interval_seconds=float(self.status_poll_interval),
-                is_cancelled=lambda: not self.is_running,
-                on_status=lambda status: self._record_fal_poll_status(
-                    task["request_id"],
-                    pending_task.operation,
-                    model_id,
-                    status,
-                    input_fingerprint=input_fingerprint,
-                ),
-            )
-        else:
-            completed = client.run_image_operation(
-                operation,
-                image_url,
-                scale=scale,
-                model_id=model_id,
-                parameters=parameters,
-                is_cancelled=lambda: not self.is_running,
-                on_submitted=record_submission,
-                on_status=lambda status: self._record_fal_task(
-                    task["request_id"],
+        try:
+            if pending_task is not None:
+                task["request_id"] = pending_task.request_id
+                self.progress.emit(
+                    f"  Продолжаем Fal.ai Request ID: {pending_task.request_id}"
+                )
+                completed = client.wait_for_result(
+                    pending_task.request_id,
+                    timeout_seconds=float(self.generation_wait_timeout),
+                    poll_interval_seconds=float(self.status_poll_interval),
+                    is_cancelled=lambda: not self.is_running,
+                    on_status=lambda status: self._record_fal_poll_status(
+                        task["request_id"],
+                        pending_task.operation,
+                        model_id,
+                        status,
+                        input_fingerprint=input_fingerprint,
+                    ),
+                    status_url=pending_task.status_url,
+                    response_url=pending_task.response_url,
+                    cancel_url=pending_task.cancel_url,
+                )
+            else:
+                completed = client.run_image_operation(
                     operation,
-                    model_id,
-                    status,
-                    input_fingerprint=input_fingerprint,
-                ),
+                    image_url,
+                    scale=scale,
+                    model_id=model_id,
+                    parameters=parameters,
+                    is_cancelled=lambda: not self.is_running,
+                    on_submitted_task=record_submission,
+                    on_status=lambda status: self._record_fal_poll_status(
+                        task["request_id"],
+                        operation,
+                        model_id,
+                        status,
+                        input_fingerprint=input_fingerprint,
+                    ),
+                )
+        except (FalProviderError, TimeoutError, OSError) as error:
+            self._emit_fal_task_failure(
+                task["request_id"],
+                model_id,
+                error,
             )
+            raise
         self._ensure_running()
-        result_url = fal_image_url(completed.get("result"))
+        try:
+            result_url = fal_image_url(completed.get("result"))
+        except FalProviderError as error:
+            self._emit_fal_task_failure(task["request_id"], model_id, error)
+            self._record_fal_task(
+                task["request_id"],
+                pending_task.operation if pending_task is not None else operation,
+                model_id,
+                "failed",
+                input_fingerprint=input_fingerprint,
+            )
+            raise
+        self._emit_fal_task_succeeded(
+            task["request_id"],
+            model_id,
+            completed.get("status"),
+        )
         self._record_fal_task(
             task["request_id"],
             pending_task.operation if pending_task is not None else operation,
@@ -3040,6 +3083,9 @@ class WorkerThread(QThread):
         status,
         *,
         input_fingerprint="",
+        status_url="",
+        response_url="",
+        cancel_url="",
     ):
         request_id = str(request_id or "").strip()
         if not request_id:
@@ -3051,6 +3097,9 @@ class WorkerThread(QThread):
                 model_id,
                 status,
                 input_fingerprint=str(input_fingerprint or ""),
+                status_url=str(status_url or ""),
+                response_url=str(response_url or ""),
+                cancel_url=str(cancel_url or ""),
             )
         except (OSError, ValueError, FalProviderError):
             # A journal failure must not expose secrets or turn a successful
@@ -3066,14 +3115,59 @@ class WorkerThread(QThread):
         *,
         input_fingerprint="",
     ):
-        if str(status) in {"completed", "completed_after_cancel"}:
-            return
-        self._record_fal_task(
-            request_id,
-            operation,
-            model_id,
-            status,
-            input_fingerprint=input_fingerprint,
+        task_id = str(request_id or "").strip()
+        normalized = str(status or "unknown").strip().casefold() or "unknown"
+        with self._shared_state_lock:
+            attempt = self._fal_poll_attempts.get(task_id, 0) + 1
+            self._fal_poll_attempts[task_id] = attempt
+        if normalized not in {"completed", "completed_after_cancel"}:
+            self._record_fal_task(
+                task_id,
+                operation,
+                model_id,
+                normalized,
+                input_fingerprint=input_fingerprint,
+            )
+        self._emit_diagnostic(
+            "provider_task_polled",
+            provider="fal",
+            model=model_id,
+            task=task_id,
+            provider_state=normalized,
+            poll_attempt=attempt,
+        )
+
+    def _emit_fal_task_succeeded(self, request_id, model_id, status):
+        task_id = str(request_id or "").strip()
+        normalized = str(status or "completed").strip().casefold() or "completed"
+        with self._shared_state_lock:
+            attempt = self._fal_poll_attempts.get(task_id, 0)
+        self._emit_diagnostic(
+            "provider_task_succeeded",
+            provider="fal",
+            model=model_id,
+            task=task_id,
+            provider_state=normalized,
+            poll_attempt=attempt,
+            outcome="succeeded",
+        )
+
+    def _emit_fal_task_failure(
+        self,
+        request_id,
+        model_id,
+        error,
+        **details,
+    ):
+        task_id = str(request_id or "").strip()
+        self._emit_diagnostic(
+            "provider_task_failed",
+            provider="fal",
+            model=model_id,
+            task=task_id,
+            error_message=self._safe_error_text(error),
+            outcome="failed",
+            **details,
         )
 
     def _record_kie_task(
@@ -3202,6 +3296,9 @@ class WorkerThread(QThread):
                     on_status=lambda status, task=task: self._record_fal_poll_status(
                         task.request_id, task.operation, task.model_id, status
                     ),
+                    status_url=task.status_url,
+                    response_url=task.response_url,
+                    cancel_url=task.cancel_url,
                 )
             except (FalProviderError, TimeoutError, OSError) as error:
                 self._emit_diagnostic(
@@ -3213,7 +3310,26 @@ class WorkerThread(QThread):
                     error_message=self._safe_error_text(error),
                 )
                 continue
-            fal_image_url(result.get("result"))
+            try:
+                fal_image_url(result.get("result"))
+            except FalProviderError as error:
+                self._emit_fal_task_failure(
+                    task.request_id,
+                    task.model_id,
+                    error,
+                )
+                self._record_fal_task(
+                    task.request_id,
+                    task.operation,
+                    task.model_id,
+                    "failed",
+                )
+                continue
+            self._emit_fal_task_succeeded(
+                task.request_id,
+                task.model_id,
+                result.get("status"),
+            )
             self._record_fal_task(
                 task.request_id,
                 task.operation,
@@ -4645,54 +4761,84 @@ class WorkerThread(QThread):
             model_id=model_id,
             input_payload=payload,
         )
-        pending_task = self._claim_pending_task(
-            self.fal_task_journal,
-            "generation",
-            model_id,
-            self._claimed_fal_task_ids,
-            input_fingerprint=input_fingerprint,
-        )
-        if pending_task is not None:
-            request_id = pending_task.request_id
-            task_operation = pending_task.operation
-            self.progress.emit(f"  Продолжаем Fal.ai Request ID: {request_id}")
-        else:
-            submitted = client.submit_task(request)
-            request_id = str(submitted.get("request_id") or "").strip()
-            task_operation = "generation"
+        request_id = ""
+        try:
+            pending_task = self._claim_pending_task(
+                self.fal_task_journal,
+                "generation",
+                model_id,
+                self._claimed_fal_task_ids,
+                input_fingerprint=input_fingerprint,
+            )
+            if pending_task is not None:
+                request_id = pending_task.request_id
+                task_operation = pending_task.operation
+                lifecycle_urls = {
+                    "status_url": pending_task.status_url,
+                    "response_url": pending_task.response_url,
+                    "cancel_url": pending_task.cancel_url,
+                }
+                self.progress.emit(f"  Продолжаем Fal.ai Request ID: {request_id}")
+            else:
+                submitted = client.submit_task(request)
+                request_id = str(submitted.get("request_id") or "").strip()
+                task_operation = "generation"
+                lifecycle_urls = fal_lifecycle_urls(submitted, request_id)
+                self._record_fal_task(
+                    request_id,
+                    task_operation,
+                    model_id,
+                    "queued",
+                    input_fingerprint=input_fingerprint,
+                    **lifecycle_urls,
+                )
+                self.progress.emit(f"  Fal.ai Request ID: {request_id}")
+                self._emit_diagnostic(
+                    "provider_task_submitted",
+                    provider="fal",
+                    model=model_id,
+                    task=request_id,
+                    provider_state="queued",
+                )
+            completed = client.wait_for_result(
+                request_id,
+                timeout_seconds=float(self.generation_wait_timeout),
+                poll_interval_seconds=float(self.status_poll_interval),
+                is_cancelled=lambda: not self.is_running,
+                on_status=lambda status: self._record_fal_poll_status(
+                    request_id,
+                    task_operation,
+                    model_id,
+                    status,
+                    input_fingerprint=input_fingerprint,
+                ),
+                **lifecycle_urls,
+            )
+        except (FalProviderError, TimeoutError, OSError) as error:
+            self._emit_fal_task_failure(
+                request_id,
+                model_id,
+                error,
+            )
+            raise
+        self._ensure_running()
+        try:
+            result_url = fal_image_url(completed.get("result"))
+        except FalProviderError as error:
+            self._emit_fal_task_failure(request_id, model_id, error)
             self._record_fal_task(
                 request_id,
                 task_operation,
                 model_id,
-                "queued",
+                "failed",
                 input_fingerprint=input_fingerprint,
             )
-            self.progress.emit(f"  Fal.ai Request ID: {request_id}")
-            self._emit_diagnostic(
-                "provider_task_submitted",
-                provider="fal",
-                model=model_id,
-                task=request_id,
-                provider_state="queued",
-            )
-        completed = client.wait_for_result(
-            request_id,
-            timeout_seconds=float(self.generation_wait_timeout),
-            poll_interval_seconds=float(self.status_poll_interval),
-            is_cancelled=lambda: not self.is_running,
-            on_status=lambda status: self._record_fal_poll_status(
-                request_id,
-                task_operation,
-                model_id,
-                status,
-                input_fingerprint=input_fingerprint,
-            ),
-        )
-        self._ensure_running()
-        try:
-            result_url = fal_image_url(completed.get("result"))
-        except FalProviderError:
             raise
+        self._emit_fal_task_succeeded(
+            request_id,
+            model_id,
+            completed.get("status"),
+        )
         self._record_fal_task(
             request_id,
             task_operation,
@@ -9592,7 +9738,7 @@ def run_packaged_entrypoint_check(
         and packaged_view.mode_selection.api_settings_button.text()
         == "Настройки API"
         and packaged_view.mode_selection.diagnostics_button.text()
-        == "Журнал диагностики"
+        == "Диагностика"
     )
     controls_are_connected = (
         packaged_view.mode_selection.receivers(

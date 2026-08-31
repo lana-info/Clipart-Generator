@@ -132,8 +132,9 @@ Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-012`.
 
 ## Task 4: Исправить cleanup, 300 DPI и chroma presets
 
-Status: Done in source — approved copy and implementation checkpoint `46f11ba`;
-shared editor screenshots recorded, Windows scaling remains in Task 13
+Status: Fixed on `codex/fix-3.1-windows-acceptance-blockers` — the shared
+workflow allow-list again exposes 300 DPI in both Clipart and Processing;
+replacement Windows acceptance remains in Task 13
 
 Goal:
 Закрепить короткие подписи и один безопасный набор key colors.
@@ -147,12 +148,23 @@ Acceptance:
 - [x] Нет обещания удалить скрытый SynthID.
 - [x] Exact actions: `Удалить служебные данные изображения` и
   `Удалить водяной знак Gemini`.
-- [x] 300 DPI меняет metadata и не скрыт в applicable workflow.
+- [x] 300 DPI меняет metadata и не скрыт в applicable workflow. Regression
+  test covers the active workflow boundary for both Clipart and Processing.
 - [x] Prompt/removal используют один закрытый набор трёх цветов.
 
 Verification:
 - [x] UI string/visibility tests.
 - [x] DPI metadata round-trip и draft migration tests.
+- [x] Добавить workflow-level regression test: `export_300_dpi` разрешён,
+  видим и не сбрасывается для Clipart и Processing. Existing tests covered the
+  editor/runtime in isolation but did not exercise the workflow allow-list.
+
+Root cause checkpoint 2026-08-30: commit `5163b1e` introduced
+`_CLIPART_OPERATIONS` without `export_300_dpi`; both active workflows reuse
+that tuple, and `ProcessingPipelineEditor._apply_workflow_visibility()` hides
+the checkbox and changes an existing `True` value to `False`. The DPI writer,
+runtime stages, state field and metadata verification remain implemented. No
+runtime fix was made while the owner continues Windows observation gathering.
 
 Dependencies: Task 2. Scope: M. Requirements: `CG31-FR-013`–`CG31-FR-015`.
 
@@ -752,9 +764,10 @@ Acceptance:
 - [x] Каждый запуск изолирован в `.run/<run-id>`, резервирует имена всего batch
   и публикует только свои файлы. Прежний выбор workspace с `rough/` и `output/`
   сохранён без миграционного экрана; literal `output` нормализуется в parent.
-- [x] Adversarial Chroma test подтвердил потерю enclosed near-key детали;
-  automatic mode теперь останавливается с понятной ошибкой вместо стирающего
-  fallback. Правило exact selected key не менялось.
+- [x] Adversarial Chroma tests подтвердили потерю и цветовой сдвиг enclosed
+  near-key деталей. Automatic mode сохраняет RGB полностью непрозрачной
+  внутренней части предмета и ограничивает despill зоной смешанной кромки;
+  exact selected key по-прежнему неотличим от фона без отдельной маски.
 - [x] Редактор ограничен 40 Мп, `QThread.finished` больше не подменён строковым
   business-сигналом, а проверка прозрачности видна также в Processing.
 - [x] Installer повторно проверяется перед launch, license outage отделён от
@@ -823,6 +836,79 @@ Steps:
   При расхождении сохранить имена файлов, SHA-256 и диагностический журнал;
   отдельно сверить ожидаемые stage-копии в `rough/`. Это paid request и требует
   отдельного явного разрешения владельца.
+- [x] После завершения текущего Windows observation pass восстановить
+  `Установить 300 DPI` в Clipart и Processing, сначала добавив failing
+  workflow-level visibility/state regression. Это ранее утверждённая функция,
+  поэтому рекомендуемый release decision — исправить и пересобрать 3.1.0 до
+  публикации, а не переносить молча в 3.2.0.
+- [x] Исправить terminal diagnostics для неуспешной задачи: событие
+  `item_finished` с `outcome=failed` не может иметь уровень `info` и описание
+  `Обработка изображения завершена.`. Оно должно отображаться как ошибка с
+  однозначным текстом `Обработка изображения завершилась с ошибкой` либо
+  нормализоваться в `item_failed`, сохраняя safe task ID, provider error code,
+  модель, этап и номер элемента.
+- [x] Оставить один пользовательский вход в общий журнал: постоянную кнопку
+  `Диагностика` справа вверху на главном экране и в wizard; удалить отдельную
+  кнопку/диалог технического лога со страницы Results. Используется уже
+  утверждённая верхняя кнопка, поэтому новый visual mockup не требуется.
+- [x] Ограничить журнал одновременно размером и количеством: максимум 5000
+  записей на запуск, три запуска, 8 МиБ на запуск и 24 МиБ суммарно. Старые
+  журналы, созданные до лимита количества, также читаются bounded. Одинаковый
+  polling сохраняется на первом опросе, при смене состояния и каждом десятом;
+  1024 позиции и часть byte budget зарезервированы для warning/error/terminal,
+  поэтому поздняя причина сбоя и итог запуска не вытесняются обычными записями.
+- [x] Разрешить структурированное событие
+  `provider_task_recovery_deferred` для KIE/Fal и показывать его как понятное
+  предупреждение с безопасными provider/model/task полями. При сохранении API
+  settings журнал отмечает configured-состояние KIE, PhotoRoom, Fal и RunPod,
+  но никогда не значения ключей.
+- [x] Подключить уже получаемые Fal lifecycle callbacks к единому журналу:
+  accepted submit, sampled poll/state, provider success и bounded failure с
+  request ID/model. Это не создаёт дополнительных сетевых или платных вызовов;
+  временный recovery failure остаётся `recovery_deferred`, а не ложным terminal.
+- [x] Добавить regression для KIE terminal fail: `provider_task_failed`
+  сопровождается одним failed item, не создаёт ready-файл, не помечается как
+  success/info и остаётся доступным для явного `Повторить ошибки` без
+  автоматической повторной платной отправки.
+- [x] После observation pass исправить общий Fal.ai HTTP 405, подтверждённый на
+  `fal-ai/flux/schnell` и `ideogram/v4/fast`. Полная последовательность уже
+  локализует сбой: Fal возвращает отдельный request ID для каждого POST submit,
+  после чего 405 возникает при первом lifecycle read до события
+  `provider_task_polled`; archive не различает immediate status и result read.
+  Клиент теперь использует и журналирует фактические
+  provider-supplied status/response/cancel URL вместо их реконструкции; точное
+  устранение Windows 405 подтверждается отдельным контролируемым Fal smoke.
+  Cancel recovery читает accepted 400/404 body один раз и корректно сохраняет
+  `ALREADY_COMPLETED`, не превращая его в ошибку разбора.
+- [x] До исправления не выполнять новые платные Fal.ai проверки. Для найденной
+  корневой причины сначала добавить минимальный regression на фактический HTTP
+  method/URL, provider-supplied lifecycle URLs и безопасное redirect-поведение,
+  затем проверить общий клиент и recovery; один failed item не должен
+  создавать ready-файл или запускать автоматическую платную повторную отправку.
+- [ ] После всех offline gates отдельно разрешить один минимальный Windows Fal
+  smoke. Без него исправленный lifecycle contract доказан локально, но исчезновение
+  фактического HTTP 405 у провайдера ещё не является подтверждённым.
+- [x] Исправить provider evidence для генерации: `run_started.provider_routes`
+  должен определять KIE/Fal по выбранным text/reference моделям, а не всегда
+  писать `generation:kie`. Добавить mixed-model regression, чтобы preflight,
+  стоимость и диагностика использовали один фактический route resolver.
+- [x] Исправить публикацию стадий в `rough/` без изменения утверждённой модели
+  папок `rough/` + `output/`: один provider result должен публиковаться как один
+  `*_generated`, а `gen_metadata_*` и `gen_existing_alpha_*` не должны попадать
+  в `generated` только из-за общего префикса `gen`. Сначала добавить regression
+  на реальный двухэлементный набор: 2 provider results, 2 generated rough,
+  отдельный meaningful `bg-removed`, без семантических дублей generated.
+- [x] Сделать решение `skip_remover_for_alpha` понятным в результате/журнале:
+  если KIE уже вернул usable alpha, явно сообщать, что Chroma не запускалась и
+  прозрачность пришла от провайдера. Не превращать такой PNG принудительно в
+  синий фон и не менять утверждённое сохранение provider alpha без отдельного
+  продуктового решения. В Chroma acceptance такой случай должен считаться
+  `inconclusive/skipped`, а не успешной проверкой keyer, без автоматической
+  повторной платной генерации. Worker теперь безопасно включает reuse alpha по
+  умолчанию, даже если вызывающий flow не передал флаг; явное `False` остаётся
+  только для внутренних сценариев, которым действительно нужен remover.
+  Structured `stage_finished` сохраняет `outcome=skipped` и
+  `status=already_alpha`, поэтому журнал не утверждает, что Chroma запускалась.
 
 Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
@@ -834,11 +920,11 @@ Acceptance:
 Verification:
 - [x] History/merge-base audit and full VDS tests pass.
 - [x] Technical-review and prebuild source-acceptance branches fast-forwarded
-  without conflicts through `7addeee`; latest complete offline suite: 1026
+  without conflicts through `7addeee`; first release-candidate suite: 1030
   passed, 57 intentional/environment skips, 2 deselected, 140 subtests. Two of
-  those skips are the new Windows-only DPAPI and native installer-lock tests.
-- [x] Replacement Windows artifact built with all automated gates green.
-- [ ] Manual Windows checklist remains.
+  those skips are the Windows-only DPAPI and native installer-lock tests.
+- [x] First Windows 3.1.0 artifact built with all automated gates green.
+- [ ] Replacement Windows 3.1.1 candidate and manual Windows checklist remain.
 
 Release preparation 2026-08-30: версия 3.1.0, release notes и полный Windows
 checklist подготовлены в `codex/release-3.1.0-final-candidate`. Workflow теперь
@@ -860,6 +946,57 @@ Artifact `windows-3.1.0` contains installer `231576596` bytes with SHA-256
 `421aae337715057bbd44a808c0078d08689c04443225b2b1b1a19269a85b7f80`,
 matching provenance. It is an unpublished acceptance artifact; manual visual,
 install/upgrade, workspace, Chroma and license checks remain.
+
+Subsequent blocker/UI follow-up passes 1056 offline tests, 57 documented skips,
+2 deselections and 146 subtests. It is now integrated for the separately
+authorized replacement 3.1.1 build; no release publication or paid provider
+request is implied.
+
+Windows observation 2026-08-30: KIE
+`flux-2/flex-text-to-image` item 2/2 returned provider task failure code `422`
+with the generic message `Please try again, or change your input files or
+prompt.`. The model ID and request fields remain present in the official KIE
+contract, so this single response does not prove a stale model or invalid local
+payload. The confirmed application defect is diagnostic classification:
+`main.py` emits `item_finished(outcome=failed)`, while
+`build_provider_event()` derives severity only from the event name and
+`DiagnosticJournal.record_structured()` selects the generic successful-sounding
+summary. No paid retry or runtime fix was started during observation gathering.
+
+Windows observation 2026-08-30: Fal.ai generation returned the same terminal
+`HTTP 405` for both items with two different models, `fal-ai/flux/schnell` and
+`ideogram/v4/fast`. The exported lifecycle shows four accepted submissions with
+distinct request IDs, followed by failure before any `provider_task_polled`;
+source tracing localizes 405 to the first lifecycle read, not POST submit. If
+status is immediately complete, that read can be the result URL, so the archive
+does not distinguish status from result. The client currently reconstructs
+queue lifecycle routes instead of retaining the provider-supplied URLs. The
+same report proves that `run_started` mislabels Fal generation as
+`generation:kie` due to a hard-coded diagnostic route. Further paid Fal
+attempts are stopped; no runtime fix was made during observation.
+
+Windows evidence 2026-08-30: a later KIE `gpt-image-2-text-to-image` run
+completed two prompts with two distinct task IDs, one downloaded result per
+task, Local Chroma Key, two distinct ready filenames and terminal counts
+`succeeded=2`, `failed=0`. This confirms the shared KIE credentials/client and
+rules out a candidate-wide KIE outage; the earlier FLUX.2 Flex 422 remains a
+model/task failure. Pixel fidelity and content-duplicate acceptance still need
+visual/hash evidence.
+
+Follow-up PNG evidence resolves the apparent five KIE duplicates in `rough/`.
+There are only two unique generated pixel sets and exactly two paid task IDs.
+`rough_01_generated` equals `rough_04_generated`; `rough_02_generated` equals
+both `rough_03_generated` and `rough_05_generated`. Source tracing proves that
+`_persist_rough_outputs()` misclassifies `gen_metadata_*` and
+`gen_existing_alpha_*` as `generated` because it matches the generic substring
+`gen`. This is a rough-stage publication bug, not repeated provider submission.
+The original raccoon is opaque RGB on blue and its separate Chroma result has
+alpha; the original ballerina arrived from KIE as RGBA with usable alpha, so the
+existing skip-remover rule preserved it and KIE—not Chroma—omitted the requested
+blue background. The owner's KIE account confirms exactly two paid tasks. The
+ballerina prompt length (1301) matches the diagnostic, and the actual GPT Image
+2 payload contains no transparent-background parameter, so this is provider
+prompt non-adherence rather than a conflicting application request.
 
 Evidence: `develop/3.1` fast-forwarded from `78f8c63` through `dd01703` to
 `ea57e12` without conflicts and was pushed to GitHub. Post-integration
@@ -926,6 +1063,222 @@ Acceptance before implementation:
   ручной контур.
 
 Dependencies: released 3.1.0 mask editor baseline. Scope: next-version feature.
+
+## Task 28: Понятная стоимость нескольких провайдеров и явный CSV-экспорт
+
+Status: Done in current 3.1 follow-up — owner approved implementation during
+Windows acceptance; offline UI evidence and regression tests completed
+
+Goal:
+Убрать неоднозначность в смешанном KIE/Fal.ai pipeline и сделать экспорт всей
+таблицы промптов заметным без угадывания назначения иконки.
+
+Implemented direction:
+- Для pipeline с несколькими платными провайдерами показывать раздельную
+  оценку: `KIE — …`, `Fal.ai — …`, `Итого — …` под общим заголовком
+  `Ориентировочная стоимость`.
+- Кнопка `Обновить оценку Fal.ai` обновляет только строку Fal.ai; уже известная
+  оценка KIE остаётся видимой и не подменяется числом Fal.ai.
+- Если оценка одного провайдера недоступна или устарела, явно показывать это у
+  соответствующей строки. Частичную сумму нельзя выдавать за полную итоговую
+  стоимость; итог помечается как неполный до получения всех используемых
+  оценок.
+- Не показывать отдельную строку провайдера, который не используется выбранным
+  pipeline.
+- В панели таблицы отделить экспорт от групп `Промпты` и `Референсы`: добавить
+  отдельную группу `Экспорт:` и кнопку с видимой надписью `CSV` бирюзовым
+  акцентом. Иконку можно сохранить как вспомогательную, но она не заменяет
+  текст.
+- Для кнопки CSV использовать tooltip/accessibility name
+  `Экспортировать все строки в CSV`; существующий формат и round-trip CSV не
+  менять в рамках этой UI-задачи.
+
+Acceptance:
+- [x] KIE-only и mixed/incomplete/complete состояния покрыты offscreen tests;
+  Fal.ai refresh привязан к фактическому набору endpoint quantities.
+- [x] Панель промптов/референсов проверена на 1120×780 с отдельной группой
+  `Экспорт:` и текстовой кнопкой `CSV`.
+- [x] Локальные KIE/PhotoRoom оценки отделены от Fal.ai, который требует
+  явного обновления; изменение pipeline сбрасывает устаревшую Fal.ai оценку.
+- [x] Регрессионные тесты подтверждают, что refresh Fal.ai не скрывает KIE,
+  частичная сумма не маркируется как полный итог, а CSV экспортирует те же
+  строки и референсы без изменения данных.
+
+Evidence: owner Windows screenshots from 2026-08-30 reproduced the ambiguity.
+Focused offline suite and real offscreen Qt captures validate the corrected
+layout and provider breakdown; no paid request was used. Final focused gate:
+178 tests and 28 subtests; full offline gate: 1056 tests and 146 subtests.
+
+## Task 29 (3.2.0): Alpha-safe Fal.ai upscale после удаления фона
+
+Status: Deferred to the next version after 3.1.0 — root cause and provider
+candidate confirmed from official documentation; implementation and paid
+endpoint verification intentionally not started
+
+Goal:
+Разрешить облачный Fal.ai upscale прозрачного PNG после удаления фона, не
+предлагая модели, для которых сохранение alpha не гарантировано.
+
+Confirmed diagnosis:
+- Текущий `fal-ai/esrgan` принимает и возвращает PNG, но его официальная схема
+  не обещает сохранение alpha. В локальном capability catalog его
+  `preserves_alpha` поэтому остаётся `unknown`; текущая блокировка после
+  удаления фона является безопасным поведением, а не ошибкой выполнения.
+- Официальный Fal.ai endpoint `topaz/upscale/image/transparent` прямо обещает
+  end-to-end alpha preservation и всегда возвращает PNG. Он выполняет только
+  фиксированный upscale 4×; billing также считается по фактическому 4×
+  результату независимо от переданного scale.
+
+Approved direction:
+- Не ослаблять защиту и не разрешать обычный Fal.ai ESRGAN после удаления фона
+  без отдельного adversarial alpha test и явной гарантии провайдера.
+- Добавить `Topaz Transparent (4×)` как отдельную Fal.ai-модель для операции
+  `Апскейл после удаления фона`.
+- Фильтровать модели по конкретному endpoint capability, а не считать весь
+  провайдер Fal.ai одинаковым: после удаления фона показывать только модели с
+  подтверждённым `preserves_alpha=true`; до удаления фона ESRGAN может
+  оставаться доступным.
+- Рядом с Topaz Transparent явно показывать фиксированный масштаб `4×` и не
+  предлагать неработающий выбор 2×. Оценка стоимости должна учитывать
+  фактический 4× output и входить в раздельный Fal.ai subtotal из Task 28.
+- После загрузки результата проверять реальный PNG/alpha contract. Если ответ
+  оказался непрозрачным или повреждённым, не публиковать его как ready-файл и
+  сохранить исходный прозрачный результат предыдущего этапа.
+- В текущем 3.1 follow-up весь второй upscale после удаления фона временно
+  скрыт и выключен, чтобы пользователь не мог выбрать неподходящую модель.
+  Апскейл до удаления фона остаётся доступным; второй этап вернётся только с
+  отдельной проверенной alpha-safe моделью.
+
+Acceptance before implementation:
+- [ ] Утверждён mockup выбора модели до/после удаления фона, включая скрытый
+  ESRGAN и видимый `Topaz Transparent (4×)` в alpha-required состоянии.
+- [ ] Capability catalog, payload, polling/recovery, price refresh и diagnostic
+  journal поддерживают новый endpoint без ослабления существующих проверок.
+- [ ] Offline contract tests подтверждают endpoint-specific filtering,
+  фиксированный 4× payload, PNG requirement и отказ от публикации flattened
+  результата.
+- [ ] Один минимальный платный Fal.ai test на synthetic RGBA fixture отдельно
+  разрешён владельцем и подтверждает сохранение полностью прозрачных,
+  полупрозрачных и непрозрачных областей после 4×.
+
+Official evidence:
+- `https://fal.ai/models/fal-ai/esrgan/api` — PNG output поддерживается, но
+  alpha preservation не заявлен.
+- `https://fal.ai/models/topaz/upscale/image/transparent/api` — alpha channel
+  сохраняется end-to-end, output всегда PNG, upscale и billing фиксированы 4×.
+
+Dependencies: Task 28 pricing breakdown and released 3.1.0 processing baseline.
+Scope: next-version provider capability; paid verification requires separate
+owner approval.
+
+## Task 30 (3.2.0): Chroma «Авто» и цвет фона для каждого изображения
+
+Status: Deferred to the next version after 3.1.0 — product direction approved;
+visual mockup and per-item Auto implementation intentionally not started;
+current 3.1 candidate colour-shift reproduction completed separately
+
+Goal:
+Снизить повреждение многоцветных предметов Chroma Key и однозначно хранить,
+какой фон был выбран, сгенерирован и удалён для каждого изображения.
+
+Approved direction:
+- Сохранить видимые ручные кнопки `Синий`, `Красный`, `Зелёный`. Четвёртый
+  `Оранжевый` (`#FF6600`) не добавлять: adversarial test текущего алгоритма
+  подтвердил полное удаление чисто-красной детали предмета. В будущей версии
+  рядом добавить отдельную кнопку
+  `Авто`, а не заменять ручное управление выпадающим списком.
+- В `Авто` выбирать chroma-цвет до платной генерации отдельно для каждого
+  промпта, добавлять его в prompt и сохранять вместе с item/task state.
+  Удаление фона обязано использовать тот же сохранённый цвет, а не выполнять
+  независимый повторный выбор после загрузки.
+- Для каждого item записывать requested key (`name` + `#RRGGBB`), источник
+  выбора (`manual`/`auto`), измеренный border key, результат проверки
+  (`matched`, `mismatch`, `already_alpha`, `ambiguous`) и факт
+  `chroma_applied`/`skipped`. Данные должны переживать restart/recovery и быть
+  видимы в Results, run report и безопасном diagnostic journal без текста
+  промпта и credentials.
+- После загрузки проверять фактический фон. При несовпадении, неоднородном фоне
+  или уже существующем alpha не применять другой key молча: показать понятное
+  сообщение, сохранить исходник и предложить ручной цвет либо semantic remover.
+- Никогда не запускать автоматическую повторную платную генерацию из-за
+  неверного chroma-фона.
+- Если безопасного key нет, `Авто` рекомендует Local BEN2/rembg либо облачный
+  remover, а не обещает безопасное удаление.
+
+Evidence and boundary:
+- В сложной композиции с зелёной листвой, розово-красными цветами, голубой
+  гортензией, синей лентой и синей росписью нет универсально безопасного
+  primary key. В предоставленном результате blue key фон удалён и тонкие
+  детали в основном сохранены, но часть собственных синих деталей визуально
+  уходит в зелёный/бирюзовый, что согласуется с риском чрезмерного despill.
+- Текущий source воспроизвёл тот же сдвиг на предоставленном файле. Минимальный
+  synthetic regression также подтвердил превращение непрозрачной светло-синей
+  детали в зелёно-бирюзовую. Узкая release-fix сохраняет RGB непрозрачного
+  интерьера и оставляет despill только у смешанной кромки; Auto и per-item key
+  остаются в 3.2.0, а четвёртый ручной preset отклонён.
+- Действующее правило сохраняется: точный выбранный key внутри предмета
+  неотличим от фона без дополнительной маски. `Авто` снижает и объясняет риск,
+  но не отменяет это ограничение.
+
+Acceptance before implementation:
+- [ ] Утверждены mockups трёх ручных кнопок, `Авто`, per-item badge и
+  состояний matched/mismatch/already-alpha/ambiguous/no-safe-key.
+- [ ] Project state, task recovery и run report round-trip сохраняют один key
+  на item и никогда не меняют его после restart.
+- [ ] Synthetic adversarial tests покрывают собственные синие, красные,
+  зелёные и оранжевые детали, near-key despill, тонкие веточки и отверстия.
+- [ ] Paid generation не повторяется автоматически; mismatch безопасно
+  останавливает Chroma и сохраняет исходный provider result.
+
+Dependencies: released 3.1.0 Chroma baseline and Task 13 diagnostics fixes.
+Scope: next-version per-item state/UI and key-selection feature.
+
+## Task 31 (3.2.0): Проверка доступности выбранных provider/model routes
+
+Status: Deferred to the next version after 3.1.0 — product direction approved;
+provider contracts and UI states require separate design and validation
+
+Goal:
+Перед запуском понятнее показывать, доступны ли выбранные KIE/Fal модели на
+каждом платном этапе, не выполняя платную генерацию и не обещая доступность,
+которую provider API не может гарантировать.
+
+Approved direction:
+- В шаге проверки действий показывать отдельный статус для каждой фактически
+  выбранной пары provider/model: generation, reference generation, upscale
+  before/after и background removal.
+- Использовать состояния `Доступна`, `Недоступна`, `Не удалось проверить` и
+  время последней проверки. Серый/неизвестный статус не считать ошибкой и не
+  показывать как подтверждённую доступность.
+- Различать неверный credential, отсутствующий model route, временный outage,
+  неподдерживаемую операцию/формат и неопределённый ответ. Не отправлять prompt,
+  references или paid inference ради preflight.
+- Общий preflight должен использовать тот же route resolver, что run plan,
+  стоимость и диагностика; mixed KIE/Fal pipeline проверяется по этапам.
+- Если provider не даёт надёжного capability endpoint, показывать
+  `Не удалось проверить` и разрешать осознанный запуск, а не ложный зелёный
+  статус. Результат реальной задачи остаётся окончательным источником истины.
+
+Evidence and boundary:
+- Успех `gpt-image/1.5-text-to-image` подтверждает работоспособность KIE в
+  целом, но terminal 422 у `flux-2/flex-text-to-image` не доказывает, что модель
+  постоянно недоступна: задача была принята и могла отклонить конкретный input.
+- Fal HTTP 405 воспроизводился на двух моделях после submit и исправлен на
+  уровне lifecycle URL contract; один разрешённый Windows smoke остаётся
+  обязательным перед тем, как показывать маршрут зелёным.
+
+Acceptance before implementation:
+- [ ] Проверены официальные capability/status contracts KIE и Fal без paid
+  inference; отсутствие такого контракта явно отражено в UX.
+- [ ] Утверждён макет списка этапов и четырёх состояний до UI implementation.
+- [ ] Offline tests покрывают mixed routes, auth denial, model-not-found,
+  outage, timeout, stale cache и неизвестный ответ без утечки credentials.
+- [ ] Preflight не создаёт task ID, не списывает средства и не меняет recovery
+  journal; запуск никогда не повторяется автоматически после failed preflight.
+
+Dependencies: Task 13 diagnostics, Task 28 provider cost breakdown and stable
+provider capability contracts.
+Scope: next-version provider observability and preflight UX.
 
 ## Исторические задачи 3.0
 

@@ -1,6 +1,262 @@
 # Project state
 
-Updated: 2026-08-30
+Updated: 2026-08-31
+
+## Unified bounded diagnostics — 2026-08-31
+
+The owner approved one visually persistent `Диагностика` action at the top
+right. The duplicate Results-page technical-log button/dialog is removed; the
+top action opens the same application journal before mode selection and inside
+the wizard. That journal already correlates application, licence, workflow,
+run/item/stage, provider, retry/cancel, update and export events.
+
+The audit confirmed that byte-only retention could keep about 22,000 small
+events in one 8 MiB session and allocate about 40 MiB while reading it. It also
+confirmed that once the byte cap was reached a later provider error was lost,
+and that the emitted KIE/Fal `provider_task_recovery_deferred` event was rejected
+by the structured allow-list. The journal now retains at most 5,000 events per
+launch and reads at most that many from each of the newest three launches,
+including oversized legacy files. Repeated polling keeps the first sample,
+state transitions and every tenth sample. Normal events stop before the hard
+limit, reserving 1,024 event slots and a bounded byte tail for warnings, errors
+and run/session terminal records. Deferred recovery is a warning with safe
+provider/model/task context; API settings record only configured booleans for
+KIE, PhotoRoom, Fal and RunPod. Prompt, credential, image, URL and private-path
+exclusions are unchanged.
+Fal generation and processing now publish the lifecycle information already
+returned by their existing calls: accepted submission, sampled status changes,
+provider success and bounded wait/HTTP failure. No availability probe, retry or
+additional paid request was added; a recoverable polling outage remains the
+separate `provider_task_recovery_deferred` warning.
+
+Verification is green: the focused diagnostics/Fal/UI suite passes 208 tests
+and 24 subtests; the full offline suite passes 1049 tests and 146 subtests,
+with 57 documented platform/deferred skips and two intentional deselections.
+The bounded-journal benchmark retained the late provider error and terminal
+records while reducing peak legacy-read memory from about 40.7 MiB to 6.46 MiB.
+The fresh automatic Chroma benchmark also passes: alpha IoU `0.968704`, alpha
+MAE `0.018194`, median 2048×2048 runtime `1.400 s`, peak RSS `420.824 MiB`
+below the `448 MiB` ceiling. Compilation, sensitive-artifact scan,
+`git diff --check` and final independent review pass. Manual Windows UI and one
+controlled live Fal run remain release-acceptance checks.
+
+## Windows acceptance regression: 300 DPI hidden — 2026-08-30
+
+The owner confirmed that `Установить 300 DPI` is absent from both Clipart and
+Processing in the current Windows candidate. This is a real UI/state regression,
+not an intentional product removal: DPI writing, final-save verification,
+project state and runtime stages remain implemented.
+
+The root cause is the workflow contract introduced by commit `5163b1e`:
+`_CLIPART_OPERATIONS` omits `export_300_dpi`, and both Clipart and Processing
+reuse that allow-list. `ProcessingPipelineEditor._apply_workflow_visibility()`
+therefore hides the existing checkbox and resets an already enabled value to
+`False`. A direct offscreen reproduction confirms `allowed=False`,
+`hidden=True`, `state=False` in both modes. Existing DPI tests exercised the
+editor/runtime without this workflow boundary and did not detect the omission.
+
+The regression is fixed on `codex/fix-3.1-windows-acceptance-blockers` by adding
+the existing operation back to the shared workflow allow-list. A workflow-level
+offscreen regression proves that Clipart and Processing both expose the control
+and preserve an enabled value; the focused workflow/editor/final-save suite
+passes 28 tests. Replacement Windows acceptance remains required before release.
+
+## Windows acceptance regression: failed KIE item shown as information — 2026-08-30
+
+During a two-item KIE generation with the valid documented model
+`flux-2/flex-text-to-image`, item 2 returned terminal provider error `422` and
+the generic provider message asking to retry or change the input/prompt. The
+single response does not identify whether the cause was transient provider
+failure or that particular prompt; no automatic or additional paid retry was
+performed.
+
+The journal then displayed `Уровень: информация`, event `item_finished` and
+`Обработка изображения завершена.` while retaining the failure text. This
+misclassification is reproducible from source: the worker emits
+`item_finished` with `outcome=failed`; event severity is inferred only from an
+event name ending in `_failed`, and the journal summary is selected from the
+generic `item_finished` label without considering outcome. Provider failure
+itself is already recorded separately as `provider_task_failed`.
+
+This diagnostics defect is fixed on the release-blocker branch. Any structured
+event with `outcome=failed` is forced to error severity, and failed
+`item_finished` receives the unambiguous summary
+`Обработка изображения завершилась с ошибкой.` Existing provider/task/model,
+stage and bounded error fields remain available. The new builder and persisted
+journal regressions first reproduced the old info/success wording and now pass.
+
+## Windows acceptance regression: Fal.ai HTTP 405 across models — 2026-08-30
+
+The owner reproduced the same terminal `Fal.ai HTTP 405` during generation with
+two independent Fal.ai models: `fal-ai/flux/schnell` and
+`ideogram/v4/fast`. Both items in both runs failed identically. This cross-model
+reproduction makes a model-specific outage or bad prompt unlikely and points to
+the shared Fal request lifecycle in the current Windows candidate. Both failures
+are also rendered through the already confirmed misleading `item_finished`
+information-level event.
+
+The exported full diagnostic sequence narrows the failure boundary. Fal accepts
+each POST submission and returns a distinct request ID; the application records
+`provider_task_submitted`, then fails before the first
+`provider_task_polled`. The 405 is therefore not a submit rejection and occurs
+during the first lifecycle read. If the first status is already `COMPLETED`, the
+old event order also permits the failing read to be the result URL, so the
+archive alone cannot honestly distinguish status from result. Official Fal
+queue documentation returns provider-supplied `status_url`, `response_url` and
+`cancel_url`; the candidate discarded all three and reconstructed them from the
+model and request ID.
+
+The fix branch now validates, uses and journals Fal's exact lifecycle URLs for
+generation and processing, including restart recovery. Only HTTPS URLs on
+`queue.fal.run` containing the same request ID are accepted; cross-host,
+downgrade and mismatched-task values are rejected, and old journal records keep
+the backward-compatible reconstructed fallback. The focused Fal/KIE/concurrency
+and redirect-security suite passes 116 tests. This removes the confirmed client
+contract defect without another paid submission; one controlled Windows Fal
+run remains necessary to prove that the observed provider-side 405 is gone.
+Final review also reproduced a cancel-recovery double read: accepted HTTP
+400/404 bodies were consumed while extracting an error detail and then parsed
+again as empty. The response is now bounded and parsed once, so
+`ALREADY_COMPLETED` remains a valid late-cancel outcome.
+
+The same report exposes a separate diagnostics defect:
+`v3_run_queue._provider_model_routes()` hard-codes `generation:kie` for every
+generation run, so both Fal runs are incorrectly announced as KIE even though
+their model and actual worker are Fal. This does not cause HTTP 405, but it makes
+provider preflight, cost interpretation and support evidence misleading.
+
+The fix branch now derives the generation provider from the actual text or
+reference model used by each run item. Fal-only, KIE-only and mixed KIE/Fal
+batches have separate regressions, including a Fal model ID without the
+`fal-ai/` prefix.
+
+Further paid Fal.ai attempts remain stopped until the source gate and review are
+green and the owner separately authorizes a controlled acceptance request.
+
+## Windows acceptance evidence: KIE GPT Image 2 succeeds — 2026-08-30
+
+The owner supplied the sanitized run report and full diagnostic package for a
+successful `gpt-image-2-text-to-image` KIE run. Two prompts produced two distinct
+KIE task IDs; both submissions returned HTTP 200, both tasks reached `success`,
+each downloaded exactly one PNG, Local Chroma Key completed, and the run ended
+with `succeeded=2`, `failed=0`. The ready filenames are distinct. This evidence
+confirms that KIE credentials, submission, concurrent polling, result download
+and final export work in the same Windows candidate, and that the earlier
+`flux-2/flex-text-to-image` 422 is not a candidate-wide KIE integration outage.
+
+The report alone does not provide pixel-level transparency quality evidence or
+filesystem hashes, so it does not close Chroma fidelity or duplicate-content
+acceptance. It does confirm that this run did not create duplicate task IDs or
+duplicate ready filenames.
+
+## Windows acceptance regression: duplicate/mislabelled rough stages — 2026-08-30
+
+The owner supplied all six PNGs published to `rough/` by the successful
+two-item KIE GPT Image 2 run. Hash and decoded-pixel comparison proves that the
+five files labelled `rough_*_generated.png` are only two unique provider
+results: `rough_01_generated` and `rough_04_generated` are pixel-identical
+raccoon images; `rough_02_generated`, `rough_03_generated` and
+`rough_05_generated` are pixel-identical ballerina images. The KIE lifecycle
+still contains exactly two paid task IDs, so this is not repeated paid
+generation.
+
+The root cause is `_persist_rough_outputs()`. It classifies every raw PNG by a
+substring search, with the generic marker `gen` falling back to stage
+`generated`. Pipeline files keep `gen` as their item prefix, so
+`gen_metadata_*` and `gen_existing_alpha_*` are incorrectly republished as new
+generated images. In this run, the exact mapping is the original two downloads,
+two metadata-cleaned copies and one existing-alpha copy, plus the correctly
+labelled raccoon `bg-removed` stage. The current tests assert that rough files
+exist and use collision numbering, but do not require one published generated
+stage per actual provider result or reject semantic duplicates.
+
+This confirmed file-publication regression is fixed without changing the
+approved `rough/` and `output/` folders. The `generated` classifier now accepts
+only the exact provider-download filename for the current run; metadata-cleaned
+and existing-alpha copies are no longer relabelled as new generations. A
+five-file reproduction now publishes exactly two generated stages and one
+meaningful background-removal stage, and the focused output-path suite passes.
+
+The same pixel evidence resolves the blue-background question. The raccoon KIE
+download is an opaque RGB image with the requested blue background, and Local
+Chroma Key produces the separate alpha result. The ballerina KIE download is
+already RGBA with usable transparency before background removal; KIE did not
+follow the requested blue-background instruction for that item. The application
+then correctly follows the existing `skip_remover_for_alpha` rule and preserves
+the provider alpha instead of running Chroma. The UI/journal should make this
+decision visible, but flattening valid provider alpha onto blue is not approved.
+
+The owner verified the KIE account history and confirmed exactly those two paid
+tasks. The supplied ballerina request also removes payload ambiguity: its inner
+prompt is exactly 1301 characters, matching `item_input_inspected`, and the
+request uses `aspect_ratio=1:1` and `resolution=1K`. Source inspection confirms
+that the GPT Image 2 payload contains only those documented fields and does not
+request a transparent background. The prompt repeatedly and unambiguously asks
+for an edge-to-edge opaque blue canvas; therefore the provider result failed
+that prompt constraint. A Chroma acceptance run must report this source as
+inconclusive/skipped rather than count provider alpha as evidence of Chroma
+quality, and it must not perform an automatic paid regeneration.
+
+## Windows owner feedback follow-up — 2026-08-31
+
+The owner has started manual Windows acceptance. The current source follow-up
+implements the small, approved UI corrections without changing provider
+runtime contracts:
+
+- mixed pipelines now show separate `KIE`, `Fal.ai` and optional `PhotoRoom`
+  rows plus `Итого`; Fal.ai refresh changes only its row and an incomplete
+  subtotal is never presented as a complete total;
+- CSV export now has a separate `Экспорт:` group with a visibly
+  labelled turquoise-accent `CSV` button and an explicit tooltip/accessibility
+  name;
+- `Апскейл после удаления фона` is temporarily hidden and normalized to off in
+  both Clipart and Processing UI. Its implementation remains intact for the
+  future alpha-safe endpoint; all other operations, including first upscale and
+  `Экспорт 300 DPI`, remain visible and functional.
+
+The following product improvements remain deliberately deferred:
+
+- Fal.ai ESRGAN is correctly blocked after background removal because its
+  official contract supports PNG but does not guarantee alpha preservation.
+  Fal.ai now documents a separate `topaz/upscale/image/transparent` endpoint
+  that preserves alpha end-to-end and always returns PNG at a fixed, billed 4×
+  scale. Task 29 records it as the preferred next-version after-removal model;
+  ESRGAN remains a before-removal option unless separately proven alpha-safe.
+- a complex multicolour subject demonstrated that no single blue/red/green key
+  is universally safe and that blue subject details can visually shift toward
+  green/teal under despill. Task 30 records the approved future direction:
+  retain the three visible manual colour buttons, add `Авто`, and persist the
+  selected/observed key separately for each image
+  through task recovery, Results, run report and diagnostics. Auto must choose
+  before generation, reuse the same stored key for removal, validate the actual
+  border and never trigger an automatic paid regeneration. A current-source
+  adversarial test rejected orange `#FF6600`: the current single-dominant-channel
+  algorithm removed a pure-red subject detail. No fourth preset was added and
+  Chroma source remains unchanged.
+
+Tasks 29–31 remain next-version work and require approved full screen/state
+mockups before implementation. No release version, installer or provider
+runtime is changed by this checkpoint. The current UI offers upscale only
+before removal; Local Real-ESRGAN remains the future safe implementation for
+the hidden after-removal stage, and Fal.ai ESRGAN is not treated as alpha-safe.
+
+Verification is green after review follow-up: the focused Clipart/Processing/
+provider/Chroma/state suite passes 178 tests and 28 subtests; the full offline
+suite passes 1056 tests and 146 subtests, with 57 documented skips and two
+intentional deselections. All tracked Python files compile, the tracked
+sensitive-artifact scan and `git diff --check` pass. Fresh automatic Chroma
+benchmark remains unchanged at alpha IoU `0.968704`, alpha MAE `0.018194`,
+median 2048×2048 runtime `1.443 s` and peak RSS `421.203 MiB` below the
+`448 MiB` ceiling. Independent review found two provider-cost cache/route edge
+cases; both were reproduced by failing tests, fixed and accepted on re-review
+with no remaining important or blocking findings.
+
+Task 31 records the approved future provider/model availability check. It must
+show separate KIE/Fal route states per paid stage, distinguish unavailable from
+unknown and never create a paid task for preflight. A KIE terminal 422 after a
+task was accepted is not sufficient evidence that the model route is globally
+unavailable; likewise, Fal routes must not be shown as confirmed until the
+corrected lifecycle contract passes the remaining controlled Windows smoke.
 
 ## Latest project checkpoint
 
@@ -15,36 +271,34 @@ The established workspace remains unchanged for the user: selected root
 contains `rough/` and `output/`; a saved literal `output` path resolves
 automatically to its parent, with no migration page.
 
-The final independent source review verdict is `pass-with-nits`: no blocking or
-important defects remain. The release-preparation tree passes 1030 offline tests, 57
-intentional/environment skips, 2 configured network deselections and 140
-subtests. The two additional skips are the new Windows-only DPAPI and native
-installer-lock contracts; they remain explicit Windows acceptance gates. All
-tracked Python files compile; sensitive scan and `git diff --check` pass. The
-latest automatic Chroma benchmark passes all gates: alpha IoU `0.968704`, alpha
-MAE `0.018194`, 2048×2048 median `1.357 s`, peak RSS `421.465 MiB` below the
-`448 MiB` ceiling. Release-candidate re-verification keeps the same quality
-summary with 2048×2048 median `1.319 s` and peak RSS `421.207 MiB`. All tracked
-Python files compile; sensitive scan, offscreen startup smoke and
-`git diff --check` pass. No paid request or publication was performed.
+The first release-candidate tree passed 1030 offline tests, 57 documented
+skips, 2 configured network deselections and 140 subtests. Windows run
+`33323248601` confirmed the native security contracts and exposed an incomplete
+Real-ESRGAN v0.2.0 archive. Replacement run `33323775508` from commit `8c8c51c`
+used the complete pinned v0.2.5.0 archive and passed every automated Windows
+gate, including installed startup/UI and local processing. Its unpublished
+`windows-3.1.0` artifact contains a `231576596` byte installer with SHA-256
+`421aae337715057bbd44a808c0078d08689c04443225b2b1b1a19269a85b7f80`.
 
-The owner has now authorized preparation and creation of the replacement
-Windows installer. Release preparation is isolated on
-`codex/release-3.1.0-final-candidate`: `release/VERSION.txt` and the fallback
-Azure default are 3.1.0, release notes and the Windows acceptance checklist are
-present, and the GitHub workflow must run the real Windows DPAPI and
-installer-lock contracts before PyInstaller. GitHub CLI is now authorized for
-the owner account. Windows run `33323248601` confirmed both native security
-contracts, PyInstaller startup and installer creation, then correctly failed
-the installed local-processing gate: the older pinned Real-ESRGAN v0.2.0
-archive contained no models. The candidate now uses the complete pinned
-v0.2.5.0 archive through the existing SHA-256 and required-file validator.
-Replacement run `33323775508` from commit `8c8c51c` passed every automated
-Windows gate, including installed startup/UI and local processing. Artifact
-`windows-3.1.0` contains `VibixImages-Setup-3.1.0.exe` (`231576596` bytes),
-SHA-256 `421aae337715057bbd44a808c0078d08689c04443225b2b1b1a19269a85b7f80`;
-downloaded checksum and provenance match. It remains an unpublished acceptance artifact; the paid KIE
-duplicate audit and publication still require separate approval.
+Subsequent Windows acceptance found the provider, diagnostics, rough-stage,
+300 DPI and UI issues recorded above. The final follow-up tree passes 1056
+offline tests and 146 subtests, with no important or blocking source-review
+findings. The owner has authorized integration and a replacement Windows 3.1.1
+build; publication and paid provider requests remain outside this build step.
+
+The Windows observation pass subsequently confirmed a current-source Chroma
+colour regression: fully opaque light-blue subject detail could be reconstructed
+as green/teal. A synthetic adversarial test failed before the fix. Chroma now
+preserves source RGB in the fully opaque subject interior while retaining edge
+despill and all existing benchmark gates; the approved 3.2 per-item Auto key
+selection remains deferred.
+
+A later Windows diagnostic archive captured KIE succeeding with an RGBA PNG,
+followed by Local Chroma failing the item because the border no longer matched
+blue. The worker now defaults to preserving usable provider alpha even if a
+caller omits the flow flag, emits the existing explicit alpha-reuse progress
+message and completes the item without calling a remover. An RGBA channel alone
+is not treated as proof: at least one transparent pixel is still required.
 
 The Windows acceptance checklist now includes a clean-workspace duplicate
 audit prompted by the owner's earlier candidate observation: one KIE prompt,

@@ -3,6 +3,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from PIL import Image
 from PyQt6.QtWidgets import QApplication
@@ -32,7 +33,7 @@ class V3DiagnosticJournalTests(unittest.TestCase):
                 draft_path=root / "project_state.json",
                 diagnostic_journal=journal,
             )
-            self.assertEqual(view.mode_selection.diagnostics_button.text(), "Журнал диагностики")
+            self.assertEqual(view.mode_selection.diagnostics_button.text(), "Диагностика")
             self.assertEqual(
                 view.mode_selection.receivers(view.mode_selection.diagnostics_requested),
                 1,
@@ -40,10 +41,56 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             view._handle_mode_selected(ProjectMode.CLIPART.value)
             self.assertEqual(view.shell.diagnostics_button.text(), "Диагностика")
             self.assertEqual(view.shell.receivers(view.shell.diagnostics_requested), 1)
-            view._show_diagnostics()
+            view.shell.state.set_step(StepId.RESULTS)
+            view.shell.refresh()
+            self.assertIs(view.shell.state.current_step, StepId.RESULTS)
+            view.shell.diagnostics_button.click()
+            self.app.processEvents()
             self.assertIsInstance(view._diagnostics_dialog, DiagnosticJournalDialog)
             self.assertGreater(view._diagnostics_dialog.event_list.count(), 0)
             view._diagnostics_dialog.close()
+            view.close()
+
+    def test_api_settings_diagnostic_covers_all_configurable_providers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.1")
+            view = V3ApplicationView(
+                draft_path=root / "project_state.json",
+                diagnostic_journal=journal,
+            )
+            dialog = SimpleNamespace(
+                settings={
+                    "kie_api_key": "",
+                    "photoroom_api_key": "photo-key",
+                    "fal_api_key": "fal-key",
+                    "runpod_api_key": "runpod-key",
+                },
+                exec=lambda: True,
+            )
+            with patch(
+                "v3_api_settings.ApiSettingsDialog",
+                return_value=dialog,
+            ):
+                view._show_api_settings()
+
+            event = next(
+                item for item in journal.read_events()
+                if item["event"] == "api_settings_saved"
+            )
+            self.assertEqual(
+                event["details"]["configured"],
+                {
+                    "kie": False,
+                    "photoroom": True,
+                    "fal": True,
+                    "runpod": True,
+                },
+            )
+            raw = journal.session_path.read_text(encoding="utf-8")
+            self.assertNotIn("photo-key", raw)
+            self.assertNotIn("fal-key", raw)
+            self.assertNotIn("runpod-key", raw)
             view.close()
 
     def test_structured_provider_event_uses_v2_schema_and_safe_details(self) -> None:
@@ -92,6 +139,28 @@ class V3DiagnosticJournalTests(unittest.TestCase):
             self.assertNotIn("private prompt", exported)
             self.assertNotIn("sk-secret-value", exported)
             self.assertNotIn("example.test", exported)
+
+    def test_failed_item_finished_is_not_persisted_as_successful_information(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            journal = DiagnosticJournal(Path(temp), app_version="3.1")
+            journal.record_structured(
+                {
+                    "event": "item_finished",
+                    "outcome": "failed",
+                    "provider": "kie",
+                    "model": "flux-2/flex-text-to-image",
+                    "stage": "generation",
+                    "error_code": "422",
+                    "error_message": "Please try again",
+                }
+            )
+
+            event = journal.read_events()[0]
+            self.assertEqual(event["severity"], "error")
+            self.assertEqual(
+                event["summary"],
+                "Обработка изображения завершилась с ошибкой.",
+            )
 
     def test_detailed_journal_limits_cover_large_image_batches(self) -> None:
         self.assertEqual(DEFAULT_SESSION_MAX_BYTES, 8 * 1024 * 1024)
@@ -305,6 +374,68 @@ class V3DiagnosticJournalTests(unittest.TestCase):
                     "text_generation:gpt-image-2",
                     "reference_generation:gpt-image-2-image-to-image",
                 ],
+            )
+
+    def test_generation_run_reports_actual_fal_provider_for_nonprefixed_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.1")
+            request = SimpleNamespace(
+                mode="mode1_generate_only",
+                work_dir=str(root),
+                settings={
+                    "text_generation_model": "ideogram/v4/fast",
+                    "reference_generation_model": "gpt-image-2-image-to-image",
+                },
+                generated_prompts=[{"prompt": "private", "references": []}],
+                selected_files=[],
+            )
+
+            RunQueueSession(
+                request,
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+
+            started = next(
+                event
+                for event in journal.read_events()
+                if event["event"] == "run_started"
+            )
+            self.assertEqual(started["details"]["provider_routes"], ["generation:fal"])
+
+    def test_mixed_generation_run_reports_both_actual_providers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = DiagnosticJournal(root, app_version="3.1")
+            request = SimpleNamespace(
+                mode="mode1_generate_only",
+                work_dir=str(root),
+                settings={
+                    "text_generation_model": "gpt-image-2",
+                    "reference_generation_model": "fal-ai/flux/schnell",
+                },
+                generated_prompts=[
+                    {"prompt": "plain", "references": []},
+                    {"prompt": "reference", "references": ["https://example.test/ref.png"]},
+                ],
+                selected_files=[],
+            )
+
+            RunQueueSession(
+                request,
+                ProjectMode.CLIPART,
+                diagnostic_journal=journal,
+            )
+
+            started = next(
+                event
+                for event in journal.read_events()
+                if event["event"] == "run_started"
+            )
+            self.assertEqual(
+                started["details"]["provider_routes"],
+                ["generation:kie", "generation:fal"],
             )
 
     def test_trim_print_run_records_configuration_stages_output_and_terminal_summary(self) -> None:

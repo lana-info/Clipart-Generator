@@ -313,6 +313,7 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                     unsharp_enabled=True,
                     remove_bg=True,
                     remove_bg_provider="local_ben2",
+                    skip_remover_for_alpha=False,
                     edge_shrink_enabled=True,
                     visible_mark_confirmed_regions={
                         visible_mark_region_key(source): (78, 58, 10, 8)
@@ -395,7 +396,7 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                 self.assertEqual(final_image.size, (100, 80))
                 self.assertEqual(final_image.mode, "RGBA")
 
-    def test_existing_alpha_bypasses_remover_when_enabled(self):
+    def test_existing_alpha_bypasses_remover_by_default(self):
         with tempfile.TemporaryDirectory(prefix="clipart-alpha-reuse-") as temp_dir:
             temp_path = Path(temp_dir)
             raw_dir = temp_path / "raw"
@@ -408,12 +409,15 @@ class VisibleMarkPipelineTests(unittest.TestCase):
                 worker_settings(
                     remove_bg=True,
                     remove_bg_provider="local_rembg",
-                    skip_remover_for_alpha=True,
                 ),
             )
             worker._run_local_rembg = lambda *_args: self.fail(
                 "remover must not run for an existing alpha mask"
             )
+            progress_messages = []
+            diagnostic_events = []
+            worker.progress.connect(progress_messages.append)
+            worker.diagnostic.connect(diagnostic_events.append)
 
             result_path = worker._run_processing_pipeline(
                 str(source), None, str(raw_dir), 1, "file"
@@ -422,6 +426,17 @@ class VisibleMarkPipelineTests(unittest.TestCase):
             with Image.open(result_path) as result:
                 self.assertEqual(result.mode, "RGBA")
                 self.assertEqual(result.getpixel((0, 0)), (20, 30, 40, 0))
+            self.assertTrue(
+                any("alpha-маска" in message for message in progress_messages)
+            )
+            stage_finished = next(
+                event
+                for event in diagnostic_events
+                if event["event"] == "stage_finished"
+                and event.get("stage") == "background_removal"
+            )
+            self.assertEqual(stage_finished["outcome"], "skipped")
+            self.assertEqual(stage_finished["status"], "already_alpha")
 
     def test_ui_passes_confirmed_regions_only_to_current_run(self):
         with tempfile.TemporaryDirectory(prefix="clipart-visible-ui-run-") as temp_dir:

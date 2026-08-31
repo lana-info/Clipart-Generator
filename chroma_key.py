@@ -19,6 +19,7 @@ KEY_COLORS: Final[dict[str, tuple[int, int, int]]] = {
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 _MAX_AMBIGUOUS_COMPONENT_DENSITY: Final[float] = 0.02
 _MIN_AMBIGUOUS_COMPONENT_LIMIT: Final[int] = 64
+_MAX_AMBIGUOUS_KEY_DISTANCE: Final[float] = 230.0
 
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
     "watercolor": (
@@ -221,7 +222,7 @@ def _remove_chroma_key_precise(
     ambiguous_band = (
         (raw_matte > 0.05)
         & (raw_matte < 0.95)
-        & (distance_from_key < 200.0)
+        & (distance_from_key < _MAX_AMBIGUOUS_KEY_DISTANCE)
     )
     protected_interior_detail = np.zeros(raw_matte.shape, dtype=bool)
     if np.any(ambiguous_band):
@@ -265,13 +266,8 @@ def _remove_chroma_key_precise(
             )
             touches_subject = np.any(local_subject & ring)
             local_protected = protected_interior_detail[y0:y1, x0:x1]
-            if touches_subject and suspicious_edge_detail:
-                error_type = (
-                    ChromaKeySubjectColorError
-                    if enclosed
-                    else ChromaKeyAmbiguousError
-                )
-                raise error_type(
+            if touches_subject and suspicious_edge_detail and not enclosed:
+                raise ChromaKeyAmbiguousError(
                     "Предмет содержит выбранный Chroma Key цвет; выберите другой цвет фона"
                 )
             if touches_subject and enclosed:
@@ -626,6 +622,26 @@ def _neutralize_translucent_complement(
     return Image.fromarray(pixels, mode="RGBA")
 
 
+def _preserve_fully_opaque_source_rgb(
+    source: Image.Image,
+    result: Image.Image,
+) -> Image.Image:
+    """Keep original colour where keying found no background contribution."""
+    pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8).copy()
+    fully_opaque = pixels[..., 3] == 255
+    if not np.any(fully_opaque):
+        return result
+    distance_from_edge = cv2.distanceTransform(
+        fully_opaque.astype(np.uint8),
+        cv2.DIST_L2,
+        3,
+    )
+    opaque_interior = fully_opaque & (distance_from_edge > 6.0)
+    source_rgb = np.asarray(source.convert("RGB"), dtype=np.uint8)
+    pixels[..., :3][opaque_interior] = source_rgb[opaque_interior]
+    return Image.fromarray(pixels, mode="RGBA")
+
+
 def _remove_chroma_key_staged(
     image: Image.Image,
     key_color: object,
@@ -976,10 +992,12 @@ def remove_chroma_key_automatic(
             pass
         else:
             result = _neutralize_opaque_key_spill(image, result, key_color)
-            return _neutralize_translucent_complement(image, result, key_color)
+            result = _neutralize_translucent_complement(image, result, key_color)
+            return _preserve_fully_opaque_source_rgb(image, result)
     result = _remove_chroma_key_staged(image, key_color)
     result = _neutralize_opaque_key_spill(image, result, key_color)
-    return _neutralize_translucent_complement(image, result, key_color)
+    result = _neutralize_translucent_complement(image, result, key_color)
+    return _preserve_fully_opaque_source_rgb(image, result)
 
 
 def chroma_key_prompt_block(
