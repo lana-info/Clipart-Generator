@@ -2,6 +2,28 @@
 
 Updated: 2026-08-31
 
+## Processing acceptance fixes integrated — 2026-08-31
+
+The seven owner-approved checkpoints are combined on
+`codex/integrate-processing-acceptance`, based on current
+`origin/develop/3.1` commit `e972393`. The integration preserves separate
+commits for output integrity, DPI-only runs, responsive large imports, terminal
+failure reasons, Fal.ai batch preflight, the shared pre-run review/cost UI and
+the next-version documentation.
+
+The only source-level overlap was between large-import header validation and
+Fal.ai provider preflight; the integrated path keeps both: UI/request inspection
+does not fully decode every image, while provider-specific limits still block
+the complete batch before any paid submit. Documentation and adjacent test
+imports were combined without dropping either regression set.
+
+Verification on the integrated tree: 344 affected tests and 19 subtests pass
+with 56 documented skips. The complete offline suite passes 1111 tests and 146
+subtests, with 58 documented skips and two intentional deselections. No live
+provider request, Windows build, merge into `develop/3.1` or release action was
+performed. Windows acceptance remains required for the original 81-file import,
+installed review layout and controlled provider scenarios.
+
 ## Processing output integrity checkpoint — 2026-08-31
 
 Fal upscale and background-removal results now remain available both as remote
