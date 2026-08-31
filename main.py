@@ -2272,8 +2272,6 @@ class WorkerThread(QThread):
         rough_dir.mkdir(parents=True, exist_ok=True)
         stage_markers = (
             ("visible_mark", "visible-mark-cleaned"),
-            ("upscaled_after", "upscaled-after"),
-            ("upscaled", "upscaled-before"),
             ("edgeshrink", "edge-cleaned"),
             ("chroma_key_nobg", "bg-removed"),
             ("photoroom_nobg", "bg-removed"),
@@ -2289,10 +2287,18 @@ class WorkerThread(QThread):
         counters = {}
         for source in sorted(Path(raw_dir).glob("*.png")):
             lower_name = source.name.casefold()
-            stage = next(
-                (label for marker, label in stage_markers if marker in lower_name),
-                None,
+            upscale_result = re.search(
+                rf"_upscaled_(before|after)(?:_fal)?_\d{{3}}_{re.escape(self.run_stamp)}\.png$",
+                lower_name,
+                re.IGNORECASE,
             )
+            if upscale_result:
+                stage = f"upscaled-{upscale_result.group(1).casefold()}"
+            else:
+                stage = next(
+                    (label for marker, label in stage_markers if marker in lower_name),
+                    None,
+                )
             if stage is None and generated_name.fullmatch(source.name):
                 stage = "generated"
             if stage is None:
@@ -2751,7 +2757,7 @@ class WorkerThread(QThread):
                     nobg_path = os.path.join(raw_dir, f"{prefix}_fal_nobg_{idx:03d}_{self.run_stamp}.png")
                     self._download_file(current_url, nobg_path)
                     current_path = nobg_path
-                    local_result = False
+                    local_result = True
                 else:
                     if (
                         self.kie_remove_bg_model == "recraft/remove-background"
@@ -2997,7 +3003,7 @@ class WorkerThread(QThread):
                 elapsed_ms=round((time.monotonic() - upscale_started) * 1000),
                 **inspect_diagnostic_image(current_path),
             )
-            return current_path, current_url, False
+            return current_path, current_url, True
         if provider == "local_realesrgan":
             with self._local_operation_lock:
                 current_path = self._ensure_local_path(
@@ -3874,6 +3880,7 @@ class WorkerThread(QThread):
             if self.export_300_dpi:
                 self._verify_png_dpi(stage_path, dpi=300)
             self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
+            self._validate_published_png(output_path)
             if self.export_300_dpi:
                 self.progress.emit(
                     f"  Установлен DPI 300 для {os.path.basename(output_path)}"
@@ -3884,6 +3891,25 @@ class WorkerThread(QThread):
                     os.remove(stage_path)
                 except OSError:
                     pass
+
+    def _validate_published_png(self, output_path):
+        try:
+            if os.path.getsize(output_path) <= 0:
+                raise RuntimeError("Итоговый PNG повреждён: файл пуст")
+        except FileNotFoundError as error:
+            raise RuntimeError("Итоговый PNG не сохранён") from error
+        except OSError as error:
+            raise RuntimeError("Итоговый PNG недоступен для проверки") from error
+
+        try:
+            with Image.open(output_path) as image:
+                if image.format != "PNG" or image.width <= 0 or image.height <= 0:
+                    raise RuntimeError("Итоговый PNG повреждён")
+                image.load()
+        except RuntimeError:
+            raise
+        except (OSError, UnidentifiedImageError, ValueError) as error:
+            raise RuntimeError("Итоговый PNG повреждён") from error
 
     def _inspect_precleanup_source(self, source_path):
         if not self._metadata_cleanup_requested():

@@ -2,6 +2,22 @@
 
 Updated: 2026-08-31
 
+## Processing output integrity checkpoint — 2026-08-31
+
+Fal upscale and background-removal results now remain available both as remote
+URLs for a following provider stage and as authoritative local PNGs for final
+export. This removes the second CDN download without forcing large data-URI
+uploads between consecutive Fal stages. Recraft preparation copies are no
+longer published to `rough/`; only actual before/after upscale results match.
+
+Final publication now fails the item unless the destination exists, is nonzero
+and fully decodes as PNG. This closes the observed false-success path for a
+missing seventeenth result. The exact post-publication disappearance mechanism
+is not present in the historical diagnostics, so the safeguard is verified
+without claiming an unsupported filesystem root cause. Full offline verification
+passes: 1091 tests, 146 subtests, 57 documented skips and 2 deselections. No
+live provider request, Windows build or release was started.
+
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 
 The approved acceptance fixes and Fal.ai Bria Creative, Topaz Precision and
