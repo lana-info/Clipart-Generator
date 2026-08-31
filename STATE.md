@@ -40,6 +40,15 @@ blocking the UI. Focused Processing/provider verification passes 165 tests,
 37 subtests and one documented missing-binary skip. Windows responsiveness on
 the owner's actual 81 upscaled files remains the platform acceptance check.
 
+## Processing error-summary checkpoint — 2026-08-31
+
+Run Queue now preserves the classified per-item failure code through terminal
+completion and retry. A completed batch with configuration, timeout, provider,
+file, image or processing failures no longer rewrites the run reason to
+`missing_completion`; mixed failures use `multiple_item_failures`.
+`missing_completion` is reserved for rows still pending/running when the worker
+claims it has finished. User-facing per-file messages remain unchanged.
+
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 
 The approved acceptance fixes and Fal.ai Bria Creative, Topaz Precision and
