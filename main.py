@@ -1119,7 +1119,7 @@ class WorkerThread(QThread):
             settings.get("local_realesrgan_after_scale", self.local_realesrgan_scale)
         )
         self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
-        self.skip_remover_for_alpha = bool(settings.get("skip_remover_for_alpha", False))
+        self.skip_remover_for_alpha = bool(settings.get("skip_remover_for_alpha", True))
         self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
         self.local_rembg_model = settings.get("local_rembg_model", "birefnet-general")
         self.local_rembg_edge_quality = normalize_local_rembg_edge_quality(

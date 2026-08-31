@@ -224,6 +224,13 @@ preserves source RGB in the fully opaque subject interior while retaining edge
 despill and all existing benchmark gates; the approved 3.2 per-item Auto key
 selection remains deferred.
 
+A later Windows diagnostic archive captured KIE succeeding with an RGBA PNG,
+followed by Local Chroma failing the item because the border no longer matched
+blue. The worker now defaults to preserving usable provider alpha even if a
+caller omits the flow flag, emits the existing explicit alpha-reuse progress
+message and completes the item without calling a remover. An RGBA channel alone
+is not treated as proof: at least one transparent pixel is still required.
+
 The Windows acceptance checklist now includes a clean-workspace duplicate
 audit prompted by the owner's earlier candidate observation: one KIE prompt,
 one requested variant and one provider task must produce exactly one ready
