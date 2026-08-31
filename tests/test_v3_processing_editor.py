@@ -79,17 +79,9 @@ class ProcessingEditorTests(unittest.TestCase):
         profile = editor.operation_widgets["local_rembg_profile"]
         profile.setCurrentIndex(profile.findData("anime"))
         self.assertEqual(state.processing.operations.local_rembg_model, "isnet-anime")
-        state.processing.operations.upscale_after = True
-        state.processing.operations.upscale_after_provider = "kie"
-        state.processing.operations.kie_upscale_after_model = "recraft/crisp-upscale"
-        editor.refresh_from_state()
-        recraft_index = editor.operation_widgets["kie_upscale_after_model"].findData(
-            "recraft/crisp-upscale"
-        )
-        self.assertFalse(
-            editor.operation_widgets["kie_upscale_after_model"].model()
-            .item(recraft_index)
-            .isEnabled()
+        self.assertTrue(editor.operation_widgets["upscale_after"].isHidden())
+        self.assertTrue(
+            editor.operation_widgets["kie_upscale_after_model"].isHidden()
         )
         self.assertTrue(hasattr(editor, "cleanup_checkbox"))
         self.assertFalse(editor.cleanup_checkbox.isChecked())
@@ -127,6 +119,31 @@ class ProcessingEditorTests(unittest.TestCase):
                 "Экспорт нового PNG",
             ),
         )
+
+    def test_ui_hides_and_disables_upscale_after_but_keeps_other_operations(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        operations = state.processing.operations
+        operations.upscale_before = True
+        operations.remove_background = True
+        operations.upscale_after = True
+
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+
+        self.assertFalse(operations.upscale_after)
+        self.assertTrue(editor.operation_widgets["upscale_after"].isHidden())
+        self.assertTrue(
+            editor.operation_widgets["upscale_after_provider"].isHidden()
+        )
+        self.assertFalse(editor.operation_widgets["upscale_before"].isHidden())
+        self.assertFalse(editor.operation_widgets["remove_background"].isHidden())
+        self.assertTrue(operations.upscale_before)
+        self.assertTrue(operations.remove_background)
 
     def test_stage_sections_follow_enabled_pipeline_order(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)

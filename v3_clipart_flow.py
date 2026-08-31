@@ -64,6 +64,7 @@ from v3_components import (
 from v3_processing_editor import (
     ProcessingPipelineEditor,
     RunPlanBuilder,
+    UPSCALE_AFTER_UI_ENABLED,
 )
 from v3_provider_registry import CHROMA_KEY_COLOR_OPTIONS
 from fal_model_catalog import is_fal_generation_model, is_fal_model_id
@@ -176,6 +177,8 @@ class CostEstimate:
     processing_request_count: int = 0
     generation_usd: Decimal = Decimal("0")
     processing_usd: Decimal = Decimal("0")
+    provider_usd: Mapping[str, Decimal] = field(default_factory=dict)
+    incomplete_providers: tuple[str, ...] = ()
 
     @property
     def summary(self) -> str:
@@ -458,6 +461,15 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
     complete = True
     generation_request_count = len(state.clipart.prompts) * variants
     processing_request_count = 0
+    provider_totals: dict[str, Decimal] = {}
+    incomplete_providers: set[str] = set()
+
+    def use_provider(provider: str) -> None:
+        provider_totals.setdefault(provider, Decimal("0"))
+
+    def add_provider_cost(provider: str, amount: Decimal) -> None:
+        use_provider(provider)
+        provider_totals[provider] += amount
 
     for entry in state.clipart.prompts:
         has_references = bool(entry.references)
@@ -469,34 +481,65 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
             if has_references
             else generation.resolution
         )
+        provider = "fal" if is_fal_generation_model(option.model_id) else "kie"
+        use_provider(provider)
+        if provider == "fal":
+            incomplete_providers.add(provider)
+            continue
         unit = _price_usd(option.pricing, resolution)
         if unit is None:
             complete = False
+            incomplete_providers.add(provider)
         else:
-            generation_total += unit * variants
+            amount = unit * variants
+            generation_total += amount
+            add_provider_cost(provider, amount)
 
     _, processing_pricing = _legacy_catalog()
     operations = state.clipart.operations
+    output_count = len(state.clipart.prompts) * variants
     processing_models: list[str] = []
     if operations.upscale_before and operations.upscale_before_provider == "kie":
+        use_provider("kie")
         processing_models.append(operations.kie_upscale_model)
+    elif operations.upscale_before and operations.upscale_before_provider == "fal":
+        use_provider("fal")
+        incomplete_providers.add("fal")
+        processing_request_count += output_count
     if operations.remove_background:
         if operations.remove_background_provider == "kie":
+            use_provider("kie")
             processing_models.append(operations.kie_remove_bg_model)
         elif operations.remove_background_provider == "photoroom":
-            processing_total += Decimal("0.02") * len(state.clipart.prompts) * variants
-            processing_request_count += len(state.clipart.prompts) * variants
+            amount = Decimal("0.02") * output_count
+            processing_total += amount
+            add_provider_cost("photoroom", amount)
+            processing_request_count += output_count
+        elif operations.remove_background_provider == "fal":
+            use_provider("fal")
+            incomplete_providers.add("fal")
+            processing_request_count += output_count
     if operations.upscale_after and operations.upscale_after_provider == "kie":
+        use_provider("kie")
         processing_models.append(operations.kie_upscale_after_model)
+    elif operations.upscale_after and operations.upscale_after_provider == "fal":
+        use_provider("fal")
+        incomplete_providers.add("fal")
+        processing_request_count += output_count
 
-    output_count = len(state.clipart.prompts) * variants
     processing_request_count += len(processing_models) * output_count
     for model_id in processing_models:
         unit = _price_usd(processing_pricing.get(model_id), "")
         if unit is None:
             complete = False
+            incomplete_providers.add("kie")
         else:
-            processing_total += unit * output_count
+            amount = unit * output_count
+            processing_total += amount
+            add_provider_cost("kie", amount)
+
+    if incomplete_providers:
+        complete = False
 
     return CostEstimate(
         request_count=generation_request_count + processing_request_count,
@@ -506,6 +549,8 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
         processing_request_count=processing_request_count,
         generation_usd=generation_total,
         processing_usd=processing_total,
+        provider_usd=MappingProxyType(dict(provider_totals)),
+        incomplete_providers=tuple(sorted(incomplete_providers)),
     )
 
 
@@ -2484,9 +2529,17 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             self.delete_refs_button,
         ):
             action_layout.addWidget(button)
-        self.export_csv_button = _compact_review_action_button(
-            "prompt_export",
-            "Экспорт CSV",
+        action_layout.addSpacing(tokens.space_4)
+        self.export_actions_label = QLabel("Экспорт:")
+        self.export_actions_label.setProperty("v3Small", True)
+        action_layout.addWidget(self.export_actions_label)
+        self.export_csv_button = V3Button("CSV", ButtonVariant.PRIMARY)
+        self.export_csv_button.setIcon(_review_action_icon("prompt_export"))
+        self.export_csv_button.setIconSize(QSize(22, 22))
+        self.export_csv_button.setFixedHeight(40)
+        self.export_csv_button.setToolTip("Экспортировать все строки в CSV")
+        self.export_csv_button.setAccessibleName(
+            "Экспортировать все строки в CSV"
         )
         action_layout.addWidget(self.export_csv_button)
         action_layout.addStretch()
@@ -3333,6 +3386,8 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self.changed = changed
         self.operation_widgets: dict[str, QWidget] = {}
         operations = state.clipart.operations
+        if not UPSCALE_AFTER_UI_ENABLED:
+            operations.upscale_after = False
         self.operations = operations
         upscale_models = KIE_MODEL_OPTIONS
         remove_bg_models = KIE_REMOVE_BG_MODEL_OPTIONS
@@ -3677,6 +3732,8 @@ class ClipartProcessingPage(_ScrollableStepPage):
         current = self.state.clipart.operations.to_dict()
         for name, control in self.operation_widgets.items():
             current[name] = self._value(control)
+        if not UPSCALE_AFTER_UI_ENABLED:
+            current["upscale_after"] = False
         current["visible_mark_cleanup_mode"] = "gemini_auto"
         self.state.clipart.operations = ImageOperationData(**current)
         self._refresh_control_visibility()
@@ -3746,6 +3803,10 @@ class ClipartProcessingPage(_ScrollableStepPage):
         }
         for name, visible in visibility.items():
             self._set_control_visible(name, visible)
+        self._set_control_visible(
+            "upscale_after",
+            UPSCALE_AFTER_UI_ENABLED,
+        )
 
     def _refresh_pipeline(self) -> None:
         steps = clipart_pipeline_steps(self.state.clipart.operations)
@@ -3822,6 +3883,10 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         )
         self.state = state
         self.fal_cost_refresh = fal_cost_refresh
+        self._fal_cost_amount: Decimal | None = None
+        self._fal_cost_currency = "USD"
+        self._fal_cost_signature: tuple[tuple[str, int], ...] | None = None
+        self._fal_cost_error = ""
         self.output_label = QLabel()
         self.output_label.setWordWrap(True)
         self.output_label.setProperty("v3Status", True)
@@ -3892,14 +3957,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.refresh_from_state()
 
     def _fal_selected(self) -> bool:
-        generation = self.state.clipart.generation
-        operations = self.state.clipart.operations
-        return (
-            is_fal_generation_model(generation.model)
-            or (operations.upscale_before and operations.upscale_before_provider == "fal")
-            or (operations.upscale_after and operations.upscale_after_provider == "fal")
-            or (operations.remove_background and operations.remove_background_provider == "fal")
-        )
+        return bool(fal_endpoint_quantities(self.state))
 
     def validation_issues(self) -> tuple[str, ...]:
         return ()
@@ -3912,6 +3970,11 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         if not output_dir:
             output_dir = "не выбрана"
         estimate = estimate_clipart_cost(self.state)
+        fal_signature = tuple(sorted(fal_endpoint_quantities(self.state).items()))
+        if self._fal_cost_signature != fal_signature:
+            self._fal_cost_amount = None
+            self._fal_cost_currency = "USD"
+            self._fal_cost_error = ""
         generation = self.state.clipart.generation
         self.output_label.setText(f"Папка результата: {output_dir}")
         variants = generation.variants
@@ -3927,17 +3990,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
             f"обработка {estimate.processing_request_count} · "
             f"всего {estimate.request_count}"
         )
-        if estimate.complete:
-            self.cost_breakdown_label.setText(
-                "Ориентировочная стоимость: "
-                f"генерация ${estimate.generation_usd:.3f} · "
-                f"обработка ${estimate.processing_usd:.3f} · "
-                f"всего ${estimate.estimated_usd:.3f}"
-            )
-        else:
-            self.cost_breakdown_label.setText(
-                "Ориентировочная стоимость не рассчитана полностью"
-            )
+        self._render_cost_breakdown(estimate)
         self.pipeline_label.setText(
             "Порядок: "
             + " → ".join(
@@ -3947,23 +4000,72 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         has_fal = self._fal_selected()
         self.fal_cost_refresh_button.setVisible(has_fal)
 
+    def _render_cost_breakdown(self, estimate: CostEstimate) -> None:
+        labels = {
+            "kie": "KIE",
+            "fal": "Fal.ai",
+            "photoroom": "PhotoRoom",
+        }
+        lines = ["Ориентировочная стоимость"]
+        total = Decimal("0")
+        total_complete = True
+        for provider in ("kie", "fal", "photoroom"):
+            if provider not in estimate.provider_usd:
+                continue
+            if provider == "fal":
+                if self._fal_cost_amount is not None:
+                    lines.append(
+                        f"Fal.ai — {self._fal_cost_amount:.3f} "
+                        f"{self._fal_cost_currency}"
+                    )
+                    if self._fal_cost_currency == "USD":
+                        total += self._fal_cost_amount
+                    else:
+                        total_complete = False
+                elif self._fal_cost_error:
+                    lines.append(f"Fal.ai — {self._fal_cost_error}")
+                    total_complete = False
+                else:
+                    lines.append("Fal.ai — требуется обновить")
+                    total_complete = False
+                continue
+            amount = estimate.provider_usd[provider]
+            if provider in estimate.incomplete_providers:
+                lines.append(f"{labels[provider]} — стоимость недоступна")
+                total_complete = False
+            else:
+                lines.append(f"{labels[provider]} — {amount:.3f} USD")
+                total += amount
+        if total_complete:
+            lines.append(f"Итого — {total:.3f} USD")
+        else:
+            lines.append("Итого — не рассчитано полностью")
+        lines.append("Фактическая сумма может отличаться.")
+        self.cost_breakdown_label.setText("\n".join(lines))
+
     def refresh_fal_cost(self) -> None:
+        current_signature = tuple(
+            sorted(fal_endpoint_quantities(self.state).items())
+        )
         if self.fal_cost_refresh is None:
-            self.cost_breakdown_label.setText(
-                "Оценка Fal.ai недоступна: добавьте API-ключ в настройках."
-            )
+            self._fal_cost_amount = None
+            self._fal_cost_signature = current_signature
+            self._fal_cost_error = "добавьте API-ключ в настройках"
+            self._render_cost_breakdown(estimate_clipart_cost(self.state))
             return
         try:
             amount, currency = self.fal_cost_refresh()
         except (RuntimeError, ValueError, TypeError) as error:
-            self.cost_breakdown_label.setText(
-                f"Не удалось обновить оценку Fal.ai: {error}"
-            )
+            self._fal_cost_amount = None
+            self._fal_cost_signature = current_signature
+            self._fal_cost_error = f"не удалось обновить: {error}"
+            self._render_cost_breakdown(estimate_clipart_cost(self.state))
             return
-        self.cost_breakdown_label.setText(
-            f"Ориентировочная стоимость Fal.ai: {amount:.3f} {currency}. "
-            "Фактическая сумма может отличаться."
-        )
+        self._fal_cost_amount = Decimal(str(amount))
+        self._fal_cost_currency = str(currency or "USD").upper()
+        self._fal_cost_signature = current_signature
+        self._fal_cost_error = ""
+        self._render_cost_breakdown(estimate_clipart_cost(self.state))
 
     def set_preflight_status(self, text: str, *, ready: bool) -> None:
         if ready:
