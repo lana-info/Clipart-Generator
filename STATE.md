@@ -409,15 +409,16 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Current branch and handoff
 
-- Target 3.1 integration line: `develop/3.1` synchronized with GitHub at
-  `f90f04a`. The retained source branches are not deleted.
+- Target 3.1 integration line: `develop/3.1`; release-candidate and Windows
+  acceptance follow-up branches are integrated locally for the 3.1.1 build.
+  The retained source branches are not deleted.
 - Windows-native acceptance follow-up `codex/fix-3.1-windows-native-tests` is
   integrated. It added real DPAPI and installer-lock tests without production
   code changes.
-- Active release-preparation branch:
-  `codex/release-3.1.0-final-candidate`, based on `f90f04a`. Version 3.1.0 is
-  changed only there. The intended manual GitHub artifact is `windows-3.1.0`;
-  Azure is fallback infrastructure.
+- Active release preparation is the integrated `develop/3.1`. Version 3.1.1 is
+  set only for the explicitly authorized replacement build. The intended
+  manual GitHub artifact is `windows-3.1.1`; Azure remains fallback
+  infrastructure.
 - Release baseline branch: `develop/3.0`
 - Frozen 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`.
   Its relevant history is already incorporated into the 3.1 ancestry; it is a
@@ -443,8 +444,7 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Immediate next action
 
-Download artifact `windows-3.1.0` from run `33323775508` before its three-day
-retention expires, then perform the manual
+Build and download replacement artifact `windows-3.1.1`, then perform the manual
 UI, mouse-editor, install/upgrade, path/output, license and Chroma checks at
 1120×780 and 100% display scaling. A stylus check is needed only when the target
 device uses one. The one-prompt/one-variant KIE duplicate audit is a separately

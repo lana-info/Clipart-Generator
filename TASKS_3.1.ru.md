@@ -810,8 +810,8 @@ Steps:
   явного разрешения владельца на Windows build.
 - [x] Добавить в Windows workflow обязательные нативные DPAPI и installer-lock
   gates до PyInstaller/Inno Setup.
-- Провести manual Windows acceptance по
-  `docs/testing/windows-3.1.0-acceptance-checklist.ru.md`.
+- Провести replacement manual Windows acceptance по
+  `docs/testing/windows-3.1.1-acceptance-checklist.ru.md`.
 - [ ] Открыть установленный candidate на Windows при поддерживаемом
   1120×780 и scaling 100%: сравнить Tasks 2, 3 и 5 с implemented screenshots,
   проверить отсутствие наложений и доступность навигации. Меньшие окна и
@@ -914,7 +914,8 @@ Acceptance:
 - [ ] Все `CG31-AC-001`–`CG31-AC-009` имеют evidence.
 - [ ] Для всех UI-задач выполнен `CG31-AC-010`: approved mockup существует до
   первого implementation commit, итоговые screenshots ему соответствуют.
-- [x] Release/version меняется на `3.1.0` только в release-preparation task.
+- [x] Release/version изменён на `3.1.1` только после отдельного разрешения
+  владельца на replacement Windows build.
 - [ ] Update не публикуется автоматически.
 
 Verification:
