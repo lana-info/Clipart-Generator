@@ -2,6 +2,21 @@
 
 Updated: 2026-08-31
 
+## Processing large-import responsiveness checkpoint — 2026-08-31
+
+The Processing files page no longer fully decodes every source twice on the UI
+thread. Header metadata is cached against file size and nanosecond mtime, large
+batches render their cards immediately, and scaled thumbnails are queued one at
+a time. Small batches retain immediate previews and the visible layout is
+unchanged.
+
+Run-request validation remains header-only so moving to Run does not reproduce
+the freeze. Each worker fully decodes its source under a bounded local lock
+before any paid Fal operation, preserving fail-closed billing behavior without
+blocking the UI. Focused Processing/provider verification passes 165 tests,
+37 subtests and one documented missing-binary skip. Windows responsiveness on
+the owner's actual 81 upscaled files remains the platform acceptance check.
+
 ## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
 
 The approved acceptance fixes and Fal.ai Bria Creative, Topaz Precision and

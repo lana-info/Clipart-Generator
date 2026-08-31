@@ -3,11 +3,13 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
 from PyQt6.QtCore import QMimeData, QObject, QUrl, Qt, pyqtSignal
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication, QCheckBox
 
 from v3_mode_selection import V3ApplicationView
@@ -243,6 +245,96 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertIn("DPI не указан", accepted[0].summary)
             self.assertFalse(page.thumbnail_labels[0].pixmap().isNull())
             self.assertEqual(page.validation_issues(), ())
+
+    def test_add_files_reuses_inspection_during_refresh(self):
+        with tempfile.TemporaryDirectory(prefix="processing-inspection-cache-") as temp:
+            source = Path(temp) / "sample.png"
+            Image.new("RGB", (7, 9), "green").save(source)
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            page = ProcessingFilesPage(state, lambda: None)
+
+            with patch(
+                "v3_processing_flow.inspect_local_image",
+                wraps=inspect_local_image,
+            ) as inspect:
+                page.add_files([str(source)])
+
+            self.assertEqual(inspect.call_count, 1)
+
+    def test_large_batch_add_does_not_decode_pixels_synchronously(self):
+        with tempfile.TemporaryDirectory(prefix="processing-large-import-") as temp:
+            root = Path(temp)
+            sources = []
+            for index in range(81):
+                source = root / f"source-{index:03d}.png"
+                Image.new("RGB", (8, 8), (index, 40, 90)).save(source)
+                sources.append(str(source))
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            page = ProcessingFilesPage(state, lambda: None)
+
+            with patch.object(
+                Image.Image,
+                "load",
+                side_effect=AssertionError("pixel decode must be deferred"),
+            ) as load:
+                accepted = page.add_files(sources)
+
+            self.assertEqual(len(accepted), 81)
+            load.assert_not_called()
+            self.assertEqual(len(page.thumbnail_labels), 81)
+            self.assertTrue(
+                all(label.text() == "Загрузка…" for label in page.thumbnail_labels)
+            )
+
+    def test_large_batch_run_request_does_not_decode_pixels_synchronously(self):
+        with tempfile.TemporaryDirectory(prefix="processing-large-request-") as temp:
+            root = Path(temp)
+            state, _ = self.make_state(root)
+            sources = []
+            for index in range(40):
+                source = root / f"request-{index:03d}.png"
+                Image.new("RGB", (8, 8), (index, 40, 90)).save(source)
+                sources.append(str(source))
+            state.processing.selected_files = sources
+
+            with patch.object(
+                Image.Image,
+                "load",
+                side_effect=AssertionError("request validation must stay header-only"),
+            ) as load:
+                request = build_processing_run_request(
+                    state,
+                    {},
+                    allow_full_image_changes=True,
+                    external_transfer_consent=False,
+                )
+
+            self.assertEqual(len(request.selected_files), 40)
+            load.assert_not_called()
+
+    def test_large_batch_thumbnails_load_from_event_queue(self):
+        with tempfile.TemporaryDirectory(prefix="processing-lazy-thumbnails-") as temp:
+            root = Path(temp)
+            sources = []
+            for index in range(21):
+                source = root / f"thumb-{index:03d}.png"
+                Image.new("RGB", (8, 8), (index, 40, 90)).save(source)
+                sources.append(str(source))
+            page = ProcessingFilesPage(
+                ProjectState(mode=ProjectMode.PROCESSING),
+                lambda: None,
+            )
+
+            page.add_files(sources)
+            self.assertTrue(
+                all(label.text() == "Загрузка…" for label in page.thumbnail_labels)
+            )
+
+            QTest.qWait(400)
+
+            self.assertTrue(
+                all(not label.pixmap().isNull() for label in page.thumbnail_labels)
+            )
 
     def test_drag_and_drop_accepts_only_valid_local_images(self):
         with tempfile.TemporaryDirectory(prefix="processing-drop-") as temp:
