@@ -1034,19 +1034,16 @@ Acceptance before implementation:
 
 Dependencies: released 3.1.0 mask editor baseline. Scope: next-version feature.
 
-## Task 28 (3.2.0): Понятная стоимость нескольких провайдеров и явный CSV-экспорт
+## Task 28: Понятная стоимость нескольких провайдеров и явный CSV-экспорт
 
-Status: Deferred to the next version after 3.1.0 — owner feedback recorded
-during Windows acceptance; visual mockup and implementation intentionally not
-started
+Status: Done in current 3.1 follow-up — owner approved implementation during
+Windows acceptance; offline UI evidence and regression tests completed
 
 Goal:
 Убрать неоднозначность в смешанном KIE/Fal.ai pipeline и сделать экспорт всей
 таблицы промптов заметным без угадывания назначения иконки.
 
-Approved direction:
-- Не изменять кандидат 3.1.0: при текущей проверке критическая ошибка не
-  подтверждена, замечания относятся к понятности интерфейса.
+Implemented direction:
 - Для pipeline с несколькими платными провайдерами показывать раздельную
   оценку: `KIE — …`, `Fal.ai — …`, `Итого — …` под общим заголовком
   `Ориентировочная стоимость`.
@@ -1066,21 +1063,21 @@ Approved direction:
   `Экспортировать все строки в CSV`; существующий формат и round-trip CSV не
   менять в рамках этой UI-задачи.
 
-Acceptance before implementation:
-- [ ] Утверждены mockups для KIE-only, Fal.ai-only, mixed, refreshing,
-  unavailable/stale estimate и incomplete-total states.
-- [ ] Утверждён полный mockup панели промптов/референсов с отдельной группой
+Acceptance:
+- [x] KIE-only и mixed/incomplete/complete состояния покрыты offscreen tests;
+  Fal.ai refresh привязан к фактическому набору endpoint quantities.
+- [x] Панель промптов/референсов проверена на 1120×780 с отдельной группой
   `Экспорт:` и текстовой кнопкой `CSV`.
-- [ ] Зафиксировано, какие цены являются локальной оценкой, а какие требуют
-  запроса к провайдеру, и когда значение считается устаревшим.
-- [ ] Регрессионные тесты подтверждают, что refresh Fal.ai не скрывает KIE,
+- [x] Локальные KIE/PhotoRoom оценки отделены от Fal.ai, который требует
+  явного обновления; изменение pipeline сбрасывает устаревшую Fal.ai оценку.
+- [x] Регрессионные тесты подтверждают, что refresh Fal.ai не скрывает KIE,
   частичная сумма не маркируется как полный итог, а CSV экспортирует те же
   строки и референсы без изменения данных.
 
-Evidence: owner Windows screenshots from 2026-08-30 show a single Fal.ai value
-after refresh and an icon-only CSV action visually grouped with prompt/reference
-buttons. Scope: next-version UI/estimation clarity; no paid request required for
-the design stage.
+Evidence: owner Windows screenshots from 2026-08-30 reproduced the ambiguity.
+Focused offline suite and real offscreen Qt captures validate the corrected
+layout and provider breakdown; no paid request was used. Final focused gate:
+178 tests and 28 subtests; full offline gate: 1056 tests and 146 subtests.
 
 ## Task 29 (3.2.0): Alpha-safe Fal.ai upscale после удаления фона
 
@@ -1117,9 +1114,10 @@ Approved direction:
 - После загрузки результата проверять реальный PNG/alpha contract. Если ответ
   оказался непрозрачным или повреждённым, не публиковать его как ready-файл и
   сохранить исходный прозрачный результат предыдущего этапа.
-- В 3.1.0 пользовательский безопасный путь остаётся прежним: выбрать
-  `Local Real-ESRGAN` после удаления фона либо выполнять Fal.ai ESRGAN до
-  удаления фона.
+- В текущем 3.1 follow-up весь второй upscale после удаления фона временно
+  скрыт и выключен, чтобы пользователь не мог выбрать неподходящую модель.
+  Апскейл до удаления фона остаётся доступным; второй этап вернётся только с
+  отдельной проверенной alpha-safe моделью.
 
 Acceptance before implementation:
 - [ ] Утверждён mockup выбора модели до/после удаления фона, включая скрытый
@@ -1154,9 +1152,10 @@ Goal:
 какой фон был выбран, сгенерирован и удалён для каждого изображения.
 
 Approved direction:
-- Не менять 3.1.0. Сохранить видимые ручные кнопки `Синий`, `Красный`,
-  `Зелёный`; в будущей версии рассмотреть четвёртый `Оранжевый` (`#FF6600`)
-  только после contract/adversarial test. Рядом добавить отдельную кнопку
+- Сохранить видимые ручные кнопки `Синий`, `Красный`, `Зелёный`. Четвёртый
+  `Оранжевый` (`#FF6600`) не добавлять: adversarial test текущего алгоритма
+  подтвердил полное удаление чисто-красной детали предмета. В будущей версии
+  рядом добавить отдельную кнопку
   `Авто`, а не заменять ручное управление выпадающим списком.
 - В `Авто` выбирать chroma-цвет до платной генерации отдельно для каждого
   промпта, добавлять его в prompt и сохранять вместе с item/task state.
@@ -1185,14 +1184,14 @@ Evidence and boundary:
 - Текущий source воспроизвёл тот же сдвиг на предоставленном файле. Минимальный
   synthetic regression также подтвердил превращение непрозрачной светло-синей
   детали в зелёно-бирюзовую. Узкая release-fix сохраняет RGB непрозрачного
-  интерьера и оставляет despill только у смешанной кромки; Auto, четвёртый цвет
-  и per-item key остаются в 3.2.0.
+  интерьера и оставляет despill только у смешанной кромки; Auto и per-item key
+  остаются в 3.2.0, а четвёртый ручной preset отклонён.
 - Действующее правило сохраняется: точный выбранный key внутри предмета
   неотличим от фона без дополнительной маски. `Авто` снижает и объясняет риск,
   но не отменяет это ограничение.
 
 Acceptance before implementation:
-- [ ] Утверждены mockups четырёх ручных кнопок, `Авто`, per-item badge и
+- [ ] Утверждены mockups трёх ручных кнопок, `Авто`, per-item badge и
   состояний matched/mismatch/already-alpha/ambiguous/no-safe-key.
 - [ ] Project state, task recovery и run report round-trip сохраняют один key
   на item и никогда не меняют его после restart.

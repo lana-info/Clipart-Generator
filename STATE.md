@@ -197,21 +197,25 @@ that prompt constraint. A Chroma acceptance run must report this source as
 inconclusive/skipped rather than count provider alpha as evidence of Chroma
 quality, and it must not perform an automatic paid regeneration.
 
-## Windows owner feedback deferred beyond 3.1.0 — 2026-08-30
+## Windows owner feedback follow-up — 2026-08-31
 
-The owner has started manual Windows acceptance. Several next-version product
-improvements are deliberately deferred without changing the current 3.1.0
-candidate:
+The owner has started manual Windows acceptance. The current source follow-up
+implements the small, approved UI corrections without changing provider
+runtime contracts:
 
-- a mixed KIE/Fal.ai pipeline can show only the refreshed Fal.ai estimate, so
-  it is unclear whether KIE is included; the next-version direction is a
-  provider breakdown (`KIE`, `Fal.ai`, `Итого`) where Fal.ai refresh changes
-  only its own row and an incomplete subtotal is never presented as a complete
-  total;
-- the icon-only CSV export is visually mixed with prompt/reference actions;
-  the next-version direction is a separate `Экспорт:` group with a visibly
+- mixed pipelines now show separate `KIE`, `Fal.ai` and optional `PhotoRoom`
+  rows plus `Итого`; Fal.ai refresh changes only its row and an incomplete
+  subtotal is never presented as a complete total;
+- CSV export now has a separate `Экспорт:` group with a visibly
   labelled turquoise-accent `CSV` button and an explicit tooltip/accessibility
   name;
+- `Апскейл после удаления фона` is temporarily hidden and normalized to off in
+  both Clipart and Processing UI. Its implementation remains intact for the
+  future alpha-safe endpoint; all other operations, including first upscale and
+  `Экспорт 300 DPI`, remain visible and functional.
+
+The following product improvements remain deliberately deferred:
+
 - Fal.ai ESRGAN is correctly blocked after background removal because its
   official contract supports PNG but does not guarantee alpha preservation.
   Fal.ai now documents a separate `topaz/upscale/image/transparent` endpoint
@@ -221,19 +225,31 @@ candidate:
 - a complex multicolour subject demonstrated that no single blue/red/green key
   is universally safe and that blue subject details can visually shift toward
   green/teal under despill. Task 30 records the approved future direction:
-  retain visible manual colour buttons, evaluate orange as a fourth preset,
-  add `Авто`, and persist the selected/observed key separately for each image
+  retain the three visible manual colour buttons, add `Авто`, and persist the
+  selected/observed key separately for each image
   through task recovery, Results, run report and diagnostics. Auto must choose
   before generation, reuse the same stored key for removal, validate the actual
-  border and never trigger an automatic paid regeneration. The supplied file
-  predates the current candidate, so current-source reproduction and a minimal
-  adversarial test remain mandatory before changing Chroma.
+  border and never trigger an automatic paid regeneration. A current-source
+  adversarial test rejected orange `#FF6600`: the current single-dominant-channel
+  algorithm removed a pure-red subject detail. No fourth preset was added and
+  Chroma source remains unchanged.
 
-These requirements are recorded in Tasks 28–31 (3.2.0). They require approved
-full screen/state mockups before implementation. No runtime source, release
-version, installer or current acceptance criterion is changed by this
-documentation checkpoint. For 3.1.0, the safe after-removal path is Local
-Real-ESRGAN; Fal.ai ESRGAN can be used before removal.
+Tasks 29–31 remain next-version work and require approved full screen/state
+mockups before implementation. No release version, installer or provider
+runtime is changed by this checkpoint. The current UI offers upscale only
+before removal; Local Real-ESRGAN remains the future safe implementation for
+the hidden after-removal stage, and Fal.ai ESRGAN is not treated as alpha-safe.
+
+Verification is green after review follow-up: the focused Clipart/Processing/
+provider/Chroma/state suite passes 178 tests and 28 subtests; the full offline
+suite passes 1056 tests and 146 subtests, with 57 documented skips and two
+intentional deselections. All tracked Python files compile, the tracked
+sensitive-artifact scan and `git diff --check` pass. Fresh automatic Chroma
+benchmark remains unchanged at alpha IoU `0.968704`, alpha MAE `0.018194`,
+median 2048×2048 runtime `1.443 s` and peak RSS `421.203 MiB` below the
+`448 MiB` ceiling. Independent review found two provider-cost cache/route edge
+cases; both were reproduced by failing tests, fixed and accepted on re-review
+with no remaining important or blocking findings.
 
 Task 31 records the approved future provider/model availability check. It must
 show separate KIE/Fal route states per paid stage, distinguish unavailable from
