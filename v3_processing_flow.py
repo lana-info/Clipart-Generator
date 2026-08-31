@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from PIL import Image, UnidentifiedImageError
@@ -32,12 +33,17 @@ from PyQt6.QtWidgets import (
 from license_client import LicenseError
 
 from v3_clipart_flow import (
+    CostEstimate,
     ClipartFlowError,
     ClipartRunRequest,
     _ScrollableStepPage,
+    _configure_review_page_layout,
+    _format_review_cost_breakdown,
+    _review_section_label,
     _safe_runtime_error,
     _worker_settings,
 )
+from v3_api_settings import estimate_fal_cost
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_processing_editor import (
     CLEANUP_OPERATION_LABELS,
@@ -343,40 +349,92 @@ def estimate_processing_cost(
     operations: ImageOperationData,
     file_count: int,
 ) -> str:
+    estimate = estimate_processing_cost_breakdown(operations, file_count)
+    if not estimate.provider_usd:
+        return "локально, без оплаты API"
+    if "fal" in estimate.incomplete_providers:
+        return "Fal.ai: стоимость не рассчитана"
+    if not estimate.complete:
+        return "стоимость рассчитана не полностью"
+    return f"ориентировочно ${estimate.estimated_usd:.3f}"
+
+
+def estimate_processing_cost_breakdown(
+    operations: ImageOperationData,
+    file_count: int,
+) -> CostEstimate:
+    if not isinstance(operations, ImageOperationData):
+        raise TypeError("operations must be ImageOperationData")
+    count = max(0, int(file_count))
     prices = {
         "topaz/image-upscale": Decimal("0.20"),
         "recraft/crisp-upscale": Decimal("0.0025"),
         "recraft/remove-background": Decimal("0.005"),
     }
-    total = Decimal("0")
-    complete = True
-    fal_selected = False
-    if operations.upscale_before and operations.upscale_before_provider == "kie":
-        price = prices.get(operations.kie_upscale_model)
-        complete = complete and price is not None
-        total += (price or Decimal("0")) * file_count
-    elif operations.upscale_before and operations.upscale_before_provider == "fal":
-        fal_selected = True
-    if operations.upscale_after and operations.upscale_after_provider == "kie":
-        price = prices.get(operations.kie_upscale_after_model)
-        complete = complete and price is not None
-        total += (price or Decimal("0")) * file_count
+    provider_totals: dict[str, Decimal] = {}
+    incomplete: set[str] = set()
+    request_count = 0
+
+    def add(provider: str, unit_price: Decimal | None) -> None:
+        nonlocal request_count
+        request_count += count
+        provider_totals.setdefault(provider, Decimal("0"))
+        if unit_price is None:
+            incomplete.add(provider)
+        else:
+            provider_totals[provider] += unit_price * count
+
+    if operations.upscale_before:
+        provider = operations.upscale_before_provider
+        if provider == "kie":
+            add("kie", prices.get(operations.kie_upscale_model))
+        elif provider == "fal":
+            add("fal", None)
+    if operations.upscale_after:
+        provider = operations.upscale_after_provider
+        if provider == "kie":
+            add("kie", prices.get(operations.kie_upscale_after_model))
+        elif provider == "fal":
+            add("fal", None)
     if operations.remove_background:
-        if operations.remove_background_provider == "kie":
-            price = prices.get(operations.kie_remove_bg_model)
-            complete = complete and price is not None
-            total += (price or Decimal("0")) * file_count
-        elif operations.remove_background_provider == "photoroom":
-            total += Decimal("0.02") * file_count
-        elif operations.remove_background_provider == "fal":
-            fal_selected = True
-    if not uses_external_processing(operations):
-        return "локально, без оплаты API"
-    if fal_selected:
-        return "Fal.ai: стоимость не рассчитана"
-    if not complete:
-        return "стоимость рассчитана не полностью"
-    return f"ориентировочно ${total:.3f}"
+        provider = operations.remove_background_provider
+        if provider == "kie":
+            add("kie", prices.get(operations.kie_remove_bg_model))
+        elif provider == "photoroom":
+            add("photoroom", Decimal("0.02"))
+        elif provider == "fal":
+            add("fal", None)
+
+    total = sum(provider_totals.values(), Decimal("0"))
+    return CostEstimate(
+        request_count=request_count,
+        estimated_usd=total,
+        complete=not incomplete,
+        processing_request_count=request_count,
+        processing_usd=total,
+        provider_usd=MappingProxyType(dict(provider_totals)),
+        incomplete_providers=tuple(sorted(incomplete)),
+    )
+
+
+def processing_fal_endpoint_quantities(
+    operations: ImageOperationData,
+    file_count: int,
+) -> dict[str, int]:
+    count = max(0, int(file_count))
+    quantities: dict[str, int] = {}
+
+    def add(model_id: str) -> None:
+        if count > 0 and model_id:
+            quantities[model_id] = quantities.get(model_id, 0) + count
+
+    if operations.upscale_before and operations.upscale_before_provider == "fal":
+        add(operations.fal_upscale_model)
+    if operations.upscale_after and operations.upscale_after_provider == "fal":
+        add(operations.fal_upscale_after_model)
+    if operations.remove_background and operations.remove_background_provider == "fal":
+        add(operations.fal_remove_bg_model)
+    return quantities
 
 
 def processing_change_summary(operations: ImageOperationData) -> tuple[str, str]:
@@ -1088,37 +1146,86 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         pipeline_page: ProcessingPipelinePage,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        fal_cost_refresh: Callable[[], tuple[float, str]] | None = None,
     ) -> None:
         super().__init__(
             "Проверка и запуск",
-            "Проверьте порядок, место сохранения и итоговую стоимость.",
+            "Проверьте файлы, порядок обработки, папку результата и стоимость.",
             tokens=tokens,
         )
         self.state = state
         self.files_page = files_page
         self.pipeline_page = pipeline_page
+        self.fal_cost_refresh = fal_cost_refresh
+        self._fal_cost_amount: Decimal | None = None
+        self._fal_cost_currency = "USD"
+        self._fal_cost_signature: tuple[tuple[str, int], ...] | None = None
+        self._fal_cost_error = ""
+        self.files_section_label = _review_section_label("Файлы и результат")
+        self.pipeline_section_label = _review_section_label("Порядок")
+        self.cost_section_label = _review_section_label("API-вызовы и стоимость")
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
         self.pipeline_label = QLabel()
         self.pipeline_label.setWordWrap(True)
         self.output_label = QLabel()
         self.output_label.setWordWrap(True)
+        self.requests_label = QLabel()
+        self.requests_label.setWordWrap(True)
+        self.cost_breakdown_label = QLabel()
+        self.cost_breakdown_label.setWordWrap(True)
+        self.fal_cost_refresh_button = V3Button(
+            "Обновить оценку Fal.ai", ButtonVariant.SECONDARY
+        )
+        self.fal_cost_refresh_button.clicked.connect(self.refresh_fal_cost)
+        self.cost_row = QWidget()
+        cost_layout = QHBoxLayout(self.cost_row)
+        cost_layout.setContentsMargins(0, 0, 0, 0)
+        cost_layout.setSpacing(tokens.space_2)
+        cost_layout.addWidget(self.cost_breakdown_label)
+        cost_layout.addWidget(self.fal_cost_refresh_button)
+        cost_layout.addStretch(1)
         self.warning_label = QLabel()
         self.warning_label.setWordWrap(True)
+        self.warning_label.setProperty("v3Status", True)
         self.warning_label.setProperty("state", "warning")
         self.requirements_label = QLabel()
         self.requirements_label.setWordWrap(True)
+        self.requirements_label.setProperty("v3Status", True)
+        self.requirements_label.hide()
         self.run_status_label = QLabel()
         self.run_status_label.setWordWrap(True)
+        self.run_status_label.setProperty("v3Small", True)
         for widget in (
+            self.files_section_label,
             self.summary_label,
-            self.pipeline_label,
             self.output_label,
+            self.pipeline_section_label,
+            self.pipeline_label,
+            self.cost_section_label,
+            self.requests_label,
+            self.cost_row,
             self.warning_label,
             self.requirements_label,
             self.run_status_label,
         ):
             self.add_widget(widget)
+        _configure_review_page_layout(
+            self,
+            (
+                self.files_section_label,
+                self.summary_label,
+                self.output_label,
+                self.pipeline_section_label,
+                self.pipeline_label,
+                self.cost_section_label,
+                self.requests_label,
+                self.cost_breakdown_label,
+                self.warning_label,
+                self.requirements_label,
+                self.run_status_label,
+            ),
+        )
         self.refresh_from_state()
 
     def refresh_from_state(self) -> None:
@@ -1133,35 +1240,119 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
             output_dir = "не выбрана"
         steps = processing_pipeline_steps(operations)
         removed, preserved = processing_change_summary(operations)
-        cost = estimate_processing_cost(operations, len(files))
+        estimate = estimate_processing_cost_breakdown(operations, len(files))
+        fal_signature = tuple(
+            sorted(processing_fal_endpoint_quantities(operations, len(files)).items())
+        )
+        if self._fal_cost_signature != fal_signature:
+            self._fal_cost_amount = None
+            self._fal_cost_currency = "USD"
+            self._fal_cost_error = ""
         recipe = PROCESSING_RECIPES.get(
             self.state.processing.recipe,
             PROCESSING_RECIPES["custom"],
         )
         self.summary_label.setText(
-            f"Файлов: {len(files)} · рецепт: "
-            f"{recipe.title} "
-            f"· стоимость: {cost} · очищается: {removed} · сохраняется: {preserved}"
+            f"{len(files)} файлов · {recipe.title}\n"
+            f"Очищается: {removed} · сохраняется: {preserved}"
         )
         self.pipeline_label.setText(
-            "Порядок: " + (" → ".join(steps) if steps else "операции не выбраны")
+            " → ".join(steps) if steps else "Операции не выбраны"
         )
         self.output_label.setText(
             f"Папка результата: {output_dir}. Исходники не перезаписываются."
         )
+        request_parts = []
+        for provider, label in (
+            ("kie", "KIE"),
+            ("fal", "Fal.ai"),
+            ("photoroom", "PhotoRoom"),
+        ):
+            provider_count = 0
+            if provider in estimate.provider_usd:
+                if provider == "fal":
+                    provider_count = sum(
+                        processing_fal_endpoint_quantities(
+                            operations, len(files)
+                        ).values()
+                    )
+                else:
+                    # Each selected provider stage makes one call per file.
+                    provider_count = sum(
+                        len(files)
+                        for enabled, selected in (
+                            (
+                                operations.upscale_before,
+                                operations.upscale_before_provider,
+                            ),
+                            (
+                                operations.upscale_after,
+                                operations.upscale_after_provider,
+                            ),
+                            (
+                                operations.remove_background,
+                                operations.remove_background_provider,
+                            ),
+                        )
+                        if enabled and selected == provider
+                    )
+            if provider_count:
+                request_parts.append(f"{label}: {provider_count} вызовов")
+        request_parts.append(f"всего: {estimate.request_count} вызовов")
+        self.requests_label.setText(" · ".join(request_parts))
+        self._render_cost_breakdown(estimate)
+        self.fal_cost_refresh_button.setVisible(bool(fal_signature))
         external = uses_external_processing(operations)
         warnings: list[str] = []
         if operations.remove_background or operations.edge_shrink or operations.trim:
             warnings.append("Прозрачность и границы объекта могут измениться.")
         if uses_full_image_changes(operations):
-            warnings.append("Выбран этап, способный изменить пиксели всего изображения.")
+            warnings.append(
+                "Выбран этап, способный изменить пиксели всего изображения."
+            )
         if external:
             warnings.append(
-                f"Файл будет передан внешнему сервису; {cost}."
+                "Выбранные файлы будут переданы внешнему сервису."
             )
         else:
             warnings.append("Сетевая передача не требуется.")
         self.warning_label.setText(" ".join(warnings))
+
+    def _render_cost_breakdown(self, estimate: CostEstimate) -> None:
+        self.cost_breakdown_label.setText(
+            _format_review_cost_breakdown(
+                estimate,
+                fal_amount=self._fal_cost_amount,
+                fal_currency=self._fal_cost_currency,
+                fal_error=self._fal_cost_error,
+            )
+        )
+
+    def refresh_fal_cost(self) -> None:
+        operations = self.state.processing.operations
+        file_count = len(self.state.processing.selected_files)
+        signature = tuple(
+            sorted(processing_fal_endpoint_quantities(operations, file_count).items())
+        )
+        if self.fal_cost_refresh is None:
+            self._fal_cost_amount = None
+            self._fal_cost_signature = signature
+            self._fal_cost_error = "добавьте API-ключ в настройках"
+        else:
+            try:
+                amount, currency = self.fal_cost_refresh()
+            except (RuntimeError, ValueError, TypeError) as error:
+                self._fal_cost_amount = None
+                self._fal_cost_signature = signature
+                self._fal_cost_error = f"не удалось обновить: {error}"
+            else:
+                self._fal_cost_amount = Decimal(str(amount))
+                self._fal_cost_currency = str(currency or "USD").upper()
+                self._fal_cost_signature = signature
+                self._fal_cost_error = ""
+        self._render_cost_breakdown(
+            estimate_processing_cost_breakdown(operations, file_count)
+        )
 
     def validation_issues(self) -> tuple[str, ...]:
         issues = list(self.files_page.validation_issues())
@@ -1170,9 +1361,13 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
 
     def set_preflight_status(self, text: str, *, ready: bool) -> None:
         if ready:
-            self.requirements_label.clear()
-            self.requirements_label.setVisible(False)
-            self.requirements_label.setAccessibleName("")
+            message = "✓ Готово к запуску."
+            self.requirements_label.setText(message)
+            self.requirements_label.setVisible(True)
+            self.requirements_label.setProperty("state", "default")
+            self.requirements_label.setAccessibleName(message)
+            self.requirements_label.style().unpolish(self.requirements_label)
+            self.requirements_label.style().polish(self.requirements_label)
             return
         self.requirements_label.setVisible(True)
         prefix = "✕ "
@@ -1185,7 +1380,7 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         self.requirements_label.style().polish(self.requirements_label)
 
     def set_run_status(self, text: str, *, error: bool = False) -> None:
-        prefix = "ОШИБКА: " if error else "Готово: "
+        prefix = "✕ " if error else "✓ "
         message = prefix + text[:500]
         self.run_status_label.setText(message)
         self.run_status_label.setProperty("state", "error" if error else "default")
@@ -1385,6 +1580,7 @@ class ProcessingFlowController(QObject):
                 self.files_page,
                 self.pipeline_page,
                 tokens=self.shell.tokens,
+                fal_cost_refresh=self._refresh_fal_cost,
             ),
         )
         self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
@@ -1469,6 +1665,21 @@ class ProcessingFlowController(QObject):
         if mode == ProjectMode.PROCESSING.value:
             self.start()
 
+    def _refresh_fal_cost(self) -> tuple[float, str]:
+        runtime_settings = self.runtime_settings_provider()
+        if not isinstance(runtime_settings, Mapping):
+            raise ProcessingFlowError("Настройки запуска повреждены")
+        api_key = str(runtime_settings.get("fal_api_key") or "").strip()
+        if not api_key:
+            raise ProcessingFlowError("Добавьте Fal.ai API Key в настройках API")
+        quantities = processing_fal_endpoint_quantities(
+            self.shell.state.processing.operations,
+            len(self.shell.state.processing.selected_files),
+        )
+        if not quantities:
+            raise ProcessingFlowError("В текущем запуске нет операций Fal.ai")
+        return estimate_fal_cost(api_key, quantities)
+
     def start(self) -> ClipartRunRequest | None:
         if self.shell.another_run_is_active(self):
             message = "Сначала завершите текущее задание в другом режиме"
@@ -1497,14 +1708,14 @@ class ProcessingFlowController(QObject):
         self.run_queue.connect_worker(worker)
         self.runtime_adapter.start(worker)
         self.shell.show_results()
-        self.review_page.set_run_status("Запуск передан pipeline 2.0")
+        self.review_page.set_run_status("Запуск начат")
         self.started.emit(request)
         return request
 
     def _finished(self, message: str) -> None:
         self.run_queue.finished()
         safe = _safe_runtime_error(message, self._runtime_settings)
-        self.review_page.set_run_status(safe)
+        self.review_page.set_run_status("Обработка завершена")
         self.finished.emit(safe)
 
     def _error(self, message: str) -> None:

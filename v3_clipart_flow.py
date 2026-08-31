@@ -7,7 +7,7 @@ import os
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -1132,6 +1132,91 @@ class _ScrollableStepPage(QScrollArea):
 
     def refresh_from_state(self) -> None:
         return
+
+
+def _review_section_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setProperty("v3SectionTitle", True)
+    label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+    label.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Maximum,
+    )
+    return label
+
+
+def _configure_review_page_layout(
+    page: _ScrollableStepPage,
+    labels: Sequence[QLabel],
+) -> None:
+    """Keep every pre-run review page aligned to the shared top grid."""
+    page.card.layout().setAlignment(Qt.AlignmentFlag.AlignTop)
+    page.card.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+    page.card.content.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Maximum,
+    )
+    for label in (page.card.title_label, page.card.description_label, *labels):
+        label.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+        )
+        label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+
+
+def _format_review_cost_breakdown(
+    estimate: CostEstimate,
+    *,
+    fal_amount: Decimal | None = None,
+    fal_currency: str = "USD",
+    fal_error: str = "",
+) -> str:
+    def money(value: Decimal) -> str:
+        return str(value.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP))
+
+    if not estimate.provider_usd:
+        return "Локальная обработка — без оплаты API."
+
+    labels = {
+        "kie": "KIE",
+        "fal": "Fal.ai",
+        "photoroom": "PhotoRoom",
+    }
+    lines = ["Ориентировочная стоимость"]
+    total = Decimal("0")
+    total_complete = True
+    for provider in ("kie", "fal", "photoroom"):
+        if provider not in estimate.provider_usd:
+            continue
+        if provider == "fal":
+            if fal_amount is not None:
+                lines.append(f"Fal.ai — {money(fal_amount)} {fal_currency}")
+                if fal_currency == "USD":
+                    total += fal_amount
+                else:
+                    total_complete = False
+            elif fal_error:
+                lines.append(f"Fal.ai — {fal_error}")
+                total_complete = False
+            else:
+                lines.append("Fal.ai — требуется обновить")
+                total_complete = False
+            continue
+        amount = estimate.provider_usd[provider]
+        if provider in estimate.incomplete_providers:
+            lines.append(f"{labels[provider]} — стоимость недоступна")
+            total_complete = False
+        else:
+            lines.append(f"{labels[provider]} — {money(amount)} USD")
+            total += amount
+    if total_complete:
+        lines.append(f"Итого — {money(total)} USD")
+    else:
+        lines.append("Итого — не рассчитано полностью")
+    lines.append("Фактическая сумма может отличаться.")
+    return "\n".join(lines)
 
 
 def _supported_local_reference(path: str) -> bool:
@@ -3876,7 +3961,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
     ) -> None:
         super().__init__(
             "Проверка и запуск",
-            "Проверьте объём, стоимость и точный порядок до запуска.",
+            "Проверьте файлы, порядок обработки, папку результата и стоимость.",
             tokens=tokens,
         )
         self.state = state
@@ -3885,21 +3970,19 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self._fal_cost_currency = "USD"
         self._fal_cost_signature: tuple[tuple[str, int], ...] | None = None
         self._fal_cost_error = ""
+        self.files_section_label = _review_section_label("Файлы и результат")
+        self.pipeline_section_label = _review_section_label("Порядок")
+        self.cost_section_label = _review_section_label("API-вызовы и стоимость")
         self.output_label = QLabel()
         self.output_label.setWordWrap(True)
-        self.output_label.setProperty("v3Status", True)
         self.summary_label = QLabel()
         self.summary_label.setWordWrap(True)
-        self.summary_label.setProperty("v3Status", True)
         self.requests_label = QLabel()
         self.requests_label.setWordWrap(True)
-        self.requests_label.setProperty("v3Status", True)
         self.cost_breakdown_label = QLabel()
         self.cost_breakdown_label.setWordWrap(True)
-        self.cost_breakdown_label.setProperty("v3Status", True)
         self.pipeline_label = QLabel()
         self.pipeline_label.setWordWrap(True)
-        self.pipeline_label.setProperty("v3Status", True)
         self.requirements_label = QLabel()
         self.requirements_label.setWordWrap(True)
         self.requirements_label.setProperty("v3Status", True)
@@ -3919,39 +4002,33 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         cost_layout.addWidget(self.fal_cost_refresh_button)
         cost_layout.addStretch(1)
         for widget in (
+            self.files_section_label,
             self.output_label,
             self.summary_label,
+            self.pipeline_section_label,
+            self.pipeline_label,
+            self.cost_section_label,
             self.requests_label,
             self.cost_row,
-            self.pipeline_label,
             self.requirements_label,
             self.run_status_label,
         ):
             self.add_widget(widget)
-        self.card.layout().setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.card.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.card.content.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Maximum,
+        _configure_review_page_layout(
+            self,
+            (
+                self.files_section_label,
+                self.output_label,
+                self.summary_label,
+                self.pipeline_section_label,
+                self.pipeline_label,
+                self.cost_section_label,
+                self.requests_label,
+                self.cost_breakdown_label,
+                self.requirements_label,
+                self.run_status_label,
+            ),
         )
-        for label in (
-            self.card.title_label,
-            self.card.description_label,
-            self.output_label,
-            self.summary_label,
-            self.requests_label,
-            self.cost_breakdown_label,
-            self.pipeline_label,
-            self.requirements_label,
-            self.run_status_label,
-        ):
-            label.setAlignment(
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-            )
-            label.setSizePolicy(
-                QSizePolicy.Policy.Expanding,
-                QSizePolicy.Policy.Maximum,
-            )
         self.refresh_from_state()
 
     def _fal_selected(self) -> bool:
@@ -3990,8 +4067,7 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         )
         self._render_cost_breakdown(estimate)
         self.pipeline_label.setText(
-            "Порядок: "
-            + " → ".join(
+            " → ".join(
                 clipart_pipeline_steps(self.state.clipart.operations)
             )
         )
@@ -3999,47 +4075,14 @@ class ClipartReviewRunPage(_ScrollableStepPage):
         self.fal_cost_refresh_button.setVisible(has_fal)
 
     def _render_cost_breakdown(self, estimate: CostEstimate) -> None:
-        labels = {
-            "kie": "KIE",
-            "fal": "Fal.ai",
-            "photoroom": "PhotoRoom",
-        }
-        lines = ["Ориентировочная стоимость"]
-        total = Decimal("0")
-        total_complete = True
-        for provider in ("kie", "fal", "photoroom"):
-            if provider not in estimate.provider_usd:
-                continue
-            if provider == "fal":
-                if self._fal_cost_amount is not None:
-                    lines.append(
-                        f"Fal.ai — {self._fal_cost_amount:.3f} "
-                        f"{self._fal_cost_currency}"
-                    )
-                    if self._fal_cost_currency == "USD":
-                        total += self._fal_cost_amount
-                    else:
-                        total_complete = False
-                elif self._fal_cost_error:
-                    lines.append(f"Fal.ai — {self._fal_cost_error}")
-                    total_complete = False
-                else:
-                    lines.append("Fal.ai — требуется обновить")
-                    total_complete = False
-                continue
-            amount = estimate.provider_usd[provider]
-            if provider in estimate.incomplete_providers:
-                lines.append(f"{labels[provider]} — стоимость недоступна")
-                total_complete = False
-            else:
-                lines.append(f"{labels[provider]} — {amount:.3f} USD")
-                total += amount
-        if total_complete:
-            lines.append(f"Итого — {total:.3f} USD")
-        else:
-            lines.append("Итого — не рассчитано полностью")
-        lines.append("Фактическая сумма может отличаться.")
-        self.cost_breakdown_label.setText("\n".join(lines))
+        self.cost_breakdown_label.setText(
+            _format_review_cost_breakdown(
+                estimate,
+                fal_amount=self._fal_cost_amount,
+                fal_currency=self._fal_cost_currency,
+                fal_error=self._fal_cost_error,
+            )
+        )
 
     def refresh_fal_cost(self) -> None:
         current_signature = tuple(
@@ -4067,12 +4110,16 @@ class ClipartReviewRunPage(_ScrollableStepPage):
 
     def set_preflight_status(self, text: str, *, ready: bool) -> None:
         if ready:
-            self.requirements_label.clear()
-            self.requirements_label.setVisible(False)
-            self.requirements_label.setAccessibleName("")
+            message = "✓ Готово к запуску."
+            self.requirements_label.setText(message)
+            self.requirements_label.setVisible(True)
+            self.requirements_label.setProperty("state", "default")
+            self.requirements_label.setAccessibleName(message)
+            self.requirements_label.style().unpolish(self.requirements_label)
+            self.requirements_label.style().polish(self.requirements_label)
             return
         self.requirements_label.setVisible(True)
-        prefix = "✓ " if ready else "✕ "
+        prefix = "✕ "
         self.requirements_label.setText(prefix + text)
         self.requirements_label.setProperty(
             "state",

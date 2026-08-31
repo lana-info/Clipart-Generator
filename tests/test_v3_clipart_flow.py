@@ -1655,8 +1655,14 @@ class V3ClipartFlowTests(unittest.TestCase):
         ):
             self.assertTrue(label.alignment() & Qt.AlignmentFlag.AlignLeft)
             self.assertTrue(label.alignment() & Qt.AlignmentFlag.AlignTop)
-            self.assertEqual(label.property("v3Status"), True)
-        self.assertLess(review.output_label.geometry().top(), 40)
+        self.assertLess(review.output_label.geometry().top(), 90)
+        section_copy = " ".join(
+            label.text() for label in review.findChildren(QLabel)
+        )
+        self.assertIn("Файлы и результат", section_copy)
+        self.assertIn("Порядок", section_copy)
+        self.assertIn("API-вызовы и стоимость", section_copy)
+        self.assertLess(review.files_section_label.geometry().top(), 40)
 
     def test_final_review_separates_request_counts_and_provider_costs(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
@@ -1687,7 +1693,8 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertNotIn("API-ключи не сохраняются", review_copy)
 
         review.set_preflight_status("Обязательные поля заполнены; запуск готов.", ready=True)
-        self.assertTrue(review.requirements_label.isHidden())
+        self.assertFalse(review.requirements_label.isHidden())
+        self.assertEqual(review.requirements_label.text(), "✓ Готово к запуску.")
 
     def test_mixed_provider_cost_refresh_keeps_kie_and_marks_total_complete(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
