@@ -937,6 +937,14 @@ Verification:
 - [x] Replacement Windows 3.1.1 candidate built with all automated gates green.
 - [ ] Manual Windows checklist remains.
 
+Latest replacement evidence 2026-08-31: GitHub Actions run `33413361301`
+successfully built and installed Windows 3.1.1 from exact commit
+`85f9a5cfbfc529b0df5ab13014d1274e00daa1c9`. Artifact `windows-3.1.1`
+(`9766378600`, retention through 2026-09-03) contains the installer, verified
+SHA-256, version, secret-free provenance and UI evidence. Repository visibility
+was restored to private after completion; nothing was published. Manual Windows
+acceptance remains required.
+
 Release preparation 2026-08-30: версия 3.1.0, release notes и полный Windows
 checklist подготовлены в `codex/release-3.1.0-final-candidate`. Workflow теперь
 обязан выполнить оба нативных security contract test до сборки. Публикация и
@@ -1379,6 +1387,9 @@ Verification:
 - [x] Compilation, sensitive-artifact scan и `git diff --check` прошли.
 - [x] Fresh automatic Chroma benchmark unchanged: alpha IoU `0.968704`,
   alpha MAE `0.018194`, background leakage `0`, opaque subject loss `0`.
+- [x] Windows candidate run `33413361301` built, installed and validated the
+  application from source commit `85f9a5c`; artifact `windows-3.1.1` is ready
+  for owner acceptance.
 - [ ] Платный Windows quality test выполняет владелец в приложении.
 
 ## Исторические задачи 3.0

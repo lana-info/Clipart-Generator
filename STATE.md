@@ -2,6 +2,27 @@
 
 Updated: 2026-08-31
 
+## Replacement Windows 3.1.1 candidate with Fal upscalers — 2026-08-31
+
+The approved acceptance fixes and Fal.ai Bria Creative, Topaz Precision and
+Recraft Crisp first-stage upscalers were fast-forwarded into `develop/3.1`.
+GitHub Actions run `33413361301` built the Windows-only candidate from exact
+source commit `85f9a5cfbfc529b0df5ab13014d1274e00daa1c9`. All automated gates passed,
+including native Windows security contracts, PyInstaller, Inno Setup, installed
+application verification, release-contract validation and artifact upload.
+
+Artifact `windows-3.1.1` has ID `9766378600` and expires on 2026-09-03. The
+downloaded `VibixImages-Setup-3.1.1.exe` is 231,579,989 bytes; its published
+SHA-256 file verifies successfully (`AAEE86E7C3AA542FCBC425046DE9EECF663ED9AB8D66D202542AD8494DDED500`).
+The build provenance identifies Windows Server 2025, Python 3.12.10 and reports
+`secret_free: true`. Repository visibility was returned to private immediately
+after the run. No release, tag or update was published.
+
+Remaining release gate is owner-operated Windows acceptance: visual/UI checks,
+one controlled KIE generation, one controlled Fal generation, and paid quality
+checks for Bria (transparent and opaque), Topaz 2x/4x and Recraft on an opaque
+PNG. Recraft must continue to reject usable transparency before paid submit.
+
 ## Windows acceptance follow-up: Fal.ai replacement upscalers — 2026-08-31
 
 The owner approved three replacements for the rejected Fal ESRGAN in the first
