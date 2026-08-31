@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 import main
 
@@ -101,7 +101,7 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                 self.assertEqual(result.getpixel((0, 0))[3], 0)
                 self.assertEqual(result.getpixel((7, 7)), (220, 90, 40, 255))
 
-    def test_local_chroma_pipeline_rejects_an_ambiguous_background(self):
+    def test_local_chroma_pipeline_preserves_ambiguous_image_for_manual_correction(self):
         with tempfile.TemporaryDirectory(prefix="ambiguous-chroma-") as temp:
             root = Path(temp)
             source_path = root / "source.png"
@@ -122,9 +122,75 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                 chroma_key_color="blue",
             )
 
-            with self.assertRaisesRegex(ValueError, "неоднородный"):
-                worker._run_processing_pipeline(
-                    str(source_path), None, str(raw_dir), 1, "file"
+            messages = []
+            diagnostics = []
+            worker.progress.connect(messages.append)
+            worker.diagnostic.connect(diagnostics.append)
+
+            result_path = worker._run_processing_pipeline(
+                str(source_path), None, str(raw_dir), 1, "file"
+            )
+
+            self.assertEqual(Path(result_path), source_path)
+            with Image.open(result_path) as preserved:
+                self.assertIsNone(
+                    ImageChops.difference(preserved.convert("RGBA"), image).getbbox()
+                )
+            self.assertTrue(
+                any("ручн" in message.casefold() for message in messages)
+            )
+            stage_terminal = [
+                event
+                for event in diagnostics
+                if event.get("event") == "stage_finished"
+                and event.get("stage") == "background_removal"
+            ]
+            self.assertEqual(stage_terminal[-1]["outcome"], "skipped")
+            self.assertEqual(
+                stage_terminal[-1]["status"],
+                "manual_transparency_required",
+            )
+
+    def test_ambiguous_local_chroma_bypasses_final_trim_and_preserves_ready_pixels(self):
+        with tempfile.TemporaryDirectory(prefix="ambiguous-chroma-ready-") as temp:
+            root = Path(temp)
+            source_path = root / "source.png"
+            raw_dir = root / "rough"
+            output_path = root / "output" / "source_ready.png"
+            raw_dir.mkdir()
+            output_path.parent.mkdir()
+            size = 40
+            image = Image.new("RGBA", (size, size), (255, 255, 255, 255))
+            ImageDraw.Draw(image).rectangle(
+                (8, 8, 31, 31), fill=(0, 0, 210, 255)
+            )
+            image.save(source_path)
+            worker = self.make_worker(
+                root,
+                remove_bg=True,
+                remove_bg_provider="local_chroma_key",
+                chroma_key_color="blue",
+                trim_enabled=True,
+            )
+
+            with patch.object(
+                main,
+                "remove_chroma_key_automatic",
+                side_effect=main.ChromaKeyAmbiguousError("ambiguous key"),
+            ):
+                result_path = worker._process_file_entry(
+                    1,
+                    1,
+                    str(source_path),
+                    str(raw_dir),
+                    str(output_path),
+                )
+
+            self.assertEqual(Path(result_path), output_path)
+            with Image.open(output_path) as ready:
+                self.assertEqual(ready.size, image.size)
+                self.assertIsNone(
+                    ImageChops.difference(ready.convert("RGBA"), image).getbbox()
                 )
 
     def test_worker_normalizes_a_non_preset_legacy_chroma_color_to_blue(self):

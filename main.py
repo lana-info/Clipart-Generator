@@ -49,7 +49,11 @@ ensure_gui_standard_streams()
 
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
-from chroma_key import KEY_COLORS, remove_chroma_key_automatic
+from chroma_key import (
+    KEY_COLORS,
+    ChromaKeyAmbiguousError,
+    remove_chroma_key_automatic,
+)
 from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from ai_watermark_backend import (
@@ -1551,6 +1555,7 @@ class WorkerThread(QThread):
         out_path: str,
         process_generated: bool,
     ) -> str:
+        self._item_context.manual_transparency_required = False
         self._set_diagnostic_context(idx, total, "generation")
         self.progress.emit(f"[{idx}/{total}] Генерация")
         self._emit_file_progress(idx, total, 4)
@@ -1936,6 +1941,7 @@ class WorkerThread(QThread):
         raw_dir: str,
         out_path: str,
     ) -> str:
+        self._item_context.manual_transparency_required = False
         self._set_diagnostic_context(idx, total, "processing")
         self.progress.emit(
             f"[{idx}/{total}] Обработка файла: {os.path.basename(file_path)}"
@@ -2386,6 +2392,7 @@ class WorkerThread(QThread):
     def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
         self._ensure_running()
         self._item_context.metadata_cleaned = False
+        self._item_context.manual_transparency_required = False
         order_error = validate_upscale_after_background_order(
             self.remove_bg,
             self.upscale_after,
@@ -2611,12 +2618,51 @@ class WorkerThread(QThread):
                             raw_dir, f"{prefix}_chroma_key_nobg_{idx:03d}_{self.run_stamp}.png"
                         )
                         validate_local_image_input(current_path)
-                        with Image.open(current_path) as source_image:
-                            result = remove_chroma_key_automatic(
-                                source_image,
-                                self.chroma_key_color,
+                        try:
+                            with Image.open(current_path) as source_image:
+                                result = remove_chroma_key_automatic(
+                                    source_image,
+                                    self.chroma_key_color,
+                                )
+                                self._save_image_object_as_png(result, nobg_path)
+                        except ChromaKeyAmbiguousError as error:
+                            safe_error = self._safe_error_text(error)
+                            self._item_context.manual_transparency_required = True
+                            self.progress.emit(
+                                "  Local Chroma Key не применён: "
+                                f"{safe_error}. Откройте результат для ручной "
+                                "коррекции прозрачности."
                             )
-                            self._save_image_object_as_png(result, nobg_path)
+                            self._emit_item_progress(
+                                idx,
+                                int(
+                                    getattr(
+                                        self._diagnostic_context,
+                                        "item_total",
+                                        1,
+                                    )
+                                    or 1
+                                ),
+                                "background_removal",
+                                "stage_skipped",
+                                message=(
+                                    "Local Chroma Key не применён; требуется "
+                                    "ручная коррекция прозрачности."
+                                ),
+                            )
+                            self._emit_diagnostic(
+                                "stage_finished",
+                                provider=remove_provider,
+                                model=remove_model,
+                                outcome="skipped",
+                                status="manual_transparency_required",
+                                error_message=safe_error,
+                                elapsed_ms=round(
+                                    (time.monotonic() - remove_started) * 1000
+                                ),
+                                **inspect_diagnostic_image(current_path),
+                            )
+                            return current_path
                     self.progress.emit(f"  Локальный Chroma Key без фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
@@ -3690,6 +3736,9 @@ class WorkerThread(QThread):
 
     def _save_final_output(self, result_url, source_path, output_path, raw_dir, idx, prefix):
         self._ensure_running()
+        trim_enabled = self.trim_enabled and not bool(
+            getattr(self._item_context, "manual_transparency_required", False)
+        )
         output_dir = os.path.dirname(os.path.abspath(output_path))
         os.makedirs(output_dir, exist_ok=True)
         stage_path = None
@@ -3704,7 +3753,7 @@ class WorkerThread(QThread):
                 stage_path = stage_file.name
 
             local_cleanup_source = None
-            if self._metadata_cleanup_requested() and not self.trim_enabled and not self.export_300_dpi:
+            if self._metadata_cleanup_requested() and not trim_enabled and not self.export_300_dpi:
                 if result_url and os.path.isfile(str(result_url)):
                     local_cleanup_source = str(result_url)
                 elif not result_url and source_path and os.path.isfile(str(source_path)):
@@ -3721,8 +3770,9 @@ class WorkerThread(QThread):
                     raw_dir,
                     idx,
                     prefix,
+                    trim_enabled=trim_enabled,
                 )
-            elif self.trim_enabled:
+            elif trim_enabled:
                 source_inspection = self._inspect_precleanup_source(source_path)
                 self._trim_image_file(
                     source_path,
@@ -3939,15 +3989,26 @@ class WorkerThread(QThread):
         for title, values in messages:
             self.progress.emit(f"  Очистка файла: {title} — {', '.join(values) if values else 'нет'}")
 
-    def _save_pipeline_result(self, result_url, output_path, raw_dir, idx, prefix):
+    def _save_pipeline_result(
+        self,
+        result_url,
+        output_path,
+        raw_dir,
+        idx,
+        prefix,
+        *,
+        trim_enabled=None,
+    ):
+        if trim_enabled is None:
+            trim_enabled = self.trim_enabled
         if os.path.isfile(str(result_url)):
             inspection = self._inspect_precleanup_source(result_url)
-            if self.trim_enabled:
+            if trim_enabled:
                 self._trim_image_file(result_url, output_path, "в конце", trim_mode=self._normalize_trim_mode(self.trim_mode))
             else:
                 self._save_image_as_png(result_url, output_path)
             return inspection
-        if self.trim_enabled:
+        if trim_enabled:
             pretrim_path = os.path.join(raw_dir, f"{prefix}_pretrim_{idx:03d}_{self.run_stamp}.png")
             self._download_precleanup_result(result_url, pretrim_path)
             inspection = self._inspect_precleanup_source(pretrim_path)

@@ -652,6 +652,14 @@ class RunQueueSession(QObject):
         for stage, current in tuple(item.stage_statuses.items()):
             if current == "running":
                 item.stage_statuses[stage] = status
+
+    @staticmethod
+    def _successful_item_message(item: RunItem) -> str:
+        if item.stage_statuses.get("background_removal") == "skipped":
+            return (
+                "Результат сохранён; проверьте и исправьте прозрачность вручную."
+            )
+        return "Результат сохранён."
     def _active_item(self, local_index: int) -> RunItem | None:
         if local_index < 1 or local_index > len(self.active_order):
             return None
@@ -726,6 +734,16 @@ class RunQueueSession(QObject):
                         item=item.index,
                         kind="generated",
                     )
+        elif status == "stage_skipped":
+            item.status = RunItemStatus.RUNNING
+            if stage:
+                item.stage_statuses[stage] = "skipped"
+            self._event(
+                "stage_updated",
+                item=item.index,
+                stage=stage,
+                status="skipped",
+            )
         elif status == "succeeded":
             trusted = _trusted_worker_path(event.output_path, self.output_dir)
             if not trusted:
@@ -763,7 +781,7 @@ class RunQueueSession(QObject):
                     )
                 else:
                     item.status = RunItemStatus.SUCCEEDED
-                    item.short_message = "Результат сохранён."
+                    item.short_message = self._successful_item_message(item)
                     self._event(
                         "item_succeeded",
                         item=item.index,
@@ -938,7 +956,7 @@ class RunQueueSession(QObject):
                     self._close_running_stages(item, "complete")
                     item.stage_statuses["export"] = "complete"
                     item.status = RunItemStatus.SUCCEEDED
-                    item.short_message = "Результат сохранён."
+                    item.short_message = self._successful_item_message(item)
                     self._event(
                         "item_succeeded",
                         item=item.index,

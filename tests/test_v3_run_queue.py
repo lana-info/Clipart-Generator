@@ -907,6 +907,80 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(persisted["outcome"], "skipped")
             self.assertEqual(persisted["status"], "already_alpha")
 
+    def test_manual_chroma_skip_keeps_ready_result_actionable(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-manual-chroma-") as temp:
+            root = Path(temp)
+            output = root / "output" / "flowers_ready.png"
+            output.parent.mkdir(parents=True)
+            Image.new("RGBA", (20, 20), (0, 0, 255, 255)).save(output)
+            session = RunQueueSession(
+                generation_request(root, count=1),
+                ProjectMode.CLIPART,
+            )
+            session.handle_progress("[1/1] Генерация")
+            session.handle_progress(
+                "  Этап обработки: background_removal; status=running"
+            )
+            session.handle_item_progress(
+                {
+                    "item_index": 1,
+                    "total_items": 1,
+                    "stage": "background_removal",
+                    "status": "stage_skipped",
+                    "message": "Требуется ручная коррекция прозрачности.",
+                }
+            )
+
+            session.handle_item_progress(
+                {
+                    "item_index": 1,
+                    "total_items": 1,
+                    "stage": "export",
+                    "status": "succeeded",
+                    "output_path": str(output),
+                }
+            )
+
+            item = session.items[0]
+            self.assertIs(item.status, RunItemStatus.SUCCEEDED)
+            self.assertEqual(item.output_path, str(output.resolve()))
+            self.assertIn("исправьте прозрачность", item.short_message)
+
+    def test_indexed_chroma_skip_is_attributed_to_the_correct_parallel_item(self):
+        with tempfile.TemporaryDirectory(prefix="v3-queue-chroma-batch-") as temp:
+            session = RunQueueSession(
+                generation_request(temp, count=2),
+                ProjectMode.CLIPART,
+            )
+            for index in (1, 2):
+                session.handle_item_progress(
+                    {
+                        "item_index": index,
+                        "total_items": 2,
+                        "stage": "background_removal",
+                        "status": "running",
+                    }
+                )
+
+            session.handle_item_progress(
+                {
+                    "item_index": 1,
+                    "total_items": 2,
+                    "stage": "background_removal",
+                    "status": "stage_skipped",
+                    "message": "Требуется ручная коррекция прозрачности.",
+                }
+            )
+
+            self.assertEqual(
+                session.items[0].stage_statuses["background_removal"],
+                "skipped",
+            )
+            self.assertEqual(
+                session.items[1].stage_statuses["background_removal"],
+                "running",
+            )
+
     def test_terminal_kie_failure_has_no_output_and_requires_explicit_retry(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-kie-terminal-") as temp:
             root = Path(temp)
