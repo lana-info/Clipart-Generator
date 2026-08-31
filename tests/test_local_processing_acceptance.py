@@ -610,6 +610,26 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                 self.assertEqual(result.mode, "RGB")
                 self.assertEqual(result.size, image.size)
 
+    def test_process_only_accepts_300_dpi_as_the_only_enabled_stage(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-dpi-only-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            Image.new("RGBA", (18, 14), (30, 90, 150, 175)).save(source)
+            worker = main.WorkerThread(
+                "mode2_process",
+                str(root),
+                worker_settings(export_300_dpi=True),
+                selected_files=[str(source)],
+            )
+
+            worker._mode2_process_files(emit_final=False)
+
+            outputs = list((root / "output").glob("*.png"))
+            self.assertEqual(len(outputs), 1)
+            with Image.open(outputs[0]) as result:
+                self.assertEqual(result.size, (18, 14))
+                self.assertAlmostEqual(result.info["dpi"][0], 300, delta=1)
+
     def test_unsharp_preserves_alpha_and_changes_rgb(self):
         with tempfile.TemporaryDirectory(prefix="clipart-unsharp-") as temp_dir:
             source_path = Path(temp_dir) / "source.png"
