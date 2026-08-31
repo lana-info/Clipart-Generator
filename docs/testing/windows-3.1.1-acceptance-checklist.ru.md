@@ -9,23 +9,26 @@
 
 ## 1. Идентификация
 
-- [ ] Source branch: `develop/3.1`.
-- [ ] Source commit и GitHub Actions run записаны.
-- [ ] Artifact: `windows-3.1.1`.
-- [ ] Installer: `VibixImages-Setup-3.1.1.exe`.
-- [ ] SHA-256 совпадает с `.sha256` и `build-provenance.json`.
-- [ ] Приложенный `release/VERSION.txt` содержит `3.1.1`.
+- [x] Source branch: `develop/3.1`.
+- [x] Source commit: `dee4fac526a5418b607140d21e683dd2fb3bd4d2`;
+  GitHub Actions run: `33350465599`.
+- [x] Artifact: `windows-3.1.1`, ID `9743579624`, expires
+  `2026-09-03T02:31:52Z`; локальная серверная копия сохранена.
+- [x] Installer: `VibixImages-Setup-3.1.1.exe`, `231576030` байт.
+- [x] SHA-256 совпадает с `.sha256` и `build-provenance.json`:
+  `1c89a48d4050322e5e5e62dcb881636784070c4cb68ce102029495b1b1c02946`.
+- [x] Приложенный `release/VERSION.txt` содержит `3.1.1`.
 
 ## 2. Автоматические Windows gates
 
-- [ ] DPAPI round-trip Fal.ai key прошёл на Windows, не `skipped`.
-- [ ] Installer-lock contract прошёл на Windows, не `skipped`.
-- [ ] License/run gates, compilation и sensitive scan прошли.
-- [ ] PyInstaller executable сообщает версию 3.1.1.
-- [ ] Inno Setup, установленный startup/UI smoke и Local Real-ESRGAN smoke
+- [x] DPAPI round-trip Fal.ai key прошёл на Windows, не `skipped`.
+- [x] Installer-lock contract прошёл на Windows, не `skipped`.
+- [x] License/run gates, compilation и sensitive scan прошли.
+- [x] PyInstaller executable сообщает версию 3.1.1.
+- [x] Inno Setup, установленный startup/UI smoke и Local Real-ESRGAN smoke
   завершились успешно.
-- [ ] Release contract, checksum и provenance прошли.
-- [ ] Artifact содержит Windows screenshots: `mode-selection.png`,
+- [x] Release contract, checksum и provenance прошли.
+- [x] Artifact содержит Windows screenshots: `mode-selection.png`,
   `clipart-prompts.png`, `clipart-prompt-review.png`.
 
 ## 3. Установка и обновление

@@ -925,7 +925,8 @@ Verification:
   passed, 57 intentional/environment skips, 2 deselected, 140 subtests. Two of
   those skips are the Windows-only DPAPI and native installer-lock tests.
 - [x] First Windows 3.1.0 artifact built with all automated gates green.
-- [ ] Replacement Windows 3.1.1 candidate and manual Windows checklist remain.
+- [x] Replacement Windows 3.1.1 candidate built with all automated gates green.
+- [ ] Manual Windows checklist remains.
 
 Release preparation 2026-08-30: версия 3.1.0, release notes и полный Windows
 checklist подготовлены в `codex/release-3.1.0-final-candidate`. Workflow теперь
@@ -952,6 +953,14 @@ Subsequent blocker/UI follow-up passes 1056 offline tests, 57 documented skips,
 2 deselections and 146 subtests. It is now integrated for the separately
 authorized replacement 3.1.1 build; no release publication or paid provider
 request is implied.
+
+Replacement run `33350465599` from integrated commit `dee4fac` passed every
+Windows gate. Artifact `windows-3.1.1` (ID `9743579624`) contains installer
+`231576030` bytes with SHA-256
+`1c89a48d4050322e5e5e62dcb881636784070c4cb68ce102029495b1b1c02946`;
+downloaded installer, sidecar and provenance match. Repository visibility was
+returned to private immediately after the successful run. Manual acceptance
+and any publication remain separate decisions.
 
 Windows observation 2026-08-30: KIE
 `flux-2/flex-text-to-image` item 2/2 returned provider task failure code `422`

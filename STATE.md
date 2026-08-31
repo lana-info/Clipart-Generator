@@ -286,6 +286,17 @@ offline tests and 146 subtests, with no important or blocking source-review
 findings. The owner has authorized integration and a replacement Windows 3.1.1
 build; publication and paid provider requests remain outside this build step.
 
+Replacement Windows run `33350465599` from integrated commit `dee4fac` passed
+all automated gates in 9m40s: native DPAPI and installer-lock contracts,
+PyInstaller version/startup, signed Visual C++ prerequisite, Inno Setup,
+installed UI/startup and Local Real-ESRGAN smoke, checksum, provenance and
+release contract. Artifact `windows-3.1.1` (ID `9743579624`) contains
+`VibixImages-Setup-3.1.1.exe` (`231576030` bytes), SHA-256
+`1c89a48d4050322e5e5e62dcb881636784070c4cb68ce102029495b1b1c02946`.
+The downloaded installer, sidecar and provenance match; a local server copy is
+retained under `build-downloads/`. Repository visibility was restored to
+private immediately after completion. No release was published.
+
 The Windows observation pass subsequently confirmed a current-source Chroma
 colour regression: fully opaque light-blue subject detail could be reconstructed
 as green/teal. A synthetic adversarial test failed before the fix. Chroma now
@@ -444,8 +455,9 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Immediate next action
 
-Build and download replacement artifact `windows-3.1.1`, then perform the manual
-UI, mouse-editor, install/upgrade, path/output, license and Chroma checks at
+Download the preserved `windows-3.1.1` installer to the target Windows computer,
+then perform the manual UI, mouse-editor, install/upgrade, path/output, license
+and Chroma checks at
 1120×780 and 100% display scaling. A stylus check is needed only when the target
 device uses one. The one-prompt/one-variant KIE duplicate audit is a separately
 authorized paid request. Publication remains a separate later decision.
