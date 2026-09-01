@@ -702,15 +702,15 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Current branch and handoff
 
-- Target 3.1 integration line remains `develop/3.1`. The current Windows 3.1.2
-  acceptance candidate was built from retained branch
-  `codex/feature-automatic-output-recovery`; branches were not deleted.
+- Target 3.1 integration line remains `develop/3.1`. The current Windows 3.1.3
+  release candidate is prepared on retained branch
+  `codex/fix-recraft-transparent-generated-input`; branches are not deleted.
 - Windows-native acceptance follow-up `codex/fix-3.1-windows-native-tests` is
   integrated. It added real DPAPI and installer-lock tests without production
   code changes.
-- Active release preparation is version 3.1.2 on
-  `codex/feature-automatic-output-recovery`. The verified manual GitHub
-  artifact is `windows-3.1.2`; Azure remains fallback infrastructure.
+- Active release preparation is version 3.1.3 on
+  `codex/fix-recraft-transparent-generated-input`. The previous verified manual
+  GitHub artifact is `windows-3.1.2`; Azure remains fallback infrastructure.
 - Release baseline branch: `develop/3.0`
 - Frozen 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`.
   Its relevant history is already incorporated into the 3.1 ancestry; it is a

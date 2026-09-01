@@ -1529,7 +1529,7 @@ Acceptance:
 
 ## Task 37 (3.1.2 acceptance follow-up): прозрачный вход Recraft Crisp
 
-Status: Done in source — offline regression tests green; Windows rebuild not started
+Status: 3.1.3 Windows candidate authorized; release build pending
 
 Acceptance:
 - [x] Recraft Crisp не отклоняет прозрачный PNG до создания Fal.ai task.
