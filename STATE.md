@@ -702,16 +702,15 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 
 ## Current branch and handoff
 
-- Target 3.1 integration line: `develop/3.1`; release-candidate and Windows
-  acceptance follow-up branches are integrated locally for the 3.1.1 build.
-  The retained source branches are not deleted.
+- Target 3.1 integration line remains `develop/3.1`. The current Windows 3.1.2
+  acceptance candidate was built from retained branch
+  `codex/feature-automatic-output-recovery`; branches were not deleted.
 - Windows-native acceptance follow-up `codex/fix-3.1-windows-native-tests` is
   integrated. It added real DPAPI and installer-lock tests without production
   code changes.
-- Active release preparation is the integrated `develop/3.1`. Version 3.1.1 is
-  set only for the explicitly authorized replacement build. The intended
-  manual GitHub artifact is `windows-3.1.1`; Azure remains fallback
-  infrastructure.
+- Active release preparation is version 3.1.2 on
+  `codex/feature-automatic-output-recovery`. The verified manual GitHub
+  artifact is `windows-3.1.2`; Azure remains fallback infrastructure.
 - Release baseline branch: `develop/3.0`
 - Frozen 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`.
   Its relevant history is already incorporated into the 3.1 ancestry; it is a
@@ -1351,6 +1350,14 @@ image-processing version.
   `secret_free: true`. The repository was returned to private immediately
   after artifact download and verification; no release was published and no
   paid provider request was made.
+- Replacement version 3.1.2 workflow run `33461586695` succeeded from exact
+  release commit `b228f1f2a9b6a9955290698943e2032ed84e590b`. Artifact
+  `windows-3.1.2` has ID `9783611927`, expires 2026-09-04, and contains the
+  verified `231607203`-byte installer. SHA-256 is
+  `96C6F1A8E813554CE25B4C5C966CE7A9F15D5EB65DB74BCDBCDD3561B2910323`;
+  provenance reports Windows Server 2025, Python 3.12.10 and
+  `secret_free: true`. The repository is private; no release was published
+  and no paid provider request was made.
 
 ## Prohibited without explicit approval
 
