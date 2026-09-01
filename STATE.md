@@ -1343,8 +1343,11 @@ image-processing version.
   transparent input is forwarded as RGBA without adding a background, and the
   provider output is accepted as returned. Recraft may still return an opaque
   result; this is now a documented model limitation rather than an app error.
-- Focused suite: 168 tests passed. Full offline suite: 1119 passed and 59
-  documented skips. Compilation, diff checks and offscreen layout pass.
+- Fal Topaz Transparent 4× is now offered in both `upscale_before` and
+  `upscale_after`, with the same explicit `сохраняет прозрачность` label.
+- Latest focused model/UI/routing suite: 129 tests passed. Full offline suite:
+  1120 passed and 59 documented skips. Compilation, diff checks and offscreen
+  layout pass.
 - Windows workflow run `33460333635` succeeded from exact source commit
   `a3374c81db6c6dacd18b5b18f351f02541fd7156`. Artifact `windows-3.1.1`
   has ID `9783161166`, expires 2026-09-04, and contains the verified

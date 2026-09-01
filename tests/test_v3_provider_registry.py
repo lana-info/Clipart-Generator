@@ -93,6 +93,10 @@ class ProviderRegistryTests(unittest.TestCase):
             (
                 ("Bria Creative 2× — сохраняет прозрачность", "bria/upscale/creative"),
                 ("Topaz Precision", "topaz/upscale/image/precision"),
+                (
+                    "Topaz Transparent 4× — сохраняет прозрачность",
+                    "topaz/upscale/image/transparent",
+                ),
                 ("Recraft Crisp 4× — без прозрачности", "fal-ai/recraft/upscale/crisp"),
             ),
         )

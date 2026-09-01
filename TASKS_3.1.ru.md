@@ -1541,12 +1541,14 @@ Acceptance:
 - [x] Непрозрачные JPEG/PNG по-прежнему нормализуются в RGB PNG, а ограничения
   одного кадра, размеров, пикселей и 5 MB сохраняются.
 - [x] Существующее ограничение списка моделей для `upscale_after` не меняется.
+- [x] Topaz Transparent 4× доступен в Fal.ai для апскейла до и после удаления
+  фона; обе подписи явно говорят `сохраняет прозрачность`.
 - [ ] Проверить реальный Fal.ai результат в следующей Windows-сборке; платный
   provider test автоматически не запускать.
 
 Verification:
-- [x] Focused routing/provider/upscale/background suite: 121 tests passed.
-- [x] Full offline suite: 1119 passed, 59 documented skips.
+- [x] Focused model/UI/routing/provider suite: 129 tests passed.
+- [x] Full offline suite: 1120 passed, 59 documented skips.
 - [x] Python compilation and `git diff --check` pass.
 
 ## Исторические задачи 3.0

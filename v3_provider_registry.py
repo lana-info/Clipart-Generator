@@ -217,10 +217,14 @@ FAL_REMOVE_BG_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
 FAL_UPSCALE_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
     ("Bria Creative 2× — сохраняет прозрачность", FAL_BRIA_UPSCALE_MODEL_ID),
     ("Topaz Precision", FAL_TOPAZ_PRECISION_MODEL_ID),
+    (
+        "Topaz Transparent 4× — сохраняет прозрачность",
+        FAL_TOPAZ_TRANSPARENT_MODEL_ID,
+    ),
     ("Recraft Crisp 4× — без прозрачности", FAL_RECRAFT_CRISP_MODEL_ID),
 )
 FAL_UPSCALE_AFTER_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (
-    ("Topaz Transparent (4×)", FAL_TOPAZ_TRANSPARENT_MODEL_ID),
+    ("Topaz Transparent 4× — сохраняет прозрачность", FAL_TOPAZ_TRANSPARENT_MODEL_ID),
     ("Bria Creative 2× — сохраняет прозрачность", FAL_BRIA_UPSCALE_MODEL_ID),
 )
 FAL_BIREFNET_MODEL_OPTIONS: Final[tuple[tuple[str, str], ...]] = (

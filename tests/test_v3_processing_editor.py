@@ -198,6 +198,25 @@ class ProcessingEditorTests(unittest.TestCase):
             ),
         )
 
+    def test_topaz_transparent_is_labeled_for_both_fal_upscale_positions(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        editor = ProcessingPipelineEditor(
+            state.processing,
+            lambda: None,
+            title="Pipeline",
+            description="Common pipeline",
+            include_cleanup=True,
+        )
+        expected_model_id = "topaz/upscale/image/transparent"
+        expected_label = "Topaz Transparent 4× — сохраняет прозрачность"
+
+        for control_name in ("fal_upscale_model", "fal_upscale_after_model"):
+            with self.subTest(control=control_name):
+                combo = editor.operation_widgets[control_name]
+                index = combo.findData(expected_model_id)
+                self.assertGreaterEqual(index, 0)
+                self.assertEqual(combo.itemText(index), expected_label)
+
     def test_stage_sections_follow_enabled_pipeline_order(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations
