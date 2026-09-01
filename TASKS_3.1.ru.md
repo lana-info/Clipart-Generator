@@ -1503,7 +1503,7 @@ Verification:
 
 ## Task 36 (3.1.1 acceptance follow-up): Fal MIME и ограничения Chroma Key
 
-Status: Done in source — offline regression/UI checks green; Windows rebuild not started
+Status: Windows candidate built and verified; manual Fal/Chroma acceptance pending
 
 Acceptance:
 - [x] Recraft Crisp и другие upscaler-операции не отклоняются из-за отличия
@@ -1517,8 +1517,11 @@ Acceptance:
   Chroma Key для прозрачных и полупрозрачных материалов.
 - [x] Focused suite: 168 tests; full offline suite: 1119 passed, 59 skips;
   compilation, `git diff --check` и offscreen-проверка компоновки проходят.
-- [ ] Владелец проверяет экран и Recraft Crisp в следующей Windows-сборке;
-  платный acceptance и сборку автоматически не запускать.
+- [x] Windows run `33460333635` собрал и проверил установленное приложение из
+  точного source commit `a3374c8`; artifact `windows-3.1.1` имеет ID
+  `9783161166`, локально скачан и прошёл SHA-256 verification.
+- [ ] Владелец проверяет экран и Recraft Crisp в этой Windows-сборке; платный
+  provider acceptance автоматически не запускать.
 
 ## Исторические задачи 3.0
 

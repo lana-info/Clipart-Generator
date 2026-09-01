@@ -1341,8 +1341,16 @@ image-processing version.
   still pass the existing bounded Pillow decode/PNG conversion, and the
   existing post-download alpha checks for alpha-safe pipelines are unchanged.
 - Focused suite: 168 tests passed. Full offline suite: 1119 passed and 59
-  documented skips. Compilation, diff checks and offscreen layout pass. No
-  paid Fal request, Windows rebuild, deployment or release action was started.
+  documented skips. Compilation, diff checks and offscreen layout pass.
+- Windows workflow run `33460333635` succeeded from exact source commit
+  `a3374c81db6c6dacd18b5b18f351f02541fd7156`. Artifact `windows-3.1.1`
+  has ID `9783161166`, expires 2026-09-04, and contains the verified
+  `231592992`-byte installer. SHA-256 is
+  `37189AA7EB7442C40D81EA992FCD92D5DB601233C48D81479DE2F95EA123298E`;
+  provenance reports Windows Server 2025, Python 3.12.10 and
+  `secret_free: true`. The repository was returned to private immediately
+  after artifact download and verification; no release was published and no
+  paid provider request was made.
 
 ## Prohibited without explicit approval
 
