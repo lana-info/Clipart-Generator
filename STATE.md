@@ -1365,6 +1365,15 @@ image-processing version.
   provenance reports Windows Server 2025, Python 3.12.10 and
   `secret_free: true`. The repository is private; no release was published
   and no paid provider request was made.
+- Version 3.1.3 workflow run `33466579183` succeeded from exact release commit
+  `1646f0cd99cb1fa19ec9bfcf512b4bc62011ca95`. Artifact `windows-3.1.3`
+  has ID `9785263159`, expires 2026-09-04, and contains the independently
+  verified `231608112`-byte installer. SHA-256 is
+  `30D5DF961FA4A02780CFE5714CAEA9994F60C3C28ADBF5997C7456A7EA0D576C`;
+  provenance reports Windows Server 2025, Python 3.12.10 and
+  `secret_free: true`. The repository was returned to private immediately
+  after the workflow; no release was published and no paid provider request
+  was made.
 
 ## Prohibited without explicit approval
 

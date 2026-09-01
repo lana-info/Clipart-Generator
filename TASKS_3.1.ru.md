@@ -1529,7 +1529,7 @@ Acceptance:
 
 ## Task 37 (3.1.2 acceptance follow-up): прозрачный вход Recraft Crisp
 
-Status: 3.1.3 Windows candidate authorized; release build pending
+Status: Windows 3.1.3 candidate built and verified; manual provider/UI acceptance pending
 
 Acceptance:
 - [x] Recraft Crisp не отклоняет прозрачный PNG до создания Fal.ai task.
@@ -1550,6 +1550,14 @@ Verification:
 - [x] Focused model/UI/routing/provider suite: 129 tests passed.
 - [x] Full offline suite: 1120 passed, 59 documented skips.
 - [x] Python compilation and `git diff --check` pass.
+- [x] Windows workflow run `33466579183` собрал и проверил установленное
+  приложение из точного release commit `1646f0c`; artifact `windows-3.1.3`
+  имеет ID `9785263159` и истекает 2026-09-04.
+- [x] Скачанный installer имеет размер `231608112` байт; SHA-256 совпал с
+  sidecar: `30D5DF961FA4A02780CFE5714CAEA9994F60C3C28ADBF5997C7456A7EA0D576C`.
+  Provenance сообщает Windows Server 2025, Python 3.12.10 и `secret_free: true`.
+- [x] Репозиторий возвращён в private; release не опубликован, платные
+  provider-запросы не выполнялись.
 
 ## Исторические задачи 3.0
 
