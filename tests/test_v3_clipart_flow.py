@@ -651,10 +651,10 @@ class V3ClipartFlowTests(unittest.TestCase):
                 "Хвоя",
                 "Металл",
                 "Лента / сатин",
-                "Прозрачные детали",
-                "Снег / лёд",
             ],
         )
+        self.assertNotIn("transparent_details", page.paste_chroma_material_buttons)
+        self.assertNotIn("snow_ice", page.paste_chroma_material_buttons)
         self.assertFalse(hasattr(page, "chroma_key_custom_color"))
 
     def test_clipart_chroma_sources_use_three_visible_color_buttons(self):
@@ -730,6 +730,8 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("Выберите красный фон", copy)
         self.assertIn("выберите зелёный фон", copy)
         self.assertIn("выбираются слева", copy)
+        self.assertIn("прозрачными и полупрозрачными", copy)
+        self.assertIn("Не используйте Chroma Key", copy)
         self.assertTrue(
             page.chroma_advisor.content_layout.alignment()
             & Qt.AlignmentFlag.AlignTop
@@ -763,6 +765,15 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.app.processEvents()
 
         self.assertEqual(page.horizontalScrollBar().maximum(), 0)
+        warning = next(
+            label
+            for label in page.chroma_advisor.findChildren(QLabel)
+            if "прозрачными и полупрозрачными" in label.text()
+        )
+        self.assertGreaterEqual(
+            warning.height(),
+            warning.heightForWidth(warning.width()),
+        )
 
         shell.close()
 

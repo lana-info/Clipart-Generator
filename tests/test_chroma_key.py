@@ -166,16 +166,14 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertNotIn("paper texture", prompt)
         self.assertNotIn("unlit", prompt)
 
-    def test_transparent_material_requires_visible_content_behind_it(self):
+    def test_legacy_transparent_materials_no_longer_change_chroma_prompt(self):
         prompt = chroma_key_prompt_block(
             "blue",
-            materials=("transparent_details",),
+            materials=("transparent_details", "snow_ice"),
         )
 
-        self.assertIn("genuinely semi-transparent", prompt)
-        self.assertIn("Whatever lies behind them", prompt)
-        self.assertIn("exact chroma-key background", prompt)
-        self.assertIn("never render translucent areas as opaque", prompt)
+        self.assertNotIn("semi-transparent", prompt)
+        self.assertNotIn("Snow and ice", prompt)
 
     def test_invalid_color_is_rejected(self):
         with self.assertRaises(ValueError):

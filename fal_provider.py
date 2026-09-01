@@ -449,7 +449,7 @@ def validate_fal_image_result(
         content_type = str(record.get("content_type") or "").strip().lower()
         if content_type and not content_type.startswith("image/"):
             raise FalProviderError("Fal.ai вернул результат не в формате изображения")
-        if content_type:
+        if content_type and operation == "remove_background":
             allowed = {f"image/{fmt}" for fmt in profile.output_formats}
             if content_type not in allowed:
                 raise FalProviderError(

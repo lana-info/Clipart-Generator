@@ -251,7 +251,7 @@ class PromptGeneratorData:
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         allowed_materials = {
             "watercolor", "thin_leaves", "conifer_needles", "metal",
-            "ribbon_satin", "transparent_details", "snow_ice",
+            "ribbon_satin",
         }
         self.chroma_key_materials = [
             material for material in _string_list(self.chroma_key_materials, limit=7)

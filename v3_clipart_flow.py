@@ -128,8 +128,6 @@ CHROMA_KEY_MATERIAL_OPTIONS = (
     ("Хвоя", "conifer_needles"),
     ("Металл", "metal"),
     ("Лента / сатин", "ribbon_satin"),
-    ("Прозрачные детали", "transparent_details"),
-    ("Снег / лёд", "snow_ice"),
 )
 
 
@@ -2004,10 +2002,23 @@ class ClipartPromptInputPage(_ScrollableStepPage):
                 "Материалы и детали выбираются слева и автоматически "
                 "добавляют нужную фразу."
             ),
+            (
+                "Chroma Key плохо работает с прозрачными и полупрозрачными "
+                "материалами (стекло, лёд, снег, фатин, дым, свечение). "
+                "Не используйте Chroma Key для таких изображений."
+            ),
         ):
             label = QLabel(text)
             label.setWordWrap(True)
             label.setProperty("v3Description", True)
+            if "прозрачными и полупрозрачными" in text:
+                minimum_text_width = advisor.minimumWidth() - 4 * self.tokens.space_3
+                label.setMinimumHeight(
+                    max(
+                        label.heightForWidth(minimum_text_width),
+                        4 * self.tokens.control_height,
+                    )
+                )
             advisor.add_widget(label)
         advisor.set_expanded(True)
         return advisor

@@ -1501,6 +1501,25 @@ Verification:
 - [ ] Controlled Fal/KIE test: provider result ready, local save interrupted,
   restart resumes the same task ID without a second paid submit.
 
+## Task 36 (3.1.1 acceptance follow-up): Fal MIME и ограничения Chroma Key
+
+Status: Done in source — offline regression/UI checks green; Windows rebuild not started
+
+Acceptance:
+- [x] Recraft Crisp и другие upscaler-операции не отклоняются из-за отличия
+  `image/*` metadata от заявленного формата модели.
+- [x] Не-изображения по-прежнему отклоняются; скачанные байты проходят
+  существующую проверку Pillow и преобразование в PNG.
+- [x] Существующая фактическая alpha-проверка прозрачного pipeline не изменена.
+- [x] Из обоих наборов Chroma-настроек удалены `Прозрачные детали` и
+  `Снег / лёд`; старые сохранённые значения больше не меняют промпт.
+- [x] В правом помощнике полностью видимо предупреждение не использовать
+  Chroma Key для прозрачных и полупрозрачных материалов.
+- [x] Focused suite: 168 tests; full offline suite: 1119 passed, 59 skips;
+  compilation, `git diff --check` и offscreen-проверка компоновки проходят.
+- [ ] Владелец проверяет экран и Recraft Crisp в следующей Windows-сборке;
+  платный acceptance и сборку автоматически не запускать.
+
 ## Исторические задачи 3.0
 
 `NEXT-TASK-009B` и `NEXT-TASK-009C` в `TASKS_3.0.ru.md` остаются историческим

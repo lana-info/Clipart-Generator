@@ -1330,6 +1330,20 @@ hidden for the stable client release, including corrected-PNG and alpha-mask
 save buttons. The implementation remains available for the future dedicated
 image-processing version.
 
+## Chroma/Fal acceptance follow-up — 2026-09-01
+
+- Chroma Key no longer offers `Прозрачные детали` or `Снег / лёд`; legacy
+  saved values are ignored and no longer alter generated prompts.
+- The right-side Chroma helper explicitly warns against transparent and
+  semi-transparent materials, including glass, ice, snow, tulle, smoke and
+  glow. Opaque-material behavior is unchanged.
+- Fal upscalers accept any `image/*` response metadata. The downloaded bytes
+  still pass the existing bounded Pillow decode/PNG conversion, and the
+  existing post-download alpha checks for alpha-safe pipelines are unchanged.
+- Focused suite: 168 tests passed. Full offline suite: 1119 passed and 59
+  documented skips. Compilation, diff checks and offscreen layout pass. No
+  paid Fal request, Windows rebuild, deployment or release action was started.
+
 ## Prohibited without explicit approval
 
 - Secrets, credentials, `.env` files, and user data in Git.

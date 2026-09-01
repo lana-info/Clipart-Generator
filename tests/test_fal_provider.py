@@ -643,18 +643,20 @@ class FalProviderTests(unittest.TestCase):
             },
         )
 
-    def test_topaz_transparent_result_rejects_non_png_content_type(self):
-        with self.assertRaisesRegex(FalProviderError, "формат"):
+    def test_upscaler_accepts_alternate_image_content_type_metadata(self):
+        self.assertEqual(
             validate_fal_image_result(
                 {
                     "image": {
-                        "url": "https://cdn.example/flattened.jpg",
-                        "content_type": "image/jpeg",
+                        "url": "https://cdn.example/upscaled.webp",
+                        "content_type": "image/webp",
                     }
                 },
                 operation="upscale",
-                model_id="topaz/upscale/image/transparent",
-            )
+                model_id="fal-ai/recraft/upscale/crisp",
+            ),
+            "https://cdn.example/upscaled.webp",
+        )
 
     def test_task_journal_does_not_recover_completed_after_cancel(self):
         with tempfile.TemporaryDirectory() as temp:
