@@ -1339,6 +1339,10 @@ image-processing version.
 - Fal upscalers accept any `image/*` response metadata. The downloaded bytes
   still pass the existing bounded Pillow decode/PNG conversion, and the
   existing post-download alpha checks for alpha-safe pipelines are unchanged.
+- Source follow-up removes the separate pre-submit Recraft Crisp alpha block:
+  transparent input is forwarded as RGBA without adding a background, and the
+  provider output is accepted as returned. Recraft may still return an opaque
+  result; this is now a documented model limitation rather than an app error.
 - Focused suite: 168 tests passed. Full offline suite: 1119 passed and 59
   documented skips. Compilation, diff checks and offscreen layout pass.
 - Windows workflow run `33460333635` succeeded from exact source commit

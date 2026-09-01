@@ -1527,6 +1527,28 @@ Acceptance:
 - [ ] Владелец проверяет экран и Recraft Crisp в Windows 3.1.2; платный
   provider acceptance автоматически не запускать.
 
+## Task 37 (3.1.2 acceptance follow-up): прозрачный вход Recraft Crisp
+
+Status: Done in source — offline regression tests green; Windows rebuild not started
+
+Acceptance:
+- [x] Recraft Crisp не отклоняет прозрачный PNG до создания Fal.ai task.
+- [x] Вход передаётся как RGBA без искусственного белого или цветного фона.
+- [x] Исправление генерационного `upscale_before` не зависит от выбора Local
+  Chroma Key или другого следующего способа удаления фона.
+- [x] Результат принимается в том виде, который вернула модель; потеря alpha
+  сама по себе не становится ошибкой приложения.
+- [x] Непрозрачные JPEG/PNG по-прежнему нормализуются в RGB PNG, а ограничения
+  одного кадра, размеров, пикселей и 5 MB сохраняются.
+- [x] Существующее ограничение списка моделей для `upscale_after` не меняется.
+- [ ] Проверить реальный Fal.ai результат в следующей Windows-сборке; платный
+  provider test автоматически не запускать.
+
+Verification:
+- [x] Focused routing/provider/upscale/background suite: 121 tests passed.
+- [x] Full offline suite: 1119 passed, 59 documented skips.
+- [x] Python compilation and `git diff --check` pass.
+
 ## Исторические задачи 3.0
 
 `NEXT-TASK-009B` и `NEXT-TASK-009C` в `TASKS_3.0.ru.md` остаются историческим

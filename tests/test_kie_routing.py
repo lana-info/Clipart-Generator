@@ -785,7 +785,7 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(calls["scale"], 4)
         self.assertIsNone(calls.get("parameters"))
 
-    def test_fal_recraft_crisp_rejects_transparent_input_before_paid_call(self):
+    def test_fal_recraft_crisp_accepts_transparent_input_during_upscale_before(self):
         with tempfile.TemporaryDirectory(prefix="fal-recraft-alpha-") as temp:
             source = Path(temp) / "source.png"
             image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
@@ -799,29 +799,43 @@ class KieRoutingTests(unittest.TestCase):
                     fal_upscale_model="fal-ai/recraft/upscale/crisp",
                 ),
             )
+            calls = []
             worker._fal_process_image = types.MethodType(
-                lambda *_args, **_kwargs: self.fail("paid Fal call must not start"),
+                lambda _self, image_url, **kwargs: calls.append(
+                    {"image_url": image_url, **kwargs}
+                )
+                or "https://cdn.example/upscaled.png",
+                worker,
+            )
+            worker._download_file = types.MethodType(
+                lambda _self, _url, output_path: Image.new(
+                    "RGB", (128, 128), (180, 70, 100)
+                ).save(output_path, format="PNG"),
                 worker,
             )
 
-            with self.assertRaisesRegex(RuntimeError, "Bria"):
-                worker._run_upscale_pass(
-                    str(source),
-                    None,
-                    temp,
-                    1,
-                    "gen",
-                    "upscaled_before",
-                    "fal",
-                    2,
-                    "ignored",
-                )
-            self.assertEqual(worker._diagnostic_context.stage, "upscale_before")
-            self.assertEqual(worker._diagnostic_context.provider, "fal")
-            self.assertEqual(
-                worker._diagnostic_context.model,
-                "fal-ai/recraft/upscale/crisp",
+            output_path, _output_url, _local = worker._run_upscale_pass(
+                str(source),
+                None,
+                temp,
+                1,
+                "gen",
+                "upscaled_before",
+                "fal",
+                2,
+                "ignored",
             )
+
+            prepared = next(Path(temp).glob("*_recraft_input_*.png"))
+            with Image.open(prepared) as prepared_image:
+                self.assertEqual(prepared_image.mode, "RGBA")
+                self.assertIn("A", prepared_image.getbands())
+                self.assertEqual(prepared_image.getpixel((0, 0))[3], 0)
+            with Image.open(output_path) as output_image:
+                self.assertEqual(output_image.mode, "RGB")
+                self.assertEqual(output_image.size, (128, 128))
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]["model_id"], "fal-ai/recraft/upscale/crisp")
 
     def test_processing_worker_decodes_corrupt_source_before_paid_fal_call(self):
         with tempfile.TemporaryDirectory(prefix="processing-corrupt-worker-") as temp:

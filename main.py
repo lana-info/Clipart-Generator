@@ -795,7 +795,7 @@ def validate_recraft_crisp_upscale_input(image_path):
 
 
 def prepare_fal_recraft_crisp_input(image_path, output_path):
-    """Create the opaque PNG required by Fal.ai Recraft Crisp before billing."""
+    """Normalize a Fal.ai Recraft Crisp input to PNG before billing."""
     try:
         with Image.open(image_path) as image:
             if getattr(image, "n_frames", 1) != 1:
@@ -812,12 +812,8 @@ def prepare_fal_recraft_crisp_input(image_path, output_path):
                 raise RuntimeError(
                     "Fal.ai Recraft Crisp: исходное изображение превышает 4 MP"
                 )
-            if has_usable_alpha(image):
-                raise RuntimeError(
-                    "Fal.ai Recraft Crisp не сохраняет прозрачность. "
-                    "Для прозрачного PNG выберите Bria Creative."
-                )
-            image.convert("RGB").save(output_path, format="PNG")
+            output_mode = "RGBA" if has_usable_alpha(image) else "RGB"
+            image.convert(output_mode).save(output_path, format="PNG")
         if os.path.getsize(output_path) > FAL_RECRAFT_CRISP_MAX_BYTES:
             try:
                 os.unlink(output_path)
