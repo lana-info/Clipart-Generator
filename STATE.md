@@ -711,6 +711,9 @@ focused Clipart/Pinterest tests прошли; Windows visual acceptance по-п�
 - Active release preparation is version 3.1.3 on
   `codex/fix-recraft-transparent-generated-input`. The previous verified manual
   GitHub artifact is `windows-3.1.2`; Azure remains fallback infrastructure.
+- Windows 3.1.4 with safe pre-activation license error codes was built and
+  installed successfully by GitHub Actions run `33890987423` from source commit
+  `cdabb45`; the retained artifact is `windows-3.1.4` (ID `9944244047`).
 - Release baseline branch: `develop/3.0`
 - Frozen 3.0.7 source line: `codex/fix-pinterest-prompt-only` at `78f8c63`.
   Its relevant history is already incorporated into the 3.1 ancestry; it is a

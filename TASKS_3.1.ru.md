@@ -1529,7 +1529,9 @@ Acceptance:
 
 ## Task 37 (3.1.2 acceptance follow-up): прозрачный вход Recraft Crisp
 
-Status: 3.1.3 Windows candidate authorized; release build pending
+Status: 3.1.4 Windows installer built and installed successfully by GitHub
+Actions run `33890987423`; ручная проверка активации пользователем остаётся
+следующим шагом.
 
 Acceptance:
 - [x] Recraft Crisp не отклоняет прозрачный PNG до создания Fal.ai task.
