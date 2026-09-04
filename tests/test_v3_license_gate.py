@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
 
 from license_client import LicenseAuthorization, LicenseError, LicenseUnavailableError
-from v3_license import OnlineLicenseGate, SavedLicenseUnavailableDialog
+from v3_license import LicenseDialog, OnlineLicenseGate, SavedLicenseUnavailableDialog
 
 
 def authorization(*, offline: bool = False) -> LicenseAuthorization:
@@ -194,6 +195,37 @@ class OnlineLicenseGateTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(LicenseError, "сервером лицензий"):
             gate.activate("CG-TEST")
+
+
+class LicenseDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_activation_failure_shows_and_copies_safe_error_code(self):
+        gate = OnlineLicenseGate(
+            FakeClient(
+                failure=LicenseUnavailableError(
+                    "Не удалось найти сервер лицензий по DNS.",
+                    code="license_dns",
+                )
+            )
+        )
+        dialog = LicenseDialog(gate)
+        dialog.license_key_input.setText("CG-TEST")
+
+        with patch("v3_license.QMessageBox.warning") as warning:
+            dialog._activate()
+
+        self.assertEqual(dialog.error_code_label.text(), "Код ошибки: license_dns")
+        self.assertFalse(dialog.copy_error_button.isHidden())
+        self.assertTrue(dialog.copy_error_button.isEnabled())
+        self.assertIn("Код ошибки: license_dns", warning.call_args.args[2])
+
+        dialog._copy_error_code()
+
+        self.assertEqual(QApplication.clipboard().text(), "license_dns")
+        dialog.deleteLater()
 
 
 if __name__ == "__main__":

@@ -5,12 +5,14 @@ from __future__ import annotations
 from typing import Protocol
 
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -19,6 +21,7 @@ from license_client import (
     LicenseAuthorization,
     LicenseError,
     LicenseUnavailableError,
+    safe_license_error_code,
 )
 from app_identity import APP_NAME
 
@@ -150,6 +153,18 @@ class LicenseDialog(QDialog):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
+        self.error_code_label = QLabel()
+        self.error_code_label.setAccessibleName("Код ошибки лицензии")
+        self.error_code_label.hide()
+        layout.addWidget(self.error_code_label)
+
+        self.copy_error_button = QPushButton("Скопировать код ошибки")
+        self.copy_error_button.setAccessibleName("Скопировать код ошибки лицензии")
+        self.copy_error_button.clicked.connect(self._copy_error_code)
+        self.copy_error_button.hide()
+        layout.addWidget(self.copy_error_button)
+        self._error_code = ""
+
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -168,12 +183,12 @@ class LicenseDialog(QDialog):
             authorization = self.gate.activate(license_key)
         except LicenseError as exc:
             self.license_key_input.clear()
-            self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "Лицензия", str(exc))
+            self._show_activation_error(exc)
             return
         finally:
             self.buttons.setEnabled(True)
         self.license_key_input.clear()
+        self._clear_error_code()
         self.status_label.setText(self.gate.status_text)
         QMessageBox.information(
             self,
@@ -181,6 +196,26 @@ class LicenseDialog(QDialog):
             "Лицензия активирована и проверена онлайн",
         )
         self.accept()
+
+    def _show_activation_error(self, exc: LicenseError) -> None:
+        self._error_code = safe_license_error_code(exc)
+        message = str(exc)
+        error_code_text = f"Код ошибки: {self._error_code}"
+        self.status_label.setText(message)
+        self.error_code_label.setText(error_code_text)
+        self.error_code_label.show()
+        self.copy_error_button.show()
+        QMessageBox.warning(self, "Лицензия", f"{message}\n\n{error_code_text}")
+
+    def _clear_error_code(self) -> None:
+        self._error_code = ""
+        self.error_code_label.clear()
+        self.error_code_label.hide()
+        self.copy_error_button.hide()
+
+    def _copy_error_code(self) -> None:
+        if self._error_code:
+            QApplication.clipboard().setText(self._error_code)
 
 
 class SavedLicenseUnavailableDialog(QDialog):

@@ -37,9 +37,21 @@ OFFLINE_GRACE_DAYS = 7
 class LicenseError(RuntimeError):
     """A bounded, user-safe licensing failure."""
 
+    def __init__(self, message: str, *, code: str = "license_error") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 class LicenseUnavailableError(LicenseError):
     """A temporary transport/server failure that may be retried safely."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "license_transport_other",
+    ) -> None:
+        super().__init__(message, code=code)
 
 
 class NoRedirectHandler(request.HTTPRedirectHandler):
@@ -72,6 +84,32 @@ def _license_transport_message(exc: BaseException) -> str:
             "Проверьте подключение к интернету и повторите попытку."
         )
     return "Не удалось связаться с сервером лицензий"
+
+
+def _license_transport_code(exc: BaseException) -> str:
+    reason = getattr(exc, "reason", exc)
+    if _is_certificate_verification_failure(exc):
+        return "license_ssl_verification"
+    if isinstance(reason, socket.gaierror) or "getaddrinfo" in str(reason).casefold():
+        return "license_dns"
+    if isinstance(reason, TimeoutError) or isinstance(exc, TimeoutError):
+        return "license_timeout"
+    return "license_transport_other"
+
+
+def safe_license_error_code(exc: BaseException) -> str:
+    """Return a stable, non-sensitive support code for a licensing failure."""
+    code = getattr(exc, "code", "license_error")
+    allowed_codes = {
+        "license_error",
+        "license_rejected",
+        "license_server_unavailable",
+        "license_ssl_verification",
+        "license_dns",
+        "license_timeout",
+        "license_transport_other",
+    }
+    return code if code in allowed_codes else "license_error"
 
 
 def _bundled_certificate_context() -> ssl.SSLContext | None:
@@ -499,10 +537,13 @@ class LicenseClient:
                 raw = self._read_response_limited(response)
         except error.HTTPError as exc:
             if 400 <= exc.code < 500 and exc.code not in {408, 425, 429}:
-                raise LicenseError("Лицензия отклонена сервером") from None
+                raise LicenseError(
+                    "Лицензия отклонена сервером", code="license_rejected"
+                ) from None
             if exc.code in {408, 425, 429} or 500 <= exc.code < 600:
                 raise LicenseUnavailableError(
-                    "Сервер лицензий временно недоступен"
+                    "Сервер лицензий временно недоступен",
+                    code="license_server_unavailable",
                 ) from None
             raise LicenseError("Лицензионный сервер вернул недопустимый ответ") from None
         except error.URLError as exc:
@@ -521,12 +562,17 @@ class LicenseClient:
                         raw = self._read_response_limited(response)
                 except (error.URLError, TimeoutError, OSError) as fallback_error:
                     raise LicenseUnavailableError(
-                        _license_transport_message(fallback_error)
+                        _license_transport_message(fallback_error),
+                        code=_license_transport_code(fallback_error),
                     ) from None
             else:
-                raise LicenseUnavailableError(_license_transport_message(exc)) from None
+                raise LicenseUnavailableError(
+                    _license_transport_message(exc), code=_license_transport_code(exc)
+                ) from None
         except (TimeoutError, OSError) as exc:
-            raise LicenseUnavailableError(_license_transport_message(exc)) from None
+            raise LicenseUnavailableError(
+                _license_transport_message(exc), code=_license_transport_code(exc)
+            ) from None
         try:
             decoded = json.loads(raw.decode("utf-8"))
         except (UnicodeError, ValueError):
