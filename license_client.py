@@ -6,6 +6,8 @@ import base64
 import json
 import os
 import secrets
+import socket
+import ssl
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -20,6 +22,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 from license_update_contract import LicenseUpdatePolicy
+
+try:
+    import certifi
+except Exception:
+    certifi = None
 
 
 MAX_LICENSE_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -37,6 +44,42 @@ class LicenseUnavailableError(LicenseError):
 
 class NoRedirectHandler(request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _is_certificate_verification_failure(exc: BaseException) -> bool:
+    reason = getattr(exc, "reason", exc)
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return True
+    return "certificate_verify_failed" in str(reason).casefold()
+
+
+def _license_transport_message(exc: BaseException) -> str:
+    reason = getattr(exc, "reason", exc)
+    if _is_certificate_verification_failure(exc):
+        return (
+            "Не удалось проверить SSL-сертификат сервера лицензий. "
+            "Проверьте дату и время Windows и обновления корневых сертификатов."
+        )
+    if isinstance(reason, socket.gaierror) or "getaddrinfo" in str(reason).casefold():
+        return (
+            "Не удалось найти сервер лицензий по DNS. "
+            "Проверьте VPN, прокси и настройки DNS."
+        )
+    if isinstance(reason, TimeoutError) or isinstance(exc, TimeoutError):
+        return (
+            "Не удалось связаться с сервером лицензий: сервер не ответил вовремя. "
+            "Проверьте подключение к интернету и повторите попытку."
+        )
+    return "Не удалось связаться с сервером лицензий"
+
+
+def _bundled_certificate_context() -> ssl.SSLContext | None:
+    if certifi is None:
+        return None
+    try:
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
         return None
 
 
@@ -462,10 +505,28 @@ class LicenseClient:
                     "Сервер лицензий временно недоступен"
                 ) from None
             raise LicenseError("Лицензионный сервер вернул недопустимый ответ") from None
-        except (error.URLError, TimeoutError, OSError):
-            raise LicenseUnavailableError(
-                "Не удалось связаться с сервером лицензий"
-            ) from None
+        except error.URLError as exc:
+            certificate_context = (
+                _bundled_certificate_context()
+                if _is_certificate_verification_failure(exc)
+                else None
+            )
+            if certificate_context is not None:
+                fallback_opener = request.build_opener(
+                    request.HTTPSHandler(context=certificate_context),
+                    NoRedirectHandler(),
+                )
+                try:
+                    with fallback_opener.open(req, timeout=self.timeout) as response:
+                        raw = self._read_response_limited(response)
+                except (error.URLError, TimeoutError, OSError) as fallback_error:
+                    raise LicenseUnavailableError(
+                        _license_transport_message(fallback_error)
+                    ) from None
+            else:
+                raise LicenseUnavailableError(_license_transport_message(exc)) from None
+        except (TimeoutError, OSError) as exc:
+            raise LicenseUnavailableError(_license_transport_message(exc)) from None
         try:
             decoded = json.loads(raw.decode("utf-8"))
         except (UnicodeError, ValueError):

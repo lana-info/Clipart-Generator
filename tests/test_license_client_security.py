@@ -1,6 +1,8 @@
 import base64
 import json
 import os
+import socket
+import ssl
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -325,6 +327,46 @@ class LicenseClientSecurityTests(unittest.TestCase):
                         raised.exception,
                         license_client.LicenseUnavailableError,
                     )
+
+    def test_ssl_verification_failure_retries_with_bundled_certificates(self):
+        verification_error = error.URLError(
+            ssl.SSLCertVerificationError(1, "certificate verify failed")
+        )
+        primary_opener = FakeOpener(failure=verification_error)
+        fallback_opener = FakeOpener(SignedLicenseResponder(self.server_private))
+
+        class CertificateBundle:
+            @staticmethod
+            def where():
+                return ssl.get_default_verify_paths().cafile
+
+        with (
+            patch.object(
+                license_client.request,
+                "build_opener",
+                side_effect=[primary_opener, fallback_opener],
+            ),
+            patch.object(license_client, "certifi", CertificateBundle(), create=True),
+        ):
+            result = self.make_client().activate(DUMMY_LICENSE_KEY)
+
+        self.assertEqual(result.product_id, "clipart-generator")
+        self.assertEqual(len(primary_opener.requests), 1)
+        self.assertEqual(len(fallback_opener.requests), 1)
+
+    def test_dns_failure_has_a_safe_actionable_message(self):
+        dns_error = error.URLError(socket.gaierror("name resolution failed"))
+        with patch.object(
+            license_client.request,
+            "build_opener",
+            return_value=FakeOpener(failure=dns_error),
+        ):
+            with self.assertRaisesRegex(
+                license_client.LicenseUnavailableError, "DNS"
+            ) as raised:
+                self.make_client().activate(DUMMY_LICENSE_KEY)
+
+        self.assertNotIn(DUMMY_LICENSE_KEY, str(raised.exception))
 
     def test_license_response_read_is_bounded(self):
         response = JsonResponse({"ok": True}, declared_length=9)
