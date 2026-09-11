@@ -35,6 +35,7 @@ class ObjectTests(unittest.TestCase):
         self.assertEqual(prompts[0].result_kind, 'clipart')
         self.assertTrue(prompts[0].chroma_key_color)
         self.assertEqual(prompts[0].references, [])
+        self.assertEqual(prompts[0].object_id, recipe.objects[0]['id'])
 
     def test_gui_handoff_roundtrip_and_validation_atomicity(self):
         state = ProjectState()

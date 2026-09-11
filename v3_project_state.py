@@ -178,6 +178,7 @@ class PromptEntry:
     # contain subjects for which different background colours are appropriate.
     chroma_key_color: str = ""
     result_kind: str = "legacy"
+    object_id: str = ""
 
     def __post_init__(self) -> None:
         from result_background_policy import validate_result_kind
@@ -187,6 +188,7 @@ class PromptEntry:
         self.references = _references(self.references)
         color = _text(self.chroma_key_color, limit=20).lower()
         self.chroma_key_color = color if color in KEY_COLORS else ""
+        self.object_id = _text(self.object_id, limit=64).strip()
 
     def to_dict(self) -> dict[str, Any]:
         result = {
@@ -197,6 +199,8 @@ class PromptEntry:
             result["chroma_key_color"] = self.chroma_key_color
         if self.result_kind != "legacy":
             result["result_kind"] = self.result_kind
+        if self.object_id:
+            result["object_id"] = self.object_id
         return result
 
     @classmethod
@@ -211,6 +215,7 @@ class PromptEntry:
             references=_references(value.get("references", [])),
             chroma_key_color=value.get("chroma_key_color", ""),
             result_kind=value.get("result_kind", "legacy"),
+            object_id=value.get("object_id", ""),
         )
         return entry if entry.prompt or entry.references else None
 
@@ -1374,9 +1379,14 @@ def _validate_prompt_section(section: Mapping[str, Any], name: str) -> None:
             raise ProjectStateError(f"Project draft {name} prompt must be an object")
         _reject_unknown_fields(
             entry,
-            ("prompt", "references", "chroma_key_color", "result_kind"),
+            ("prompt", "references", "chroma_key_color", "result_kind", "object_id"),
             f"{name}.prompt",
         )
+        object_id = entry.get("object_id", "")
+        if not isinstance(object_id, str) or len(object_id) > 64:
+            raise ProjectStateError(
+                f"Project draft {name} prompt object id is invalid"
+            )
         if not isinstance(entry.get("prompt"), str):
             raise ProjectStateError(f"Project draft {name} prompt text must be a string")
         from result_background_policy import validate_result_kind

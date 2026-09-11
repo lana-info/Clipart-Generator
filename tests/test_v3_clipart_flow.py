@@ -126,8 +126,8 @@ class V3ClipartFlowTests(unittest.TestCase):
 
     def test_batch_prompt_text_edits_preserve_references_and_order(self):
         entries = [
-            PromptEntry("blue fox", ["one.png"]),
-            PromptEntry("red fox", ["two.png"]),
+            PromptEntry("blue fox", ["one.png"], object_id="obj-1"),
+            PromptEntry("red fox", ["two.png"], object_id="obj-2"),
         ]
         changed, matches = apply_prompt_text_edit(
             entries, rows=(0,), action="replace", find_text="fox", new_text="wolf"
@@ -135,6 +135,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(matches, 1)
         self.assertEqual([entry.prompt for entry in changed], ["blue wolf", "red fox"])
         self.assertEqual([entry.references for entry in changed], [["one.png"], ["two.png"]])
+        self.assertEqual([entry.object_id for entry in changed], ["obj-1", "obj-2"])
         appended, matches = apply_prompt_text_edit(
             changed, rows=(0, 1), action="append", find_text="", new_text="isolated"
         )
@@ -372,7 +373,7 @@ class V3ClipartFlowTests(unittest.TestCase):
 
     def test_prompt_review_exposes_one_batch_editor_and_one_step_undo(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
-        state.clipart.prompts = [PromptEntry("Fox"), PromptEntry("Bear")]
+        state.clipart.prompts = [PromptEntry("Fox", object_id="obj-1"), PromptEntry("Bear", object_id="obj-2")]
         page = ClipartPromptReviewPage(state, lambda: None)
 
         self.assertTrue(hasattr(page, "batch_edit_button"))
@@ -381,13 +382,14 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertFalse(page.undo_batch_button.isEnabled())
 
         page._apply_batch_result(
-            [PromptEntry("Red fox"), PromptEntry("Brown bear")],
+            [PromptEntry("Red fox", object_id="obj-1"), PromptEntry("Brown bear", object_id="obj-2")],
             affected_count=2,
         )
         self.assertEqual(
             [entry.prompt for entry in state.clipart.prompts],
             ["Red fox", "Brown bear"],
         )
+        self.assertEqual([entry.object_id for entry in state.clipart.prompts], ["obj-1", "obj-2"])
         self.assertTrue(page.undo_batch_button.isEnabled())
 
         page.undo_batch_button.click()
@@ -1027,6 +1029,17 @@ class V3ClipartFlowTests(unittest.TestCase):
         review_page._duplicate()
         self.assertEqual(len(state.clipart.prompts), MAX_PROMPT_ENTRIES)
         self.assertIn("Максимум", review_page.card.status_label.text())
+    def test_prompt_review_duplicate_preserves_object_id(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        shell = AppShell(state)
+        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        state.clipart.prompts = [PromptEntry("First", object_id="obj-1")]
+        review_page = controller.pages[StepId.PROMPT_REVIEW]
+        review_page.refresh_from_state()
+        review_page.table.setCurrentCell(0, 0)
+        review_page._duplicate()
+        self.assertEqual([entry.object_id for entry in state.clipart.prompts], ["obj-1", "obj-1"])
+
     def test_processing_page_exposes_every_supported_operation_setting(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)

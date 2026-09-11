@@ -22,8 +22,25 @@ set IDs survive replanning and recipe roundtrip. No provider/API call is involve
 Focused: 32 passed + 4 subtests. Full isolated pytest: 1372 passed, 57 skipped,
 2 deselected, 232 subtests in 64.40s. Independent final review: no P1/P2.
 
-Next task in order: use the saved plan for separate ZIP/contact-sheet outputs
-without regenerating or reprocessing the same unique asset.
+Saved Bundle Plan is now connected to successful current-run outputs. Compiled
+Clipart prompts retain internal object_id through project persistence, prompt
+editing/copy/batch/duplicate paths, run request, queue and retry. worker_kwargs
+still sends only provider-required fields, so object_id is not exposed upstream.
+Before set export, a unique successful PNG is seeded with every planned set
+membership that contains its object ID. Existing manual membership is preserved;
+multiple successful variants for one object are left unresolved for Review instead
+of silently choosing a file. This adds no generation or processing request.
+
+Initial independent review found two P2 metadata-loss paths in batch edit and
+duplicate/copy flows; regression tests reproduced them and all were fixed. Final
+focused verification: 204 passed, 27 subtests. Full isolated pytest: 1377 passed,
+57 skipped, 2 deselected, 232 subtests in 60.50s. Final independent read-only
+review: NO P1/P2 FINDINGS. No paid calls, builds, deployments or workflow dispatches.
+
+Next task in order: make the automatic plan the normal export path and move the
+manual assignment table behind an optional «Изменить состав наборов» action.
+This is a user-visible flow change and therefore requires the AGENTS.md visual
+approval gate before implementation.
 
 ## Preparation review fixes, completed verification 2026-09-11
 

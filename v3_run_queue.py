@@ -389,6 +389,8 @@ def _request_items(request: Any, mode: ProjectMode) -> list[RunItem]:
                     "references": list(entry.get("references") or []),
                     "chroma_key_color": str(entry.get("chroma_key_color") or ""),
                     "result_kind": entry.get("result_kind", "legacy"),
+                    **({"object_id": str(entry.get("object_id") or "")}
+                       if str(entry.get("object_id") or "") else {}),
                 },
             )
             for index, entry in enumerate(generated, start=1)
@@ -1218,6 +1220,8 @@ class RunQueueSession(QObject):
                             self.items[index].payload.get("chroma_key_color") or ""
                         ),
                         "result_kind": self.items[index].payload.get("result_kind", "legacy"),
+                        **({"object_id": str(self.items[index].payload.get("object_id") or "")}
+                           if str(self.items[index].payload.get("object_id") or "") else {}),
                     }
                     for index in failed
                 ],
@@ -1827,9 +1831,64 @@ class RunResultsPage(QWidget):
         self.membership_changed.emit()
         self.session.changed.emit()
 
+    def _seed_bundle_membership(self):
+        if self.state.mode is not ProjectMode.CLIPART or not self.session:
+            return False
+        recipe_data = self.state.clipart.recipe
+        if not isinstance(recipe_data, dict):
+            return False
+        try:
+            from studio_clipart_recipe import ClipartRecipe
+            from studio_bundle_planner import validate_bundle_plan
+            from studio_export_membership import (
+                asset_id_for_path, validate_export_membership,
+            )
+            recipe = ClipartRecipe.from_dict(recipe_data)
+            plan = validate_bundle_plan(recipe.bundle_plan, recipe.objects)
+            membership = validate_export_membership(self.state.clipart.export_membership)
+        except (TypeError, ValueError):
+            return False
+        export_paths = {str(path.resolve()): path.resolve() for path in self._export_paths()}
+        by_object = {}
+        for item in self.session.items:
+            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path \
+                    or not isinstance(item.payload, dict):
+                continue
+            object_id = str(item.payload.get('object_id') or '').strip()
+            try:
+                resolved = str(Path(item.output_path).resolve())
+            except OSError:
+                continue
+            if object_id and resolved in export_paths:
+                by_object.setdefault(object_id, []).append(resolved)
+        changed = False
+        for object_id, outputs in by_object.items():
+            if len(outputs) != 1:
+                continue
+            path = outputs[0]
+            if path in membership:
+                continue
+            links = [
+                {'set_id': entry['set_id'], 'title': entry['title'], 'included': True}
+                for entry in plan['sets'] if object_id in entry['item_ids']
+            ]
+            if not links:
+                continue
+            candidate = dict(membership)
+            candidate[path] = {
+                'version': 2, 'asset_id': asset_id_for_path(path), 'memberships': links,
+            }
+            membership = validate_export_membership(candidate)
+            changed = True
+        if changed:
+            self.state.clipart.export_membership = membership
+            self.membership_changed.emit()
+        return changed
+
     def _export_sets(self):
         if self.state.mode is not ProjectMode.CLIPART:
             return
+        self._seed_bundle_membership()
         paths = self._export_paths()
         if paths:
             from studio_set_export_ui import SetExportDialog

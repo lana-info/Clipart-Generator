@@ -16,6 +16,10 @@ def set_id_for_title(title):
     return str(uuid5(_NAMESPACE, 'set:' + title))
 
 
+def asset_id_for_path(path):
+    return str(uuid5(_NAMESPACE, 'asset:' + str(path)))
+
+
 def _valid_id(value):
     try:
         return isinstance(value, str) and str(UUID(value)) == value
@@ -42,7 +46,7 @@ def validate_export_membership(value):
             raise ValueError('Неверный путь PNG в распределении наборов')
         if isinstance(item, dict) and set(item) == {'title', 'included'}:
             _validate_link(item, legacy=True)
-            item = {'version': 2, 'asset_id': str(uuid5(_NAMESPACE, 'asset:' + path)),
+            item = {'version': 2, 'asset_id': asset_id_for_path(path),
                     'memberships': [dict(item, set_id=set_id_for_title(item['title']))]}
         if (not isinstance(item, dict) or set(item) != {'version', 'asset_id', 'memberships'}
                 or type(item['version']) is not int or item['version'] != 2

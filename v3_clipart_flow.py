@@ -896,6 +896,7 @@ def build_clipart_run_request(
                     "references": list(entry.references),
                     "chroma_key_color": entry.chroma_key_color,
                     "result_kind": entry.result_kind,
+                    **({"object_id": entry.object_id} if entry.object_id else {}),
                 }
             )
 
@@ -998,6 +999,7 @@ def apply_prompt_text_edit(
             references=list(entry.references),
             chroma_key_color=entry.chroma_key_color,
             result_kind=entry.result_kind,
+            object_id=entry.object_id,
         )
         for entry in entries
     ]
@@ -1375,6 +1377,7 @@ class PromptReferenceEditorDialog(QDialog):
         self.setWindowTitle("Редактор промпта")
         self._result_kind = entry.result_kind
         self._chroma_key_color = entry.chroma_key_color
+        self._object_id = entry.object_id
         self.setModal(True)
         self._prompt_edit = QPlainTextEdit(entry.prompt)
         self._prompt_edit.setMinimumHeight(120)
@@ -1484,7 +1487,7 @@ class PromptReferenceEditorDialog(QDialog):
     def prompt_entry(self) -> PromptEntry:
         return PromptEntry(self.prompt_text(), self.references(),
                            chroma_key_color=self._chroma_key_color,
-                           result_kind=self._result_kind)
+                           result_kind=self._result_kind, object_id=self._object_id)
 
 
 class ReferenceScopeDialog(QDialog):
@@ -1550,6 +1553,7 @@ class PromptBatchEditDialog(QDialog):
                 references=list(entry.references),
                 chroma_key_color=entry.chroma_key_color,
                 result_kind=entry.result_kind,
+                object_id=entry.object_id,
             )
             for entry in entries
         ]
@@ -1661,6 +1665,7 @@ class PromptBatchEditDialog(QDialog):
                     references=list(entry.references),
                     chroma_key_color=entry.chroma_key_color,
                     result_kind=entry.result_kind,
+                    object_id=entry.object_id,
                 )
                 for entry in self._preview_entries
             ],
@@ -2632,6 +2637,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 references=list(entry.references),
                 chroma_key_color=entry.chroma_key_color,
                 result_kind=entry.result_kind,
+                object_id=entry.object_id,
             )
             for entry in self.state.clipart.prompts
         ]
@@ -2641,6 +2647,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 references=list(entry.references),
                 chroma_key_color=entry.chroma_key_color,
                 result_kind=entry.result_kind,
+                object_id=entry.object_id,
             )
             for entry in entries
         ]
@@ -2914,7 +2921,8 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
             original = self.state.clipart.prompts[row] if row < len(self.state.clipart.prompts) else PromptEntry()
             entries.append(PromptEntry(prompt=prompt, references=references,
                                        chroma_key_color=original.chroma_key_color,
-                                       result_kind=original.result_kind))
+                                       result_kind=original.result_kind,
+                                       object_id=original.object_id))
         self.state.clipart.prompts = entries
         self._apply_search()
         self._refresh_issues()
@@ -2952,6 +2960,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 references=list(source.references),
                 chroma_key_color=source.chroma_key_color,
                 result_kind=source.result_kind,
+                object_id=source.object_id,
             ),
         )
         self.refresh_from_state()

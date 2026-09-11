@@ -819,6 +819,17 @@ class V3RunQueueTests(unittest.TestCase):
             )
             self.assertIn("прервана пользователем", session.items[0].short_message)
 
+    def test_generated_object_id_survives_queue_and_retry(self):
+        with tempfile.TemporaryDirectory(prefix='v3-object-id-') as temp:
+            request = generation_request(temp)
+            request.generated_prompts[1]['object_id'] = 'object-2'
+            session = RunQueueSession(request, ProjectMode.CLIPART)
+            self.assertEqual(session.items[1].payload['object_id'], 'object-2')
+            session.items[1].status = RunItemStatus.FAILED
+            session.running = False
+            retry = session.prepare_retry()
+            self.assertEqual(retry.generated_prompts[0]['object_id'], 'object-2')
+
     def test_retry_request_contains_only_failed_private_payloads(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-retry-") as temp:
             request = generation_request(temp)

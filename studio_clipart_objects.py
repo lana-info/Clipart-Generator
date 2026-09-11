@@ -75,5 +75,6 @@ def compile_objects(recipe, generator):
         # Use the existing language/chroma pipeline, preserving its validation.
         entry = generate_prompt_series(ProjectMode.CLIPART, PromptGeneratorData(**fields))[0]
         entry.result_kind = 'clipart'
+        entry.object_id = item['id']
         prompts.append(entry)
     return prompts

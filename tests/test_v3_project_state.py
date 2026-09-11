@@ -170,6 +170,12 @@ class ProjectRoutesTests(unittest.TestCase):
             state.set_step(StepId.FILES)
 
 
+    def test_prompt_entry_roundtrip_preserves_optional_object_id(self):
+        entry = PromptEntry('flower', object_id='object-123')
+        self.assertEqual(PromptEntry.from_value(entry.to_dict()).object_id, 'object-123')
+        self.assertNotIn('object_id', PromptEntry('legacy').to_dict())
+
+
 class ProjectSerializationTests(unittest.TestCase):
     def test_prompt_entry_round_trips_automatic_chroma_key(self):
         entry = PromptEntry("blue ribbon", ["ribbon.png"], "red")

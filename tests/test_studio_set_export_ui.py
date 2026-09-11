@@ -172,3 +172,57 @@ def test_many_memberships_edit_save_reopen_preserves_other_links(images, tmp_pat
         link['set_id'] for link in membership[key]['memberships']]
     for widget in (dialog, reopened, page):
         widget.close()
+
+
+def test_bundle_plan_seeds_four_memberships_without_duplicate_generation(images):
+    from studio_bundle_planner import propose_bundle_plan
+    from studio_clipart_objects import fill_recipe
+    from studio_clipart_recipe import ClipartRecipe
+    recipe = ClipartRecipe()
+    recipe.select(30)
+    recipe.objects = fill_recipe([], recipe.counts)
+    recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.recipe = recipe.to_dict()
+    page = RunResultsPage(state)
+    root = images[0].parent
+    object_id = recipe.bundle_plan['sets'][0]['item_ids'][0]
+    page.session = SimpleNamespace(running=False, output_dir=root, items=[
+        RunItem(1, 'one', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]),
+                payload={'object_id': object_id})
+    ])
+    page._seed_bundle_membership()
+    links = state.clipart.export_membership[str(images[0].resolve())]['memberships']
+    expected = [entry for entry in recipe.bundle_plan['sets'] if object_id in entry['item_ids']]
+    assert [(link['set_id'], link['title']) for link in links] == [
+        (entry['set_id'], entry['title']) for entry in expected]
+    assert all(link['included'] for link in links)
+    page.close()
+
+
+def test_bundle_plan_does_not_overwrite_manual_membership_or_choose_ambiguous_variant(images):
+    from studio_bundle_planner import propose_bundle_plan
+    from studio_clipart_objects import fill_recipe
+    from studio_clipart_recipe import ClipartRecipe
+    from studio_export_membership import validate_export_membership
+    recipe = ClipartRecipe()
+    recipe.select(30)
+    recipe.objects = fill_recipe([], recipe.counts)
+    recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.recipe = recipe.to_dict()
+    existing = validate_export_membership({str(images[0].resolve()): {'title': 'Manual', 'included': False}})
+    state.clipart.export_membership = existing
+    page = RunResultsPage(state)
+    root = images[0].parent
+    ids = recipe.bundle_plan['sets'][-1]['item_ids']
+    page.session = SimpleNamespace(running=False, output_dir=root, items=[
+        RunItem(1, 'manual', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': ids[0]}),
+        RunItem(2, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[1]), payload={'object_id': ids[1]}),
+        RunItem(3, 'v2', status=RunItemStatus.SUCCEEDED, output_path=str(images[2]), payload={'object_id': ids[1]}),
+    ])
+    page._seed_bundle_membership()
+    assert state.clipart.export_membership[str(images[0].resolve())] == existing[str(images[0].resolve())]
+    assert str(images[1].resolve()) not in state.clipart.export_membership
+    assert str(images[2].resolve()) not in state.clipart.export_membership
+    page.close()
