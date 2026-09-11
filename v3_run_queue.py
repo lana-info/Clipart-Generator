@@ -1816,7 +1816,12 @@ class RunResultsPage(QWidget):
                 membership = self.state.clipart.export_membership
                 previous = membership.get(item.output_path) or membership.get(str(source.resolve()))
                 if previous is not None:
-                    membership[str(destination)] = dict(previous)
+                    from studio_export_membership import validate_export_membership
+                    membership = validate_export_membership(membership)
+                    previous = membership.get(item.output_path) or membership[str(source.resolve())]
+                    membership[str(destination)] = dict(previous, memberships=[
+                        dict(link) for link in previous['memberships']])
+                    self.state.clipart.export_membership = membership
                 item.output_path = str(destination)
                 item.editor_output_path = str(destination)
         self.membership_changed.emit()

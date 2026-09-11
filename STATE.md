@@ -2,30 +2,21 @@
 
 Updated: 2026-09-11
 
-## Current handoff: many-to-many stopped, documentation checkpoint 2026-09-11
+## Current handoff: many-to-many completed, 2026-09-11
 
-Preservation commit `40ceffa` (`chore: preserve reviewed Studio 3.2 work
-[skip ci]`) уже отправлен в `origin` и проверен ранее. Для него подтверждены:
-1361 passed, 57 skipped, 2 deselected, 223 subtests; два socket-теста отдельно
-завершились успешно. Независимое ревью в его scope не выявило findings.
+Many-to-many export membership завершена. Legacy назначения мигрируют в version 2
+со стабильными asset/set ID и точным backup перед первым overwrite. Один PNG
+сохраняет несколько независимых memberships и может переиспользоваться в
+нескольких ZIP без повторной генерации. Contour-copy переносит memberships.
+Отдельно исправлена нормализация ошибки migration-backup в standalone draft.
 
-После preservation checkpoint начата подзадача many-to-many membership. Она
-частично реализована только в локальной рабочей копии и остановлена до
-независимого ревью, возможных исправлений, отдельного коммита и push. В копии
-затронуты `studio_export_membership.py`, `studio_projects.py`,
-`studio_set_export_ui.py`, `v3_project_state.py`, `v3_run_queue.py` и связанные
-тесты `tests/test_studio_contour_integration.py`, `tests/test_studio_projects.py`,
-`tests/test_studio_set_export_ui.py`, `tests/test_studio_export_membership.py`.
-Это не релиз и не подтверждение готовности функции; локальные проверки этой
-остановленной копии не считать приёмкой.
+Focused verification: 31 passed, 8 subtests. Full isolated pytest: 1369 passed,
+57 skipped, 2 deselected, 228 subtests in 60.63s. py_compile and git diff --check
+passed. Final independent read-only review: NO P1/P2 FINDINGS. No paid calls,
+builds, deployments or workflow dispatches.
 
-Рабочее дерево намеренно dirty из-за этой остановленной подзадачи. Данный
-документационный коммит фиксирует состояние и не закрывает many-to-many, а
-незакоммиченные исходники и тесты не входят в него.
-
-Первый шаг после возобновления: продолжить many-to-many, провести независимое
-ревью, внести необходимые исправления, выполнить commit/push и получить чистый
-`git status`; затем выполнять следующие открытые задачи строго по порядку.
+Next task in order: automatic mini/standard/maxi/full-bundle planning before
+generation, preserving unique-asset cost semantics and independent memberships.
 
 ## Preparation review fixes, completed verification 2026-09-11
 

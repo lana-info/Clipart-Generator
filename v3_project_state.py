@@ -2191,6 +2191,8 @@ def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> Non
 
     temporary_path: Path | None = None
     try:
+        from studio_export_membership import backup_membership_migration
+        backup_membership_migration(destination, draft, max_bytes=MAX_DRAFT_BYTES)
         with tempfile.NamedTemporaryFile(
             mode="wb",
             dir=parent,
@@ -2203,7 +2205,7 @@ def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> Non
             temporary.flush()
             os.fsync(temporary.fileno())
         os.replace(temporary_path, destination)
-    except OSError as error:
+    except (OSError, ValueError) as error:
         if temporary_path is not None:
             try:
                 temporary_path.unlink(missing_ok=True)

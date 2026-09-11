@@ -2,20 +2,20 @@
 
 ## Current handoff, 2026-09-11
 
-Preservation commit `40ceffa` уже отправлен и проверен ранее: 1361 pytest
-passed, 57 skipped, 2 deselected, 223 subtests; два socket-теста отдельно OK;
-независимое ревью в его scope было без findings.
+Many-to-many export membership завершена после preservation commit `40ceffa`.
+Legacy `path -> {title, included}` мигрирует в version 2 со стабильными asset/set
+ID; один PNG может входить в несколько комплектов независимо, contour-copy
+сохраняет memberships, а первый overwrite legacy-файла создаёт точный backup.
+Исправлена обработка ошибки backup в standalone draft.
 
-Подзадача many-to-many membership после этого начата, но остановлена в
-частично реализованной локальной рабочей копии до независимого ревью,
-возможных исправлений, commit и push. Рабочее дерево dirty из-за неё. Текущий
-документационный коммит не закрывает подзадачу и не включает её исходники или
-тесты; состояние копии не является релизом.
+Проверка: focused 31 passed + 8 subtests; полный isolated pytest 1369 passed,
+57 skipped, 2 deselected, 228 subtests; py_compile и git diff --check проходят.
+Финальное независимое read-only ревью не выявило P1/P2 findings.
 
-Первый шаг после возобновления: продолжить many-to-many, провести независимое
-ревью, исправить findings при необходимости, commit/push и проверить чистый
-`git status`. Только после этого переходить к следующим открытым задачам по
-порядку. Открытые planning, palette и UX-audit задачи не считаются выполненными.
+Следующая задача строго по порядку: автоматическое планирование
+mini/standard/maxi/full-bundle до генерации, затем использование этого плана
+для отдельных ZIP без повторной генерации/обработки, необязательный редактор
+состава, расширение палитр и пользовательский UX-аудит технических терминов.
 
 ## Active 3.2 development scope
 

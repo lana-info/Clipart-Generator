@@ -117,6 +117,11 @@ class ProjectStore:
             self._read(destination, expected_id=project_id)
         record = ProjectRecord(project_id, module_id, name, self._now(), self._copy_state(state))
         payload = self._encode(record)
+        from studio_export_membership import backup_membership_migration
+        try:
+            backup_membership_migration(destination, state, max_bytes=MAX_PROJECT_BYTES)
+        except (OSError, ValueError) as error:
+            raise ProjectStoreError('Project migration backup could not be saved') from error
         self._atomic_replace(destination, payload)
         return record
 

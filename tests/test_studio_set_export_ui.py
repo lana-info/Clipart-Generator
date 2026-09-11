@@ -137,3 +137,38 @@ def test_invalid_membership_cannot_overwrite_draft(images, tmp_path):
     with pytest.raises(ValueError):
         save_project_draft(state, path)
     assert path.read_bytes() == before
+
+
+def test_many_memberships_edit_save_reopen_preserves_other_links(images, tmp_path):
+    from studio_export_membership import validate_export_membership
+    key = str(images[0])
+    membership = validate_export_membership({key: {'title': 'Mini', 'included': True},
+        '/older/missing.png': {'title': 'Old', 'included': False}})
+    for title in ('Standard', 'Maxi', 'Bundle'):
+        membership[key]['memberships'].extend(validate_export_membership(
+            {key: {'title': title, 'included': True}})[key]['memberships'])
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.export_membership = membership
+    page = RunResultsPage(state)
+    dialog = SetExportDialog([images[0]], membership=membership)
+    dialog.membership_saved.connect(page._save_export_membership)
+    assert dialog.table.rowCount() == 4
+    assert len(dialog.groups()) == 4
+    dialog.reviewed.setChecked(True)
+    dialog.table.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
+    assert not dialog.reviewed.isChecked()
+    dialog._save_membership()
+    path = tmp_path / 'many.json'
+    save_project_draft(state, path)
+    restored = load_project_draft(path)
+    reopened = SetExportDialog([images[0]], membership=restored.clipart.export_membership)
+    assert [link['included'] for link in restored.clipart.export_membership[key]['memberships']] == [True, False, True, True]
+    assert restored.clipart.export_membership['/older/missing.png'] == membership['/older/missing.png']
+    assert [group['title'] for group in reopened.groups()] == ['Mini', 'Maxi', 'Bundle']
+    assert not reopened.reviewed.isChecked()
+    # The source assignment and all non-edited IDs remain unchanged.
+    assert state.clipart.export_membership[key]['asset_id'] == membership[key]['asset_id']
+    assert [link['set_id'] for link in state.clipart.export_membership[key]['memberships']] == [
+        link['set_id'] for link in membership[key]['memberships']]
+    for widget in (dialog, reopened, page):
+        widget.close()

@@ -37,7 +37,16 @@ class SetExportDialog(QDialog):
         from studio_export_membership import validate_export_membership
         saved = validate_export_membership(membership or {})
         self.saved_membership = saved
-        self.paths = [Path(path) for path in paths]
+        # Reuse the existing assignment controls for each saved relation. Never
+        # collapse multiple memberships into the first one on save/reopen.
+        self.paths, self.links = [], []
+        for path in dict.fromkeys(Path(path).resolve() for path in paths):
+            key = str(path)
+            if key not in saved:
+                saved.update(validate_export_membership({key: {'title': 'Набор 1', 'included': True}}))
+            for link in saved[key]['memberships']:
+                self.paths.append(path)
+                self.links.append(dict(link))
         self.worker = None
         self.exported = []
         self.setWindowTitle('Clipart · Экспорт наборов')
@@ -53,7 +62,7 @@ class SetExportDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         for row, path in enumerate(self.paths):
-            assignment = saved.get(str(path.resolve()), {'title': 'Набор 1', 'included': True})
+            assignment = self.links[row]
             item = QTableWidgetItem(path.name)
             item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked if assignment['included'] else Qt.CheckState.Unchecked)
@@ -93,18 +102,34 @@ class SetExportDialog(QDialog):
         self.reviewed.setChecked(False)
 
     def _save_membership(self):
-        from studio_export_membership import validate_export_membership
         try:
-            value = validate_export_membership(self.saved_membership | {str(path.resolve()): dict(
-                title=self.table.item(row, 1).text().strip(),
-                included=self.table.item(row, 0).checkState() == Qt.CheckState.Checked)
-                for row, path in enumerate(self.paths)})
+            value = self._membership()
         except ValueError as exc:
             self.status.setText(str(exc))
             return
         self.membership_saved.emit(value)
         self.saved_membership = value
+        self.links = [link for path in dict.fromkeys(self.paths)
+                      for link in value[str(path)]['memberships']]
         self.status.setText('Распределение передано проекту для сохранения. Экспорт не запускался.')
+
+    def _membership(self):
+        from studio_export_membership import validate_export_membership, set_id_for_title
+        value = validate_export_membership(self.saved_membership)
+        known = {link['title']: link['set_id'] for item in value.values()
+                 for link in item['memberships']}
+        for path in self.paths:
+            value[str(path)]['memberships'] = []
+        for row, path in enumerate(self.paths):
+            original = self.links[row]
+            title = self.table.item(row, 1).text()
+            # Existing titles are not normalized on migration or mere saving.
+            set_id = (original['set_id'] if title == original['title'] else
+                      known.get(title, set_id_for_title(title)))
+            value[str(path)]['memberships'].append(dict(
+                set_id=set_id, title=title,
+                included=self.table.item(row, 0).checkState() == Qt.CheckState.Checked))
+        return validate_export_membership(value)
 
     def _assign(self):
         title = self.group.text().strip()
@@ -116,16 +141,15 @@ class SetExportDialog(QDialog):
 
     def groups(self):
         groups = OrderedDict()
-        for row, path in enumerate(self.paths):
-            if self.table.item(row, 0).checkState() != Qt.CheckState.Checked:
-                continue
-            title = self.table.item(row, 1).text().strip()
-            if not title or len(title) > 200:
-                raise ValueError('Укажите название набора до 200 символов для каждого выбранного PNG')
-            groups.setdefault(title, []).append(path)
-        if not groups or len(groups) > 100 or any(len(paths) > 1000 for paths in groups.values()):
+        membership = self._membership()
+        for path in dict.fromkeys(self.paths):
+            for link in membership[str(path)]['memberships']:
+                if link['included']:
+                    group = groups.setdefault(link['set_id'], dict(title=link['title'], images=[]))
+                    group['images'].append(path)
+        if not groups or len(groups) > 100 or any(len(group['images']) > 1000 for group in groups.values()):
             raise ValueError('Выберите от 1 до 100 наборов, не более 1000 PNG в каждом')
-        return [dict(title=title, images=paths) for title, paths in groups.items()]
+        return list(groups.values())
 
     def _export(self):
         if self.worker is not None:

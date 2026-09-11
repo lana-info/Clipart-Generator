@@ -65,7 +65,9 @@ class ContourIntegrationTests(unittest.TestCase):
             results = controller.run_queue.page
             self.assertEqual(results._export_paths(), [copy])
             self.assertEqual(session.items[0].output_path, str(copy))
-            self.assertEqual(state.clipart.export_membership[str(copy)], {'title': 'Garden', 'included': True})
+            from studio_export_membership import validate_export_membership
+            expected = validate_export_membership({str(source): {'title': 'Garden', 'included': True}})[str(source)]
+            self.assertEqual(state.clipart.export_membership[str(copy)], expected)
             archives = export_clipart_sets([{'title': 'Garden', 'images': results._export_paths()}], root)
             with ZipFile(archives[0]) as archive:
                 pngs = [name for name in archive.namelist() if name.endswith('.png')]
@@ -80,7 +82,7 @@ class ContourIntegrationTests(unittest.TestCase):
                 editor.contour_button.click()
             self.assertEqual(failures, [])
             self.assertEqual(results._export_paths(), [second])
-            self.assertEqual(state.clipart.export_membership[str(second)], {'title': 'Garden', 'included': True})
+            self.assertEqual(state.clipart.export_membership[str(second)], expected)
             from studio_projects import ProjectStore
             store = ProjectStore(root / 'projects')
             record = store.create('clipart', 'Garden', state.to_dict())
