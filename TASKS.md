@@ -11,10 +11,11 @@
 - [x] New independent review: no findings in fixes/integration scope;
   reviewer independently ran 93 tests and 8 subtests.
 
-Verification gate is complete. Preserve this checkpoint on the current branch
-with [skip ci]; use Git commit/upstream state to verify transport completion.
-This does not complete Studio 3.2. Next product task remains the many-to-many
-membership migration in TASKS_VIBIX_STUDIO_3.2.ru.md; do not start it in preparation.
+Verification gate is complete. Preservation commit `40ceffa` was sent and
+verified previously. This does not complete Studio 3.2. The many-to-many
+membership migration has since been started partially in a local working copy,
+but remains open and stopped before independent review, any required fixes,
+commit/push, and a clean `git status`.
 
 ## Owner refinement recorded; stop after documentation
 
@@ -28,8 +29,21 @@ Remove background-removal method names/key colors from ALL user-facing surfaces,
 including settings/help/errors/user diagnostics and delivery metadata; keep
 internal checks and generation model/cost visibility. See latest PRD section.
 
-Documentation only in this turn. Resume implementation only on a new user request.
-Existing runtime is not yet compliant with these latest requirements.
+This documentation checkpoint does not close the stopped implementation copy.
+After resumption, finish and review many-to-many first; only then continue the
+remaining open tasks in order. Existing runtime is not yet compliant with these
+latest requirements.
+
+## Current stopped many-to-many working copy
+
+The working tree is intentionally dirty from the stopped subtask. It currently
+touches `studio_export_membership.py`, `studio_projects.py`,
+`studio_set_export_ui.py`, `v3_project_state.py`, `v3_run_queue.py` and related
+tests, including the new `tests/test_studio_export_membership.py`. These are
+unfinished local changes, not a release or a completed task. Do not mark the
+many-to-many items below as done until independent review, required fixes,
+commit/push and clean status are complete. Do not include these files in this
+documentation commit.
 
 ## Result export now connected
 

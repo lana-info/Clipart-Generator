@@ -1,5 +1,22 @@
 # Vibix Images
 
+## Current handoff, 2026-09-11
+
+Preservation commit `40ceffa` уже отправлен и проверен ранее: 1361 pytest
+passed, 57 skipped, 2 deselected, 223 subtests; два socket-теста отдельно OK;
+независимое ревью в его scope было без findings.
+
+Подзадача many-to-many membership после этого начата, но остановлена в
+частично реализованной локальной рабочей копии до независимого ревью,
+возможных исправлений, commit и push. Рабочее дерево dirty из-за неё. Текущий
+документационный коммит не закрывает подзадачу и не включает её исходники или
+тесты; состояние копии не является релизом.
+
+Первый шаг после возобновления: продолжить many-to-many, провести независимое
+ревью, исправить findings при необходимости, commit/push и проверить чистый
+`git status`. Только после этого переходить к следующим открытым задачам по
+порядку. Открытые planning, palette и UX-audit задачи не считаются выполненными.
+
 ## Active 3.2 development scope
 
 Latest owner decisions (supersede the manual-first export workflow): minimize

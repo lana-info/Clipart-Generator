@@ -2,6 +2,31 @@
 
 Updated: 2026-09-11
 
+## Current handoff: many-to-many stopped, documentation checkpoint 2026-09-11
+
+Preservation commit `40ceffa` (`chore: preserve reviewed Studio 3.2 work
+[skip ci]`) уже отправлен в `origin` и проверен ранее. Для него подтверждены:
+1361 passed, 57 skipped, 2 deselected, 223 subtests; два socket-теста отдельно
+завершились успешно. Независимое ревью в его scope не выявило findings.
+
+После preservation checkpoint начата подзадача many-to-many membership. Она
+частично реализована только в локальной рабочей копии и остановлена до
+независимого ревью, возможных исправлений, отдельного коммита и push. В копии
+затронуты `studio_export_membership.py`, `studio_projects.py`,
+`studio_set_export_ui.py`, `v3_project_state.py`, `v3_run_queue.py` и связанные
+тесты `tests/test_studio_contour_integration.py`, `tests/test_studio_projects.py`,
+`tests/test_studio_set_export_ui.py`, `tests/test_studio_export_membership.py`.
+Это не релиз и не подтверждение готовности функции; локальные проверки этой
+остановленной копии не считать приёмкой.
+
+Рабочее дерево намеренно dirty из-за этой остановленной подзадачи. Данный
+документационный коммит фиксирует состояние и не закрывает many-to-many, а
+незакоммиченные исходники и тесты не входят в него.
+
+Первый шаг после возобновления: продолжить many-to-many, провести независимое
+ревью, внести необходимые исправления, выполнить commit/push и получить чистый
+`git status`; затем выполнять следующие открытые задачи строго по порядку.
+
 ## Preparation review fixes, completed verification 2026-09-11
 
 Owner authorized preservation of the accumulated work on the current branch,
@@ -37,7 +62,8 @@ Staging normalized trailing whitespace only on three lines of the imported
 production-pipeline text and one line of the historical HTML mockup; no source
 wording or runtime code changed in this final hygiene pass.
 See docs/ERRORS.md for causes and regression coverage. Product priorities remain
-TASKS_VIBIX_STUDIO_3.2.ru.md: many-to-many membership first, not started here.
+TASKS_VIBIX_STUDIO_3.2.ru.md: many-to-many membership first; its implementation
+is currently only an unfinished local working copy.
 
 ## Paused by owner after documenting latest decisions
 
@@ -68,10 +94,11 @@ or deliverables. Use outcome-only wording; retain internal engineering details
 and checks without leaking them. This does not hide generation provider/model
 selection or prices. User-surface audit and cleanup are still pending.
 
-Next when owner resumes: follow latest priority checklist in TASKS_VIBIX_STUDIO_3.2.ru.md;
-implement many-to-many auto plans, optional editor, palette expansion and UX audit.
-No further implementation until resumed. Historical checkpoints below describe
-actual existing code, not completion of these new requirements.
+After the stopped working copy is resumed and completed, follow the latest
+priority checklist in TASKS_VIBIX_STUDIO_3.2.ru.md: finish many-to-many, then
+implement automatic plans, optional editor, palette expansion and UX audit.
+Historical checkpoints below describe actual existing code, not completion of
+these new requirements.
 
 ## Latest increment: result-to-ZIP UI connected
 
