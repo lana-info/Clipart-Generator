@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Mapping
 
-SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key", "fal_api_key")
+SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key", "fal_api_key", "openrouter_api_key")
 ALL_PROVIDER_CREDENTIAL_KEYS = SECRET_CONFIG_KEYS + ("runpod_api_key", "runpod_endpoint_id")
 
 
@@ -165,6 +165,8 @@ class ProviderCredentialStore:
         return values
 
     def save(self, values: Mapping[str, str]) -> None:
+        if any('\n' in str(value) or '\r' in str(value) for value in values.values()):
+            raise ValueError('Ключи API не должны содержать переносы строк')
         env_values = {key: value for key, value in values.items() if key != "fal_api_key"}
         self.fal.save(values)
         self.env.save(dict(env_values))

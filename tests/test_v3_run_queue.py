@@ -821,8 +821,11 @@ class V3RunQueueTests(unittest.TestCase):
 
     def test_retry_request_contains_only_failed_private_payloads(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-retry-") as temp:
+            request = generation_request(temp)
+            request.generated_prompts[1]["result_kind"] = "pattern"
+            request.generated_prompts[0]["chroma_key_color"] = "red"
             session = RunQueueSession(
-                generation_request(temp),
+                request,
                 ProjectMode.CLIPART,
             )
             for index in range(1, 4):
@@ -842,6 +845,8 @@ class V3RunQueueTests(unittest.TestCase):
 
             self.assertIsNotNone(retry)
             self.assertEqual(len(retry.generated_prompts), 1)
+            self.assertEqual(retry.generated_prompts[0]["result_kind"], "pattern")
+            self.assertEqual(session.items[0].payload["chroma_key_color"], "red")
             self.assertEqual(
                 retry.generated_prompts[0]["prompt"],
                 f"{SECRET_PROMPT} 2",
@@ -1673,6 +1678,8 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertIn("📁 Папка результата:", page.summary_label.text())
             self.assertIn("⏱ Время:", page.summary_label.text())
             self.assertIn("идёт обработка", page._stage_label("processing"))
+            self.assertIn("удаляется фон", page._stage_label("background_removal"))
+            self.assertIn("очищается край", page._stage_label("edge_cleanup"))
             self.assertFalse(page.viewer.isVisible())
             result_button_texts = {
                 button.text() for button in page.findChildren(V3Button)

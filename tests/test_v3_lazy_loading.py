@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -48,6 +49,12 @@ class V3LazyLoadingTests(unittest.TestCase):
             {StepId.PROJECT},
         )
         project_page = controller.pages[StepId.PROJECT]
+
+        # Navigation requires a writable folder; do not depend on the machine's
+        # saved/default Pictures path when testing lazy page materialization.
+        work_dir = tempfile.TemporaryDirectory(prefix="vibix-lazy-pages-")
+        self.addCleanup(work_dir.cleanup)
+        project_page.work_dir_edit.setText(work_dir.name)
 
         view.shell.go_next()
 

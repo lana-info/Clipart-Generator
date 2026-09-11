@@ -174,13 +174,30 @@ def _references(value: Any) -> list[str]:
 class PromptEntry:
     prompt: str = ""
     references: list[str] = field(default_factory=list)
+    # The selected key belongs to an individual prompt: one pack can safely
+    # contain subjects for which different background colours are appropriate.
+    chroma_key_color: str = ""
+    result_kind: str = "legacy"
 
     def __post_init__(self) -> None:
+        from result_background_policy import validate_result_kind
+
+        self.result_kind = validate_result_kind(self.result_kind)
         self.prompt = _text(self.prompt)
         self.references = _references(self.references)
+        color = _text(self.chroma_key_color, limit=20).lower()
+        self.chroma_key_color = color if color in KEY_COLORS else ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {"prompt": self.prompt, "references": list(self.references)}
+        result = {
+            "prompt": self.prompt,
+            "references": list(self.references),
+        }
+        if self.chroma_key_color:
+            result["chroma_key_color"] = self.chroma_key_color
+        if self.result_kind != "legacy":
+            result["result_kind"] = self.result_kind
+        return result
 
     @classmethod
     def from_value(cls, value: Any) -> PromptEntry | None:
@@ -192,6 +209,8 @@ class PromptEntry:
         entry = cls(
             prompt=value.get("prompt", ""),
             references=_references(value.get("references", [])),
+            chroma_key_color=value.get("chroma_key_color", ""),
+            result_kind=value.get("result_kind", "legacy"),
         )
         return entry if entry.prompt or entry.references else None
 
@@ -879,19 +898,32 @@ class ClipartModeData:
     )
     generation: GenerationData = field(default_factory=GenerationData)
     operations: ImageOperationData = field(default_factory=clipart_operation_defaults)
+    # Optional for legacy drafts; appended to preserve positional construction.
+    recipe: dict[str, Any] | None = None
+    export_membership: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        from studio_export_membership import validate_export_membership
+        membership = validate_export_membership(self.export_membership)
         return {
             "prompts": [entry.to_dict() for entry in self.prompts],
             "prompt_generator": self.prompt_generator.to_dict(),
             "generation": self.generation.to_dict(),
             "operations": self.operations.to_dict(),
+            **({"recipe": self.recipe} if self.recipe is not None else {}),
+            **({"export_membership": membership} if membership else {}),
         }
 
     @classmethod
     def from_dict(cls, value: Any) -> ClipartModeData:
         data = value if isinstance(value, Mapping) else {}
+        from studio_clipart_recipe import ClipartRecipe
+        from studio_export_membership import validate_export_membership
+        recipe = (ClipartRecipe.from_dict(data["recipe"]).to_dict()
+                  if "recipe" in data else None)
         return cls(
+            recipe=recipe,
+            export_membership=validate_export_membership(data.get('export_membership', {})),
             prompts=_prompt_entries(data.get("prompts", [])),
             prompt_generator=PromptGeneratorData.from_dict(
                 data.get("prompt_generator", {}),
@@ -1340,9 +1372,25 @@ def _validate_prompt_section(section: Mapping[str, Any], name: str) -> None:
     for entry in prompts:
         if not isinstance(entry, Mapping):
             raise ProjectStateError(f"Project draft {name} prompt must be an object")
-        _reject_unknown_fields(entry, ("prompt", "references"), f"{name}.prompt")
+        _reject_unknown_fields(
+            entry,
+            ("prompt", "references", "chroma_key_color", "result_kind"),
+            f"{name}.prompt",
+        )
         if not isinstance(entry.get("prompt"), str):
             raise ProjectStateError(f"Project draft {name} prompt text must be a string")
+        from result_background_policy import validate_result_kind
+        try:
+            validate_result_kind(entry.get("result_kind", "legacy"))
+        except ValueError as error:
+            raise ProjectStateError(str(error)) from error
+        chroma_key_color = entry.get("chroma_key_color", "")
+        if not isinstance(chroma_key_color, str) or (
+            chroma_key_color and chroma_key_color.lower() not in KEY_COLORS
+        ):
+            raise ProjectStateError(
+                f"Project draft {name} prompt chroma key color is invalid"
+            )
         references = entry.get("references")
         if not isinstance(references, list) or not all(
             isinstance(reference, str) for reference in references
@@ -1680,9 +1728,21 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     clipart = _draft_object(value, "clipart")
     _reject_unknown_fields(
         clipart,
-        ("prompts", "prompt_generator", "generation", "operations"),
+        ("prompts", "prompt_generator", "generation", "operations", "recipe", "export_membership"),
         "clipart",
     )
+    if "export_membership" in clipart:
+        from studio_export_membership import validate_export_membership
+        try:
+            validate_export_membership(clipart['export_membership'])
+        except ValueError as error:
+            raise ProjectStateError(str(error)) from error
+    if "recipe" in clipart:
+        from studio_clipart_recipe import ClipartRecipe
+        try:
+            ClipartRecipe.from_dict(clipart["recipe"])
+        except ValueError as error:
+            raise ProjectStateError(str(error)) from error
     _validate_prompt_section(clipart, "clipart")
     if "prompt_generator" in clipart:
         _validate_prompt_generator_section(

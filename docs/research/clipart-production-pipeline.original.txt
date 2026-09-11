@@ -1,0 +1,1506 @@
+# Автоматизированный production-пайплайн для больших наборов clipart: генерация, контроль качества, chroma key, прозрачность и upscale
+
+## Резюме
+
+Для вашей задачи я бы **не строила систему вокруг идеи “каждый промпт должен с первого раза дать хороший файл”**. Генеративные модели пока недостаточно надёжны для этого: исследования text-to-image evaluation показывают систематические ошибки в количестве объектов, пространственных отношениях, композиции и мелких деталях. Более реалистичная production-архитектура: **каждый промпт является слотом, который не считается выполненным, пока один из его кандидатов не прошёл все проверки**. TIFA прямо показывает слабые места современных генераторов в counting, spatial relations и multi-object composition, а GenAI-Bench показывает практическую пользу ранжирования нескольких кандидатов по визуально-языковой оценке вместо принятия первого результата. citeturn14view7turn14view6
+
+Для ваших watercolor cliparts оптимальный базовый порядок такой:
+
+**Prompt → выбор безопасного chroma-key → generation → preflight QC → background removal → edge decontamination → разделение RGB/Alpha → один финальный upscale → recombine RGBA → final QC → готовый PNG.**
+
+Ключевое отличие от текущего процесса: **никакого дорогого upscale до того, как изображение признано пригодным**. Если утка деформирована, цветочки превратились в кашу или генератор создал белые куски фона внутри композиции, файл должен быть автоматически забракован и перегенерирован. Никакой алгоритм chroma-key не исправит неправильно нарисованный объект.
+
+Для удаления chroma-key одного `remove blue pixels` недостаточно. Нужны: сохранённый выбранный цвет, измерение **реального** цвета, который нарисовал генератор, цветовое расстояние вместо грубых RGB-порогов, работа с connected components, отдельное обращение с закрытыми внутренними областями рамок/венков и обязательное удаление color spill с полупрозрачного края. OpenCV предоставляет flood-fill именно для connected regions, а CIEDE2000 даёт более разумную меру различия цветов, чем простая разница RGB. citeturn13view5turn13view6
+
+Синяя кайма, которую вы увидели после 4× upscale, имеет понятную техническую причину. PNG использует **straight/unassociated alpha**: RGB пикселя хранится независимо от его прозрачности. Поэтому прозрачный или полупрозрачный пиксель может всё ещё содержать синий RGB от chroma-key. После интерполяции или AI upscale этот загрязнённый цвет становится видимым. citeturn13view7turn13view8 Поэтому обязательный порядок должен быть именно **remove → decontaminate → upscale**, а не просто remove → upscale.
+
+Для upscale я бы сделала **сменный backend**. На 7 сентября 2026 года Topaz Transparent на FAL стоит $0.08 за каждые начатые 24 MP результата, всегда увеличивает ровно 4× по каждой стороне и сохраняет alpha. BRIA Creative Upscale стоит $0.04 за изображение, делает 2×, заявляет `preserve_alpha=true`, но является именно creative upscaler и регенерирует детали, поэтому требует проверки на изменение акварельного исходника. Real-ESRGAN можно запускать локально, у официального inference-кода есть RGBA и отдельный `alpha_upsampler`; Lanczos остаётся лучшим дешёвым детерминированным baseline и особенно полезен для alpha mask. citeturn13view0turn15search0turn14view1turn16view0
+
+**Моя рекомендуемая production-схема для вашего приложения:**
+
+> **Default:** генерация → QC → chroma removal → decontamination → RGB + alpha → upscale → final QC.
+> **Small-image:** сначала определить/очистить фон без generative upscale; при необходимости использовать обычный 2× resize только для анализа маски → затем один финальный AI upscale.
+> **Fallback:** alternate chroma → regeneration → segmentation/matting модель → final QC.
+> **No-upscale:** тот же качественный cutout pipeline, но без последнего upscale.
+
+И самое важное: **“N промптов → N готовых файлов” реализуется не качеством одной генерации, а оркестратором**, который ведёт каждый prompt-slot до состояния `COMPLETE` и автоматически заменяет неудачные attempts.
+
+## Архитектура production-пайплайна и режимы
+
+### Базовые предположения
+
+Ниже я исхожу из того, что исходные генерации обычно имеют размер порядка 1024 px и выше, финальный продукт должен быть PNG RGBA с прозрачным фоном, стиль содержит watercolor edges, тонкие листья, цветы и небольшие декоративные элементы, а инфраструктура, наличие GPU и максимальный бюджет пока не зафиксированы. Поэтому upscaler и fallback background remover должны быть заменяемыми компонентами.
+
+Пороговые значения ниже **не являются универсальными научными стандартами**. Это стартовые production-параметры, которые следует откалибровать на вашем собственном наборе примерно из нескольких сотен помеченных good/bad генераций. Особенно это важно для watercolor: BRISQUE и NIQE, например, основаны на natural-scene statistics, поэтому абсолютный “хороший” threshold, рассчитанный для фотографии, нельзя слепо переносить на стилизованный клипарт. citeturn17search1turn13view10
+
+### Основной поток
+
+```mermaid
+flowchart TD
+    A[Prompt / prompt slot] --> B[Оценить сложность]
+    B --> C[Выбрать безопасный chroma key]
+    C --> D[Сгенерировать candidate]
+    D --> E[Cheap deterministic QC]
+
+    E -->|Fail| F{Attempts left?}
+    F -->|Да| G[Изменить seed / prompt / key]
+    G --> D
+    F -->|Нет| H[Fallback route]
+
+    E -->|Pass| I[Semantic / VLM QC]
+    I -->|Fail| F
+    I -->|Pass| J[Измерить фактический BG color]
+
+    J --> K[Chroma-key mask]
+    K --> L[Connected BG + enclosed high-confidence key regions]
+    L --> M[Soft alpha]
+    M --> N[Edge decontamination / despill]
+
+    N --> O[RGB foreground plate]
+    N --> P[Alpha mask]
+
+    O --> Q{Mode}
+    P --> Q
+
+    Q -->|Default| R[Upscale RGB + alpha]
+    Q -->|Small-image| S[Small-image strategy]
+    Q -->|No-upscale| T[Без upscale]
+    Q -->|Fallback| H
+
+    H --> U[Alternate key / BiRefNet-RMBG]
+    U --> N
+
+    R --> V[Recombine RGBA]
+    S --> V
+    T --> V
+
+    V --> W[Final QC on several backgrounds]
+    W -->|Fail| X[Retry / alternate upscaler / fallback]
+    X --> F
+    W -->|Pass| Y[COMPLETE PNG]
+```
+
+Такой конвейер отделяет **generation defects** от **cutout defects**. Это принципиально: ваша первая рамка с деформированной композицией должна закончить жизнь на `Preflight QC`, а не пройти через background removal и upscale. Исследования TIFA и VQAScore подтверждают, что автоматический visual-language evaluator можно использовать для проверки соответствия сложному промпту, а GenAI-Bench показал, что ранжирование всего нескольких кандидатов может заметно улучшить соответствие человеческой оценке. citeturn14view7turn13view12turn14view6
+
+### Режимы
+
+| Режим | Когда использовать | Pipeline | Главный плюс | Риск |
+|---|---|---|---|---|
+| **Default** | Нормальное исходное разрешение, хороший chroma BG | QC → remove → decontaminate → RGB/alpha → upscale → final QC | Лучший основной маршрут | Требует хорошего edge processing |
+| **Small-image** | Недостаточно пикселей для стабильного edge/mask анализа | QC → native keying → при необходимости детерминированный resize маски/анализа → decontamination → final upscale | Не усиливает chroma contamination AI-моделью заранее | Слабые мелкие детали уже могут быть потеряны генератором |
+| **Fallback** | Chroma конфликтует с объектом, BG неоднородный, сложные волосы/веточки/дырки или повторные failures | regenerate с другим key → segmentation/matting → decontamination → upscale | Спасает сложные случаи | Дороже, возможны ошибки segmentation |
+| **No-upscale** | Исходного разрешения достаточно для конечного продукта | QC → remove → decontaminate → final QC | Самый дешёвый и самый fidelity-safe | Не добавляет разрешение |
+
+**Стартовое правило выбора Small-image:** попробовать порог `min(width,height) < 768 px` **или** слишком широкий measured edge transition. Но это именно значение для A/B-калибровки, а не физическая граница.
+
+Я бы **не делала AI upscale перед chroma removal даже в Small-image mode по умолчанию**. Generative/restoration upscaler способен изменить оттенок однотонного фона и создать новые смешанные пиксели вокруг объекта. Real-ESRGAN, например, специально обучен восстанавливать изображения при сложных деградациях, а не сохранять математически точный key color. citeturn16view2 Если увеличение нужно только для более стабильного mask extraction, безопаснее сначала проверить обычный Lanczos/bicubic. Pillow определяет Lanczos как high-quality truncated-sinc resampling filter. citeturn13view4
+
+### Decision gates
+
+```mermaid
+flowchart TD
+    A[Новая генерация] --> B{BG uniform?}
+    B -->|Нет| R1[Reject / regenerate]
+
+    B -->|Да| C{Prompt composition correct?}
+    C -->|Нет| R2[Reject / regenerate]
+
+    C -->|Да| D{Malformed / smeared details?}
+    D -->|Да| R3[Reject / regenerate]
+
+    D -->|Нет| E{Key sufficiently separated from foreground?}
+    E -->|Нет| R4[Alternate key or fallback]
+
+    E -->|Да| F[Remove background]
+    F --> G{Alpha/edge clean?}
+    G -->|Нет| H[Retune tolerance / decontaminate]
+    H --> G
+
+    G -->|Да| I[Upscale]
+    I --> J{Final composites clean?}
+    J -->|Нет| K[Retry upscale / mask / fallback]
+    J -->|Да| L[Accept]
+```
+
+### Что нельзя автоматически “исправлять”
+
+Ваш пример с **белыми кусками между тюльпанами/элементами** особенно важен. Если генератор нарисовал белый участок там, где вы ожидаете прозрачность, но этот участок **не является chroma-key цветом**, алгоритм не может надёжно понять, белый это фон или настоящий белый лепесток/утка/ромашка. Автоматическое правило “удаляй белые внутренние островки” разрушит legitimate white details.
+
+Поэтому:
+
+**wrong-color interior patch → generation QC failure**, а не задача chroma removal.
+
+Это одна из самых важных границ ответственности в системе.
+
+## Автоматический контроль качества до удаления фона
+
+Здесь лучше использовать **каскад**, а не одну AI-проверку. Сначала дешёвые математические тесты, затем более дорогой image/VLM evaluator только для тех кандидатов, которые прошли очевидные проверки.
+
+### Таблица QC
+
+| Проверка | Что ловит | Стартовый threshold | Решение |
+|---|---|---:|---|
+| Decode/size | битый файл, неверное разрешение | exact expected dimensions | hard reject |
+| Border key coverage | неровный/не тот фон | ≥ **97%** good; 93–97% warning; <93% reject | reject/continue |
+| Border key ΔE00 median | фон отличается от определённого key | ≤ **3** желательно | warning |
+| Border key ΔE00 P95 | noise/gradient BG | ≤ **8** стартово | reject/retune |
+| Foreground touches frame | обрезанные детали | < **1% perimeter** touching | reject |
+| Safe margin | объект слишком близко к canvas edge | ориентир ≥ **2% shortest side** | warning/reject |
+| Sharpness anomaly | “каша”, blur, smeared flowers | ≥0.6× median good-set score; <0.45× reject | reject |
+| VLM prompt fidelity | забытые/лишние объекты | ≥ **0.85** | reject |
+| VLM structural quality | деформации/сломанные формы | ≥ **0.90**, без hard defect flags | reject |
+| Micro-detail quality | мелкие цветы/листочки | ≥ **0.75** | retry |
+| Background defect flag | white patches, gradients, artifacts | должно быть `false` | reject |
+| BRISQUE/NIQE anomaly | общий quality outlier | хуже P99 вашей good-baseline → reject | secondary only |
+
+Здесь CIEDE2000 выбран не случайно: он предназначен для количественного сравнения цветов в CIELAB. citeturn13view6 Но **ΔE=3, 8, 12 и т. п. в этой архитектуре являются предложенными инженерными thresholds**, а не универсальными значениями CIE для chroma-key.
+
+### Проверка однородности фона
+
+Берём не один угол, а border band:
+
+```text
+border_width = max(8 px, round(0.01 * min(width, height)))
+```
+
+Из всех пикселей этой полосы:
+
+1. переводим RGB → Lab;
+2. кластеризуем, например, в 2–3 группы;
+3. ищем dominant chroma-colored cluster;
+4. его median становится **observed key**, независимо от того, какой hex попросили в prompt;
+5. считаем median и P95 ΔE00.
+
+Это важно, потому что генеративная модель не обязана реально нарисовать `#0000FF`, даже если её попросили.
+
+Хорошее starting gate:
+
+```text
+border_key_coverage >= 0.97
+median_deltaE <= 3
+p95_deltaE <= 8
+```
+
+Но если объект сам слегка касается рамки, coverage закономерно уменьшится. Поэтому border test должен учитывать foreground candidates, а не считать любой отличный от key пиксель ошибкой.
+
+### Проверка “мыльности”
+
+Простой variance-of-Laplacian удобен как anomaly detector, но абсолютный threshold типа “100 = sharp” для вашей задачи опасен. Акварель намеренно содержит мягкие участки.
+
+Гораздо лучше создать **reference distribution**:
+
+```text
+sharpness_ratio =
+    candidate_foreground_gradient_score /
+    median_accepted_score_for_same_style
+```
+
+Стартово:
+
+```text
+>= 0.60       PASS
+0.45–0.60     REVIEW / VLM CHECK
+< 0.45        REJECT
+```
+
+Дополнительно можно измерять ширину перехода на сильных объектах. Для генерации около 1024 px хорошим стартовым anomaly flag будет `P90 edge_transition_width > 4 px`, но опять же не как единственный hard gate.
+
+BRISQUE и NIQE тоже можно хранить как признаки. BRISQUE представляет собой no-reference IQA на основе natural-scene statistics, NIQE также использует статистику natural images и работает без reference image. Поэтому для watercolor их разумнее применять как **outlier detectors относительно вашей собственной истории**, а не как универсальные показатели эстетического качества. citeturn17search1turn13view10
+
+### Semantic/VLM QC
+
+Здесь я бы не спрашивала AI:
+
+> “Is this image good?”
+
+Это слишком расплывчато.
+
+Нужно превратить исходный prompt в маленький набор атомарных вопросов, в духе TIFA:
+
+```json
+{
+  "required_subjects_correct": true,
+  "required_subject_count_correct": true,
+  "composition_correct": true,
+  "objects_not_deformed": true,
+  "no_extra_objects": true,
+  "tiny_flowers_well_formed": true,
+  "no_smeared_detail_clusters": true,
+  "background_is_uniform_solid_color": true,
+  "no_white_background_patches_inside_design": true,
+  "no_clipped_elements": true,
+  "overall_prompt_fidelity": 0.91,
+  "structural_quality": 0.94,
+  "microdetail_quality": 0.82
+}
+```
+
+TIFA именно раскладывает prompt fidelity на вопросы и категории, а VQAScore использует visual question answering для оценки того, показывает ли изображение требуемое содержимое. citeturn14view7turn13view12
+
+Для ваших clipart я бы ввела **hard defects**, которые всегда означают reject независимо от среднего score:
+
+```text
+deformed_animal = true
+broken_object_geometry = true
+unwanted_white_patch = true
+major_smeared_flower_cluster = true
+background_not_uniform = true
+critical_element_clipped = true
+```
+
+Это напрямую закрывает проблемы, которые вы показали на своих четырёх примерах.
+
+### Один кандидат или несколько
+
+Для дешёвых простых prompts можно начинать с **1 candidate** и делать retry только после failure.
+
+Для сложных:
+- wreaths;
+- florals;
+- multiple animals;
+- много мелких цветов;
+- рамки с множеством внутренних просветов,
+
+разумнее сразу создавать **2–3 candidates** и ранжировать их.
+
+GenAI-Bench показал, что ranking 3–9 candidates с VQAScore может существенно улучшать human-alignment rating, причём на сложных compositional prompts такой ranking оказался эффективнее ряда других scorers. citeturn14view6
+
+Для вашей экономики я бы не начинала сразу с 9. **2–3 candidates для high-risk prompt** выглядит разумным начальным компромиссом.
+
+## Chroma-key, alpha и очистка цветной каймы
+
+### Автоматический выбор безопасного цвета
+
+Я бы не делала фиксированный список “синий, зелёный, магента” с простым `if green leaves then blue`.
+
+Лучше формализовать.
+
+**Шаг A. Построить ожидаемую палитру объекта.**
+
+Из prompt извлечь:
+- названные цвета;
+- типичные цвета объектов;
+- стиль;
+- при наличии reference image, реальные dominant foreground colors.
+
+Например:
+
+```text
+white goose
+pink bows
+green foliage
+yellow daisies
+powder-blue ribbons
+```
+
+Получаем набор foreground-color risks.
+
+**Шаг B. Создать candidate chroma palette.**
+
+Например 12–24 высоконасыщенных оттенка по hue wheel:
+
+```text
+S ≈ 0.95–1.0
+V ≈ 0.85–1.0
+```
+
+Не обязательно ограничиваться телевизионным green/blue.
+
+**Шаг C. Оценить каждый candidate.**
+
+Пример score:
+
+```text
+safe_score(c) =
+    0.60 * min_deltaE00(c, expected_foreground_colors)
+  + 0.25 * median_deltaE00(c, expected_foreground_colors)
+  + 0.15 * semantic_rarity(c)
+  - explicit_color_conflict_penalty
+```
+
+Выбирать цвет с максимальным **минимальным** расстоянием от foreground.
+
+Мой стартовый safeguard:
+
+```text
+min ΔE00 to predicted foreground >= 25
+```
+
+Если такого цвета нет, **не насиловать chroma-key**, а переключить prompt в fallback segmentation route.
+
+CIEDE2000 подходит для этого лучше, чем евклидово RGB-distance, поскольку специально определяет различие цветов в Lab-пространстве. citeturn13view6 Значение 25 здесь является моей консервативной стартовой границей для этой системы, а не официальным threshold.
+
+### Хранить requested и observed key отдельно
+
+После generation сохранять примерно такую metadata:
+
+```json
+{
+  "job_id": "clip_0042",
+  "attempt_id": 2,
+  "prompt_hash": "...",
+  "generator": {
+    "provider": "...",
+    "model": "...",
+    "version": "...",
+    "seed": 938422
+  },
+  "chroma": {
+    "requested_hex": "#003CFF",
+    "requested_rgb": [0, 60, 255],
+    "requested_lab": [42.1, 55.2, -92.0],
+
+    "observed_rgb_median": [4, 66, 247],
+    "observed_lab_median": [42.9, 51.8, -88.3],
+
+    "border_band_px": 10,
+    "border_coverage": 0.985,
+    "delta_e_median": 2.4,
+    "delta_e_p95": 5.9,
+
+    "t_hard": 7.9,
+    "t_soft": 17.9
+  },
+
+  "pipeline_version": "cutout-v1.0",
+  "qc": {}
+}
+```
+
+**Source of truth лучше хранить в БД/sidecar JSON**, а final PNG считать экспортом. Так pipeline можно повторить с другим tolerance или upscaler без догадок.
+
+### Адаптивный tolerance
+
+Я бы не ставила один fixed tolerance типа `20` для всех картинок.
+
+Стартовая схема:
+
+```text
+t_hard = clamp(P95_border_ΔE + 2, 6, 12)
+t_soft = t_hard + 8..12
+```
+
+Например:
+
+```text
+P95 observed background = ΔE 5.9
+
+t_hard = 7.9
+t_soft = 17.9
+```
+
+Тогда:
+
+- `ΔE <= t_hard`: почти наверняка key/background;
+- `t_hard < ΔE < t_soft`: переходная зона, которая может стать partial alpha;
+- `ΔE >= t_soft`: foreground.
+
+### Почему одного border-connected flood-fill мало
+
+Border-connected removal очень полезен: OpenCV `floodFill` именно заполняет connected component от заданного seed с условием близости соседних пикселей. citeturn13view5
+
+Но есть важный нюанс для **ваших венков и рамок**.
+
+Представьте замкнутый венок:
+
+```text
+outside chroma | WREATH | inside chroma
+```
+
+Центральный chroma background **не связан с краем изображения**, потому что венок образовал закрытое кольцо.
+
+Если удалять только background connected to canvas border, центр венка останется непрозрачным.
+
+Поэтому лучше гибрид:
+
+```text
+hard key mask globally
+       +
+connected soft tolerance
+```
+
+Алгоритм:
+
+1. найти все пиксели с очень высокой уверенностью `ΔE <= t_hard`;
+2. foreground-like ambiguous pixels не удалять глобально;
+3. компоненты hard-key, touching canvas border, автоматически BG;
+4. внутренние hard-key components тоже считать BG, если:
+   - median ΔE очень низкий;
+   - variance цвета низкая;
+   - они действительно совпадают с observed key;
+5. расширять их на переходные пиксели только connected growth в диапазоне `t_soft`.
+
+Таким образом:
+- центр венка удалится;
+- случайный голубой бантик, похожий, но не идентичный key, с меньшей вероятностью исчезнет;
+- автоматический safe-color selection дополнительно снижает этот риск.
+
+### Формирование soft alpha
+
+Вместо:
+
+```text
+key = 0
+everything else = 255
+```
+
+лучше создавать мягкий переход.
+
+Упрощённая форма:
+
+```text
+alpha = smoothstep(t_hard, t_soft, ΔE)
+```
+
+с пространственными ограничениями по region connectivity.
+
+Для watercolor это особенно важно: жёсткая бинарная маска превращает мягкую кисть в вырезанный ножницами край.
+
+### Почему появляется синяя кайма
+
+PNG хранит **непремультиплированные RGB и alpha отдельно**. То есть пиксель может иметь:
+
+```text
+RGB = blue
+alpha = 0
+```
+
+и этот RGB всё равно физически присутствует в PNG. Это прямо следует из спецификации PNG: stored color values не изменяются из-за alpha. citeturn13view7
+
+Ещё опаснее partial edge:
+
+```text
+RGB = 40% object + 60% blue BG
+alpha = 0.4
+```
+
+Если просто сделать BG transparent, этот RGB всё равно contaminated.
+
+Композиция цвета математически имеет вид:
+
+\[
+C = \alpha F + (1-\alpha)B
+\]
+
+для opaque backdrop, что следует из стандартной alpha-compositing формулы W3C. citeturn13view8
+
+Поскольку `B`, то есть chroma background, нам известен, можно оценить foreground color:
+
+\[
+F = \frac{C-(1-\alpha)B}{\alpha}
+\]
+
+Это и есть математическая основа **color decontamination**.
+
+### Практический despill
+
+Для `alpha >= 0.2`:
+
+```text
+foreground =
+    (observed_rgb - (1-alpha) * key_rgb) / alpha
+```
+
+с clamp диапазона.
+
+Для очень маленькой alpha эта формула становится нестабильной из-за деления на маленькое число. Поэтому при:
+
+```text
+alpha < 0.15–0.20
+```
+
+лучше не пытаться “восстановить” цвет математически, а распространить RGB ближайшего хорошего foreground pixel наружу.
+
+Обрабатывать можно только узкую edge band:
+
+```text
+2–4 source pixels @ ~1024 px
+```
+
+с адаптацией к resolution.
+
+Это как раз тот этап, которого вам сейчас не хватает:
+
+> **Remove BG → Decontaminate edge → Upscale.**
+
+### Дополнительный контроль color spill
+
+После decontamination:
+
+```text
+edge = pixels where 0.05 < alpha < 0.95
+spill_rate =
+  count(edge pixels still strongly similar to key) /
+  count(edge pixels)
+```
+
+Начальное целевое значение:
+
+```text
+spill_rate < 0.5%
+```
+
+`0.5–1%` можно отправлять на второй despill pass, >1% на re-key/fallback.
+
+Эти проценты являются рекомендуемыми production SLO, а не published benchmark.
+
+## Работа с RGB и alpha отдельно
+
+Это, на мой взгляд, **самое правильное долгосрочное изменение архитектуры вашего приложения**.
+
+Не считать transparent PNG единственным intermediate asset.
+
+Хранить:
+
+```text
+RGB foreground plate
++
+Alpha mask
+```
+
+и только на выходе собирать PNG.
+
+### Почему это полезно
+
+PNG допускает скрытый RGB даже за полностью прозрачными пикселями. citeturn13view7 Поэтому у AI-upscaler появляются дополнительные данные, которые могут случайно попасть в край. Отдельная clean RGB plate позволяет контролировать эти пиксели.
+
+Pipeline:
+
+```mermaid
+flowchart LR
+    A[Generated RGB + chroma] --> B[Estimate alpha]
+    A --> C[Decontaminate foreground color]
+
+    B --> D[Alpha mask]
+    C --> E[Clean RGB foreground plate]
+
+    E --> F[RGB upscaler]
+    D --> G[Mask upscaler]
+
+    F --> H[RGB high-res]
+    G --> I[Alpha high-res]
+
+    H --> J[Recombine RGBA PNG]
+    I --> J
+
+    J --> K[Composite tests]
+```
+
+### RGB foreground plate
+
+После decontamination RGB следует расширить немного **за границу foreground**:
+
+```text
+foreground color extension: примерно 8–16 source pixels
+```
+
+Не синим, не чёрным, не белым, а nearest-neighbor/inpainted foreground colors.
+
+Это означает, что за будущей прозрачностью скрыт **цвет самого объекта**, а не chroma background.
+
+Если upscale чуть смешает пиксели, он смешает:
+- кремовый с кремовым,
+- зелёный с зелёным,
+- розовый с розовым,
+
+а не кремовый с ярко-синим.
+
+### Upscale alpha
+
+Для alpha mask я бы **не начинала с generative AI**.
+
+Начальные варианты:
+
+1. Lanczos;
+2. bicubic;
+3. Real-ESRGAN alpha mode как A/B test.
+
+Официальный Real-ESRGAN inference действительно имеет:
+
+```text
+--alpha_upsampler realesrgan | bicubic
+```
+
+и распознаёт RGBA input; для RGBA output сохраняется PNG. citeturn16view0turn16view1
+
+Но это не означает, что AI alpha обязательно лучше для акварели. Маска должна сохранять геометрию, а не “придумывать красивые детали”. Поэтому моё исходное production preference:
+
+> **AI upscale RGB + deterministic upscale alpha.**
+
+Lanczos в Pillow является high-quality resampling filter и не генерирует новых элементов. citeturn13view4
+
+### Важный технический момент про ресайз
+
+Для обычной интерполяции RGBA безопаснее работать с **premultiplied alpha**, ресайзить и затем при необходимости возвращаться к straight alpha перед записью PNG. W3C отдельно описывает premultiplied representation как `color × alpha`, тогда как PNG сохраняет straight/unassociated alpha. citeturn13view8turn13view7
+
+Для neural RGB upscaler я бы делала иначе:
+
+```text
+decontaminated foreground plate
+→ foreground-color extension
+→ AI RGB upscale
+
+alpha
+→ deterministic mask upscale
+
+→ recombine
+```
+
+Это проще и надёжнее, чем заставлять generic neural model понимать premultiplied RGBA.
+
+### Финальная проверка на разных фонах
+
+Один и тот же PNG автоматически композитить на:
+
+```text
+white
+black
+50% gray
+checkerboard
+complementary high-saturation color
+```
+
+И только после этого считать файл готовым.
+
+Именно на black/white/gray очень быстро становятся видны:
+- blue halo;
+- white fringe;
+- black fringe;
+- pinholes;
+- jagged mask;
+- потерянные тонкие листья.
+
+Для внутреннего debug UI я бы показывала увеличенный фрагмент края на **400–800%** плюс alpha heatmap и spill heatmap.
+
+## Апскейлеры: качество, стоимость и выбор
+
+Цены ниже проверены по актуальным страницам FAL на **7 сентября 2026 года**.
+
+| Upscaler | Alpha | Scale | Текущая стоимость | Сильные стороны | Ограничения | Мой вариант использования |
+|---|---|---:|---:|---|---|---|
+| **Topaz Transparent / FAL** | Да | фиксированные **4×** | **$0.08 / started 24 MP output** | Очень простой transparent workflow, PNG, alpha retained | Только 4×, большие outputs быстро переходят в следующий billing block | **Premium Default** после чистого cutout |
+| **BRIA Creative / FAL** | `preserve_alpha=true` | **2×**, up to 10 MP | **$0.04/image** | Дешевле, alpha, добавляет perceived detail | Creative/regenerative, может изменить watercolor details | Optional **Creative Enhance** |
+| **Real-ESRGAN** | Да, включая separate alpha mode | x2/x4 + outscale | Нет per-image API fee при локальном запуске | Batch/local, control, tile/fp16, open implementation | GPU/ops, модель restoration может менять art | **Standard/local** после A/B |
+| **Lanczos** | Да как обычное RGBA/mask resampling | произвольный | CPU cost only | Детерминированный, никакой hallucination | Не восстанавливает новые детали | Alpha masks, baseline, No-AI mode |
+
+### Topaz Transparent на FAL
+
+FAL сейчас указывает:
+
+- всегда **4× ширина и 4× высота**;
+- соответственно 16× площадь;
+- alpha сохраняется;
+- output PNG;
+- $0.08 за каждые начатые 24 MP результата. citeturn13view0
+
+Примеры стоимости:
+
+| Input | Output | Цена одного | 100 файлов |
+|---|---:|---:|---:|
+| 1024×1024 | 4096×4096 = 16.8 MP | **$0.08** | **$8** |
+| 1536×1024 | 6144×4096 = 25.2 MP | **$0.16** | **$16** |
+| 1536×1536 | 6144×6144 = 37.7 MP | **$0.16** | **$16** |
+| 2000×2000 | 8000×8000 = 64 MP | **$0.24** | **$24** |
+
+FAL сам приводит примеры 1024² → 4096² за $0.08 и 2000² → 8000² за $0.24. citeturn13view0
+
+Для вас важный вывод: **не отправлять на Topaz candidate до QC**. Если у набора 100 prompts и половина плохих generations, платить нужно только за 100 окончательно принятых cutouts, а не за 150–200 attempts.
+
+### BRIA Creative Upscale
+
+На текущей странице FAL BRIA Creative стоит **$0.04/image**, делает 2× и описывается как upscaler, который **regenerates sharper textures and refined details** до 10 MP. Его API имеет `preserve_alpha=true` по умолчанию и возвращает PNG. citeturn15search0turn14view2turn14view1
+
+Именно слово **regenerates** для вашего продукта двоякое.
+
+Это может улучшить:
+- мелкий цветок;
+- texture;
+- watercolor definition.
+
+Но это также означает, что для коммерческого clipart нельзя исходить из предположения “пиксели только увеличились”. Я бы считала BRIA **creative mode**, пока A/B не докажет, что ваши бантики, ромашки, лапы уток и листья сохраняются достаточно точно. Это инженерный вывод из характера модели, а не заявленный FAL дефект. citeturn14view2
+
+### Real-ESRGAN
+
+Real-ESRGAN создавался как blind super-resolution/restoration система для реальных сложных деградаций и использует synthetic degradation pipeline. citeturn16view2
+
+Официальный inference поддерживает:
+- `RealESRGAN_x4plus`;
+- `RealESRGAN_x2plus`;
+- final `--outscale`;
+- tiling;
+- `tile_pad=10` по умолчанию;
+- fp16 по умолчанию;
+- GPU selection;
+- `--alpha_upsampler realesrgan|bicubic`;
+- RGBA input/output. citeturn16view0turn16view1
+
+Для вашего приложения его главное преимущество:
+
+**нет обязательной оплаты $0.04–$0.08 каждый раз**, если модель запускается на вашей инфраструктуре.
+
+Но “local = free” тоже было бы неверно. Есть:
+- GPU electricity/cloud runtime;
+- память;
+- deploy;
+- updates;
+- queue management.
+
+Поэтому его надо оценивать не абстрактно, а в:
+
+```text
+$/accepted PNG
+images/min
+p50 latency
+p95 latency
+GPU-hours / 1000 assets
+```
+
+Универсальную скорость без конкретной GPU я бы не обещала.
+
+Стартовая конфигурация для A/B:
+
+```text
+RealESRGAN_x4plus
+fp16
+tile=0 if VRAM sufficient
+otherwise tile=512 or 256
+tile_pad=10
+```
+
+а `realesr-general-x4v3` можно отдельно тестировать с мягким denoise, потому что официальный код позволяет регулировать `denoise_strength`. citeturn16view0
+
+### Lanczos
+
+Lanczos ничего не “дорисует”. Он просто делает высококачественное математическое resampling; Pillow описывает его как truncated sinc filter. citeturn13view4
+
+Поэтому он очень полезен как:
+
+- alpha-mask upscaler;
+- No-AI baseline;
+- Small-image preprocessing;
+- контрольный вариант, чтобы понять, действительно ли AI upscale улучшает продукт.
+
+Иногда для уже хорошо прорисованного 1536–2048 px watercolor clipart **Lanczos может дать более коммерчески безопасный результат**, чем creative upscaler, который неожиданно изменяет мелкие элементы. Это следует проверять A/B на ваших реальных assets.
+
+### Fallback background removal
+
+Если chroma-key несколько раз не проходит, я бы не отправляла файл в бесконечные retries одного алгоритма.
+
+BiRefNet был разработан для high-resolution dichotomous image segmentation, причём работа отдельно уделяет внимание fine-detail reconstruction и gradient supervision. citeturn16view3 Это делает класс таких моделей интересным fallback для сложных cutouts.
+
+Как готовый API-вариант, FAL сейчас предлагает BRIA RMBG 2.0 по **$0.018 за inference**, с transparent PNG output. citeturn14view3
+
+Это даёт разумную ladder:
+
+```text
+cheap chroma removal
+       ↓ fail
+alternate chroma / regeneration
+       ↓ fail
+segmentation fallback (~$0.018 API example)
+       ↓
+edge cleanup
+```
+
+а не manual Photoshop после каждой пятой картинки.
+
+## Тестирование, мониторинг и получение N готовых файлов из N prompts
+
+### “Гарантия” N из N
+
+Нужно разделить две вещи.
+
+**Нельзя математически гарантировать**, что stochastic generative model за фиксированные три попытки обязательно выдаст качественную картинку.
+
+Можно гарантировать **production contract**:
+
+> prompt-slot считается завершённым только когда существует asset, прошедший Final QC.
+
+Состояния:
+
+```text
+PENDING
+→ GENERATING
+→ PREFLIGHT_QC
+→ CUTOUT
+→ UPSCALE
+→ FINAL_QC
+→ COMPLETE
+```
+
+При failure:
+
+```text
+FAILED_ATTEMPT
+→ RETRY
+```
+
+а не:
+
+```text
+FAILED_ATTEMPT
+→ slot lost
+```
+
+Таким образом batch из 100 prompts не заканчивается на “87 хороших и 13 плохих”. Он заканчивается, когда `complete_count == 100`, либо явно сообщает, какие slots исчерпали заданный автоматический budget и требуют исключительного вмешательства.
+
+### Retry ladder
+
+Я бы начала с:
+
+```text
+Attempt 1:
+  normal generation
+
+Attempt 2:
+  different seed / slightly stricter generation instruction
+
+Attempt 3:
+  alternate candidate or alternate chroma key
+
+Then:
+  fallback route
+
+If generation itself is structurally invalid:
+  regenerate
+
+If generation is good but keying fails:
+  segmentation fallback
+
+If upscale alone fails:
+  alternate upscaler
+```
+
+Очень важно не перегенерировать хороший исходник только потому, что **upscale** сделал странный край.
+
+### Почему 3 attempts разумны как старт
+
+Если для иллюстрации предположить независимый pass probability 80% на одну попытку, вероятность хотя бы одного pass за три attempts:
+
+\[
+1-(1-0.8)^3 = 99.2\%
+\]
+
+При 70%:
+
+\[
+1-(1-0.7)^3 = 97.3\%
+\]
+
+Реальные attempts, конечно, **не независимы**: сложный prompt остаётся сложным. Поэтому эти числа нельзя использовать как обещание. Они лишь показывают, почему несколько attempts плюс alternate strategy гораздо устойчивее single-shot production.
+
+### Production SLO, которые я бы поставила
+
+После calibration:
+
+| KPI | Начальная цель |
+|---|---:|
+| First-attempt preflight pass | **≥80%** |
+| Accepted within 3 generation attempts | **≥97%** |
+| Fallback background removal | **≤3–5%** |
+| Manual intervention | **≤1%** |
+| Final halo/spill escape | **<0.5%** |
+| Final malformed-object escape | **<0.25%** |
+| COMPLETE count | **100% prompt slots**, при условии доступного fallback/escalation |
+| Paid upscale calls | ≈ **1 на окончательно принятый asset** |
+
+Это **целевые SLO**, а не результаты уже проведённых тестов.
+
+### Golden test set
+
+Нужно собрать отдельный набор не из случайных картинок, а по типам сложности.
+
+Минимально:
+
+```text
+simple single object
+white/pale subject
+green foliage
+blue ribbons
+pink bows
+dense florals
+tiny flowers
+closed wreath
+rectangular frame
+internal transparent holes
+thin stems
+soft watercolor edge
+multiple animals
+same-color-as-key stress cases
+```
+
+Для каждого нужны:
+- good examples;
+- intentionally bad examples;
+- known edge cases.
+
+### Synthetic ground truth
+
+Очень хороший способ проверить именно background removal:
+
+Берём **уже идеальный transparent PNG**, где alpha нам известна, и сами композитим его на:
+
+```text
+blue key
+green key
+magenta key
+several selected auto-keys
+```
+
+Затем прогоняем pipeline и сравниваем recovered alpha с исходной.
+
+Так у нас есть **настоящая ground-truth mask**, которой нет у обычной генерации.
+
+Для matting давно используются SAD/MSE, а Microsoft alpha-matting benchmark предложил ещё Gradient и Connectivity errors, потому что они лучше отражают визуально важные ошибки края и связности. В их user study gradient/connectivity metrics показали более сильную корреляцию с человеческим восприятием соответствующих дефектов, чем одни pixel-wise errors. citeturn13view17
+
+Для ваших synthetic tests отслеживать:
+
+```text
+Alpha SAD
+Alpha MSE
+Gradient error
+Connectivity error
+edge ΔE
+spill_rate
+foreground core color drift
+component count difference
+```
+
+### Human Correction Effort
+
+Для вас есть ещё один особенно подходящий metric: **сколько ручной работы осталось**.
+
+В работе DIS5K авторы ввели Human Correction Efforts (HCE), который приближённо оценивает количество mouse-click operations, необходимых для исправления false positives и false negatives segmentation. citeturn14view4turn14view5
+
+Для вашего бизнеса можно сделать ещё проще:
+
+```text
+manual_fix_required: yes/no
+manual_fix_seconds
+number_of_brush/erase actions
+```
+
+В конечном счёте это важнее, чем абстрактное +0.02 к segmentation metric.
+
+### A/B matrix: порядок remove/upscale
+
+Именно этот тест я бы провела первым, потому что у вас уже есть реальный blue-fringe failure.
+
+| Test | Asset type | N | Route A | Route B | Control C | Что сравнивать |
+|---|---|---:|---|---|---|---|
+| A1 | simple object | 50 | **remove → decontam → upscale** | upscale chroma → remove → decontam | remove → upscale без decontam | spill %, edge quality |
+| A2 | pale/white goose | 50 | A | B | C | blue fringe, white-edge integrity |
+| A3 | dense florals | 50 | A | B | C | tiny detail survival |
+| A4 | closed wreath | 50 | A | B | C | internal holes, components |
+| A5 | thin leaves/stems | 50 | A | B | C | alpha Gradient/Connectivity |
+| A6 | watercolor soft edges | 50 | A | B | C | smoothness + halo |
+| A7 | color close to key | 50 | A | B | C | foreground damage |
+
+Для честного сравнения порядка желательно использовать один и тот же RGB upscaler, например Real-ESRGAN, в A и B. Topaz Transparent по своей природе предназначен уже для transparent input, поэтому он не подходит как симметричный вариант B “upscale opaque chroma first”. citeturn13view0
+
+**Главная метрика здесь не “какой файл выглядит чуть красивее”**, а:
+
+```text
+edge_spill_rate
+alpha Gradient error
+alpha Connectivity error
+foreground ΔE drift
+VLM detail defects
+manual_fix_seconds
+```
+
+### A/B matrix для upscalers
+
+| Category | N | Lanczos | Real-ESRGAN | Topaz Transparent | BRIA Creative |
+|---|---:|---|---|---|---|
+| simple clipart | 50 | baseline | test | test | test |
+| detailed floral | 50 | baseline | test | test | test |
+| watercolor feathers/fur | 50 | baseline | test | test | test |
+| fine stems | 50 | baseline | test | test | test |
+| bows/textile details | 50 | baseline | test | test | test |
+
+Оценивать:
+- fidelity к исходному объекту;
+- новые artifacts;
+- detail legibility;
+- edge halo;
+- mask geometry;
+- cost/image;
+- seconds/image;
+- retry rate.
+
+### Quality-gate pass-rate experiment
+
+Не стоит заранее придумывать фактический pass rate. Таблица должна собирать реальные результаты:
+
+| Pipeline version | Prompts | First-pass QC | Pass after retry 2 | Pass after retry 3 | Fallback | Manual | Final defects |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Baseline | 300 | measured | measured | measured | measured | measured | measured |
+| + deterministic QC | 300 | measured | measured | measured | measured | measured | measured |
+| + VLM gate | 300 | measured | measured | measured | measured | measured | measured |
+| + auto key | 300 | measured | measured | measured | measured | measured | measured |
+| + decontamination | 300 | measured | measured | measured | measured | measured | measured |
+| + new upscaler | 300 | measured | measured | measured | measured | measured | measured |
+| **Target** | — | **≥80%** | — | **≥97% cumulative** | **≤5%** | **≤1%** | **<0.5% edge failures** |
+
+Так вы поймёте не просто “новая функция вроде помогает”, а **какой именно этап сократил ручную работу**.
+
+### Production sampling
+
+На старте я бы вручную смотрела больше:
+
+```text
+первые ~500 outputs:
+  10–20% random human sample
+  + 100% warning-zone assets
+```
+
+После стабилизации:
+
+```text
+2–5% random sample
++ 100% warning/fallback outputs
++ 100% outputs после model/prompt/pipeline version change
+```
+
+Эти проценты являются рекомендуемой операционной стратегией.
+
+Логировать:
+
+```text
+first_pass_rate
+attempts_per_prompt
+candidate_rank_selected
+key_color_distribution
+background_uniformity_fail_rate
+semantic_fail_rate
+blur_fail_rate
+keying_fail_rate
+spill_fail_rate
+fallback_rate
+upscaler_fail_rate
+manual_rate
+manual_fix_seconds
+cost_per_complete_asset
+p50 / p95 stage latency
+pipeline_version
+generator_model_version
+upscaler_version
+```
+
+Это позволит заметить, например, что новая версия генератора внезапно чаще создаёт белые patches или хуже соблюдает solid background.
+
+### Диагностические визуалы, которые стоит встроить
+
+Для приложения полезнее не просто “PASS/FAIL”, а compact debug view:
+
+| Visual | Что показывает |
+|---|---|
+| Original generation | проблема генератора или обработки |
+| Predicted foreground overlay | что система считает объектом |
+| Alpha mask black/white | holes, lost stems |
+| 800% edge crop | fringe/aliasing |
+| Key-distance heatmap | где chroma смешался с объектом |
+| Spill heatmap | остаточный chroma color |
+| Composite on white | dark/color fringe |
+| Composite on black | white halo |
+| Composite on gray | общая edge quality |
+| Contact sheet of attempts | почему candidate 2 выиграл |
+
+Именно для ваших текущих изображений contact-sheet вместе с reason codes будет полезнее абстрактного score:
+
+```text
+Attempt 1:
+REJECT: malformed composition
+
+Attempt 2:
+REJECT: microdetail blur
+
+Attempt 3:
+PASS: 0.94 structural, 0.87 detail, clean BG
+```
+
+## Реализация в приложении и короткое ТЗ для Codex
+
+Архитектурно я бы разделила pipeline на независимые функции. Это позволит менять генератор, background remover или upscaler без переписывания всего приложения.
+
+**Core modules:**
+
+```text
+select_chroma_key()
+generate_candidate()
+
+measure_observed_key()
+run_preflight_pixel_qc()
+run_semantic_qc()
+
+build_hard_key_mask()
+classify_background_components()
+build_soft_alpha()
+
+decontaminate_rgb()
+extend_foreground_rgb()
+
+upscale_rgb()
+upscale_alpha()
+recombine_rgba()
+
+run_final_qc()
+
+retry_or_fallback()
+complete_prompt_slot()
+```
+
+### Минимальные структуры данных
+
+```typescript
+type PromptJobStatus =
+  | "pending"
+  | "generating"
+  | "preflight_qc"
+  | "cutout"
+  | "upscaling"
+  | "final_qc"
+  | "complete"
+  | "blocked";
+
+interface ChromaMeta {
+  requestedHex: string;
+  requestedRgb: [number, number, number];
+
+  observedRgb: [number, number, number];
+  observedLab: [number, number, number];
+
+  borderBandPx: number;
+  borderCoverage: number;
+  medianDeltaE: number;
+  p95DeltaE: number;
+
+  hardTolerance: number;
+  softTolerance: number;
+}
+
+interface QCResult {
+  passed: boolean;
+  warnings: string[];
+  hardFailures: string[];
+
+  backgroundUniformity: number;
+  structuralQuality: number;
+  promptFidelity: number;
+  microdetailQuality: number;
+  sharpnessScore: number | null;
+}
+
+interface Attempt {
+  attemptId: string;
+  promptId: string;
+  generatorVersion: string;
+  seed?: number;
+
+  chroma: ChromaMeta;
+  preflightQC: QCResult;
+  finalQC?: QCResult;
+
+  status: string;
+}
+```
+
+### Safe-color псевдокод
+
+```python
+def select_chroma_key(prompt_palette, candidates):
+    scored = []
+
+    for key in candidates:
+        distances = [
+            delta_e_2000(key.lab, fg.lab)
+            for fg in prompt_palette
+        ]
+
+        min_distance = min(distances)
+        median_distance = median(distances)
+
+        explicit_conflict = key.semantic_color in prompt_palette.named_colors
+
+        if min_distance < 25:
+            continue
+
+        score = (
+            0.60 * min_distance
+            + 0.25 * median_distance
+            + 0.15 * key.semantic_rarity_score
+            - (100 if explicit_conflict else 0)
+        )
+
+        scored.append((score, key))
+
+    if not scored:
+        return None  # fallback route
+
+    return max(scored)[1]
+```
+
+### Adaptive keying
+
+```python
+border = get_border_band(image, ratio=0.01, min_px=8)
+
+observed_key = robust_dominant_color_lab(border)
+
+p95 = percentile(
+    delta_e_2000(border, observed_key),
+    95,
+)
+
+t_hard = clamp(p95 + 2, 6, 12)
+t_soft = t_hard + 10
+```
+
+Затем:
+
+```text
+hard_key = ΔE <= t_hard
+soft_key = ΔE <= t_soft
+```
+
+`hard_key` используется для уверенных BG regions, `soft_key` только для controlled edge growth.
+
+### Decontamination checklist
+
+Код должен:
+
+- не менять opaque core;
+- работать главным образом в edge band;
+- использовать known observed background;
+- не делить на alpha около нуля;
+- расширять foreground RGB наружу;
+- проверять residual spill;
+- сохранять RGB plate и alpha отдельно;
+- только затем upscale.
+
+Формулу decontamination следует реализовать из стандартной alpha-compositing модели; PNG при финальной записи снова хранится как straight-alpha RGBA. citeturn13view8turn13view7
+
+### Upscaler abstraction
+
+```typescript
+interface Upscaler {
+  name: string;
+
+  upscaleRgb(
+    image: RGBImage,
+    scale: number
+  ): Promise<RGBImage>;
+
+  upscaleAlpha?(
+    alpha: AlphaMask,
+    scale: number
+  ): Promise<AlphaMask>;
+}
+```
+
+Backend:
+
+```text
+TopazTransparentUpscaler
+BriaCreativeUpscaler
+RealESRGANUpscaler
+LanczosUpscaler
+```
+
+Real-ESRGAN уже предоставляет x2/x4 models, configurable outscale, tile processing, fp16 и alpha-upscaler options в официальном inference implementation. citeturn16view0turn16view1
+
+### Final acceptance
+
+Файл становится `COMPLETE` только если:
+
+```text
+RGBA PNG valid
+correct final dimensions
+alpha exists
+outer unwanted background transparent
+no hard key remnants
+spill_rate below threshold
+no obvious white/black/color halo
+foreground geometry preserved
+no new upscale defects
+required microdetails remain readable
+composites pass on white/black/gray
+```
+
+Если Final QC упал **только по upscale artifact**, не надо заново генерировать изображение. Нужно попробовать другой upscaler.
+
+Если упал по **mask**, повторить cutout/fallback.
+
+Если упал по **malformed object**, тогда нужна regeneration.
+
+Это сократит и стоимость, и бессмысленные retries.
+
+### Короткое готовое ТЗ для Codex
+
+```text
+Нужно доработать существующий pipeline генерации clipart так, чтобы
+batch из N prompts автоматически доводился до N качественных
+transparent PNG с минимальным ручным вмешательством.
+
+Сначала изучи текущий код и существующие функции. Не переписывай
+рабочие части без необходимости.
+
+Реализуй модульный pipeline:
+
+Prompt
+→ automatic chroma-key selection
+→ generation
+→ preflight quality gate
+→ chroma removal
+→ edge decontamination/despill
+→ separate RGB foreground plate + alpha mask
+→ upscale
+→ recombine RGBA
+→ final QC
+→ COMPLETE.
+
+Требования:
+
+1. AUTO CHROMA COLOR
+- Анализировать ожидаемые цвета объекта из prompt.
+- Выбирать key из насыщенной candidate palette с максимальным
+  perceptual distance от foreground.
+- Использовать CIELAB/CIEDE2000.
+- Стартовое требование min ΔE00 >= 25.
+- Если безопасного key нет, отправлять в Fallback.
+- Сохранять requested key и после generation измерять actual/observed
+  key по border pixels.
+- Хранить metadata для каждого attempt.
+
+2. PREFLIGHT QC BEFORE BG REMOVAL
+Проверять до upscale:
+- valid image/dimensions;
+- uniform chroma background;
+- border key coverage;
+- clipping/touching canvas;
+- blur/smeared microdetails;
+- malformed objects/composition;
+- missing/extra prompt elements;
+- unwanted white/background patches;
+- deformed animals/flowers/objects.
+
+Стартовые thresholds:
+border coverage >= 0.97;
+93–97% = warning;
+<0.93 = reject.
+Использовать adaptive statistics относительно accepted style baseline
+для blur/sharpness.
+Добавить structured VLM QC с hard defect flags.
+
+При generation defect:
+REJECT и автоматически regenerate.
+Не тратить upscale на rejected generations.
+
+3. CHROMA REMOVAL
+- Border band примерно max(8px, 1% min dimension).
+- Определить observed background color robust median/cluster.
+- tHard = clamp(P95 border ΔE + 2, 6, 12).
+- tSoft = tHard + примерно 10.
+- Hard high-confidence key regions могут быть background даже внутри
+  closed wreath/frame.
+- Ambiguous soft key pixels удалять только через controlled connected
+  growth.
+- Не удалять globally все похожие цвета объекта.
+
+4. ALPHA
+Создавать soft alpha, а не только binary mask.
+Сохранять alpha mask отдельно.
+
+5. EDGE DECONTAMINATION
+До любого AI upscale убрать chroma spill из RGB partial-alpha pixels.
+Использовать известный observed background и alpha compositing:
+F = (C - (1-alpha)*B) / alpha
+только при безопасной alpha.
+Для alpha < ~0.15–0.20 использовать nearest/inpainted foreground RGB.
+Не оставлять blue/green/magenta RGB под transparent edge.
+Расширить clean foreground RGB немного за alpha boundary.
+
+6. UPSCALE
+Сделать pluggable backend:
+- Topaz Transparent FAL
+- BRIA Creative
+- Real-ESRGAN
+- Lanczos
+
+Default:
+remove → decontaminate → RGB/alpha → final upscale.
+
+Small-image:
+не делать generative upscale chroma image до удаления BG по умолчанию;
+при необходимости использовать deterministic Lanczos/bicubic для
+mask analysis, затем один final upscale.
+
+Fallback:
+alternate chroma/regeneration → segmentation/background-removal
+backend → decontamination → upscale.
+
+No-upscale:
+тот же cutout pipeline, но skip upscale.
+
+Alpha по умолчанию upscale отдельно deterministic Lanczos/bicubic.
+RGB можно upscale AI-моделью.
+После этого recombine RGBA.
+
+7. FINAL QC
+Автоматически composite PNG на:
+white, black, gray и high-contrast background.
+Проверять halo, chroma spill, holes, clipping и потерю деталей.
+Стартовый target residual spill_rate < 0.5%.
+
+8. ORCHESTRATION
+Каждый prompt является slot.
+Slot считается завершённым только после Final QC.
+Сделать state machine:
+PENDING → GENERATED → PREFLIGHT_QC → CUTOUT → UPSCALED
+→ FINAL_QC → COMPLETE.
+
+Failures должны иметь reason code.
+Generation failure → regenerate.
+Mask failure → re-key/fallback.
+Upscale failure → alternate upscaler.
+Не начинать весь pipeline заново без необходимости.
+
+Добавить attempts, retries, idempotency и сохранение промежуточных
+artifacts/metadata.
+
+9. LOGGING
+Хранить:
+first_pass_rate,
+attempts_per_prompt,
+failure reasons,
+fallback_rate,
+spill_fail_rate,
+manual_review_rate,
+cost_per_complete_asset,
+stage latency,
+generator/upscaler/pipeline versions.
+
+10. TESTS
+Добавить unit/integration tests для:
+- safe key selection;
+- closed wreath internal background;
+- color similar to foreground;
+- blue fringe;
+- white subject;
+- tiny flowers;
+- soft watercolor edge;
+- mask recombination;
+- transparent PNG output.
+
+Создать synthetic tests:
+взять known RGBA cutout, composite на chroma background,
+прогнать remover и сравнить recovered alpha с ground truth.
+
+Сначала покажи, какие существующие файлы/модули будут затронуты и
+какие текущие функции можно переиспользовать. Затем реализуй
+изменения небольшими изолированными шагами и после каждого шага
+запускай соответствующие тесты.
+```
+
+Итоговая production-идея сводится не к тому, чтобы сделать chroma-key “сильнее”, а к тому, чтобы **перестать пропускать плохие изображения дальше по конвейеру**. В вашем случае максимальное сокращение ручной работы дадут три изменения одновременно: **pre-generation safe-key selection, strict preflight rejection/regeneration и decontaminated RGB + separate alpha перед единственным финальным upscale**. Для сложных случаев chroma-key должен быть быстрым основным методом, а segmentation/matting, например семейство BiRefNet/RMBG, резервным путем, а не ручная чистка пользователем. citeturn16view3turn14view3

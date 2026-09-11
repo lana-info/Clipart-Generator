@@ -8,13 +8,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QEventLoop, QStandardPaths, pyqtSignal
+from PyQt6.QtCore import QEventLoop, QStandardPaths, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMessageBox,
+    QMenu,
+    QScrollArea,
     QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
@@ -33,6 +36,9 @@ from v3_components import (
 )
 from v3_project_state import ProjectMode, ProjectState
 from v3_project_state import ProjectStateError, load_project_draft, save_project_draft
+from studio_projects import ProjectStore
+from studio_catalog import CatalogEntry, ModuleAvailability, card_action
+from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
 from v3_clipart_flow import install_clipart_flow
 from v3_pinterest_flow import install_pinterest_flow
 from v3_processing_flow import install_processing_flow
@@ -53,7 +59,7 @@ class ModeCardSpec:
 
 MODE_CARD_SPECS: dict[ProjectMode, ModeCardSpec] = {
     ProjectMode.CLIPART: ModeCardSpec(
-        title="Создать клипарт",
+        title="Генерация изображений",
         description=(
             "Массово создавайте изображения в нейросетях, включая "
             "согласованные серии клипартов, с гибкой генерацией и обработкой."
@@ -61,7 +67,7 @@ MODE_CARD_SPECS: dict[ProjectMode, ModeCardSpec] = {
         result="серия готовых изображений, в том числе PNG-клипартов",
     ),
     ProjectMode.PINTEREST: ModeCardSpec(
-        title="Создать Pinterest-пины",
+        title="Pinterest",
         description=(
             "Создавайте только готовые вертикальные изображения по промптам — "
             "без публикации, редактора макетов и обязательного текста поверх."
@@ -69,7 +75,7 @@ MODE_CARD_SPECS: dict[ProjectMode, ModeCardSpec] = {
         result="пакет изображений Pinterest-пинов",
     ),
     ProjectMode.PROCESSING: ModeCardSpec(
-        title="Обработать изображения",
+        title="Обработка изображений",
         description=(
             "Улучшите собственные или лицензированные файлы: фон, качество, "
             "края, метаданные и проверка."
@@ -113,6 +119,9 @@ class ModeSelectionScreen(QWidget):
     license_requested = pyqtSignal()
     api_settings_requested = pyqtSignal()
     diagnostics_requested = pyqtSignal()
+    project_requested = pyqtSignal(str)
+    all_projects_requested = pyqtSignal()
+    module_action_requested = pyqtSignal(str, str)
 
     def __init__(
         self,
@@ -123,6 +132,7 @@ class ModeSelectionScreen(QWidget):
         super().__init__(parent)
         self.tokens = tokens
         self.mode_cards: dict[ProjectMode, ModeCard] = {}
+        self.module_cards: dict[str, StudioCatalogCard] = {}
 
         self.setMinimumSize(*V3_WINDOW_MINIMUM_SIZE)
         self.setAccessibleName("Выбор задачи")
@@ -135,7 +145,7 @@ class ModeSelectionScreen(QWidget):
             tokens.space_6,
             tokens.space_6,
         )
-        layout.setSpacing(tokens.space_4)
+        layout.setSpacing(tokens.space_3)
 
         self.account_card = QFrame()
         self.account_card.setProperty("v3Card", True)
@@ -171,23 +181,20 @@ class ModeSelectionScreen(QWidget):
         account_layout.addWidget(self.diagnostics_button)
         layout.addWidget(self.account_card)
 
-        title = QLabel("Что вы хотите сделать?")
+        title = QLabel("Модули")
         title.setProperty("v3Title", True)
         title.setAccessibleName(title.text())
         layout.addWidget(title)
 
-        description = QLabel(
-            "Выберите задачу — дальше будут показаны только нужные шаги и настройки."
-        )
-        description.setProperty("v3Description", True)
-        description.setWordWrap(True)
-        layout.addWidget(description)
-
         self.cards_container = QWidget()
-        cards_layout = QHBoxLayout(self.cards_container)
+        cards_layout = QGridLayout(self.cards_container)
+        self.cards_layout = cards_layout
         cards_layout.setContentsMargins(0, 0, 0, 0)
-        cards_layout.setSpacing(tokens.space_4)
-        for mode in ProjectMode:
+        cards_layout.setSpacing(tokens.space_3)
+        cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        for column in range(3):
+            cards_layout.setColumnStretch(column, 1)
+        for mode in (ProjectMode.CLIPART, ProjectMode.PROCESSING, ProjectMode.PINTEREST):
             spec = MODE_CARD_SPECS[mode]
             card = ModeCard(
                 mode.value,
@@ -195,16 +202,29 @@ class ModeSelectionScreen(QWidget):
                 spec.description,
                 spec.result,
                 tokens=tokens,
-                illustration_path=mode_illustration_path(mode),
+                illustration_path=(catalog_artwork("generation") if mode is ProjectMode.CLIPART
+                                   else mode_illustration_path(mode)),
+                compact=True,
             )
+            card.description_label.setText({
+                ProjectMode.CLIPART: "Изображения и серии по промптам",
+                ProjectMode.PROCESSING: "Фон, качество и прозрачность",
+                ProjectMode.PINTEREST: "Пины по промптам, без публикации",
+            }[mode])
             card.selected.connect(self._select_mode)
             card.setSizePolicy(
                 QSizePolicy.Policy.Ignored,
                 QSizePolicy.Policy.Expanding,
             )
             self.mode_cards[mode] = card
-            cards_layout.addWidget(card, 1)
-        layout.addWidget(self.cards_container, 1)
+        self.catalog_scroll = QScrollArea()
+        self.catalog_scroll.setWidgetResizable(True)
+        self.catalog_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.catalog_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.catalog_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.catalog_scroll.setWidget(self.cards_container)
+        layout.addWidget(self.catalog_scroll, 1)
+        self.set_module_catalog(BUILTIN_CATALOG)
 
         self.recent_project_card = QFrame()
         self.recent_project_card.setProperty("v3Card", True)
@@ -231,7 +251,25 @@ class ModeSelectionScreen(QWidget):
         )
         recent_layout.addWidget(self.continue_button)
         self.recent_project_card.hide()
-        layout.addWidget(self.recent_project_card)
+        layout.insertWidget(1, self.recent_project_card)
+
+        self.saved_projects_card = QFrame()
+        self.saved_projects_card.setProperty("v3Card", True)
+        saved_layout = QVBoxLayout(self.saved_projects_card)
+        saved_layout.setContentsMargins(10, 6, 10, 6)
+        saved_layout.setSpacing(4)
+        saved_heading = QHBoxLayout()
+        heading = QLabel("Продолжить работу")
+        saved_heading.addWidget(heading, 1)
+        self.all_projects_button = V3Button("Все проекты", ButtonVariant.GHOST)
+        self.all_projects_button.clicked.connect(self.all_projects_requested.emit)
+        saved_heading.addWidget(self.all_projects_button)
+        saved_layout.addLayout(saved_heading)
+        self.saved_projects_layout = QHBoxLayout()
+        saved_layout.addLayout(self.saved_projects_layout)
+        self.saved_project_buttons: list[V3Button] = []
+        self.saved_projects_card.hide()
+        layout.insertWidget(1, self.saved_projects_card)
 
         self.cancel_button = V3Button(
             "Вернуться",
@@ -246,6 +284,57 @@ class ModeSelectionScreen(QWidget):
         for mode, card in self.mode_cards.items():
             card.set_selected(mode is selected_mode)
         self.mode_selected.emit(selected_mode.value)
+
+    def set_module_catalog(self, entries, availability=None) -> None:
+        """Render trusted catalog metadata; emitting intent never grants access."""
+        entries = tuple(entries)
+        if not all(isinstance(entry, CatalogEntry) for entry in entries):
+            raise TypeError("Catalog entries must be CatalogEntry values")
+        if len({entry.module_id for entry in entries}) != len(entries):
+            raise ValueError("Duplicate catalog module")
+        availability = availability or {}
+        # Validate the entire replacement before disturbing the visible catalog.
+        for entry in entries:
+            card_action(entry, availability.get(entry.module_id, ModuleAvailability()))
+        for card in self.module_cards.values():
+            self.cards_layout.removeWidget(card)
+            card.hide()
+            card.deleteLater()
+        self.module_cards = {}
+        for entry in entries:
+            card = StudioCatalogCard(entry, availability.get(entry.module_id, ModuleAvailability()),
+                                     tokens=self.tokens)
+            card.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            card.action_requested.connect(self.module_action_requested.emit)
+            self.module_cards[entry.module_id] = card
+        while self.cards_layout.count():
+            self.cards_layout.takeAt(0)
+        cards = [self.mode_cards[ProjectMode.CLIPART], self.mode_cards[ProjectMode.PROCESSING]]
+        modules = list(self.module_cards.values())
+        cards.extend(modules[:2])
+        cards.append(self.mode_cards[ProjectMode.PINTEREST])
+        cards.extend(modules[2:])
+        for index, card in enumerate(cards):
+            self.cards_layout.addWidget(card, index // 3, index % 3)
+
+    def set_saved_projects(self, projects: list) -> None:
+        while self.saved_projects_layout.count():
+            item = self.saved_projects_layout.takeAt(0)
+            item.widget().hide()
+            item.widget().deleteLater()
+        self.saved_project_buttons = []
+        for project in projects[:3]:
+            button = V3Button(project.name, ButtonVariant.SECONDARY)
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            button.setToolTip(f"{project.name}\n{project.updated_at}")
+            button.setAccessibleName(f"Продолжить проект: {project.name}")
+            button.clicked.connect(
+                lambda _checked=False, project_id=project.project_id:
+                self.project_requested.emit(project_id)
+            )
+            self.saved_projects_layout.addWidget(button, 1)
+            self.saved_project_buttons.append(button)
+        self.saved_projects_card.setVisible(bool(projects))
 
     def reset_selection(self) -> None:
         for card in self.mode_cards.values():
@@ -318,6 +407,15 @@ class V3ApplicationView(QWidget):
         self._update_controller = None
         self._initialization_overlay: InitializationProgressOverlay | None = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
+        self._project_store = None
+        self._project_store_unavailable = False
+        if self._draft_path is not None:
+            try:
+                self._project_store = ProjectStore(self._draft_path.parent / "projects")
+            except (OSError, ValueError):
+                self._project_store_unavailable = True
+        self._active_project_id: str | None = None
+        self._recent_saved_project_id: str | None = None
         self._preferences_path = (
             self._draft_path.with_name("preferences.json")
             if self._draft_path is not None else None
@@ -350,6 +448,8 @@ class V3ApplicationView(QWidget):
         self.mode_selection.license_requested.connect(self._show_license)
         self.mode_selection.api_settings_requested.connect(self._show_api_settings)
         self.mode_selection.diagnostics_requested.connect(self._show_diagnostics)
+        self.mode_selection.project_requested.connect(self.continue_saved_project)
+        self.mode_selection.all_projects_requested.connect(self._show_all_projects)
         self.stack.addWidget(self.mode_selection)
 
         if recent_project is None and self._draft_path is not None:
@@ -499,6 +599,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.reset_selection()
         self.mode_selection.set_mode_switch_context(False)
         self.mode_selection.set_recent_project_summary(self._recent_project)
+        self._refresh_saved_projects()
         self.refresh_license_status()
         self._set_application_screen(self.mode_selection, "mode_selection", trigger)
 
@@ -520,6 +621,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.reset_selection()
         self.mode_selection.set_mode_switch_context(True)
         self.mode_selection.set_recent_project_summary(None)
+        self.mode_selection.set_saved_projects([])
         self._set_application_screen(
             self.mode_selection,
             "mode_selection",
@@ -576,10 +678,13 @@ class V3ApplicationView(QWidget):
 
         state = ProjectState(mode=mode)
         self._apply_preferences(state, mode)
+        self._active_project_id = None
         self._replace_shell(state)
         self.new_project_started.emit(mode.value)
 
     def continue_last_project(self) -> bool:
+        if self._recent_saved_project_id is not None:
+            return self.continue_saved_project(self._recent_saved_project_id)
         if self._recent_project is None:
             return False
         state = ProjectState.from_dict(self._recent_project.to_dict())
@@ -591,6 +696,56 @@ class V3ApplicationView(QWidget):
         )
         self.project_continued.emit(state.mode.value)
         return True
+
+    def _refresh_saved_projects(self) -> None:
+        if self._project_store is None:
+            return
+        try:
+            records = self._project_store.recent()
+        except (OSError, ValueError):
+            records = []
+        self.mode_selection.set_saved_projects(records)
+        self._recent_saved_project_id = records[0].project_id if records else None
+        if records:
+            self.mode_selection.recent_project_card.hide()
+
+    def continue_saved_project(self, project_id: str) -> bool:
+        if self._project_store is None:
+            return False
+        if self.shell is not None and self.shell.active_run_controller() is not None:
+            self.shell.set_save_error("Сначала остановите текущее задание.")
+            return False
+        try:
+            record = self._project_store.load(project_id)
+            state = ProjectState.from_dict(record.state)
+        except (OSError, ValueError):
+            QMessageBox.warning(self, "Проект", "Не удалось открыть сохранённый проект.")
+            return False
+        self._active_project_id = record.project_id
+        self._replace_shell(state)
+        self.project_continued.emit(state.mode.value)
+        return True
+
+    def _show_all_projects(self) -> None:
+        if self._project_store is None:
+            return
+        menu = QMenu(self)
+        try:
+            records = self._project_store.recent(limit=None)
+        except (OSError, ValueError):
+            QMessageBox.warning(self, "Проекты", "Не удалось прочитать список проектов.")
+            return
+        for record in records:
+            action = menu.addAction(record.name.replace("&", "&&"))
+            action.triggered.connect(
+                lambda _checked=False, project_id=record.project_id:
+                self.continue_saved_project(project_id)
+            )
+        if not records:
+            menu.addAction("Нет сохранённых проектов").setEnabled(False)
+        button = self.mode_selection.all_projects_button
+        menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
+        menu.deleteLater()
 
     def _load_recent_project(self) -> ProjectState | None:
         path = self._draft_path
@@ -686,14 +841,50 @@ class V3ApplicationView(QWidget):
             return
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
+            if self._project_store is not None:
+                state = self.shell.state
+                args = (state.mode.value, state.common.project_name.strip() or "Без названия", state.to_dict())
+                if self._active_project_id is None:
+                    record = self._project_store.create(*args)
+                    self._active_project_id = record.project_id
+                else:
+                    self._project_store.save(self._active_project_id, *args)
+            # The separate project is authoritative. Never write a newer legacy
+            # draft first, then hide it behind an older project after a failure.
             save_project_draft(self.shell.state, path)
             preferences_saved = self._save_preferences()
-        except (OSError, ProjectStateError):
+            self._recent_project = ProjectState.from_dict(self.shell.state.to_dict())
+        except (OSError, ValueError):
             self.shell.set_save_error("Не удалось сохранить изменения")
             return
         self.shell.set_save_error(
-            None if preferences_saved else "Не удалось сохранить изменения"
+            None if preferences_saved and not self._project_store_unavailable
+            else "Не удалось сохранить изменения"
         )
+
+    def _create_project_worker(self, shell: AppShell, **kwargs: Any) -> Any:
+        from v3_runtime_adapter import DEFAULT_LEGACY_RUNTIME_ADAPTER
+
+        if shell is not self.shell:
+            raise ValueError("Откройте проект заново перед запуском")
+        if self._draft_path is not None:
+            if self._project_store is None:
+                raise OSError("Не удалось сохранить проект. Проверьте доступ к папке приложения")
+            # Save before creating a worker, including retries. Failure must
+            # not silently fall back to a shared journal and submit paid work.
+            state = shell.state
+            args = (state.mode.value, state.common.project_name.strip() or "Без названия", state.to_dict())
+            try:
+                if self._active_project_id is None:
+                    record = self._project_store.create(*args)
+                    self._active_project_id = record.project_id
+                else:
+                    self._project_store.save(self._active_project_id, *args)
+            except (OSError, ValueError) as error:
+                raise OSError("Не удалось сохранить проект. Запуск не начат") from error
+            kwargs["project_id"] = self._active_project_id
+        factory = self._worker_factory or DEFAULT_LEGACY_RUNTIME_ADAPTER.create_worker
+        return factory(**kwargs)
 
     def _replace_shell(self, state: ProjectState) -> None:
         previous = self.shell
@@ -735,7 +926,7 @@ class V3ApplicationView(QWidget):
         }
         installer_kwargs = {
             "runtime_settings_provider": self._runtime_settings,
-            "worker_factory": self._worker_factory,
+            "worker_factory": lambda **kwargs: self._create_project_worker(shell, **kwargs),
             "authorization_provider": (
                 self._license_gate.authorize_run
                 if self._license_gate is not None

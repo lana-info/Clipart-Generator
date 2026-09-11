@@ -512,13 +512,15 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_editing_prompt_text_preserves_reference_paths(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [
-            PromptEntry("Fox", ["D:/one.png", "D:/two.png"]),
+            PromptEntry("Fox", ["D:/one.png", "D:/two.png"], result_kind="clipart", chroma_key_color="green"),
         ]
         page = ClipartPromptReviewPage(state, lambda: None)
 
         page.table.item(0, 0).setText("Red fox")
 
         self.assertEqual(state.clipart.prompts[0].prompt, "Red fox")
+        self.assertEqual(state.clipart.prompts[0].result_kind, "clipart")
+        self.assertEqual(state.clipart.prompts[0].chroma_key_color, "green")
         self.assertEqual(
             state.clipart.prompts[0].references,
             ["D:/one.png", "D:/two.png"],
@@ -676,7 +678,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(page.paste_chroma_color.currentData(), "red")
         self.assertTrue(page.paste_chroma_color_buttons["red"].isChecked())
 
-    def test_series_color_buttons_restore_and_update_draft_and_prompt(self):
+    def test_series_uses_automatic_key_color_even_if_legacy_control_changes(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompt_generator.theme = "Watercolor fox"
         state.clipart.prompt_generator.subjects = ["Fox"]
@@ -690,7 +692,7 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         self.assertEqual(page.chroma_key_color.currentData(), "green")
         self.assertEqual(state.clipart.prompt_generator.chroma_key_color, "green")
-        self.assertIn("#00FF00", page.preview_label.text())
+        self.assertIn("#0000FF", page.preview_label.text())
 
     def test_series_chroma_controls_default_to_blue_and_limit_materials_to_three(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
@@ -1097,6 +1099,8 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_cost_and_worker_request_include_variants_references_and_operations(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-run-") as temp:
             state = self.make_state(temp)
+            state.clipart.prompts[0].chroma_key_color = "red"
+            state.clipart.prompts[1].chroma_key_color = "green"
             state.runtime.timeout = 42
             request = build_clipart_run_request(
                 state,
@@ -1107,6 +1111,8 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertEqual(request.mode, "mode_both")
         self.assertEqual(len(request.generated_prompts), 4)
         self.assertEqual(request.generated_prompts[2]["references"], [str(Path(temp) / "reference.png")])
+        self.assertEqual(request.generated_prompts[0]["chroma_key_color"], "red")
+        self.assertEqual(request.generated_prompts[2]["chroma_key_color"], "green")
         self.assertEqual(request.settings["text_generation_model"], state.clipart.generation.model)
         self.assertEqual(request.settings["remove_bg"], True)
         self.assertEqual(request.settings["timeout"], 42)

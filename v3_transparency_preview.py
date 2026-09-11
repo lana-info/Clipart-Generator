@@ -859,6 +859,7 @@ class ClipartTransparencyEditorPage(QWidget):
     back_requested = pyqtSignal()
     focus_mode_changed = pyqtSignal(bool)
     saved = pyqtSignal(str)
+    copy_saved = pyqtSignal(object, object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -1048,6 +1049,9 @@ class ClipartTransparencyEditorPage(QWidget):
         self.background_buttons["Шахматный"].setChecked(True)
         tools_layout.addLayout(background_row)
 
+        self.contour_button = V3Button("Контур по точкам", ButtonVariant.SECONDARY)
+        self.contour_button.clicked.connect(self._open_contour_editor)
+        tools_layout.addWidget(self.contour_button)
         save_row = QHBoxLayout()
         self.save_button = V3Button("Сохранить PNG", ButtonVariant.PRIMARY)
         self.back_button = V3Button("К результатам", ButtonVariant.SECONDARY)
@@ -1252,10 +1256,36 @@ class ClipartTransparencyEditorPage(QWidget):
             self.undo_button.setEnabled(False)
             self.redo_button.setEnabled(False)
             self.save_button.setEnabled(False)
+            self.contour_button.setEnabled(False)
             return
         self.undo_button.setEnabled(document.can_undo)
         self.redo_button.setEnabled(document.can_redo)
         self.save_button.setEnabled(True)
+        self.contour_button.setEnabled(True)
+
+    def _open_contour_editor(self) -> None:
+        from studio_contour_editor import ContourEditorDialog
+        import numpy as np
+
+        path = self.current_path
+        if path is None:
+            return
+        # Pass the current in-memory alpha, not the last version on disk.
+        # Cancelling the dialog leaves this page and its undo history intact.
+        dialog = ContourEditorDialog(
+            path, self, rgba=np.array(self.document.corrected_image(), dtype=np.uint8),
+        )
+        dialog.exec()
+        saved_path = dialog.saved_path
+        if saved_path is not None:
+            paths = list(self._paths)
+            saved_path = Path(saved_path)
+            if saved_path not in paths:
+                paths.append(saved_path)
+            self.set_files(paths, selected_index=paths.index(saved_path), rough_dir=self._rough_dir)
+            self.copy_saved.emit(path, saved_path)
+            self.saved.emit(saved_path.name)
+        dialog.deleteLater()
 
     def save_current(self) -> tuple[Path, Path]:
         output_path = self.current_path

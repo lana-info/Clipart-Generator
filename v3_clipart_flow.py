@@ -453,6 +453,7 @@ def _price_usd(
 
 
 def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
+    from result_background_policy import keeps_background
     if not isinstance(state, ProjectState):
         raise TypeError("state must be a ProjectState")
     generation = state.clipart.generation
@@ -499,39 +500,40 @@ def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
     _, processing_pricing = _legacy_catalog()
     operations = state.clipart.operations
     output_count = len(state.clipart.prompts) * variants
-    processing_models: list[str] = []
+    removal_count = sum(not keeps_background(entry.result_kind) for entry in state.clipart.prompts) * variants
+    processing_models: list[tuple[str, int]] = []
     if operations.upscale_before and operations.upscale_before_provider == "kie":
         use_provider("kie")
-        processing_models.append(operations.kie_upscale_model)
+        processing_models.append((operations.kie_upscale_model, output_count))
     elif operations.upscale_before and operations.upscale_before_provider == "fal":
         use_provider("fal")
         incomplete_providers.add("fal")
         processing_request_count += output_count
-    if operations.remove_background:
+    if operations.remove_background and removal_count:
         if operations.remove_background_provider == "kie":
             use_provider("kie")
-            processing_models.append(operations.kie_remove_bg_model)
+            processing_models.append((operations.kie_remove_bg_model, removal_count))
         elif operations.remove_background_provider == "photoroom":
-            amount = Decimal("0.02") * output_count
+            amount = Decimal("0.02") * removal_count
             processing_total += amount
             add_provider_cost("photoroom", amount)
-            processing_request_count += output_count
+            processing_request_count += removal_count
         elif operations.remove_background_provider == "fal":
             use_provider("fal")
             incomplete_providers.add("fal")
-            processing_request_count += output_count
+            processing_request_count += removal_count
     if operations.upscale_after and operations.upscale_after_provider == "kie":
         use_provider("kie")
-        processing_models.append(operations.kie_upscale_after_model)
+        processing_models.append((operations.kie_upscale_after_model, output_count))
 
-    processing_request_count += len(processing_models) * output_count
-    for model_id in processing_models:
+    processing_request_count += sum(count for _, count in processing_models)
+    for model_id, count in processing_models:
         unit = _price_usd(processing_pricing.get(model_id), "")
         if unit is None:
             complete = False
             incomplete_providers.add("kie")
         else:
-            amount = unit * output_count
+            amount = unit * count
             processing_total += amount
             add_provider_cost("kie", amount)
 
@@ -853,6 +855,9 @@ def build_clipart_run_request(
 
     prompts: list[dict[str, Any]] = []
     for entry in state.clipart.prompts:
+        from result_background_policy import keeps_background
+        if keeps_background(entry.result_kind) and entry.chroma_key_color:
+            raise ClipartFlowError("Фон, плитка или страница не должны содержать настройку chroma-key")
         if not entry.prompt.strip():
             raise ClipartFlowError("Пустой промпт нельзя отправить на генерацию")
         has_references = bool(entry.references)
@@ -889,6 +894,8 @@ def build_clipart_run_request(
                 {
                     "prompt": entry.prompt,
                     "references": list(entry.references),
+                    "chroma_key_color": entry.chroma_key_color,
+                    "result_kind": entry.result_kind,
                 }
             )
 
@@ -985,7 +992,15 @@ def apply_prompt_text_edit(
         raise ValueError("Unknown prompt text edit action")
     selected = {row for row in rows if 0 <= row < len(entries)}
     find_text, new_text = find_text.strip(), new_text.strip()
-    result = [PromptEntry(entry.prompt, list(entry.references)) for entry in entries]
+    result = [
+        PromptEntry(
+            prompt=entry.prompt,
+            references=list(entry.references),
+            chroma_key_color=entry.chroma_key_color,
+            result_kind=entry.result_kind,
+        )
+        for entry in entries
+    ]
     matches = 0
     for row in selected:
         if action in {"prepend", "append"} and not new_text:
@@ -1358,6 +1373,8 @@ class PromptReferenceEditorDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Редактор промпта")
+        self._result_kind = entry.result_kind
+        self._chroma_key_color = entry.chroma_key_color
         self.setModal(True)
         self._prompt_edit = QPlainTextEdit(entry.prompt)
         self._prompt_edit.setMinimumHeight(120)
@@ -1465,7 +1482,9 @@ class PromptReferenceEditorDialog(QDialog):
         return references[:MAX_REFERENCES_PER_PROMPT]
 
     def prompt_entry(self) -> PromptEntry:
-        return PromptEntry(self.prompt_text(), self.references())
+        return PromptEntry(self.prompt_text(), self.references(),
+                           chroma_key_color=self._chroma_key_color,
+                           result_kind=self._result_kind)
 
 
 class ReferenceScopeDialog(QDialog):
@@ -1526,7 +1545,13 @@ class PromptBatchEditDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(620)
         self._entries = [
-            PromptEntry(entry.prompt, list(entry.references)) for entry in entries
+            PromptEntry(
+                prompt=entry.prompt,
+                references=list(entry.references),
+                chroma_key_color=entry.chroma_key_color,
+                result_kind=entry.result_kind,
+            )
+            for entry in entries
         ]
         self._selected_rows = tuple(
             sorted({row for row in selected_rows if 0 <= row < len(entries)})
@@ -1631,7 +1656,12 @@ class PromptBatchEditDialog(QDialog):
     def edited_entries(self) -> tuple[list[PromptEntry], int]:
         return (
             [
-                PromptEntry(entry.prompt, list(entry.references))
+                PromptEntry(
+                    prompt=entry.prompt,
+                    references=list(entry.references),
+                    chroma_key_color=entry.chroma_key_color,
+                    result_kind=entry.result_kind,
+                )
                 for entry in self._preview_entries
             ],
             self._affected_count,
@@ -1753,6 +1783,19 @@ class ClipartProjectPage(_ScrollableStepPage):
 
         self.work_dir_edit.textChanged.connect(self._sync)
         self._refresh_status()
+
+        # Pinterest derives from this page but must keep its own workflow.
+        if type(self) is ClipartProjectPage:
+            self.builder_button = V3Button("Настроить набор клипартов", ButtonVariant.SECONDARY)
+            self.builder_button.clicked.connect(self._open_builder)
+            self.add_widget(self.builder_button)
+
+    def _open_builder(self) -> None:
+        from studio_clipart_builder_ui import ClipartBuilderDialog
+
+        dialog = ClipartBuilderDialog(self.state, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.changed()
 
     def _browse(self) -> None:
         selected = QFileDialog.getExistingDirectory(
@@ -2584,11 +2627,21 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         if affected_count <= 0:
             return
         self._batch_undo_snapshot = [
-            PromptEntry(entry.prompt, list(entry.references))
+            PromptEntry(
+                prompt=entry.prompt,
+                references=list(entry.references),
+                chroma_key_color=entry.chroma_key_color,
+                result_kind=entry.result_kind,
+            )
             for entry in self.state.clipart.prompts
         ]
         self.state.clipart.prompts = [
-            PromptEntry(entry.prompt, list(entry.references))
+            PromptEntry(
+                prompt=entry.prompt,
+                references=list(entry.references),
+                chroma_key_color=entry.chroma_key_color,
+                result_kind=entry.result_kind,
+            )
             for entry in entries
         ]
         self.undo_batch_button.setEnabled(True)
@@ -2858,7 +2911,10 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 self.card.set_state("error", "Референс превышает допустимую длину")
                 self.refresh_from_state()
                 return
-            entries.append(PromptEntry(prompt=prompt, references=references))
+            original = self.state.clipart.prompts[row] if row < len(self.state.clipart.prompts) else PromptEntry()
+            entries.append(PromptEntry(prompt=prompt, references=references,
+                                       chroma_key_color=original.chroma_key_color,
+                                       result_kind=original.result_kind))
         self.state.clipart.prompts = entries
         self._apply_search()
         self._refresh_issues()
@@ -2891,7 +2947,12 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         source = self.state.clipart.prompts[row]
         self.state.clipart.prompts.insert(
             row + 1,
-            PromptEntry(source.prompt, list(source.references)),
+            PromptEntry(
+                prompt=source.prompt,
+                references=list(source.references),
+                chroma_key_color=source.chroma_key_color,
+                result_kind=source.result_kind,
+            ),
         )
         self.refresh_from_state()
         self.table.setCurrentCell(row + 1, 0)
@@ -3842,6 +3903,7 @@ ClipartProcessingPage = _SharedClipartProcessingPage
 
 def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
     """Return paid Fal.ai call counts for the current clipart run."""
+    from result_background_policy import keeps_background
     if not isinstance(state, ProjectState):
         raise TypeError("state must be a ProjectState")
     generation = state.clipart.generation
@@ -3862,7 +3924,8 @@ def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
     if operations.upscale_before and operations.upscale_before_provider == "fal":
         add(operations.fal_upscale_model, output_count)
     if operations.remove_background and operations.remove_background_provider == "fal":
-        add(operations.fal_remove_bg_model, output_count)
+        removal_count = sum(not keeps_background(entry.result_kind) for entry in state.clipart.prompts) * variants
+        add(operations.fal_remove_bg_model, removal_count)
     return quantities
 
 
@@ -4186,6 +4249,7 @@ class ClipartFlowController(QObject):
     def _create_transparency_page(self) -> ClipartTransparencyEditorPage:
         page = ClipartTransparencyEditorPage()
         page.back_requested.connect(self._close_transparency_editor)
+        page.copy_saved.connect(self.run_queue.page.use_edited_output)
         page.focus_mode_changed.connect(self.shell.set_canvas_focus_mode)
         return page
 

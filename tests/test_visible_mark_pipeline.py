@@ -402,7 +402,9 @@ class VisibleMarkPipelineTests(unittest.TestCase):
             raw_dir = temp_path / "raw"
             raw_dir.mkdir()
             source = temp_path / "source.png"
-            Image.new("RGBA", (8, 8), (20, 30, 40, 0)).save(source, format="PNG")
+            native = Image.new("RGBA", (8, 8), (20, 30, 40, 0))
+            native.putpixel((4, 4), (20, 30, 40, 128))
+            native.save(source, format="PNG")
             worker = main.WorkerThread(
                 "mode2_process",
                 str(temp_path),
@@ -425,7 +427,8 @@ class VisibleMarkPipelineTests(unittest.TestCase):
 
             with Image.open(result_path) as result:
                 self.assertEqual(result.mode, "RGBA")
-                self.assertEqual(result.getpixel((0, 0)), (20, 30, 40, 0))
+                self.assertEqual(result.getpixel((0, 0)), (0, 0, 0, 0))
+                self.assertEqual(result.getpixel((4, 4)), (20, 30, 40, 128))
             self.assertTrue(
                 any("alpha-маска" in message for message in progress_messages)
             )

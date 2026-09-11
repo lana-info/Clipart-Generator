@@ -52,6 +52,10 @@ Write-Host "==> Build app with PyInstaller"
     --add-data "assets/mode-clipart.png;assets" `
     --add-data "assets/mode-pinterest.png;assets" `
     --add-data "assets/mode-processing.png;assets" `
+    --add-data "assets/studio-generation-cover.png;assets" `
+    --add-data "assets/studio-patterns-cover.png;assets" `
+    --add-data "assets/studio-mockups-cover.png;assets" `
+    --add-data "assets/vibix-images.svg;assets" `
     --add-data "release/VERSION.txt;release" `
     --add-data "third_party/remove_ai_watermarks_gemini/assets;third_party/remove_ai_watermarks_gemini/assets" `
     --add-data "third_party/remove_ai_watermarks_gemini/LICENSE;third_party/remove_ai_watermarks_gemini" `

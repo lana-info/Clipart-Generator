@@ -81,6 +81,117 @@ def test_fal_balance_and_pricing_use_platform_api(monkeypatch):
     assert calls[2][2]["payload"]["estimate_type"] == "historical_api_price"
 
 
+def test_fal_zero_historical_estimate_uses_complete_flat_rates(monkeypatch):
+    calls = []
+
+    def fake_request(api_key, path, **kwargs):
+        calls.append(path)
+        if path == "models/pricing/estimate":
+            return {"total_cost": 0, "currency": "USD"}
+        return {
+            "prices": [
+                {"endpoint_id": "fal-ai/one", "unit_price": 0.01, "unit": "image", "currency": "USD"},
+                {"endpoint_id": "fal-ai/two", "unit_price": 0.02, "unit": "request", "currency": "USD"},
+            ]
+        }
+
+    monkeypatch.setattr("v3_api_settings._fal_platform_request", fake_request)
+
+    assert estimate_fal_cost("secret", {"fal-ai/one": 2, "fal-ai/two": 3}) == (0.08, "USD")
+    assert calls == ["models/pricing/estimate", "models/pricing"]
+
+
+def test_fal_zero_historical_estimate_rejects_megapixel_rate(monkeypatch):
+    def fake_request(api_key, path, **kwargs):
+        if path == "models/pricing/estimate":
+            return {"total_cost": 0, "currency": "USD"}
+        return {
+            "prices": [
+                {"endpoint_id": "fal-ai/upscale", "unit_price": 0.01, "unit": "megapixel", "currency": "USD"}
+            ]
+        }
+
+    monkeypatch.setattr("v3_api_settings._fal_platform_request", fake_request)
+
+    with pytest.raises(RuntimeError, match="Оценка пока недоступна"):
+        estimate_fal_cost("secret", {"fal-ai/upscale": 1})
+
+
+def test_fal_zero_historical_estimate_allows_genuine_zero_flat_rates(monkeypatch):
+    def fake_request(api_key, path, **kwargs):
+        if path == "models/pricing/estimate":
+            return {"total_cost": 0, "currency": "USD"}
+        return {
+            "prices": [
+                {"endpoint_id": "fal-ai/free", "unit_price": 0, "unit": "image", "currency": "USD"}
+            ]
+        }
+
+    monkeypatch.setattr("v3_api_settings._fal_platform_request", fake_request)
+
+    assert estimate_fal_cost("secret", {"fal-ai/free": 1}) == (0.0, "USD")
+
+
+@pytest.mark.parametrize("total_cost", (-0.01, float("nan"), float("inf"), float("-inf")))
+def test_fal_estimate_rejects_invalid_total_cost(monkeypatch, total_cost):
+    monkeypatch.setattr(
+        "v3_api_settings._fal_platform_request",
+        lambda *args, **kwargs: {"total_cost": total_cost, "currency": "USD"},
+    )
+
+    with pytest.raises(RuntimeError, match="неподдерживаемом формате"):
+        estimate_fal_cost("secret", {"fal-ai/test": 1})
+
+
+@pytest.mark.parametrize("currency", ("US", "USDD", "12$"))
+def test_fal_estimate_rejects_non_iso_currency(monkeypatch, currency):
+    monkeypatch.setattr(
+        "v3_api_settings._fal_platform_request",
+        lambda *args, **kwargs: {"total_cost": 0.01, "currency": currency},
+    )
+
+    with pytest.raises(RuntimeError, match="неподдерживаемом формате"):
+        estimate_fal_cost("secret", {"fal-ai/test": 1})
+
+
+def test_fal_zero_historical_estimate_rejects_missing_rates(monkeypatch):
+    def fake_request(api_key, path, **kwargs):
+        if path == "models/pricing/estimate":
+            return {"total_cost": 0, "currency": "USD"}
+        return {
+            "prices": [
+                {"endpoint_id": "fal-ai/one", "unit_price": 0.01, "unit": "image", "currency": "USD"}
+            ]
+        }
+
+    monkeypatch.setattr("v3_api_settings._fal_platform_request", fake_request)
+
+    with pytest.raises(RuntimeError, match="Оценка пока недоступна"):
+        estimate_fal_cost("secret", {"fal-ai/one": 1, "fal-ai/two": 1})
+
+
+def test_fal_zero_historical_estimate_rejects_inconsistent_rate_currency(monkeypatch):
+    def fake_request(api_key, path, **kwargs):
+        if path == "models/pricing/estimate":
+            return {"total_cost": 0, "currency": "USD"}
+        return {
+            "prices": [
+                {"endpoint_id": "fal-ai/one", "unit_price": 0.01, "unit": "image", "currency": "EUR"}
+            ]
+        }
+
+    monkeypatch.setattr("v3_api_settings._fal_platform_request", fake_request)
+
+    with pytest.raises(RuntimeError, match="Оценка пока недоступна"):
+        estimate_fal_cost("secret", {"fal-ai/one": 1})
+
+
+@pytest.mark.parametrize("quantity", (0, -1, True, 1.0, "1"))
+def test_fal_estimate_requires_strictly_positive_integer_quantities(quantity):
+    with pytest.raises(ValueError, match="положительным целым"):
+        estimate_fal_cost("secret", {"fal-ai/test": quantity})
+
+
 @pytest.mark.parametrize(
     "redirect_url",
     (

@@ -1,5 +1,193 @@
 # TASKS
 
+## Preparation gate before new implementation
+
+- [x] Reproduce and fix review P2s: contour copy to current result/export,
+  schema-aware membership path validation, bounded undo history predecessor.
+- [x] Focused regression: 211 passed, 14 subtests; no wording-only tests added.
+- [x] Full offline pytest: 1361 passed, 57 skipped, 2 deselected, 223 subtests;
+  compilation, startup smoke, tracked artifact guard and diff-check passed.
+- [x] Socket recheck through orchestrator escalation: 2 tests OK, exit 0 (0.204s).
+- [x] New independent review: no findings in fixes/integration scope;
+  reviewer independently ran 93 tests and 8 subtests.
+
+Verification gate is complete. Preserve this checkpoint on the current branch
+with [skip ci]; use Git commit/upstream state to verify transport completion.
+This does not complete Studio 3.2. Next product task remains the many-to-many
+membership migration in TASKS_VIBIX_STUDIO_3.2.ru.md; do not start it in preparation.
+
+## Owner refinement recorded; stop after documentation
+
+Pending next implementation: automatic overlapping mini/standard/maxi/full-bundle
+plans before generation, many-to-many asset membership with safe migration of the
+current single assignment, reuse one processed PNG across ZIPs without repeat cost.
+Manual assignment becomes an optional editor; default path is review/correct only.
+Expand categorized palette cards and brief-based recommendations (holidays,
+seasons, nature incl. mountains/sand/clay, color families, use cases).
+Remove background-removal method names/key colors from ALL user-facing surfaces,
+including settings/help/errors/user diagnostics and delivery metadata; keep
+internal checks and generation model/cost visibility. See latest PRD section.
+
+Documentation only in this turn. Resume implementation only on a new user request.
+Existing runtime is not yet compliant with these latest requirements.
+
+## Result export now connected
+
+Clipart results now open explicit set membership / PNG inclusion / review dialog.
+Threaded export creates separate ZIPs with PDF and manifest; cancel cleans staging.
+Only successful final PNGs of the current session are offered; no folder guessing.
+Membership now saves via the project draft and restores titles/exclusions across
+reopening, without restoring the review checkbox. Older-run assignments survive.
+Next: reference-image analysis and integrated alpha/QC. Packaging checkbox does
+not certify cutout quality. See STATE.md tests and the saved Qt screenshot.
+
+## Planning UI connected; export core implemented
+
+- Done: OpenRouter key/settings, recipe provider/model persistence, async builder
+  planning with current-tariff confirmation, cancel/stale guards and no auto retry.
+- Done: explicit multi-set export API, one ZIP per set with overview and manifest,
+  staged publication and unchanged source PNGs.
+- Pending: KIE tariff/launch gate, real image-reference analysis, paid live probes
+  (new budget required), integrated QC and set-membership/export UI.
+- Not complete: full Studio workflow, Patterns/Junk Journal and release acceptance.
+
+See STATE.md for precise limits: OpenRouter key uses local plaintext .env like KIE;
+estimate is not a monetary cap; archive API is not yet exposed on results screen.
+
+## Text assistant routes implemented, UI pending
+
+Approved KIE + OpenRouter and Gemini 3.8 Flash / DeepSeek V4 Flash Vision Exp /
+GPT-5 mini. Added explicit provider catalog and single-request planner adapter.
+Next: secure OpenRouter credential/settings integration, asynchronous builder
+actions with cost/consent preflight, then separately authorized live probes.
+No live requests, automatic fallback or image-reference upload in this increment.
+The adapter alone does not complete the automatic-planning user workflow.
+
+## Automatic planning priority
+
+Owner approved brief-driven AI set proposals with optional manual edits.
+Implemented offline planning request/atomic response validation, pin persistence
+and editor control. Next: verified text provider adapter and explicit planning
+actions, then end-to-end prompt/background-review/export integration. No live
+AI planning is connected yet; see VS-13/15 and STATE.md for actual status.
+
+## Concrete objects increment
+
+Object editor and optional append-to-prompts now work through existing draft
+storage and prompt generation. Recipe slots preserve manual details; names are
+required for prompt handoff. Next: semantic/reference integration, full module
+processing preflight and independent set exports. See STATE.md for limits/tests.
+
+## Reference increment
+
+Separate reference page and explicit local palette extraction are implemented.
+Roles and manual observations survive draft reload; source files are preserved.
+Next: region selection/portable references, automatic semantic analysis when its
+provider is selected, concrete objects and prompt handoff. No paid calls made.
+
+## Latest UI increment
+
+Working Clipart-only set-settings dialog: idea, visual direction/palettes,
+editable recipe. Saves through the existing project draft; cancellation keeps
+state unchanged. Owner authorized coding the described workflow. Next integrate
+the separate reference step, concrete objects and prompt handoff, then delivery.
+The full eight-screen flow is still incomplete; see STATE.md for verification.
+
+## Latest implementation: editable Clipart recipes
+
+VS-13 now has offline balanced/characters/decorative recipes for 1–1000 images,
+exact totals, explicit manual role edits, and optional validated persistence in
+the existing V3 project draft. Theme, custom context and related motifs survive
+save/reopen. Legacy drafts remain valid. This is the planning data layer;
+the eight-screen builder, reference analysis, prompt handoff and per-set ZIP
+integration remain open. See STATE.md for verification.
+
+## Current priority: separate application modules
+
+Owner rejected the mixed result-kind review UI. Clipart, Patterns and Junk
+Journal have separate entry points/screens/workflows. Internal result_kind
+guards remain; no cross-module user dropdown. Next approve the Clipart-only
+proposal in docs/ui/3.2/clipart-review-proposal/, implement its module-specific
+review/preflight, and complete existing-image quality acceptance. Then Patterns;
+Junk Journal remains its own future module. Old mixed UI tasks below are history.
+
+## Result-kind routing increment, 2026-09-10
+
+Explicit per-prompt type now survives project/edit/queue/retry. Surface types
+skip remover, edge shrink and trim, with per-type removal cost quantities.
+Legacy inputs are unchanged; this does not infer types from prompt text.
+Next: approved type/profile UI and matching stage/provider preflight, portable
+PNG type metadata, then hole-policy validation. See VS-15/17 checkpoint in
+TASKS_VIBIX_STUDIO_3.2.ru.md. No new paid generation or build.
+
+## Attachment follow-up, 2026-09-10
+
+Latest: owner raised the key cap; four GPT Image 2 probes completed, $0.12 total
+spent of $1. RGBA output confirmed for transparent prompts, but wreath haze
+remains; current chroma is primary pending broader QC. Key retained outside
+project, mode 0600, at owner's request. Earlier key-cap blocker below is history.
+
+Owner authorized documentation, offline comparison and continued implementation.
+Initial code-433 key-cap failures are resolved; see STATE.md for attempt history.
+Use the new priority checkpoint in TASKS_VIBIX_STUDIO_3.2.ru.md. The ZIP
+candidate failed existing reference cases and is not integrated. Existing
+native-alpha reuse is strengthened; native-generation provider integration,
+full QC, white removal and real-image acceptance remain open. Owner subsequently
+authorized up to $1 total for KIE comparison. Spend is $0.12, remaining $0.88;
+key retained outside project. Build/publication remain separate.
+
+Material review is complete: text dialogue/research, six screenshots and three
+spreadsheet builders. Accepted: shared Holiday/character profiles, presets,
+palette sources and distinct multi-detail/variant modes; no Midjourney addition.
+New bounded VS-16 increment: persist requested chroma before generation and bind
+it to raw-image SHA256; reuse on local reprocessing. Automatic per-prompt
+selection/queue handoff already existed (previous status corrected).
+Next: approve the builder mockup; complete Job/Attempt/observed-background
+metadata and validate a small Clipart → review/editor
+→ PNG set using existing images first. Patterns follows; Nano Banana Pro is a
+tile-generation candidate, SeedVR2 Seamless a separate optional upscale candidate.
+Junk Journal is approved as a separate future module; Alphabet remains future
+scope. Original PNGs, not screenshots, are
+ needed for cutout acceptance. Clipart starts from an editable role-based set
+ recipe (hero objects, compositions, wreaths, borders/frames, small decor) and
+ ends with an overview sheet plus a ZIP of Ready PNGs. See VS-13–18/26/28/31/34
+ in the 3.2 tasks.
+No full Studio completion claimed. No new paid generation or build.
+
+## Active branch: Studio 3.2
+
+Current work runs in `codex/feature-alpha-routing-benchmark-3.2` in the
+same `studio-3.2-worktree`, based on the existing develop/3.2 working state.
+Explicit opaque clipart processing now has reference colour/geometry metrics
+and final-export hash-bound processing receipts. Opt-in completed-stage tracing
+is available; opaque profile v2 omits the translucent-material recolouring
+heuristic while retaining legitimate opaque colours and legacy behavior.
+An additional ordinary-AA
+prototype was rejected after thin-detail regressions; this quality gap remains
+open. Next algorithm work must pass all six independent reference fixtures,
+not only the 39 selector probes. Full CK-01…11 scope remains open
+(PRD_CHROMA_KEY_QUALITY_V1.ru.md).
+
+Direct upstream execution now supplements the audit: six goldens, three narrow
+AA squares and one separate opaque island. Adaptive rim checking is promising
+but not sufficient; upstream defaults fail some preservation cases. Next work
+must test pre-solve classification/reference confidence against these cases;
+do not introduce global island deletion. See the existing full audit for evidence.
+
+The owner authorized the new implementation. Current ordered scope/progress is
+in `TASKS_VIBIX_STUDIO_3.2.ru.md`; specification is
+`PRD_VIBIX_STUDIO_3.2_V2.ru.md`. The 3.0 release tasks below are historical,
+not authorization to build or publish Studio 3.2. Home direction approved:
+three recent projects plus equal illustrated cards. Separate project autosave,
+resume and illustrated catalog are connected. Catalog download/purchase intents
+are not production integrations; portable assets, runtime pages and editors remain open.
+Task journals now use each Studio project's UUID and save-before-worker boundary;
+durable run recovery and unknown paid POST outcomes remain open (see 3.2 tasks).
+Contour dialog is now connected from transparency editing, with fixed brush
+presets, mouse/keyboard control, alpha-only history and separate PNG export.
+VS-19/20/21 remain partial: node add/delete, edit-history persistence, QC and
+large-image background extraction remain open; no packaged acceptance yet.
+
 Source specs: `PRD.md` and `PROCESSING_PIPELINE_TZ.md`.
 
 Rule: take the next open task in order. Keep code changes narrow and do not refactor working code unless it directly makes the current task safer.

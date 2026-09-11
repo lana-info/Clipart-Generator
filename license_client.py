@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import secrets
 import tempfile
 from dataclasses import dataclass
@@ -41,6 +42,15 @@ class NoRedirectHandler(request.HTTPRedirectHandler):
 
 
 @dataclass(frozen=True)
+class ModuleEntitlement:
+    """One explicit server-signed, time-bounded module grant."""
+
+    module_id: str
+    not_before: datetime
+    expires_at: datetime
+
+
+@dataclass(frozen=True)
 class LicenseAuthorization:
     license_id: str
     product_id: str
@@ -50,6 +60,18 @@ class LicenseAuthorization:
     is_offline_grace: bool = False
     last_verified_at: datetime | None = None
     grace_expires_at: datetime | None = None
+    module_entitlements: tuple[ModuleEntitlement, ...] = ()
+
+    def allows_module(self, module_id: str, *, now: datetime | None = None) -> bool:
+        """Never infer module rights from the product/license ID or local install."""
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None or current < self.issued_at:
+            return False
+        deadline = self.grace_expires_at if self.is_offline_grace else self.expires_at
+        if deadline is None or current >= deadline:
+            return False
+        return any(grant.module_id == module_id and grant.not_before <= current < grant.expires_at
+                   for grant in self.module_entitlements)
 
 
 def _b64encode(value: bytes) -> str:
@@ -82,6 +104,30 @@ def _parse_datetime(value: object, *, label: str) -> datetime:
     if parsed.tzinfo is None:
         raise LicenseError(f"Некорректный срок лицензии: {label}")
     return parsed.astimezone(timezone.utc)
+
+
+def _parse_module_entitlements(value: object) -> tuple[ModuleEntitlement, ...]:
+    """Called only after verification of the device-bound authorization signature."""
+    if (not isinstance(value, dict) or set(value) != {"schema_version", "grants"}
+            or type(value["schema_version"]) is not int or value["schema_version"] != 1
+            or not isinstance(value["grants"], list) or len(value["grants"]) > 100):
+        raise LicenseError("Некорректные права доступа к модулям")
+    grants = []
+    seen = set()
+    for raw in value["grants"]:
+        if not isinstance(raw, dict) or set(raw) != {"module_id", "not_before", "expires_at"}:
+            raise LicenseError("Некорректное право доступа к модулю")
+        module_id = raw["module_id"]
+        if (not isinstance(module_id, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", module_id)
+                or module_id in seen):
+            raise LicenseError("Некорректный идентификатор модуля")
+        start = _parse_datetime(raw["not_before"], label="module.not_before")
+        end = _parse_datetime(raw["expires_at"], label="module.expires_at")
+        if end <= start:
+            raise LicenseError("Некорректный срок доступа к модулю")
+        seen.add(module_id)
+        grants.append(ModuleEntitlement(module_id, start, end))
+    return tuple(grants)
 
 
 class LicenseStateStore:
@@ -391,6 +437,7 @@ class LicenseClient:
             is_offline_grace=True,
             last_verified_at=last_verified_at,
             grace_expires_at=grace_expires_at,
+            module_entitlements=authorization.module_entitlements,
         )
 
     def authenticated_request(
@@ -580,4 +627,8 @@ class LicenseClient:
             device_key=expected_device_key,
             issued_at=issued_at,
             expires_at=expires_at,
+            module_entitlements=(
+                _parse_module_entitlements(payload["module_entitlements"])
+                if "module_entitlements" in payload else ()
+            ),
         )

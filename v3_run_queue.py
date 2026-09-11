@@ -127,6 +127,8 @@ class RunItem:
     source_path: str = field(default="", repr=False)
     output_path: str = field(default="", repr=False)
     payload: Any = field(default=None, repr=False)
+    # Explicit editor save, distinct from a worker-supplied external path.
+    editor_output_path: str = field(default="", repr=False)
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -385,6 +387,8 @@ def _request_items(request: Any, mode: ProjectMode) -> list[RunItem]:
                 payload={
                     "prompt": str(entry.get("prompt") or ""),
                     "references": list(entry.get("references") or []),
+                    "chroma_key_color": str(entry.get("chroma_key_color") or ""),
+                    "result_kind": entry.get("result_kind", "legacy"),
                 },
             )
             for index, entry in enumerate(generated, start=1)
@@ -1186,6 +1190,7 @@ class RunQueueSession(QObject):
             item.status = RunItemStatus.PENDING
             item.short_message = "Ожидает повторного запуска."
             item.output_path = ""
+            item.editor_output_path = ""
             item.stage_statuses.clear()
             if isinstance(item.payload, dict):
                 item.source_path = ""
@@ -1209,6 +1214,10 @@ class RunQueueSession(QObject):
                         "references": list(
                             self.items[index].payload.get("references") or []
                         ),
+                        "chroma_key_color": str(
+                            self.items[index].payload.get("chroma_key_color") or ""
+                        ),
+                        "result_kind": self.items[index].payload.get("result_kind", "legacy"),
                     }
                     for index in failed
                 ],
@@ -1459,13 +1468,14 @@ def transparency_candidate_paths(session: RunQueueSession) -> list[Path]:
     seen: set[Path] = set()
     output_root = session.output_dir.resolve(strict=False)
 
-    def add(path: str | Path) -> None:
+    def add(path: str | Path, *, editor_copy: bool = False) -> None:
         candidate = Path(path)
         canonical = candidate.resolve(strict=False)
         if (
-            not _READY_OUTPUT_NAME.search(candidate.name)
+            (not editor_copy and not _READY_OUTPUT_NAME.search(candidate.name))
+            or candidate.suffix.lower() != '.png'
             or candidate.is_symlink()
-            or not _is_within(canonical, output_root)
+            or (not editor_copy and not _is_within(canonical, output_root))
             or canonical in seen
             or not candidate.is_file()
         ):
@@ -1475,7 +1485,7 @@ def transparency_candidate_paths(session: RunQueueSession) -> list[Path]:
 
     for item in session.items:
         if item.status is RunItemStatus.SUCCEEDED and item.output_path:
-            add(item.output_path)
+            add(item.output_path, editor_copy=item.output_path == item.editor_output_path)
     try:
         ready_outputs = sorted(
             (
@@ -1504,6 +1514,7 @@ class RunResultsPage(QWidget):
     process_more_requested = pyqtSignal()
     finish_requested = pyqtSignal()
     transparency_requested = pyqtSignal(int)
+    membership_changed = pyqtSignal()
 
     def __init__(
         self,
@@ -1634,6 +1645,8 @@ class RunResultsPage(QWidget):
             ButtonVariant.PRIMARY,
         )
         self.open_folder_button.clicked.connect(self._open_folder)
+        self.export_sets_button = V3Button('Экспорт наборов ZIP', ButtonVariant.SECONDARY)
+        self.export_sets_button.clicked.connect(self._export_sets)
         self.check_transparency_button = V3Button(
             "Проверить прозрачность",
             ButtonVariant.SECONDARY,
@@ -1664,6 +1677,7 @@ class RunResultsPage(QWidget):
         self.finish_button.hide()
         workflow_layout.addStretch()
         utility_primary_layout.addWidget(self.open_folder_button)
+        utility_primary_layout.addWidget(self.export_sets_button)
         utility_primary_layout.addWidget(self.check_transparency_button)
         utility_primary_layout.addWidget(self.save_corrected_button)
         utility_primary_layout.addWidget(self.save_mask_button)
@@ -1702,6 +1716,8 @@ class RunResultsPage(QWidget):
 
     def refresh_from_state(self) -> None:
         session = self.session
+        self.export_sets_button.setVisible(self.state.mode is ProjectMode.CLIPART)
+        self.export_sets_button.setEnabled(bool(session and not session.running and self._export_paths()))
         if session is None:
             self._transparency_paths = []
             self.stop_button.hide()
@@ -1768,10 +1784,69 @@ class RunResultsPage(QWidget):
         self._selection_changed(self.queue.currentRow())
         self._show_completion_if_needed(session)
 
+    def _export_paths(self):
+        """Only final outputs recorded by this session, never a folder scan."""
+        if self.session is None or self.session.running:
+            return []
+        paths, seen = [], set()
+        for item in self.session.items:
+            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
+                continue
+            path = Path(item.output_path)
+            if (path.suffix.lower() != '.png' or path.is_symlink()
+                    or not path.is_file() or (not _is_within(path, self.session.output_dir)
+                                             and item.output_path != item.editor_output_path)):
+                continue
+            resolved = path.resolve()
+            if resolved not in seen:
+                paths.append(resolved)
+                seen.add(resolved)
+        return paths
+
+    def use_edited_output(self, source, destination):
+        """Adopt an explicitly saved copy only for a current successful result."""
+        source, destination = Path(source), Path(destination)
+        if (source.resolve() not in self._export_paths() or destination.is_symlink()
+                or not destination.is_file() or destination.suffix.lower() != '.png'):
+            return
+        destination = destination.resolve()
+        for item in self.session.items:
+            if (item.status is RunItemStatus.SUCCEEDED and item.output_path
+                    and Path(item.output_path).resolve() == source.resolve()):
+                membership = self.state.clipart.export_membership
+                previous = membership.get(item.output_path) or membership.get(str(source.resolve()))
+                if previous is not None:
+                    membership[str(destination)] = dict(previous)
+                item.output_path = str(destination)
+                item.editor_output_path = str(destination)
+        self.membership_changed.emit()
+        self.session.changed.emit()
+
+    def _export_sets(self):
+        if self.state.mode is not ProjectMode.CLIPART:
+            return
+        paths = self._export_paths()
+        if paths:
+            from studio_set_export_ui import SetExportDialog
+            dialog = SetExportDialog(paths, self, membership=self.state.clipart.export_membership)
+            dialog.membership_saved.connect(self._save_export_membership)
+            dialog.exec()
+
+    def _save_export_membership(self, membership):
+        from studio_export_membership import validate_export_membership
+        self.state.clipart.export_membership = validate_export_membership(membership)
+        self.membership_changed.emit()
+
     @staticmethod
     def _stage_label(stage: str) -> str:
         return {
             "processing": "идёт обработка",
+            "background_removal": "удаляется фон",
+            "upscale": "увеличивается изображение",
+            "unsharp": "повышается резкость",
+            "edge_cleanup": "очищается край",
+            "metadata_cleanup": "очищаются метаданные",
+            "export_300_dpi": "сохраняется PNG",
             "generation": "создаётся изображение",
             "export": "сохраняется результат",
             "trim": "подготавливается изображение",
@@ -2114,6 +2189,7 @@ class RunQueueSupport:
         self.page.retry_requested.connect(self.retry_failed)
         self.page.process_more_requested.connect(self.process_more)
         self.page.finish_requested.connect(self.finish_workflow)
+        self.page.membership_changed.connect(controller.shell.state_changed.emit)
 
     def finish_workflow(self) -> None:
         if self.session is None or self.session.running:

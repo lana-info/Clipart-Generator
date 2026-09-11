@@ -150,6 +150,8 @@ class ChromaKeyTests(unittest.TestCase):
 
     def test_prompt_block_contains_key_color_and_watercolor_rule(self):
         prompt = chroma_key_prompt_block("red", watercolor=True)
+        self.assertIn("fully opaque and solid", prompt)
+        self.assertIn("no transparency", prompt)
 
         self.assertIn("#FF0000", prompt)
         self.assertIn("chroma-key", prompt)
@@ -166,16 +168,15 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertNotIn("paper texture", prompt)
         self.assertNotIn("unlit", prompt)
 
-    def test_transparent_material_requires_visible_content_behind_it(self):
+    def test_transparent_material_is_rejected_by_opaque_prompt_contract(self):
         prompt = chroma_key_prompt_block(
             "blue",
             materials=("transparent_details",),
         )
 
-        self.assertIn("genuinely semi-transparent", prompt)
-        self.assertIn("Whatever lies behind them", prompt)
-        self.assertIn("exact chroma-key background", prompt)
-        self.assertIn("never render translucent areas as opaque", prompt)
+        self.assertIn("fully opaque and solid", prompt)
+        self.assertNotIn("genuinely semi-transparent", prompt)
+        self.assertNotIn("Whatever lies behind them", prompt)
 
     def test_invalid_color_is_rejected(self):
         with self.assertRaises(ValueError):

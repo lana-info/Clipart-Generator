@@ -390,11 +390,11 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.deleteLater()
 
             restored = V3ApplicationView(draft_path=draft_path)
-            self.assertFalse(restored.mode_selection.recent_project_card.isHidden())
+            self.assertFalse(restored.mode_selection.saved_projects_card.isHidden())
             self.assertTrue(
-                restored.mode_selection.continue_button.accessibleDescription()
+                restored.mode_selection.saved_project_buttons[0].accessibleName()
             )
-            restored.mode_selection.continue_button.click()
+            restored.mode_selection.saved_project_buttons[0].click()
             restored_state = restored.project_state
             self.assertEqual(
                 restored_state.clipart.prompts[0].prompt,
@@ -428,6 +428,77 @@ class V3ModeSelectionTests(unittest.TestCase):
 
             view._save_draft()
             self.assertTrue(view.shell.save_error_label.isHidden())
+            view.close()
+            view.deleteLater()
+
+    def test_three_recent_projects_retain_four_and_resume_without_worker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project_state.json"
+            factory = Mock(side_effect=AssertionError("resume must not create paid work"))
+            view = V3ApplicationView(draft_path=path, worker_factory=factory)
+            for number in range(4):
+                view._handle_mode_selected(ProjectMode.CLIPART.value)
+                view.project_state.common.project_name = f"Набор {number}"
+                view.project_state.clipart.prompts = [PromptEntry(f"subject {number}")]
+                view.shell.mark_dirty()
+                view.show_new_project()
+            self.assertEqual(len(view.mode_selection.saved_project_buttons), 3)
+            self.assertEqual(len(view._project_store.recent(limit=None)), 4)
+            oldest = view._project_store.recent(limit=None)[-1]
+            view.close()
+            view.deleteLater()
+            restored = V3ApplicationView(draft_path=path, worker_factory=factory)
+            self.assertEqual(len(restored.mode_selection.saved_project_buttons), 3)
+            self.assertTrue(restored.continue_saved_project(oldest.project_id))
+            self.assertEqual(restored.project_state.clipart.prompts[0].prompt, "subject 0")
+            restored.project_state.common.project_name = "Исправлено"
+            restored.shell.mark_dirty()
+            self.assertEqual(len(restored._project_store.recent(limit=None)), 4)
+            self.assertEqual(restored._project_store.load(oldest.project_id).name, "Исправлено")
+            factory.assert_not_called()
+            restored.close()
+            restored.deleteLater()
+
+    def test_store_failure_does_not_write_a_newer_hidden_legacy_draft(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project_state.json"
+            view = V3ApplicationView(draft_path=path)
+            view._handle_mode_selected(ProjectMode.CLIPART.value)
+            previous = path.read_bytes()
+            view.project_state.common.project_name = "Несохранённые изменения"
+            with patch.object(view._project_store, "save", side_effect=OSError("disk")):
+                view.shell.mark_dirty()
+            self.assertEqual(path.read_bytes(), previous)
+            self.assertFalse(view.shell.save_error_label.isHidden())
+            view.close()
+            view.deleteLater()
+
+    def test_worker_factory_uses_saved_project_identity_for_all_modes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            factory = Mock()
+            view = V3ApplicationView(draft_path=Path(temp) / "draft.json", worker_factory=factory)
+            identities = []
+            for mode in (ProjectMode.CLIPART, ProjectMode.PROCESSING, ProjectMode.PINTEREST):
+                view._handle_mode_selected(mode.value)
+                controller = view._ensure_mode_controller(view.shell, mode)
+                controller.worker_factory(mode="test", work_dir=temp, settings={})
+                first = factory.call_args.kwargs
+                self.assertEqual(first["project_id"], view._active_project_id)
+                self.assertNotIn("project_id", first["settings"])
+                controller.worker_factory(mode="test", work_dir=temp, settings={})
+                self.assertEqual(factory.call_args.kwargs["project_id"], first["project_id"])
+                identities.append(first["project_id"])
+                view.show_new_project()
+            self.assertEqual(len(set(identities)), 3)
+            self.assertTrue(view.continue_saved_project(identities[0]))
+            view._ensure_mode_controller(view.shell, ProjectMode.CLIPART).worker_factory(
+                mode="test", work_dir=temp, settings={})
+            self.assertEqual(factory.call_args.kwargs["project_id"], identities[0])
+            with patch.object(view._project_store, "save", side_effect=OSError("disk")):
+                factory.reset_mock()
+                with self.assertRaises(OSError):
+                    view._create_project_worker(view.shell, mode="test", work_dir=temp, settings={})
+                factory.assert_not_called()
             view.close()
             view.deleteLater()
 

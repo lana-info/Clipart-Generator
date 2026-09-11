@@ -1,5 +1,94 @@
 # Vibix Images
 
+## Active 3.2 development scope
+
+Latest owner decisions (supersede the manual-first export workflow): minimize
+manual work throughout. User supplies creative direction, reviews the proposal
+and corrects exceptions. Plan mini/standard/maxi/full-bundle membership before
+generation; one asset may belong to several sets, generated/processed once and
+reused in each ZIP. Default nested tiers are proposed automatically; manual
+membership editing is secondary. Count unique generated assets separately from
+total delivered files. Preserve explicit paid-launch approval and quality checks.
+
+Expand palette cards (5–7 actual swatches) by holidays, seasons, nature, color
+families and use; recommend by brief before showing the full library. Nature
+includes mountains, sea, forest, sand, clay, flowers, berries and fruit. Keep
+custom/from-reference palettes and collection-wide consistency.
+
+Background-removal technique, technical key color and names such as chroma-key
+must NEVER appear on user-facing screens, settings, tooltips, errors, progress,
+help, user diagnostics or delivery metadata. Only result-oriented language
+(transparent background, check image edges). Internal developer documentation
+and diagnostics may retain implementation details; this does not hide text/image
+generation provider/model choices or costs. These refinements are pending code.
+
+Approved text assistant: support both KIE and OpenRouter, either key sufficient.
+Selected models: Gemini 3.8 Flash, DeepSeek V4 Flash Vision Exp (experimental),
+GPT-5 mini (not GPT-5.4 mini). Provider/model is independent of image generation.
+Only confirmed routes are offered: KIE Gemini; OpenRouter all three. One explicit
+request through one service, no silent provider/model fallback or double spend.
+Model availability and prices must be checked per service; no universal aliases.
+
+Owner-approved refinement: automatic set planning is the primary Clipart path.
+Users specify theme/purpose/context, characters/motifs, visual direction,
+palette/references and quantity. The app proposes individual objects, actions
+and details; manual item editing is optional. Recipe allocation alone is not AI
+planning. Users review before image spending, pin ideas, replace one or regenerate
+unpinned ideas. No automatic paid generation on draft load or navigation.
+
+Owner clarification: Clipart, Patterns and Junk Journal are separate application
+modules with their own entry points, screens and workflows, not product-type
+tabs in one universal builder. The owner rejected the mixed result-kind mockup.
+Shared palettes/presets/providers are internal reusable services. Modules set
+technical result_kind; do not expose it as a cross-module per-row selector.
+Clipart is first, Patterns next, Junk Journal a separately scoped future module.
+
+Owner-approved Clipart prompt direction, consolidated 2026-09-10: a builder
+with Holiday themes, conditional character fields, editable versioned presets,
+palette sources and distinct combined-details versus separate-variants modes.
+No Midjourney integration; retain existing KIE/fal.ai workflows. Reference
+builders inform our own implementation, not wholesale reuse of their assets.
+Junk Journal is an owner-approved separate future module for coordinated pages,
+papers, cards and decorative elements; preserve product backgrounds and reuse
+shared palettes/presets/references. Page/export specifics remain to be scoped.
+Alphabet remains future scope. Patterns retains local
+composition and AI-tile paths; Nano Banana Pro is a comparison candidate, while
+SeedVR2 Seamless is an optional tile-upscale candidate, not a tile generator.
+See PRD v2 and its task list for acceptance and the ordered next increment.
+
+Owner approved the attachment review follow-up on 2026-09-10: compare local
+cutout candidates and continue implementation. Preserve and extend the existing
+alpha-reuse path; generation capabilities belong to the actual provider/model,
+not the model family name. KIE remains the GPT integration route. Native alpha
+and chroma converge on common final review/export. White removal remains an
+experimental candidate; difference matting is not a default. Details and measured
+candidate rejection: docs/research/attached-pipeline-review-2026-09-10.ru.md.
+The attachment's implementation prompt is research input, not project authority.
+
+Approved home: three recently saved projects above an equal-sized illustrated
+module catalog. All projects are retained, with autosave and explicit resume;
+reopening must never resubmit paid work. Module actions: Open/Update,
+Download if entitled, Buy if not entitled, Coming soon if not released.
+
+Product clarification, 2026-09-08: Studio is a modular seller workspace, not a
+replacement of the app with Auto Clipart. Preserve standalone universal image
+generation and processing. Product modules cover an idea-to-deliverables workflow;
+future directions include mockups, tumbler designs, Excel products, listing/SEO
+preparation and separately confirmed publishing. Package downloads and execution
+require module-specific license rights; unavailable modules show promotional
+cards. Existing Pinterest is to become an independently updated module before
+its later board/description/content-plan expansion. Compatible new modules must
+register without editing the shell. Future directions are not all 3.2 features.
+
+The owner authorized Studio 3.2 implementation on `develop/3.2` from the 3.1
+runtime baseline. See `PRD_VIBIX_STUDIO_3.2_V2.ru.md` and
+`TASKS_VIBIX_STUDIO_3.2.ru.md` for installable official modules, automated
+Clipart sets, local contour/alpha editing, Patterns, meaningful output names
+and Letter contact sheets. This supersedes the historical deferral of Patterns
+below for this new branch only. Stable 3.1 workflows remain unchanged.
+New UI requires the repository's visual approval gate. Backend prototypes are
+not a completed 3.2 application, and no release/version metadata is bumped yet.
+
 ## Purpose
 
 Windows desktop application for generating and processing clipart images. The project supports KIE-backed generation and local or remote processing providers, including Real-ESRGAN, rembg, BEN2, PhotoRoom, metadata cleanup, and bounded provenance inspection.

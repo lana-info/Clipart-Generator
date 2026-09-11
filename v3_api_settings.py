@@ -5,6 +5,7 @@ import sys
 import urllib.error
 import urllib.request
 import json
+import math
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -121,11 +122,14 @@ def estimate_fal_cost(
     endpoint_quantities: Mapping[str, int],
     timeout: float = 15.0,
 ) -> tuple[float, str]:
-    quantities = {
-        str(endpoint).strip(): int(quantity)
-        for endpoint, quantity in endpoint_quantities.items()
-        if str(endpoint).strip() and int(quantity) > 0
-    }
+    quantities: dict[str, int] = {}
+    for endpoint, quantity in endpoint_quantities.items():
+        endpoint_id = str(endpoint).strip()
+        if not endpoint_id:
+            raise ValueError("Укажите Fal.ai endpoint ID")
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0:
+            raise ValueError("Количество Fal.ai вызовов должно быть положительным целым числом")
+        quantities[endpoint_id] = quantity
     if not quantities:
         raise ValueError("Укажите количество Fal.ai вызовов")
     payload = _fal_platform_request(
@@ -139,9 +143,71 @@ def estimate_fal_cost(
         timeout=timeout,
     )
     try:
-        return float(payload["total_cost"]), str(payload.get("currency") or "USD").upper()
+        total_cost = float(payload["total_cost"])
+        currency = _normalize_fal_currency(payload["currency"])
     except (KeyError, TypeError, ValueError) as error:
         raise RuntimeError("Fal.ai вернул оценку стоимости в неподдерживаемом формате") from error
+    if not math.isfinite(total_cost) or total_cost < 0:
+        raise RuntimeError("Fal.ai вернул оценку стоимости в неподдерживаемом формате")
+    if total_cost > 0:
+        return total_cost, currency
+
+    return _estimate_zero_historical_fal_cost(
+        api_key,
+        quantities,
+        historical_currency=currency,
+        timeout=timeout,
+    )
+
+
+def _normalize_fal_currency(value: Any) -> str:
+    currency = str(value).upper()
+    if len(currency) != 3 or not currency.isalpha():
+        raise ValueError("currency must be an ISO 4217 code")
+    return currency
+
+
+def _estimate_zero_historical_fal_cost(
+    api_key: str,
+    quantities: Mapping[str, int],
+    *,
+    historical_currency: str,
+    timeout: float,
+) -> tuple[float, str]:
+    prices = fetch_fal_pricing(api_key, list(quantities), timeout=timeout)
+    by_endpoint: dict[str, dict[str, Any]] = {}
+    for price in prices:
+        endpoint_id = str(price.get("endpoint_id") or "").strip()
+        if endpoint_id not in quantities or endpoint_id in by_endpoint:
+            raise RuntimeError("Оценка пока недоступна: Fal.ai не вернул однозначные тарифы для выбранных операций")
+        by_endpoint[endpoint_id] = price
+
+    if set(by_endpoint) != set(quantities):
+        raise RuntimeError("Оценка пока недоступна: Fal.ai не вернул тарифы для всех выбранных операций")
+
+    total_cost = 0.0
+    for endpoint_id, quantity in quantities.items():
+        price = by_endpoint[endpoint_id]
+        unit = str(price.get("unit") or "").strip().lower()
+        if unit not in {"image", "request"}:
+            raise RuntimeError(
+                "Оценка пока недоступна: для Fal.ai нужны размеры или длительность, "
+                "а тариф операции не является фиксированным за image/request"
+            )
+        try:
+            unit_price = float(price["unit_price"])
+            price_currency = _normalize_fal_currency(price["currency"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise RuntimeError("Оценка пока недоступна: Fal.ai вернул неполный тариф операции") from error
+        if not math.isfinite(unit_price) or unit_price < 0:
+            raise RuntimeError("Оценка пока недоступна: Fal.ai вернул недопустимый тариф операции")
+        if price_currency != historical_currency:
+            raise RuntimeError("Оценка пока недоступна: Fal.ai вернул тарифы в разных валютах")
+        total_cost += unit_price * quantity
+        if not math.isfinite(total_cost):
+            raise RuntimeError("Оценка пока недоступна: Fal.ai вернул недопустимый тариф операции")
+
+    return total_cost, historical_currency
 
 
 def user_env_path() -> Path:
@@ -219,7 +285,7 @@ class ApiSettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
-                "Ключи KIE/PhotoRoom хранятся локально в пользовательском .env; "
+                "Ключи KIE/OpenRouter/PhotoRoom хранятся локально в пользовательском .env; "
                 "Fal.ai сохраняется в защищённом хранилище Windows и не показывается в логах."
             )
         )
@@ -245,11 +311,12 @@ class ApiSettingsDialog(QDialog):
         layout.addWidget(provider_help)
         form = QFormLayout()
         self.kie_edit = QLineEdit(values.get("kie_api_key", ""))
+        self.openrouter_edit = QLineEdit(values.get("openrouter_api_key", ""))
         self.photo_edit = QLineEdit(values.get("photoroom_api_key", ""))
         self.fal_edit = QLineEdit(values.get("fal_api_key", ""))
         self.runpod_key_edit = QLineEdit(values.get("runpod_api_key", ""))
         self.runpod_endpoint_edit = QLineEdit(values.get("runpod_endpoint_id", ""))
-        for edit in (self.kie_edit, self.photo_edit, self.fal_edit, self.runpod_key_edit):
+        for edit in (self.kie_edit, self.openrouter_edit, self.photo_edit, self.fal_edit, self.runpod_key_edit):
             edit.setEchoMode(QLineEdit.EchoMode.Password)
         kie_row = QHBoxLayout()
         kie_row.addWidget(self.kie_edit)
@@ -257,6 +324,7 @@ class ApiSettingsDialog(QDialog):
         self.balance_button.clicked.connect(self._check_balance)
         kie_row.addWidget(self.balance_button)
         form.addRow("KIE API Key", kie_row)
+        form.addRow("OpenRouter API Key (текстовый помощник)", self.openrouter_edit)
         photo_row = QHBoxLayout()
         photo_row.addWidget(self.photo_edit)
         self.photo_balance_button = V3Button("Проверить баланс", ButtonVariant.SECONDARY)
@@ -335,6 +403,7 @@ class ApiSettingsDialog(QDialog):
     def _save(self) -> None:
         self.settings = {
             "kie_api_key": self.kie_edit.text().strip(),
+            "openrouter_api_key": self.openrouter_edit.text().strip(),
             "photoroom_api_key": self.photo_edit.text().strip(),
             "fal_api_key": self.fal_edit.text().strip(),
             "runpod_api_key": self.runpod_key_edit.text().strip(),
@@ -349,11 +418,15 @@ class ApiSettingsDialog(QDialog):
                 self.fal_concurrency_combo.currentData()
             ),
         }
-        save_credentials(
-            {
-                key: value
-                for key, value in self.settings.items()
-                if key in ALL_PROVIDER_CREDENTIAL_KEYS
-            }
-        )
+        try:
+            save_credentials(
+                {
+                    key: value
+                    for key, value in self.settings.items()
+                    if key in ALL_PROVIDER_CREDENTIAL_KEYS
+                }
+            )
+        except (OSError, RuntimeError, ValueError):
+            self.status.setText('Не удалось сохранить ключи. Проверьте формат и доступ к хранилищу.')
+            return
         self.accept()

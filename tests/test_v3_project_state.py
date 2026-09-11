@@ -171,6 +171,14 @@ class ProjectRoutesTests(unittest.TestCase):
 
 
 class ProjectSerializationTests(unittest.TestCase):
+    def test_prompt_entry_round_trips_automatic_chroma_key(self):
+        entry = PromptEntry("blue ribbon", ["ribbon.png"], "red")
+
+        restored = PromptEntry.from_value(entry.to_dict())
+
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored.chroma_key_color, "red")
+
     def test_saved_transparency_editor_step_reopens_on_results_without_a_session(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.set_step(StepId.TRANSPARENCY)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Final
 
 import cv2
@@ -20,6 +20,9 @@ _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 _MAX_AMBIGUOUS_COMPONENT_DENSITY: Final[float] = 0.02
 _MIN_AMBIGUOUS_COMPONENT_LIMIT: Final[int] = 64
 _MAX_AMBIGUOUS_KEY_DISTANCE: Final[float] = 230.0
+_MIN_OPAQUE_REFERENCE_DISTANCE: Final[float] = 96.0
+_MAX_ENCLOSED_TRANSITION_ROI_WORK_MULTIPLIER: Final[int] = 4
+_SUBJECT_PROFILES: Final[frozenset[str]] = frozenset(("legacy", "opaque_clipart"))
 
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
     "watercolor": (
@@ -120,6 +123,8 @@ def remove_chroma_key(
 def _remove_chroma_key_precise(
     image: Image.Image,
     key_color: object = "blue",
+    *,
+    allow_enclosed_transition_recovery: bool = False,
 ) -> Image.Image:
     """Remove a generated solid background using its measured border color."""
     if not isinstance(image, Image.Image):
@@ -294,6 +299,12 @@ def _remove_chroma_key_precise(
     raw_matte[protected_interior_detail] = 1.0
     del protected_interior_detail
     matte = raw_matte.copy()
+    if allow_enclosed_transition_recovery:
+        matte = _recover_enclosed_transition_matte(
+            rgb,
+            measured_key,
+            raw_matte,
+        )
     matte[distance_from_key >= 200.0] = 1.0
     visible = matte > (1.0 / 255.0)
     if np.any(visible):
@@ -349,6 +360,116 @@ def _remove_chroma_key_precise(
         np.rint(matte * 255.0).astype(np.uint8),
     )
     return Image.fromarray(pixels, mode="RGBA")
+
+
+def _recover_enclosed_transition_matte(
+    rgb: np.ndarray,
+    measured_key: np.ndarray,
+    raw_matte: np.ndarray,
+) -> np.ndarray:
+    """Solve enclosed near-key subject regions from their local opaque colour.
+
+    Channel dominance alone underestimates alpha for a legitimate foreground
+    whose strongest channel happens to be the key channel.  A component which
+    is enclosed by definite background has a different topological signal: its
+    least-key-like samples provide a local foreground reference.  Only accept
+    the two-colour solve when every repaired sample fits that local reference;
+    otherwise retain the conservative dominance matte.  In particular, the
+    reference must be at least 96 RGB units away from the key. This is a
+    numerical-separation heuristic, not proof that the reference is opaque;
+    opacity is the caller's profile assumption. Distance transforms run only
+    on component bounding boxes, and their cumulative area is capped at four
+    source-image areas; unprocessed components retain the conservative matte.
+    """
+    candidate = raw_matte > 0.02
+    component_count, labels, stats, _ = cv2.connectedComponentsWithStats(
+        candidate.astype(np.uint8),
+        connectivity=8,
+    )
+    matte = raw_matte.copy()
+    height, width = raw_matte.shape
+    component_limit = max(
+        _MIN_AMBIGUOUS_COMPONENT_LIMIT,
+        int(height * width * _MAX_AMBIGUOUS_COMPONENT_DENSITY),
+    )
+    if component_count - 1 > component_limit:
+        return matte
+    roi_work_budget = height * width * _MAX_ENCLOSED_TRANSITION_ROI_WORK_MULTIPLIER
+    roi_work = 0
+
+    for component_id in range(1, component_count):
+        left, top, component_width, component_height, area = stats[component_id]
+        if area < 9:
+            continue
+        if (
+            left == 0
+            or top == 0
+            or left + component_width == width
+            or top + component_height == height
+        ):
+            continue
+
+        region = np.s_[top : top + component_height, left : left + component_width]
+        component = labels[region] == component_id
+        local_matte = raw_matte[region]
+        peak = float(np.max(local_matte[component]))
+        if peak < 0.55 or peak >= 0.995:
+            continue
+        reference = component & (local_matte >= peak - 0.025)
+        local_rgb = rgb[region]
+        reference &= (
+            np.linalg.norm(local_rgb - measured_key[None, None, :], axis=2)
+            >= _MIN_OPAQUE_REFERENCE_DISTANCE
+        )
+        if not np.any(reference):
+            continue
+        roi_area = component_width * component_height
+        if roi_work + roi_area > roi_work_budget:
+            break
+        roi_work += roi_area
+
+        _, nearest = cv2.distanceTransformWithLabels(
+            (~reference).astype(np.uint8),
+            cv2.DIST_L2,
+            5,
+            labelType=cv2.DIST_LABEL_PIXEL,
+        )
+        reference_labels = nearest[reference]
+        component_labels = nearest[component]
+        local_foreground = np.empty(
+            (int(np.count_nonzero(component)), 3),
+            dtype=np.float32,
+        )
+        for channel in range(3):
+            lookup = np.zeros(int(nearest.max()) + 1, dtype=np.float32)
+            lookup[reference_labels] = local_rgb[..., channel][reference]
+            local_foreground[:, channel] = lookup[component_labels]
+
+        source_color = local_rgb[component]
+        direction = local_foreground - measured_key[None, :]
+        denominator = np.sum(direction * direction, axis=1)
+        alpha = np.divide(
+            np.sum((source_color - measured_key[None, :]) * direction, axis=1),
+            denominator,
+            out=np.zeros_like(denominator),
+            where=denominator > 1e-6,
+        )
+        predicted = measured_key[None, :] + alpha[:, None] * direction
+        residual = np.linalg.norm(source_color - predicted, axis=1)
+        solved = (
+            (alpha >= 0.04)
+            & (alpha <= 1.02)
+            & (residual <= 5.0)
+            & (alpha >= local_matte[component] - 0.02)
+        )
+        if np.any(solved):
+            component_matte = matte[region]
+            component_matte = component_matte[component]
+            component_matte[solved] = np.clip(alpha[solved], 0.0, 1.0)
+            restored_region = matte[region]
+            restored_region[component] = component_matte
+
+    return matte
 
 
 def _blurred_subject_reference(
@@ -962,15 +1083,75 @@ def _measured_border_key(image: Image.Image) -> np.ndarray:
     return np.median(border, axis=0).astype(np.float32)
 
 
+def measure_chroma_background(image: Image.Image) -> tuple[int, int, int]:
+    """Report the rounded median border RGB used for removal, not generation."""
+    if not isinstance(image, Image.Image) or not all(image.size):
+        raise ValueError("A nonempty image is required to measure the background")
+    return tuple(int(round(value)) for value in _measured_border_key(image))
+
+
+def _has_enclosed_transition_solution(
+    image: Image.Image,
+    key_color: object,
+    measured_key: np.ndarray,
+) -> bool:
+    """Whether precise has a reference-backed recovery unavailable to staged."""
+    requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
+    key_channel = int(np.argmax(requested_key))
+    other_channels = [index for index in range(3) if index != key_channel]
+    rgb = np.asarray(image.convert("RGB"), dtype=np.float32)
+    background_dominance = measured_key[key_channel] - max(
+        measured_key[other_channels[0]],
+        measured_key[other_channels[1]],
+    )
+    if background_dominance <= 0.0:
+        return False
+    pixel_dominance = rgb[..., key_channel] - np.maximum(
+        rgb[..., other_channels[0]],
+        rgb[..., other_channels[1]],
+    )
+    raw_matte = 1.0 - np.clip(
+        pixel_dominance / background_dominance,
+        0.0,
+        1.0,
+    )
+    recovered_matte = _recover_enclosed_transition_matte(
+        rgb,
+        measured_key,
+        raw_matte,
+    )
+    return bool(np.count_nonzero(recovered_matte >= raw_matte + 0.10) >= 9)
+
+
 def remove_chroma_key_automatic(
     image: Image.Image,
     key_color: object = "blue",
+    *,
+    subject_profile: str = "legacy",
+    stage_observer: Callable[[str, Image.Image], None] | None = None,
 ) -> Image.Image:
-    """Remove a generated key background without user-tuned thresholds."""
+    """Remove a generated key background without user-tuned thresholds.
+
+    ``opaque_clipart`` enables a bounded recovery for an enclosed, near-key
+    opaque subject when its local colour is a numerically reliable reference.
+    The default ``legacy`` profile does not enable this recovery. An opaque
+    near-key object and a translucent object can have identical composite
+    pixels; this profile choice cannot be inferred from RGB alone.
+    Opaque clipart also skips the legacy translucent-material colour heuristic:
+    partial edge coverage alone does not justify neutralising foreground hues.
+
+    ``stage_observer`` is an opt-in offline diagnostic hook. It receives an
+    independent RGBA snapshot after each completed pixel stage; none are
+    allocated in normal processing. Observer exceptions propagate to its caller.
+    """
     if not isinstance(image, Image.Image):
         raise TypeError("image must be a PIL image")
     if image.width < 1 or image.height < 1:
         raise ValueError("image dimensions must be positive")
+    if subject_profile not in _SUBJECT_PROFILES:
+        raise ValueError("subject_profile must be 'legacy' or 'opaque_clipart'")
+    if stage_observer is not None and not callable(stage_observer):
+        raise TypeError("stage_observer must be callable")
     requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
     key_channel = int(np.argmax(requested_key))
     measured_key = _measured_border_key(image)
@@ -983,21 +1164,54 @@ def remove_chroma_key_automatic(
         measured_key[other_channels[0]],
         measured_key[other_channels[1]],
     )
-    if measured_other <= 36.0:
+    prefer_precise = measured_other <= 36.0
+    if subject_profile == "opaque_clipart":
+        prefer_precise |= _has_enclosed_transition_solution(
+            image,
+            key_color,
+            measured_key,
+        )
+    if prefer_precise:
         try:
-            result = _remove_chroma_key_precise(image, key_color)
+            result = _remove_chroma_key_precise(
+                image,
+                key_color,
+                allow_enclosed_transition_recovery=(
+                    subject_profile == "opaque_clipart"
+                ),
+            )
         except ChromaKeySubjectColorError:
             raise
         except ChromaKeyAmbiguousError:
             pass
         else:
+            if stage_observer is not None:
+                stage_observer("precise_result", result.copy())
             result = _neutralize_opaque_key_spill(image, result, key_color)
-            result = _neutralize_translucent_complement(image, result, key_color)
-            return _preserve_fully_opaque_source_rgb(image, result)
+            if stage_observer is not None:
+                stage_observer("opaque_spill", result.copy())
+            if subject_profile == "legacy":
+                result = _neutralize_translucent_complement(image, result, key_color)
+                if stage_observer is not None:
+                    stage_observer("translucent_complement", result.copy())
+            result = _preserve_fully_opaque_source_rgb(image, result)
+            if stage_observer is not None:
+                stage_observer("source_rgb_restore", result.copy())
+            return result
     result = _remove_chroma_key_staged(image, key_color)
+    if stage_observer is not None:
+        stage_observer("staged_result", result.copy())
     result = _neutralize_opaque_key_spill(image, result, key_color)
-    result = _neutralize_translucent_complement(image, result, key_color)
-    return _preserve_fully_opaque_source_rgb(image, result)
+    if stage_observer is not None:
+        stage_observer("opaque_spill", result.copy())
+    if subject_profile == "legacy":
+        result = _neutralize_translucent_complement(image, result, key_color)
+        if stage_observer is not None:
+            stage_observer("translucent_complement", result.copy())
+    result = _preserve_fully_opaque_source_rgb(image, result)
+    if stage_observer is not None:
+        stage_observer("source_rgb_restore", result.copy())
+    return result
 
 
 def chroma_key_prompt_block(
@@ -1016,7 +1230,10 @@ def chroma_key_prompt_block(
         f"({hex_color}) digital chroma-key background. The background fills "
         "the image edge to edge with no gradient and stays fully bright inside "
         "every gap and opening. No reflection, tint, shadow, glow, haze or "
-        "color spill on the subject. Crisp hard edges, everything in sharp "
+        "color spill on the subject. The subject is fully opaque and solid: "
+        "no transparency, translucency, semi-transparent materials, glass, "
+        "tulle, lace mesh, veil, smoke, mist, haze or see-through parts. "
+        "Crisp hard edges, everything in sharp "
         "focus, the complete subject centered with at least 10% empty margin, "
         "nothing cropped, no text, no watermark, no stray fragments."
     )
@@ -1024,6 +1241,10 @@ def chroma_key_prompt_block(
     if watercolor:
         selected.add("watercolor")
     for material in MATERIAL_PROMPT_CLAUSES:
+        if material == "transparent_details":
+            # Opaque clipart mode deliberately rejects this material class;
+            # never append a contradictory instruction to the provider prompt.
+            continue
         if material in selected:
             block += MATERIAL_PROMPT_CLAUSES[material]
     return block

@@ -1,5 +1,20 @@
 ﻿# CHANGELOG
 
+## Studio 3.2 work in progress, 2026-09-10
+
+- Saved contour copies become the current result for set export, preserving
+  originals and explicit membership. Membership paths containing words such as
+  secret/token no longer prevent project saves; credential fields remain blocked.
+- Bounded contour Undo stops at the retained predecessor after history eviction,
+  instead of jumping over edits to the original image.
+
+- Compared attached clipart pipeline with six existing reference fixtures;
+  rejected replacement after edge, thin-detail and hole regressions.
+- Existing alpha reuse preserves visible RGB and every nonzero alpha value,
+  clears fully hidden RGB and rejects entirely invisible results.
+- Recorded provider-capability/native-alpha/chroma priorities and delivery
+  follow-ups in the active Studio specification and task list. No version bump.
+
 ## [3.0.0-rc1] - 2026-07-31
 
 - Source release candidate for the Clipart, Pinterest, and Processing V3
@@ -11,6 +26,59 @@
   defaults, and existing artifacts still identify `2.0`.
 
 ## Unreleased
+
+- Clipart Chroma Key prompt: generation now explicitly requests a fully opaque,
+  solid subject and excludes transparent or mesh-like materials. The old
+  transparent-material clause cannot introduce contradictory text in this mode.
+
+- Results: during processing the current file now shows the actual stage in
+  plain language, including background removal and edge cleanup.
+
+- Local Chroma Key: для непрозрачного клипарта отключена лишняя коррекция,
+  предназначенная для полупрозрачных материалов. Сохранены прежний обычный режим
+  и защита настоящих цветов объекта. Добавлена локальная поэтапная диагностика;
+  записи обработки v2 читаются вместе с прежними v1. Основной дефект AA-маски
+  на сложных краях ещё не устранён.
+
+- Chroma Key: сведения об удалении фона сохраняются рядом с итоговым PNG и
+  проверяются по hash изображения; сбой записи сведений не теряет готовый PNG.
+  Добавлены offline-проверки отверстий, мелких компонент, смещения контура и
+  ширины перехода прозрачности на явно выбранном профиле края.
+
+- Local Chroma Key: профиль непрозрачного клипарта исправляет воспроизведённую
+  потерю цвета и непрозрачности у близкого к ключу предмета. Входная alpha
+  ограничивает результат. Добавлены локальные измерения ошибок края и
+  воспроизводимый набор проверок на трёх основных цветах ключа.
+
+- Studio 3.2: редактор контура из проверки прозрачности, локальные правки
+  точек/ручек и alpha-кисть, отмена/повтор, отдельный PNG без перезаписи.
+  Пять фиксированных размеров кисти, горячие клавиши и панорамирование пробелом.
+  Автоконтур пока ограничен 4 Мп; расширенный редактор и Windows-проверка впереди.
+
+- Studio 3.2: KIE/Fal журналы разделены по проектам; перед созданием worker
+  проект сохраняется. Полное восстановление очереди после аварии ещё не готово.
+- Нулевая предварительная оценка Fal проверяется по тарифу; неизвестная
+  стоимость не выдаётся за бесплатную операцию. Это не учёт списаний.
+
+- Studio 3.2: главный экран с шестью одинаковыми карточками и разными обложками.
+  Генерация, обработка и Pinterest сохранены; будущие модули «Скоро выйдет».
+  Добавлена безопасная модель состояний каталога; покупка/скачивание ещё не
+  подключены к серверу. Обложки включены в Windows список ресурсов без сборки.
+
+- Studio 3.2: отдельное автосохранение проектов, три последних на главной
+  и меню всех проектов. Повторное открытие восстанавливает настройки и промпты,
+  не запускает платную генерацию; неизвестные схемы не перезаписываются.
+  Полный каталог модулей и переносимые assets ещё не подключены.
+
+- Studio 3.2: добавлен проверяемый runtime официальных подписанных модулей,
+  клиентский контракт signed module entitlements без выдачи прав старым ключам
+  по умолчанию и адаптер прежнего Pinterest workflow. Проверено на тестовых
+  пакетах; серверная раздача и переключение рабочего UI ещё не реализованы.
+
+- Studio 3.2: подготовлены отдельные backend-прототипы установки подписанных
+  модулей, локального контура alpha, повторов Patterns, имён PNG и обзора
+  набора PDF Letter (пять колонок). Рабочие экраны и очередь ещё не подключены;
+  это не готовый релиз. См. TASKS_VIBIX_STUDIO_3.2.ru.md.
 
 - Окно доступного обновления показывает краткий блок «Что нового» из
   подписанного сервером описания release. При отсутствии описания блок не

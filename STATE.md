@@ -1,6 +1,962 @@
 # Project state
 
-Updated: 2026-08-31
+Updated: 2026-09-11
+
+## Preparation review fixes, completed verification 2026-09-11
+
+Owner authorized preservation of the accumulated work on the current branch,
+including correction of three independently reviewed P2 defects. This preparation
+supersedes the documentation-only pause below, but does not start pending features.
+Contour copies now update the current successful result and its export membership;
+explicit editor copies outside the output folder are accepted without admitting
+unrelated folder files. Originals remain unchanged. Export membership path keys
+are validated by their schema, not treated as credential field names; actual
+credential fields remain rejected. Bounded contour history advances its retained
+base on eviction instead of jumping to the original alpha. The base consumes the
+history byte budget; Reset still targets the immutable original.
+
+All three defects reproduced before the fixes. Focused integration/queue/project/
+history checks: 211 passed, 14 subtests. Full isolated pytest: 1361 passed,
+57 skipped, 2 deselected, 223 subtests (62.48s). Mandatory unittest: 1252 tests,
+57 skipped, exactly two socket PermissionErrors under the sandbox (56.94s).
+The orchestrator reran exactly those two socket tests with require_escalated:
+both OK, 2 tests in 0.204s, exit 0. This closes the sandbox failures without
+claiming a fresh single full unittest run outside the sandbox. Compilation,
+startup smoke, tracked artifact guard and diff-check passed.
+New independent reviewer 01a08dc1-babe-7e62-afa5-f3c549b2f52a reported no justified
+findings within the three fixes and integration scope; independently ran
+93 tests and 8 subtests, including modal Qt, external/repeated contour copies,
+ZIP/PDF, stale source rejection, membership paths/credential protection and
+bounded Undo. Both verification and review gates are satisfied.
+This is a reviewed preservation checkpoint, not a Studio release. No build,
+paid API or deployment; all test processes completed. Owner authorized committing
+the accumulated snapshot with [skip ci] and pushing this same branch without force.
+Git records the preservation commit and remote synchronization; do not restart
+completed tests absent new code changes. New product tasks remain unstarted.
+Staging normalized trailing whitespace only on three lines of the imported
+production-pipeline text and one line of the historical HTML mockup; no source
+wording or runtime code changed in this final hygiene pass.
+See docs/ERRORS.md for causes and regression coverage. Product priorities remain
+TASKS_VIBIX_STUDIO_3.2.ru.md: many-to-many membership first, not started here.
+
+## Paused by owner after documenting latest decisions
+
+Latest request supersedes earlier continue-until-finished instructions: record
+decisions and stop. This turn changes documentation only; no code, paid calls,
+build, commit or new runtime tests. Last implementation verification remains
+1357 passed / 57 skipped / 2 deselected / 220 subtests, not a new test result.
+
+Approved direction: minimal manual work across the workflow; user supplies brief,
+reviews and corrects. Automatically plan mini/standard/maxi/full-bundle contents
+before generation; default nested proposals, one asset in multiple sets (3–4+),
+generate/process once and reuse exact PNG across separate ZIPs. Keep paid consent
+and quality review. Manual distribution becomes optional "Change set contents".
+Current export_membership is path -> one title/included; current UI is manual.
+It DOES NOT implement many-to-many or automatic tier planning. Migration must
+preserve existing assignments/exclusions and never trigger generation.
+
+Expand current eight palettes to categorized 5–7-swatch cards with recommendations:
+holidays/seasons/nature (sea, forest, mountains, sand, clay, flowers, berries, fruit),
+color families (sage, lilac, blue, beige, pink etc.) and application. Optional
+pastel/muted/saturated/contrast, custom and reference-derived palettes. Collection
+and all subsets share the selected art direction; references also inform technique,
+objects and mood. No expanded catalog has been implemented in this turn.
+
+Hard UX constraint: no background-removal method/algorithm name or technical key
+color anywhere user-facing, even settings/help/errors/progress/user diagnostics
+or deliverables. Use outcome-only wording; retain internal engineering details
+and checks without leaking them. This does not hide generation provider/model
+selection or prices. User-surface audit and cleanup are still pending.
+
+Next when owner resumes: follow latest priority checklist in TASKS_VIBIX_STUDIO_3.2.ru.md;
+implement many-to-many auto plans, optional editor, palette expansion and UX audit.
+No further implementation until resumed. Historical checkpoints below describe
+actual existing code, not completion of these new requirements.
+
+## Latest increment: result-to-ZIP UI connected
+
+RunResultsPage now exposes Export sets ZIP for Clipart only. Disabled before/while
+running or without usable successful outputs. Candidate selection uses only this
+session's recorded successful PNG output paths within output_dir, excludes symlinks
+and duplicates, and never scans the folder for older/unrelated PNGs.
+SetExportDialog supports inclusion checkboxes, editable set membership and bulk
+assignment to selected rows. Default membership is explicitly visible as Set 1;
+users review/modify before export, not inferred from subject/completion order.
+Manual review checkbox is reset when inclusion or membership changes.
+
+Actual export runs in QThread, creates separate ZIPs through studio_set_export,
+and reports the new destination folder. Cancellation is cooperative between
+file/set/PDF steps and before publication; close waits for cleanup rather than
+destroying an active worker. No partial publication if cancelled before commit.
+If publication already completed, success is reported, not a false cancellation.
+No source PNG bytes changed. Explicit Save membership stores path-keyed title and
+inclusion through optional clipart.export_membership and shell.state_changed
+autosave. Other-run assignments are preserved; legacy drafts omit the field.
+Invalid membership is rejected before overwriting a valid draft. Reopening restores
+membership but never restores the visual-review checkbox. Paths aren't portable
+IDs: moving/renaming outputs still requires reassignment.
+This is packaging UI plus explicit user review, NOT automated alpha-quality
+certification or a complete image-review/editor workflow.
+
+Focused checks: 69 passed, 5 subtests, including real threaded PDF/ZIP export,
+two-set membership, review gate, cancellation cleanup, current-session-only paths
+and exclusion from other modes. Initial fixture bug destroyed QApplication too
+early; fixed fixture lifetime using yield, rerun succeeded. Real Qt export screen
+inspected offscreen at 1120x780; final artifact:
+docs/ui/3.2/export-sets-1120x780.png (dummy names, actual Qt screen).
+Persistence-focused checks: 101 passed, 27 subtests. First full-suite checkpoint
+before persistence: 1355 passed, 57 skipped, 2 deselected, 220 subtests (60.50s).
+No paid calls/build/commit. Next: image-reference
+handoff and integrated local alpha/QC acceptance; KIE tariff and live probes remain.
+Final full suite after persistence: 1357 passed, 57 skipped, 2 deselected,
+220 subtests (60.45s). git diff --check passed. Skips remain Windows-specific
+contracts, unavailable RealESRGAN and deferred Pinterest. Windows/live API not tested.
+
+## Latest increment: working planning controls and per-set export core
+
+Owner requested continuing all stages autonomously; paid probes, release builds,
+publishing and Windows acceptance still require separate authority/environment.
+Continued existing feature branch; preserved accumulated changes; no commit/push.
+
+OpenRouter credential now has a masked field in ApiSettingsDialog, runtime secret
+handoff and SECRET_CONFIG_KEYS exclusion from normal config. Storage is the SAME
+plaintext user .env as KIE (not encrypted); no secret is put in recipe/draft.
+Composite credential save rejects multiline values before modifying stores;
+UI save errors keep the dialog open with a sanitized message.
+Recipe.assistant stores only validated provider/model and preserves old drafts.
+
+PlanningPanel is connected to the actual builder page: provider-filtered models,
+replace selected / propose all unpinned, background tariff fetch and generation,
+explicit confirmation, discard-on-cancel, stale validation before paid launch and
+before apply. Default is OpenRouter Gemini; GPT-5 mini and DeepSeek Vision selectable.
+Current OpenRouter tariffs come from GET /api/v1/models (no generation). UI estimate
+uses input byte count + overhead and 16000 output tokens; explicitly not a dollar
+cap or tokenizer measurement, excludes platform fee. provider.max_price enforces
+confirmed token/request tariffs, not aggregate spending. No auto retry/fallback.
+KIE can be selected/saved but launch is blocked pending verified tariff/cost controls.
+Cancellation does not refund/abort an already submitted upstream request; results
+are discarded. Worker connection/read timeouts still aren't a total deadline.
+References still only supply manual text observations; no image transmission.
+Real Qt screen checked offscreen at 1120x780: /tmp/vibix-planning-ui.png (temporary).
+
+studio_set_export.export_clipart_sets accepts explicit final-PNG membership per set
+and publishes a new folder with one ZIP per set: PNGs, Letter overview.pdf and a
+minimal manifest with hashes/dimensions. Snapshots preserve source PNG bytes.
+All archives stage before publication; failure leaves no partial output folder.
+This export API is tested but NOT wired into result review UI; no set membership
+is inferred from completion order or filenames. Alpha quality is caller-reviewed,
+not certified by the archive function. Limits: 100 sets, 1000 PNG/set, 64MB/PNG.
+
+Next: reference-image analysis consent/handoff, live provider acceptance with a
+separately approved text budget, integrated alpha/QC review and explicit set
+membership → export UI. Patterns/Junk Journal/release remain incomplete; do not
+call the overall project finished. Full isolated suite: 1349 passed, 57 skipped,
+2 deselected, 220 subtests (61.24s). Skips remain native Windows contracts,
+unavailable RealESRGAN and deferred Pinterest. No paid API checks or build.
+Focused UI/settings check: 42 passed; export/planner/client: 18 passed with
+11 subtests before the final full run. git diff --check passed.
+
+## Latest increment: selected text models and single-request adapter
+
+Owner approved KIE and OpenRouter, Gemini 3.8 Flash, DeepSeek V4 Flash Vision Exp
+and GPT-5 mini (not 5.4 mini). PROJECT/PRD/tasks reflect confirmed exact routes.
+studio_text_models.py permits Gemini through KIE and all three through OpenRouter.
+studio_text_client.generate_plan takes explicit runtime credentials/approval,
+snapshots recipe, sends one request and returns validated proposals without
+mutating draft. No retries, redirects, model fallback, tool execution or uploads.
+OpenRouter uses strict JSON schema; KIE relies on local validation and accepts
+chat/native Gemini envelopes due to inconsistent published docs. No unsupported
+KIE token/schema parameters guessed. Therefore no KIE monetary/token cap claimed.
+80-target/200KB brief/2MB response limits, connect/read timeout, sanitized network
+errors. Timeout is not a total wall-clock deadline; cancellation remains pending.
+Only manual reference observations are sent, not images. The runtime approval
+boolean is a launch gate, NOT a budget cap or complete UI consent implementation.
+
+Next: OpenRouter secret storage + provider/model settings, cost preflight and
+asynchronous builder integration; inspect live responses only with paid-test
+authorization. No key read, paid call, dependency, build, commit or UI change.
+Focused verification: 14 passed and 11 subtests with mocked HTTP, including pins,
+invalid IDs, no fallback, explicit approval, redirects, oversized and bad replies.
+Full isolated suite: 1334 passed, 57 skipped, 2 deselected, 220 subtests (60.36s).
+Skips remain Windows contracts, unavailable RealESRGAN and deferred Pinterest.
+git diff --check passed. Live provider compatibility and Windows UI not tested.
+
+## Latest increment: safe automatic-planning boundary
+
+Owner approved automatic ideas from the brief as the primary path, with optional
+manual editing. PRD/PROJECT/tasks updated. studio_clipart_planner.py assembles
+brief/palette/manual reference observations and selected unpinned targets; accepts
+complete validated suggestions atomically without changing IDs, ordinals or roles.
+Stale responses are rejected by matching the request against the current draft.
+Local reference paths are excluded. This is offline data logic, not a live AI
+client; no semantic image analysis or network request has been implemented.
+Optional pinned bool is backward compatible and persists in recipes. ObjectEditor
+has a pin checkbox; page renamed Proposed Set, but manual editing is still the
+only connected workflow until the text adapter/planning actions are implemented.
+Next: verify an existing-provider text API/model and cost, implement asynchronous
+adapter with explicit budget/preflight, then wire initial/single/unpinned proposals.
+No new provider, dependency, secret access, paid request, build or commit.
+Official API discovery: https://docs.kie.ai/market/gemini/gemini-2-5-flash
+documents an existing-provider chat-completions endpoint and structured output.
+This is an adapter candidate, not a final model choice or a verified price.
+Next session need not search for a new provider first. Focused tests: 16 passed;
+offscreen ObjectEditor pin interaction and screenshot checked (not full Windows
+visual acceptance). Full isolated suite: 1326 passed, 57 skipped, 2 deselected,
+209 subtests passed (59.75s). Skips remain Windows contracts, missing RealESRGAN
+and deferred Pinterest workflows. git diff --check passed.
+
+## Latest increment: concrete objects and explicit prompt handoff
+
+Builder now includes an ObjectEditor after recipe structure (five local pages).
+Objects have stable IDs/ordinals, role, name, action/pose, extras, layout/shape
+and details; add/duplicate/remove/edit persist through optional recipe.objects.
+Recipe expansion adds blank slots, never invents named AI objects or deletes
+edited rows. Returning from objects synchronizes role totals so Back/Next does
+not resurrect deleted entries. Incomplete objects may be saved as drafts.
+
+An explicit unchecked option appends prompts on Save using the existing
+generate_prompt_series language/chroma pipeline. Empty names or count mismatch
+block handoff atomically; existing prompts remain. Existing chroma enablement
+is respected; it is not yet a fully automatic module processing profile.
+Reference images/notes are not attached to new prompts in this increment.
+AI object suggestions, reference handoff, final integrated launch/review/export
+and per-set ZIP remain pending. Real populated Qt screen inspected at 1120×780.
+Verification: full isolated suite 1320 passed, 57 skipped, 2 deselected,
+209 subtests (59.25s). Tests cover object draft roundtrip, append without
+overwriting, invalid handoff atomicity, stable IDs and Back/Next deletion.
+git diff --check passed. No paid calls/build; native Windows still unverified.
+
+## Latest increment: separate reference screen and local palette
+
+The builder now has four working pages: idea, visual settings, references,
+recipe structure. ReferenceEditor stores up to 20 PNG/JPEG/WebP references with
+multiple roles (technique, palette, mood, subject, character, pose, composition)
+and editable manual observations. Optional recipe.references round-trips through
+the existing validated draft; missing files do not prevent reopening the project.
+Files stay at their original paths (portable copying is still pending).
+
+Local palette extraction uses a bounded EXIF-oriented thumbnail and ignores
+transparent padding; explicit apply updates the editable palette. No upload or
+AI interpretation occurs. Source files remain unchanged when removing entries.
+Source mapping: 2026-06-05_130634.png -> presets/custom/from-image palette;
+Characters/Holiday/Junk Journal review -> distinct visual/subject/mood roles.
+Crop/region selection, automatic semantic analysis, object planning and final
+prompt/reference handoff remain pending. A full eight-step app is not claimed.
+Qt reference screen inspected at 1120×780 offscreen; Windows not tested.
+Verification: 1314 passed, 57 skipped, 2 deselected, 209 subtests in the full
+isolated suite (62.71s). Reference/recipe/draft focused checks passed; source
+preservation, transparent-padding palette, role roundtrip, cancellation and
+missing-file reopening covered. git diff --check passed. Empty and populated
+real Qt screens inspected locally. No paid calls, new dependencies or build.
+
+## Latest UI increment: editable set settings
+
+Owner explicitly authorized implementing the described screens without another
+mockup approval loop. ClipartProjectPage now opens ClipartBuilderDialog using
+the existing theme. This first working block includes idea/custom context/motifs,
+visual settings, eight palette cards, and recipe distribution. Back/Next and
+explicit save work; Cancel preserves all project state. Visual selections are
+stored separately in optional recipe.visual and compiled into the existing
+prompt_generator.style; palette uses the existing field. Existing prompts are
+not overwritten. Pinterest has no builder entry.
+
+This is not yet the complete eight-screen workflow: separate reference editing,
+concrete object planning, full prompt/queue integration and per-set ZIP remain.
+The dialog has three local pages until the remaining workflow is integrated.
+Real Qt style screen inspected at 1120×780 offscreen; Windows acceptance remains.
+Verification: full suite 1309 passed, 57 skipped, 2 deselected, 209 subtests
+(59.73s); after restricting the entry to Clipart, four builder tests passed,
+including Pinterest exclusion. git diff --check passed. No paid calls/build.
+
+## Latest implementation: offline Clipart recipe persistence
+
+studio_clipart_recipe.py allocates the exact requested total across five roles
+using three weighted recipes. Explicit manual edits update the total and retain
+zero categories. Theme/custom context/related motifs and counts persist through
+optional clipart.recipe in the existing V3 draft. Legacy drafts omit the field;
+invalid or future recipe schemas fail before overwriting a valid draft.
+No provider call occurs during planning or loading. This increment implements
+the data layer only; builder screens, reference extraction, object-to-prompt
+handoff and multiple-set ZIP integration remain open.
+
+Verification: full isolated suite 1306 passed, 57 skipped, 2 deselected,
+209 subtests (59.32s). Windows-native/Real-ESRGAN/deferred Pinterest limitations
+remain. Focused recipe and draft tests: 38 passed, 22 subtests. No paid calls,
+build, commit or push. New UI still requires the concrete visual approval in
+AGENTS.md; text approval covers the workflow, not final screen layouts.
+
+## Current direction: separate modules; Clipart-only mockup
+
+Owner explicitly rejected cross-module product-type selection. Clipart,
+Patterns and Junk Journal are distinct application modules entered from the
+Studio catalog, each with its own workflow and screens. Reuse shared services
+internally; keep result_kind as module-owned processing safety metadata, not
+a user dropdown. Do not rewrite legacy projects or remove tested backend guards.
+The mixed result-kind-proposal is rejected, not pending approval.
+Its replacement is docs/ui/3.2/clipart-review-proposal/ (Clipart-only, proposed).
+The owner additionally chose a recipe-first entry: independently set desired
+counts of hero objects, compositions, wreaths, borders/frames and small decor;
+the module proposes a few editable balanced set plans before any paid work.
+The brief uses a primary subject theme plus one optional context: a broad season
+or a specific holiday, never both at once.
+Delivery is a review sheet plus a ZIP of Ready PNGs and manifest; Review assets
+are visibly excluded by default. Every set gets its own ZIP, overview and
+manifest; multiple sets never silently merge into one archive. The former
+five-screen flow omitted the required visual-direction stage and is superseded.
+Owner corrected the proposed flow to eight focused steps: brief/context/target
+count, visual style, references, set structure, concrete objects, launch,
+review, export. Context offers season, holiday, occasions and custom text;
+related motifs supplement the main theme. Target count yields editable balanced
+recipes. Soft alpha edges remain outside UI controls and retain the 1–2 px
+final-PNG QC limit. PRD §6 now records the exact choices and actions for all
+eight screens. The older six-screen proposal is superseded; runtime implementation
+still awaits visual approval of a revised layout.
+Existing-PNG quality acceptance remains required.
+Patterns follows Clipart; Junk Journal remains a separate future scoped module.
+No runtime code changes, new paid calls, builds or commits in this revision.
+
+## Historical rejected proposal: result-kind review screen
+
+Six offline proposal states (clipart, pattern, type menu, empty, conflict,
+unknown price) and a current real review-page screenshot are saved in
+docs/ui/3.2/result-kind-proposal/. All PNGs are 1120×780. README records
+interactions, limitations and the reproduction command. No runtime UI changed;
+all displayed proposal prices are synthetic. These mixed-type controls must
+not be implemented; follow the separate-module direction above instead.
+The broader Holiday/character/palette builder is not approved by this proposal.
+
+## Latest increment: explicit result-kind background protection
+
+PromptEntry now carries an optional result_kind (legacy default). Project
+round-trip, normalized entries, editor/copies, worker requests and retries
+preserve it. Surface kinds pattern/background/texture/journal_page bypass
+removal, alpha-edge shrink and automatic trim in the existing Worker, without
+mutating shared settings. Surface+chroma conflicts fail before generation.
+Offline cost estimates and Fal removal quantities exclude these surface items.
+Found and fixed existing metadata loss in RunItem construction and manual
+prompt edits (both chroma colour and type must survive these transitions).
+
+No new controls/UI approval, paid calls, dependency, build, commit or push.
+This is a backend contract, not the finished automatic router. Next: approve
+the Clipart-only mockup and adapt stage/provider/key preflight to its module;
+persist type for independently imported PNGs; implement explicit hole policy
+for frames/wreaths/labels. Untyped imported images retain legacy behavior.
+Existing-source review/editor/final-PNG quality acceptance is still open.
+
+Verification: full isolated pytest 1301 passed, 57 skipped, 2 deselected,
+209 subtests, 59.35s. Surface preservation checked across six removal-provider
+settings, including final PNG pixels/dimensions; project/editor/retry metadata
+and mixed-batch price quantities covered. Compile and git diff --check passed.
+Native Windows, missing Real-ESRGAN and deferred Pinterest skips remain;
+no live provider or visual acceptance claimed.
+
+## Latest increment: per-source generation background record
+
+Owner approved a separate future Junk Journal module (pages, papers, cards,
+decorative elements), while continuing current Clipart tasks first. Shared
+palettes help reduce key/subject conflicts, but cannot constrain every colour
+the model invents; pixel palette extraction and observed-background QC remain.
+
+Code inspection corrected the previous documentation: per-prompt automatic
+selection and PromptEntry → queue → Worker colour handoff already existed in
+the accumulated worktree. They were not newly implemented in this increment.
+New: chroma_generation_record.py writes a no-clobber request record BEFORE
+generation, then binds a separate record to downloaded raw-image SHA256.
+_generate_entry uses it for entries with explicit chroma metadata; processing
+reads the source-bound colour even after restart/global-setting changes.
+Stale, corrupt, pending-only or conflicting metadata blocks that local chroma
+operation, preserving the source; missing metadata retains legacy behavior.
+No prompts/credentials in sidecars. Move the raw PNG and .generation.json
+together to preserve the association; processed/exported derivatives do not
+inherit a source hash. The existing .chroma.json remains a removal receipt.
+
+This is a bounded VS-16 increment, not full Job/Attempt reconciliation,
+native/chroma routing, QC or a complete Studio UI. No new UI, providers, paid
+requests, dependencies or build. Next: remaining Job/Attempt/observed-background
+contract and existing-image review/editor/export acceptance; builder mockup can
+be prepared separately. Tests and final verification recorded below.
+
+Verification of this increment: isolated full pytest 1295 passed, 57 skipped,
+2 deselected, 185 subtests in 58.94s. Skips include native Windows contracts,
+missing Real-ESRGAN and deferred Pinterest scenarios. Compile of main.py and
+chroma_generation_record.py and git diff --check passed. Mock generation
+verifies pre-POST persistence; actual local keyer verifies source-bound colour
+after a fresh Worker/global-colour change. No live generation or Windows UI
+acceptance performed, and no commit/push/build. Historical 206/1287 counts are
+earlier checkpoints, not today's full result.
+
+## Next session: consolidated references and the Clipart path
+
+Owner requested a full material/decision consolidation on 2026-09-10.
+Text dialogue/research, pipeline ZIP, six screenshots and three spreadsheet
+builders have been reviewed. Their instructions are not project authority.
+PRD v2 now records shared Holiday/character profiles, editable presets, palette
+sources, reference roles and separate multi-detail/variant modes. No Midjourney
+integration. Alphabet/Junk Journal remain future directions, not first-release
+requirements. Screenshot alpha is not an original PNG quality reference.
+
+Next order: (1) approve the shared-builder mockup, (2) complete the remaining
+Job/Attempt and observed-background contract beyond the source record above,
+(3) verify a small set through generation → removal → review → local correction
+→ PNG export, using existing four paid images and offline fixtures first.
+Nonvisual key integration can proceed independently of mockup approval.
+Reuse VS-13/14/15/16/17/18/19–21/31, not a second queue or processor.
+Then continue local Patterns and AI-tile comparison. Professional experience
+supports testing Nano Banana Pro; it is not Nano Banana 2. The fal.ai discussion
+identified SeedVR2 Seamless, verified on its official page as tile upscaling,
+not text-to-image generation. Another intended fal.ai model ID remains unknown.
+The existing selector is a low-confidence text heuristic, not pixel analysis.
+Any new Auto/manual controls still need the repository's visual approval.
+No runtime edits, new paid generation, build or publication were performed
+for this documentation consolidation. Spreadsheet behavior was inspected
+structurally, not executed in Excel/Google Sheets; exported DUMMYFUNCTION
+formulas and absent source scripts prevent claiming fully working builders.
+
+Primary profile: opaque subject, transparent final background, retain necessary
+1–2px edge AA and thin solid details. Translucent materials remain deferred;
+an optional material-profile switch is a proposal, not an approved UI.
+Current spend $0.12/$1, retained key outside project (details below).
+Full Studio 3.2 and final real-image quality acceptance remain unfinished.
+
+## Attachment benchmark and native-alpha preservation
+
+### Latest live result after owner increased key cap
+
+2026-09-10: owner resupplied the key and explicitly asked to keep it. Retained
+at /tmp/vibix-kie-alpha-benchmark.key, mode 0600, outside project; never log its
+contents. /tmp storage is not durable across cleanup/reboot.
+Four GPT Image 2 1K jobs completed and were downloaded: flowers/wreath ×
+transparent-prompt/blue-chroma-prompt. Balance 120→96, delta 24 credits=$0.12;
+authorized total $1, remaining $0.88. Earlier rejected attempts spent zero.
+Do not automatically use the remaining budget. No further paid work submitted.
+
+Actual outputs are 1254×1254 PNG: transparent-prompt results RGBA, chroma RGB.
+This verifies alpha in these provider outputs, not provider-internal native
+generation or an API background parameter. Wreath RGBA has visible haze on
+black. Current opaque_clipart keyer produces cleaner-looking wreath in this
+small comparison, ~0.94–0.99s per image. No ground truth, geometry/detail
+differences between generations, no universal ranking or final 1–2px guarantee.
+Keep opaque/chroma primary; preserve supplied alpha without automatic binary
+threshold and require review. Native generation integration/QC remain open.
+
+Evidence: .scratch/kie-alpha-live-2026-09-10-retry/ledger.json, analysis.json,
+comparison-white-black.png, four untouched provider PNG and processed copies.
+scripts/analyze_kie_clipart_probe.py creates the local comparison; credential-
+free CDN download required an explicit browser User-Agent after default 403.
+No regeneration for download failure. Prior cap error below is resolved history.
+
+Historical initial rejection, resolved: owner supplied a temporary KIE key by SSH; credit GET
+authenticated successfully (120 credits). One GPT Image 2 1K submission was
+rejected with code 433 and no task ID. The remaining three were never sent.
+One independent Nano Banana 2 1K control was also rejected with 433:
+"The current number of points used by apiKey has exceeded the total limit".
+Balance remained 120 after both; observed spend $0 of the authorized $1.
+The blocker was the key-specific usage cap, not an exhausted account balance.
+It was subsequently fixed; four successful results are recorded above.
+No image was generated at that initial checkpoint. The first temporary key
+was removed then; the newly supplied key is retained as instructed. Local ledgers:
+.scratch/kie-alpha-live-2026-09-10/ledger.json and
+.scratch/kie-nano-control-2026-09-10/ledger.json. No blind resubmissions.
+
+Active branch: codex/feature-alpha-routing-benchmark-3.2 (no upstream), based
+on the same 85f9a5c and all preserved cumulative uncommitted Studio changes.
+Owner authorized documentation/comparison/continued implementation. ZIP candidate
+passes its five tests but worsens all five partial-alpha golden comparisons;
+frame-contact and source-alpha probes also fail. Do not integrate it wholesale.
+Report: docs/research/attached-pipeline-review-2026-09-10.ru.md.
+
+Existing skip_remover_for_alpha is reused, not newly invented. Worker now calls
+native_alpha.preserve_native_alpha: preserve every nonzero alpha/visible RGB,
+zero hidden RGB, reject entirely transparent results. Focused tests: 88 passed,
+1 missing-Real-ESRGAN skip, 12 subtests. Final isolated full pytest:
+1287 passed, 57 skipped, 2 deselected, 185 subtests, 62.24 seconds.
+Command: /tmp/vibix32-venv/bin/python scripts/run_isolated_tests.py -q --tb=short.
+Linux user-data is isolated with LOCALAPPDATA before app import. A lazy-page
+test now supplies its own writable work directory. Compile/diff and the CI
+sensitive scan with its documented allow-list pass.
+This is preservation, not cutout QC or native generation integration.
+
+Next: VS-03A provider capability/intent, current chroma reference-confidence,
+then VS-17/18 final QC and approved end-to-end Clipart/editor/export. KIE
+Sunburst 2.5 public I2I example has background=transparent; its tariff remains
+unconfirmed and it was not called. See latest live result above for key access
+and actual $0.12 spend. Full Studio modules/UI/Patterns remain open.
+No build, release, commit or push. Historical checkpoints below
+are not the current task order.
+
+## Historical increment: deterministic chroma-key colour selection foundation
+
+`chroma_key_selection.py` adds the first local, dependency-free selection
+heuristic for the supported blue/green/red key palette. It scores explicit
+Russian/English colour and subject words, chooses the least-conflicting colour,
+keeps blue on ties, and returns its evidence plus `text_only`/`low` confidence.
+It does not inspect generated pixels and never promises a safe key. The earlier
+claim that it was not enabled in generation was inaccurate: existing
+v3_prompt_generator already selects the colour per prompt and carries it in
+PromptEntry. See the latest increment for the added on-disk source binding.
+
+Verification: six selector unit tests passed. No provider call, build or release.
+
+## Current increment: opaque prompt contract
+
+The chroma-key prompt block now explicitly requires a fully opaque, solid
+subject and excludes transparency, translucent materials, glass, tulle, mesh,
+veil, smoke, mist and haze. A caller selecting the old `transparent_details`
+material clause no longer receives contradictory instructions; that clause is
+ignored in this opaque workflow. Hair, fur, twigs and thin solid leaves remain
+allowed. This controls generation intent only; the provider can still violate
+the prompt, so output validation remains required.
+
+Focused prompt/chroma tests are running; no provider request or build was made.
+
+## Current increment: visible processing stage labels
+
+Results now translates structured processing stages into clear user-facing
+status text: background removal, upscale, sharpening, edge cleanup, metadata
+cleanup and PNG/DPI export. This addresses the case where the queue was active
+but only showed the generic processing label. The worker and pipeline are
+unchanged; no additional work is performed.
+
+Verification: `tests.test_v3_run_queue` 59 tests OK. Full suite should be rerun
+after the next algorithm change; no build or release was started.
+
+## Current research: execute the upstream reference before another engine change
+
+Owner asked to revisit the downloaded Clipbrook code because quality is still
+poor. The unchanged pinned upstream SHA c1473ae was run directly on six locked
+256x256 fixtures with default parameters, using Node24 builtin TS transform
+and a local import adapter. No packages installed or runtime code changed.
+Three additional 1px-AA opaque squares and a 16x16 separate opaque island were
+tested. Details and float metrics are appended to the existing full audit:
+`docs/research/clipbrook-core-chroma-audit-2026-09-09.ru.md`.
+
+Adaptive rim classification causally improves mean alpha error in two fixtures
+but does not solve all edge defects. Upstream defaults improve black partial
+p95 in three fixtures and worsen it in two; fixed island cleanup deletes the
+separate opaque square, and one narrow blue/purple AA edge is lost. This is
+not proof against the owner's observed Clipbrook service result: service
+configuration, input resolution and the real source/result pair are unknown.
+Next implementation must validate pre-solve rim classification plus reference
+confidence, not blindly replace the engine or copy finalisation constants.
+Asked owner for original PNG and corresponding cutouts; not available yet.
+Application/tests unchanged; prior 1191-test result remains the runtime baseline.
+Terra independently reproduced all six upstream outputs/stats; a further main
+rerun records input/harness/upstream source SHA and Node/command metadata in
+`.scratch/upstream-reproduction-metadata.json`. Documentation hygiene: 4 passed;
+diff check clean. No direct upstream code reuse, release build, commit or push.
+
+## Current increment: isolate translucent-material correction from opaque clipart
+
+`opaque_clipart` now skips the legacy translucent-complement colour heuristic
+in both precise and staged paths. Legacy output/order and final opaque RGB
+protection remain unchanged. This removes an additional wrong hue adjustment,
+NOT the primary ordinary-AA matte defect. A locked golden pixel (79,53) in
+soft-edge-red now keeps R107 instead of being further altered to R142; its
+alpha is still incorrectly 255 versus reference163, explicitly not solved.
+Adversarial 32x32 legitimate key-tinted highlights remain byte-exact.
+
+`chroma_diagnostics.py` and the opt-in `stage_observer` record completed stage
+counts/hashes and optional known-truth metrics without changing output bytes.
+Observer snapshots are independent; normal processing creates no snapshots.
+Offline diagnostics cap inputs at 4M pixels, record no pixel payloads, paths or
+prompts, and make no quality claim without truth. CLI reproduction:
+`scripts/benchmark_chroma_selector.py --subject-profile opaque_clipart
+--include-goldens --trace-stages --output <new-local-report.json>`.
+This is partial CK-04: internal mask/reference/confidence diagnostics remain open.
+
+Measured before/after on six existing hash-verified fixtures: alpha and geometry
+unchanged; all 39 selector outputs unchanged. Soft-edge-red black partial
+composite p95 improved 0.316212→0.281892, max 0.402353→0.381146;
+partial-alpha-red black partial max 0.393726→0.329412. Other four fixtures and
+white/magenta composite metrics were unchanged. These are normalized errors,
+not a whole-image quality rating. A 4x nearest-neighbour visual comparison on
+black/white/magenta confirms the primary matte/halo problem remains visible.
+Local evidence: `.scratch/chroma-stages-2026-09-09.json`,
+`.scratch/chroma-stages-opaque-v2-2026-09-09.json`,
+`.scratch/chroma-opaque-v2-visual.png`; these are untracked local QA artifacts.
+
+Receipts now identify `opaque-clipart-v2`; old v1 receipts remain readable under
+their original version, never silently relabelled. No release-version bump.
+Terra independently reviewed profile gating, privacy, non-interference and
+receipt compatibility: no P1/P2 findings. Its initial ad-hoc composite numbers
+overflowed int16 and were rejected; the measurements above use the canonical
+float `reference_quality` implementation, independently rerun by the main agent.
+Full unittest: 1191 tests OK, 57 skipped. No paid calls/build/commit/push.
+Next: classification/reference-confidence work for the still-overestimated AA
+mask; obtain owner source/result PNG pair for the reported real-image fringe.
+
+## Current increment: reference geometry and processing receipts
+
+Offline `chroma_quality.py` now measures direct-overlap components/holes,
+bidirectional contour displacement and explicit normal-profile alpha width.
+Foreground uses 8-connectivity, holes 4-connectivity; even alpha=1/255 counts
+as support. Region/pixel/sample limits bound diagnostics. These require truth
+or explicit normal samples and do not certify arbitrary user images.
+
+`chroma_provenance.py` saves a schema-checked, hash-bound `.png.chroma.json`
+receipt after final PNG publication. Worker captures the removal input hash,
+requested and observed removal key, then binds the receipt to exported bytes.
+No prompts, paths or credentials are stored. This is removal provenance, NOT
+the original generation request; `quality_status=not_evaluated` is explicit.
+Missing/stale/unsupported receipts are unavailable. Existing sidecars are
+preserved; a receipt write failure leaves the PNG intact with a progress message.
+An incomplete or consumed per-item receipt cannot leak into a later export.
+
+`scripts/benchmark_chroma_selector.py --include-goldens` now reports geometry
+for 39 selector probes and six existing independent reference fixtures.
+The explicit straight top edge in the selector probes measured about 1.8px;
+that is not a whole-image 2px guarantee. Stronger composite metrics exposed
+remaining ordinary AA errors in existing fixtures despite passing mean gates;
+this remains open algorithm work, not completed CK-01…11 or Studio 3.2.
+
+Independent Terra review verified that all non-spill golden sources exactly
+match their known foreground/alpha/key composition. A local-reference AA
+prototype was rejected and removed: a dominance score of 1 can still correspond
+to true alpha 153/255; deep references miss local colour gradients, while
+shallower references worsened thin-line and partial-alpha composite p95 to
+0.437 and 0.499. Do not reintroduce that threshold adjustment. The next
+algorithm experiment needs a local foreground-colour estimate with independent
+confidence checks and comparison against all six fixtures, not just the
+39 selector probes. The stable near-key recovery remains in place.
+
+Export captures the published PNG hash under the publication lock and checks
+it before receipt creation. If the file changed in between, no misleading
+receipt is written. This is not a transactional multi-file project format;
+existing sidecars are still never overwritten automatically.
+
+Verification for this increment: stable full unittest discovery ran 1180 tests,
+OK with 57 skips (local loopback permitted); focused receipt/Worker/geometry
+suite ran 47 tests, OK with one platform skip. Documentation hygiene: 4 passed;
+git diff --check clean. A prior in-progress run overlapped an agent edit and
+failed six geometry calls; the stable full rerun above supersedes it. Windows
+packaged acceptance and real owner source/result pairs remain unverified.
+No release build, paid API request, commit or push was performed.
+
+## Current increment: opaque clipart key recovery
+
+Owner authorized implementation. Active task branch is
+`codex/fix-chroma-quality-3.2` in the same studio-3.2-worktree; all cumulative
+3.2 changes were retained. Local Chroma Key now explicitly requests the
+`opaque_clipart` subject profile. This is a product assumption for opaque
+clipart, not proof of opacity inferred from RGB. The legacy Python API default
+is unchanged; source alpha remains an upper bound in both profiles.
+
+Reference-backed recovery repairs eligible enclosed near-key components before
+RGB unmixing. Component ROI processing has a cumulative 4x-image-area budget.
+No upstream source was incorporated. Offline `chroma_quality.py` reports
+per-region alpha/RGB mean/p95/max, counts and three-background composites;
+empty regions produce null scores. `scripts/benchmark_chroma_selector.py`
+records the engine/input/truth hashes for a reproducible 39-case sweep.
+On that synthetic sweep, worst edge RGB channel error fell from 92/255 to
+1/255, worst opaque-interior alpha error from 71/255 to zero. These numbers
+do not establish general real-image quality or the requested 1–2px final AA.
+
+Local exported-PNG acceptance covers the actual Worker call and preservation
+of the source file. Full quality profile, general selector replacement,
+trace/sidecar/Review, real owner fixtures, final-AA/topology gates and packaged
+Windows acceptance remain open. No release version, build, commit or push.
+Verification: full unittest discovery 1160 tests OK, 57 skipped (loopback
+fixtures permitted); final focused regression 31 tests OK, one platform skip.
+Existing chroma/fine-detail and three committed golden gates also passed under
+an explicit opaque-profile wrapper (31 checks). Initial sandbox full run had
+two socket-permission errors; the permitted full rerun passed.
+
+## Research checkpoint: Chroma Key quality profile
+
+Read-only audit of `clipbrook-core` (reference SHA
+`c1473ae2c7d60f3beb7a56b46045c91bcf896945`) and the current Vibix chroma
+path is recorded in `docs/research/clipbrook-core-chroma-audit-2026-09-09.ru.md`.
+An independent synthetic probe proved a discontinuity of the automatic
+precise/staged selector at the observed-key secondary-channel threshold 36→37:
+it can create a reddish edge and reduce opacity for an opaque purple subject.
+This proves a current algorithmic risk, not the cause of the user's screenshot;
+the source/result PNG pair is still needed for that attribution. The new
+`PRD_CHROMA_KEY_QUALITY_V1.ru.md` makes benchmark fixtures, diagnostics and
+one measured profile prerequisites to VS-17. No chroma runtime code was changed,
+no upstream code was incorporated, and no paid/runtime dependency was added.
+Direct source reuse remains subject to the upstream AGPL-3.0-only licence.
+Independent PRD review found and closed dependencies for sidecar/editor state,
+external alpha-preserving resize routes, immutable QC gates and Auto/manual
+retry provenance; no remaining P1/P2 findings.
+
+## Active increment: approved contour editor implementation
+
+Owner approved the four contour editor PNG states and authorized implementation.
+Core session/history/export and Qt dialog are connected via "Контур по точкам"
+on the existing transparency page. Current unsaved RGBA is passed to the dialog;
+cancel preserves it and atomic no-clobber export adds a separate PNG to the list.
+Session owns bounded alpha history, undoable reset and source RGB. Lazy opening
+avoids automatic full-image vector extraction. Two consecutive node drags, Alt
+handle drag, holes/residual preservation and modal save round-trip are tested.
+Owner requested fixed brush choices: 2/8/16/32/64 px, no slider. Brackets select
+size; V/B/E/H select tools; Space pans; Ctrl+Z and Ctrl+Shift+Z handle history.
+Latest focused tests: 56 passed. Real Qt 1120x780 proof (synthetic QA cup only)
+is in docs/ui/3.2/contour-editor-proof, rendered by scripts/preview_studio_contour.py.
+Visual review fixed unreadable dark labels; failed Open preserves current edits.
+Whole unittest regression: 1151 tests OK, 57 skipped. Documentation hygiene:
+4 passed; diff check clean. No paid calls, commit or installer build.
+Limits: synchronous full-mask Auto contour limited to 4*1024*1024 pixels; larger
+PNGs up to core 32M limit retain brush editing. No node insertion/deletion,
+corner/smooth mode, saved editable-history reload, QC invalidation or Windows
+packaged acceptance yet. VS-19/20/21 remain partial, not completed Studio 3.2.
+
+## Current increment: project-scoped task journals
+
+Studio's shared worker factory now saves the active UUID project before worker
+creation and passes project_id separately from settings. All active controllers
+and their generic retry factory use this boundary; stale shells and failed
+project writes cannot create a worker. WorkerThread uses per-UUID Fal/KIE journal
+filenames within the chosen work directory. Legacy no-ID callers keep old names;
+old shared journal records are not automatically assigned to Studio projects.
+Known limitations: moving the work folder does not relocate journals; old pending
+legacy tasks need explicit migration/reconciliation; no durable run snapshot or
+pre-submit intent yet. This is isolation, not complete crash recovery.
+Targeted checks: 29 passed + 11 subtests; active flow regression 151 passed,
+54 deferred Pinterest skips + 6 subtests; real journal isolation 2 passed.
+Full integration: 1148 unittest tests OK, 57 skipped; Luna read-only review
+found no P1/P2 within this slice. No Windows/paid acceptance or build performed.
+Contour proposal is now in docs/ui/3.2/contour-editor-proposal as PNG images;
+visual approval requested before implementing the editor screen. Frontend-design
+guided reuse of Vibix tokens and readable labels; these are mockups only.
+
+## Current increment: honest Fal estimates and immutable asset backend
+
+Zero historical Fal estimates now check published flat image/request rates.
+Unknown variable-unit costs remain unavailable, not falsely free. Positive
+historical estimates remain estimates, not actual charged usage. Tests cover
+zero/paid/free/variable rates, malformed responses and currency mismatch.
+The user's exact paid upscale scenario has not been reproduced; dimension-aware
+upscale estimates and actual spend accounting remain outstanding.
+
+Added studio_assets.py with SHA-256 immutable blobs, streamed import, verified
+resolve, safe portable filenames and corruption rejection. Not yet connected
+to project persistence/import/export. Windows directory fsync is unavailable;
+Windows runtime durability remains unverified. Targeted tests: 42 passed.
+Full regression: 1145 unittest tests, OK (57 skipped), isolated profile and
+local HTTP fixtures only. Documentation hygiene: 4 passed; diff check clean.
+
+Queue audit found existing journals but no durable pre-submit intent for an
+accepted paid POST whose response is lost. This is NOT fixed. Next: bind jobs
+to project UUID and safely restore known tasks without duplicate submission.
+Contour mockups were revised in the delivery worktree; not yet approved or
+connected to the application. No paid calls, build, commit or publication.
+
+## Latest checkpoint: illustrated catalog connected
+
+The approved home direction is now connected to the real Qt application:
+three recent projects above six equal 248px cards in a three-column scrollable
+grid. Existing CLIPART runtime is presented as universal image generation;
+Processing and Pinterest retain their actual controllers and license gates.
+New Auto Clipart, Patterns and Mockups show disabled "Скоро выйдет" because
+their complete product workflows are not yet wired. No fake installed rights.
+
+`studio_catalog.py` models presentation only (Open/Download/Buy/Coming soon /
+incompatible), with strict bool facts and unknown-rights defaults. Installed
+without rights does not open. `studio_catalog_ui.py` uses an artwork allowlist,
+plain-text labels and emits module/action intent only. No production handler,
+download server, payment endpoint or module entitlement issuance was added.
+Future handlers must use authoritative gate checks, not presentation booleans.
+Catalog replacement validates before replacing and hides retired widgets
+immediately, fixing ghost cards found during actual offscreen rendering.
+
+Three distinct built-in-imagegen covers saved in assets/studio-*-cover.png;
+prompts recorded in docs/ui/3.2/studio-seller-proposal/cover-prompts.md.
+KIE/Fal application keys were not used. Windows build.ps1 now includes these
+assets and fallback SVG; no build/install/version bump or workflow dispatch.
+macOS packaging remains unverified and outside this Windows asset-list change.
+
+Proof: docs/ui/3.2/catalog-proof, produced by scripts/preview_studio_home.py.
+Default/empty 1120x780 and action/incompatible fixtures 1120x780/980x700 were
+visually inspected; smaller window scroll reaches all buttons. Action fixtures
+explicitly label themselves synthetic. Terra implemented state contract; Luna
+review found no remaining P1/P2. Main owns integration and rendering checks.
+This advances VS-06/09 presentation, not completion of module distribution.
+Final verification: 1131 unittest tests OK, 57 skipped; isolated /tmp profile
+and permitted local loopback test server. Compilation, targeted sensitive scan
+and diff/docs hygiene pass. Windows native/installer acceptance not performed.
+Next independent work: VS-07 portable assets and VS-12 restart-safe job lifecycle
+before licensed runtime pages. Contour/Patterns editor visual approval remains.
+
+## Latest owner decision: resume projects and equal cards
+
+Implemented first connected slice: `studio_projects.py` + `v3_mode_selection.py`
+store separate UUID projects alongside the legacy draft. Three recent buttons
+and All projects menu reopen settings/prompts/step without starting a worker;
+new projects do not replace prior projects. Atomic writes, 2 MiB bound,
+unknown-schema/symlink/credential-field/depth rejection. Store is authoritative
+and saved before legacy draft, avoiding hidden newer drafts after storage failure.
+Terra implemented storage; Luna independently identified the write-order issue;
+main integrated UI and added failure/restart/no-worker regressions.
+
+Focused verification: 36 tests +6 subtests; final complete unittest discovery
+1119 tests OK, 57 skips, in isolated profile with permitted loopback server.
+Actual Qt Linux offscreen 1120x780
+render: `docs/ui/3.2/recent-projects-proof/recent-projects-1120x780.png`, reproduced
+with `scripts/preview_studio_home.py`. This is a functional increment on the old
+three-mode home, NOT the final marketplace catalog: custom artwork, preview-rich
+recent cards and downloadable module integration remain. Images are referenced
+by existing paths; portable assets, job/editor-history recovery remain VS-07/12/21.
+No Windows rendered or packaged acceptance, paid calls or deployment performed.
+
+Owner approved continuing implementation: combine the resume-project block from
+proposal C with equal-sized illustrated module cards. Show three recent projects
+above the catalog; retain all older projects. Autosave and reopen restore work,
+never automatically repeat paid generation. API settings/diagnostics stay at top.
+Remove "Всегда доступен"; planned modules say "Скоро выйдет", entitled uninstalled
+modules "Скачать", unentitled modules "Купить". Each module will have its own
+thematic artwork. This supersedes the home-screen approval blockers below, not
+the separate visual gates for the contour/Patterns editors. Recent-project
+persistence is connected as described above; final catalog is next.
+
+## Module-runtime implementation, latest checkpoint 2026-09-08
+
+Implemented in `studio-3.2-worktree` after owner authorized Sol/Terra execution:
+
+- `studio_module_runtime.py`: verified package import and atomic registration;
+  public metadata has no raw handlers/factories; per-dispatch authorization and
+  package integrity checks; activation failure restores prior Store pointer;
+  lazy relative imports do not dirty immutable inventory. Cross-thread host
+  access is rejected and bytecode context uses a process-wide runtime lock.
+- PageHandle lease blocks updates/unload until actual page teardown releases it.
+  v1 handlers are synchronous, Future/generator/coroutine returns are rejected;
+  real background queue integration remains VS-12. This is not an OS sandbox;
+  close() is cooperative and does not destroy an externally retained QWidget.
+- `license_client.py`: optional signed module_entitlements parsed only after
+  verified device/product/nonce-bound signature. Legacy absence => empty/deny.
+  Each grant has module_id/not_before/expires_at; existing offline grace keeps
+  exactly signed grants and cannot extend their expiry. Existing base flows
+  unchanged; no entitlements are issued by the current server.
+- `studio_module_access.py`: fresh existing license gate for each host action;
+  no trust in local installed state or cached rights; offline download denied.
+- `studio_official_modules/pinterest/entry.py`: signed-package adapter preserves
+  existing route and delegates page creation via host services. Contract tests
+  pass; this is NOT migration of working Qt controllers or provider execution.
+
+Terra implemented runtime and mockup in isolated worktrees; Sol audited license
+sources and independently reviewed code. Main integrated changes, added signed
+claim parsing/access composition and Pinterest adapter tests. No new dependencies,
+server edits, paid API calls, commits/pushes, installers or deployment.
+
+Verification for this increment: 38 focused tests +22 subtests; complete unittest
+discovery 1107 tests, OK (57 skips). Initial run under the newly restricted
+sandbox failed on loopback sockets and writes to the default user-data directory,
+not just the changed modules. Retested with a dedicated /tmp profile via
+LOCALAPPDATA and XDG_CONFIG_HOME, and permitted loopback test-server execution;
+all pass without weakening tests or modifying user settings. Main/new-source
+compilation, targeted sensitive-artifact scan and documentation/diff checks pass.
+Repro: LOCALAPPDATA=/tmp/vibix32-acceptance-profile/data
+XDG_CONFIG_HOME=/tmp/vibix32-acceptance-profile/config QT_QPA_PLATFORM=offscreen
+/tmp/vibix32-venv/bin/python -m unittest discover -s tests -q
+(profile config/user-dirs.dirs points XDG_PICTURES_DIR into the same /tmp profile).
+
+UI: owner explicitly answered "Нужно изменить" to seller-proposal mockup.
+Do not implement that mockup or infer approval from the general instruction to
+build the project.
+
+Follow-up received: marketplace-style illustrated cards using existing artwork;
+remove sidebar, right technical/status columns and catalog dropdown; compact API
+settings/diagnostics at top. Show images for uninstalled cards, simple action
+labels and "Скоро" for future modules. Owner sees HTML as source, so three
+actual PNG alternatives requested for inline review. Implementation approval
+still not received.
+Three rendered 1120x780 alternatives are now saved under
+`docs/ui/3.2/studio-seller-proposal/alternative-{a,b,c}-1120x780.png`: equal
+marketplace grid, larger featured cards, and resume-project plus catalog.
+They reuse existing mode illustrations; Patterns artwork repeats without aspect
+distortion. These are mockups only; present PNGs inline rather than HTML links.
+New artifacts: `docs/ui/3.2/studio-seller-proposal/`. Prior UI BLOCKER below remains,
+but its status is now revision requested, not simply awaiting first approval.
+
+Next: revise/approve UI based on owner feedback; VS-07/12 shared projects and job
+lifetimes before real module UI integration. Server grants/download authorization
+and commercial old-key rules remain separate unfinished work, not silently faked.
+
+## Seller-platform clarification, 2026-09-08
+
+Updated existing PRD/PROJECT/tasks to preserve universal generation/processing
+and define Studio as licensed downloadable product-workflow modules. Existing
+Pinterest first moves unchanged behind the module API; boards/descriptions/
+content plans are a later expansion. Mockups, tumbler designs, Excel products,
+listing/SEO and publishing are future modules, not implemented 3.2 features.
+Module-specific entitlements must gate both package delivery and execution;
+package signatures alone do not grant access. Existing ModuleStore is still
+only the integrity/storage backend. No runtime licensing/server changes made.
+
+Previous UI proposal is not approved and needs revision to show the preserved
+universal tools and license-aware catalog. Next technical step is VS-02/35
+contract/audit, followed by fixture registration VS-08/37 and Pinterest adapter
+VS-36; do not build more isolated product helpers before the module boundary.
+Old-key entitlement migration/expiry commercial rules remain to be decided
+before implementing that dependent behavior, not a blocker for contract work.
+This clarification changed documentation only; no UI approval inferred.
+
+## Active Studio 3.2 implementation checkpoint, 2026-09-08
+
+Owner authorized implementation, including Luna/Terra delegation. Working tree:
+`studio-3.2-worktree`, branch `develop/3.2`, base `85f9a5c` from local 3.1.
+Fetched remote 3.1 `e972393` adds only Windows-candidate documentation; no runtime
+delta. Existing dirty historical worktrees were not modified. No commit, push,
+merge, paid API call, installer build or deployment was performed.
+
+Authoritative scope: `PRD_VIBIX_STUDIO_3.2_V2.ru.md` and
+`TASKS_VIBIX_STUDIO_3.2.ru.md`. The owner's latest additions are stable prompt
+ordinal + descriptive 1–3-word PNG names and Letter contact sheets with five
+images per row, each with its own filename. Backend helpers consume a short
+title; semantic title generation and job persistence remain to be integrated.
+
+Implemented but NOT wired into runtime UI/queues:
+
+- `studio_modules.py`: bounded signed local packages, inventory/hash/version/
+  platform checks, immutable staging, activation/rollback/disable. Revalidates
+  package integrity at activation and at `verified_active_path`. Official trust
+  keys must be supplied by the host. No network catalog, code loader, project
+  migrations, dependency resolution or OS isolation is claimed.
+- `studio_contour.py`: experimental auto-extracted paths with editable cubic
+  handles, alpha-only changes inside a selected ROI. Raster residuals and other
+  holes/components are retained; paths are re-extracted after Apply, so stable
+  handle identities/history are not yet provided. Binary mode and compact
+  1–2px feather have synthetic tests, not final real-clipart QC acceptance.
+- `studio_patterns.py`: JSON scenes, straight/half-row/half-column repeats,
+  boundary/rotation wrapping, supertiles, deterministic locked layout, bounded
+  previews. Memory/transform/composite budgets and an independent lattice oracle
+  were added after review. Rounding that exceeds a tiny preview budget rejects
+  before allocation. No seam-quality classifier, GUI or export workflow yet.
+- `studio_delivery.py`: safe names from input ordinal/title and atomic Letter
+  PDF export, default 5 columns × 6 rows, individual Unicode labels, no silent
+  PDF overwrite. This does not yet rename files generated by the old queue.
+
+Independent Terra review found and drove fixes for Gaussian alpha tails,
+hole overwrites, stale contour geometry, installed package integrity, renderer
+resource limits and preview rounding. Luna implemented delivery, Terra contour,
+Patterns and UI mockups; main integrated and checked all slices.
+
+Verification:
+
+- `/tmp/vibix32-venv/bin/python` is an isolated test environment with existing
+  project test dependencies; requirements files unchanged. OpenCV headless is
+  used for Linux checks, not a new runtime packaging dependency.
+- Focused pytest: 51 passed + 10 subtests (47 new backend cases and four existing
+  documentation checks). Compilation and `git diff --check` pass.
+- Required unittest discovery: 1083 tests, OK with 57 expected skips. Initial
+  run exposed a nonportable imported PRD link; saved the provided document locally
+  and fixed links, then repeated discovery successfully. The subsequent final
+  preview-rounding guard has its own focused regression; no existing code changed.
+- Actual synthetic PDF: 31 images, two Letter pages, 612×792 pt; rendered with
+  pdftoppm and inspected, Cyrillic text extracted with pdftotext. Reproduce using
+  `scripts/preview_studio_delivery.py` with a fresh output folder. Proof:
+  `docs/ui/3.2/delivery-proof/clipart-contact-sheet-letter.pdf`.
+
+UI BLOCKER: local AGENTS.md mandates explicit visual approval before coding
+new screens; prior implementation/PRD approval is insufficient. Proposed screens
+are in `docs/ui/3.2/studio-proposal/index.html`, with five 1120×780 PNG renders.
+They contain only synthetic data and are NOT application screenshots. Approval
+was requested; not yet received. No production UI source has changed.
+
+Next: obtain visual approval, finalize VS-02/03 contracts and QC fixtures, then
+implement the ordered minimal end-to-end Clipart path using existing provider/
+queue/editor components. The full 3.2 app, production module distribution,
+Windows visual/packaged acceptance and real cutout-quality benchmark remain
+unfinished. Do not report these backend slices as completed VS-09/19/24/34.
 
 ## Windows acceptance follow-up: Fal.ai replacement upscalers — 2026-08-31
 

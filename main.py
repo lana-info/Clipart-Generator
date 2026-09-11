@@ -53,7 +53,9 @@ from chroma_key import (
     KEY_COLORS,
     ChromaKeyAmbiguousError,
     remove_chroma_key_automatic,
+    measure_chroma_background,
 )
+from chroma_provenance import image_digest, write_receipt
 from license_client import LicenseClient, LicenseError
 from metadata_cleanup import MetadataCleanupError, MetadataCleanupOptions, cleanup_image_metadata
 from ai_watermark_backend import (
@@ -1005,8 +1007,12 @@ class WorkerThread(QThread):
     progress_value = pyqtSignal(int)
     diagnostic = pyqtSignal(object)
 
-    def __init__(self, mode, work_dir, settings, selected_files=None, generated_prompts=None, parent=None):
+    def __init__(self, mode, work_dir, settings, selected_files=None, generated_prompts=None, parent=None, *, project_id=None):
         super().__init__(parent)
+        if project_id is not None:
+            if not isinstance(project_id, str) or str(uuid.UUID(project_id)) != project_id:
+                raise ValueError("Некорректный идентификатор проекта")
+        self.project_id = project_id
         self.mode = mode
         self.work_dir = work_dir
         self.settings = settings
@@ -1029,11 +1035,15 @@ class WorkerThread(QThread):
         self._run_raw_dir = None
         self._diagnostic_context = threading.local()
         self._provider_lease_context = threading.local()
+        # Never claim another Studio project's paid task, even when both use
+        # the same work folder and identical prompts. Legacy callers keep their
+        # journal; ambiguous legacy records are not automatically reassigned.
+        journal_suffix = f".{project_id}" if project_id else ""
         self.fal_task_journal = FalTaskJournal(
-            os.path.join(self.work_dir, ".vibix_fal_tasks.json")
+            os.path.join(self.work_dir, f".vibix_fal_tasks{journal_suffix}.json")
         )
         self.kie_task_journal = FalTaskJournal(
-            os.path.join(self.work_dir, ".vibix_kie_tasks.json")
+            os.path.join(self.work_dir, f".vibix_kie_tasks{journal_suffix}.json")
         )
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
@@ -1612,6 +1622,13 @@ class WorkerThread(QThread):
         prompt_text = entry.get("prompt", "")
         self._diagnostic_context.prompt_text = prompt_text
         references = entry.get("references", [])
+        from result_background_policy import keeps_background
+
+        result_kind = entry.get("result_kind", "legacy")
+        preserve_surface = keeps_background(result_kind)
+        self._item_context.preserve_surface = preserve_surface
+        if preserve_surface and entry.get("chroma_key_color"):
+            raise ValueError("Для фона или плитки нельзя задавать chroma-key; исправьте настройки до генерации")
         self._emit_diagnostic(
             "item_input_inspected",
             prompt_index=idx,
@@ -1620,11 +1637,20 @@ class WorkerThread(QThread):
             operation_type="generation",
         )
         self._emit_file_progress(idx, total, 18)
+        from chroma_generation_record import bind_generation_record, write_generation_intent
+
+        gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
+        generation_intent = None
+        if entry.get("chroma_key_color"):
+            generation_intent = write_generation_intent(
+                gen_path, color=entry["chroma_key_color"], prompt=prompt_text,
+            )
         image_url = self._kie_generate_image(prompt_text, references)
         self._emit_file_progress(idx, total, 36)
         self._ensure_running()
-        gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
         self._download_file(image_url, gen_path)
+        if generation_intent is not None:
+            bind_generation_record(gen_path, generation_intent)
         self._ensure_running()
         self.progress.emit(f"  Сгенерировано: {gen_path}")
         self._emit_item_progress(
@@ -1652,8 +1678,10 @@ class WorkerThread(QThread):
                     raw_dir,
                     idx,
                     "gen",
+                    chroma_key_color=entry.get("chroma_key_color"),
+                    result_kind=result_kind,
                 )
-            elif self.edge_shrink_enabled:
+            elif self.edge_shrink_enabled and not preserve_surface:
                 with self._local_operation_lock:
                     final_url = self._edge_shrink_alpha_source_if_available(
                         gen_path,
@@ -1833,17 +1861,33 @@ class WorkerThread(QThread):
         self.progress_value.emit(int(base + local / total_items))
 
     def _normalize_prompt_entries(self, raw_entries):
+        from result_background_policy import validate_result_kind
+
         entries = []
         for item in raw_entries or []:
             if isinstance(item, dict):
                 prompt_text = str(item.get("prompt", "")).strip()
                 references = split_references(item.get("references", ""))
                 if prompt_text or references:
-                    entries.append({"prompt": prompt_text, "references": references})
+                    chroma_key_color = str(
+                        item.get("chroma_key_color", "")
+                    ).strip().lower()
+                    entries.append(
+                        {
+                            "prompt": prompt_text,
+                            "references": references,
+                            "result_kind": validate_result_kind(item.get("result_kind", "legacy")),
+                            "chroma_key_color": (
+                                chroma_key_color if chroma_key_color in KEY_COLORS else ""
+                            ),
+                        }
+                    )
                 continue
             prompt_text = str(item).strip()
             if prompt_text:
-                entries.append({"prompt": prompt_text, "references": []})
+                entries.append(
+                    {"prompt": prompt_text, "references": [], "chroma_key_color": ""}
+                )
         return entries
 
     def _mode2_process_files(self, emit_final=True):
@@ -2452,19 +2496,46 @@ class WorkerThread(QThread):
         self.progress.emit(f"  Промежуточный локальный источник: {local_path}")
         return local_path
 
-    def _run_processing_pipeline(self, source_path, source_url, raw_dir, idx, prefix):
+    def _run_processing_pipeline(
+        self,
+        source_path,
+        source_url,
+        raw_dir,
+        idx,
+        prefix,
+        *,
+        chroma_key_color=None,
+        result_kind="legacy",
+    ):
+        from result_background_policy import keeps_background
+
+        preserve_surface = keeps_background(result_kind)
+        remove_background = self.remove_bg and not preserve_surface
+        self._item_context.preserve_surface = preserve_surface
         self._ensure_running()
+        self._item_context.chroma_receipt = None
         self._item_context.metadata_cleaned = False
         self._item_context.manual_transparency_required = False
+        selected_chroma_key_color = str(chroma_key_color or "").strip().lower()
+        if remove_background and self._uses_local_chroma_key_remove_bg() and source_path:
+            from chroma_generation_record import load_generation_color
+
+            recorded_color = load_generation_color(source_path)
+            if recorded_color:
+                if selected_chroma_key_color in KEY_COLORS and selected_chroma_key_color != recorded_color:
+                    raise ValueError("Цвет фона задания не совпадает со сведениями исходного изображения")
+                selected_chroma_key_color = recorded_color
+        if selected_chroma_key_color not in KEY_COLORS:
+            selected_chroma_key_color = self.chroma_key_color
         order_error = validate_upscale_after_background_order(
-            self.remove_bg,
+            remove_background,
             self.upscale_after,
             self.upscale_after_provider,
             self.kie_upscale_after_model,
         )
         if order_error:
             raise ValueError(order_error)
-        if self._can_use_legacy_kie_processing_pipeline():
+        if not preserve_surface and self._can_use_legacy_kie_processing_pipeline():
             self._set_provider_diagnostic_context(
                 "upscale_before",
                 "kie",
@@ -2605,7 +2676,7 @@ class WorkerThread(QThread):
             )
             self._ensure_running()
 
-        if self.remove_bg:
+        if remove_background:
             self._diagnostic_context.stage = "background_removal"
             remove_started = time.monotonic()
             remove_provider = self.remove_bg_provider
@@ -2645,8 +2716,10 @@ class WorkerThread(QThread):
                         raw_dir,
                         f"{prefix}_existing_alpha_{idx:03d}_{self.run_stamp}.png",
                     )
+                    from native_alpha import preserve_native_alpha
                     with Image.open(current_path) as source_image:
-                        source_image.convert("RGBA").save(nobg_path, format="PNG")
+                        preserved = preserve_native_alpha(source_image)
+                        self._save_image_object_as_png(preserved, nobg_path)
                     self.progress.emit(
                         "  Использована сохранённая alpha-маска; remover не вызывается"
                     )
@@ -2684,9 +2757,18 @@ class WorkerThread(QThread):
                             with Image.open(current_path) as source_image:
                                 result = remove_chroma_key_automatic(
                                     source_image,
-                                    self.chroma_key_color,
+                                    selected_chroma_key_color,
+                                    subject_profile="opaque_clipart",
                                 )
                                 self._save_image_object_as_png(result, nobg_path)
+                                try:
+                                    self._item_context.chroma_receipt = {
+                                        "source_sha256": image_digest(current_path),
+                                        "requested_background": "#%02X%02X%02X" % KEY_COLORS[selected_chroma_key_color],
+                                        "observed_background": "#%02X%02X%02X" % measure_chroma_background(source_image),
+                                    }
+                                except (OSError, ValueError):
+                                    self.progress.emit("  Не удалось подготовить сведения об обработке Chroma Key")
                         except ChromaKeyAmbiguousError as error:
                             safe_error = self._safe_error_text(error)
                             self._item_context.manual_transparency_required = True
@@ -2826,7 +2908,7 @@ class WorkerThread(QThread):
             )
             self._ensure_running()
 
-        if self.edge_shrink_enabled:
+        if self.edge_shrink_enabled and not preserve_surface:
             self._diagnostic_context.stage = "edge_cleanup"
             edge_started = time.monotonic()
             self._emit_diagnostic(
@@ -2837,7 +2919,7 @@ class WorkerThread(QThread):
                 outcome="started",
             )
             current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "local_source")
-            edge_applied = self.remove_bg or self._has_alpha_channel(current_path)
+            edge_applied = remove_background or self._has_alpha_channel(current_path)
             if edge_applied:
                 with self._local_operation_lock:
                     current_path = self._edge_shrink_pipeline_step(current_path, raw_dir, idx, prefix)
@@ -2855,7 +2937,11 @@ class WorkerThread(QThread):
             )
             self._ensure_running()
 
-        return current_path if local_result else current_url
+        pipeline_result = current_path if local_result else current_url
+        receipt = getattr(self._item_context, "chroma_receipt", None)
+        if receipt is not None:
+            receipt["pipeline_result"] = pipeline_result
+        return pipeline_result
 
     def _visible_mark_cleanup_pipeline_step(self, input_path, raw_dir, idx, prefix):
         confirmed_region = None
@@ -3822,7 +3908,15 @@ class WorkerThread(QThread):
 
     def _save_final_output(self, result_url, source_path, output_path, raw_dir, idx, prefix):
         self._ensure_running()
-        trim_enabled = self.trim_enabled and not bool(
+        chroma_receipt = getattr(self._item_context, "chroma_receipt", None)
+        self._item_context.chroma_receipt = None
+        capture_receipt = bool(chroma_receipt and chroma_receipt.get("pipeline_result")
+                               and chroma_receipt["pipeline_result"] == result_url)
+        self._item_context.capture_chroma_digest = capture_receipt
+        self._item_context.chroma_published_digest = None
+        preserve_surface = bool(getattr(self._item_context, "preserve_surface", False))
+        self._item_context.preserve_surface = False
+        trim_enabled = self.trim_enabled and not preserve_surface and not bool(
             getattr(self._item_context, "manual_transparency_required", False)
         )
         output_dir = os.path.dirname(os.path.abspath(output_path))
@@ -3874,11 +3968,26 @@ class WorkerThread(QThread):
             if self.export_300_dpi:
                 self._verify_png_dpi(stage_path, dpi=300)
             self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
+            if capture_receipt:
+                try:
+                    published_digest = self._item_context.chroma_published_digest
+                    if published_digest is None:
+                        raise ValueError("Published image digest unavailable")
+                    write_receipt(
+                        output_path,
+                        source_sha256=chroma_receipt["source_sha256"],
+                        requested_background=chroma_receipt["requested_background"],
+                        observed_background=chroma_receipt["observed_background"],
+                        expected_result_sha256=published_digest,
+                    )
+                except (OSError, ValueError):
+                    self.progress.emit("  PNG сохранён; сведения об обработке Chroma Key записать не удалось")
             if self.export_300_dpi:
                 self.progress.emit(
                     f"  Установлен DPI 300 для {os.path.basename(output_path)}"
                 )
         finally:
+            self._item_context.capture_chroma_digest = False
             if stage_path and os.path.exists(stage_path):
                 try:
                     os.remove(stage_path)
@@ -3924,6 +4033,11 @@ class WorkerThread(QThread):
                 output_path,
                 overwrite=self.overwrite_existing,
             )
+            if getattr(self._item_context, "capture_chroma_digest", False):
+                try:
+                    self._item_context.chroma_published_digest = image_digest(output_path)
+                except (OSError, ValueError):
+                    self._item_context.chroma_published_digest = None
 
     def _publish_final_output(self, stage_path, output_path, source_inspection=None):
         self._ensure_running()

@@ -9,6 +9,7 @@ from unittest.mock import patch
 from PIL import Image, ImageChops, ImageDraw
 
 import main
+from chroma_provenance import image_digest, load_receipt, receipt_path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -59,6 +60,142 @@ def create_quadrant_rgba(path, size=(32, 28)):
 
 
 class LocalProcessingAcceptanceTests(unittest.TestCase):
+    def test_generation_records_key_before_api_and_reprocessing_uses_it(self):
+        from chroma_generation_record import load_generation_color, record_path
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            worker = self.make_worker(root, remove_bg=True,
+                                      remove_bg_provider="local_chroma_key",
+                                      chroma_key_color="blue")
+            source = raw / f"gen_001_{worker.run_stamp}.png"
+            def generate(prompt, references):
+                self.assertTrue(record_path(source, pending=True).exists())
+                self.assertFalse(source.exists())
+                return "https://example.invalid/generated.png"
+            def download(url, target):
+                image = Image.new("RGB", (64, 64), (0, 255, 0))
+                ImageDraw.Draw(image).rectangle((16, 16, 47, 47), fill=(130, 80, 170))
+                image.save(target)
+            with patch.object(worker, "_kie_generate_image", side_effect=generate), \
+                 patch.object(worker, "_download_file", side_effect=download), \
+                 patch.object(worker, "_save_final_output"):
+                worker._generate_entry(1, 1, {"prompt": "flower", "chroma_key_color": "green"},
+                                       str(raw), str(root / "output.png"), False)
+            self.assertEqual(load_generation_color(source), "green")
+            original = source.read_bytes()
+            restarted = self.make_worker(root, remove_bg=True,
+                                         remove_bg_provider="local_chroma_key",
+                                         chroma_key_color="red")
+            with patch.object(main, "remove_chroma_key_automatic", wraps=main.remove_chroma_key_automatic) as keyer:
+                result = restarted._run_processing_pipeline(str(source), None, str(raw), 2, "file")
+            self.assertEqual(keyer.call_args.args[1], "green")
+            with Image.open(result) as image:
+                self.assertEqual(image.getpixel((0, 0))[3], 0)
+                self.assertEqual(image.getpixel((32, 32))[3], 255)
+            self.assertEqual(source.read_bytes(), original)
+            with self.assertRaisesRegex(ValueError, "не совпадает"):
+                restarted._run_processing_pipeline(str(source), None, str(raw), 3, "file", chroma_key_color="blue")
+
+    def test_failed_generation_intent_write_never_submits_paid_request(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = self.make_worker(Path(temp))
+            with patch("chroma_generation_record.write_generation_intent", side_effect=OSError("disk full")), \
+                 patch.object(worker, "_kie_generate_image") as generate:
+                with self.assertRaises(OSError):
+                    worker._generate_entry(1, 1, {"prompt": "flower", "chroma_key_color": "red"},
+                                           temp, str(Path(temp) / "output.png"), False)
+                generate.assert_not_called()
+
+    def test_native_alpha_route_preserves_detail_without_chroma_call(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            source_path = root / "native.png"
+            source = Image.new("RGBA", (32, 32), (0, 0, 255, 0))
+            ImageDraw.Draw(source).rectangle((8, 8, 23, 23), fill=(120, 70, 30, 255))
+            source.putpixel((7, 12), (80, 60, 190, 1))
+            source.putpixel((7, 13), (80, 60, 190, 128))
+            source.save(source_path)
+            original = source_path.read_bytes()
+            worker = self.make_worker(root, remove_bg=True, remove_bg_provider="local_chroma_key")
+            with patch.object(main, "remove_chroma_key_automatic", side_effect=AssertionError("unexpected keyer")):
+                result_path = worker._run_processing_pipeline(str(source_path), None, str(raw), 1, "file")
+            with Image.open(result_path) as result:
+                self.assertEqual(result.getchannel("A").tobytes(), source.getchannel("A").tobytes())
+                self.assertEqual(result.getpixel((7, 12)), source.getpixel((7, 12)))
+                self.assertEqual(result.getpixel((7, 13)), source.getpixel((7, 13)))
+                self.assertEqual(result.getpixel((0, 0)), (0, 0, 0, 0))
+            self.assertEqual(source_path.read_bytes(), original)
+
+    def test_local_chroma_export_preserves_near_key_opaque_subject(self):
+        for green in (36, 37):
+            with self.subTest(green=green), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                raw = root / "rough"
+                raw.mkdir()
+                source_path = root / "source.png"
+                source = Image.new("RGB", (96, 96), (2, green, 250))
+                ImageDraw.Draw(source).rectangle((20, 20, 75, 75), fill=(120, 80, 180))
+                ImageDraw.Draw(source).line((20, 20, 75, 20), fill=(61, 58, 215))
+                source.save(source_path)
+                original_bytes = source_path.read_bytes()
+                worker = self.make_worker(root, remove_bg=True,
+                                          remove_bg_provider="local_chroma_key")
+                result_path = worker._run_processing_pipeline(
+                    str(source_path), None, str(raw), 1, "file"
+                )
+                self.assertNotEqual(Path(result_path), source_path)
+                self.assertEqual(source_path.read_bytes(), original_bytes)
+                with Image.open(result_path) as result:
+                    self.assertEqual(result.getpixel((48, 48)), (120, 80, 180, 255))
+                    edge = result.getpixel((48, 20))
+                    self.assertLessEqual(max(abs(a - b) for a, b in zip(edge[:3], (120, 80, 180))), 4)
+                    self.assertAlmostEqual(edge[3], 128, delta=4)
+                    self.assertEqual(result.getpixel((0, 0))[3], 0)
+                final_path = root / "final.png"
+                worker._save_final_output(result_path, str(source_path), str(final_path), str(raw), 1, "file")
+                receipt = load_receipt(final_path)
+                self.assertIsNotNone(receipt)
+                self.assertEqual(receipt["source_sha256"], image_digest(source_path))
+                self.assertEqual(receipt["observed_removal_background"], "#02%02XFA" % green)
+                self.assertEqual(receipt["quality_status"], "not_evaluated")
+                second_path = root / "no-processing.png"
+                worker._save_final_output(None, str(source_path), str(second_path), str(raw), 2, "file")
+                self.assertFalse(receipt_path(second_path).exists())
+
+    def test_failed_chroma_receipt_does_not_lose_exported_png(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source.png"
+            Image.new("RGBA", (4, 4), (10, 20, 30, 255)).save(source)
+            worker = self.make_worker(root)
+            worker._item_context.chroma_receipt = {
+                "pipeline_result": str(source), "source_sha256": image_digest(source),
+                "requested_background": "#0000FF", "observed_background": "#0000FF",
+            }
+            messages = []
+            worker.progress.connect(messages.append)
+            final_path = root / "final.png"
+            with patch.object(main, "write_receipt", side_effect=OSError("fixture failure")):
+                worker._save_final_output(str(source), str(source), str(final_path), str(root), 1, "file")
+            self.assertTrue(final_path.is_file())
+            self.assertTrue(any("PNG сохранён" in message for message in messages))
+
+    def test_unfinished_chroma_receipt_is_not_attached_to_next_export(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source.png"
+            Image.new("RGB", (4, 4), (10, 20, 30)).save(source)
+            worker = self.make_worker(root)
+            worker._item_context.chroma_receipt = {"source_sha256": image_digest(source)}
+            output = root / "final.png"
+            worker._save_final_output(None, str(source), str(output), str(root), 1, "file")
+            self.assertFalse(receipt_path(output).exists())
+
     def make_worker(self, work_dir, **settings):
         return main.WorkerThread(
             "mode2_process",

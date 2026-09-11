@@ -119,6 +119,21 @@ class V3PromptGeneratorTests(unittest.TestCase):
 
         self.assertIn("#0000FF", prompts[0].prompt)
         self.assertIn("no paper texture", prompts[0].prompt)
+        self.assertEqual(prompts[0].chroma_key_color, "blue")
+
+    def test_clipart_series_chooses_key_per_prompt_without_manual_default(self):
+        prompts = generate_prompt_series(
+            ProjectMode.CLIPART,
+            PromptGeneratorData(
+                subjects=["blue ribbon with green leaves"],
+                chroma_key_enabled=True,
+                chroma_key_color="blue",
+            ),
+        )
+
+        self.assertEqual(prompts[0].chroma_key_color, "red")
+        self.assertIn("#FF0000", prompts[0].prompt)
+        self.assertNotIn("#0000FF", prompts[0].prompt)
 
     def test_clipart_series_keeps_selected_chroma_materials(self):
         prompts = generate_prompt_series(

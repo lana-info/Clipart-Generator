@@ -590,6 +590,7 @@ class ModeCard(QFrame):
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
         illustration_path: str | Path | None = None,
+        compact: bool = False,
     ) -> None:
         super().__init__(parent)
         self.mode_id = mode_id
@@ -662,6 +663,19 @@ class ModeCard(QFrame):
 
         self.setAccessibleName(title)
         self.setAccessibleDescription(f"{description}. Результат: {result_text}")
+
+        if compact:
+            layout.setContentsMargins(12, 10, 12, 10)
+            layout.setSpacing(6)
+            self.setFixedHeight(248)
+            if self.illustration is not None:
+                self.illustration.setFixedHeight(112)
+            self.description_label.setWordWrap(False)
+            self.title_label.setWordWrap(False)
+            self.title_label.setToolTip(title)
+            self.description_label.setToolTip(description)
+            self.result_label.hide()
+            self.start_button.setText("Открыть")
 
     @property
     def is_selected(self) -> bool:

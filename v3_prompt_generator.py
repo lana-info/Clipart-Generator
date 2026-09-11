@@ -20,6 +20,7 @@ from v3_project_state import (
 )
 from clipart_prompt_schema import ClipartPromptFields, render_clipart_prompt
 from chroma_key import chroma_key_prompt_block
+from chroma_key_selection import select_chroma_key_color
 from prompt_translation import (
     PromptTranslationBackend,
     translate_prompt_fields,
@@ -176,6 +177,7 @@ def generate_prompt_series(
     prompts: list[PromptEntry] = []
     for subject in subjects:
         for variation in variations:
+            chroma_key_color = ""
             if normalized_mode is ProjectMode.CLIPART:
                 clipart_fields = ClipartPromptFields(
                     object=subject,
@@ -209,9 +211,12 @@ def generate_prompt_series(
                     language=target_language if translation.translated else source_language,
                 )
                 if normalized.chroma_key_enabled:
+                    # A user should not have to predict what colour is safe.
+                    # Choose per prompt because one series can mix subjects.
+                    chroma_key_color = select_chroma_key_color(prompt).color
                     try:
                         key_block = chroma_key_prompt_block(
-                            normalized.chroma_key_color,
+                            chroma_key_color,
                             watercolor="watercolor" in " ".join(
                                 (normalized.style, normalized.theme)
                             ).casefold()
@@ -240,7 +245,9 @@ def generate_prompt_series(
                     for part in prompt_parts
                     if (sentence := _prompt_sentence(part))
                 )
-            prompts.append(PromptEntry(prompt=prompt))
+            prompts.append(
+                PromptEntry(prompt=prompt, chroma_key_color=chroma_key_color)
+            )
     return normalize_prompt_entries(
         prompts,
         limit=MAX_PROMPT_SERIES_COUNT,
@@ -281,6 +288,8 @@ def normalize_prompt_entries(
             PromptEntry(
                 prompt=prompt,
                 references=entry.references,
+                chroma_key_color=entry.chroma_key_color,
+                result_kind=entry.result_kind,
             )
         )
         if len(result) >= bounded_limit:
