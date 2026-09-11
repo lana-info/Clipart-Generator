@@ -50,6 +50,7 @@ class ClipartRecipe:
     references: list[dict] = field(default_factory=list)
     objects: list[dict] = field(default_factory=list)
     assistant: dict[str, str] = field(default_factory=dict)
+    bundle_plan: dict[str, Any] | None = None
 
     def validate(self) -> None:
         if not isinstance(self.assistant, dict) or (self.assistant and set(self.assistant) != {'provider', 'model'}):
@@ -61,6 +62,9 @@ class ClipartRecipe:
         validate_references(self.references)
         from studio_clipart_objects import validate_objects
         validate_objects(self.objects)
+        if self.bundle_plan is not None:
+            from studio_bundle_planner import validate_bundle_plan
+            validate_bundle_plan(self.bundle_plan, self.objects)
         _text(self.theme)
         _text(self.context)
         _count(self.total, 1)
@@ -103,11 +107,12 @@ class ClipartRecipe:
                 **({"visual": dict(self.visual)} if self.visual else {}),
                 **({"references": deepcopy(self.references)} if self.references else {}),
                 **({"objects": deepcopy(self.objects)} if self.objects else {}),
-                **({"assistant": dict(self.assistant)} if self.assistant else {})}
+                **({"assistant": dict(self.assistant)} if self.assistant else {}),
+                **({"bundle_plan": deepcopy(self.bundle_plan)} if self.bundle_plan is not None else {})}
 
     @classmethod
     def from_dict(cls, value: Any) -> "ClipartRecipe":
-        if not isinstance(value, dict) or set(value) - {"visual", "references", "objects", "assistant"} != {
+        if not isinstance(value, dict) or set(value) - {"visual", "references", "objects", "assistant", "bundle_plan"} != {
             "schema_version", "theme", "context", "motifs", "total", "counts"
         }:
             raise ValueError("Повреждённая структура рецепта")
@@ -115,7 +120,7 @@ class ClipartRecipe:
             raise ValueError("Неподдерживаемая версия рецепта")
         result = cls(value["theme"], value["context"], value["motifs"],
                      value["total"], value["counts"], value.get("visual", {}), value.get("references", []),
-                     value.get("objects", []), value.get("assistant", {}))
+                     value.get("objects", []), value.get("assistant", {}), value.get("bundle_plan"))
         result.validate()
         result.motifs = list(result.motifs)
         result.counts = dict(result.counts)
@@ -124,4 +129,5 @@ class ClipartRecipe:
         result.references = validate_references(result.references)
         result.objects = deepcopy(result.objects)
         result.assistant = dict(result.assistant)
+        result.bundle_plan = deepcopy(result.bundle_plan) if result.bundle_plan is not None else None
         return result

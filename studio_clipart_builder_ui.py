@@ -218,6 +218,9 @@ class ClipartBuilderDialog(QDialog):
         recipe.references = self.reference_editor.value()
         recipe.objects = self.object_editor.value()
         recipe.edit_counts({role: sum(item['role'] == role for item in recipe.objects) for role in ROLES})
+        if recipe.objects:
+            from studio_bundle_planner import propose_bundle_plan
+            recipe.bundle_plan = propose_bundle_plan(recipe.objects, existing=recipe.bundle_plan)
         recipe.assistant = self.planning.selection()
         recipe.validate()
         return recipe, self.palette.text().strip()
@@ -282,6 +285,9 @@ class ClipartBuilderDialog(QDialog):
             self.recipe.objects = self.object_editor.value()
             if self.recipe.objects:
                 self.recipe.edit_counts({role: sum(item['role'] == role for item in self.recipe.objects) for role in ROLES})
+                from studio_bundle_planner import propose_bundle_plan
+                self.recipe.bundle_plan = propose_bundle_plan(
+                    self.recipe.objects, existing=self.recipe.bundle_plan)
             value = self.recipe.to_dict()
         except ValueError as error:
             self.error.setText(str(error))

@@ -15,8 +15,15 @@ Focused verification: 31 passed, 8 subtests. Full isolated pytest: 1369 passed,
 passed. Final independent read-only review: NO P1/P2 FINDINGS. No paid calls,
 builds, deployments or workflow dispatches.
 
-Next task in order: automatic mini/standard/maxi/full-bundle planning before
-generation, preserving unique-asset cost semantics and independent memberships.
+Automatic mini/standard/maxi/full-bundle planning is now implemented before
+prompt handoff. The planner uses stable object IDs, role-aware deterministic
+ranking, strictly nested tier prefixes and fewer tiers for small collections;
+set IDs survive replanning and recipe roundtrip. No provider/API call is involved.
+Focused: 32 passed + 4 subtests. Full isolated pytest: 1372 passed, 57 skipped,
+2 deselected, 232 subtests in 64.40s. Independent final review: no P1/P2.
+
+Next task in order: use the saved plan for separate ZIP/contact-sheet outputs
+without regenerating or reprocessing the same unique asset.
 
 ## Preparation review fixes, completed verification 2026-09-11
 
