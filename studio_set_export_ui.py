@@ -7,7 +7,7 @@ from PyQt6.QtCore import QEvent, QPoint, QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QDialog, QFileDialog, QFrame, QGridLayout,
-    QHeaderView, QHBoxLayout, QLabel, QPushButton, QScrollArea, QStackedWidget,
+    QHeaderView, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QStackedWidget,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -38,8 +38,9 @@ class ExportWorker(QThread):
 
 class SetExportDialog(QDialog):
     membership_saved = pyqtSignal(object)
+    fix_requested = pyqtSignal(str)
 
-    def __init__(self, paths, parent=None, *, membership=None, review_issues=None):
+    def __init__(self, paths, parent=None, *, membership=None, review_issues=None, quality_reports=None):
         super().__init__(parent)
         from studio_export_membership import validate_export_membership
 
@@ -53,6 +54,16 @@ class SetExportDialog(QDialog):
                 ))
         self.saved_membership = saved
         self.review_issues = [dict(issue) for issue in (review_issues or ())]
+        allowed_paths = {str(path) for path in self.paths}
+        self.quality_reports = {}
+        for report in quality_reports or ():
+            raw_path = str(getattr(report, 'path', '') or '')
+            status = str(getattr(report, 'status', '') or '')
+            if not raw_path or status not in {'ok', 'review', 'block'}:
+                raise ValueError('Повреждён результат проверки PNG')
+            key = str(Path(raw_path).resolve())
+            if key in allowed_paths:
+                self.quality_reports[key] = report
         self.worker = None
         self.exported = []
         self._set_columns = []
@@ -65,8 +76,10 @@ class SetExportDialog(QDialog):
         root.addWidget(self.stack, 1)
 
         self.summary_page = self._build_summary_page()
+        self.quality_page = self._build_quality_page()
         self.manual_page = self._build_manual_page()
         self.stack.addWidget(self.summary_page)
+        self.stack.addWidget(self.quality_page)
         self.stack.addWidget(self.manual_page)
         self.stack.setCurrentWidget(self.summary_page)
 
@@ -160,6 +173,19 @@ class SetExportDialog(QDialog):
         issue_layout.addWidget(self.review_now_button)
         layout.addWidget(self.issue_panel)
 
+        self.quality_panel = QFrame()
+        self.quality_panel.setProperty('v3Card', True)
+        quality_panel_layout = QHBoxLayout(self.quality_panel)
+        self.quality_summary_label = QLabel('')
+        self.quality_summary_label.setWordWrap(True)
+        quality_panel_layout.addWidget(self.quality_summary_label, 1)
+        self.review_quality_button = QPushButton('Проверить PNG')
+        self.review_quality_button.setProperty('v3Button', True)
+        self.review_quality_button.setProperty('variant', 'secondary')
+        self.review_quality_button.clicked.connect(self._show_quality_review)
+        quality_panel_layout.addWidget(self.review_quality_button)
+        layout.addWidget(self.quality_panel)
+
         self.delivery_note = QLabel(
             'Для каждого набора будет создан отдельный ZIP-архив. '
             'Внутри: PNG, лист с превью и список файлов.'
@@ -176,6 +202,73 @@ class SetExportDialog(QDialog):
         self.export_button.clicked.connect(self._export)
         actions.addWidget(self.export_button)
         layout.addLayout(actions)
+        return page
+
+    def _build_quality_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        title = QLabel('Проверка качества PNG')
+        title.setProperty('v3Title', True)
+        layout.addWidget(title)
+        note = QLabel(
+            'Проверка выполняется локально и не изменяет PNG. '
+            'Выберите файл, чтобы увидеть причину и рекомендуемое действие.'
+        )
+        note.setProperty('v3Description', True)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        self.quality_page_summary_label = QLabel('')
+        self.quality_page_summary_label.setProperty('v3Status', True)
+        self.quality_page_summary_label.setWordWrap(True)
+        layout.addWidget(self.quality_page_summary_label)
+
+        body = QHBoxLayout()
+        self.quality_list = QListWidget()
+        self.quality_list.setMinimumWidth(360)
+        self.quality_list.currentRowChanged.connect(self._quality_selected)
+        body.addWidget(self.quality_list, 2)
+        detail = QFrame()
+        detail.setProperty('v3Card', True)
+        detail_layout = QVBoxLayout(detail)
+        self.quality_issue_title = QLabel('Выберите PNG')
+        self.quality_issue_title.setProperty('v3Title', True)
+        self.quality_issue_text = QLabel('')
+        self.quality_issue_text.setWordWrap(True)
+        self.quality_action_text = QLabel('')
+        self.quality_action_text.setWordWrap(True)
+        self.quality_action_text.setProperty('v3Description', True)
+        detail_layout.addWidget(self.quality_issue_title)
+        detail_layout.addWidget(self.quality_issue_text)
+        detail_layout.addWidget(self.quality_action_text)
+        detail_layout.addStretch(1)
+        detail_actions = QHBoxLayout()
+        self.quality_fix_button = QPushButton('Проверить / исправить PNG')
+        self.quality_fix_button.setProperty('v3Button', True)
+        self.quality_fix_button.setProperty('variant', 'primary')
+        self.quality_fix_button.clicked.connect(self._request_quality_fix)
+        self.quality_exclude_button = QPushButton('Исключить из наборов')
+        self.quality_exclude_button.setProperty('v3Button', True)
+        self.quality_exclude_button.setProperty('variant', 'secondary')
+        self.quality_exclude_button.clicked.connect(self._exclude_quality_selected)
+        detail_actions.addWidget(self.quality_fix_button)
+        detail_actions.addWidget(self.quality_exclude_button)
+        detail_layout.addLayout(detail_actions)
+        body.addWidget(detail, 3)
+        layout.addLayout(body, 1)
+
+        footer = QHBoxLayout()
+        self.quality_back_button = QPushButton('К наборам')
+        self.quality_back_button.setProperty('v3Button', True)
+        self.quality_back_button.setProperty('variant', 'secondary')
+        self.quality_back_button.clicked.connect(self._show_summary)
+        footer.addWidget(self.quality_back_button)
+        footer.addStretch(1)
+        self.quality_export_button = QPushButton('Создать наборы')
+        self.quality_export_button.setProperty('v3Button', True)
+        self.quality_export_button.setProperty('variant', 'primary')
+        self.quality_export_button.clicked.connect(self._export)
+        footer.addWidget(self.quality_export_button)
+        layout.addLayout(footer)
         return page
 
     def _build_manual_page(self):
@@ -334,6 +427,115 @@ class SetExportDialog(QDialog):
                 unresolved.append(issue)
         self.review_issues = unresolved
 
+    def _path_is_active(self, path, membership=None):
+        source = self.saved_membership if membership is None else membership
+        item = source.get(str(Path(path).resolve()))
+        return bool(item and any(link.get('included') for link in item.get('memberships', ())))
+
+    def _active_quality_blockers(self, membership=None):
+        return [
+            report for path, report in self.quality_reports.items()
+            if report.status == 'block' and self._path_is_active(path, membership)
+        ]
+
+    def _refresh_quality_page(self):
+        if not hasattr(self, 'quality_list'):
+            return
+        selected_path = ''
+        current = self.quality_list.currentItem()
+        if current is not None:
+            selected_path = str(current.data(Qt.ItemDataRole.UserRole) or '')
+        self.quality_list.blockSignals(True)
+        self.quality_list.clear()
+        selected_row = -1
+        status_labels = {'ok': 'Готово', 'review': 'Проверьте края', 'block': 'Не экспортировать'}
+        for path in self.paths:
+            key = str(path)
+            report = self.quality_reports.get(key)
+            if report is None:
+                continue
+            if not self._path_is_active(key):
+                status = 'Исключено из наборов'
+            else:
+                status = status_labels[report.status]
+            row = QListWidgetItem(f'{path.name} — {status}')
+            row.setData(Qt.ItemDataRole.UserRole, key)
+            self.quality_list.addItem(row)
+            if key == selected_path:
+                selected_row = self.quality_list.count() - 1
+        self.quality_list.blockSignals(False)
+        if self.quality_list.count():
+            self.quality_list.setCurrentRow(selected_row if selected_row >= 0 else 0)
+        else:
+            self._quality_selected(-1)
+
+    def _quality_selected(self, row):
+        item = self.quality_list.item(row) if 0 <= row < self.quality_list.count() else None
+        key = str(item.data(Qt.ItemDataRole.UserRole) or '') if item is not None else ''
+        report = self.quality_reports.get(key)
+        active = bool(key and self._path_is_active(key))
+        if report is None:
+            self.quality_issue_title.setText('Выберите PNG')
+            self.quality_issue_text.clear()
+            self.quality_action_text.clear()
+            self.quality_fix_button.setEnabled(False)
+            self.quality_exclude_button.setEnabled(False)
+            return
+        title = {'ok': 'Готово', 'review': 'Проверьте края', 'block': 'Не экспортировать'}[report.status]
+        if not active:
+            title = 'Исключено из наборов'
+        self.quality_issue_title.setText(title)
+        messages = '\n'.join(f'• {issue.message}' for issue in report.issues) or 'Проблем не найдено.'
+        actions = '\n'.join(f'• {issue.action}' for issue in report.issues if issue.action)
+        self.quality_issue_text.setText(messages)
+        self.quality_action_text.setText(('Что сделать:\n' + actions) if actions else '')
+        actionable = active and report.status in {'review', 'block'} and self.worker is None
+        self.quality_fix_button.setEnabled(actionable)
+        self.quality_exclude_button.setEnabled(actionable)
+
+    def _show_quality_review(self):
+        self._refresh_quality_page()
+        self.stack.setCurrentWidget(self.quality_page)
+        self.status.clear()
+
+    def _request_quality_fix(self):
+        if self.worker is not None:
+            return
+        item = self.quality_list.currentItem()
+        if item is None:
+            return
+        path = str(item.data(Qt.ItemDataRole.UserRole) or '')
+        report = self.quality_reports.get(path)
+        if not path or report is None or report.status == 'ok' or not self._path_is_active(path):
+            return
+        self.done(QDialog.DialogCode.Rejected)
+        self.fix_requested.emit(path)
+
+    def _exclude_quality_selected(self):
+        if self.worker is not None:
+            return
+        item = self.quality_list.currentItem()
+        if item is None:
+            return
+        path = str(item.data(Qt.ItemDataRole.UserRole) or '')
+        report = self.quality_reports.get(path)
+        if not path or report is None or report.status == 'ok':
+            return
+        from studio_export_membership import validate_export_membership
+        value = validate_export_membership(self.saved_membership)
+        entry = value.get(path)
+        if entry is None:
+            return
+        for link in entry['memberships']:
+            link['included'] = False
+        value = validate_export_membership(value)
+        self.saved_membership = value
+        self._resolve_review_issues(value)
+        self.membership_saved.emit(value)
+        self.status.setText('Дизайн исключён из наборов. Файл на диске не удалён.')
+        self._refresh_summary()
+        self._refresh_quality_page()
+
     def _manual_changed(self, *_):
         self.status.clear()
 
@@ -412,7 +614,36 @@ class SetExportDialog(QDialog):
                 f'Нужно проверить {issue_count} изображений. '
                 'Приложение ничего не выбрало автоматически.'
             )
-        self.export_button.setEnabled(bool(groups) and not issue_count and self.worker is None)
+        review_count = sum(
+            report.status == 'review' and self._path_is_active(path)
+            for path, report in self.quality_reports.items()
+        )
+        block_count = len(self._active_quality_blockers())
+        quality_issue_count = review_count + block_count
+        self.quality_panel.setVisible(quality_issue_count > 0)
+        if quality_issue_count:
+            parts = []
+            if review_count:
+                parts.append(f'{review_count} нужно проверить')
+            if block_count:
+                parts.append(f'{block_count} блокирует экспорт')
+            quality_text = (
+                'Автопроверка PNG: ' + ' · '.join(parts) + '. '
+                'Файлы не изменялись.'
+            )
+            self.quality_summary_label.setText(quality_text)
+            self.quality_page_summary_label.setText(quality_text)
+            self.quality_panel.setProperty('state', 'error' if block_count else 'warning')
+            self.quality_panel.style().unpolish(self.quality_panel)
+            self.quality_panel.style().polish(self.quality_panel)
+        else:
+            self.quality_summary_label.clear()
+            self.quality_page_summary_label.setText(
+                'Автопроверка PNG: Проблем, блокирующих экспорт, нет.'
+            )
+        export_enabled = bool(groups) and not issue_count and not block_count and self.worker is None
+        self.export_button.setEnabled(export_enabled)
+        self.quality_export_button.setEnabled(export_enabled)
 
     def _show_manual_editor(self):
         self._rebuild_manual_table()
@@ -468,6 +699,8 @@ class SetExportDialog(QDialog):
             groups = self.groups()
             if self.review_issues:
                 raise ValueError('Сначала проверьте отмеченные изображения')
+            if self._active_quality_blockers():
+                raise ValueError('Исправьте или исключите PNG, которые блокируют экспорт')
         except ValueError as exc:
             self.status.setText(str(exc))
             return
@@ -477,9 +710,13 @@ class SetExportDialog(QDialog):
         self.worker = ExportWorker(groups, folder, self)
         self.worker.finished.connect(self._finished)
         self.export_button.setEnabled(False)
+        self.quality_export_button.setEnabled(False)
         self.edit_sets_button.setEnabled(False)
         self.save_membership.setEnabled(False)
         self.return_button.setEnabled(False)
+        self.quality_back_button.setEnabled(False)
+        self.quality_fix_button.setEnabled(False)
+        self.quality_exclude_button.setEnabled(False)
         self.status.setText(
             f'Создаю наборы: {len(groups)}. Не закрывайте приложение до завершения.'
         )
@@ -501,7 +738,9 @@ class SetExportDialog(QDialog):
         self.edit_sets_button.setEnabled(True)
         self.save_membership.setEnabled(True)
         self.return_button.setEnabled(True)
+        self.quality_back_button.setEnabled(True)
         self._refresh_summary()
+        self._refresh_quality_page()
 
     def reject(self):
         if self.worker is not None:

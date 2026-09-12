@@ -1,5 +1,19 @@
 # Vibix Images
 
+## Clipart PNG quality preflight checkpoint, 2026-09-12
+
+Set export now performs a local read-only preflight of final transparent Clipart PNGs.
+It explains specific problems per design and separates hard blockers (unreadable, no
+transparency, nearly empty) from review warnings (canvas-edge contact, excessive
+semitransparency, likely colour fringe). Blockers prevent ZIP creation only while the
+design remains included; the user can open the existing transparency editor or exclude
+the design without deleting the PNG. Background/surface outputs are exempt from alpha
+requirements. The check does not modify files, call providers, or trigger paid retries.
+It is intentionally lighter than the formal VS-03/VS-18 numerical edge-QC profile.
+Real Qt proof: `docs/ui/3.2/alpha-qc/actual-alpha-qc-1120x780.png`. Verification:
+focused 118 passed + 5 subtests; full isolated pytest 1431 passed, 57 skipped, 2
+deselected, 233 subtests.
+
 ## Bundle regression checkpoint, 2026-09-12
 
 Cross-cutting regressions now explicitly prove that one PNG can participate in four

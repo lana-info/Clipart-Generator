@@ -1930,6 +1930,60 @@ class RunResultsPage(QWidget):
                 issues.append({'kind': 'ambiguous', 'object_id': object_id, 'count': count, 'paths': paths})
         return issues
 
+    def _alpha_qc_reports(self, paths=None):
+        """Inspect transparent-intent final PNGs locally, without changing files."""
+        if self.state.mode is not ProjectMode.CLIPART or self.session is None:
+            return []
+        from result_background_policy import keeps_background
+        from studio_alpha_qc import inspect_alpha_png
+
+        requested = {
+            str(Path(path).resolve()) for path in (paths if paths is not None else self._export_paths())
+        }
+        reports = []
+        seen = set()
+        for item in self.session.items:
+            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
+                continue
+            try:
+                resolved = str(Path(item.output_path).resolve())
+            except OSError:
+                continue
+            if resolved not in requested or resolved in seen:
+                continue
+            payload = item.payload if isinstance(item.payload, dict) else {}
+            result_kind = str(payload.get('result_kind') or 'legacy')
+            try:
+                if keeps_background(result_kind):
+                    continue
+            except ValueError:
+                result_kind = 'legacy'
+            report = inspect_alpha_png(
+                resolved,
+                residue_hint=str(payload.get('chroma_key_color') or '') or None,
+            )
+            reports.append(report)
+            seen.add(resolved)
+        return reports
+
+    def _request_quality_fix(self, path):
+        if self.session is None:
+            return
+        try:
+            target = Path(path).resolve()
+        except OSError:
+            return
+        for index, item in enumerate(self.session.items):
+            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
+                continue
+            try:
+                candidate = Path(item.output_path).resolve()
+            except OSError:
+                continue
+            if candidate == target:
+                self.transparency_requested.emit(index)
+                return
+
     def _export_sets(self):
         if self.state.mode is not ProjectMode.CLIPART:
             return
@@ -1940,8 +1994,10 @@ class RunResultsPage(QWidget):
             dialog = SetExportDialog(
                 paths, self, membership=self.state.clipart.export_membership,
                 review_issues=self._bundle_export_issues(),
+                quality_reports=self._alpha_qc_reports(paths),
             )
             dialog.membership_saved.connect(self._save_export_membership)
+            dialog.fix_requested.connect(self._request_quality_fix)
             dialog.exec()
 
     def _save_export_membership(self, membership):

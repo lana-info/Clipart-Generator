@@ -2,6 +2,22 @@
 
 Updated: 2026-09-12
 
+## Current handoff: local Clipart PNG preflight implemented, 2026-09-12
+
+Final transparent Clipart PNGs now receive a local/read-only quality preflight when
+opening set export. `studio_alpha_qc.py` reports concrete user-facing reasons: unreadable
+file, missing transparency, nearly-empty result, subject touching the canvas edge,
+excessive semitransparency, and likely residual colour fringe. Objective blockers stop
+set export only while that PNG remains included; heuristic edge warnings are Review and
+do not block. The quality page lets the user open the existing transparency editor or
+explicitly exclude the design from all sets without deleting the file. Surface outputs
+(pattern/background/texture/journal page) are not incorrectly required to have alpha.
+No PNG bytes are modified, no provider call is made, and no paid retry is triggered.
+This is a pragmatic export preflight, not the strict versioned VS-03/VS-18 contour QC.
+Real Qt proof: `docs/ui/3.2/alpha-qc/actual-alpha-qc-1120x780.png`. Focused affected
+contour: 118 passed + 5 subtests. Full isolated pytest: 1431 passed, 57 skipped, 2
+deselected, 233 subtests in 63.16s.
+
 ## Current handoff: cross-cutting bundle regressions completed, 2026-09-12
 
 The many-to-many/export checkpoint now has an explicit no-duplicate-paid-work

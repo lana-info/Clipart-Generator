@@ -1843,3 +1843,45 @@ class V3RunQueueTests(unittest.TestCase):
                 Path(url.toLocalFile()).resolve(),
                 (root / "output").resolve(),
             )
+
+
+def test_run_results_alpha_qc_checks_only_transparent_intent(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    from v3_run_queue import RunItem
+    clipart = tmp_path / 'clipart.png'
+    surface = tmp_path / 'background.png'
+    Image.new('RGBA', (20, 20), (10, 20, 30, 255)).save(clipart)
+    Image.new('RGB', (20, 20), (10, 20, 30)).save(surface)
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    page = RunResultsPage(state)
+    page.session = type('Session', (), {
+        'items': [
+            RunItem(1, 'clipart', status=RunItemStatus.SUCCEEDED, output_path=str(clipart),
+                    payload={'result_kind': 'clipart', 'chroma_key_color': 'blue'}),
+            RunItem(2, 'background', status=RunItemStatus.SUCCEEDED, output_path=str(surface),
+                    payload={'result_kind': 'background'}),
+        ]
+    })()
+    reports = page._alpha_qc_reports([clipart.resolve(), surface.resolve()])
+    assert [Path(report.path) for report in reports] == [clipart.resolve()]
+    assert reports[0].status == 'block'
+    assert reports[0].issues[0].code == 'no_transparency'
+    page.close()
+
+
+def test_run_results_quality_fix_maps_output_path_back_to_item(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    from v3_run_queue import RunItem
+    output = tmp_path / 'clipart.png'
+    Image.new('RGBA', (20, 20), (10, 20, 30, 128)).save(output)
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    page = RunResultsPage(state)
+    page.session = type('Session', (), {
+        'items': [RunItem(1, 'clipart', status=RunItemStatus.SUCCEEDED,
+                          output_path=str(output), payload={'result_kind': 'clipart'})]
+    })()
+    opened = []
+    page.transparency_requested.connect(opened.append)
+    page._request_quality_fix(str(output.resolve()))
+    assert opened == [0]
+    page.close()

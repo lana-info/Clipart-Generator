@@ -448,3 +448,138 @@ def test_bundle_membership_seed_deduplicates_duplicate_session_records(images):
     assert key in state.clipart.export_membership
     assert state.clipart.export_membership[key]['memberships']
     page.close()
+
+
+def test_quality_review_warning_explains_problem_without_blocking_export(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets([images[0]], ['Мини'])
+    report = AlphaQcReport(
+        str(images[0].resolve()), 'review',
+        (AlphaQcIssue('touches_edge', 'review',
+                      'Видимые пиксели доходят до края холста.',
+                      'Проверьте края изображения.'),),
+        width=32, height=32,
+    )
+    dialog = SetExportDialog([images[0]], membership=membership, quality_reports=[report])
+    assert dialog.quality_panel.isVisible() or not dialog.isVisible()
+    assert '1 нужно проверить' in dialog.quality_summary_label.text()
+    assert '1 нужно проверить' in dialog.quality_page_summary_label.text()
+    assert dialog.export_button.isEnabled()
+    assert dialog.quality_export_button.isEnabled()
+    dialog._show_quality_review()
+    assert dialog.quality_list.count() == 1
+    assert 'Проверьте края' in dialog.quality_list.item(0).text()
+    assert 'доходят до края' in dialog.quality_issue_text.text()
+    dialog.reject()
+
+
+def test_quality_blocker_disables_export_until_explicit_exclusion_without_deleting_file(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets(images[:2], ['Мини'])
+    blocked = AlphaQcReport(
+        str(images[0].resolve()), 'block',
+        (AlphaQcIssue('no_transparency', 'block',
+                      'В PNG нет прозрачного фона.',
+                      'Исправьте фон или исключите дизайн.'),),
+        width=32, height=32,
+    )
+    dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[blocked])
+    saved = []
+    dialog.membership_saved.connect(saved.append)
+    assert not dialog.export_button.isEnabled()
+    dialog._show_quality_review()
+    assert not dialog.quality_export_button.isEnabled()
+    dialog.quality_list.setCurrentRow(0)
+    assert dialog.quality_exclude_button.isEnabled()
+    dialog.quality_exclude_button.click()
+    assert images[0].is_file()
+    key = str(images[0].resolve())
+    assert saved
+    assert all(not link['included'] for link in saved[-1][key]['memberships'])
+    assert dialog.export_button.isEnabled()
+    assert dialog.quality_export_button.isEnabled()
+    assert 'Исключено' in dialog.quality_list.item(0).text()
+    dialog.reject()
+
+
+def test_quality_summary_clears_stale_blocker_text_after_exclusion(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets(images[:2], ['Мини'])
+    blocked = AlphaQcReport(
+        str(images[0].resolve()), 'block',
+        (AlphaQcIssue('no_transparency', 'block', 'Нет прозрачности.',
+                      'Исправьте или исключите.'),), width=32, height=32,
+    )
+    dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[blocked])
+    dialog._show_quality_review()
+    assert '1 блокирует экспорт' in dialog.quality_page_summary_label.text()
+    dialog.quality_list.setCurrentRow(0)
+    dialog.quality_exclude_button.click()
+    assert 'блокирует экспорт' not in dialog.quality_page_summary_label.text()
+    assert 'Проблем, блокирующих экспорт, нет' in dialog.quality_page_summary_label.text()
+    dialog.reject()
+
+
+def test_quality_fix_action_emits_exact_png_path(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets([images[0]], ['Мини'])
+    report = AlphaQcReport(
+        str(images[0].resolve()), 'review',
+        (AlphaQcIssue('color_fringe', 'review', 'Подозрительная цветная кайма.',
+                      'Очистите края.'),), width=32, height=32,
+    )
+    dialog = SetExportDialog([images[0]], membership=membership, quality_reports=[report])
+    requested = []
+    dialog.fix_requested.connect(requested.append)
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    dialog.quality_fix_button.click()
+    assert requested == [str(images[0].resolve())]
+
+
+def test_quality_exclusion_resolves_ambiguity_when_one_variant_remains(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets(images[:2], ['Мини'])
+    paths = [str(image.resolve()) for image in images[:2]]
+    issue = {'kind': 'ambiguous', 'object_id': 'obj-1', 'count': 2, 'paths': paths}
+    blocked = AlphaQcReport(
+        paths[0], 'block',
+        (AlphaQcIssue('no_transparency', 'block', 'Нет прозрачности.',
+                      'Исправьте или исключите.'),), width=32, height=32,
+    )
+    dialog = SetExportDialog(
+        images[:2], membership=membership, review_issues=[issue], quality_reports=[blocked]
+    )
+    assert len(dialog.review_issues) == 1
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    dialog.quality_exclude_button.click()
+    assert dialog.review_issues == []
+    assert dialog.export_button.isEnabled()
+    dialog.reject()
+
+
+def test_quality_controls_lock_while_export_worker_is_active(images, tmp_path, monkeypatch):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets(images[:1], ['Мини'])
+    report = AlphaQcReport(
+        str(images[0].resolve()), 'review',
+        (AlphaQcIssue('touches_edge', 'review', 'Проверьте край.', 'Проверьте PNG.'),),
+        width=32, height=32,
+    )
+    dialog = SetExportDialog(images[:1], membership=membership, quality_reports=[report])
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(tmp_path))
+    monkeypatch.setattr('studio_set_export_ui.ExportWorker.start', lambda self: None)
+    dialog._show_quality_review()
+    dialog._export()
+    assert dialog.worker is not None
+    assert not dialog.quality_export_button.isEnabled()
+    assert not dialog.quality_back_button.isEnabled()
+    assert not dialog.quality_fix_button.isEnabled()
+    assert not dialog.quality_exclude_button.isEnabled()
+    dialog._quality_selected(0)
+    assert not dialog.quality_fix_button.isEnabled()
+    assert not dialog.quality_exclude_button.isEnabled()
+    dialog.worker.deleteLater()
+    dialog.worker = None
+    dialog.reject()
