@@ -2,6 +2,10 @@
 
 Updated: 2026-09-12
 
+## Current handoff: commercial Clipart prompt guidance implemented, 2026-09-12
+
+Owner-provided Etsy Bundle Studio prompt/knowledge material was reviewed for reusable product rules. New local `studio_commercial_prompt_guidance.py` adds collection-first planning hints (commercial purpose, no filler, controlled variety, no near-duplicates, reusable design assets) and role-specific direction for hero/composition/wreath/border/decor. `planning_request()` carries this bounded local guidance and `studio_text_client` tells the planner to use it without changing Style/Holiday/Palette ownership. `compile_objects()` adds full-visibility/margin/readable-silhouette quality and role-specific crop/overlap/opening/fragment constraints. The owner material is treated as structural inspiration; long external prompt templates are not copied into every request, and Vibix internal background-preparation rules remain authoritative. Focused: 70 passed + 23 subtests. Full isolated pytest: 1453 passed, 57 skipped, 2 deselected, 235 subtests in 64.65s. No provider call/build/deploy.
+
 ## Current handoff: reference-image consent/handoff implemented, 2026-09-12
 
 The Reference step now separates local/text-only use from sending the actual image to the AI planner. Every reference defaults to text-only. Per-reference image permission is in-memory only, is not added to recipe/project persistence, and is cleared only after the user answers the final paid confirmation; capability/tariff preflight does not silently consume it. Before any paid OpenRouter request, local preflight validates PNG/JPEG/WebP, 40 MP, max 10 MB per image, max 4 images and 20 MB total; the current OpenRouter model catalog must explicitly advertise `image` in `input_modalities`. The paid confirmation lists selected filenames and states that permission applies only to that run.

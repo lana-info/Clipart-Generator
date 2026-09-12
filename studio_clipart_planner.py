@@ -35,6 +35,7 @@ def planning_request(recipe, palette='', replace_ids=None):
         raise ValueError('Нет объектов для подбора')
     from studio_holiday_profiles import holiday_planning_hints
     from studio_style_profiles import style_planning_hints
+    from studio_commercial_prompt_guidance import commercial_planning_hints
     return deepcopy(dict(
         schema_version=1,
         brief=dict(theme=recipe.theme, context=recipe.context, motifs=recipe.motifs,
@@ -44,6 +45,7 @@ def planning_request(recipe, palette='', replace_ids=None):
             recipe.visual.get('technique', ''),
             mood=recipe.visual.get('mood', ''),
         ),
+        commercial=commercial_planning_hints(),
         # Local paths and image bytes are deliberately not sent as observations.
         reference_observations=[dict(roles=ref['roles'], notes=ref['notes'])
                                 for ref in recipe.references if ref['notes'].strip()],

@@ -82,6 +82,18 @@ class PlannerTests(unittest.TestCase):
         self.assertIn("gentle", request["style"]["modifiers"])
         self.assertNotIn("provider", request["style"])
 
+    def test_commercial_collection_guidance_is_bounded_and_role_specific(self):
+        request = planning_request(self.recipe)
+        guidance = request["commercial"]
+        self.assertTrue(guidance["collection_first"])
+        self.assertIn("no_filler", guidance["principles"])
+        self.assertIn("hero", guidance["roles"])
+        self.assertIn("wreath", guidance["roles"])
+        self.assertIn("decor", guidance["roles"])
+        self.assertLess(len(str(guidance)), 6000)
+        self.assertNotIn("provider", guidance)
+
+
     def test_local_reference_paths_not_in_request(self):
         self.recipe.references = [dict(path='/private/reference.png', roles=['mood'], notes='Радостное')]
         request = planning_request(self.recipe)

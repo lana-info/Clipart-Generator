@@ -152,6 +152,15 @@ isolated suite: 1377 passed, 57 skipped, 2 deselected, 232 subtests. Финал�
 - [ ] Поддержка наборов свыше 80 идей: управляемое разбиение и учёт расходов.
   Пока один запрос ограничен 80 целевыми идеями, без скрытой обрезки.
 
+### Commercial Collection Director / Prompt QC
+
+- [x] Добавить локальный collection-first guidance для Clipart: коммерческая функция каждого слота, no-filler, controlled variety, no-near-duplicates, единый Style/Palette Profile.
+- [x] Добавить role-specific prompt QC без подмены background-removal контракта: полный объект и безопасные поля, читаемый силуэт, no-crop/no-random-extras; отдельные правила для composition/wreath/border/decor.
+- [ ] Lettering/typography как отдельный будущий workflow Studio: фразы, стили lettering, readable-text QC и отдельные bundle rules. Не смешивать с текущим Clipart output.
+- [ ] Product strategy expansion после Clipart MVP: Etsy SEO, listing-cover concepts и Pinterest product ideas как отдельные действия/модули поверх готового набора, не часть платной генерации изображений.
+
+Owner-provided Etsy Bundle Studio prompt/knowledge material использовано как структурная и коммерческая основа, без копирования больших prompt templates один-в-один. Focused: 70 passed + 23 subtests; full isolated pytest: 1453 passed / 57 skipped / 2 deselected / 235 subtests (64.65s).
+
 ### VS-13/15: автоматический подбор как основной путь
 
 - [x] Зафиксировать бриф → рецепт → предложенный набор → проверка → генерация.

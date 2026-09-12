@@ -63,13 +63,32 @@ def compile_objects(recipe, generator):
     ):
         raise ValueError('Состав объектов не совпадает с рецептом')
     prompts = []
-    role_names = dict(zip(OBJECT_ROLES, ('главный объект', 'композиция', 'венок', 'бордюр / рамка', 'декор')))
+    role_names = {
+        'ru': dict(zip(OBJECT_ROLES, ('главный объект', 'композиция', 'венок', 'бордюр / рамка', 'декор'))),
+        'en': dict(zip(OBJECT_ROLES, ('main subject', 'composition', 'wreath', 'border / frame', 'decor'))),
+    }
+    from studio_commercial_prompt_guidance import prompt_guidance_for_role
     for item in items:
         fields = generator.to_dict()
+        language_values = (
+            recipe.theme, recipe.context, item['name'], item['action'], item['extras'],
+            item['layout'], item['details'], generator.style, generator.palette,
+            generator.composition, generator.background, generator.consistency,
+            *generator.restrictions,
+        )
+        guidance_language = (
+            'ru' if any(any('а' <= char.casefold() <= 'я' for char in value)
+                        for value in language_values if isinstance(value, str)) else 'en'
+        )
+        guidance = prompt_guidance_for_role(item['role'], language=guidance_language)
         fields.update(theme='; '.join(s for s in (recipe.theme, recipe.context) if s),
                       subjects=[item['name']], variations=['; '.join(s for s in
                           (item['action'], item['extras'], item['details']) if s)],
-                      composition='; '.join(s for s in (role_names[item['role']], item['layout']) if s))
+                      composition='; '.join(s for s in
+                          (role_names[guidance_language][item['role']], item['layout'], guidance['composition']) if s),
+                      consistency='; '.join(s for s in
+                          (generator.consistency, guidance['consistency']) if s),
+                      restrictions=list(generator.restrictions) + list(guidance['restrictions']))
         if any(len(s) > 4000 for s in (fields['theme'], fields['composition'], *fields['variations'])):
             raise ValueError('Сократите объединённое описание объекта до 4000 символов')
         # Use the existing language/chroma pipeline, preserving its validation.

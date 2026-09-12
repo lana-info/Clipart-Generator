@@ -75,6 +75,44 @@ class ObjectTests(unittest.TestCase):
         self.assertEqual(editor.items[0], original)
         editor.close()
 
+    def test_compile_adds_commercial_cutout_quality_without_background_method(self):
+        recipe = ClipartRecipe(theme='Мишки')
+        recipe.select(1)
+        recipe.objects = fill_recipe([], recipe.counts)
+        recipe.objects[0].update(name='Тедди', action='сидит')
+        prompt = compile_objects(recipe, PromptGeneratorData(style='Акварель'))[0].prompt.casefold()
+        self.assertIn('полностью видим', prompt)
+        self.assertIn('читаемый силуэт', prompt)
+        self.assertIn('без обрезания', prompt)
+        self.assertIn('без случайных лишних объектов', prompt)
+        self.assertNotIn('pure white background', prompt)
+
+    def test_commercial_guidance_preserves_english_prompt_language(self):
+        recipe = ClipartRecipe(theme='Christmas teddy bears')
+        recipe.select(1)
+        recipe.objects = fill_recipe([], recipe.counts)
+        recipe.objects[0].update(name='Teddy bear', action='sitting')
+        prompt = compile_objects(recipe, PromptGeneratorData(style='soft watercolor'))[0].prompt
+        self.assertIn('Object: Teddy bear.', prompt)
+        self.assertIn('fully visible', prompt.casefold())
+        self.assertIn('no cropping', prompt.casefold())
+        self.assertNotIn('Объект:', prompt)
+        self.assertNotIn('без обрезания', prompt.casefold())
+
+
+    def test_compile_adds_role_specific_wreath_and_decor_guidance(self):
+        recipe = ClipartRecipe(theme='Рождество')
+        recipe.total = 2
+        recipe.counts = dict(hero=0, composition=0, wreath=1, border=0, decor=1)
+        recipe.objects = fill_recipe([], recipe.counts)
+        for item in recipe.objects:
+            item['name'] = 'Венок' if item['role'] == 'wreath' else 'Бант'
+        prompts = compile_objects(recipe, PromptGeneratorData(style='Акварель'))
+        by_role = {item['role']: prompt.prompt.casefold() for item, prompt in zip(recipe.objects, prompts)}
+        self.assertIn('чистое внутреннее отверстие', by_role['wreath'])
+        self.assertIn('без случайных плавающих фрагментов', by_role['decor'])
+
+
     def test_invalid_records_rejected(self):
         items = fill_recipe([], ClipartRecipe().counts)
         items[1]['id'] = items[0]['id']

@@ -95,6 +95,18 @@ class TextClientTests(unittest.TestCase):
         self.assertIn('keep one coherent base style', instructions)
 
     @patch('studio_text_client.requests.post')
+    def test_commercial_guidance_reaches_planner_instructions(self, post):
+        self.mock_response(post)
+        generate_plan(self.recipe, **self.args)
+        instructions = post.call_args.kwargs['json']['messages'][0]['content'].casefold()
+        self.assertIn('commercial guidance', instructions)
+        self.assertIn('no filler', instructions)
+        self.assertIn('near duplicates', instructions)
+        self.assertIn('clean interior opening', instructions)
+        self.assertIn('floating fragments', instructions)
+
+
+    @patch('studio_text_client.requests.post')
     def test_network_failure_is_not_retried_or_leaked(self, post):
         post.side_effect = requests.Timeout('dummy-test-key private request data')
         with self.assertRaises(TextGenerationError) as raised:
