@@ -6,7 +6,7 @@ import requests
 from studio_text_client import TextGenerationError
 
 
-def fetch_text_tariff(model, api_key):
+def fetch_text_model_info(model, api_key):
     try:
         with requests.get('https://openrouter.ai/api/v1/models',
                           headers={'Authorization': f'Bearer {api_key}'},
@@ -25,7 +25,18 @@ def fetch_text_tariff(model, api_key):
             raise ValueError
         if prices['request'] != 0:
             raise ValueError  # First UI supports token-only tariffs, not extra request fees.
-        return {key: float(value * (1 if key == 'request' else 1_000_000))
-                for key, value in prices.items()}
+        modalities = entry.get('architecture', {}).get('input_modalities', ())
+        if not isinstance(modalities, (list, tuple)) or any(not isinstance(value, str) for value in modalities):
+            modalities = ()
+        return {
+            **{key: float(value * (1 if key == 'request' else 1_000_000))
+               for key, value in prices.items()},
+            'input_modalities': tuple(modalities),
+        }
     except (requests.RequestException, ValueError, KeyError, TypeError, StopIteration, InvalidOperation):
         raise TextGenerationError('Не удалось подтвердить тариф модели. Генерация не запущена.') from None
+
+
+def fetch_text_tariff(model, api_key):
+    info = fetch_text_model_info(model, api_key)
+    return {key: info[key] for key in ('prompt', 'completion', 'request')}

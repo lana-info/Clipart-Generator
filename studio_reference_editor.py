@@ -3,9 +3,10 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-                             QListWidget, QLabel, QCheckBox, QPlainTextEdit, QFileDialog)
+                             QListWidget, QLabel, QCheckBox, QPlainTextEdit, QFileDialog, QRadioButton, QButtonGroup)
 from studio_clipart_references import (
     REFERENCE_ROLES, validate_references, reference_thumbnail, extract_palette,
+    reference_file_info,
 )
 
 
@@ -17,6 +18,7 @@ class ReferenceEditor(QWidget):
         self.references = validate_references(references)
         self.selected = -1
         self.loading = False
+        self._ai_image_paths = set()
         root = QHBoxLayout(self)
         left, right = QVBoxLayout(), QVBoxLayout()
         root.addLayout(left, 1)
@@ -34,6 +36,9 @@ class ReferenceEditor(QWidget):
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumHeight(200)
         right.addWidget(self.preview)
+        self.reference_info = QLabel("")
+        self.reference_info.setProperty('v3Small', True)
+        right.addWidget(self.reference_info)
         right.addWidget(QLabel("Что использовать из этого изображения?"))
         self.roles = {}
         for key, title in REFERENCE_ROLES.items():
@@ -47,6 +52,27 @@ class ReferenceEditor(QWidget):
         self.notes.setMaximumHeight(100)
         self.notes.textChanged.connect(self._store)
         right.addWidget(self.notes)
+        right.addWidget(QLabel("Использование в AI-подборе"))
+        self.ai_usage_group = QButtonGroup(self)
+        self.text_only_radio = QRadioButton("Только текстовые признаки — изображение не отправляется")
+        self.send_image_radio = QRadioButton("Передать изображение модели — только для следующего AI-подбора")
+        self.ai_usage_group.addButton(self.text_only_radio)
+        self.ai_usage_group.addButton(self.send_image_radio)
+        self.text_only_radio.setChecked(True)
+        self.send_image_radio.toggled.connect(self._store_ai_choice)
+        right.addWidget(self.text_only_radio)
+        right.addWidget(self.send_image_radio)
+        self.ai_privacy_note = QLabel("Перед запуском будет отдельное подтверждение. Разрешение не сохраняется в проекте.")
+        self.ai_privacy_note.setWordWrap(True)
+        self.ai_privacy_note.setProperty('v3Small', True)
+        right.addWidget(self.ai_privacy_note)
+        self.ai_preflight_note = QLabel("Перед отправкой проверим поддержку изображения выбранной моделью, формат и размер файла.")
+        self.ai_preflight_note.setWordWrap(True)
+        self.ai_preflight_note.setProperty('v3Small', True)
+        right.addWidget(self.ai_preflight_note)
+        self.ai_selection_count = QLabel("Выбрано для передачи сейчас: 0 · максимум 4")
+        self.ai_selection_count.setProperty('v3Small', True)
+        right.addWidget(self.ai_selection_count)
         self.palette = QPushButton("Взять палитру из изображения")
         self.palette.clicked.connect(self._palette)
         right.addWidget(self.palette)
@@ -98,11 +124,21 @@ class ReferenceEditor(QWidget):
             check.setChecked(key in item['roles'])
         self.notes.setEnabled(valid)
         self.notes.setPlainText(item['notes'])
+        self.text_only_radio.setEnabled(valid)
+        self.send_image_radio.setEnabled(valid)
+        send_image = bool(valid and item.get('path') in self._ai_image_paths)
+        self.send_image_radio.setChecked(send_image)
+        self.text_only_radio.setChecked(not send_image)
         self.palette.setEnabled(valid)
         self.preview.clear()
+        self.reference_info.clear()
         self.status.clear()
         if valid:
             try:
+                info = reference_file_info(item['path'])
+                label = {'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/webp': 'WebP'}[info['mime_type']]
+                size_mb = info['size'] / (1024 * 1024)
+                self.reference_info.setText(f"{label} · {info['width']}×{info['height']} · {size_mb:.1f} МБ")
                 image = reference_thumbnail(item['path'])
                 data = image.tobytes()
                 qimage = QImage(data, image.width, image.height, image.width * 4, QImage.Format.Format_RGBA8888).copy()
@@ -115,10 +151,46 @@ class ReferenceEditor(QWidget):
             self.preview.setText("Можно продолжить без референсов")
         self.loading = False
 
+    def _store_ai_choice(self, checked):
+        if self.loading or self.selected < 0 or self.selected >= len(self.references):
+            return
+        path = self.references[self.selected]['path']
+        if checked:
+            self._ai_image_paths.add(path)
+        else:
+            self._ai_image_paths.discard(path)
+        self._update_ai_selection_count()
+
+    def _update_ai_selection_count(self):
+        self.ai_selection_count.setText(
+            f"Выбрано для передачи сейчас: {len(self.selected_ai_image_paths())} · максимум 4"
+        )
+
+    def selected_ai_image_paths(self):
+        return tuple(item['path'] for item in self.references if item['path'] in self._ai_image_paths)
+
+    def clear_ai_image_paths(self):
+        self._ai_image_paths.clear()
+        if self.selected >= 0:
+            previous = self.loading
+            self.loading = True
+            self.send_image_radio.setChecked(False)
+            self.text_only_radio.setChecked(True)
+            self.loading = previous
+        self._update_ai_selection_count()
+
+    def consume_ai_image_paths(self):
+        paths = self.selected_ai_image_paths()
+        self.clear_ai_image_paths()
+        return paths
+
     def _remove(self):
         if self.selected < 0:
             return
         index = self.selected
+        removed_path = self.references[index]['path']
+        self._ai_image_paths.discard(removed_path)
+        self._update_ai_selection_count()
         self.files.blockSignals(True)
         self.references.pop(index)
         self.files.takeItem(index)

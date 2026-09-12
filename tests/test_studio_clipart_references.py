@@ -1,6 +1,7 @@
 import copy
 import tempfile
 import unittest
+import pytest
 from pathlib import Path
 from PIL import Image
 from PyQt6.QtWidgets import QApplication
@@ -66,3 +67,101 @@ class ReferenceTests(unittest.TestCase):
         for roles in (['unknown'], ['mood', 'mood'], [1], 'palette'):
             with self.assertRaises(ValueError):
                 validate_references([{'path': '/a.png', 'roles': roles, 'notes': ''}])
+
+
+    def test_reference_image_consent_is_ephemeral_and_not_persisted(self):
+        from studio_reference_editor import ReferenceEditor
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'consent.png'
+            Image.new('RGB', (24, 24), (10, 20, 30)).save(path)
+            editor = ReferenceEditor([])
+            editor.add_reference(path)
+            self.assertEqual(editor.selected_ai_image_paths(), ())
+            editor.send_image_radio.setChecked(True)
+            self.assertEqual(editor.selected_ai_image_paths(), (str(path.resolve()),))
+            saved = editor.value()
+            self.assertEqual(set(saved[0]), {'path', 'roles', 'notes'})
+            self.assertNotIn('send', str(saved).casefold())
+            self.assertEqual(editor.consume_ai_image_paths(), (str(path.resolve()),))
+            self.assertEqual(editor.selected_ai_image_paths(), ())
+            reopened = ReferenceEditor(saved)
+            self.assertEqual(reopened.selected_ai_image_paths(), ())
+            reopened.close(); editor.close()
+
+    def test_reference_upload_preflight_builds_data_url_without_path(self):
+        from studio_clipart_references import prepare_reference_image_for_model
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'private-name.png'
+            Image.new('RGB', (20, 20), (1, 2, 3)).save(path)
+            prepared = prepare_reference_image_for_model(path)
+            self.assertEqual(prepared['mime_type'], 'image/png')
+            self.assertTrue(prepared['data_url'].startswith('data:image/png;base64,'))
+            self.assertNotIn(str(path), str(prepared))
+            self.assertNotIn('private-name', str(prepared))
+
+
+    def test_model_handoff_revalidates_actual_bytes_after_preflight(self):
+        from studio_clipart_references import (
+            prepare_reference_image_for_model, reference_image_upload_info,
+        )
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'changed.png'
+            Image.new('RGB', (20, 20), (10, 20, 30)).save(path)
+            expected = reference_image_upload_info(path)
+            Image.new('RGB', (20, 20), (200, 20, 30)).save(path)
+            with self.assertRaisesRegex(ValueError, 'измен'):
+                prepare_reference_image_for_model(
+                    path, expected_sha256=expected['sha256']
+                )
+
+    def test_reference_editor_shows_file_info_and_preflight_explanation(self):
+        from studio_reference_editor import ReferenceEditor
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'info.png'
+            Image.new('RGB', (120, 80), (10, 20, 30)).save(path)
+            editor = ReferenceEditor([])
+            editor.add_reference(path)
+            self.assertIn('PNG', editor.reference_info.text())
+            self.assertIn('120×80', editor.reference_info.text())
+            note = editor.ai_preflight_note.text().casefold()
+            self.assertIn('модел', note)
+            self.assertIn('формат', note)
+            self.assertIn('размер', note)
+            editor.close()
+
+    def test_missing_reference_upload_preflight_is_plain_value_error(self):
+        from studio_clipart_references import reference_image_upload_info
+        with self.assertRaisesRegex(ValueError, 'недоступ'):
+            reference_image_upload_info('/missing/private-reference.png')
+
+
+    def test_reference_editor_ai_selection_count_is_visible_and_one_shot(self):
+        from studio_reference_editor import ReferenceEditor
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'count.png'
+            Image.new('RGB', (20, 20), (1, 2, 3)).save(path)
+            editor = ReferenceEditor([])
+            editor.add_reference(path)
+            self.assertIn('0', editor.ai_selection_count.text())
+            self.assertIn('4', editor.ai_selection_count.text())
+            editor.send_image_radio.setChecked(True)
+            self.assertIn('1', editor.ai_selection_count.text())
+            editor.consume_ai_image_paths()
+            self.assertIn('0', editor.ai_selection_count.text())
+            editor.close()
+
+
+    def test_local_reference_preview_does_not_depend_on_ai_upload_limit(self):
+        from unittest.mock import patch
+        from studio_reference_editor import ReferenceEditor
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'local-only.png'
+            Image.new('RGB', (30, 20), (20, 40, 60)).save(path)
+            with patch('studio_clipart_references.reference_image_upload_info',
+                       side_effect=ValueError('AI upload too large')):
+                editor = ReferenceEditor([])
+                editor.add_reference(path)
+                self.assertFalse(editor.preview.pixmap().isNull())
+                self.assertTrue(editor.palette.isEnabled())
+                self.assertIn('PNG', editor.reference_info.text())
+                editor.close()

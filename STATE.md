@@ -2,6 +2,12 @@
 
 Updated: 2026-09-12
 
+## Current handoff: reference-image consent/handoff implemented, 2026-09-12
+
+The Reference step now separates local/text-only use from sending the actual image to the AI planner. Every reference defaults to text-only. Per-reference image permission is in-memory only, is not added to recipe/project persistence, and is cleared only after the user answers the final paid confirmation; capability/tariff preflight does not silently consume it. Before any paid OpenRouter request, local preflight validates PNG/JPEG/WebP, 40 MP, max 10 MB per image, max 4 images and 20 MB total; the current OpenRouter model catalog must explicitly advertise `image` in `input_modalities`. The paid confirmation lists selected filenames and states that permission applies only to that run.
+
+`studio_text_client.py` accepts images only for OpenRouter after explicit approval/capability checks, confirms every selected image still belongs to the current recipe, and verifies the preflight SHA-256 fingerprint again on the exact bytes immediately before network handoff. It encodes those bytes as base64 data URLs, sends roles/notes separately, and never sends local paths. Image requests set `provider.data_collection=deny`, keep fallbacks disabled, and have no automatic retry. KIE intentionally remains text-only until its multimodal contract/tariff are verified. Local preview/palette use is independent from the stricter upload-size limits. Real Qt proof: `docs/ui/3.2/reference-image-consent/actual-reference-consent-1120x780.png`. Focused: 60 passed + 13 subtests. Full isolated pytest: 1448 passed, 57 skipped, 2 deselected, 235 subtests in 64.95s. No live paid reference-image request, build, workflow dispatch or deployment.
+
 ## Current handoff: local Clipart PNG preflight implemented, 2026-09-12
 
 Final transparent Clipart PNGs now receive a local/read-only quality preflight when

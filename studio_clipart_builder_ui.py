@@ -402,7 +402,11 @@ class ClipartBuilderDialog(QDialog):
         from studio_planning_ui import PlanningPanel
         layout = self._page()
         self.object_editor = ObjectEditor(self.recipe.objects)
-        self.planning = PlanningPanel(self._planning_snapshot, self.object_editor, self.recipe.assistant)
+        self.planning = PlanningPanel(
+            self._planning_snapshot, self.object_editor, self.recipe.assistant,
+            reference_images=self.reference_editor.selected_ai_image_paths,
+            clear_reference_images=self.reference_editor.clear_ai_image_paths,
+        )
         layout.addWidget(self.planning)
         layout.addWidget(self.object_editor)
         from PyQt6.QtWidgets import QCheckBox

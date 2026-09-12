@@ -95,8 +95,18 @@ isolated suite: 1377 passed, 57 skipped, 2 deselected, 232 subtests. Финал�
   `docs/ui/3.2/alpha-qc/actual-alpha-qc-1120x780.png`. Focused: 118 passed + 5
   subtests; full isolated pytest: 1431 passed / 57 skipped / 2 deselected / 233
   subtests (63.16s). Это preflight, не полный численный VS-03/VS-18 QC-профиль.
-- [ ] Передача реальных изображений-референсов модели с явным согласием пользователя,
-  capability/size preflight и без скрытой отправки локальных файлов.
+- [x] Передача реальных изображений-референсов модели с явным согласием пользователя:
+  по умолчанию text-only, opt-in отдельно для каждого reference и только на следующий
+  AI-подбор; разрешение не сохраняется. До платного запроса проверяются PNG/JPEG/WebP,
+  40 MP, до 10 МБ на файл, максимум 4 и 20 МБ суммарно, а OpenRouter model catalog
+  обязан явно сообщить `image` в `input_modalities`. Локальные пути не отправляются —
+  только base64 data URL + роли/notes; `data_collection=deny`, fallback/retry отключены.
+  KIE остаётся text-only до отдельной проверки multimodal contract/tariff. Real Qt proof:
+  `docs/ui/3.2/reference-image-consent/actual-reference-consent-1120x780.png`. Exact
+  выбранные байты фиксируются SHA-256 перед подтверждением и проверяются снова перед
+  сетью, поэтому замена файла после consent останавливает запрос. Focused: 60 passed +
+  13 subtests; full isolated: 1448 passed / 57 skipped / 2 deselected / 235 subtests
+  (64.95s). Live paid reference-image request не выполнялся.
 
 Экспорт не заменяет визуальную проверку. Кнопка «Сохранить распределение» сохраняет
 назначения в draft через штатный autosave; закрытие без сохранения не меняет их.
@@ -133,8 +143,10 @@ isolated suite: 1377 passed, 57 skipped, 2 deselected, 232 subtests. Финал�
   выбора помощника и UI настроек. Нельзя класть ключ в draft или экспорт.
 - [ ] Асинхронный запуск/отмена из builder, стоимость/лимит и подтверждение до
   запроса. Клиент пока не подключён к UI и не является готовым AI-сценарием.
-- [ ] Разбор реальных изображений-референсов с явным согласием на передачу.
-  Сейчас передаются только ручные текстовые наблюдения.
+- [x] Передача реальных изображений-референсов через OpenRouter vision-capable route
+  с одноразовым явным согласием, capability/size preflight и вторым подтверждением
+  перед платным запросом. Provider mocks/локальные payload tests пройдены; live paid
+  acceptance и KIE multimodal остаются отдельными задачами.
 - [ ] Согласованная платная проба каждого маршрута, проверка тарифов/usage и
   параметров KIE. Не использовать старый бюджет проверки alpha для текстов.
 - [ ] Поддержка наборов свыше 80 идей: управляемое разбиение и учёт расходов.

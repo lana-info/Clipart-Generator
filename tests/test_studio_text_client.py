@@ -134,3 +134,65 @@ class TextClientTests(unittest.TestCase):
         with self.assertRaises(TextGenerationError):
             generate_plan(self.recipe, **self.args)
         self.assertEqual(before, self.recipe.to_dict())
+
+
+    @patch('studio_text_client.requests.post')
+    def test_openrouter_reference_image_payload_has_no_local_path(self, post):
+        import tempfile
+        from pathlib import Path
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'secret-local-name.png'
+            Image.new('RGB', (16, 16), (10, 20, 30)).save(path)
+            self.recipe.references = [dict(path=str(path), roles=['character'], notes='round teddy face')]
+            from studio_clipart_references import reference_image_upload_info
+            fingerprint = reference_image_upload_info(path)['sha256']
+            self.mock_response(post)
+            generate_plan(
+                self.recipe, **self.args, reference_images=[str(path)],
+                reference_images_approved=True,
+                reference_image_hashes={str(path.resolve()): fingerprint},
+                input_modalities=('text', 'image'),
+            )
+            payload = post.call_args.kwargs['json']
+            content = payload['messages'][1]['content']
+            self.assertIsInstance(content, list)
+            self.assertEqual(content[0]['type'], 'text')
+            self.assertEqual(content[1]['type'], 'image_url')
+            self.assertTrue(content[1]['image_url']['url'].startswith('data:image/png;base64,'))
+            encoded = json.dumps(payload)
+            self.assertNotIn(str(path), encoded)
+            self.assertNotIn('secret-local-name', encoded)
+            self.assertEqual(payload['provider']['data_collection'], 'deny')
+
+    @patch('studio_text_client.requests.post')
+    def test_reference_image_handoff_requires_exact_preflight_fingerprint(self, post):
+        import tempfile
+        from pathlib import Path
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'reference.png'
+            Image.new('RGB', (12, 12), (1, 2, 3)).save(path)
+            self.recipe.references = [dict(path=str(path), roles=['character'], notes='')]
+            with self.assertRaisesRegex(TextGenerationError, 'отпечат'):
+                generate_plan(
+                    self.recipe, **self.args, reference_images=[str(path)],
+                    reference_images_approved=True, input_modalities=('text', 'image'),
+                )
+            post.assert_not_called()
+
+    def test_reference_images_require_explicit_approval_and_capability(self):
+        import tempfile
+        from pathlib import Path
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'reference.png'
+            Image.new('RGB', (12, 12), (1, 2, 3)).save(path)
+            for extra in (
+                dict(reference_images=[str(path)], reference_images_approved=False,
+                     input_modalities=('text', 'image')),
+                dict(reference_images=[str(path)], reference_images_approved=True,
+                     input_modalities=('text',)),
+            ):
+                with self.subTest(extra=extra), self.assertRaises(TextGenerationError):
+                    generate_plan(self.recipe, **self.args, **extra)

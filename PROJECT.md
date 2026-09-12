@@ -1,5 +1,9 @@
 # Vibix Images
 
+## Reference-image consent/handoff checkpoint, 2026-09-12
+
+Clipart AI planning can now optionally send selected reference images to OpenRouter vision-capable models. Image transfer is opt-in per reference, disabled by default, one-shot only, and never persisted as project permission. Before a paid request the app validates file format/size, fingerprints the exact selected bytes with SHA-256, checks the live OpenRouter model catalog `input_modalities`, then shows a second confirmation listing the selected filenames. The fingerprint is checked again immediately before network handoff, so replacing a file after consent stops the request. Up to 4 PNG/JPEG/WebP references may be selected, max 10 MB each and 20 MB total. Local paths are never sent to the model; the request contains bounded base64 data URLs plus explicit roles/notes, and image requests set OpenRouter `data_collection: deny`. KIE remains text-only until its multimodal envelope/pricing are separately verified. No live paid image-reference request was made in this checkpoint. Real Qt proof: `docs/ui/3.2/reference-image-consent/actual-reference-consent-1120x780.png`. Focused affected verification: 60 passed + 13 subtests; full isolated pytest: 1448 passed, 57 skipped, 2 deselected, 235 subtests in 64.95s.
+
 ## Clipart PNG quality preflight checkpoint, 2026-09-12
 
 Set export now performs a local read-only preflight of final transparent Clipart PNGs.

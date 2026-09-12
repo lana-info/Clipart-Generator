@@ -138,3 +138,117 @@ def test_tariff_read_and_invalid_price(monkeypatch):
         else:
             with pytest.raises(TextGenerationError):
                 fetch_text_tariff('openai/gpt-5-mini', 'dummy')
+
+
+
+def test_reference_image_capability_preflight_blocks_text_only_model(builder, monkeypatch, tmp_path):
+    from PIL import Image
+    ref = tmp_path / 'vision.png'
+    Image.new('RGB', (20, 20), (20, 30, 40)).save(ref)
+    builder.reference_editor.add_reference(ref)
+    builder.reference_editor.send_image_radio.setChecked(True)
+    jobs = queued(builder.planning)
+    question = MagicMock()
+    monkeypatch.setattr(QMessageBox, 'question', question)
+    builder.planning.start(False)
+    assert len(jobs) == 1
+    assert builder.reference_editor.selected_ai_image_paths() == (str(ref.resolve()),)
+    jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text',)), None)
+    question.assert_not_called()
+    assert len(jobs) == 1
+    assert builder.reference_editor.selected_ai_image_paths() == (str(ref.resolve()),)
+    assert 'изображ' in builder.planning.status.text().casefold()
+
+
+def test_reference_image_quote_names_files_and_is_one_shot(builder, monkeypatch, tmp_path):
+    from PIL import Image
+    ref = tmp_path / 'teddy-reference.png'
+    Image.new('RGB', (20, 20), (20, 30, 40)).save(ref)
+    builder.reference_editor.add_reference(ref)
+    builder.reference_editor.send_image_radio.setChecked(True)
+    jobs = queued(builder.planning)
+    prompts = []
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: prompts.append(args[2]) or QMessageBox.StandardButton.No)
+    builder.planning.start(False)
+    self_info = dict(prompt=.25, completion=2., request=0., input_modalities=('text','image'))
+    assert builder.reference_editor.selected_ai_image_paths() == (str(ref.resolve()),)
+    jobs[0][1](self_info, None)
+    assert prompts and 'teddy-reference.png' in prompts[0]
+    assert '1' in prompts[0]
+    assert builder.reference_editor.selected_ai_image_paths() == ()
+
+
+
+def test_reference_image_consent_clears_only_after_positive_confirmation(builder, monkeypatch, tmp_path):
+    from PIL import Image
+    ref = tmp_path / 'confirmed-reference.png'
+    Image.new('RGB', (20, 20), (20, 30, 40)).save(ref)
+    builder.reference_editor.add_reference(ref)
+    builder.reference_editor.send_image_radio.setChecked(True)
+    jobs = queued(builder.planning)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    builder.planning.start(False)
+    assert builder.reference_editor.selected_ai_image_paths() == (str(ref.resolve()),)
+    jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text','image')), None)
+    assert len(jobs) == 2
+    assert builder.reference_editor.selected_ai_image_paths() == ()
+
+
+
+def test_reference_image_change_after_confirmation_stops_before_network(builder, monkeypatch, tmp_path):
+    from PIL import Image
+    ref = tmp_path / 'changing-reference.png'
+    Image.new('RGB', (20, 20), (20, 30, 40)).save(ref)
+    builder.reference_editor.add_reference(ref)
+    builder.reference_editor.send_image_radio.setChecked(True)
+    jobs = queued(builder.planning)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    post = MagicMock(side_effect=AssertionError('network must not run for changed reference'))
+    monkeypatch.setattr('studio_text_client.requests.post', post)
+    builder.planning.start(False)
+    jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text','image')), None)
+    assert len(jobs) == 2
+    Image.new('RGB', (20, 20), (200, 30, 40)).save(ref)
+    with pytest.raises(TextGenerationError, match='измен'):
+        jobs[1][0]()
+    post.assert_not_called()
+
+
+
+def test_planning_panel_copy_says_images_are_opt_in(builder):
+    text = builder.planning.status.text().casefold()
+    assert 'по умолчанию' in text
+    assert 'явн' in text
+    assert 'изображ' in text
+
+
+def test_model_info_exposes_live_input_modalities(monkeypatch):
+    from studio_text_pricing import fetch_text_model_info
+    response = MagicMock(); response.status_code = 200
+    response.iter_content.return_value = [json.dumps({'data': [dict(
+        id='openai/gpt-5-mini',
+        pricing=dict(prompt='0.00000025', completion='0.000002', request='0'),
+        architecture=dict(input_modalities=['text', 'image']),
+    )]}).encode()]
+    get = MagicMock(); get.return_value.__enter__.return_value = response
+    monkeypatch.setattr('studio_text_pricing.requests.get', get)
+    info = fetch_text_model_info('openai/gpt-5-mini', 'dummy')
+    assert info['input_modalities'] == ('text', 'image')
+    assert info['prompt'] == .25
+
+
+
+def test_reference_image_total_size_blocks_before_quote(builder, monkeypatch):
+    refs = []
+    for n in range(3):
+        path = f'/tmp/ref-{n}.png'
+        builder.recipe.references.append(dict(path=path, roles=['style'], notes=''))
+        refs.append(path)
+    builder.planning.reference_images = lambda: tuple(refs)
+    monkeypatch.setattr('studio_clipart_references.reference_image_upload_info',
+                        lambda path: dict(mime_type='image/png', size=8 * 1024 * 1024,
+                                          width=100, height=100, sha256='0' * 64))
+    jobs = queued(builder.planning)
+    builder.planning.start(False)
+    assert not jobs
+    assert '20' in builder.planning.status.text()
