@@ -1,5 +1,9 @@
 # Vibix Images
 
+## Large AI-planning batches checkpoint, 2026-09-12
+
+Clipart OpenRouter planning no longer hard-stops above 80 target ideas. A single owner-confirmed planning attempt is split deterministically into sequential requests of at most 80 targets; the confirmation shows total ideas, request count and a combined estimate before any paid POST. There are no hidden retries. Successful earlier batches update only a private working recipe so later batches can see prior proposed names/actions and avoid cross-batch duplicates; the editor/project remains unchanged until every batch succeeds. Any batch error/cancel/stale-state leaves the collection unchanged while clearly warning that already-sent requests may still have been charged. Reference-image consent, fingerprints and capability checks remain unchanged and, when opted in, the confirmation explicitly states that references are sent in each batch. Focused planning/OpenRouter/builder verification: 54 passed + 13 subtests; full isolated pytest: 1460 passed, 57 skipped, 2 deselected, 235 subtests in 64.42s. No live paid batching request was made.
+
 ## Wreath/frame interior-opening QC checkpoint, 2026-09-12
 
 Final Clipart PNG preflight now uses recipe `object_id`/role to enable an extra local Review check for wreaths and frame-like borders. A bounded 256×256 alpha preview accepts meaningful transparent center space (including an intentionally open wreath) or a significant enclosed transparent region. Missing/filled interior space is a Review reason, not a hard blocker; hero/decor outputs are not subjected to this rule. The check is read-only, makes no provider call and does not alter PNG bytes. Labels remain separate future semantics rather than inheriting wreath rules. Focused alpha/results/export verification: 102 passed + 5 subtests; full isolated pytest: 1457 passed, 57 skipped, 2 deselected, 235 subtests in 63.54s.

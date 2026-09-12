@@ -2,6 +2,10 @@
 
 Updated: 2026-09-12
 
+## Current handoff: >80 AI planning batching implemented, 2026-09-12
+
+`PlanningPanel` now splits one logical OpenRouter planning attempt into stable target batches of at most 80 while preserving one explicit paid confirmation. The quote shows the number of sequential requests and a combined estimate. Batches have no automatic retry. Each successful batch is validated and applied only to a private working `ClipartRecipe`, allowing later batches to see previous suggestions for collection-level duplicate avoidance; the live editor/project is updated atomically only after every batch succeeds and the launch snapshot is still current. A later batch failure, cancel or stale edit discards all collected suggestions while warning that already-sent requests may have been paid. Focused planning/OpenRouter/builder verification: 54 passed + 13 subtests. Full isolated pytest: 1460 passed, 57 skipped, 2 deselected, 235 subtests in 64.42s. No live paid batching call/build/deploy.
+
 ## Current handoff: wreath/frame interior-opening QC implemented, 2026-09-12
 
 `studio_alpha_qc.inspect_alpha_png()` now accepts a local `expect_interior_opening` contract. `RunResultsPage` derives it only from the current Clipart recipe object role (`wreath`, plus frame-like `border` based on object semantics) via persisted `object_id`. The detector works on a maximum 256×256 alpha preview, accepts meaningful transparent center space or a significant enclosed transparent region, and treats missing interior space as Review (`missing_interior_opening`). It never hard-blocks on this heuristic and does not affect hero/composition/decor unless separately requested. Focused contour: 102 passed + 5 subtests. Full isolated pytest: 1457 passed, 57 skipped, 2 deselected, 235 subtests in 63.54s.

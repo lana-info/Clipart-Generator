@@ -252,3 +252,97 @@ def test_reference_image_total_size_blocks_before_quote(builder, monkeypatch):
     builder.planning.start(False)
     assert not jobs
     assert '20' in builder.planning.status.text()
+
+
+def _make_large_collection(builder, total):
+    builder.recipe.select(total)
+    builder.object_editor.items = fill_recipe([], builder.recipe.counts)
+    builder.object_editor.refresh()
+
+
+def _fake_batch_result(recipe, palette, replace_ids):
+    req = planning_request(recipe, palette, list(replace_ids))
+    rows = []
+    for target in req['targets']:
+        row = dict(id=target['id'], **dict.fromkeys(TEXT_FIELDS, ''))
+        row['name'] = f"Идея {target['id'][:8]}"
+        rows.append(row)
+    return dict(request=req, suggestions=rows)
+
+
+def test_large_planning_is_split_into_bounded_paid_batches(builder, monkeypatch):
+    _make_large_collection(builder, 161)
+    before_ids = [item['id'] for item in builder.object_editor.items]
+    jobs = queued(builder.planning)
+    quote_texts = []
+    monkeypatch.setattr(
+        QMessageBox, 'question',
+        lambda *args: quote_texts.append(args[2]) or QMessageBox.StandardButton.Yes,
+    )
+    calls = []
+    def fake_generate(recipe, *, palette='', replace_ids=None, **kwargs):
+        calls.append(tuple(replace_ids or ()))
+        return _fake_batch_result(recipe, palette, replace_ids)
+    monkeypatch.setattr('studio_planning_ui.generate_plan', fake_generate)
+
+    builder.planning.start(False)
+    assert len(jobs) == 1
+    jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text',)), None)
+
+    assert quote_texts
+    assert '161' in quote_texts[0]
+    assert '3' in quote_texts[0]
+    assert len(jobs) == 2
+    for index in range(3):
+        result = jobs[index + 1][0]()
+        jobs[index + 1][1](result, None)
+    assert [len(batch) for batch in calls] == [80, 80, 1]
+    assert [item for batch in calls for item in batch] == before_ids
+    assert all(item['name'].startswith('Идея ') for item in builder.object_editor.items)
+    assert builder.planning.pending is None
+
+
+def test_large_planning_failure_keeps_editor_atomic(builder, monkeypatch):
+    _make_large_collection(builder, 81)
+    jobs = queued(builder.planning)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(
+        'studio_planning_ui.generate_plan',
+        lambda recipe, *, palette='', replace_ids=None, **kwargs:
+            _fake_batch_result(recipe, palette, replace_ids),
+    )
+
+    builder.planning.start(False)
+    before = copy.deepcopy(builder.object_editor.items)
+    jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text',)), None)
+    assert len(jobs) == 2
+    first = jobs[1][0]()
+    jobs[1][1](first, None)
+    assert len(jobs) == 3
+    jobs[2][1](None, 'Второй запрос не выполнен')
+
+    assert builder.object_editor.items == before
+    assert 'не измен' in builder.planning.status.text().casefold()
+    assert builder.planning.pending is None
+
+
+def test_large_planning_next_batch_sees_previous_batch_suggestions(builder, monkeypatch):
+    _make_large_collection(builder, 81)
+    jobs = queued(builder.planning)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    seen_existing_names = []
+
+    def fake_generate(recipe, *, palette='', replace_ids=None, **kwargs):
+        seen_existing_names.append([item['name'] for item in recipe.objects[:80]])
+        return _fake_batch_result(recipe, palette, replace_ids)
+
+    monkeypatch.setattr('studio_planning_ui.generate_plan', fake_generate)
+    builder.planning.start(False)
+    jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text',)), None)
+    first = jobs[1][0]()
+    jobs[1][1](first, None)
+    second = jobs[2][0]()
+    jobs[2][1](second, None)
+
+    assert all(not name for name in seen_existing_names[0])
+    assert all(name.startswith('Идея ') for name in seen_existing_names[1])

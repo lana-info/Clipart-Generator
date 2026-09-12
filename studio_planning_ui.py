@@ -111,8 +111,13 @@ class PlanningPanel(QWidget):
                     raise ValueError('Выберите идею для замены')
                 ids = [self.editor.items[self.editor.selected]['id']]
             request = planning_request(recipe, palette, ids)
-            if len(request['targets']) > 80:
-                raise ValueError('За один подбор допускается до 80 незакреплённых идей')
+            target_ids = [target['id'] for target in request['targets']]
+            batches = [target_ids[index:index + 80]
+                       for index in range(0, len(target_ids), 80)]
+            batch_requests = [planning_request(recipe, palette, list(batch)) for batch in batches]
+            if any(len(json.dumps(batch_request, ensure_ascii=False).encode()) > 200_000
+                   for batch_request in batch_requests):
+                raise ValueError('Сократите описание набора перед подбором')
             image_paths = tuple(str(Path(path).resolve()) for path in self.reference_images())
             if len(image_paths) > 4:
                 raise ValueError('Для одного AI-подбора можно передать до 4 изображений-референсов')
@@ -141,6 +146,14 @@ class PlanningPanel(QWidget):
         self._busy(True)
         self.status.setText('Проверяю текущий тариф. Генерация ещё не запущена.')
 
+        def current_matches_request():
+            current, current_palette = self.snapshot()
+            if reference_snapshot is not None and current.references != reference_snapshot:
+                raise ValueError('Референсы изменились. Запустите подбор заново.')
+            if planning_request(current, current_palette, ids) != request:
+                raise ValueError('Настройки изменились. Запустите подбор заново.')
+            return current, current_palette
+
         def quoted(tariff, error):
             if token.is_set():
                 return
@@ -151,26 +164,38 @@ class PlanningPanel(QWidget):
                 self._finish('Выбранная модель не подтверждает поддержку изображений. Оставьте текстовые признаки или выберите vision-модель.')
                 return
             try:
-                current, current_palette = self.snapshot()
-                if reference_snapshot is not None and current.references != reference_snapshot:
-                    raise ValueError('Референсы изменились. Запустите подбор заново.')
-                if planning_request(current, current_palette, ids) != request:
-                    raise ValueError('Настройки изменились. Запустите подбор заново.')
+                current_matches_request()
             except ValueError as exc:
                 self._finish(str(exc))
                 return
-            # Approximation, explicitly not a hard token or monetary cap.
-            input_estimate = len(json.dumps(request, ensure_ascii=False).encode()) + 2048
-            estimate = (input_estimate * tariff['prompt'] + 16000 * tariff['completion']) / 1_000_000
-            text = (f"{self.model.currentText()} · OpenRouter\nИдей: {len(request['targets'])}\n"
-                    f"Тариф за 1 млн токенов: вход ${tariff['prompt']:g}, выход ${tariff['completion']:g}.\n"
-                    f"Ориентир с резервом на ответ: ${estimate:.4f}. Это оценка, не денежный лимит; комиссия не включена.\n"
-                    + ((f'Будут переданы изображения ({len(image_paths)}): ' +
-                        ', '.join(__import__('pathlib').Path(path).name for path in image_paths) +
-                        '. Разрешение действует только для этого запуска. Стоимость изображений может увеличить итог.\n')
-                       if image_paths else
-                       'Передаются текст задания и ручные наблюдения референсов. Изображения не передаются.\n')
-                    + 'Запрос может быть оплачен даже при ошибке ответа. Запустить?')
+            # Estimate: each batch reserves its own response budget; it is not a monetary ceiling.
+            input_estimate = sum(
+                len(json.dumps(batch_request, ensure_ascii=False).encode()) + 2048
+                for batch_request in batch_requests
+            )
+            estimate = (
+                input_estimate * tariff['prompt']
+                + 16000 * len(batches) * tariff['completion']
+            ) / 1_000_000
+            image_note = 'Передаются текст задания и ручные наблюдения референсов. Изображения не передаются.\n'
+            if image_paths:
+                image_note = (
+                    f'Будут переданы изображения ({len(image_paths)}): '
+                    + ', '.join(Path(path).name for path in image_paths)
+                    + '. Разрешение действует только для этого запуска. '
+                    + ('Изображения будут переданы в каждом запросе этого подбора. '
+                       if len(batches) > 1 else '')
+                    + 'Стоимость изображений может увеличить итог.\n'
+                )
+            text = (
+                f"{self.model.currentText()} · OpenRouter\n"
+                f"Идей: {len(request['targets'])}\n"
+                f"Запросов: {len(batches)} (не более 80 идей в каждом)\n"
+                f"Тариф за 1 млн токенов: вход ${tariff['prompt']:g}, выход ${tariff['completion']:g}.\n"
+                f"Ориентир с резервом на все ответы: ${estimate:.4f}. Это оценка, не денежный лимит; комиссия не включена.\n"
+                + image_note
+                + 'Запросы выполняются последовательно без автоповторов. Уже отправленный запрос может быть оплачен даже при ошибке. Запустить?'
+            )
             decision = QMessageBox.question(
                 self, 'Платный подбор', text,
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -184,41 +209,83 @@ class PlanningPanel(QWidget):
             if token.is_set():
                 return
             try:
-                current, current_palette = self.snapshot()
-                if reference_snapshot is not None and current.references != reference_snapshot:
-                    raise ValueError('Референсы изменились. Запустите подбор заново.')
-                if planning_request(current, current_palette, ids) != request:
-                    raise ValueError('Настройки изменились. Запустите подбор заново.')
+                current_matches_request()
             except ValueError as exc:
                 self._finish(str(exc))
                 return
-            self.status.setText('Подбираю идеи. Можно отменить ожидание; автоповтора нет.')
 
-            def work():
-                if token.is_set():
-                    return None
-                return generate_plan(recipe, palette=palette, replace_ids=ids, **selection,
-                                     api_key=key, approved=True, max_price={key: tariff[key] for key in ('prompt','completion','request')},
-                                     reference_images=image_paths,
-                                     reference_images_approved=bool(image_paths),
-                                     reference_image_hashes=reference_hashes,
-                                     input_modalities=tuple(tariff.get('input_modalities', ())))
+            collected = []
+            working_recipe = copy.deepcopy(recipe)
 
-            def completed(result, error):
+            def run_batch(batch_index):
                 if token.is_set():
                     return
-                if error:
-                    self._finish(error)
+                if batch_index >= len(batches):
+                    try:
+                        current, current_palette = current_matches_request()
+                        items = apply_suggestions(
+                            current, request, collected, palette=current_palette
+                        )
+                        self.editor.items = items
+                        self.editor.refresh()
+                        self._finish('Идеи предложены. Проверьте набор и сохраните настройки.')
+                    except ValueError as exc:
+                        self._finish(f'{exc} Набор не изменён.')
                     return
-                try:
-                    current, current_palette = self.snapshot()
-                    items = apply_suggestions(current, result['request'], result['suggestions'], palette=current_palette)
-                    self.editor.items = items
-                    self.editor.refresh()
-                    self._finish('Идеи предложены. Проверьте набор и сохраните настройки.')
-                except ValueError as exc:
-                    self._finish(str(exc))
-            self._run(work, completed)
+
+                batch = list(batches[batch_index])
+                batch_recipe = copy.deepcopy(working_recipe)
+                expected_request = planning_request(batch_recipe, palette, batch)
+                self.status.setText(
+                    f'Подбираю идеи: запрос {batch_index + 1} из {len(batches)}. '
+                    'Можно отменить ожидание; автоповтора нет.'
+                )
+
+                def work():
+                    if token.is_set():
+                        return None
+                    return generate_plan(
+                        batch_recipe, palette=palette, replace_ids=batch, **selection,
+                        api_key=key, approved=True,
+                        max_price={name: tariff[name] for name in ('prompt', 'completion', 'request')},
+                        reference_images=image_paths,
+                        reference_images_approved=bool(image_paths),
+                        reference_image_hashes=reference_hashes,
+                        input_modalities=tuple(tariff.get('input_modalities', ())),
+                    )
+
+                def completed(result, error):
+                    if token.is_set():
+                        return
+                    if error:
+                        self._finish(
+                            f'{error} Набор не изменён. Уже завершённые запросы могли быть оплачены.'
+                        )
+                        return
+                    try:
+                        if not isinstance(result, dict):
+                            raise ValueError('Текстовый помощник вернул неверный результат')
+                        result_request = result.get('request')
+                        suggestions = result.get('suggestions')
+                        if result_request != expected_request:
+                            raise ValueError('Ответ относится к другому батчу')
+                        # Keep previous batch suggestions only in a private working copy.
+                        # The editor/project is changed atomically only after every batch succeeds.
+                        next_objects = apply_suggestions(
+                            working_recipe, result_request, suggestions, palette=palette
+                        )
+                        current_matches_request()
+                        working_recipe.objects = next_objects
+                        collected.extend(suggestions)
+                    except (TypeError, ValueError) as exc:
+                        self._finish(f'{exc} Набор не изменён.')
+                        return
+                    run_batch(batch_index + 1)
+
+                self._run(work, completed)
+
+            run_batch(0)
+
         self._run(lambda: fetch_text_model_info(selection['model'], key), quoted)
 
     def _finish(self, text):
