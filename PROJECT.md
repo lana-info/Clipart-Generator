@@ -1,5 +1,23 @@
 # Vibix Images
 
+## Holiday-aware Clipart checkpoint, 2026-09-12
+
+Clipart now has a local Holiday Profile layer and curated five-color palette library.
+Holiday context enriches palette, character accessories, props, decor, compositions,
+mood and background hints without replacing the main theme or triggering a paid call.
+First wave: Christmas, Halloween, Easter, Valentine’s Day, Thanksgiving, 4th of July /
+Independence Day, St. Patrick’s Day, Baby Shower, Birthday, First Birthday. Mother’s
+Day/Father’s Day are deferred. Christmas and Halloween use explicit canonical holiday
+color logic. Builder recommendations are local/deterministic and cards show exactly
+five swatches; custom and reference-derived palettes remain available.
+
+`Holiday PRO Prompt builder.xlsx` was reviewed as structural inspiration for holiday,
+objects/details, emotion, activity, background, palette and preset dimensions; it is
+not copied as an implementation template. Implementation plan:
+`docs/superpowers/plans/2026-09-12-holiday-aware-clipart.md`. Focused verification:
+35 passed + 11 subtests; full isolated pytest: 1403 passed, 57 skipped, 2 deselected,
+233 subtests. Real Qt proof: `docs/ui/3.2/holiday-palettes/christmas-1120x780.png`.
+
 ## Current handoff, 2026-09-11
 
 Automatic set export UI is now summary-first. The main screen shows only unique

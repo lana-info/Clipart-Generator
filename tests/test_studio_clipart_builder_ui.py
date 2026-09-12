@@ -46,6 +46,29 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(state.clipart.prompts, [])
         dialog.close()
 
+    def test_palette_library_uses_five_swatch_cards_and_holiday_recommendation(self):
+        state = ProjectState()
+        dialog = ClipartBuilderDialog(state)
+        dialog.theme.setText('Мишки Тедди')
+        dialog.context.setCurrentText('Christmas')
+        dialog._refresh_palette_recommendations()
+        self.assertEqual(dialog.recommended_palette_cards[0]['key'], 'holiday-christmas')
+        self.assertTrue(dialog.palette_cards)
+        self.assertTrue(all(len(card['colors']) == 5 for card in dialog.palette_cards))
+        self.assertEqual(dialog.palette_reference_button.text(), 'Взять из референса')
+        dialog.close()
+
+    def test_palette_category_filter_and_selection_keep_plain_palette_value(self):
+        state = ProjectState()
+        dialog = ClipartBuilderDialog(state)
+        dialog.palette_category.setCurrentText('Природа')
+        dialog._refresh_palette_library()
+        self.assertTrue(dialog.palette_cards)
+        self.assertTrue(all(card['category'] == 'Природа' for card in dialog.palette_cards))
+        dialog._select_palette(dialog.palette_cards[0]['colors'])
+        self.assertEqual(len(dialog.palette.text().split()), 5)
+        dialog.close()
+
     def test_cancel_does_not_mutate_state(self):
         state = ProjectState()
         before = state.to_dict()

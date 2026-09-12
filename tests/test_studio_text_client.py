@@ -62,6 +62,20 @@ class TextClientTests(unittest.TestCase):
         self.assertFalse(post.call_args.kwargs['allow_redirects'])
 
     @patch('studio_text_client.requests.post')
+    def test_holiday_guidance_reaches_provider_as_bounded_design_data(self, post):
+        self.recipe.theme = 'Мишки Тедди'
+        self.recipe.context = 'Christmas'
+        self.mock_response(post)
+        generate_plan(self.recipe, **self.args)
+        payload = post.call_args.kwargs['json']
+        self.assertIn('holiday guidance', payload['messages'][0]['content'])
+        brief = json.loads(payload['messages'][1]['content'])
+        self.assertEqual(brief['brief']['theme'], 'Мишки Тедди')
+        self.assertEqual(brief['holiday']['holiday'], 'Рождество')
+        self.assertIn('gift box', brief['holiday']['props'])
+        self.assertNotIn('Mother', str(brief['holiday']))
+
+    @patch('studio_text_client.requests.post')
     def test_kie_native_envelope_and_model_specific_url(self, post):
         native = dict(candidates=[dict(finishReason='STOP', content=dict(parts=[
             dict(thought=True, text='not final'), dict(text=json.dumps(dict(items=self.rows)))]))])

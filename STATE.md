@@ -1,6 +1,25 @@
 # Project state
 
-Updated: 2026-09-11
+Updated: 2026-09-12
+
+## Current handoff: holiday-aware Clipart architecture, 2026-09-12
+
+Owner-approved holiday-aware architecture is implemented locally. New modules
+`studio_holiday_profiles.py` and `studio_palette_library.py` provide validated local
+first-wave holiday profiles and a curated five-color palette library. Supported
+first wave: Christmas, Halloween, Easter, Valentine’s Day, Thanksgiving, 4th of July /
+Independence Day, St. Patrick’s Day, Baby Shower, Birthday, First Birthday. Mother’s
+Day and Father’s Day are intentionally excluded. Christmas/Halloween use canonical
+theme-linked colors rather than arbitrary aesthetic palettes.
+
+`planning_request()` now includes bounded holiday design data (accessories, props,
+decor, compositions, mood, background hints, exclusions) while preserving the main
+theme; no extra provider call is introduced. Builder palette UI now has deterministic
+theme/context recommendations, category filtering, exactly five visible swatches per
+card, custom HEX input and a direct path to reference-derived palette selection. The
+reviewed `Holiday PRO Prompt builder.xlsx` is recorded as structural inspiration only.
+Focused holiday/palette/planner/builder/text/reference tests: 35 passed + 11 subtests.
+Full isolated pytest: 1403 passed, 57 skipped, 2 deselected, 233 subtests in 65.77s.
 
 ## Current handoff: automatic set export UI completed, 2026-09-11
 

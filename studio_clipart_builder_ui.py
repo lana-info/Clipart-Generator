@@ -3,22 +3,15 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox, QDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QVBoxLayout, QWidget, QFrame,
 )
 from studio_clipart_recipe import ClipartRecipe, ROLES
 from v3_components import apply_v3_theme
 
 ROLE_LABELS = ("Главные объекты", "Композиции", "Венки", "Бордюры и рамки", "Мелкий декор")
-PALETTES = (
-    ("Розовый сад", "#F8D6DF #E68BA0 #BE5566 #F5E6DB #EDE4D8"),
-    ("Зимний лес", "#24483C #587662 #B24A55 #DEC7A3 #F3EBDF"),
-    ("Морской", "#24566D #77B9CA #BDDCE0 #D2B390 #F5EEE1"),
-    ("Осенняя охра", "#A45C38 #D89050 #DFB666 #80764B #F0E1C4"),
-    ("Нежная сирень", "#81769F #B8A3CD #E8D7EA #CEE3DF #F5EEE8"),
-    ("Детский праздник", "#EDAFB6 #F3D487 #9BC9CA #B5CFA0 #F7EEE0"),
-    ("Винтажная бумага", "#66584D #A68B72 #C8B89F #DED2BD #F3EBDD"),
-    ("Ягодный", "#762E46 #B04E6A #DC92A3 #84916C #F4E5D7"),
-)
+from studio_palette_library import all_palette_presets, palette_categories, recommended_palette_presets
+
+PALETTES = tuple((preset.title, ' '.join(preset.colors)) for preset in all_palette_presets())
 
 
 def combo(values):
@@ -128,30 +121,107 @@ class ClipartBuilderDialog(QDialog):
             field.setAccessibleName(label)
             form.addRow(label, field)
         layout.addLayout(form)
-        palette_group = QGroupBox("Готовые палитры · выберите набор оттенков")
-        grid = QGridLayout(palette_group)
-        for i, (name, colors) in enumerate(PALETTES):
-            card = QWidget()
-            card_layout = QVBoxLayout(card)
-            button = QPushButton(name)
-            button.clicked.connect(lambda checked=False, value=colors: self.palette.setText(value))
-            card_layout.addWidget(button)
-            row = QHBoxLayout()
-            for color in colors.split():
-                swatch = QLabel()
-                swatch.setFixedHeight(23)
-                swatch.setToolTip(color)
-                swatch.setStyleSheet(f"background:{color};border-radius:4px")
-                row.addWidget(swatch)
-            card_layout.addLayout(row)
-            grid.addWidget(card, i // 4, i % 4)
-        layout.addWidget(palette_group)
         self.palette = QLineEdit(generator.palette)
         self.palette.setMaxLength(4000)
         self.palette.setAccessibleName("Своя палитра")
-        self.palette.setPlaceholderText("Выберите палитру выше или задайте свои цвета")
-        layout.addWidget(self.palette)
+        self.palette.setPlaceholderText("HEX-коды или выберите палитру выше")
+
+        recommended_title = QLabel("Рекомендуем для вашей темы")
+        recommended_title.setStyleSheet("font-size:16px;font-weight:600")
+        layout.addWidget(recommended_title)
+        recommended_group = QFrame()
+        recommended_group.setProperty('v3Card', True)
+        self.recommended_palette_grid = QGridLayout(recommended_group)
+        layout.addWidget(recommended_group)
+
+        library_group = QGroupBox("Библиотека палитр")
+        library_layout = QVBoxLayout(library_group)
+        self.palette_category = QComboBox()
+        self.palette_category.addItems(["Все", *palette_categories()])
+        self.palette_category.currentTextChanged.connect(self._refresh_palette_library)
+        library_layout.addWidget(self.palette_category)
+        self.palette_library_host = QWidget()
+        self.palette_library_grid = QGridLayout(self.palette_library_host)
+        library_layout.addWidget(self.palette_library_host)
+        layout.addWidget(library_group)
+
+        custom = QHBoxLayout()
+        custom.addWidget(QLabel("Своя палитра"))
+        custom.addWidget(self.palette, 1)
+        self.palette_reference_button = QPushButton("Взять из референса")
+        self.palette_reference_button.clicked.connect(self._go_to_references)
+        custom.addWidget(self.palette_reference_button)
+        layout.addLayout(custom)
+
+        self.recommended_palette_cards = []
+        self.palette_cards = []
+        self.theme.textChanged.connect(self._refresh_palette_recommendations)
+        self.context.currentTextChanged.connect(self._refresh_palette_recommendations)
+        self._refresh_palette_recommendations()
+        self._refresh_palette_library()
         layout.addStretch()
+
+    @staticmethod
+    def _clear_layout(layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _select_palette(self, colors):
+        self.palette.setText(' '.join(colors))
+
+    def _palette_card(self, preset, grid, index, target):
+        card = QFrame()
+        card.setProperty('v3Card', True)
+        card_layout = QVBoxLayout(card)
+        top = QHBoxLayout()
+        button = QPushButton(preset.title)
+        button.clicked.connect(lambda checked=False, colors=preset.colors: self._select_palette(colors))
+        top.addWidget(button, 1)
+        character = QLabel(preset.character)
+        character.setProperty('v3Small', True)
+        top.addWidget(character)
+        card_layout.addLayout(top)
+        swatches = QHBoxLayout()
+        for color in preset.colors:
+            swatch = QLabel()
+            swatch.setFixedHeight(26)
+            swatch.setMinimumWidth(34)
+            swatch.setToolTip(color)
+            swatch.setStyleSheet(f'background:{color};border-radius:4px')
+            swatches.addWidget(swatch, 1)
+        card_layout.addLayout(swatches)
+        grid.addWidget(card, index // 3, index % 3)
+        target.append(dict(key=preset.key, title=preset.title, category=preset.category,
+                           character=preset.character, colors=list(preset.colors), widget=card))
+
+    def _refresh_palette_recommendations(self, *_):
+        if not hasattr(self, 'recommended_palette_grid'):
+            return
+        self._clear_layout(self.recommended_palette_grid)
+        self.recommended_palette_cards = []
+        for index, preset in enumerate(recommended_palette_presets(
+                self.theme.text().strip(), self.context.currentText().strip())):
+            self._palette_card(preset, self.recommended_palette_grid, index,
+                               self.recommended_palette_cards)
+
+    def _refresh_palette_library(self, *_):
+        if not hasattr(self, 'palette_library_grid'):
+            return
+        self._clear_layout(self.palette_library_grid)
+        self.palette_cards = []
+        category = self.palette_category.currentText() if hasattr(self, 'palette_category') else 'Все'
+        presets = [preset for preset in all_palette_presets()
+                   if category == 'Все' or preset.category == category]
+        for index, preset in enumerate(presets):
+            self._palette_card(preset, self.palette_library_grid, index, self.palette_cards)
+
+    def _go_to_references(self):
+        self.pages.setCurrentIndex(2)
+        self.error.clear()
+        self._update_navigation()
 
     def _references(self):
         from studio_reference_editor import ReferenceEditor

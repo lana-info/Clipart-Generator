@@ -59,6 +59,21 @@ class PlannerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             restored.validate()
 
+    def test_holiday_profile_is_added_to_request_without_replacing_main_theme(self):
+        self.recipe.theme = 'Мишки Тедди'
+        self.recipe.context = 'Christmas'
+        request = planning_request(self.recipe)
+        self.assertEqual(request['brief']['theme'], 'Мишки Тедди')
+        self.assertEqual(request['brief']['context'], 'Christmas')
+        self.assertEqual(request['holiday']['holiday'], 'Рождество')
+        self.assertIn('Santa hat', request['holiday']['character_accessories'])
+        self.assertIn('gift box', request['holiday']['props'])
+
+    def test_non_holiday_context_does_not_invent_profile(self):
+        self.recipe.context = 'Мой праздник'
+        request = planning_request(self.recipe)
+        self.assertIsNone(request['holiday'])
+
     def test_local_reference_paths_not_in_request(self):
         self.recipe.references = [dict(path='/private/reference.png', roles=['mood'], notes='Радостное')]
         request = planning_request(self.recipe)

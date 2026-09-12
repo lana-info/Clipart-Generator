@@ -33,9 +33,20 @@ Focused: 31 passed + 8 subtests; полный isolated suite: 1369 passed, 57 sk
   создаются. После review-fix `5688c1a` combined targeted: 128 passed + 32 subtests;
   final combined full suite: 1390 passed / 57 skipped / 2 deselected / 233 subtests;
   local read-only diff review без новых P1/P2.
-- [ ] Расширить палитры по праздникам, сезонам, природе (включая горы/песок/глину),
-  цветовым семействам и применению; карточки 5–7 оттенков, рекомендации по теме,
-  характер яркости, свои варианты и референсы.
+- [x] Расширить палитры по праздникам, сезонам, природе (включая горы/песок/глину),
+  цветовым семействам и применению; карточки ровно по 5 оттенков, рекомендации по
+  теме/контексту, характер палитры, свои варианты и переход к палитре из референса.
+- [x] Добавить локальный `Holiday Profile` first wave: Christmas, Halloween, Easter,
+  Valentine’s Day, Thanksgiving, 4th of July / Independence Day, St. Patrick’s Day,
+  Baby Shower, Birthday, First Birthday. Профиль влияет на palette/accessories/props/
+  decor/compositions/mood/background hints и передаётся в planning request без
+  отдельного API-вызова. Mother’s Day / Father’s Day не включать в first wave.
+- [x] Зафиксировать каноничные holiday colors: classic American Christmas и classic
+  Halloween; не использовать случайные «красивые» цвета вместо тематических кодов.
+- [x] Использовать `Holiday PRO Prompt builder.xlsx` только как структурный источник
+  категорий/идей, без прямого копирования чужой логики.
+  Проверка holiday/palette increment: focused 35 passed + 11 subtests; full isolated
+  pytest 1403 passed / 57 skipped / 2 deselected / 233 subtests (65.77s).
 - [ ] Проверить все пользовательские поверхности, общие/расширенные настройки,
   справку, ошибки, прогресс, диагностику и выдачу: нигде не раскрывать название
   способа удаления фона или технический цвет. Внутренние проверки сохранить.
