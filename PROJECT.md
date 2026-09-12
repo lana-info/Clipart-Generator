@@ -1,5 +1,9 @@
 # Vibix Images
 
+## Wreath/frame interior-opening QC checkpoint, 2026-09-12
+
+Final Clipart PNG preflight now uses recipe `object_id`/role to enable an extra local Review check for wreaths and frame-like borders. A bounded 256×256 alpha preview accepts meaningful transparent center space (including an intentionally open wreath) or a significant enclosed transparent region. Missing/filled interior space is a Review reason, not a hard blocker; hero/decor outputs are not subjected to this rule. The check is read-only, makes no provider call and does not alter PNG bytes. Labels remain separate future semantics rather than inheriting wreath rules. Focused alpha/results/export verification: 102 passed + 5 subtests; full isolated pytest: 1457 passed, 57 skipped, 2 deselected, 235 subtests in 63.54s.
+
 ## Commercial Clipart prompt guidance checkpoint, 2026-09-12
 
 Clipart planning now has a deterministic collection-first commercial guidance layer derived from owner-provided Etsy bundle/prompt material as structural inspiration, not copied prompt templates. The planner explicitly asks for commercially useful roles, no filler, controlled variety and no near-duplicates while preserving one style/palette direction. Final object prompt compilation adds local cutout-quality guidance (full visibility, safe margins, readable silhouette, no crop or accidental extras) plus role-specific constraints for compositions, wreaths, borders and decor. These rules do not replace the internal transparent-background/chroma contract and make no provider call. Future backlog keeps Lettering, Prompt Doctor and Etsy/Pinterest/listing-cover strategy separate from the active Clipart module; the durable roadmap is `FUTURE_STUDIO_MODULES.ru.md`. Focused prompt/planner verification: 70 passed + 23 subtests; full isolated pytest: 1453 passed, 57 skipped, 2 deselected, 235 subtests in 64.65s.

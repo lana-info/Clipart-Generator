@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections import deque
 from pathlib import Path
 
 from PIL import Image, ImageColor, UnidentifiedImageError
@@ -54,8 +55,54 @@ def _parse_residue_hint(value: str | None) -> tuple[int, int, int] | None:
         return None
 
 
-def inspect_alpha_png(path: str | Path, *, residue_hint: str | None = None) -> AlphaQcReport:
+def _has_interior_opening(alpha: Image.Image) -> bool:
+    """Detect meaningful central or enclosed transparent space for a wreath/frame."""
+    sample = alpha.copy()
+    sample.thumbnail((256, 256))
+    width, height = sample.size
+    if width < 3 or height < 3:
+        return False
+    pixels = sample.load()
+    center_left, center_right = max(1, int(width * 0.35)), min(width - 1, int(width * 0.65))
+    center_top, center_bottom = max(1, int(height * 0.35)), min(height - 1, int(height * 0.65))
+    center_total = max(1, (center_right - center_left) * (center_bottom - center_top))
+    center_transparent = sum(
+        1 for y in range(center_top, center_bottom)
+        for x in range(center_left, center_right) if pixels[x, y] <= 8
+    )
+    if center_transparent >= max(16, int(center_total * 0.25)):
+        return True
+    transparent = bytearray(width * height)
+    for y in range(height):
+        base = y * width
+        for x in range(width):
+            transparent[base + x] = 1 if pixels[x, y] <= 8 else 0
+    outside = bytearray(width * height)
+    queue = deque()
+    def add(x, y):
+        index = y * width + x
+        if transparent[index] and not outside[index]:
+            outside[index] = 1
+            queue.append((x, y))
+    for x in range(width):
+        add(x, 0); add(x, height - 1)
+    for y in range(1, height - 1):
+        add(0, y); add(width - 1, y)
+    while queue:
+        x, y = queue.popleft()
+        if x: add(x - 1, y)
+        if x + 1 < width: add(x + 1, y)
+        if y: add(x, y - 1)
+        if y + 1 < height: add(x, y + 1)
+    enclosed = sum(1 for index, value in enumerate(transparent) if value and not outside[index])
+    return enclosed >= max(16, int(width * height * 0.005))
+
+
+def inspect_alpha_png(path: str | Path, *, residue_hint: str | None = None,
+                      expect_interior_opening: bool = False) -> AlphaQcReport:
     """Inspect one final PNG without modifying it or calling external services."""
+    if type(expect_interior_opening) is not bool:
+        raise ValueError('Неверный режим проверки внутреннего отверстия')
     source = Path(path)
     try:
         if not source.is_file() or source.stat().st_size > MAX_QC_BYTES:
@@ -132,6 +179,13 @@ def inspect_alpha_png(path: str | Path, *, residue_hint: str | None = None) -> A
             'touches_edge', 'review',
             'Видимые пиксели доходят до края холста; объект может быть обрезан или рядом остался мусор.',
             'Откройте файл и проверьте края. Исправьте изображение или исключите дизайн.',
+        ))
+
+    if expect_interior_opening and not _has_interior_opening(alpha):
+        issues.append(_issue(
+            'missing_interior_opening', 'review',
+            'Внутреннее отверстие венка или рамки выглядит закрытым либо залитым.',
+            'Проверьте центр на контрастном фоне. Очистите внутреннее пространство или исключите дизайн.',
         ))
 
     hint = _parse_residue_hint(residue_hint)

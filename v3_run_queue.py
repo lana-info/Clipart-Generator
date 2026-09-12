@@ -1940,6 +1940,21 @@ class RunResultsPage(QWidget):
         requested = {
             str(Path(path).resolve()) for path in (paths if paths is not None else self._export_paths())
         }
+        opening_roles = {}
+        recipe_data = self.state.clipart.recipe
+        if isinstance(recipe_data, dict):
+            try:
+                from studio_clipart_recipe import ClipartRecipe
+                recipe = ClipartRecipe.from_dict(recipe_data)
+                opening_roles = {}
+                for obj in recipe.objects:
+                    role = obj['role']
+                    text = ' '.join(str(obj.get(key) or '') for key in ('name', 'layout')).casefold()
+                    opening_roles[obj['id']] = (
+                        role == 'wreath' or (role == 'border' and ('frame' in text or 'рамк' in text))
+                    )
+            except (TypeError, ValueError):
+                opening_roles = {}
         reports = []
         seen = set()
         for item in self.session.items:
@@ -1958,9 +1973,11 @@ class RunResultsPage(QWidget):
                     continue
             except ValueError:
                 result_kind = 'legacy'
+            object_id = str(payload.get('object_id') or '').strip()
             report = inspect_alpha_png(
                 resolved,
                 residue_hint=str(payload.get('chroma_key_color') or '') or None,
+                expect_interior_opening=bool(opening_roles.get(object_id, False)),
             )
             reports.append(report)
             seen.add(resolved)

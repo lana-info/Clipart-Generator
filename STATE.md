@@ -2,6 +2,10 @@
 
 Updated: 2026-09-12
 
+## Current handoff: wreath/frame interior-opening QC implemented, 2026-09-12
+
+`studio_alpha_qc.inspect_alpha_png()` now accepts a local `expect_interior_opening` contract. `RunResultsPage` derives it only from the current Clipart recipe object role (`wreath`, plus frame-like `border` based on object semantics) via persisted `object_id`. The detector works on a maximum 256×256 alpha preview, accepts meaningful transparent center space or a significant enclosed transparent region, and treats missing interior space as Review (`missing_interior_opening`). It never hard-blocks on this heuristic and does not affect hero/composition/decor unless separately requested. Focused contour: 102 passed + 5 subtests. Full isolated pytest: 1457 passed, 57 skipped, 2 deselected, 235 subtests in 63.54s.
+
 ## Current handoff: commercial Clipart prompt guidance implemented, 2026-09-12
 
 Owner-provided Etsy Bundle Studio prompt/knowledge material was reviewed for reusable product rules. New local `studio_commercial_prompt_guidance.py` adds collection-first planning hints (commercial purpose, no filler, controlled variety, no near-duplicates, reusable design assets) and role-specific direction for hero/composition/wreath/border/decor. `planning_request()` carries this bounded local guidance and `studio_text_client` tells the planner to use it without changing Style/Holiday/Palette ownership. `compile_objects()` adds full-visibility/margin/readable-silhouette quality and role-specific crop/overlap/opening/fragment constraints. The owner material is treated as structural inspiration; long external prompt templates are not copied into every request, and Vibix internal background-preparation rules remain authoritative. Focused: 70 passed + 23 subtests. Full isolated pytest: 1453 passed, 57 skipped, 2 deselected, 235 subtests in 64.65s. No provider call/build/deploy.

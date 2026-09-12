@@ -117,3 +117,52 @@ def test_too_many_semitransparent_subject_pixels_are_review_with_specific_reason
     issue = next(issue for issue in report.issues if issue.code == 'too_translucent')
     assert 'полупрозрач' in issue.message.casefold()
     assert issue.action
+
+
+def test_expected_interior_opening_accepts_clear_frame_center(tmp_path):
+    path = tmp_path / 'frame.png'
+    image = Image.new('RGBA', (100, 100), (0, 0, 0, 0))
+    for y in range(20, 80):
+        for x in range(20, 80):
+            if not (35 <= x < 65 and 35 <= y < 65):
+                image.putpixel((x, y), (120, 90, 60, 255))
+    _save(path, image)
+
+    report = inspect_alpha_png(path, expect_interior_opening=True)
+
+    assert not any(issue.code == 'missing_interior_opening' for issue in report.issues)
+
+
+def test_expected_interior_opening_reviews_filled_center(tmp_path):
+    path = tmp_path / 'filled-wreath.png'
+    image = Image.new('RGBA', (100, 100), (0, 0, 0, 0))
+    for y in range(20, 80):
+        for x in range(20, 80):
+            image.putpixel((x, y), (120, 90, 60, 255))
+    _save(path, image)
+
+    report = inspect_alpha_png(path, expect_interior_opening=True)
+
+    issue = next(issue for issue in report.issues if issue.code == 'missing_interior_opening')
+    assert report.status == 'review'
+    assert 'внутрен' in issue.message.casefold()
+    assert 'отверст' in issue.message.casefold() or 'простран' in issue.message.casefold()
+    assert issue.action
+
+
+def test_expected_interior_opening_accepts_center_space_connected_to_outer_background(tmp_path):
+    path = tmp_path / 'open-wreath.png'
+    image = Image.new('RGBA', (100, 100), (0, 0, 0, 0))
+    for y in range(20, 80):
+        for x in range(20, 80):
+            if not (35 <= x < 65 and 35 <= y < 65):
+                image.putpixel((x, y), (120, 90, 60, 255))
+    # Open a narrow channel from the center to the outside, like an intentionally open wreath.
+    for y in range(0, 36):
+        for x in range(48, 52):
+            image.putpixel((x, y), (0, 0, 0, 0))
+    _save(path, image)
+
+    report = inspect_alpha_png(path, expect_interior_opening=True)
+
+    assert not any(issue.code == 'missing_interior_opening' for issue in report.issues)

@@ -1885,3 +1885,46 @@ def test_run_results_quality_fix_maps_output_path_back_to_item(tmp_path):
     page._request_quality_fix(str(output.resolve()))
     assert opened == [0]
     page.close()
+
+
+def test_run_results_requests_interior_opening_qc_for_wreath_role_only(tmp_path, monkeypatch):
+    app = QApplication.instance() or QApplication([])
+    from v3_run_queue import RunItem
+    from studio_clipart_recipe import ClipartRecipe
+    from studio_clipart_objects import fill_recipe
+    from studio_alpha_qc import AlphaQcReport
+
+    recipe = ClipartRecipe(theme='Holiday')
+    recipe.total = 4
+    recipe.counts = dict(hero=1, composition=0, wreath=1, border=2, decor=0)
+    recipe.objects = fill_recipe([], recipe.counts)
+    hero = next(item for item in recipe.objects if item['role'] == 'hero')
+    wreath = next(item for item in recipe.objects if item['role'] == 'wreath')
+    borders = [item for item in recipe.objects if item['role'] == 'border']
+    borders[0]['name'] = 'Decorative frame'
+    borders[1]['name'] = 'Floral border'
+    cases = [('hero', hero), ('wreath', wreath), ('frame', borders[0]), ('border', borders[1])]
+    paths = {}
+    items = []
+    for index, (label, obj) in enumerate(cases, 1):
+        path = tmp_path / f'{label}.png'
+        Image.new('RGBA', (20, 20), (0, 0, 0, 0)).save(path)
+        paths[label] = path
+        items.append(RunItem(index, label, status=RunItemStatus.SUCCEEDED, output_path=str(path),
+                             payload={'result_kind': 'clipart', 'object_id': obj['id']}))
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.recipe = recipe.to_dict()
+    page = RunResultsPage(state)
+    page.session = type('Session', (), {'items': items})()
+    seen = {}
+    def fake(path, **kwargs):
+        seen[Path(path).name] = kwargs.get('expect_interior_opening')
+        return AlphaQcReport(str(path), 'ok', ())
+    monkeypatch.setattr('studio_alpha_qc.inspect_alpha_png', fake)
+
+    page._alpha_qc_reports([path.resolve() for path in paths.values()])
+
+    assert seen == {
+        'hero.png': False, 'wreath.png': True, 'frame.png': True, 'border.png': False,
+    }
+    page.close()
