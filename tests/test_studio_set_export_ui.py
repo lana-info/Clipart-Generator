@@ -31,6 +31,7 @@ def test_manual_matrix_changes_membership_without_confirmation_checkbox(images):
     dialog = SetExportDialog(images, membership=membership)
     dialog._show_manual_editor()
     dialog.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
+    dialog._save_membership()
     groups = dialog.groups()
     assert [group['title'] for group in groups] == ['Полный']
     assert len(groups[0]['images']) == 3
@@ -341,3 +342,81 @@ def test_summary_warning_explains_action_and_blocks_export(images):
     dialog.review_now_button.click()
     assert dialog.stack.currentWidget() is dialog.manual_page
     dialog.close()
+
+
+def test_bundle_export_issues_deduplicates_same_png_for_same_object(images):
+    from studio_bundle_planner import propose_bundle_plan
+    from studio_clipart_objects import fill_recipe
+    from studio_clipart_recipe import ClipartRecipe
+    recipe = ClipartRecipe()
+    recipe.select(8)
+    recipe.objects = fill_recipe([], recipe.counts)
+    recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.recipe = recipe.to_dict()
+    page = RunResultsPage(state)
+    root = images[0].parent
+    object_id = recipe.bundle_plan['sets'][-1]['item_ids'][0]
+    page.session = SimpleNamespace(running=False, output_dir=root, items=[
+        RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+        RunItem(2, 'duplicate record', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+    ])
+    issues = page._bundle_export_issues()
+    assert not any(issue['object_id'] == object_id and issue['kind'] == 'ambiguous' for issue in issues)
+    page.close()
+
+
+def test_unsaved_manual_membership_does_not_change_summary_or_export_groups(images):
+    membership = _membership_for_sets(images, ['Мини', 'Полный'])
+    dialog = SetExportDialog(images, membership=membership)
+    before = [(group['title'], len(group['images'])) for group in dialog.groups()]
+    dialog._show_manual_editor()
+    dialog.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
+    dialog._show_summary()
+    after = [(group['title'], len(group['images'])) for group in dialog.groups()]
+    assert after == before
+    key = str(images[0].resolve())
+    assert dialog.saved_membership[key]['memberships'][0]['included'] is True
+    dialog.close()
+
+
+def test_saved_manual_choice_resolves_ambiguous_issue_but_missing_stays_blocking(images):
+    membership = _membership_for_sets(images, ['Мини', 'Полный'])
+    ambiguous_paths = [str(images[0].resolve()), str(images[1].resolve())]
+    issues = [
+        {'kind': 'ambiguous', 'object_id': 'a', 'count': 2, 'paths': ambiguous_paths},
+        {'kind': 'missing', 'object_id': 'b', 'count': 0, 'paths': []},
+    ]
+    dialog = SetExportDialog(images, membership=membership, review_issues=issues)
+    dialog._show_manual_editor()
+    # Exclude the second variant from every set; keep the first variant selected.
+    for column in range(1, dialog.table.columnCount()):
+        dialog.table.item(1, column).setCheckState(Qt.CheckState.Unchecked)
+    dialog._save_membership()
+    assert [issue['kind'] for issue in dialog.review_issues] == ['missing']
+    assert not dialog.export_button.isEnabled()
+    dialog.close()
+
+
+def test_bundle_membership_seed_deduplicates_duplicate_session_records(images):
+    from studio_bundle_planner import propose_bundle_plan
+    from studio_clipart_objects import fill_recipe
+    from studio_clipart_recipe import ClipartRecipe
+    recipe = ClipartRecipe()
+    recipe.select(8)
+    recipe.objects = fill_recipe([], recipe.counts)
+    recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.recipe = recipe.to_dict()
+    page = RunResultsPage(state)
+    root = images[0].parent
+    object_id = recipe.bundle_plan['sets'][-1]['item_ids'][0]
+    page.session = SimpleNamespace(running=False, output_dir=root, items=[
+        RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+        RunItem(2, 'same file again', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': object_id}),
+    ])
+    assert page._seed_bundle_membership()
+    key = str(images[0].resolve())
+    assert key in state.clipart.export_membership
+    assert state.clipart.export_membership[key]['memberships']
+    page.close()

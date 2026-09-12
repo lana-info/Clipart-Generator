@@ -1860,12 +1860,12 @@ class RunResultsPage(QWidget):
             except OSError:
                 continue
             if object_id and resolved in export_paths:
-                by_object.setdefault(object_id, []).append(resolved)
+                by_object.setdefault(object_id, set()).add(resolved)
         changed = False
         for object_id, outputs in by_object.items():
             if len(outputs) != 1:
                 continue
-            path = outputs[0]
+            path = next(iter(outputs))
             if path in membership:
                 continue
             links = [
@@ -1905,28 +1905,29 @@ class RunResultsPage(QWidget):
                 if object_id not in seen:
                     expected.append(object_id)
                     seen.add(object_id)
-        counts = dict.fromkeys(expected, 0)
+        paths_by_object = {object_id: set() for object_id in expected}
         export_paths = {str(path.resolve()) for path in self._export_paths()}
         for item in self.session.items:
             if (item.status is not RunItemStatus.SUCCEEDED or not item.output_path
                     or not isinstance(item.payload, dict)):
                 continue
             object_id = str(item.payload.get('object_id') or '').strip()
-            if object_id not in counts:
+            if object_id not in paths_by_object:
                 continue
             try:
                 resolved = str(Path(item.output_path).resolve())
             except OSError:
                 continue
             if resolved in export_paths:
-                counts[object_id] += 1
+                paths_by_object[object_id].add(resolved)
         issues = []
         for object_id in expected:
-            count = counts[object_id]
+            paths = sorted(paths_by_object[object_id])
+            count = len(paths)
             if count == 0:
-                issues.append({'kind': 'missing', 'object_id': object_id, 'count': 0})
+                issues.append({'kind': 'missing', 'object_id': object_id, 'count': 0, 'paths': []})
             elif count > 1:
-                issues.append({'kind': 'ambiguous', 'object_id': object_id, 'count': count})
+                issues.append({'kind': 'ambiguous', 'object_id': object_id, 'count': count, 'paths': paths})
         return issues
 
     def _export_sets(self):

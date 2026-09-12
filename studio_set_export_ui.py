@@ -52,7 +52,7 @@ class SetExportDialog(QDialog):
                     {key: {'title': 'Набор 1', 'included': True}}
                 ))
         self.saved_membership = saved
-        self.review_issues = tuple(review_issues or ())
+        self.review_issues = [dict(issue) for issue in (review_issues or ())]
         self.worker = None
         self.exported = []
         self._set_columns = []
@@ -309,16 +309,39 @@ class SetExportDialog(QDialog):
             return
         self.membership_saved.emit(value)
         self.saved_membership = value
+        self._resolve_review_issues(value)
         self.status.setText('Состав наборов сохранён. Экспорт не запускался.')
         self._refresh_summary()
         self._show_summary()
 
+
+    def _resolve_review_issues(self, membership):
+        unresolved = []
+        for issue in self.review_issues:
+            if issue.get('kind') != 'ambiguous':
+                unresolved.append(issue)
+                continue
+            paths = issue.get('paths')
+            if not isinstance(paths, (list, tuple)) or not paths:
+                unresolved.append(issue)
+                continue
+            active = 0
+            for raw_path in paths:
+                item = membership.get(str(Path(raw_path).resolve()))
+                if item and any(link.get('included') for link in item.get('memberships', ())):
+                    active += 1
+            if active != 1:
+                unresolved.append(issue)
+        self.review_issues = unresolved
+
     def _manual_changed(self, *_):
         self.status.clear()
 
-    def groups(self):
+    def groups(self, membership=None):
         groups = OrderedDict()
-        membership = self._membership()
+        if membership is None:
+            from studio_export_membership import validate_export_membership
+            membership = validate_export_membership(self.saved_membership)
         for path in self.paths:
             for link in membership[str(path)]['memberships']:
                 if link['included']:
