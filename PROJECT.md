@@ -11,13 +11,18 @@ hovering a filename shows a bounded PNG preview beside the cursor.
 
 Bundle-result review is wired to the current run: missing object results and
 multiple successful variants are reported, never auto-selected, and block export
-until reviewed. The UI accepts arbitrary set counts; the current automatic planner
-still proposes its existing nested tier plan and is a separate follow-up for richer
-6+ thematic automatic proposals. Real 1120x780 Qt proofs are under
-`docs/ui/3.2/auto-set-export-proposal/`. Focused UI/integration checks: 82 passed
-+ 5 subtests. Full isolated pytest: 1383 passed, 57 skipped, 2 deselected,
-232 subtests. Independent final review: NO P1/P2 FINDINGS. No build, paid API,
-workflow dispatch or deployment.
+until reviewed. Independent review of `3d48468` found three P2 state/counting
+problems; all are fixed in `5688c1a`, including unique-path ambiguity counting,
+saved-only export state, and clearing a resolved ambiguous choice while missing
+results stay blocking. The UI accepts arbitrary set counts.
+
+Planner schema v2 adds deterministic thematic sets alongside nested commercial
+tiers: a balanced 30-image collection yields 6 useful sets and larger collections
+can yield 7-8. Legacy v1 plans remain valid and migrate without changing commercial
+set IDs; replanning preserves stable IDs and user titles. No provider or paid call
+is involved. Combined final regression: 1390 passed, 57 skipped, 2 deselected,
+233 subtests; local read-only diff review found no new P1/P2. Real 1120x780 Qt proofs are under `docs/ui/3.2/auto-set-export-proposal/`.
+No build, paid API, workflow dispatch or deployment.
 
 
 Many-to-many export membership завершена после preservation commit `40ceffa`.

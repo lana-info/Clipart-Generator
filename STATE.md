@@ -20,10 +20,23 @@ pytest: 1383 passed, 57 skipped, 2 deselected, 232 subtests in 61.09s. Final
 independent review: NO P1/P2 FINDINGS. Real Qt proofs are in
 `docs/ui/3.2/auto-set-export-proposal/`. No build, paid calls, actions or deploy.
 
-Next product gap from owner clarification: UI already supports 6+ arbitrary sets,
-but the deterministic automatic planner still emits only the existing nested
-commercial tiers. Decide/implement richer automatic thematic sets before treating
-6+ automatic proposals as complete, then continue palette expansion and UX audit.
+Independent read-only review of commit `3d48468` found three P2 export issues:
+duplicate session records for one PNG were counted as ambiguous, unsaved matrix
+changes affected export, and manual resolution could not clear an ambiguity block.
+All three are fixed in `5688c1a`; the same-path duplicate seeding path was also
+hardened. Review-fix verification: 21 focused passed; full isolated pytest 1387
+passed, 57 skipped, 2 deselected, 232 subtests.
+
+Automatic planner expansion is now ready for commit: schema v2 keeps nested
+Mini/Standard/Maxi/Full Bundle and adds deterministic thematic sets from object
+roles. A 30-image balanced collection proposes 6 useful sets; larger collections
+can propose 7-8. Empty/exact-duplicate sets are rejected, stable IDs and user titles
+survive replanning, and legacy schema v1 validates/migrates without changing
+commercial set IDs. Combined targeted verification after `5688c1a`: 128 passed +
+32 subtests. Final combined full isolated pytest: 1390 passed, 57 skipped,
+2 deselected, 233 subtests in 60.61s. Local read-only diff review found no new
+P1/P2. Per owner decision, external Codex CLI review is no longer a mandatory gate
+when unavailable. No build, paid calls, workflow dispatch or deploy.
 
 
 ## Current handoff: many-to-many completed, 2026-09-11
