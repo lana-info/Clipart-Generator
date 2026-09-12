@@ -1885,6 +1885,50 @@ class RunResultsPage(QWidget):
             self.membership_changed.emit()
         return changed
 
+    def _bundle_export_issues(self):
+        if self.state.mode is not ProjectMode.CLIPART or not self.session:
+            return []
+        recipe_data = self.state.clipart.recipe
+        if not isinstance(recipe_data, dict):
+            return []
+        try:
+            from studio_clipart_recipe import ClipartRecipe
+            from studio_bundle_planner import validate_bundle_plan
+            recipe = ClipartRecipe.from_dict(recipe_data)
+            plan = validate_bundle_plan(recipe.bundle_plan, recipe.objects)
+        except (TypeError, ValueError):
+            return []
+        expected = []
+        seen = set()
+        for entry in plan['sets']:
+            for object_id in entry['item_ids']:
+                if object_id not in seen:
+                    expected.append(object_id)
+                    seen.add(object_id)
+        counts = dict.fromkeys(expected, 0)
+        export_paths = {str(path.resolve()) for path in self._export_paths()}
+        for item in self.session.items:
+            if (item.status is not RunItemStatus.SUCCEEDED or not item.output_path
+                    or not isinstance(item.payload, dict)):
+                continue
+            object_id = str(item.payload.get('object_id') or '').strip()
+            if object_id not in counts:
+                continue
+            try:
+                resolved = str(Path(item.output_path).resolve())
+            except OSError:
+                continue
+            if resolved in export_paths:
+                counts[object_id] += 1
+        issues = []
+        for object_id in expected:
+            count = counts[object_id]
+            if count == 0:
+                issues.append({'kind': 'missing', 'object_id': object_id, 'count': 0})
+            elif count > 1:
+                issues.append({'kind': 'ambiguous', 'object_id': object_id, 'count': count})
+        return issues
+
     def _export_sets(self):
         if self.state.mode is not ProjectMode.CLIPART:
             return
@@ -1892,7 +1936,10 @@ class RunResultsPage(QWidget):
         paths = self._export_paths()
         if paths:
             from studio_set_export_ui import SetExportDialog
-            dialog = SetExportDialog(paths, self, membership=self.state.clipart.export_membership)
+            dialog = SetExportDialog(
+                paths, self, membership=self.state.clipart.export_membership,
+                review_issues=self._bundle_export_issues(),
+            )
             dialog.membership_saved.connect(self._save_export_membership)
             dialog.exec()
 

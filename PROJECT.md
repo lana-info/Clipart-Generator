@@ -2,6 +2,24 @@
 
 ## Current handoff, 2026-09-11
 
+Automatic set export UI is now summary-first. The main screen shows only unique
+PNG count and dynamic set count, proposed-set cards and `Создать наборы`; the
+manual membership matrix opens only via `Изменить состав наборов`. The old
+confirmation checkbox, technical PDF/manifest wording and redundant Close action
+are removed. Manual headers/checks are centered, `К наборам` fits its label, and
+hovering a filename shows a bounded PNG preview beside the cursor.
+
+Bundle-result review is wired to the current run: missing object results and
+multiple successful variants are reported, never auto-selected, and block export
+until reviewed. The UI accepts arbitrary set counts; the current automatic planner
+still proposes its existing nested tier plan and is a separate follow-up for richer
+6+ thematic automatic proposals. Real 1120x780 Qt proofs are under
+`docs/ui/3.2/auto-set-export-proposal/`. Focused UI/integration checks: 82 passed
++ 5 subtests. Full isolated pytest: 1383 passed, 57 skipped, 2 deselected,
+232 subtests. Independent final review: NO P1/P2 FINDINGS. No build, paid API,
+workflow dispatch or deployment.
+
+
 Many-to-many export membership завершена после preservation commit `40ceffa`.
 Legacy `path -> {title, included}` мигрирует в version 2 со стабильными asset/set
 ID; один PNG может входить в несколько комплектов независимо, contour-copy

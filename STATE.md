@@ -2,6 +2,30 @@
 
 Updated: 2026-09-11
 
+## Current handoff: automatic set export UI completed, 2026-09-11
+
+Approved export redesign is implemented. Summary is primary; manual membership
+editing is optional and isolated on its own matrix screen. Main UI shows unique PNG
+count + dynamic set count, uses plain-language delivery wording and one stable
+`Создать наборы` action. No confirmation checkbox or redundant Close button.
+Hovering a filename in the manual matrix opens a bounded preview beside the mouse.
+The return button is sized to its label.
+
+Current-run bundle issues are derived from stable object IDs: zero successful
+exportable PNG => missing, more than one => ambiguous. Either blocks export and
+shows `Проверить сейчас`; no variant is silently selected. Existing manual
+assignments/exclusions and unrelated historical memberships remain preserved.
+Focused export/queue/contour regression: 82 passed + 5 subtests. Full isolated
+pytest: 1383 passed, 57 skipped, 2 deselected, 232 subtests in 61.09s. Final
+independent review: NO P1/P2 FINDINGS. Real Qt proofs are in
+`docs/ui/3.2/auto-set-export-proposal/`. No build, paid calls, actions or deploy.
+
+Next product gap from owner clarification: UI already supports 6+ arbitrary sets,
+but the deterministic automatic planner still emits only the existing nested
+commercial tiers. Decide/implement richer automatic thematic sets before treating
+6+ automatic proposals as complete, then continue palette expansion and UX audit.
+
+
 ## Current handoff: many-to-many completed, 2026-09-11
 
 Many-to-many export membership завершена. Legacy назначения мигрируют в version 2

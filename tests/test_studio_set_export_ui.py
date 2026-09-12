@@ -26,34 +26,30 @@ def images(tmp_path):
     app.processEvents()
 
 
-def test_membership_and_review_invalidation(images):
-    dialog = SetExportDialog(images)
-    dialog.table.item(2, 0).setCheckState(Qt.CheckState.Unchecked)
-    dialog.table.item(1, 1).setText('Второй набор')
-    assert [len(group['images']) for group in dialog.groups()] == [1, 1]
-    dialog.reviewed.setChecked(True)
-    dialog.table.item(1, 1).setText('Изменённый набор')
-    assert not dialog.reviewed.isChecked()
-    dialog.table.item(1, 1).setText('')
-    with pytest.raises(ValueError):
-        dialog.groups()
+def test_manual_matrix_changes_membership_without_confirmation_checkbox(images):
+    membership = _membership_for_sets(images, ['Мини', 'Полный'])
+    dialog = SetExportDialog(images, membership=membership)
+    dialog._show_manual_editor()
+    dialog.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
+    groups = dialog.groups()
+    assert [group['title'] for group in groups] == ['Полный']
+    assert len(groups[0]['images']) == 3
     dialog.reject()
 
 
-def test_review_required_before_folder_selection(images, monkeypatch):
+def test_export_opens_folder_without_confirmation_gate(images, monkeypatch):
     dialog = SetExportDialog(images)
     calls = []
-    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: calls.append(args))
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: calls.append(args) or '')
     dialog._export()
-    assert not calls
+    assert calls
     assert dialog.worker is None
     dialog.reject()
 
 
 def test_real_background_export_two_archives(images, tmp_path, monkeypatch):
-    dialog = SetExportDialog(images)
-    dialog.table.item(2, 1).setText('Второй набор')
-    dialog.reviewed.setChecked(True)
+    membership = _membership_for_sets(images, ['Мини', 'Полный'])
+    dialog = SetExportDialog(images, membership=membership)
     monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(tmp_path))
     dialog._export()
     worker = dialog.worker
@@ -68,7 +64,7 @@ def test_real_background_export_two_archives(images, tmp_path, monkeypatch):
         with ZipFile(archive) as z:
             counts.append(json.loads(z.read('manifest.json'))['count'])
             assert z.read('overview.pdf').startswith(b'%PDF')
-    assert counts == [2, 1]
+    assert counts == [1, 3]
     assert dialog.export_button.isEnabled()
     dialog.reject()
 
@@ -107,13 +103,15 @@ def test_export_hidden_outside_clipart(images):
 def test_membership_save_reopen_and_preserve_other_runs(images, tmp_path):
     state = ProjectState(mode=ProjectMode.CLIPART)
     state.clipart.export_membership = {'/older/result.png': {'title': 'Старый набор', 'included': True}}
+    current = _membership_for_sets(images, ['Мини', 'Полный'])
+    state.clipart.export_membership.update(current)
     page = RunResultsPage(state)
     dialog = SetExportDialog(images, membership=state.clipart.export_membership)
     dialog.membership_saved.connect(page._save_export_membership)
     changed = []
     page.membership_changed.connect(lambda: changed.append(True))
-    dialog.table.item(1, 1).setText('Набор два')
-    dialog.table.item(2, 0).setCheckState(Qt.CheckState.Unchecked)
+    dialog._show_manual_editor()
+    dialog.table.item(1, 1).setCheckState(Qt.CheckState.Unchecked)
     dialog._save_membership()
     assert changed == [True]
     assert '/older/result.png' in state.clipart.export_membership
@@ -121,9 +119,8 @@ def test_membership_save_reopen_and_preserve_other_runs(images, tmp_path):
     save_project_draft(state, path)
     restored = load_project_draft(path)
     reopened = SetExportDialog(images, membership=restored.clipart.export_membership)
-    assert reopened.table.item(1, 1).text() == 'Набор два'
-    assert reopened.table.item(2, 0).checkState() == Qt.CheckState.Unchecked
-    assert not reopened.reviewed.isChecked()
+    reopened._show_manual_editor()
+    assert reopened.table.item(1, 1).checkState() == Qt.CheckState.Unchecked
     for widget in (dialog, reopened, page):
         widget.close()
 
@@ -141,7 +138,7 @@ def test_invalid_membership_cannot_overwrite_draft(images, tmp_path):
 
 def test_many_memberships_edit_save_reopen_preserves_other_links(images, tmp_path):
     from studio_export_membership import validate_export_membership
-    key = str(images[0])
+    key = str(images[0].resolve())
     membership = validate_export_membership({key: {'title': 'Mini', 'included': True},
         '/older/missing.png': {'title': 'Old', 'included': False}})
     for title in ('Standard', 'Maxi', 'Bundle'):
@@ -152,24 +149,21 @@ def test_many_memberships_edit_save_reopen_preserves_other_links(images, tmp_pat
     page = RunResultsPage(state)
     dialog = SetExportDialog([images[0]], membership=membership)
     dialog.membership_saved.connect(page._save_export_membership)
-    assert dialog.table.rowCount() == 4
+    dialog._show_manual_editor()
+    assert dialog.table.rowCount() == 1
+    assert dialog.table.columnCount() == 5
     assert len(dialog.groups()) == 4
-    dialog.reviewed.setChecked(True)
-    dialog.table.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
-    assert not dialog.reviewed.isChecked()
+    dialog.table.item(0, 2).setCheckState(Qt.CheckState.Unchecked)
     dialog._save_membership()
     path = tmp_path / 'many.json'
     save_project_draft(state, path)
     restored = load_project_draft(path)
     reopened = SetExportDialog([images[0]], membership=restored.clipart.export_membership)
+    reopened._show_manual_editor()
     assert [link['included'] for link in restored.clipart.export_membership[key]['memberships']] == [True, False, True, True]
     assert restored.clipart.export_membership['/older/missing.png'] == membership['/older/missing.png']
     assert [group['title'] for group in reopened.groups()] == ['Mini', 'Maxi', 'Bundle']
-    assert not reopened.reviewed.isChecked()
-    # The source assignment and all non-edited IDs remain unchanged.
     assert state.clipart.export_membership[key]['asset_id'] == membership[key]['asset_id']
-    assert [link['set_id'] for link in state.clipart.export_membership[key]['memberships']] == [
-        link['set_id'] for link in membership[key]['memberships']]
     for widget in (dialog, reopened, page):
         widget.close()
 
@@ -226,3 +220,124 @@ def test_bundle_plan_does_not_overwrite_manual_membership_or_choose_ambiguous_va
     assert str(images[1].resolve()) not in state.clipart.export_membership
     assert str(images[2].resolve()) not in state.clipart.export_membership
     page.close()
+
+
+def _membership_for_sets(images, titles):
+    from studio_export_membership import validate_export_membership
+    value = validate_export_membership({str(images[0].resolve()): {'title': titles[0], 'included': True}})
+    key = str(images[0].resolve())
+    for title in titles[1:]:
+        value[key]['memberships'].extend(validate_export_membership(
+            {key: {'title': title, 'included': True}})[key]['memberships'])
+    for image in images[1:]:
+        other = validate_export_membership({str(image.resolve()): {'title': titles[-1], 'included': True}})
+        value.update(other)
+    return value
+
+
+def test_approved_export_summary_is_primary_and_plain_language(images):
+    membership = _membership_for_sets(images, ['Мини', 'Стандарт', 'Макси', 'Полный', 'Персонажи', 'Декор'])
+    dialog = SetExportDialog(images, membership=membership)
+    assert dialog.summary_page.isVisible() or not dialog.isVisible()
+    assert dialog.summary_unique_value.text() == '3'
+    assert dialog.summary_sets_value.text() == '6'
+    assert dialog.export_button.text() == 'Создать наборы'
+    assert dialog.edit_sets_button.text() == 'Изменить состав наборов'
+    assert 'PDF Letter' not in dialog.delivery_note.text()
+    assert 'manifest' not in dialog.delivery_note.text().lower()
+    assert 'лист с превью' in dialog.delivery_note.text()
+    assert not hasattr(dialog, 'reviewed')
+    assert not hasattr(dialog, 'close_button')
+    assert dialog.stack.currentWidget() is dialog.summary_page
+    dialog.close()
+
+
+def test_manual_editor_is_matrix_and_return_label_fits(images):
+    membership = _membership_for_sets(images, ['Мини', 'Стандарт', 'Макси', 'Полный'])
+    dialog = SetExportDialog(images, membership=membership)
+    dialog._show_manual_editor()
+    assert dialog.manual_page.isVisible() or not dialog.isVisible()
+    assert dialog.table.columnCount() == 5
+    assert dialog.table.horizontalHeaderItem(0).text() == 'PNG'
+    assert [dialog.table.horizontalHeaderItem(i).text() for i in range(1, 5)] == ['Мини', 'Стандарт', 'Макси', 'Полный']
+    for column in range(1, dialog.table.columnCount()):
+        assert dialog.table.horizontalHeaderItem(column).textAlignment() & Qt.AlignmentFlag.AlignHCenter
+    assert dialog.return_button.text() == 'К наборам'
+    assert dialog.return_button.minimumWidth() >= dialog.return_button.sizeHint().width()
+    dialog.close()
+
+
+def test_hover_preview_popup_uses_filename_cell_and_cursor_position(images):
+    membership = _membership_for_sets(images, ['Мини', 'Полный'])
+    dialog = SetExportDialog(images, membership=membership)
+    dialog._show_manual_editor()
+    item = dialog.table.item(0, 0)
+    from PyQt6.QtCore import QPoint
+    point = QPoint(240, 180)
+    dialog._show_preview(item, point)
+    assert dialog.preview_popup.isVisible()
+    assert dialog.preview_popup.pixmap() is not None
+    assert not dialog.preview_popup.pixmap().isNull()
+    assert dialog.preview_popup.pos().x() >= point.x()
+    assert dialog.preview_popup.pos().y() >= point.y()
+    dialog._hide_preview()
+    assert not dialog.preview_popup.isVisible()
+    dialog.close()
+
+
+def test_export_no_longer_requires_confirmation_checkbox(images, tmp_path, monkeypatch):
+    membership = _membership_for_sets(images, ['Мини', 'Полный'])
+    dialog = SetExportDialog(images, membership=membership)
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(tmp_path))
+    dialog._export()
+    worker = dialog.worker
+    assert worker is not None
+    loop = QEventLoop()
+    worker.finished.connect(loop.quit)
+    QTimer.singleShot(5000, loop.quit)
+    loop.exec()
+    assert dialog.worker is None
+    assert len(dialog.exported) == 2
+    dialog.close()
+
+
+def test_bundle_export_issues_report_missing_and_ambiguous_results(images):
+    from studio_bundle_planner import propose_bundle_plan
+    from studio_clipart_objects import fill_recipe
+    from studio_clipart_recipe import ClipartRecipe
+    recipe = ClipartRecipe()
+    recipe.select(8)
+    recipe.objects = fill_recipe([], recipe.counts)
+    recipe.bundle_plan = propose_bundle_plan(recipe.objects)
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.recipe = recipe.to_dict()
+    page = RunResultsPage(state)
+    root = images[0].parent
+    ids = recipe.bundle_plan['sets'][-1]['item_ids']
+    page.session = SimpleNamespace(running=False, output_dir=root, items=[
+        RunItem(1, 'v1', status=RunItemStatus.SUCCEEDED, output_path=str(images[0]), payload={'object_id': ids[0]}),
+        RunItem(2, 'v2', status=RunItemStatus.SUCCEEDED, output_path=str(images[1]), payload={'object_id': ids[0]}),
+        RunItem(3, 'failed', status=RunItemStatus.FAILED, output_path='', payload={'object_id': ids[1]}),
+    ])
+    issues = page._bundle_export_issues()
+    assert {issue['kind'] for issue in issues} == {'ambiguous', 'missing'}
+    assert next(issue for issue in issues if issue['kind'] == 'ambiguous')['count'] == 2
+    assert any(issue['object_id'] == ids[1] for issue in issues if issue['kind'] == 'missing')
+    page.close()
+
+
+def test_summary_warning_explains_action_and_blocks_export(images):
+    membership = _membership_for_sets(images, ['Мини', 'Полный'])
+    issues = [
+        {'kind': 'ambiguous', 'object_id': 'a', 'count': 2},
+        {'kind': 'missing', 'object_id': 'b', 'count': 0},
+    ]
+    dialog = SetExportDialog(images, membership=membership, review_issues=issues)
+    assert dialog.issue_panel.isVisible() or not dialog.isVisible()
+    assert '2' in dialog.issue_text.text()
+    assert 'ничего не выбрало автоматически' in dialog.issue_text.text()
+    assert dialog.review_now_button.text() == 'Проверить сейчас'
+    assert not dialog.export_button.isEnabled()
+    dialog.review_now_button.click()
+    assert dialog.stack.currentWidget() is dialog.manual_page
+    dialog.close()
