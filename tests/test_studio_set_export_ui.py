@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QApplication, QFileDialog
 
 from studio_set_export import export_clipart_sets, ExportCancelled
 from studio_set_export_ui import SetExportDialog
-from v3_project_state import ProjectState, ProjectMode, save_project_draft, load_project_draft
+from v3_project_state import ProjectState, ProjectMode, PromptEntry, save_project_draft, load_project_draft
 from v3_run_queue import RunResultsPage, RunItem, RunItemStatus
 
 
@@ -167,6 +167,34 @@ def test_many_memberships_edit_save_reopen_preserves_other_links(images, tmp_pat
     assert state.clipart.export_membership[key]['asset_id'] == membership[key]['asset_id']
     for widget in (dialog, reopened, page):
         widget.close()
+
+
+def test_four_set_memberships_do_not_multiply_paid_generation_or_processing(images):
+    from v3_clipart_flow import fal_endpoint_quantities
+
+    state = ProjectState(mode=ProjectMode.CLIPART)
+    state.clipart.prompts = [PromptEntry(prompt='single commercial asset')]
+    state.clipart.generation.model = 'fal-ai/flux/schnell'
+    operations = state.clipart.operations
+    operations.upscale_before = True
+    operations.upscale_before_provider = 'fal'
+    operations.fal_upscale_model = 'fal-ai/recraft/upscale/crisp'
+    operations.remove_background = True
+    operations.remove_background_provider = 'fal'
+    operations.fal_remove_bg_model = 'fal-ai/birefnet/v2'
+    expected_paid_calls = {
+        'fal-ai/flux/schnell': 1,
+        'fal-ai/recraft/upscale/crisp': 1,
+        'fal-ai/birefnet/v2': 1,
+    }
+    assert fal_endpoint_quantities(state) == expected_paid_calls
+
+    state.clipart.export_membership = _membership_for_sets(
+        [images[0]], ['Мини', 'Стандарт', 'Макси', 'Полный']
+    )
+    links = state.clipart.export_membership[str(images[0].resolve())]['memberships']
+    assert len(links) == 4
+    assert fal_endpoint_quantities(state) == expected_paid_calls
 
 
 def test_bundle_plan_seeds_four_memberships_without_duplicate_generation(images):

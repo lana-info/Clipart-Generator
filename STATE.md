@@ -2,6 +2,16 @@
 
 Updated: 2026-09-12
 
+## Current handoff: cross-cutting bundle regressions completed, 2026-09-12
+
+The many-to-many/export checkpoint now has an explicit no-duplicate-paid-work
+regression in addition to the existing four-membership roundtrip/migration/manual
+independence and user-facing terminology coverage. One generated PNG may belong to
+four sets without changing generation/upscale/background-processing quantities; set
+membership is delivery metadata, not four new paid jobs. Combined focused verification:
+28 passed + 5 subtests. Full isolated pytest: 1416 passed, 57 skipped, 2 deselected,
+233 subtests in 64.49s. No paid provider call, build, workflow dispatch or deployment.
+
 ## Current handoff: Style Profiles implemented, 2026-09-12
 
 Owner-approved Style Profile UI and local architecture are implemented.

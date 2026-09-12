@@ -62,8 +62,12 @@ Focused: 31 passed + 8 subtests; полный isolated suite: 1369 passed, 57 sk
   не копируются. Real Qt proof: `docs/ui/3.2/style-profiles/actual-teddy-christmas-1120x780.png`.
   Focused: 46 passed + 11 subtests; full isolated pytest: 1415 passed / 57 skipped /
   2 deselected / 233 subtests (64.28s).
-- [ ] Регрессии: 1 PNG в 4 комплектах, отсутствие повторных платных задач,
+- [x] Регрессии: 1 PNG в 4 комплектах, отсутствие повторных платных задач,
   roundtrip/миграция, независимые ручные включения и отсутствие технических терминов.
+  Existing many-to-many/export/UX tests покрывают membership и migration; добавлен
+  прямой contract, что четыре комплекта не умножают Fal generation/upscale/background
+  processing quantities. Combined focused: 28 passed + 5 subtests; full isolated
+  pytest: 1416 passed / 57 skipped / 2 deselected / 233 subtests (64.49s).
 
 Many-to-many, автоматическое планирование уровней и привязка плана к готовым
 результатам завершены. Внутренний object_id сохраняется через prompt/edit/queue/retry,

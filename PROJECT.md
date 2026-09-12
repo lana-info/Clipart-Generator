@@ -1,5 +1,14 @@
 # Vibix Images
 
+## Bundle regression checkpoint, 2026-09-12
+
+Cross-cutting regressions now explicitly prove that one PNG can participate in four
+commercial sets without multiplying paid generation or processing quantities. Existing
+coverage already verifies membership migration/roundtrip, independent manual set
+inclusions/exclusions, current-run seeding, ambiguous-variant blocking and hidden
+background implementation terminology. Focused: 28 passed + 5 subtests; full isolated
+pytest: 1416 passed, 57 skipped, 2 deselected, 233 subtests in 64.49s.
+
 ## Style Profiles checkpoint, 2026-09-12
 
 Clipart now has a local Style Profile layer. A collection has one base visual style
