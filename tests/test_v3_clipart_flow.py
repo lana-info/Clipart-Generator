@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QRadioButton,
+    QPushButton,
 )
 from PIL import Image
 
@@ -31,6 +32,7 @@ from v3_clipart_flow import (
     ClipartProjectPage,
     ClipartPromptInputPage,
     ClipartPromptReviewPage,
+    PromptReferenceEditorDialog,
     ClipartReviewRunPage,
     build_clipart_run_request,
     clipart_pipeline_steps,
@@ -644,157 +646,102 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("следующем шаге", page.paste_status_label.text())
         self.assertFalse(hasattr(page, "paste_button"))
 
-    def test_series_chroma_controls_offer_only_approved_materials(self):
+    def test_prompt_input_hides_background_removal_implementation_details(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
-        self.assertEqual(
-            [button.text() for button in page.chroma_material_buttons],
-            [
-                "Акварель",
-                "Тонкие листья",
-                "Хвоя",
-                "Металл",
-                "Лента / сатин",
-                "Прозрачные детали",
-                "Снег / лёд",
-            ],
-        )
-        self.assertFalse(hasattr(page, "chroma_key_custom_color"))
-
-    def test_clipart_chroma_sources_use_three_visible_color_buttons(self):
-        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
-        self.assertEqual(
-            tuple(page.chroma_key_color_buttons),
-            ("blue", "red", "green"),
-        )
-        self.assertEqual(
-            tuple(page.paste_chroma_color_buttons),
-            ("blue", "red", "green"),
-        )
+        visible = " ".join(
+            widget.text() for widget in page.findChildren((QLabel, QCheckBox, QPushButton))
+            if not widget.isHidden()
+        ).casefold()
+        for forbidden in ("chroma", "#0000ff", "синий фон", "красный фон", "зелёный фон"):
+            self.assertNotIn(forbidden, visible)
+        self.assertIn("прозрач", visible)
         self.assertTrue(page.chroma_key_color.isHidden())
-        self.assertTrue(page.paste_chroma_color.isHidden())
+        self.assertTrue(all(button.isHidden() for button in page.chroma_key_color_buttons.values()))
+        self.assertTrue(all(button.isHidden() for button in page.chroma_material_buttons))
 
-        page.paste_chroma_color_buttons["red"].click()
-
-        self.assertEqual(page.paste_chroma_color.currentData(), "red")
-        self.assertTrue(page.paste_chroma_color_buttons["red"].isChecked())
-
-    def test_series_uses_automatic_key_color_even_if_legacy_control_changes(self):
+    def test_series_transparent_background_keeps_automatic_internal_key(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompt_generator.theme = "Watercolor fox"
         state.clipart.prompt_generator.subjects = ["Fox"]
-        state.clipart.prompt_generator.chroma_key_enabled = True
-        state.clipart.prompt_generator.chroma_key_color = "red"
         page = ClipartPromptInputPage(state, lambda: None)
+        page.chroma_key_enabled.setChecked(True)
+        page._preview()
+        self.assertTrue(page._generated_variants)
+        entry = page._generated_variants[0]
+        self.assertTrue(entry.chroma_key_color)
+        self.assertIn("Isolated on a completely flat", entry.prompt)
+        self.assertNotIn("#0000FF", page.preview_label.text())
+        self.assertNotIn("chroma", page.preview_label.text().casefold())
 
-        self.assertTrue(page.chroma_key_color_buttons["red"].isChecked())
-
-        page.chroma_key_color_buttons["green"].click()
-
-        self.assertEqual(page.chroma_key_color.currentData(), "green")
-        self.assertEqual(state.clipart.prompt_generator.chroma_key_color, "green")
-        self.assertIn("#0000FF", page.preview_label.text())
-
-    def test_series_chroma_controls_default_to_blue_and_limit_materials_to_three(self):
-        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
-        self.assertEqual(page.chroma_key_color.currentData(), "blue")
-        watercolor, leaves, needles, metal = page.chroma_material_buttons[:4]
-        watercolor.click()
-        leaves.click()
-        needles.click()
-
-        self.assertTrue(watercolor.isChecked())
-        self.assertTrue(leaves.isChecked())
-        self.assertTrue(needles.isChecked())
-        self.assertFalse(metal.isEnabled())
-
-        watercolor.click()
-
-        self.assertTrue(metal.isEnabled())
-
-    def test_series_chroma_selected_materials_use_dedicated_readable_style(self):
-        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
-        self.assertTrue(page.chroma_material_buttons[0].property("v3ChromaMaterial"))
-
-    def test_clipart_chroma_sources_show_approved_clean_background_advisor(self):
-        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
-        copy = " ".join(
-            label.text() for label in page.chroma_advisor.findChildren(QLabel)
-        )
-        self.assertTrue(page.chroma_advisor.is_expanded)
-        self.assertEqual(
-            page.chroma_advisor.toggle_button.text().replace("\n", " "),
-            "Помощник чистого фона",
-        )
-        self.assertIn("Синий подходит", copy)
-        self.assertIn("Выберите красный фон", copy)
-        self.assertIn("выберите зелёный фон", copy)
-        self.assertIn("выбираются слева", copy)
-        self.assertTrue(
-            page.chroma_advisor.content_layout.alignment()
-            & Qt.AlignmentFlag.AlignTop
-        )
-        self.assertFalse(page.chroma_advisor.isHidden())
-
-        page._select_source(0)
-        self.assertFalse(page.chroma_advisor.isHidden())
-
-        page._select_source(2)
-        self.assertTrue(page.chroma_advisor.isHidden())
-
-    def test_chroma_material_controls_wrap_without_widening_the_prompt_page(self):
-        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
-        generator_layout = page.chroma_material_buttons[0].parentWidget().layout()
-        paste_layout = next(iter(page.paste_chroma_material_buttons.values())).parentWidget().layout()
-
-        self.assertEqual(generator_layout.columnCount(), 2)
-        self.assertEqual(paste_layout.columnCount(), 2)
-
-    def test_chroma_advisor_fits_the_normal_window_without_horizontal_scroll(self):
-        state = ProjectState(mode=ProjectMode.CLIPART)
-        state.set_step(StepId.PROMPTS)
-        shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
-        page = controller.pages[StepId.PROMPTS]
-        page._select_source(1)
-        shell.resize(1120, 780)
-        shell.show()
-        self.app.processEvents()
-
-        self.assertEqual(page.horizontalScrollBar().maximum(), 0)
-
-        shell.close()
-
-    def test_paste_can_append_selected_chroma_material_clause(self):
+    def test_paste_transparent_background_is_automatic_and_nontechnical(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         page = ClipartPromptInputPage(state, lambda: None)
+        self.assertEqual(page.paste_chroma_enabled.text(), "Подготовить прозрачный фон автоматически")
+        self.assertTrue(page.paste_chroma_color.isHidden())
+        self.assertTrue(all(button.isHidden() for button in page.paste_chroma_color_buttons.values()))
+        self.assertTrue(all(button.isHidden() for button in page.paste_chroma_material_buttons.values()))
         page.paste_chroma_enabled.setChecked(True)
-        page.paste_chroma_material_buttons["metal"].setChecked(True)
         page.paste_edit.setPlainText("gold ornament")
-
         page._apply_paste()
+        self.assertTrue(state.clipart.prompts[0].chroma_key_color)
+        self.assertIn("Isolated on a completely flat", state.clipart.prompts[0].prompt)
 
-        self.assertIn("matte brushed metal", state.clipart.prompts[0].prompt)
+    def test_prompt_review_and_editor_hide_internal_background_suffix(self):
+        internal = "Fox\n" + chroma_key_prompt_block("blue")
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry(internal, chroma_key_color="blue")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        page.refresh_from_state()
+        self.assertEqual(page.table.item(0, 0).text(), "Fox")
+        self.assertNotIn("#0000FF", page.table.item(0, 0).text())
+        editor = PromptReferenceEditorDialog(state.clipart.prompts[0])
+        self.assertEqual(editor._prompt_edit.toPlainText(), "Fox")
+        editor._prompt_edit.setPlainText("Edited fox")
+        saved = editor.prompt_entry()
+        self.assertTrue(saved.prompt.startswith("Edited fox"))
+        self.assertIn("Isolated on a completely flat", saved.prompt)
+        editor.close()
 
-    def test_paste_chroma_controls_limit_materials_to_three(self):
+    def test_inline_prompt_edit_preserves_hidden_background_suffix(self):
+        internal = "Fox\n" + chroma_key_prompt_block("blue")
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry(internal, chroma_key_color="blue")]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        page.refresh_from_state()
+        page.table.item(0, 0).setText("Edited fox")
+        self.assertEqual(_visible_prompt := page.table.item(0, 0).text(), "Edited fox")
+        self.assertNotIn("chroma", _visible_prompt.casefold())
+        self.assertTrue(state.clipart.prompts[0].prompt.startswith("Edited fox"))
+        self.assertIn("Isolated on a completely flat", state.clipart.prompts[0].prompt)
+        self.assertEqual(state.clipart.prompts[0].chroma_key_color, "blue")
+
+    def test_prompt_csv_export_hides_internal_background_suffix(self):
+        internal = "Fox\n" + chroma_key_prompt_block("blue")
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "prompts.csv"
+            export_prompt_csv([PromptEntry(internal, chroma_key_color="blue")], path)
+            text = path.read_text(encoding="utf-8-sig")
+        self.assertIn("Fox", text)
+        self.assertNotIn("chroma", text.casefold())
+        self.assertNotIn("#0000FF", text)
+        self.assertNotIn("Isolated on a completely flat", text)
+
+    def test_hidden_background_suffix_does_not_make_empty_user_prompt_valid(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        state.clipart.prompts = [PromptEntry(
+            "Fox\n" + chroma_key_prompt_block("blue"),
+            chroma_key_color="blue",
+        )]
+        page = ClipartPromptReviewPage(state, lambda: None)
+        page.refresh_from_state()
+        page.table.item(0, 0).setText("")
+        self.assertEqual(page.validation_issues(), ("prompt_empty",))
+        with self.assertRaisesRegex(ClipartFlowError, "Пустой промпт"):
+            build_clipart_run_request(state, {"kie_api_key": "test-key"})
+        page.close()
+
+    def test_csv_import_has_no_background_implementation_controls(self):
         page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
-        buttons = page.paste_chroma_material_buttons
-        buttons["watercolor"].click()
-        buttons["thin_leaves"].click()
-        buttons["conifer_needles"].click()
-
-        self.assertTrue(buttons["conifer_needles"].isChecked())
-        self.assertFalse(buttons["metal"].isEnabled())
-
-    def test_csv_import_has_no_chroma_controls(self):
-        page = ClipartPromptInputPage(ProjectState(mode=ProjectMode.CLIPART), lambda: None)
-
         self.assertFalse(hasattr(page, "csv_chroma_enabled"))
         self.assertFalse(hasattr(page, "csv_chroma_material_buttons"))
 
@@ -1040,6 +987,32 @@ class V3ClipartFlowTests(unittest.TestCase):
         review_page._duplicate()
         self.assertEqual([entry.object_id for entry in state.clipart.prompts], ["obj-1", "obj-1"])
 
+    def test_user_visible_clipart_surfaces_hide_background_implementation_names(self):
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        prompt_page = ClipartPromptInputPage(state, lambda: None)
+        processing_page = ClipartProcessingPage(state, lambda: None)
+        forbidden = (
+            "chroma", "birefnet", "rembg", "ben2", "photoroom",
+            "#0000ff", "синий фон", "красный фон", "зелёный фон",
+            "удаление фона",
+        )
+        for page in (prompt_page, processing_page):
+            visible_parts = []
+            for widget_type in (QLabel, QCheckBox, QPushButton):
+                visible_parts.extend(
+                    widget.text() for widget in page.findChildren(widget_type)
+                    if not widget.isHidden()
+                )
+            visible = " ".join(visible_parts).casefold()
+            for token in forbidden:
+                self.assertNotIn(token, visible, (type(page).__name__, token, visible))
+        self.assertIn("прозрач", " ".join(
+            widget.text() for widget in processing_page.findChildren(QLabel)
+            if not widget.isHidden()
+        ).casefold())
+        prompt_page.close()
+        processing_page.close()
+
     def test_processing_page_exposes_every_supported_operation_setting(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
@@ -1097,10 +1070,10 @@ class V3ClipartFlowTests(unittest.TestCase):
             (
                 "Генерация изображения",
                 "Удаление видимой метки",
-                "Апскейл до удаления фона",
+                "Апскейл до подготовки прозрачного фона",
                 "Unsharp Mask",
-                "Удаление фона",
-                "Апскейл после удаления фона",
+                "Подготовка прозрачного фона",
+                "Апскейл после подготовки прозрачного фона",
                 "Очистка края alpha",
                 "Trim",
                 "Очистка данных файла",
@@ -1420,6 +1393,19 @@ class V3ClipartFlowTests(unittest.TestCase):
         self.assertIn("Референс превышает", oversized)
         self.assertIn("10 МБ", oversized)
 
+    def test_runtime_background_errors_hide_internal_method_names(self):
+        for raw in (
+            "Chroma Key фон неоднородный; нужен ровный однотонный фон",
+            "Fal BiRefNet provider failed",
+            "local rembg model failed",
+            "PhotoRoom background removal failed",
+        ):
+            message = _safe_runtime_error(raw)
+            lowered = message.casefold()
+            for forbidden in ("chroma", "birefnet", "rembg", "photoroom"):
+                self.assertNotIn(forbidden, lowered)
+            self.assertIn("прозрач", lowered)
+
     def test_runtime_settings_are_allowlisted_and_project_bounds_win(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-runtime-") as temp:
             state = self.make_state(temp)
@@ -1479,7 +1465,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             widgets["remove_background_provider"].findData("local_rembg")
         )
         self.assertTrue(widgets["local_ben2_alpha_threshold"].isHidden())
-        self.assertFalse(widgets["local_rembg_model"].isHidden())
+        self.assertTrue(widgets["local_rembg_model"].isHidden())
         self.assertTrue(widgets["kie_remove_bg_model"].isHidden())
         widgets["unsharp"].setChecked(True)
         self.assertFalse(widgets["unsharp_amount"].isHidden())

@@ -181,7 +181,7 @@ PROCESSING_RECIPES: dict[str, tuple[str, str, ImageOperationData | None]] = {
     ),
     "prepare_clipart": (
         "Подготовить клипарт",
-        "Локальное удаление фона, очистка края и trim.",
+        "Подготовка прозрачного фона, очистка края и trim.",
         _operations(
             remove_background=True,
             remove_background_provider="local_rembg",
@@ -230,13 +230,13 @@ def _legacy_processing_pipeline_steps(
     if operations.visible_mark_cleanup:
         steps.append("Удаление видимой метки")
     if operations.upscale_before:
-        steps.append("Апскейл до удаления фона")
+        steps.append("Апскейл до подготовки прозрачного фона")
     if operations.unsharp:
         steps.append("Unsharp Mask")
     if operations.remove_background:
-        steps.append("Удаление фона")
+        steps.append("Подготовка прозрачного фона")
     if operations.upscale_after:
-        steps.append("Апскейл после удаления фона")
+        steps.append("Апскейл после подготовки прозрачного фона")
     if operations.edge_shrink:
         steps.append("Очистка края alpha")
     if operations.trim:
@@ -311,17 +311,17 @@ def validate_processing_providers(operations: ImageOperationData) -> None:
             operations.upscale_before_provider,
             "upscale_before",
         ):
-            raise ProcessingFlowError("Провайдер не поддерживает апскейл до удаления фона")
+            raise ProcessingFlowError("Провайдер не поддерживает апскейл до подготовки прозрачного фона")
         if operations.upscale_after and not provider_supports_operation(
             operations.upscale_after_provider,
             "upscale_after",
         ):
-            raise ProcessingFlowError("Провайдер не поддерживает апскейл после удаления фона")
+            raise ProcessingFlowError("Провайдер не поддерживает апскейл после подготовки прозрачного фона")
         if operations.remove_background and not provider_supports_operation(
             operations.remove_background_provider,
             "remove_background",
         ):
-            raise ProcessingFlowError("Провайдер не поддерживает удаление фона")
+            raise ProcessingFlowError("Провайдер не поддерживает подготовку прозрачного фона")
     except KeyError as error:
         raise ProcessingFlowError(
             f"\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u043f\u0440\u043e\u0432\u0430\u0439\u0434\u0435\u0440: {error.args[0]}"
@@ -836,10 +836,10 @@ class _ProcessingStateAdapter:
 class _LegacyProcessingPipelinePage(_ScrollableStepPage):
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить видимую метку — локальная реконструкция пикселей",
-        "upscale_before": "Апскейл до удаления фона — увеличит изображение",
+        "upscale_before": "Апскейл до подготовки прозрачного фона — увеличит изображение",
         "unsharp": "Unsharp Mask — усилит резкость",
         "remove_background": "Удалить фон — создаст прозрачность",
-        "upscale_after": "Апскейл после удаления фона — увеличит PNG",
+        "upscale_after": "Апскейл после подготовки прозрачного фона — увеличит PNG",
         "edge_shrink": "Очистить край alpha — уменьшит цветную кайму",
         "trim": "Trim — обрежет пустые поля",
         "export_300_dpi": "Экспорт 300 DPI — запишет разрешение печати",
@@ -882,7 +882,7 @@ class _LegacyProcessingPipelinePage(_ScrollableStepPage):
         )
         self.remove_background_provider = self._provider_combo(
             provider_layout,
-            "Удаление фона",
+            "Подготовка прозрачного фона",
             "remove_background_provider",
             processing_provider_options("remove_background_provider"),
         )

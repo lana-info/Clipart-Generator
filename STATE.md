@@ -2,6 +2,23 @@
 
 Updated: 2026-09-12
 
+## Current handoff: background-processing UX audit completed, 2026-09-12
+
+User-facing Clipart/Processing surfaces no longer expose chroma-key, technical key
+colors, background-removal provider/model names, BiRefNet/rembg/BEN2/PhotoRoom method
+details, or the generated technical background suffix. The UI uses result-oriented
+copy: automatic transparent-background preparation and edge checking. Prompt preview,
+review table, inline editor, batch preview and exported CSV show only the user-authored
+prompt; the hidden technical suffix is preserved internally through edits and run
+requests. Internal project/runtime fields remain intact for legacy compatibility.
+
+Processing provider/model controls for background preparation stay in internal state but
+are hidden from the user. Runtime errors containing internal removal-method names are
+normalized to a generic transparent-background message; queue progress was already
+result-oriented. Focused Clipart/Processing/run-queue verification: 191 passed + 5
+subtests. Full isolated pytest: 1402 passed, 57 skipped, 2 deselected, 233 subtests in
+61.21s. No paid calls, build, workflow dispatch or deployment.
+
 ## Current handoff: holiday-aware Clipart architecture, 2026-09-12
 
 Owner-approved holiday-aware architecture is implemented locally. New modules

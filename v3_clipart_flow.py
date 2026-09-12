@@ -50,6 +50,7 @@ from PyQt6.QtWidgets import (
 
 from license_client import LicenseError
 from chroma_key import chroma_key_prompt_block
+from chroma_key_selection import select_chroma_key_color
 from provider_error_messages import friendly_provider_error
 from v3_api_settings import estimate_fal_cost
 
@@ -150,8 +151,24 @@ def configure_chroma_material_buttons(buttons: Sequence[QPushButton]) -> None:
 MAX_REFERENCE_FILE_BYTES = 10 * 1024 * 1024
 _DOLLAR_PATTERN = re.compile(r"\$(\d+(?:\.\d+)?)")
 _CHROMA_PROMPT_SUFFIX_MARKER = (
-    "\nIsolated on a completely flat, uniform, solid pure "
+    "Isolated on a completely flat, uniform, solid pure "
 )
+
+
+def _split_user_prompt(prompt: str) -> tuple[str, str]:
+    """Hide the generated background-preparation suffix from user-facing editors."""
+    text = str(prompt or "")
+    index = text.find(_CHROMA_PROMPT_SUFFIX_MARKER)
+    if index < 0:
+        return text, ""
+    suffix_start = index
+    if suffix_start > 0 and text[suffix_start - 1] in " \t\r\n":
+        suffix_start -= 1
+    return text[:suffix_start].rstrip(), text[suffix_start:]
+
+
+def _user_prompt_text(prompt: str) -> str:
+    return _split_user_prompt(prompt)[0]
 
 
 class ClipartFlowError(ValueError):
@@ -562,13 +579,13 @@ def clipart_pipeline_steps(
     if operations.visible_mark_cleanup:
         steps.append("Удаление видимой метки")
     if operations.upscale_before:
-        steps.append("Апскейл до удаления фона")
+        steps.append("Апскейл до подготовки прозрачного фона")
     if operations.unsharp:
         steps.append("Unsharp Mask")
     if operations.remove_background:
-        steps.append("Удаление фона")
+        steps.append("Подготовка прозрачного фона")
     if operations.upscale_after:
-        steps.append("Апскейл после удаления фона")
+        steps.append("Апскейл после подготовки прозрачного фона")
     if operations.edge_shrink:
         steps.append("Очистка края alpha")
     if operations.trim:
@@ -788,10 +805,10 @@ def _validate_alpha_safe_upscale(operations: ImageOperationData) -> None:
         and operations.kie_upscale_after_model == "recraft/crisp-upscale"
     ):
         raise ClipartFlowError(
-            "Recraft Crisp нельзя использовать после удаления фона: "
+            "Recraft Crisp нельзя использовать после подготовки прозрачного фона: "
             "модель не поддерживает прозрачный вход"
         )
-    raise ClipartFlowError("Апскейл после удаления фона должен сохранять прозрачность")
+    raise ClipartFlowError("Апскейл после подготовки прозрачного фона должен сохранять прозрачность")
 
 
 def build_clipart_run_request(
@@ -857,8 +874,8 @@ def build_clipart_run_request(
     for entry in state.clipart.prompts:
         from result_background_policy import keeps_background
         if keeps_background(entry.result_kind) and entry.chroma_key_color:
-            raise ClipartFlowError("Фон, плитка или страница не должны содержать настройку chroma-key")
-        if not entry.prompt.strip():
+            raise ClipartFlowError("Для этого типа результата настройка прозрачного фона недоступна")
+        if not _user_prompt_text(entry.prompt).strip():
             raise ClipartFlowError("Пустой промпт нельзя отправить на генерацию")
         has_references = bool(entry.references)
         contract_model = (
@@ -1008,11 +1025,7 @@ def apply_prompt_text_edit(
         if action in {"prepend", "append"} and not new_text:
             continue
         prompt = result[row].prompt
-        editable_prompt, marker, chroma_suffix = prompt.rpartition(
-            _CHROMA_PROMPT_SUFFIX_MARKER
-        )
-        if not marker:
-            editable_prompt, chroma_suffix = prompt, ""
+        editable_prompt, chroma_suffix = _split_user_prompt(prompt)
         if action == "replace":
             if not find_text or find_text not in editable_prompt:
                 continue
@@ -1025,11 +1038,7 @@ def apply_prompt_text_edit(
             editable_prompt = "\n".join(
                 part for part in (editable_prompt, new_text) if part
             )
-        updated_prompt = (
-            editable_prompt + marker + chroma_suffix
-            if marker
-            else editable_prompt
-        )
+        updated_prompt = editable_prompt + chroma_suffix
         if updated_prompt == prompt:
             continue
         result[row].prompt = updated_prompt
@@ -1112,7 +1121,7 @@ def export_prompt_csv(
         for entry in entries:
             writer.writerow(
                 {
-                    "Prompt": entry.prompt,
+                    "Prompt": _user_prompt_text(entry.prompt),
                     "References": "|".join(entry.references),
                 }
             )
@@ -1378,8 +1387,9 @@ class PromptReferenceEditorDialog(QDialog):
         self._result_kind = entry.result_kind
         self._chroma_key_color = entry.chroma_key_color
         self._object_id = entry.object_id
+        display_prompt, self._technical_prompt_suffix = _split_user_prompt(entry.prompt)
         self.setModal(True)
-        self._prompt_edit = QPlainTextEdit(entry.prompt)
+        self._prompt_edit = QPlainTextEdit(display_prompt)
         self._prompt_edit.setMinimumHeight(120)
         self._references = QListWidget()
         self._references.setIconSize(QSize(120, 120))
@@ -1485,7 +1495,8 @@ class PromptReferenceEditorDialog(QDialog):
         return references[:MAX_REFERENCES_PER_PROMPT]
 
     def prompt_entry(self) -> PromptEntry:
-        return PromptEntry(self.prompt_text(), self.references(),
+        prompt = self.prompt_text() + self._technical_prompt_suffix
+        return PromptEntry(prompt, self.references(),
                            chroma_key_color=self._chroma_key_color,
                            result_kind=self._result_kind, object_id=self._object_id)
 
@@ -1706,8 +1717,8 @@ class PromptBatchEditDialog(QDialog):
             after = self._preview_entries[row].prompt
             if before == after:
                 continue
-            before_preview = before.replace("\n", " ")[:100]
-            after_preview = after.replace("\n", " ")[:100]
+            before_preview = _user_prompt_text(before).replace("\n", " ")[:100]
+            after_preview = _user_prompt_text(after).replace("\n", " ")[:100]
             self.preview_list.addItem(
                 f"{row + 1}. {before_preview}  →  {after_preview}"
             )
@@ -1944,25 +1955,19 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             self.chroma_advisor.setVisible(index in (0, 1))
 
     def _build_chroma_advisor(self) -> AdvancedSection:
-        advisor = AdvancedSection("Помощник чистого фона", tokens=self.tokens)
+        advisor = AdvancedSection("Прозрачный фон", tokens=self.tokens)
         advisor.setMinimumWidth(214)
         advisor.setMaximumWidth(280)
-        advisor.toggle_button.setText("Помощник\nчистого фона")
+        advisor.toggle_button.setText("Прозрачный\nфон")
         advisor.toggle_button.setStyleSheet("font-size: 12px;")
         advisor.content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        for text in (
-            "Синий подходит для растений и большинства обычных клип-артов.",
-            "Синий или фиолетовый предмет? Выберите красный фон.",
-            "Синий и красный не подходят? Тогда выберите зелёный фон.",
-            (
-                "Материалы и детали выбираются слева и автоматически "
-                "добавляют нужную фразу."
-            ),
-        ):
-            label = QLabel(text)
-            label.setWordWrap(True)
-            label.setProperty("v3Description", True)
-            advisor.add_widget(label)
+        label = QLabel(
+            "Приложение автоматически подготовит изображение для прозрачного PNG. "
+            "После обработки проверьте края изображения."
+        )
+        label.setWordWrap(True)
+        label.setProperty("v3Description", True)
+        advisor.add_widget(label)
         advisor.set_expanded(True)
         return advisor
 
@@ -2073,14 +2078,14 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             form.addRow(label, control)
         layout.addWidget(fixed_group)
 
-        key_group = QGroupBox("Подготовить изображение для лёгкого удаления фона")
+        key_group = QGroupBox("Прозрачный фон")
         key_form = QFormLayout(key_group)
         self.chroma_key_enabled = QCheckBox(
-            "Генерировать на однотонном chroma-key фоне"
+            "Подготовить прозрачный фон автоматически"
         )
         self.chroma_key_enabled.setChecked(draft.chroma_key_enabled)
         self.chroma_key_enabled.setAccessibleName(
-            "Генерировать на chroma-key фоне"
+            "Подготовить прозрачный фон автоматически"
         )
         self.chroma_key_color = QComboBox()
         for label, value in CHROMA_KEY_COLOR_OPTIONS:
@@ -2105,8 +2110,20 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             materials_layout.addWidget(button, index // 2, index % 2)
         configure_chroma_material_buttons(self.chroma_material_buttons)
         key_form.addRow(self.chroma_key_enabled)
-        key_form.addRow("Цвет фона для удаления", color_buttons_widget)
-        key_form.addRow("Материалы и детали", materials_widget)
+        note = QLabel("Технический способ подготовки выбирается автоматически.")
+        note.setProperty("v3Description", True)
+        note.setWordWrap(True)
+        key_form.addRow(note)
+        color_buttons_widget.setParent(key_group)
+        materials_widget.setParent(key_group)
+        self._chroma_color_buttons_widget = color_buttons_widget
+        self._chroma_materials_widget = materials_widget
+        color_buttons_widget.hide()
+        materials_widget.hide()
+        for button in self.chroma_key_color_buttons.values():
+            button.hide()
+        for button in self.chroma_material_buttons:
+            button.hide()
         layout.addWidget(key_group)
 
         self.preview_label = QLabel("Пример итогового промпта появится здесь.")
@@ -2190,7 +2207,7 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             return
         self.card.set_state("default")
         self._generated_variants = entries
-        example_lines = [f"{index}. {entry.prompt}" for index, entry in enumerate(entries[:2], 1)]
+        example_lines = [f"{index}. {_user_prompt_text(entry.prompt)}" for index, entry in enumerate(entries[:2], 1)]
         self.preview_label.setText("Пример итогового промпта:\n" + "\n\n".join(example_lines))
         self.combinations_label.setText(f"Будет создано {len(entries)} промптов")
         self.create_series_button.setEnabled(True)
@@ -2281,9 +2298,9 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         return widget
 
     def _add_prompt_chroma_controls(self, layout: QVBoxLayout, prefix: str) -> None:
-        group = QGroupBox("Фон для лёгкого удаления")
+        group = QGroupBox("Прозрачный фон")
         form = QFormLayout(group)
-        enabled = QCheckBox("Добавить Chroma Key-блок в конец промпта")
+        enabled = QCheckBox("Подготовить прозрачный фон автоматически")
         color = QComboBox()
         for label, value in CHROMA_KEY_COLOR_OPTIONS:
             color.addItem(label, value)
@@ -2300,8 +2317,20 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             material_layout.addWidget(button, index // 2, index % 2)
         configure_chroma_material_buttons(tuple(buttons.values()))
         form.addRow(enabled)
-        form.addRow("Цвет фона", color_buttons_widget)
-        form.addRow("Материалы и детали", materials)
+        note = QLabel("Технический способ подготовки выбирается автоматически.")
+        note.setProperty("v3Description", True)
+        note.setWordWrap(True)
+        form.addRow(note)
+        color_buttons_widget.setParent(group)
+        materials.setParent(group)
+        setattr(self, f"{prefix}_chroma_color_buttons_widget", color_buttons_widget)
+        setattr(self, f"{prefix}_chroma_materials_widget", materials)
+        color_buttons_widget.hide()
+        materials.hide()
+        for button in color_buttons.values():
+            button.hide()
+        for button in buttons.values():
+            button.hide()
         setattr(self, f"{prefix}_chroma_enabled", enabled)
         setattr(self, f"{prefix}_chroma_color", color)
         setattr(self, f"{prefix}_chroma_color_buttons", color_buttons)
@@ -2314,10 +2343,12 @@ class ClipartPromptInputPage(_ScrollableStepPage):
         enabled = getattr(self, f"{prefix}_chroma_enabled")
         if not enabled.isChecked():
             return prompt
-        color = getattr(self, f"{prefix}_chroma_color").currentData()
-        buttons = getattr(self, f"{prefix}_chroma_material_buttons")
-        materials = [value for value, button in buttons.items() if button.isChecked()]
-        return prompt + "\n" + chroma_key_prompt_block(color, materials=materials)
+        color = select_chroma_key_color(prompt).color
+        combo = getattr(self, f"{prefix}_chroma_color")
+        index = combo.findData(color)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+        return prompt + "\n" + chroma_key_prompt_block(color)
 
     def _choose_paste_references(self) -> None:
         selected, _ = QFileDialog.getOpenFileNames(
@@ -2376,8 +2407,13 @@ class ClipartPromptInputPage(_ScrollableStepPage):
             self.card.set_state("error", "Промпт слишком длинный")
             return
         prompt = self._prompt_with_chroma(prompt, "paste")
+        key_color = (
+            self.paste_chroma_color.currentData()
+            if self.paste_chroma_enabled.isChecked() else ""
+        )
         if self._store_entries(
-            [PromptEntry(prompt=prompt, references=self._paste_references)],
+            [PromptEntry(prompt=prompt, references=self._paste_references,
+                         chroma_key_color=key_color)],
             action="append",
             deduplicate=False,
         ):
@@ -2700,7 +2736,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self._updating = True
         self.table.setRowCount(len(self.state.clipart.prompts))
         for row, entry in enumerate(self.state.clipart.prompts):
-            prompt_item = QTableWidgetItem(entry.prompt)
+            prompt_item = QTableWidgetItem(_user_prompt_text(entry.prompt))
             prompt_item.setData(Qt.ItemDataRole.UserRole, row)
             self.table.setItem(row, 0, prompt_item)
             refs_item = QTableWidgetItem(_reference_summary(entry.references))
@@ -2721,7 +2757,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         query = self.search_edit.text().strip().casefold()
         visible = 0
         for row, entry in enumerate(self.state.clipart.prompts):
-            haystack = " ".join((entry.prompt, *entry.references)).casefold()
+            haystack = " ".join((_user_prompt_text(entry.prompt), *entry.references)).casefold()
             matches = not query or query in haystack
             self.table.setRowHidden(row, not matches)
             visible += int(matches)
@@ -2919,7 +2955,8 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
                 self.refresh_from_state()
                 return
             original = self.state.clipart.prompts[row] if row < len(self.state.clipart.prompts) else PromptEntry()
-            entries.append(PromptEntry(prompt=prompt, references=references,
+            _display, technical_suffix = _split_user_prompt(original.prompt)
+            entries.append(PromptEntry(prompt=prompt + technical_suffix, references=references,
                                        chroma_key_color=original.chroma_key_color,
                                        result_kind=original.result_kind,
                                        object_id=original.object_id))
@@ -3008,7 +3045,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         duplicates = 0
         seen: set[str] = set()
         for entry in self.state.clipart.prompts:
-            key = entry.prompt.strip().casefold()
+            key = _user_prompt_text(entry.prompt).strip().casefold()
             if not key:
                 empty += 1
             elif key in seen:
@@ -3023,7 +3060,7 @@ class ClipartPromptReviewPage(_ScrollableStepPage):
         self.issues_label.setAccessibleName(text)
 
     def validation_issues(self) -> tuple[str, ...]:
-        if any(not entry.prompt.strip() for entry in self.state.clipart.prompts):
+        if any(not _user_prompt_text(entry.prompt).strip() for entry in self.state.clipart.prompts):
             return ("prompt_empty",)
         return ()
 
@@ -4190,6 +4227,15 @@ def _safe_runtime_error(
         if isinstance(source.get(name), str)
     )
     safe_message = main.safe_error_text(error, secrets=secrets, limit=500)
+    lowered = safe_message.casefold()
+    if any(token in lowered for token in (
+        "chroma", "birefnet", "rembg", "ben2", "photoroom",
+        "remove-background", "remove_background", "background removal",
+    )):
+        return (
+            "Не удалось подготовить прозрачный фон. "
+            "Проверьте исходное изображение и повторите."
+        )
     classified = friendly_provider_error(safe_message)
     return classified[1] if classified is not None else safe_message
 

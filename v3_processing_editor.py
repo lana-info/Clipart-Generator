@@ -118,7 +118,7 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
     "prepare_clipart": ProcessingRecipe(
         key="prepare_clipart",
         title="Подготовить клипарт",
-        description="Локальное удаление фона, очистка края и trim.",
+        description="Подготовка прозрачного фона, очистка края и trim.",
         operations=_operations(
             upscale_before=True,
             remove_background=True,
@@ -193,13 +193,13 @@ def processing_pipeline_steps(
     if operations.invisible_watermark_cleanup:
         steps.append("Экспериментальная очистка невидимого watermark")
     if operations.upscale_before:
-        steps.append("Апскейл до удаления фона")
+        steps.append("Апскейл до подготовки прозрачного фона")
     if operations.unsharp:
         steps.append("Unsharp Mask")
     if operations.remove_background:
-        steps.append("Удаление фона")
+        steps.append("Подготовка прозрачного фона")
     if operations.upscale_after:
-        steps.append("Апскейл после удаления фона")
+        steps.append("Апскейл после подготовки прозрачного фона")
     if operations.edge_shrink:
         steps.append("Очистка края alpha")
     if operations.trim:
@@ -226,10 +226,10 @@ class RunPlanBuilder:
 
 class ProcessingPipelineEditor(QScrollArea):
     _STAGE_TITLES = {
-        "upscale_before": "Апскейл до удаления фона",
+        "upscale_before": "Апскейл до подготовки прозрачного фона",
         "unsharp": "Unsharp Mask",
-        "remove_background": "Удалить фон",
-        "upscale_after": "Апскейл после удаления фона",
+        "remove_background": "Подготовить прозрачный фон",
+        "upscale_after": "Апскейл после подготовки прозрачного фона",
         "edge_shrink": "Очистить край alpha",
         "trim": "Trim",
         "export_300_dpi": "Установить 300 DPI",
@@ -238,9 +238,9 @@ class ProcessingPipelineEditor(QScrollArea):
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить водяной знак Gemini",
         "invisible_watermark_cleanup": "Обработать скрытые водяные знаки (SynthID)",
-        "upscale_before": "Апскейл до удаления фона",
-        "upscale_after": "Апскейл после удаления фона",
-        "remove_background": "Удалить фон",
+        "upscale_before": "Апскейл до подготовки прозрачного фона",
+        "upscale_after": "Апскейл после подготовки прозрачного фона",
+        "remove_background": "Подготовить прозрачный фон",
         "fal_birefnet_refine_foreground": "Fal.ai BiRefNet: уточнить foreground",
         "fal_rembg_crop_to_bbox": "Fal.ai rembg: обрезать по объекту",
         "local_ben2_refine_foreground": "BEN2: уточнить foreground",
@@ -260,6 +260,15 @@ class ProcessingPipelineEditor(QScrollArea):
         "remove_embedded_thumbnail",
         "remove_generator_fields",
         "remove_embedded_c2pa",
+    )
+    _BACKGROUND_INTERNAL_CONTROLS = (
+        "remove_background_provider", "kie_remove_bg_model", "fal_remove_bg_model",
+        "fal_birefnet_model", "fal_birefnet_resolution",
+        "fal_birefnet_refine_foreground", "fal_rembg_crop_to_bbox",
+        "chroma_key_color", "local_rembg_profile", "local_rembg_model",
+        "local_rembg_edge_quality", "local_ben2_refine_foreground",
+        "local_ben2_alpha_threshold", "local_ben2_edge_softness",
+        "local_ben2_corner_radius",
     )
 
     def __init__(
@@ -363,7 +372,7 @@ class ProcessingPipelineEditor(QScrollArea):
         self._add_combo(
             form,
             "remove_background_provider",
-            "Провайдер удаления фона",
+            "Провайдер подготовки прозрачного фона",
             processing_provider_options("remove_background_provider"),
             operations,
         )
@@ -445,11 +454,11 @@ class ProcessingPipelineEditor(QScrollArea):
         self._add_combo(
             advanced_form,
             "kie_remove_bg_model",
-            "KIE модель удаления фона",
+            "KIE модель подготовки прозрачного фона",
             KIE_REMOVE_BG_MODEL_OPTIONS,
             operations,
         )
-        self._add_combo(advanced_form, "fal_remove_bg_model", "Fal.ai модель удаления фона", FAL_REMOVE_BG_MODEL_OPTIONS, operations)
+        self._add_combo(advanced_form, "fal_remove_bg_model", "Fal.ai модель подготовки прозрачного фона", FAL_REMOVE_BG_MODEL_OPTIONS, operations)
         self._add_combo(advanced_form, "fal_birefnet_model", "Fal.ai BiRefNet вариант", FAL_BIREFNET_MODEL_OPTIONS, operations)
         self._add_combo(advanced_form, "fal_birefnet_resolution", "Fal.ai BiRefNet разрешение", FAL_BIREFNET_RESOLUTION_OPTIONS, operations)
         self._add_bool(advanced_form, "fal_birefnet_refine_foreground", operations)
@@ -950,6 +959,8 @@ class ProcessingPipelineEditor(QScrollArea):
         }
         for name, visible in visibility.items():
             self._set_control_visible(name, visible)
+        for name in self._BACKGROUND_INTERNAL_CONTROLS:
+            self._set_control_visible(name, False)
         self._refresh_stage_visibility()
 
     def _refresh_stage_visibility(self) -> None:
@@ -1042,6 +1053,7 @@ class ProcessingPipelineEditor(QScrollArea):
             self._set_control_visible(
                 control_name,
                 operation_name in self.allowed_operations
+                and control_name not in self._BACKGROUND_INTERNAL_CONTROLS
                 and (provider_visible is None or not provider_visible.isHidden()),
             )
         cleanup_visible = "metadata_cleanup" in self.allowed_operations
@@ -1067,9 +1079,9 @@ class ProcessingPipelineEditor(QScrollArea):
         item.setEnabled(not blocked)
         if blocked:
             item.setToolTip(
-                "Недоступно после удаления фона: Recraft Crisp не поддерживает "
+                "Недоступно после подготовки прозрачного фона: Recraft Crisp не поддерживает "
                 "прозрачный вход. Используйте Local Real-ESRGAN или Recraft Crisp "
-                "до удаления фона."
+                "до подготовки прозрачного фона."
             )
         else:
             item.setToolTip("")

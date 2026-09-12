@@ -30,7 +30,7 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertTrue(state.processing.operations.trim)
         self.assertTrue(state.processing.operations.export_300_dpi)
         self.assertEqual(state.processing.recipe, "prepare_clipart")
-        self.assertIn("локальное удаление фона", PROCESSING_RECIPES["prepare_clipart"].description.lower())
+        self.assertIn("прозрач", PROCESSING_RECIPES["prepare_clipart"].description.lower())
 
     def test_shared_editor_builds_order_and_visibility(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
@@ -45,8 +45,8 @@ class ProcessingEditorTests(unittest.TestCase):
         state.processing.operations.remove_background_provider = "kie"
         editor.refresh_from_state()
 
-        self.assertIn("Удаление фона", editor.pipeline_label.text())
-        self.assertFalse(editor.operation_widgets["kie_remove_bg_model"].isHidden())
+        self.assertIn("прозрачного фона", editor.pipeline_label.text())
+        self.assertTrue(editor.operation_widgets["kie_remove_bg_model"].isHidden())
         self.assertEqual(
             editor.operation_widgets["kie_remove_bg_model"].itemData(0),
             "recraft/remove-background",
@@ -113,8 +113,8 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertEqual(
             processing_pipeline_steps(state.processing.operations),
             (
-                "Апскейл до удаления фона",
-                "Удаление фона",
+                "Апскейл до подготовки прозрачного фона",
+                "Подготовка прозрачного фона",
                 "Trim",
                 "Экспорт нового PNG",
             ),
@@ -202,82 +202,46 @@ class ProcessingEditorTests(unittest.TestCase):
         self.assertIsInstance(editor.operations_grid, QGridLayout)
         self.assertEqual(editor.operations_grid.columnCount(), 3)
 
-    def test_local_chroma_key_shows_only_the_three_preset_colors(self) -> None:
+    def test_background_implementation_controls_are_hidden_from_user(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations
         operations.remove_background = True
         operations.remove_background_provider = "local_chroma_key"
         editor = ProcessingPipelineEditor(
-            state.processing,
-            lambda: None,
-            title="Pipeline",
-            description="Common pipeline",
-            include_cleanup=True,
+            state.processing, lambda: None, title="Pipeline",
+            description="Common pipeline", include_cleanup=True,
         )
+        for name in (
+            "remove_background_provider", "kie_remove_bg_model", "fal_remove_bg_model",
+            "fal_birefnet_model", "fal_birefnet_resolution",
+            "fal_birefnet_refine_foreground", "fal_rembg_crop_to_bbox",
+            "chroma_key_color", "local_rembg_profile", "local_rembg_model",
+            "local_rembg_edge_quality", "local_ben2_refine_foreground",
+            "local_ben2_alpha_threshold", "local_ben2_edge_softness",
+            "local_ben2_corner_radius",
+        ):
+            self.assertTrue(editor.operation_widgets[name].isHidden(), name)
+        visible = " ".join(
+            widget.text() for widget in editor.findChildren(QLabel) if not widget.isHidden()
+        ).casefold()
+        self.assertNotIn("chroma", visible)
+        self.assertNotIn("birefnet", visible)
+        self.assertNotIn("rembg", visible)
+        self.assertIn("прозрач", visible)
 
-        color = editor.operation_widgets["chroma_key_color"]
-        self.assertFalse(color.isHidden())
-        self.assertEqual(
-            tuple(color.itemData(index) for index in range(color.count())),
-            ("blue", "red", "green"),
-        )
-        self.assertNotIn("chroma_key_tolerance", editor.operation_widgets)
-        self.assertNotIn("chroma_key_softness", editor.operation_widgets)
-
-    def test_fal_controls_show_selected_model_and_only_its_parameters(self) -> None:
+    def test_hidden_background_controls_keep_internal_state_compatible(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations
-        operations.upscale_before = True
-        operations.upscale_before_provider = "fal"
         operations.remove_background = True
         operations.remove_background_provider = "fal"
+        operations.fal_remove_bg_model = "fal-ai/birefnet/v2"
         editor = ProcessingPipelineEditor(
-            state.processing,
-            lambda: None,
-            title="Pipeline",
-            description="Common pipeline",
-            include_cleanup=True,
+            state.processing, lambda: None, title="Pipeline",
+            description="Common pipeline", include_cleanup=True,
         )
-
-        self.assertFalse(editor.operation_widgets["fal_upscale_model"].isHidden())
-        self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
-
-        upscale_model = editor.operation_widgets["fal_upscale_model"]
-        upscale_model.setCurrentIndex(
-            upscale_model.findData("topaz/upscale/image/precision")
-        )
-        self.assertFalse(editor.operation_widgets["fal_upscale_scale"].isHidden())
-        self.assertEqual(
-            tuple(
-                editor.operation_widgets["fal_upscale_scale"].itemData(index)
-                for index in range(editor.operation_widgets["fal_upscale_scale"].count())
-            ),
-            (2, 4),
-        )
-
-        upscale_model.setCurrentIndex(upscale_model.findData("bria/upscale/creative"))
-        self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
-
-        upscale_model.setCurrentIndex(
-            upscale_model.findData("fal-ai/recraft/upscale/crisp")
-        )
-        self.assertTrue(editor.operation_widgets["fal_upscale_scale"].isHidden())
-
-        model = editor.operation_widgets["fal_remove_bg_model"]
-        model.setCurrentIndex(model.findData("fal-ai/bria/background/remove"))
-        self.assertTrue(editor.operation_widgets["fal_birefnet_model"].isHidden())
-        self.assertTrue(editor.operation_widgets["fal_birefnet_resolution"].isHidden())
-        self.assertTrue(editor.operation_widgets["fal_rembg_crop_to_bbox"].isHidden())
-
-        model.setCurrentIndex(model.findData("fal-ai/birefnet/v2"))
-        self.assertFalse(editor.operation_widgets["fal_birefnet_model"].isHidden())
-        self.assertFalse(editor.operation_widgets["fal_birefnet_resolution"].isHidden())
-        self.assertFalse(editor.operation_widgets["fal_birefnet_refine_foreground"].isHidden())
-        self.assertTrue(editor.operation_widgets["fal_rembg_crop_to_bbox"].isHidden())
-
-        model.setCurrentIndex(model.findData("fal-ai/imageutils/rembg"))
-        self.assertTrue(editor.operation_widgets["fal_birefnet_model"].isHidden())
-        self.assertFalse(editor.operation_widgets["fal_rembg_crop_to_bbox"].isHidden())
+        self.assertEqual(editor.operation_widgets["fal_remove_bg_model"].currentData(), "fal-ai/birefnet/v2")
+        self.assertTrue(editor.operation_widgets["fal_remove_bg_model"].isHidden())
+        self.assertEqual(state.processing.operations.remove_background_provider, "fal")
 
     def test_operation_requirement_can_be_disabled_for_generation_modes(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)

@@ -1,5 +1,16 @@
 # Vibix Images
 
+## Transparent-background UX checkpoint, 2026-09-12
+
+Clipart and Processing now hide the implementation of transparent-background
+preparation from user-facing controls, previews, prompt review/editing, CSV export and
+runtime errors. Technical color selection and removal provider/model choices remain
+internal and compatible with existing drafts. User-visible wording describes only the
+result (prepare transparent background, check edges). Hidden generation suffixes remain
+attached internally when a prompt is edited, so UI simplification does not change the
+actual processing contract. Verification: focused 191 passed + 5 subtests; full isolated
+pytest 1402 passed, 57 skipped, 2 deselected, 233 subtests in 61.21s.
+
 ## Holiday-aware Clipart checkpoint, 2026-09-12
 
 Clipart now has a local Holiday Profile layer and curated five-color palette library.
