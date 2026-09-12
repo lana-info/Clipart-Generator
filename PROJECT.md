@@ -1,5 +1,22 @@
 # Vibix Images
 
+## Style Profiles checkpoint, 2026-09-12
+
+Clipart now has a local Style Profile layer. A collection has one base visual style
+plus optional character modifiers; recommendations are deterministic from theme/context
+and never trigger a provider call. The library is brand-neutral and supports custom
+user wording. Selecting a profile compiles a stable provider-facing style phrase while
+keeping the user-visible recipe fields round-trippable. Planning receives the same
+style guidance alongside Holiday Profile and palette context.
+
+The approved production UI is implemented with 3 recommendations, compact featured
+styles, category filtering, multi-select modifiers and preserved advanced visual fields.
+User-provided style guides were used only as classification/UX inspiration; concrete
+brand-specific style names and third-party prompt templates are not copied. Plan:
+`docs/superpowers/plans/2026-09-12-style-profiles.md`. Real Qt proof:
+`docs/ui/3.2/style-profiles/actual-teddy-christmas-1120x780.png`. Focused verification: 46 passed + 11 subtests; full isolated pytest: 1415 passed,
+57 skipped, 2 deselected, 233 subtests in 64.28s.
+
 ## Transparent-background UX checkpoint, 2026-09-12
 
 Clipart and Processing now hide the implementation of transparent-background

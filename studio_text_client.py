@@ -84,6 +84,8 @@ Callers must recheck the returned request against the live draft before apply.
         'If the brief contains holiday guidance, preserve the main theme and use that '
         'guidance to vary accessories, props, decor, compositions and mood; do not put '
         'every holiday element on every object. Respect listed exclusions. '
+        'If the request contains style guidance, keep one coherent base style across the '
+        'whole collection and apply its modifiers consistently without changing the subject. '
         'Vary subjects and actions; avoid near duplicates of existing named items. '
         'Keep objects opaque, fully visible with margins; no haze, glass, mesh, '
         'translucent materials, cast shadows or blurred outer edges. '

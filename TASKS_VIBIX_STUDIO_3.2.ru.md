@@ -53,6 +53,15 @@ Focused: 31 passed + 8 subtests; полный isolated suite: 1369 passed, 57 sk
   Внутренние state/runtime поля и legacy-совместимость сохранены. Focused: 191 passed
   + 5 subtests; full isolated pytest: 1402 passed / 57 skipped / 2 deselected /
   233 subtests (61.21s).
+- [x] Добавить локальный `Style Profile`: brand-neutral библиотека базовых стилей,
+  multi-select модификаторы характера, deterministic рекомендации по теме/контексту,
+  custom style fallback и единый compiled style для всей коллекции. Approved UI
+  реализует 3 рекомендации, compact featured-six view, category filtering и сохраняет
+  существующие line/material/detail настройки. Style guidance передаётся в тот же
+  planning request без дополнительного API-вызова; чужие brand-specific style names
+  не копируются. Real Qt proof: `docs/ui/3.2/style-profiles/actual-teddy-christmas-1120x780.png`.
+  Focused: 46 passed + 11 subtests; full isolated pytest: 1415 passed / 57 skipped /
+  2 deselected / 233 subtests (64.28s).
 - [ ] Регрессии: 1 PNG в 4 комплектах, отсутствие повторных платных задач,
   roundtrip/миграция, независимые ручные включения и отсутствие технических терминов.
 

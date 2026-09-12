@@ -46,6 +46,81 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(state.clipart.prompts, [])
         dialog.close()
 
+    def test_style_page_fits_1120_width_without_horizontal_scroll(self):
+        dialog = ClipartBuilderDialog(ProjectState())
+        dialog.resize(1120, 780)
+        dialog.pages.setCurrentIndex(1)
+        dialog.show()
+        self.app.processEvents()
+        page = dialog.pages.currentWidget()
+        self.assertEqual(page.horizontalScrollBar().maximum(), 0)
+        dialog.close()
+
+    def test_style_library_all_view_is_compact_featured_six(self):
+        dialog = ClipartBuilderDialog(ProjectState())
+        dialog.style_category.setCurrentText('Все')
+        dialog._refresh_style_library()
+        self.assertEqual(len(dialog.style_cards), 6)
+        self.assertEqual(
+            [card['key'] for card in dialog.style_cards],
+            ['watercolor', 'gouache', 'storybook', 'kawaii', 'cottagecore', 'gothic-dark'],
+        )
+        dialog.close()
+
+    def test_style_library_recommends_teddy_christmas_and_filters_categories(self):
+        state = ProjectState()
+        dialog = ClipartBuilderDialog(state)
+        dialog.theme.setText('Teddy Bear')
+        dialog.context.setCurrentText('Christmas')
+        dialog._refresh_style_recommendations()
+        self.assertEqual(dialog.recommended_style_cards[0]['key'], 'watercolor')
+        self.assertIn('scandinavian-folk', [card['key'] for card in dialog.recommended_style_cards])
+        dialog.style_category.setCurrentText('Персонажи')
+        dialog._refresh_style_library()
+        self.assertTrue(dialog.style_cards)
+        self.assertTrue(all(card['category'] == 'Персонажи' for card in dialog.style_cards))
+        dialog.close()
+
+    def test_style_selection_modifiers_and_roundtrip_keep_collection_profile(self):
+        state = ProjectState()
+        dialog = ClipartBuilderDialog(state)
+        dialog.theme.setText('Teddy Bear')
+        dialog._select_style_profile('watercolor')
+        self.assertEqual(dialog.technique.currentText(), 'Акварель')
+        self.assertTrue(dialog.style_modifier_buttons['gentle'].isChecked())
+        dialog.style_modifier_buttons['cozy'].click()
+        self.assertIn('Нежный', dialog.mood.currentText())
+        self.assertIn('Уютный', dialog.mood.currentText())
+        dialog._apply()
+        self.assertIn('watercolor', state.clipart.prompt_generator.style.casefold())
+        restored = ClipartBuilderDialog(state)
+        self.assertEqual(restored.technique.currentText(), 'Акварель')
+        self.assertTrue(restored.style_modifier_buttons['gentle'].isChecked())
+        self.assertTrue(restored.style_modifier_buttons['cozy'].isChecked())
+        restored.close()
+        dialog.close()
+
+    def test_manual_custom_style_clears_known_style_card_selection(self):
+        dialog = ClipartBuilderDialog(ProjectState())
+        dialog._select_style_profile('watercolor')
+        self.assertTrue(any(card['button'].isChecked() for card in dialog.style_cards
+                            if card['key'] == 'watercolor'))
+        dialog.technique.setCurrentText('Мой авторский штрих')
+        self.app.processEvents()
+        self.assertFalse(any(card['button'].isChecked() for card in dialog.style_cards))
+        dialog.close()
+
+    def test_custom_style_text_is_preserved_without_forcing_known_profile(self):
+        state = ProjectState()
+        dialog = ClipartBuilderDialog(state)
+        dialog.theme.setText('Botanical objects')
+        dialog.technique.setCurrentText('Мой авторский штрих')
+        dialog.mood.setCurrentText('')
+        dialog._apply()
+        self.assertEqual(state.clipart.recipe['visual']['technique'], 'Мой авторский штрих')
+        self.assertIn('Мой авторский штрих', state.clipart.prompt_generator.style)
+        dialog.close()
+
     def test_palette_library_uses_five_swatch_cards_and_holiday_recommendation(self):
         state = ProjectState()
         dialog = ClipartBuilderDialog(state)

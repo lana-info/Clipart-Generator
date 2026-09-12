@@ -74,6 +74,14 @@ class PlannerTests(unittest.TestCase):
         request = planning_request(self.recipe)
         self.assertIsNone(request['holiday'])
 
+    def test_style_profile_is_local_bounded_guidance_in_request(self):
+        self.recipe.visual = {"technique": "Акварель", "mood": "Нежное"}
+        request = planning_request(self.recipe)
+        self.assertEqual(request["style"]["key"], "watercolor")
+        self.assertIn("watercolor", request["style"]["prompt_phrase"].casefold())
+        self.assertIn("gentle", request["style"]["modifiers"])
+        self.assertNotIn("provider", request["style"])
+
     def test_local_reference_paths_not_in_request(self):
         self.recipe.references = [dict(path='/private/reference.png', roles=['mood'], notes='Радостное')]
         request = planning_request(self.recipe)

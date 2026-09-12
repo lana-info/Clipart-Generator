@@ -86,6 +86,15 @@ class TextClientTests(unittest.TestCase):
         self.assertNotIn('response_format', post.call_args.kwargs['json'])
 
     @patch('studio_text_client.requests.post')
+    def test_style_guidance_is_explicitly_respected_by_planning_prompt(self, post):
+        self.recipe.visual = {'technique': 'Акварель', 'mood': 'Нежное'}
+        self.mock_response(post)
+        generate_plan(self.recipe, **self.args)
+        instructions = post.call_args.kwargs['json']['messages'][0]['content'].casefold()
+        self.assertIn('style guidance', instructions)
+        self.assertIn('keep one coherent base style', instructions)
+
+    @patch('studio_text_client.requests.post')
     def test_network_failure_is_not_retried_or_leaked(self, post):
         post.side_effect = requests.Timeout('dummy-test-key private request data')
         with self.assertRaises(TextGenerationError) as raised:

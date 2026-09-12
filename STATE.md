@@ -2,6 +2,27 @@
 
 Updated: 2026-09-12
 
+## Current handoff: Style Profiles implemented, 2026-09-12
+
+Owner-approved Style Profile UI and local architecture are implemented.
+`studio_style_profiles.py` provides validated brand-neutral base styles, aliases,
+modifiers, theme/context recommendations and compiled style text. Existing recipe
+persistence remains compatible: `visual.technique` stores the base/custom choice and
+`visual.mood` stores selected modifier titles, so no recipe schema migration is needed.
+The same base style is used across object planning and prompt compilation unless the
+user explicitly changes it. Planning receives bounded local `style` guidance in the
+existing request; no extra provider call is introduced.
+
+The approved builder UI now shows three recommendations, a compact six-style featured
+view plus category filtering for the complete library, multi-select style-character
+buttons, a custom style field, and the existing line/material/detail controls.
+Brand-specific source labels are intentionally excluded; generic Storybook/children
+illustration language is used instead. Real Qt proof:
+`docs/ui/3.2/style-profiles/actual-teddy-christmas-1120x780.png`.
+Focused style/planner/builder/text/object/reference verification: 45 passed + 11
+subtests. Full isolated pytest: 1415 passed, 57 skipped, 2 deselected,
+233 subtests in 64.28s.
+
 ## Current handoff: background-processing UX audit completed, 2026-09-12
 
 User-facing Clipart/Processing surfaces no longer expose chroma-key, technical key
