@@ -245,5 +245,42 @@ def register(context):
         self.assertEqual(host.invoke_command("text-probe-ok", "echo", "ready"), "ready")
 
 
+    def test_external_job_lease_blocks_unload_and_activation_until_closed(self):
+        host = self.installed_host()
+        host.activate("fictional-export")
+        self.store.install(self.package(version="1.0.1"))
+        lease = host.acquire_job_lease("fictional-export")
+        with self.assertRaisesRegex(ModuleRuntimeError, "active jobs"):
+            host.unload("fictional-export")
+        with self.assertRaisesRegex(ModuleRuntimeError, "active jobs"):
+            host.activate("fictional-export", "1.0.1")
+        self.assertEqual(self.store.state("fictional-export")["active"], "1.0.0")
+        lease.close()
+        info = host.activate("fictional-export", "1.0.1")
+        self.assertEqual(info.version, "1.0.1")
+        host.unload("fictional-export")
+
+    def test_external_job_lease_can_be_released_by_worker_completion_thread(self):
+        host = self.installed_host()
+        host.activate("fictional-export")
+        lease = host.acquire_job_lease("fictional-export")
+        errors = []
+
+        def release():
+            try:
+                lease.close()
+                lease.close()
+            except Exception as exc:
+                errors.append(exc)
+
+        worker = threading.Thread(target=release)
+        worker.start()
+        worker.join(timeout=2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(errors, [])
+        self.assertTrue(lease.closed)
+        host.unload("fictional-export")
+
+
 if __name__ == "__main__":
     unittest.main()

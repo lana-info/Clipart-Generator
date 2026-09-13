@@ -123,6 +123,30 @@ class ModuleInfo:
     document_types: tuple[DocumentTypeInfo, ...]
 
 
+class JobLease:
+    """Host-owned lease for work that outlives a synchronous module callback."""
+
+    __slots__ = ("module_id", "_release", "_closed", "_lock")
+
+    def __init__(self, module_id: str, release: Callable[[], None]):
+        self.module_id = module_id
+        self._release = release
+        self._closed = False
+        self._lock = threading.Lock()
+
+    @property
+    def closed(self) -> bool:
+        with self._lock:
+            return self._closed
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._release()
+            self._closed = True
+
+
 class PageHandle:
     """Host-owned lease for a live page value returned by a trusted factory."""
 
@@ -174,6 +198,8 @@ class ModuleRuntimeHost:
         self._loaded: dict[str, _LoadedModule] = {}
         self._active_jobs: dict[str, int] = {}
         self._page_leases: dict[str, set[str]] = {}
+        self._job_leases: dict[str, set[str]] = {}
+        self._lease_lock = threading.RLock()
         # The host executes package callbacks on one serialized host path.  It
         # is not an OS sandbox: package code has the application's Python
         # privileges and must be from a verified, authorized publisher.
@@ -195,16 +221,8 @@ class ModuleRuntimeHost:
         self._allowed(module_id, "activate")
         self._ensure_idle(module_id)
         if version is not None:
-            previous_state = self.store.state(module_id)
-            self.store.activate(module_id, version, busy=False)
-            try:
+            with self.store.activation_transaction(module_id, version, busy=False):
                 return _module_info(self._load_verified(module_id))
-            except Exception:
-                # ModuleStore intentionally exposes no mutating pointer restore
-                # API.  Its own atomic writer preserves the complete prior state
-                # (including disabled state and rollback target) here.
-                self.store._write_state(module_id, previous_state)
-                raise
         return _module_info(self._load_verified(module_id))
 
     def load_active(self, module_id: str) -> ModuleInfo:
@@ -218,6 +236,15 @@ class ModuleRuntimeHost:
         loaded = self._loaded.pop(module_id, None)
         if loaded is not None:
             self._purge_namespace(loaded.namespace)
+
+    def acquire_job_lease(self, module_id: str) -> JobLease:
+        """Pin the currently loaded module while Core-owned work is still active."""
+        self._assert_owner_thread()
+        self._current_loaded(module_id)
+        token = uuid.uuid4().hex
+        with self._lease_lock:
+            self._job_leases.setdefault(module_id, set()).add(token)
+        return JobLease(module_id, lambda: self._release_job(module_id, token))
 
     def invoke_command(self, module_id: str, name: str, *args: Any, **kwargs: Any) -> Any:
         self._allowed(module_id, f"command:{name}")
@@ -372,8 +399,18 @@ class ModuleRuntimeHost:
             raise ModuleRuntimeError("Module host must be called on its owner thread")
 
     def _ensure_idle(self, module_id: str) -> None:
-        if self._active_jobs.get(module_id, 0) or self._page_leases.get(module_id):
+        with self._lease_lock:
+            has_job_lease = bool(self._job_leases.get(module_id))
+        if self._active_jobs.get(module_id, 0) or self._page_leases.get(module_id) or has_job_lease:
             raise ModuleRuntimeError("Module has active jobs or live pages")
+
+    def _release_job(self, module_id: str, token: str) -> None:
+        with self._lease_lock:
+            leases = self._job_leases.get(module_id)
+            if leases is not None:
+                leases.discard(token)
+                if not leases:
+                    self._job_leases.pop(module_id, None)
 
     def _release_page(self, module_id: str, token: str) -> None:
         self._assert_owner_thread()

@@ -14,6 +14,7 @@ import shutil
 import stat
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -293,6 +294,17 @@ class ModuleStore:
         self._write_state(module_id, {"active": version,
                                      "previous": previous if previous != version else self.state(module_id)["previous"],
                                      "enabled": True})
+
+    @contextmanager
+    def activation_transaction(self, module_id: str, version: str, *, busy: bool = False):
+        """Temporarily activate a verified version and restore exact prior state on failure."""
+        previous_state = self.state(module_id)
+        self.activate(module_id, version, busy=busy)
+        try:
+            yield
+        except BaseException:
+            self._write_state(module_id, previous_state)
+            raise
 
     def rollback(self, module_id: str, *, busy: bool = False) -> None:
         previous = self.state(module_id)["previous"]

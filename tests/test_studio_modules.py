@@ -148,5 +148,28 @@ class ModuleStoreTests(unittest.TestCase):
                 self.store.state("clipart")
 
 
+    def test_activation_transaction_restores_exact_prior_state_on_failure(self):
+        self.store.install(self.package(version="1.0.0"))
+        self.store.install(self.package(version="1.1.0"))
+        self.store.activate("clipart", "1.0.0")
+        self.store.disable("clipart")
+        before = self.store.state("clipart")
+        with self.assertRaisesRegex(RuntimeError, "probe failure"):
+            with self.store.activation_transaction("clipart", "1.1.0"):
+                self.assertEqual(self.store.state("clipart")["active"], "1.1.0")
+                self.assertTrue(self.store.state("clipart")["enabled"] )
+                raise RuntimeError("probe failure")
+        self.assertEqual(self.store.state("clipart"), before)
+
+    def test_activation_transaction_keeps_verified_activation_on_success(self):
+        self.store.install(self.package(version="1.0.0"))
+        self.store.install(self.package(version="1.1.0"))
+        self.store.activate("clipart", "1.0.0")
+        with self.store.activation_transaction("clipart", "1.1.0"):
+            self.assertEqual(self.store.state("clipart")["active"], "1.1.0")
+        self.assertEqual(self.store.state("clipart")["active"], "1.1.0")
+        self.assertEqual(self.store.state("clipart")["previous"], "1.0.0")
+
+
 if __name__ == "__main__":
     unittest.main()
