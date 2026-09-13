@@ -9,6 +9,7 @@ import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from studio_asset_api import AssetHandle
 SCHEMA_VERSION = 1
 DEFAULT_MAX_PER_ASSET = 256 * 1024 * 1024
 _CHUNK_BYTES = 1024 * 1024
@@ -158,6 +159,22 @@ class AssetStore:
         path = self._path_for(record.id)
         self._verify_asset(path, record)
         return path
+
+    def to_handle(self, record: AssetRecord) -> AssetHandle:
+        """Publish verified portable metadata without exposing the store path."""
+        self.resolve(record)
+        return AssetHandle(
+            record.id, record.sha256, record.size, record.filename, record.media_type
+        )
+
+    def resolve_handle(self, handle: AssetHandle) -> Path:
+        """Resolve a public handle through the existing integrity-checked store."""
+        if not isinstance(handle, AssetHandle):
+            raise AssetStoreError("Asset handle is invalid")
+        record = AssetRecord(
+            handle.asset_id, handle.sha256, handle.size, handle.filename, handle.media_type
+        )
+        return self.resolve(record)
 
     def _assert_root(self) -> None:
         try:

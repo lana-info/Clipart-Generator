@@ -142,7 +142,7 @@ def _module_name(path: Path) -> str:
 
 def _layer_for(module_name: str) -> str | None:
     parts = module_name.split(".")
-    if parts[0] == "studio_module_api":
+    if parts[0] in {"studio_module_api", "studio_asset_api"}:
         return "public_api"
     if parts[0] == "studio_official_modules" and len(parts) >= 2:
         return f"official:{parts[1]}"
@@ -297,6 +297,15 @@ def test_public_module_api_is_classified_as_its_own_dependency_boundary():
     assert _layer_for("studio_module_api") == "public_api"
     local_dependencies = {
         target for target in _imports(ROOT / "studio_module_api.py")
+        if _layer_for(target) is not None
+    }
+    assert local_dependencies == set()
+
+
+def test_public_asset_api_is_classified_as_its_own_dependency_boundary():
+    assert _layer_for("studio_asset_api") == "public_api"
+    local_dependencies = {
+        target for target in _imports(ROOT / "studio_asset_api.py")
         if _layer_for(target) is not None
     }
     assert local_dependencies == set()
