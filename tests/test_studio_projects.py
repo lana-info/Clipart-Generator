@@ -94,6 +94,8 @@ class ProjectStoreTests(unittest.TestCase):
                 store.create("clipart", "Unsafe", {"nested": {"api_key": "not saved"}})
             with self.assertRaisesRegex(ProjectStoreError, "credential"):
                 store.create("clipart", "Unsafe", {"items": [{"refresh_token": "not saved"}]})
+            with self.assertRaisesRegex(ProjectStoreError, "credential"):
+                store.create("clipart", "Unsafe", {"api_key.value": "not saved"})
             self.assertEqual(store.recent(), [])
 
     def test_rejects_cyclic_and_excessively_nested_state_as_store_errors(self):
@@ -247,6 +249,28 @@ class ProjectStoreTests(unittest.TestCase):
                             document_type=document_type, document_version=1,
                         )
                     self.assertEqual(path.read_bytes(), before)
+
+
+    def test_legacy_project_document_keeps_existing_mode_switch_compatibility(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProjectStore(Path(temp) / "projects")
+            record = store.create("clipart", "Legacy", {"mode": "clipart"})
+            updated = store.save(
+                record.project_id, "processing", "Legacy", {"mode": "processing"}
+            )
+            self.assertEqual(updated.module_id, "processing")
+            self.assertEqual(updated.document_type, "project")
+            self.assertEqual(updated.document_version, 1)
+
+
+
+    def test_generic_store_does_not_validate_module_specific_state_schema(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProjectStore(Path(temp) / "projects")
+            opaque = {"clipart": {"export_membership": {"x.png": {"module_owned": "value"}}}}
+            record = store.create("clipart", "Opaque", opaque)
+            self.assertEqual(store.load(record.project_id).state, opaque)
+
 
 
 if __name__ == "__main__":

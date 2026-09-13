@@ -44,21 +44,24 @@ class MembershipTests(unittest.TestCase):
                     save_project_draft(state, path)
 
     def test_studio_migration_backup_failure_preserves_original(self):
-        from studio_projects import ProjectStore, ProjectStoreError
+        from studio_project_documents import ProjectDocumentError, ProjectDocumentService
+        from studio_projects import ProjectStore
+        from v3_project_state import V3ProjectDocumentAdapter
         with tempfile.TemporaryDirectory() as folder:
             store = ProjectStore(folder)
             legacy = ProjectState().to_dict()
             legacy['clipart']['export_membership'] = {
                 'secret-garden.png': {'title': 'Old', 'included': False}}
             record = store.create('clipart', 'Old', legacy)
-            path = Path(folder) / (record.project_id + '.json')
+            path = store.project_path(record.project_id)
             original = path.read_bytes()
-            migrated = ProjectState.from_dict(record.state).to_dict()
+            service = ProjectDocumentService(store, (V3ProjectDocumentAdapter('clipart'),))
+            migrated = service.open(record.project_id).state
             with patch('studio_export_membership.backup_membership_migration', side_effect=OSError('disk full')):
-                with self.assertRaises(ProjectStoreError):
-                    store.save(record.project_id, 'clipart', 'Old', migrated)
+                with self.assertRaises(ProjectDocumentError):
+                    service.save(record.project_id, 'Old', migrated)
             self.assertEqual(path.read_bytes(), original)
-            store.save(record.project_id, 'clipart', 'Old', migrated)
+            service.save(record.project_id, 'Old', migrated)
             self.assertEqual(next(Path(folder).glob('*.bak')).read_bytes(), original)
             self.assertEqual(store.load(record.project_id).state, migrated)
 

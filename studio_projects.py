@@ -28,6 +28,10 @@ _DOCUMENT_TYPE = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _FORBIDDEN_KEY_PARTS = (
     "apikey", "token", "password", "secret", "credential", "authorization", "bearer",
 )
+_OPAQUE_FILENAME_EXTENSIONS = frozenset({
+    "ai", "bmp", "csv", "docx", "gif", "jpeg", "jpg", "json", "md", "pdf",
+    "png", "psd", "svg", "tif", "tiff", "txt", "webp", "xls", "xlsx", "zip",
+})
 _RECORD_KEYS_V1 = frozenset({"schema_version", "project_id", "module_id", "name", "updated_at", "state"})
 _RECORD_KEYS_V2 = frozenset({
     "schema_version", "project_id", "module_id", "document_type", "document_version",
@@ -139,7 +143,13 @@ class ProjectStore:
             # Envelope validation happens before any temporary file or replace;
             # unknown/future schemas and newer document data are never silently overwritten.
             existing = self._read(destination, expected_id=project_id)
-            if existing.module_id != module_id or existing.document_type != document_type:
+            if existing.document_type != document_type:
+                raise ProjectStoreError("Project document identity cannot change")
+            legacy_mode_switch = (
+                existing.document_type == document_type == "project"
+                and existing.document_version == document_version == 1
+            )
+            if existing.module_id != module_id and not legacy_mode_switch:
                 raise ProjectStoreError("Project document identity cannot change")
             if existing.document_version > document_version:
                 raise ProjectStoreError("Project document version is newer and read-only")
@@ -148,11 +158,6 @@ class ProjectStore:
             self._now(), self._copy_state(state),
         )
         payload = self._encode(record)
-        from studio_export_membership import backup_membership_migration
-        try:
-            backup_membership_migration(destination, state, max_bytes=MAX_PROJECT_BYTES)
-        except (OSError, ValueError) as error:
-            raise ProjectStoreError('Project migration backup could not be saved') from error
         self._atomic_replace(destination, payload)
         return record
 
@@ -163,6 +168,10 @@ class ProjectStore:
             raise ProjectStoreError("Project store root is unavailable") from exc
         if self.root.is_symlink() or not self.root.is_dir():
             raise ProjectStoreError("Project store root must be a non-symlink directory")
+
+    def project_path(self, project_id: str) -> Path:
+        """Return the validated envelope path for trusted Core document services."""
+        return self._path_for(self._project_id(project_id))
 
     def _path_for(self, project_id: str) -> Path:
         self._assert_root()
@@ -355,6 +364,15 @@ class ProjectStore:
             return
         raise ProjectStoreError("Project state must contain JSON values only")
 
+    @staticmethod
+    def _opaque_label_key(value: str) -> bool:
+        if any(separator in value for separator in ("/", "\\", ":")):
+            return True
+        if "." not in value:
+            return False
+        extension = value.rsplit(".", 1)[-1].casefold()
+        return extension in _OPAQUE_FILENAME_EXTENSIONS
+
     def _validate_container(self, value: list[Any] | dict[str, Any], depth: int,
                             ancestors: set[int], path: tuple[str, ...]) -> None:
         marker = id(value)
@@ -363,18 +381,12 @@ class ProjectStore:
         ancestors.add(marker)
         try:
             if isinstance(value, dict):
-                path_keys = path == ('clipart', 'export_membership')
-                if path_keys:
-                    from studio_export_membership import validate_export_membership
-                    try:
-                        validate_export_membership(value)
-                    except ValueError as error:
-                        raise ProjectStoreError('Project export membership is invalid') from error
                 for key, item in value.items():
                     if not isinstance(key, str):
                         raise ProjectStoreError("Project state object keys must be strings")
                     normalized = re.sub(r"[^a-z0-9]", "", key.casefold())
-                    if not path_keys and any(part in normalized for part in _FORBIDDEN_KEY_PARTS):
+                    opaque_label_key = self._opaque_label_key(key)
+                    if not opaque_label_key and any(part in normalized for part in _FORBIDDEN_KEY_PARTS):
                         raise ProjectStoreError("Project state contains a forbidden credential field")
                     self._validate_json(item, depth=depth + 1, ancestors=ancestors, path=path + (key,))
             else:

@@ -502,6 +502,32 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.close()
             view.deleteLater()
 
+    def test_saved_v3_project_uses_document_adapter_across_mode_switch(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "project_state.json"
+            factory = Mock(side_effect=AssertionError("resume must not create paid work"))
+            view = V3ApplicationView(draft_path=path, worker_factory=factory)
+            view._handle_mode_selected(ProjectMode.CLIPART.value)
+            project_id = view._active_project_id
+            self.assertIsNotNone(project_id)
+            view.project_state.switch_mode(ProjectMode.PROCESSING)
+            view.shell.mark_dirty()
+            record = view._project_store.load(project_id)
+            self.assertEqual(record.module_id, ProjectMode.CLIPART.value)
+            self.assertEqual(record.document_type, "project")
+            self.assertEqual(record.document_version, 1)
+            self.assertEqual(record.state["mode"], ProjectMode.PROCESSING.value)
+            view.close()
+            view.deleteLater()
+
+            restored = V3ApplicationView(draft_path=path, worker_factory=factory)
+            self.assertTrue(restored.continue_saved_project(project_id))
+            self.assertEqual(restored.project_state.mode, ProjectMode.PROCESSING)
+            factory.assert_not_called()
+            restored.close()
+            restored.deleteLater()
+
+
     def test_continue_is_unavailable_without_a_recent_project(self):
         view = V3ApplicationView()
         self.assertTrue(view.mode_selection.recent_project_card.isHidden())

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from chroma_key import KEY_COLORS
+from studio_project_documents import PreparedProjectDocument
 from v3_provider_registry import (
     FAL_BRIA_UPSCALE_MODEL_ID,
     KIE_TOPAZ_MODEL_ID,
@@ -2178,6 +2179,42 @@ def migrate_v2_config(
             operations=ImageOperationData.from_v2_config(config),
         ),
     )
+
+
+class V3ProjectDocumentAdapter:
+    """Compatibility owner for the legacy multi-workflow ProjectState schema."""
+
+    document_type = "project"
+    current_version = PROJECT_STATE_SCHEMA_VERSION
+
+    def __init__(self, module_id: str) -> None:
+        try:
+            self.module_id = ProjectMode(module_id).value
+        except (TypeError, ValueError) as exc:
+            raise ProjectStateError("Unsupported V3 project module") from exc
+
+    def open_state(self, state: dict[str, Any], version: int) -> dict[str, Any]:
+        if version != self.current_version:
+            raise ProjectStateError("Unsupported V3 project document version")
+        return ProjectState.from_dict(state).to_dict()
+
+    def prepare_save(
+        self, state: dict[str, Any], source_version: int | None,
+    ) -> PreparedProjectDocument:
+        if source_version not in (None, self.current_version):
+            raise ProjectStateError("Unsupported V3 project document version")
+        normalized = ProjectState.from_dict(state).to_dict()
+        return PreparedProjectDocument(self.current_version, normalized)
+
+    def before_save(self, store, existing, prepared: PreparedProjectDocument) -> None:
+        if existing is None:
+            return
+        from studio_export_membership import backup_membership_migration
+        backup_membership_migration(
+            store.project_path(existing.project_id),
+            prepared.state,
+            max_bytes=MAX_DRAFT_BYTES,
+        )
 
 
 def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> None:

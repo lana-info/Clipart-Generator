@@ -35,8 +35,11 @@ from v3_components import (
     apply_v3_theme,
 )
 from v3_project_state import ProjectMode, ProjectState
-from v3_project_state import ProjectStateError, load_project_draft, save_project_draft
+from v3_project_state import (
+    ProjectStateError, V3ProjectDocumentAdapter, load_project_draft, save_project_draft,
+)
 from studio_projects import ProjectStore
+from studio_project_documents import ProjectDocumentService
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
 from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
 from v3_clipart_flow import install_clipart_flow
@@ -408,10 +411,15 @@ class V3ApplicationView(QWidget):
         self._initialization_overlay: InitializationProgressOverlay | None = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
         self._project_store = None
+        self._project_documents = None
         self._project_store_unavailable = False
         if self._draft_path is not None:
             try:
                 self._project_store = ProjectStore(self._draft_path.parent / "projects")
+                self._project_documents = ProjectDocumentService(
+                    self._project_store,
+                    tuple(V3ProjectDocumentAdapter(mode.value) for mode in ProjectMode),
+                )
             except (OSError, ValueError):
                 self._project_store_unavailable = True
         self._active_project_id: str | None = None
@@ -716,12 +724,16 @@ class V3ApplicationView(QWidget):
             self.shell.set_save_error("Сначала остановите текущее задание.")
             return False
         try:
-            record = self._project_store.load(project_id)
-            state = ProjectState.from_dict(record.state)
+            if self._project_documents is None:
+                raise ValueError("Project document service is unavailable")
+            session = self._project_documents.open(project_id)
+            if not session.editable:
+                raise ValueError("Project document is read-only")
+            state = ProjectState.from_dict(session.state)
         except (OSError, ValueError):
             QMessageBox.warning(self, "Проект", "Не удалось открыть сохранённый проект.")
             return False
-        self._active_project_id = record.project_id
+        self._active_project_id = session.record.project_id
         self._replace_shell(state)
         self.project_continued.emit(state.mode.value)
         return True
@@ -842,13 +854,19 @@ class V3ApplicationView(QWidget):
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             if self._project_store is not None:
+                if self._project_documents is None:
+                    raise ValueError("Project document service is unavailable")
                 state = self.shell.state
-                args = (state.mode.value, state.common.project_name.strip() or "Без названия", state.to_dict())
+                name = state.common.project_name.strip() or "Без названия"
                 if self._active_project_id is None:
-                    record = self._project_store.create(*args)
+                    record = self._project_documents.create(
+                        state.mode.value, "project", name, state.to_dict()
+                    )
                     self._active_project_id = record.project_id
                 else:
-                    self._project_store.save(self._active_project_id, *args)
+                    self._project_documents.save(
+                        self._active_project_id, name, state.to_dict()
+                    )
             # The separate project is authoritative. Never write a newer legacy
             # draft first, then hide it behind an older project after a failure.
             save_project_draft(self.shell.state, path)
@@ -868,18 +886,22 @@ class V3ApplicationView(QWidget):
         if shell is not self.shell:
             raise ValueError("Откройте проект заново перед запуском")
         if self._draft_path is not None:
-            if self._project_store is None:
+            if self._project_store is None or self._project_documents is None:
                 raise OSError("Не удалось сохранить проект. Проверьте доступ к папке приложения")
             # Save before creating a worker, including retries. Failure must
             # not silently fall back to a shared journal and submit paid work.
             state = shell.state
-            args = (state.mode.value, state.common.project_name.strip() or "Без названия", state.to_dict())
+            name = state.common.project_name.strip() or "Без названия"
             try:
                 if self._active_project_id is None:
-                    record = self._project_store.create(*args)
+                    record = self._project_documents.create(
+                        state.mode.value, "project", name, state.to_dict()
+                    )
                     self._active_project_id = record.project_id
                 else:
-                    self._project_store.save(self._active_project_id, *args)
+                    self._project_documents.save(
+                        self._active_project_id, name, state.to_dict()
+                    )
             except (OSError, ValueError) as error:
                 raise OSError("Не удалось сохранить проект. Запуск не начат") from error
             kwargs["project_id"] = self._active_project_id
