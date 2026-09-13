@@ -15,8 +15,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from studio_module_runtime import (
-    CommandDeclaration, DocumentTypeDeclaration, ModuleAuthorizationError,
-    ModuleRegistration, ModuleRuntimeError, ModuleRuntimeHost, PageDeclaration,
+    CapabilityBroker, CapabilityProvider, CommandDeclaration, DocumentTypeDeclaration,
+    ModuleAuthorizationError, ModuleRegistration, ModuleRuntimeError, ModuleRuntimeHost,
+    PageDeclaration,
 )
 from studio_module_api import CapabilityRequirement
 from studio_modules import ModulePackageError, ModuleStore, canonical_manifest
@@ -196,7 +197,6 @@ def register(context):
         host = ModuleRuntimeHost(
             self.store,
             lambda _module, _action: True,
-            supported_capabilities=(),
         )
         with self.assertRaisesRegex(ModuleRuntimeError, "capability"):
             host.activate("text-probe", "1.0.0")
@@ -215,7 +215,9 @@ def register(context):
         host = ModuleRuntimeHost(
             self.store,
             lambda _module, _action: True,
-            supported_capabilities=(CapabilityRequirement("providers.text", 2),),
+            capability_broker=CapabilityBroker((
+                CapabilityProvider(CapabilityRequirement("providers.text", 2), lambda _id: object()),
+            )),
         )
         with self.assertRaisesRegex(ModuleRuntimeError, "providers.text.v1"):
             host.activate("text-probe-v", "1.0.0")
@@ -234,7 +236,9 @@ def register(context):
         host = ModuleRuntimeHost(
             self.store,
             lambda _module, _action: True,
-            supported_capabilities=(CapabilityRequirement("providers.text", 1),),
+            capability_broker=CapabilityBroker((
+                CapabilityProvider(CapabilityRequirement("providers.text", 1), lambda _id: object()),
+            )),
         )
         info = host.activate("text-probe-ok", "1.0.0")
         self.assertEqual(info.module_id, "text-probe-ok")

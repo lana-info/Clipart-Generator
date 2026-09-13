@@ -17,10 +17,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Collection, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from studio_module_api import (
-    MODULE_API_VERSION, CapabilityRequirement, CommandDeclaration, DocumentTypeDeclaration, ModuleApiError,
+    MODULE_API_VERSION, CapabilityBinding, CapabilityRequirement, CommandDeclaration,
+    DocumentTypeDeclaration, ModuleApiError, ModuleCapabilities, ModuleCapabilityContext,
     ModuleCommand, ModuleContext, ModuleDocumentType, ModulePage, ModuleRegistration,
     PageDeclaration,
 )
@@ -32,6 +33,55 @@ _BYTECODE_EXECUTION_LOCK = threading.RLock()
 
 class ModuleAuthorizationError(ModuleRuntimeError):
     """The trusted host did not explicitly grant an operation."""
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityProvider:
+    """Host-owned factory for one exact public capability version."""
+
+    requirement: CapabilityRequirement
+    factory: Callable[[str], object]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.requirement, CapabilityRequirement) or not callable(self.factory):
+            raise TypeError("CapabilityProvider requires a requirement and callable factory")
+
+
+class CapabilityBroker:
+    """Scope exact capability contracts to a module after registration."""
+
+    def __init__(self, providers: Iterable[CapabilityProvider] = ()) -> None:
+        values = tuple(providers)
+        if any(not isinstance(provider, CapabilityProvider) for provider in values):
+            raise TypeError("CapabilityBroker providers must be CapabilityProvider values")
+        by_requirement: dict[CapabilityRequirement, CapabilityProvider] = {}
+        for provider in values:
+            if provider.requirement in by_requirement:
+                raise ValueError(f"Duplicate capability provider: {provider.requirement.key}")
+            by_requirement[provider.requirement] = provider
+        self._providers = MappingProxyType(by_requirement)
+
+    def scope(
+        self,
+        module_id: str,
+        requirements: Iterable[CapabilityRequirement],
+    ) -> ModuleCapabilities:
+        bindings: list[CapabilityBinding] = []
+        for requirement in tuple(requirements):
+            if not isinstance(requirement, CapabilityRequirement):
+                raise ModuleRuntimeError("Invalid module capability requirement")
+            provider = self._providers.get(requirement)
+            if provider is None:
+                raise ModuleRuntimeError(
+                    f"Required module capability is not supported: {requirement.key}"
+                )
+            contract = provider.factory(module_id)
+            if contract is None:
+                raise ModuleRuntimeError(
+                    f"Required module capability is unavailable: {requirement.key}"
+                )
+            bindings.append(CapabilityBinding(requirement, contract))
+        return ModuleCapabilities(bindings)
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,18 +160,17 @@ class ModuleRuntimeHost:
 
     def __init__(self, store: ModuleStore, authorize: Callable[[str, str], bool] | None = None,
                  *, services: Mapping[str, Any] | None = None,
-                 supported_capabilities: Collection[CapabilityRequirement] | None = None):
+                 capability_broker: CapabilityBroker | None = None):
         if not isinstance(store, ModuleStore):
             raise TypeError("store must be a ModuleStore")
         if authorize is not None and not callable(authorize):
             raise TypeError("authorize must be callable")
+        if capability_broker is not None and not isinstance(capability_broker, CapabilityBroker):
+            raise TypeError("capability_broker must be a CapabilityBroker")
         self.store = store
         self._authorize_callback = authorize
         self._services = MappingProxyType(dict(services or {}))
-        capabilities = tuple(supported_capabilities or ())
-        if any(not isinstance(item, CapabilityRequirement) for item in capabilities):
-            raise TypeError("supported_capabilities must contain CapabilityRequirement values")
-        self._supported_capabilities = frozenset(capabilities)
+        self._capability_broker = capability_broker or CapabilityBroker()
         self._loaded: dict[str, _LoadedModule] = {}
         self._active_jobs: dict[str, int] = {}
         self._page_leases: dict[str, set[str]] = {}
@@ -264,13 +313,23 @@ class ModuleRuntimeHost:
             raise ModuleRuntimeError("register(context) must return ModuleRegistration")
         if (registration.module_id != manifest["module_id"] or registration.version != manifest["version"]):
             raise ModuleRuntimeError("Module registration identity mismatch")
-        missing = tuple(
-            requirement for requirement in registration.capabilities
-            if requirement not in self._supported_capabilities
+        current_root, current_manifest = self._verified_identity(registration.module_id)
+        if current_root != root.resolve() or current_manifest["version"] != registration.version:
+            raise ModuleRuntimeError("Module activation changed while registering")
+        capabilities = self._capability_broker.scope(
+            registration.module_id, registration.capabilities
         )
-        if missing:
-            names = ", ".join(requirement.key for requirement in missing)
-            raise ModuleRuntimeError(f"Required module capability is not supported: {names}")
+        bind = getattr(module, "bind", None)
+        if bind is not None:
+            if not callable(bind):
+                raise ModuleRuntimeError("Module bind must be callable")
+            bind_context = ModuleCapabilityContext(
+                registration.module_id, registration.version, capabilities
+            )
+            with self._module_execution():
+                result = bind(bind_context)
+            if self._synchronous_result(result) is not None:
+                raise ModuleRuntimeError("Module bind must return None")
         return registration
 
     def _current_loaded(self, module_id: str) -> _LoadedModule:

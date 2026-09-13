@@ -6,6 +6,7 @@ import inspect
 import json
 import tempfile
 import zipfile
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -14,14 +15,19 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from studio_module_api import (
     MODULE_API_VERSION,
+    CapabilityBinding,
     CapabilityRequirement,
     CommandDeclaration,
     DocumentTypeDeclaration,
     ModuleApiError,
+    ModuleCapabilities,
+    ModuleCapabilityContext,
     ModuleContext,
     ModuleRegistration,
 )
-from studio_module_runtime import ModuleAuthorizationError, ModuleRuntimeError, ModuleRuntimeHost
+from studio_module_runtime import (
+    CapabilityBroker, CapabilityProvider, ModuleAuthorizationError, ModuleRuntimeError, ModuleRuntimeHost,
+)
 from studio_modules import ModuleStore, canonical_manifest
 
 
@@ -140,6 +146,14 @@ def _signed_text_probe_package(root: Path, private: Ed25519PrivateKey) -> Path:
     return package
 
 
+class _ScopedTextContract:
+    def __init__(self, module_id):
+        self.module_id = module_id
+
+    def normalize(self, value):
+        return f"{self.module_id}:" + " ".join(str(value).split())
+
+
 def test_signed_text_probe_negotiates_capability_without_ui_or_runtime_internals():
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder)
@@ -157,10 +171,17 @@ def test_signed_text_probe_negotiates_capability_without_ui_or_runtime_internals
         assert denied.registration("text-probe") is None
 
         authorized_ids = []
+        scoped_modules = []
+        broker = CapabilityBroker((
+            CapabilityProvider(
+                CapabilityRequirement("providers.text", 1),
+                lambda module_id: scoped_modules.append(module_id) or _ScopedTextContract(module_id),
+            ),
+        ))
         host = ModuleRuntimeHost(
             store,
             lambda module_id, _action: (authorized_ids.append(module_id), 1)[1],
-            supported_capabilities=(CapabilityRequirement("providers.text", 1),),
+            capability_broker=broker,
         )
         # Authorization must grant literal True; generic truthy values remain denied.
         with pytest.raises(ModuleAuthorizationError):
@@ -168,11 +189,42 @@ def test_signed_text_probe_negotiates_capability_without_ui_or_runtime_internals
         host = ModuleRuntimeHost(
             store,
             lambda module_id, _action: (authorized_ids.append(module_id), True)[1],
-            supported_capabilities=(CapabilityRequirement("providers.text", 1),),
+            capability_broker=broker,
         )
         info = host.activate("text-probe", "1.0.0")
         assert info.module_id == "text-probe"
         assert info.pages == ()
         assert info.document_types[0].mime_type == "application/vnd.vibix.text-probe+json"
-        assert host.invoke_command("text-probe", "normalize", "  alpha   beta ") == "alpha beta"
+        assert host.invoke_command("text-probe", "normalize", "  alpha   beta ") == "text-probe:alpha beta"
+        assert scoped_modules == ["text-probe"]
         assert set(authorized_ids) == {"text-probe"}
+
+
+def test_module_capabilities_are_exact_scoped_objects_not_a_mapping():
+    requirement = CapabilityRequirement("providers.text", 1)
+    contract = object()
+    capabilities = ModuleCapabilities((CapabilityBinding(requirement, contract),))
+    context = ModuleCapabilityContext("text-probe", "1.0.0", capabilities)
+    assert not isinstance(capabilities, Mapping)
+    assert not hasattr(capabilities, "__getitem__")
+    assert context.capabilities.require(requirement) is contract
+    assert context.capabilities.requirements == (requirement,)
+    with pytest.raises(AttributeError):
+        capabilities._bindings = ()
+    with pytest.raises(ModuleApiError, match="not bound"):
+        capabilities.require(CapabilityRequirement("providers.text", 2))
+    with pytest.raises(ModuleApiError, match="not bound"):
+        capabilities.require(CapabilityRequirement("assets", 1))
+
+
+def test_capability_broker_scopes_exact_provider_factory_to_module_identity():
+    requirement = CapabilityRequirement("providers.text", 1)
+    calls = []
+    broker = CapabilityBroker((
+        CapabilityProvider(requirement, lambda module_id: calls.append(module_id) or {"module": module_id}),
+    ))
+    capabilities = broker.scope("text-probe", (requirement,))
+    assert capabilities.require(requirement) == {"module": "text-probe"}
+    assert calls == ["text-probe"]
+    with pytest.raises(ModuleRuntimeError, match="providers.text.v2"):
+        broker.scope("text-probe", (CapabilityRequirement("providers.text", 2),))

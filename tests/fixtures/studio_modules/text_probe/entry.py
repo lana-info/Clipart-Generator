@@ -6,9 +6,21 @@ from studio_module_api import (
     ModuleRegistration,
 )
 
+_TEXT_REQUIREMENT = CapabilityRequirement("providers.text", 1)
+_text_contract = None
+
+
+def bind(context):
+    global _text_contract
+    if hasattr(context, "services"):
+        raise ValueError("capability context exposed legacy services")
+    _text_contract = context.capabilities.require(_TEXT_REQUIREMENT)
+
 
 def _normalize(value):
-    return " ".join(str(value).split())
+    if _text_contract is None:
+        raise RuntimeError("text capability was not bound")
+    return _text_contract.normalize(value)
 
 
 def register(context):
@@ -21,5 +33,5 @@ def register(context):
         document_types=(DocumentTypeDeclaration(
             "note", "application/vnd.vibix.text-probe+json", 1,
         ),),
-        capabilities=(CapabilityRequirement("providers.text", 1),),
+        capabilities=(_TEXT_REQUIREMENT,),
     )

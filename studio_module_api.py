@@ -59,6 +59,66 @@ class CapabilityRequirement:
 
 
 @dataclass(frozen=True, slots=True)
+class CapabilityBinding:
+    """One host-provided contract bound to an exact declared capability."""
+
+    requirement: CapabilityRequirement
+    contract: object = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.requirement, CapabilityRequirement):
+            raise ModuleApiError("Invalid capability binding")
+        if self.contract is None:
+            raise ModuleApiError("Capability contract is unavailable")
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class ModuleCapabilities:
+    """Immutable scoped contracts; deliberately not a mapping or string locator."""
+
+    _bindings: tuple[CapabilityBinding, ...] = field(repr=False)
+
+    def __init__(self, bindings: tuple[CapabilityBinding, ...] | list[CapabilityBinding] = ()) -> None:
+        if not isinstance(bindings, (tuple, list)):
+            raise ModuleApiError("Capability bindings must be a sequence")
+        normalized: list[CapabilityBinding] = []
+        names: set[str] = set()
+        for binding in bindings:
+            if not isinstance(binding, CapabilityBinding) or binding.requirement.name in names:
+                raise ModuleApiError("Invalid or duplicate capability binding")
+            names.add(binding.requirement.name)
+            normalized.append(binding)
+        object.__setattr__(self, "_bindings", tuple(normalized))
+
+    @property
+    def requirements(self) -> tuple[CapabilityRequirement, ...]:
+        return tuple(binding.requirement for binding in self._bindings)
+
+    def require(self, requirement: CapabilityRequirement) -> object:
+        if not isinstance(requirement, CapabilityRequirement):
+            raise ModuleApiError("Invalid capability requirement")
+        for binding in self._bindings:
+            if binding.requirement == requirement:
+                return binding.contract
+        raise ModuleApiError(f"Capability is not bound: {requirement.key}")
+
+
+@dataclass(frozen=True, slots=True)
+class ModuleCapabilityContext:
+    """Second-phase context containing only contracts declared by registration."""
+
+    module_id: str
+    version: str
+    capabilities: ModuleCapabilities
+
+    def __post_init__(self) -> None:
+        _declaration_name(self.module_id)
+        _numeric_version(self.version)
+        if not isinstance(self.capabilities, ModuleCapabilities):
+            raise ModuleApiError("Invalid module capabilities")
+
+
+@dataclass(frozen=True, slots=True)
 class CommandDeclaration:
     name: str
     handler: Callable[..., Any] = field(repr=False, compare=False)
@@ -195,7 +255,8 @@ ModuleDocumentType = DocumentTypeDeclaration
 
 
 __all__ = [
-    "MODULE_API_VERSION", "CapabilityRequirement", "CommandDeclaration",
-    "DocumentTypeDeclaration", "ModuleApiError", "ModuleCommand", "ModuleContext",
-    "ModuleDocumentType", "ModulePage", "ModuleRegistration", "PageDeclaration",
+    "MODULE_API_VERSION", "CapabilityBinding", "CapabilityRequirement", "CommandDeclaration",
+    "DocumentTypeDeclaration", "ModuleApiError", "ModuleCapabilities", "ModuleCapabilityContext",
+    "ModuleCommand", "ModuleContext", "ModuleDocumentType", "ModulePage",
+    "ModuleRegistration", "PageDeclaration",
 ]
