@@ -203,41 +203,43 @@ class MaskEditDocument:
             raise ValueError("Исправленный результат нужно сохранять в PNG")
         destination.parent.mkdir(parents=True, exist_ok=True)
         mask_destination.parent.mkdir(parents=True, exist_ok=True)
-        self.recover_pair(destination, mask_destination)
         from chroma_generation_record import (
-            capture_generation_record, record_path, stage_rebound_generation_record,
+            capture_generation_record, generation_transaction_lock, record_path,
+            stage_rebound_generation_record,
         )
-        generation_record = (
-            capture_generation_record(destination) if destination.exists() else None
-        )
-        output_temporary = self._stage_png(
-            self.corrected_image(),
-            destination,
-            self._save_info,
-        )
-        mask_temporary: Path | None = None
-        sidecar_temporary: Path | None = None
-        try:
-            mask_temporary = self._stage_png(self.mask, mask_destination, {})
-            if generation_record is not None:
-                sidecar_temporary = stage_rebound_generation_record(
-                    output_temporary, generation_record, stage="final",
-                    directory=destination.parent,
-                )
-            self._replace_pair(
-                output_temporary,
-                destination,
-                mask_temporary,
-                mask_destination,
-                sidecar_temporary=sidecar_temporary,
-                sidecar_destination=(record_path(destination) if sidecar_temporary else None),
+        with generation_transaction_lock(destination):
+            self._recover_pair_unlocked(destination, mask_destination)
+            generation_record = (
+                capture_generation_record(destination) if destination.exists() else None
             )
-        finally:
-            output_temporary.unlink(missing_ok=True)
-            if mask_temporary is not None:
-                mask_temporary.unlink(missing_ok=True)
-            if sidecar_temporary is not None:
-                sidecar_temporary.unlink(missing_ok=True)
+            output_temporary = self._stage_png(
+                self.corrected_image(),
+                destination,
+                self._save_info,
+            )
+            mask_temporary: Path | None = None
+            sidecar_temporary: Path | None = None
+            try:
+                mask_temporary = self._stage_png(self.mask, mask_destination, {})
+                if generation_record is not None:
+                    sidecar_temporary = stage_rebound_generation_record(
+                        output_temporary, generation_record, stage="final",
+                        directory=destination.parent,
+                    )
+                self._replace_pair(
+                    output_temporary,
+                    destination,
+                    mask_temporary,
+                    mask_destination,
+                    sidecar_temporary=sidecar_temporary,
+                    sidecar_destination=(record_path(destination) if sidecar_temporary else None),
+                )
+            finally:
+                output_temporary.unlink(missing_ok=True)
+                if mask_temporary is not None:
+                    mask_temporary.unlink(missing_ok=True)
+                if sidecar_temporary is not None:
+                    sidecar_temporary.unlink(missing_ok=True)
         self._saved_mask = self.mask.copy()
 
     @staticmethod
@@ -322,7 +324,22 @@ class MaskEditDocument:
         output_destination: str | Path,
         mask_destination: str | Path,
     ) -> bool:
-        """Recover an interrupted PNG/mask commit before opening or saving it."""
+        """Recover an interrupted commit only while holding its advisory lock."""
+        output = Path(output_destination)
+        mask = Path(mask_destination)
+        marker, _ = cls._pair_transaction_paths(output, mask)
+        if not marker.is_file():
+            return False
+        from chroma_generation_record import generation_transaction_lock
+        with generation_transaction_lock(output):
+            return cls._recover_pair_unlocked(output, mask)
+
+    @classmethod
+    def _recover_pair_unlocked(
+        cls,
+        output_destination: str | Path,
+        mask_destination: str | Path,
+    ) -> bool:
         destinations = (Path(output_destination), Path(mask_destination))
         marker, backups = cls._pair_transaction_paths(*destinations)
         if not marker.is_file():
@@ -424,7 +441,7 @@ class MaskEditDocument:
                 includes_sidecar=includes_sidecar,
             )
         except BaseException:
-            cls.recover_pair(output_destination, mask_destination)
+            cls._recover_pair_unlocked(output_destination, mask_destination)
             raise
         for backup in backups:
             backup.unlink(missing_ok=True)
@@ -1232,7 +1249,7 @@ class ClipartTransparencyEditorPage(QWidget):
             )
             self._refresh_history_buttons()
             return
-        except (OSError, UnidentifiedImageError):
+        except (OSError, ValueError, UnidentifiedImageError):
             self.canvas.set_document(None)
             self._refresh_history_buttons()
             return

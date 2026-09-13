@@ -7,7 +7,7 @@ from PIL import Image
 
 from chroma_generation_record import (
     bind_generation_record, capture_generation_record, ensure_record_paths_available,
-    load_generation_color, load_generation_result_kind, publish_generation_copy,
+    generation_transaction_lock, load_generation_color, load_generation_result_kind, publish_generation_copy,
     rebind_generation_record, record_path, recover_generation_copy, write_generation_intent,
 )
 
@@ -213,15 +213,47 @@ class GenerationRecordTests(unittest.TestCase):
         captured = capture_generation_record(self.source)
         sidecar = record_path(self.source)
         before = sidecar.read_bytes()
-        lock = sidecar.with_name(sidecar.name + ".lock")
-        lock.write_text("held")
         Image.new("RGBA", (8, 8), (9, 8, 7, 0)).save(self.source)
-        try:
+        with generation_transaction_lock(self.source):
             with self.assertRaises(ValueError):
                 rebind_generation_record(self.source, captured, stage="final")
-        finally:
-            lock.unlink(missing_ok=True)
         self.assertEqual(sidecar.read_bytes(), before)
+
+
+    def test_advisory_generation_lock_blocks_live_holder_but_not_stale_lock_file(self):
+        lock_path = record_path(self.source).with_name(record_path(self.source).name + ".lock")
+        lock_path.write_text("stale-file-is-not-a-live-lock")
+        with generation_transaction_lock(self.source):
+            with self.assertRaises(ValueError):
+                with generation_transaction_lock(self.source):
+                    pass
+        # Advisory lock is released by closing the fd; a persistent/stale lock file
+        # must not permanently block later saves.
+        with generation_transaction_lock(self.source):
+            pass
+
+    def test_recovery_without_marker_does_not_create_persistent_lock_file(self):
+        destination = self.source.with_name("unused-copy.png")
+        lock_path = record_path(destination).with_name(record_path(destination).name + ".lock")
+        self.assertFalse(recover_generation_copy(destination))
+        self.assertFalse(lock_path.exists())
+
+    def test_recovery_does_not_reclaim_a_live_generation_copy_transaction(self):
+        import chroma_generation_record as records
+        destination = self.source.with_name("copy.png")
+        destination.write_bytes(b"partial-image")
+        marker = records._copy_marker_path(destination)
+        records._write_copy_marker(marker, {
+            "schema_version": 1,
+            "phase": "prepared",
+            "image_sha256": records._file_sha256(destination),
+            "record_sha256": "0" * 64,
+        }, overwrite=False)
+        with generation_transaction_lock(destination):
+            with self.assertRaises(ValueError):
+                recover_generation_copy(destination)
+            self.assertTrue(destination.exists())
+            self.assertTrue(marker.exists())
 
     def test_future_schema_extra_fields_and_symlink_are_rejected(self):
         self.prepare()

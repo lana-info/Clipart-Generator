@@ -232,8 +232,62 @@ def _write_copy_marker(marker: Path, payload: dict, *, overwrite: bool) -> None:
             staged.unlink(missing_ok=True)
 
 
-def recover_generation_copy(destination: str | Path) -> bool:
-    """Recover an interrupted no-clobber PNG + generation-sidecar Save As."""
+def _generation_lock_path(image_path: str | Path) -> Path:
+    target = record_path(image_path)
+    return target.with_name(target.name + ".lock")
+
+
+@contextmanager
+def generation_transaction_lock(image_path: str | Path):
+    """Hold a cross-process advisory lock for one PNG/provenance transaction.
+
+    The lock file is intentionally persistent. Ownership lives on the open file
+    descriptor, so the OS releases it automatically if the process exits or crashes.
+    """
+    lock_path = _generation_lock_path(image_path)
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(lock_path, flags, 0o600)
+    locked = False
+    try:
+        if os.name == "nt":
+            import msvcrt
+            if os.fstat(fd).st_size < 1:
+                os.lseek(fd, 0, os.SEEK_SET)
+                os.write(fd, b"\0")
+                os.fsync(fd)
+            os.lseek(fd, 0, os.SEEK_SET)
+            try:
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            except OSError as error:
+                raise ValueError("Сведения генерации уже изменяются другим процессом") from error
+            locked = True
+        else:
+            import fcntl
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as error:
+                raise ValueError("Сведения генерации уже изменяются другим процессом") from error
+            locked = True
+        yield
+    finally:
+        if locked:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+        os.close(fd)
+
+
+def _recover_generation_copy_unlocked(destination: str | Path) -> bool:
+    """Recover a previous Save As after the destination advisory lock is held."""
     target = Path(destination)
     marker = _copy_marker_path(target)
     if not marker.is_file():
@@ -270,9 +324,17 @@ def recover_generation_copy(destination: str | Path) -> bool:
     return True
 
 
+def recover_generation_copy(destination: str | Path) -> bool:
+    """Recover an interrupted Save As only after acquiring its advisory lock."""
+    if not _copy_marker_path(destination).is_file():
+        return False
+    with generation_transaction_lock(destination):
+        return _recover_generation_copy_unlocked(destination)
+
+
 def publish_generation_copy(staged_image_path: str | Path, destination: str | Path,
                             captured: dict, *, stage: str = "final") -> Path:
-    """Publish a new PNG and its v2 sidecar as one recoverable no-clobber unit."""
+    """Publish a new PNG and its v2 sidecar as one locked recoverable unit."""
     source = Path(staged_image_path)
     target = Path(destination)
     if not source.is_file():
@@ -281,56 +343,42 @@ def publish_generation_copy(staged_image_path: str | Path, destination: str | Pa
         raise ValueError("Portable generation copy must be PNG")
     if not target.parent.is_dir():
         raise FileNotFoundError("destination directory does not exist")
-    recover_generation_copy(target)
-    if target.exists() or target.is_symlink():
-        raise FileExistsError(f"refusing to overwrite existing output: {target}")
-    ensure_record_paths_available(target)
-    staged_record = stage_rebound_generation_record(
-        source, captured, stage=stage, directory=target.parent
-    )
-    sidecar = record_path(target)
-    marker = _copy_marker_path(target)
-    payload = {
-        "schema_version": 1,
-        "phase": "prepared",
-        "image_sha256": _file_sha256(source),
-        "record_sha256": _file_sha256(staged_record),
-    }
-    _write_copy_marker(marker, payload, overwrite=False)
-    image_published = False
-    sidecar_published = False
-    try:
-        publish_atomic(source, target, overwrite=False); image_published = True
-        publish_atomic(staged_record, sidecar, overwrite=False); sidecar_published = True
-        payload["phase"] = "committed"
-        _write_copy_marker(marker, payload, overwrite=True)
-        marker.unlink(missing_ok=True)
-        return target
-    except Exception:
-        if sidecar_published and sidecar.is_file() and _file_sha256(sidecar) == payload["record_sha256"]:
-            sidecar.unlink()
-        if image_published and target.is_file() and _file_sha256(target) == payload["image_sha256"]:
-            target.unlink()
-        marker.unlink(missing_ok=True)
-        raise
-    finally:
-        staged_record.unlink(missing_ok=True)
+    with generation_transaction_lock(target):
+        _recover_generation_copy_unlocked(target)
+        if target.exists() or target.is_symlink():
+            raise FileExistsError(f"refusing to overwrite existing output: {target}")
+        ensure_record_paths_available(target)
+        staged_record = stage_rebound_generation_record(
+            source, captured, stage=stage, directory=target.parent
+        )
+        sidecar = record_path(target)
+        marker = _copy_marker_path(target)
+        payload = {
+            "schema_version": 1,
+            "phase": "prepared",
+            "image_sha256": _file_sha256(source),
+            "record_sha256": _file_sha256(staged_record),
+        }
+        _write_copy_marker(marker, payload, overwrite=False)
+        image_published = False
+        sidecar_published = False
+        try:
+            publish_atomic(source, target, overwrite=False); image_published = True
+            publish_atomic(staged_record, sidecar, overwrite=False); sidecar_published = True
+            payload["phase"] = "committed"
+            _write_copy_marker(marker, payload, overwrite=True)
+            marker.unlink(missing_ok=True)
+            return target
+        except Exception:
+            if sidecar_published and sidecar.is_file() and _file_sha256(sidecar) == payload["record_sha256"]:
+                sidecar.unlink()
+            if image_published and target.is_file() and _file_sha256(target) == payload["image_sha256"]:
+                target.unlink()
+            marker.unlink(missing_ok=True)
+            raise
+        finally:
+            staged_record.unlink(missing_ok=True)
 
-
-@contextmanager
-def _exclusive_record_lock(target: Path):
-    lock = target.with_name(target.name + ".lock")
-    try:
-        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError as error:
-        raise ValueError("Сведения генерации уже изменяются другим процессом") from error
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            stream.write(str(os.getpid()))
-            stream.flush(); os.fsync(stream.fileno())
-        yield
-    finally:
-        lock.unlink(missing_ok=True)
 
 def _rebound_generation_data(image_path, captured: dict, *, stage: str = "final") -> dict:
     data = _validate(captured, pending=False)
@@ -366,7 +414,7 @@ def rebind_generation_record(image_path, captured: dict, *, stage: str = "final"
     if not overwrite:
         _write(target, data, overwrite=False)
         return
-    with _exclusive_record_lock(target):
+    with generation_transaction_lock(image_path):
         if not target.exists() or target.is_symlink():
             raise ValueError("Сведения генерации исчезли или стали недопустимой ссылкой")
         try:

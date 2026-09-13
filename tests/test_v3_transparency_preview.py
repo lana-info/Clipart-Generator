@@ -292,6 +292,43 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             self.assertFalse(marker.exists())
             self.assertFalse(backups[0].exists() or backups[1].exists() or sidecar_backup.exists())
 
+
+    def test_document_save_refuses_concurrent_generation_transaction_without_lost_update(self):
+        from chroma_generation_record import (
+            bind_generation_record, generation_transaction_lock, record_path,
+            write_generation_intent,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output" / "ready.png"
+            mask = root / "rough" / "ready_alpha-mask.png"
+            output.parent.mkdir(); mask.parent.mkdir()
+            Image.new("RGBA", (12, 12), (1, 2, 3, 255)).save(output)
+            Image.new("L", (12, 12), 255).save(mask)
+            intent = write_generation_intent(
+                output, color="green", prompt="flower", result_kind="clipart"
+            )
+            bind_generation_record(output, intent, stage="final")
+            before = (output.read_bytes(), mask.read_bytes(), record_path(output).read_bytes())
+            document = MaskEditDocument(Image.new("RGBA", (12, 12), (9, 8, 7, 255)))
+
+            with generation_transaction_lock(output):
+                with self.assertRaises(ValueError):
+                    document.save(output, mask)
+
+            self.assertEqual(output.read_bytes(), before[0])
+            self.assertEqual(mask.read_bytes(), before[1])
+            self.assertEqual(record_path(output).read_bytes(), before[2])
+
+    def test_pair_recovery_without_marker_does_not_create_generation_lock_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "ready.png"
+            mask = root / "ready-mask.png"
+            lock = output.with_name(output.name + ".generation.json.lock")
+            self.assertFalse(MaskEditDocument.recover_pair(output, mask))
+            self.assertFalse(lock.exists())
+
     def test_document_history_is_bounded_by_memory_not_only_step_count(self):
         document = MaskEditDocument(
             Image.new("RGBA", (512, 512), (10, 20, 30, 255))
