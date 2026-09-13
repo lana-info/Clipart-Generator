@@ -6,7 +6,9 @@ import unittest
 from PIL import Image
 
 from chroma_generation_record import (
-    bind_generation_record, load_generation_color, record_path, write_generation_intent,
+    bind_generation_record, capture_generation_record, ensure_record_paths_available,
+    load_generation_color, load_generation_result_kind, rebind_generation_record,
+    record_path, write_generation_intent,
 )
 
 
@@ -68,11 +70,114 @@ class GenerationRecordTests(unittest.TestCase):
         record_path(self.source).rename(record_path(moved))
         self.assertEqual(load_generation_color(moved), "green")
 
+
+    def test_v2_raw_and_final_records_preserve_kind_without_rekeying_final(self):
+        intent = write_generation_intent(
+            self.source, color="green", prompt="flower", result_kind="clipart"
+        )
+        Image.new("RGB", (8, 8), (0, 255, 0)).save(self.source)
+        bind_generation_record(self.source, intent, stage="raw")
+        self.assertEqual(load_generation_color(self.source), "green")
+        self.assertEqual(load_generation_result_kind(self.source), "clipart")
+
+        final = self.source.with_name("result.png")
+        Image.new("RGBA", (8, 8), (10, 20, 30, 0)).save(final)
+        bind_generation_record(final, intent, stage="final")
+        self.assertIsNone(load_generation_color(final))
+        self.assertEqual(load_generation_result_kind(final), "clipart")
+        data = json.loads(record_path(final).read_text())
+        self.assertEqual(data["stage"], "final")
+        self.assertNotIn("prompt", data)
+
+    def test_v2_surface_intent_allows_no_chroma_color_and_is_hash_bound(self):
+        intent = write_generation_intent(
+            self.source, color=None, prompt="pattern", result_kind="pattern"
+        )
+        self.assertIsNone(intent["requested_color"])
+        Image.new("RGB", (8, 8), (30, 40, 50)).save(self.source)
+        bind_generation_record(self.source, intent, stage="raw")
+        self.assertIsNone(load_generation_color(self.source))
+        self.assertEqual(load_generation_result_kind(self.source), "pattern")
+        Image.new("RGB", (8, 8), (1, 2, 3)).save(self.source)
+        with self.assertRaises(ValueError):
+            load_generation_result_kind(self.source)
+
+    def test_legacy_v1_record_keeps_color_but_does_not_invent_result_kind(self):
+        # Existing installs may already have schema-v1 records.
+        self.prepare("red")
+        path = record_path(self.source)
+        data = json.loads(path.read_text())
+        # prepare() should continue producing/reading a compatible record; rewrite a literal v1 fixture.
+        legacy = {
+            "schema_version": 1,
+            "requested_color": "red",
+            "prompt_sha256": data["prompt_sha256"],
+            "source_sha256": data["source_sha256"],
+        }
+        path.write_text(json.dumps(legacy))
+        self.assertEqual(load_generation_color(self.source), "red")
+        self.assertIsNone(load_generation_result_kind(self.source))
+
+    def test_rebind_after_local_edit_preserves_v2_kind_and_updates_hash(self):
+        intent = write_generation_intent(
+            self.source, color="green", prompt="flower", result_kind="clipart"
+        )
+        Image.new("RGBA", (8, 8), (10, 20, 30, 128)).save(self.source)
+        bind_generation_record(self.source, intent, stage="final")
+        captured = capture_generation_record(self.source)
+        self.assertEqual(captured["result_kind"], "clipart")
+
+        Image.new("RGBA", (8, 8), (10, 20, 30, 255)).save(self.source)
+        with self.assertRaises(ValueError):
+            load_generation_result_kind(self.source)
+        rebind_generation_record(self.source, captured, stage="final")
+        self.assertEqual(load_generation_result_kind(self.source), "clipart")
+        self.assertIsNone(load_generation_color(self.source))
+
+    def test_rebind_can_attach_captured_kind_to_separate_copy(self):
+        intent = write_generation_intent(
+            self.source, color=None, prompt="pattern", result_kind="pattern"
+        )
+        Image.new("RGB", (8, 8), (1, 2, 3)).save(self.source)
+        bind_generation_record(self.source, intent, stage="final")
+        captured = capture_generation_record(self.source)
+        copy = self.source.with_name("copy.png")
+        Image.new("RGB", (8, 8), (4, 5, 6)).save(copy)
+
+        rebind_generation_record(copy, captured, stage="final", overwrite=False)
+        self.assertEqual(load_generation_result_kind(copy), "pattern")
+        self.assertIsNone(load_generation_color(copy))
+
+    def test_capture_does_not_invent_kind_for_legacy_v1(self):
+        self.prepare("green")
+        path = record_path(self.source)
+        data = json.loads(path.read_text())
+        legacy = {
+            "schema_version": 1,
+            "requested_color": "green",
+            "prompt_sha256": data["prompt_sha256"],
+            "source_sha256": data["source_sha256"],
+        }
+        path.write_text(json.dumps(legacy))
+        self.assertIsNone(capture_generation_record(self.source))
+
+    def test_record_path_preflight_rejects_raw_or_final_pending_or_completed_collision(self):
+        final = self.source.with_name("final.png")
+        for image_path in (self.source, final):
+            for pending in (False, True):
+                with self.subTest(image=image_path.name, pending=pending):
+                    target = record_path(image_path, pending=pending)
+                    target.write_text("occupied")
+                    with self.assertRaises(FileExistsError):
+                        ensure_record_paths_available(self.source, final)
+                    target.unlink()
+        ensure_record_paths_available(self.source, final)
+
     def test_future_schema_extra_fields_and_symlink_are_rejected(self):
         self.prepare()
         path = record_path(self.source)
         original = json.loads(path.read_text())
-        for change in ({"schema_version": True}, {"schema_version": 2},
+        for change in ({"schema_version": True}, {"schema_version": 3},
                        {"quality_status": "ready"}, {"requested_color": "cyan"}):
             path.write_text(json.dumps(dict(original, **change)))
             with self.assertRaises(ValueError):

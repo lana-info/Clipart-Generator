@@ -124,6 +124,30 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
         document.reset()
         self.assertEqual(document.mask.getextrema(), (255, 255))
 
+    def test_document_save_rebinds_hash_bound_result_kind_sidecar(self):
+        from chroma_generation_record import (
+            bind_generation_record, load_generation_result_kind, write_generation_intent,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output" / "flowers_ready.png"
+            mask = root / "rough" / "flowers_ready_alpha-mask.png"
+            output.parent.mkdir()
+            Image.new("RGBA", (12, 12), (7, 8, 9, 255)).save(output)
+            intent = write_generation_intent(
+                output, color="green", prompt="flower", result_kind="clipart"
+            )
+            bind_generation_record(output, intent, stage="final")
+            with Image.open(output) as opened:
+                document = MaskEditDocument(opened.convert("RGBA"))
+            document.begin_stroke()
+            document.extend_stroke(((6, 6),), radius=2, action="remove", hardness=100)
+            document.end_stroke()
+
+            document.save(output, mask)
+
+            self.assertEqual(load_generation_result_kind(output), "clipart")
+
     def test_document_save_preserves_png_dpi(self):
         source = Image.new("RGBA", (12, 12), (7, 8, 9, 255))
         source.info["dpi"] = (300.0, 300.0)

@@ -109,6 +109,270 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                                            temp, str(Path(temp) / "output.png"), False)
                 generate.assert_not_called()
 
+    def test_generation_records_result_kind_before_api_and_binds_raw_and_final(self):
+        from chroma_generation_record import (
+            load_generation_color, load_generation_result_kind, record_path,
+        )
+        import json
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            output = root / "pattern_ready.png"
+            worker = self.make_worker(root, remove_bg=True, remove_bg_provider="local_chroma_key")
+            source = raw / f"gen_001_{worker.run_stamp}.png"
+
+            def generate(prompt, references):
+                pending = json.loads(record_path(source, pending=True).read_text())
+                self.assertEqual(pending["schema_version"], 2)
+                self.assertEqual(pending["result_kind"], "pattern")
+                self.assertEqual(pending["stage"], "raw")
+                self.assertIsNone(pending["requested_color"])
+                self.assertFalse(source.exists())
+                return "https://example.invalid/generated.png"
+
+            def download(url, target):
+                Image.new("RGB", (32, 32), (30, 40, 50)).save(target)
+
+            def save_final(result_url, source_path, output_path, *args, **kwargs):
+                Image.open(source_path).save(output_path, format="PNG")
+
+            with patch.object(worker, "_kie_generate_image", side_effect=generate), \
+                 patch.object(worker, "_download_file", side_effect=download), \
+                 patch.object(worker, "_save_final_output", side_effect=save_final):
+                worker._generate_entry(
+                    1, 1, {"prompt": "seamless pattern", "result_kind": "pattern"},
+                    str(raw), str(output), False,
+                )
+
+            self.assertEqual(load_generation_result_kind(source), "pattern")
+            self.assertEqual(load_generation_result_kind(output), "pattern")
+            self.assertIsNone(load_generation_color(output))
+            final_record = json.loads(record_path(output).read_text())
+            self.assertEqual(final_record["stage"], "final")
+
+    def test_imported_final_png_recovers_surface_result_kind_without_rekeying(self):
+        from chroma_generation_record import bind_generation_record, write_generation_intent
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            source = root / "moved-pattern.png"
+            Image.new("RGB", (32, 32), (30, 40, 50)).save(source)
+            intent = write_generation_intent(
+                source, color=None, prompt="pattern", result_kind="pattern"
+            )
+            bind_generation_record(source, intent, stage="final")
+            worker = self.make_worker(
+                root, remove_bg=True, remove_bg_provider="local_chroma_key",
+                chroma_key_color="red",
+            )
+            with patch.object(main, "remove_chroma_key_automatic",
+                              side_effect=AssertionError("final surface must not be re-keyed")):
+                result = worker._run_processing_pipeline(
+                    str(source), None, str(raw), 1, "file"
+                )
+            self.assertIsNone(result)
+
+    def test_generation_only_opaque_chroma_clipart_output_remains_raw_for_later_removal(self):
+        from chroma_generation_record import load_generation_color, record_path
+        import json
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            output = root / "clipart_ready.png"
+            worker = self.make_worker(root)
+
+            def download(url, target):
+                Image.new("RGB", (32, 32), (0, 255, 0)).save(target)
+
+            def save_final(result_url, source_path, output_path, *args, **kwargs):
+                Image.open(source_path).save(output_path, format="PNG")
+
+            with patch.object(worker, "_kie_generate_image", return_value="https://example.invalid/generated.png"), \
+                 patch.object(worker, "_download_file", side_effect=download), \
+                 patch.object(worker, "_save_final_output", side_effect=save_final):
+                worker._generate_entry(
+                    1, 1, {
+                        "prompt": "flower", "result_kind": "clipart",
+                        "chroma_key_color": "green",
+                    }, str(raw), str(output), False,
+                )
+
+            data = json.loads(record_path(output).read_text())
+            self.assertEqual(data["stage"], "raw")
+            self.assertEqual(load_generation_color(output), "green")
+
+    def test_generation_only_clipart_with_isolated_alpha_noise_remains_raw(self):
+        from chroma_generation_record import record_path
+        import json
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            output = root / "clipart_ready.png"
+            worker = self.make_worker(root)
+
+            def download(url, target):
+                image = Image.new("RGBA", (64, 64), (0, 255, 0, 255))
+                image.putpixel((0, 0), (0, 255, 0, 0))
+                image.save(target)
+
+            def save_final(result_url, source_path, output_path, *args, **kwargs):
+                Image.open(source_path).save(output_path, format="PNG")
+
+            with patch.object(worker, "_kie_generate_image", return_value="https://example.invalid/generated.png"), \
+                 patch.object(worker, "_download_file", side_effect=download), \
+                 patch.object(worker, "_save_final_output", side_effect=save_final):
+                worker._generate_entry(
+                    1, 1, {
+                        "prompt": "flower", "result_kind": "clipart",
+                        "chroma_key_color": "green",
+                    }, str(raw), str(output), False,
+                )
+
+            data = json.loads(record_path(output).read_text())
+            self.assertEqual(data["stage"], "raw")
+
+    def test_generation_only_native_transparent_clipart_output_is_final(self):
+        from chroma_generation_record import load_generation_color, record_path
+        import json
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            output = root / "clipart_ready.png"
+            worker = self.make_worker(root)
+
+            def download(url, target):
+                image = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+                ImageDraw.Draw(image).rectangle((8, 8, 23, 23), fill=(120, 80, 40, 255))
+                image.save(target)
+
+            def save_final(result_url, source_path, output_path, *args, **kwargs):
+                Image.open(source_path).save(output_path, format="PNG")
+
+            with patch.object(worker, "_kie_generate_image", return_value="https://example.invalid/generated.png"), \
+                 patch.object(worker, "_download_file", side_effect=download), \
+                 patch.object(worker, "_save_final_output", side_effect=save_final):
+                worker._generate_entry(
+                    1, 1, {"prompt": "flower", "result_kind": "clipart"},
+                    str(raw), str(output), False,
+                )
+
+            data = json.loads(record_path(output).read_text())
+            self.assertEqual(data["stage"], "final")
+            self.assertIsNone(load_generation_color(output))
+
+    def test_imported_final_clipart_png_is_not_chroma_keyed_again(self):
+        from chroma_generation_record import bind_generation_record, write_generation_intent
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            source = root / "finished-clipart.png"
+            Image.new("RGBA", (32, 32), (120, 80, 40, 255)).save(source)
+            intent = write_generation_intent(
+                source, color="green", prompt="flower", result_kind="clipart"
+            )
+            bind_generation_record(source, intent, stage="final")
+            worker = self.make_worker(
+                root, remove_bg=True, remove_bg_provider="local_chroma_key",
+                chroma_key_color="red",
+            )
+            with patch.object(
+                main, "remove_chroma_key_automatic",
+                side_effect=AssertionError("final clipart must not be re-keyed"),
+            ):
+                result = worker._run_processing_pipeline(
+                    str(source), None, str(raw), 1, "file"
+                )
+            self.assertIsNone(result)
+
+    def test_imported_png_result_kind_conflict_stops_instead_of_guessing(self):
+        from chroma_generation_record import bind_generation_record, write_generation_intent
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            source = root / "moved-pattern.png"
+            Image.new("RGB", (32, 32), (30, 40, 50)).save(source)
+            intent = write_generation_intent(
+                source, color=None, prompt="pattern", result_kind="pattern"
+            )
+            bind_generation_record(source, intent, stage="final")
+            worker = self.make_worker(root, remove_bg=True, remove_bg_provider="local_chroma_key")
+            with self.assertRaisesRegex(ValueError, "назнач|тип результата"):
+                worker._run_processing_pipeline(
+                    str(source), None, str(raw), 1, "file", result_kind="clipart"
+                )
+
+    def test_final_sidecar_collision_blocks_before_paid_generation(self):
+        from chroma_generation_record import record_path
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            output = root / "clipart_ready.png"
+            record_path(output).write_text("stale sidecar")
+            worker = self.make_worker(root)
+            with patch.object(worker, "_kie_generate_image") as generate:
+                with self.assertRaises(FileExistsError):
+                    worker._generate_entry(
+                        1, 1, {"prompt": "flower", "result_kind": "clipart"},
+                        str(raw), str(output), False,
+                    )
+            generate.assert_not_called()
+
+    def test_final_sidecar_write_failure_does_not_turn_paid_generation_into_retryable_failure(self):
+        import chroma_generation_record
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            output = root / "clipart_ready.png"
+            worker = self.make_worker(root)
+            original_bind = chroma_generation_record.bind_generation_record
+            generated = []
+
+            def generate(prompt, references):
+                generated.append(prompt)
+                return "https://example.invalid/generated.png"
+
+            def download(url, target):
+                Image.new("RGB", (24, 24), (10, 20, 30)).save(target)
+
+            def save_final(result_url, source_path, output_path, *args, **kwargs):
+                Image.open(source_path).save(output_path, format="PNG")
+
+            def fail_final(path, intent, *, stage="raw"):
+                if stage == "final":
+                    raise OSError("disk full for sidecar")
+                return original_bind(path, intent, stage=stage)
+
+            with patch.object(worker, "_kie_generate_image", side_effect=generate), \
+                 patch.object(worker, "_download_file", side_effect=download), \
+                 patch.object(worker, "_save_final_output", side_effect=save_final), \
+                 patch("chroma_generation_record.bind_generation_record", side_effect=fail_final):
+                result = worker._generate_entry(
+                    1, 1, {"prompt": "flower", "result_kind": "clipart"},
+                    str(raw), str(output), False,
+                )
+
+            self.assertEqual(result, str(output))
+            self.assertTrue(output.exists())
+            self.assertEqual(generated, ["flower"])
+
     def test_native_alpha_route_preserves_detail_without_chroma_call(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

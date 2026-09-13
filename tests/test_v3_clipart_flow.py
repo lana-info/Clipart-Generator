@@ -27,6 +27,7 @@ from chroma_key import chroma_key_prompt_block
 from v3_clipart_flow import (
     MAX_CLIPART_REQUESTS,
     ClipartFlowError,
+    ClipartRunRequest,
     ClipartProcessingPage,
     ClipartGenerationPage,
     ClipartProjectPage,
@@ -125,6 +126,43 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.generation.model = "gpt-image-2"
         state.clipart.generation.variants = 2
         return state
+
+    def test_run_request_worker_kwargs_preserve_generation_metadata(self):
+        request = ClipartRunRequest(
+            mode="mode1_generate_only",
+            work_dir="/tmp/work",
+            settings={},
+            generated_prompts=[{
+                "prompt": "flower",
+                "references": [],
+                "chroma_key_color": "green",
+                "result_kind": "clipart",
+                "object_id": "object-1",
+            }],
+        )
+        entry = request.worker_kwargs()["generated_prompts"][0]
+        self.assertEqual(entry["chroma_key_color"], "green")
+        self.assertEqual(entry["result_kind"], "clipart")
+        self.assertEqual(entry["object_id"], "object-1")
+
+    def test_worker_normalization_preserves_object_id_and_result_kind(self):
+        from main import WorkerThread
+        request = ClipartRunRequest(
+            mode="mode1_generate_only",
+            work_dir="/tmp/work",
+            settings={},
+            generated_prompts=[{
+                "prompt": "flower",
+                "references": [],
+                "chroma_key_color": "green",
+                "result_kind": "clipart",
+                "object_id": "object-1",
+            }],
+        )
+        worker = WorkerThread(**request.worker_kwargs())
+        entry = worker._normalize_prompt_entries(worker.generated_prompts)[0]
+        self.assertEqual(entry["result_kind"], "clipart")
+        self.assertEqual(entry["object_id"], "object-1")
 
     def test_batch_prompt_text_edits_preserve_references_and_order(self):
         entries = [

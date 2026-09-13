@@ -1637,20 +1637,23 @@ class WorkerThread(QThread):
             operation_type="generation",
         )
         self._emit_file_progress(idx, total, 18)
-        from chroma_generation_record import bind_generation_record, write_generation_intent
+        from chroma_generation_record import (
+            bind_generation_record, ensure_record_paths_available, write_generation_intent,
+        )
 
         gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
-        generation_intent = None
-        if entry.get("chroma_key_color"):
-            generation_intent = write_generation_intent(
-                gen_path, color=entry["chroma_key_color"], prompt=prompt_text,
-            )
+        ensure_record_paths_available(gen_path, out_path)
+        generation_intent = write_generation_intent(
+            gen_path,
+            color=entry.get("chroma_key_color") or None,
+            prompt=prompt_text,
+            result_kind=result_kind,
+        )
         image_url = self._kie_generate_image(prompt_text, references)
         self._emit_file_progress(idx, total, 36)
         self._ensure_running()
         self._download_file(image_url, gen_path)
-        if generation_intent is not None:
-            bind_generation_record(gen_path, generation_intent)
+        bind_generation_record(gen_path, generation_intent, stage="raw")
         self._ensure_running()
         self.progress.emit(f"  Сгенерировано: {gen_path}")
         self._emit_item_progress(
@@ -1702,6 +1705,17 @@ class WorkerThread(QThread):
             idx,
             "gen",
         )
+        try:
+            generation_stage = self._generation_record_stage(
+                out_path, preserve_surface=preserve_surface
+            )
+            bind_generation_record(out_path, generation_intent, stage=generation_stage)
+        except (OSError, ValueError):
+            # The paid image is already safely published. Do not turn a local sidecar
+            # failure into an implicit reason to resubmit a paid generation.
+            self.progress.emit(
+                "  PNG сохранён; назначение результата рядом с файлом записать не удалось"
+            )
         self._emit_file_progress(idx, total, 100)
         self.progress.emit(f"  Итог сохранён: {out_path}")
         self._emit_diagnostic(
@@ -1872,16 +1886,20 @@ class WorkerThread(QThread):
                     chroma_key_color = str(
                         item.get("chroma_key_color", "")
                     ).strip().lower()
-                    entries.append(
-                        {
-                            "prompt": prompt_text,
-                            "references": references,
-                            "result_kind": validate_result_kind(item.get("result_kind", "legacy")),
-                            "chroma_key_color": (
-                                chroma_key_color if chroma_key_color in KEY_COLORS else ""
-                            ),
-                        }
-                    )
+                    object_id = str(item.get("object_id") or "").strip()
+                    if len(object_id) > 64:
+                        raise ValueError("Неверный идентификатор объекта")
+                    normalized_entry = {
+                        "prompt": prompt_text,
+                        "references": references,
+                        "result_kind": validate_result_kind(item.get("result_kind", "legacy")),
+                        "chroma_key_color": (
+                            chroma_key_color if chroma_key_color in KEY_COLORS else ""
+                        ),
+                    }
+                    if object_id:
+                        normalized_entry["object_id"] = object_id
+                    entries.append(normalized_entry)
                 continue
             prompt_text = str(item).strip()
             if prompt_text:
@@ -2508,9 +2526,22 @@ class WorkerThread(QThread):
         result_kind="legacy",
     ):
         from result_background_policy import keeps_background
+        from chroma_generation_record import load_generation_result_metadata
 
+        source_is_final = False
+        if source_path:
+            recorded_metadata = load_generation_result_metadata(source_path)
+            if recorded_metadata:
+                recorded_result_kind = recorded_metadata["result_kind"]
+                source_is_final = recorded_metadata["stage"] == "final"
+                if result_kind == "legacy":
+                    result_kind = recorded_result_kind
+                elif result_kind != recorded_result_kind:
+                    raise ValueError(
+                        "Тип результата задания не совпадает с подтверждённым назначением PNG"
+                    )
         preserve_surface = keeps_background(result_kind)
-        remove_background = self.remove_bg and not preserve_surface
+        remove_background = self.remove_bg and not preserve_surface and not source_is_final
         self._item_context.preserve_surface = preserve_surface
         self._ensure_running()
         self._item_context.chroma_receipt = None
@@ -3889,6 +3920,20 @@ class WorkerThread(QThread):
     def _has_alpha_channel(self, image_path):
         with Image.open(image_path) as img:
             return "A" in img.getbands()
+
+    def _generation_record_stage(self, image_path, *, preserve_surface: bool) -> str:
+        """Classify whether this published PNG still needs Clipart background work."""
+        if preserve_surface:
+            return "final"
+        with Image.open(image_path) as image:
+            if "A" not in image.getbands() and "transparency" not in image.info:
+                return "raw"
+            alpha = image.convert("RGBA").getchannel("A")
+            histogram = alpha.histogram()
+            total = max(1, image.width * image.height)
+            transparent = sum(histogram[:17])
+            required = max(4, int(total * 0.001))
+            return "final" if transparent >= required else "raw"
 
     def _metadata_cleanup_requested(self):
         options = self.metadata_cleanup_options

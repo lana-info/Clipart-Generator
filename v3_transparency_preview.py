@@ -204,6 +204,10 @@ class MaskEditDocument:
         destination.parent.mkdir(parents=True, exist_ok=True)
         mask_destination.parent.mkdir(parents=True, exist_ok=True)
         self.recover_pair(destination, mask_destination)
+        from chroma_generation_record import capture_generation_record
+        generation_record = (
+            capture_generation_record(destination) if destination.exists() else None
+        )
         output_temporary = self._stage_png(
             self.corrected_image(),
             destination,
@@ -218,6 +222,11 @@ class MaskEditDocument:
                 mask_temporary,
                 mask_destination,
             )
+            if generation_record is not None:
+                from chroma_generation_record import rebind_generation_record
+                rebind_generation_record(
+                    destination, generation_record, stage="final", overwrite=True
+                )
         finally:
             output_temporary.unlink(missing_ok=True)
             if mask_temporary is not None:

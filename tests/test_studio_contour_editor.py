@@ -111,6 +111,43 @@ def test_save_is_separate_cancel_does_not_write_and_render(tmp_path, monkeypatch
     second=ContourEditorDialog(source); second.reject(); assert second.saved_path is None
 
 
+
+def test_save_as_copies_hash_bound_result_kind_sidecar(tmp_path, monkeypatch):
+    from chroma_generation_record import (
+        bind_generation_record, load_generation_result_kind, write_generation_intent,
+    )
+    source=tmp_path/"source.png"; make_png(source)
+    intent=write_generation_intent(source,color="green",prompt="flower",result_kind="clipart")
+    bind_generation_record(source,intent,stage="final")
+    dialog=ContourEditorDialog(source); dialog.show(); app().processEvents()
+    target=tmp_path/"corrected.png"
+    monkeypatch.setattr(QFileDialog,"getSaveFileName",lambda *args:(str(target),"PNG"))
+    dialog._save_as()
+    assert dialog.saved_path==target
+    assert load_generation_result_kind(target)=="clipart"
+    dialog.close()
+
+def test_save_as_preserves_preexisting_destination_sidecar_on_collision(tmp_path, monkeypatch):
+    from chroma_generation_record import (
+        bind_generation_record, record_path, write_generation_intent,
+    )
+    source=tmp_path/"source.png"; make_png(source)
+    intent=write_generation_intent(source,color="green",prompt="flower",result_kind="clipart")
+    bind_generation_record(source,intent,stage="final")
+    target=tmp_path/"corrected.png"
+    existing_sidecar=record_path(target)
+    existing_sidecar.write_bytes(b"preexisting-sidecar-must-survive")
+    dialog=ContourEditorDialog(source); dialog.show(); app().processEvents()
+    monkeypatch.setattr(QFileDialog,"getSaveFileName",lambda *args:(str(target),"PNG"))
+
+    dialog._save_as()
+
+    assert dialog.saved_path is None
+    assert not target.exists()
+    assert existing_sidecar.read_bytes()==b"preexisting-sidecar-must-survive"
+    dialog.close()
+
+
 def test_rgba_input_save_failure_and_missing_file_are_safe(tmp_path, monkeypatch):
     source=tmp_path/"source.png"; original=make_png(source)
     supplied=original.copy(); supplied[...,3]=128

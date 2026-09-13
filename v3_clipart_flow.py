@@ -229,6 +229,10 @@ class ClipartRunRequest:
                 {
                     "prompt": entry["prompt"],
                     "references": list(entry["references"]),
+                    "chroma_key_color": str(entry.get("chroma_key_color") or ""),
+                    "result_kind": str(entry.get("result_kind") or "legacy"),
+                    **({"object_id": str(entry["object_id"])}
+                       if entry.get("object_id") else {}),
                 }
                 for entry in self.generated_prompts
             ],

@@ -250,8 +250,7 @@ v3_project_state.py. Лимит 1000 является техническим п�
   поле уже было отброшено при создании элемента очереди.
 - [ ] Подключить внутреннюю политику к конкретному модулю и его provider/key
   preflight. Selector типа отменён; не развивать смешанную серию как UI Clipart.
-- [ ] Сохранить назначение рядом с отдельно переносимым PNG; сейчас оно
-  сохраняется в проекте/очереди, но не угадывается для импортированного файла.
+- [x] Сохранить назначение рядом с отдельно переносимым PNG: `.generation.json` schema v2 hash-bound к raw/final байтам и хранит `result_kind` + optional chroma provenance без prompt/ключей. `stage` означает готовность background-обработки, а не расположение файла: surface output сразу final; Clipart final только при значимой почти-прозрачной области (не менее 4 px и 0.1% холста); одиночный alpha-шум не считается готовым фоном, opaque chroma Clipart остаётся raw. Final sidecar никогда не возвращает chroma-цвет для повторного keying; `stage=final` также запрещает повторное автоматическое удаление фона. Импорт восстанавливает подтверждённый `result_kind`, конфликт с явно заданным типом останавливается. Transparency Editor rebind'ит sidecar после локальной правки, Contour Editor переносит его к отдельной копии. Legacy v1 остаётся chroma-only и не получает придуманного назначения. До платного POST проверяются все planned raw/final pending/completed sidecar-пути; stale/orphan collision останавливает запуск. Affected: 243 passed / 1 skipped / 35 subtests; full isolated: 1481 passed / 57 skipped / 2 deselected / 239 subtests (66.75s).
 - [x] Венки/рамки: role-aware локальная проверка внутреннего отверстия (wreath всегда; border только при frame/рамка-семантике) по final alpha; bounded preview flood-fill, good/bad fixtures и Review с конкретной причиной при закрытом/залитом центре. Focused alpha/results/export: 102 passed + 5 subtests; full isolated: 1457 passed / 57 skipped / 2 deselected / 235 subtests (63.54s).
 - [ ] Этикетки/labels: определить отдельную семантику/роль перед label-specific hole/negative-space QC; не применять автоматически правила wreath/frame.
 
@@ -271,8 +270,8 @@ v3_project_state.py. Лимит 1000 является техническим п�
   confidence и общий Review/Ready; прозрачный/native маршрут остаётся отдельно.
 - [ ] Пройти имеющиеся реальные PNG через review/editor/final export.
 
-Sidecar сохраняется у сырого исходника; переносить PNG и .generation.json
-вместе. Потерянная запись означает legacy-вход, не доказанный цвет. Повреждённая
+Schema-v2 sidecar сохраняется у raw и final PNG; переносить PNG и соответствующий .generation.json
+вместе. Legacy v1 остаётся raw/chroma-only. Потерянная запись означает legacy-вход, не доказанный цвет или result_kind. Повреждённая
 или не завершённая запись не заменяется молча общим цветом. Автоматические
 повторные платные генерации не добавлены. Геометрия keyer не менялась.
 

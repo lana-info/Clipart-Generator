@@ -556,7 +556,22 @@ class ContourEditorDialog(QDialog):
         try:
             if destination.resolve() == self.source_path.resolve():
                 raise ValueError("Выберите отдельное имя: исходный PNG не перезаписывается.")
+            from chroma_generation_record import (
+                capture_generation_record, ensure_record_paths_available,
+                rebind_generation_record,
+            )
+            generation_record = capture_generation_record(self.source_path)
+            if generation_record is not None:
+                ensure_record_paths_available(destination)
             self.canvas.session.save_copy(destination)
+            if generation_record is not None:
+                try:
+                    rebind_generation_record(
+                        destination, generation_record, stage="final", overwrite=False
+                    )
+                except (OSError, ValueError):
+                    destination.unlink(missing_ok=True)
+                    raise
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             self.status.setText(str(exc)); return
         self.saved_path=destination; self.accept()
