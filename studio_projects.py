@@ -17,16 +17,22 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+LEGACY_SCHEMA_VERSION = 1
 # Keep the same per-file ceiling as the existing V3 draft boundary.
 MAX_PROJECT_BYTES = 2 * 1024 * 1024
 MAX_JSON_DEPTH = 64
 MAX_NAME_LENGTH = 200
 _MODULE_ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
+_DOCUMENT_TYPE = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _FORBIDDEN_KEY_PARTS = (
     "apikey", "token", "password", "secret", "credential", "authorization", "bearer",
 )
-_RECORD_KEYS = frozenset({"schema_version", "project_id", "module_id", "name", "updated_at", "state"})
+_RECORD_KEYS_V1 = frozenset({"schema_version", "project_id", "module_id", "name", "updated_at", "state"})
+_RECORD_KEYS_V2 = frozenset({
+    "schema_version", "project_id", "module_id", "document_type", "document_version",
+    "name", "updated_at", "state",
+})
 
 
 class ProjectStoreError(ValueError):
@@ -37,6 +43,8 @@ class ProjectStoreError(ValueError):
 class ProjectRecord:
     project_id: str
     module_id: str
+    document_type: str
+    document_version: int
     name: str
     updated_at: str
     state: dict[str, Any]
@@ -62,13 +70,25 @@ class ProjectStore:
         self.root.mkdir(parents=True, exist_ok=True)
         self._assert_root()
 
-    def create(self, module_id: str, name: str, state: dict[str, Any]) -> ProjectRecord:
+    def create(
+        self, module_id: str, name: str, state: dict[str, Any], *,
+        document_type: str = "project", document_version: int = 1,
+    ) -> ProjectRecord:
         """Create a new UUID-addressed project without running any module code."""
-        return self._write(str(uuid.uuid4()), module_id, name, state, must_exist=False)
+        return self._write(
+            str(uuid.uuid4()), module_id, name, state,
+            document_type=document_type, document_version=document_version, must_exist=False,
+        )
 
-    def save(self, project_id: str, module_id: str, name: str, state: dict[str, Any]) -> ProjectRecord:
-        """Atomically overwrite an existing project after validating its schema."""
-        return self._write(project_id, module_id, name, state, must_exist=True)
+    def save(
+        self, project_id: str, module_id: str, name: str, state: dict[str, Any], *,
+        document_type: str = "project", document_version: int = 1,
+    ) -> ProjectRecord:
+        """Atomically overwrite an existing project after validating its envelope."""
+        return self._write(
+            project_id, module_id, name, state,
+            document_type=document_type, document_version=document_version, must_exist=True,
+        )
 
     def load(self, project_id: str) -> ProjectRecord:
         """Return validated JSON state only; this method never invokes jobs or runtime code."""
@@ -98,10 +118,14 @@ class ProjectStore:
         records.sort(key=lambda record: (record.updated_at, record.project_id), reverse=True)
         return records if limit is None else records[:limit]
 
-    def _write(self, project_id: str, module_id: str, name: str,
-               state: dict[str, Any], *, must_exist: bool) -> ProjectRecord:
+    def _write(
+        self, project_id: str, module_id: str, name: str, state: dict[str, Any], *,
+        document_type: str, document_version: int, must_exist: bool,
+    ) -> ProjectRecord:
         project_id = self._project_id(project_id)
         module_id = self._module_id(module_id)
+        document_type = self._document_type(document_type)
+        document_version = self._document_version(document_version)
         name = self._name(name)
         self._validate_state(state)
         self._assert_root()
@@ -112,10 +136,17 @@ class ProjectStore:
         if not must_exist and exists:
             raise ProjectStoreError("Project already exists")
         if exists:
-            # Schema validation happens before any temporary file or replace;
-            # unknown/future schemas are never silently overwritten.
-            self._read(destination, expected_id=project_id)
-        record = ProjectRecord(project_id, module_id, name, self._now(), self._copy_state(state))
+            # Envelope validation happens before any temporary file or replace;
+            # unknown/future schemas and newer document data are never silently overwritten.
+            existing = self._read(destination, expected_id=project_id)
+            if existing.module_id != module_id or existing.document_type != document_type:
+                raise ProjectStoreError("Project document identity cannot change")
+            if existing.document_version > document_version:
+                raise ProjectStoreError("Project document version is newer and read-only")
+        record = ProjectRecord(
+            project_id, module_id, document_type, document_version, name,
+            self._now(), self._copy_state(state),
+        )
         payload = self._encode(record)
         from studio_export_membership import backup_membership_migration
         try:
@@ -175,17 +206,30 @@ class ProjectStore:
     def _record_from_json(self, value: Any) -> ProjectRecord:
         if not isinstance(value, dict):
             raise ProjectStoreError("Project is corrupt: record must be an object")
-        if set(value) != _RECORD_KEYS:
-            raise ProjectStoreError("Project schema is unknown or incomplete")
-        if type(value["schema_version"]) is not int or value["schema_version"] != SCHEMA_VERSION:
+        schema_version = value.get("schema_version")
+        if type(schema_version) is not int or schema_version not in {LEGACY_SCHEMA_VERSION, SCHEMA_VERSION}:
             raise ProjectStoreError("Project schema version is unsupported")
+        expected_keys = _RECORD_KEYS_V1 if schema_version == LEGACY_SCHEMA_VERSION else _RECORD_KEYS_V2
+        if set(value) != expected_keys:
+            raise ProjectStoreError("Project schema is unknown or incomplete")
         project_id = self._project_id(value["project_id"])
         module_id = self._module_id(value["module_id"])
+        document_type = (
+            "project" if schema_version == LEGACY_SCHEMA_VERSION
+            else self._document_type(value["document_type"])
+        )
+        document_version = (
+            1 if schema_version == LEGACY_SCHEMA_VERSION
+            else self._document_version(value["document_version"])
+        )
         name = self._name(value["name"])
         updated_at = self._timestamp(value["updated_at"])
         state = value["state"]
         self._validate_state(state)
-        return ProjectRecord(project_id, module_id, name, updated_at, self._copy_state(state))
+        return ProjectRecord(
+            project_id, module_id, document_type, document_version, name, updated_at,
+            self._copy_state(state),
+        )
 
     def _encode(self, record: ProjectRecord) -> bytes:
         try:
@@ -193,6 +237,8 @@ class ProjectStore:
                 "schema_version": SCHEMA_VERSION,
                 "project_id": record.project_id,
                 "module_id": record.module_id,
+                "document_type": record.document_type,
+                "document_version": record.document_version,
                 "name": record.name,
                 "updated_at": record.updated_at,
                 "state": record.state,
@@ -248,6 +294,18 @@ class ProjectStore:
     def _module_id(value: Any) -> str:
         if not isinstance(value, str) or not _MODULE_ID.fullmatch(value):
             raise ProjectStoreError("Module id is invalid")
+        return value
+
+    @staticmethod
+    def _document_type(value: Any) -> str:
+        if not isinstance(value, str) or not _DOCUMENT_TYPE.fullmatch(value):
+            raise ProjectStoreError("Document type is invalid")
+        return value
+
+    @staticmethod
+    def _document_version(value: Any) -> int:
+        if type(value) is not int or not 1 <= value <= 65535:
+            raise ProjectStoreError("Document version is invalid")
         return value
 
     @staticmethod

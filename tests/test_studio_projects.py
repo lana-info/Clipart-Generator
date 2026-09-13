@@ -178,5 +178,76 @@ class ProjectStoreTests(unittest.TestCase):
                 store.load(bad_id)
 
 
+    def test_document_envelope_records_generic_metadata_and_opaque_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProjectStore(Path(temp) / "projects")
+            state = {"text": {"body": "hello"}, "custom": [1, 2, 3]}
+            record = store.create(
+                "text-probe", "Note", state,
+                document_type="note", document_version=3,
+            )
+            self.assertEqual(record.module_id, "text-probe")
+            self.assertEqual(record.document_type, "note")
+            self.assertEqual(record.document_version, 3)
+            self.assertEqual(record.state, state)
+            raw = json.loads((store.root / f"{record.project_id}.json").read_text(encoding="utf-8"))
+            self.assertEqual(raw["schema_version"], 2)
+            self.assertEqual(raw["document_type"], "note")
+            self.assertEqual(raw["document_version"], 3)
+            self.assertEqual(raw["state"], state)
+
+    def test_legacy_v1_envelope_loads_without_rewriting_opaque_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProjectStore(Path(temp) / "projects")
+            project_id = "123e4567-e89b-12d3-a456-426614174111"
+            payload = {
+                "schema_version": 1, "project_id": project_id, "module_id": "clipart",
+                "name": "Legacy", "updated_at": "2026-01-01T00:00:00Z",
+                "state": {"legacy": {"value": 7}},
+            }
+            path = store.root / f"{project_id}.json"
+            path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+            before = path.read_bytes()
+            record = store.load(project_id)
+            self.assertEqual(record.document_type, "project")
+            self.assertEqual(record.document_version, 1)
+            self.assertEqual(record.state, payload["state"])
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_newer_document_version_cannot_be_silently_downgraded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProjectStore(Path(temp) / "projects")
+            record = store.create(
+                "text-probe", "Future", {"value": "new"},
+                document_type="note", document_version=5,
+            )
+            path = store.root / f"{record.project_id}.json"
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ProjectStoreError, "newer|version"):
+                store.save(
+                    record.project_id, "text-probe", "Future", {"value": "old"},
+                    document_type="note", document_version=4,
+                )
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_project_document_identity_cannot_change_on_save(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProjectStore(Path(temp) / "projects")
+            record = store.create(
+                "text-probe", "Note", {"value": 1},
+                document_type="note", document_version=1,
+            )
+            path = store.root / f"{record.project_id}.json"
+            before = path.read_bytes()
+            for module_id, document_type in (("other", "note"), ("text-probe", "other")):
+                with self.subTest(module_id=module_id, document_type=document_type):
+                    with self.assertRaises(ProjectStoreError):
+                        store.save(
+                            record.project_id, module_id, "Note", {"value": 2},
+                            document_type=document_type, document_version=1,
+                        )
+                    self.assertEqual(path.read_bytes(), before)
+
+
 if __name__ == "__main__":
     unittest.main()
