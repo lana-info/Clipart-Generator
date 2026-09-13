@@ -1,4 +1,5 @@
 """Signed-package adapter contract; no Qt pages, network or provider calls."""
+import ast
 import base64
 import hashlib
 import json
@@ -34,6 +35,17 @@ class PinterestModuleTests(unittest.TestCase):
             archive.writestr("signature.json", json.dumps(signature))
             archive.writestr("entry.py", code)
         self.store.install(package)
+
+    def test_official_adapter_imports_only_public_module_contract(self):
+        path = Path(__file__).resolve().parents[1] / "studio_official_modules/pinterest/entry.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        modules = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
+        }
+        self.assertIn("studio_module_api", modules)
+        self.assertNotIn("studio_module_runtime", modules)
 
     def test_signed_adapter_preserves_route_and_delegates_pages_lazily(self):
         page_factory = Mock(return_value="existing-page")

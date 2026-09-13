@@ -56,7 +56,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('studio_clipart_builder_ui', 'v3_project_state'),
     ('studio_clipart_objects', 'v3_project_state'),
     ('studio_clipart_objects', 'v3_prompt_generator'),
-    ('studio_official_modules.pinterest.entry', 'studio_module_runtime'),
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),
     ('studio_projects', 'studio_export_membership'),
@@ -144,6 +143,8 @@ def _module_name(path: Path) -> str:
 
 def _layer_for(module_name: str) -> str | None:
     parts = module_name.split(".")
+    if parts[0] == "studio_module_api":
+        return "public_api"
     if parts[0] == "studio_official_modules" and len(parts) >= 2:
         return f"official:{parts[1]}"
     root_name = parts[0]
@@ -224,6 +225,10 @@ def _cross_layer_edges() -> frozenset[tuple[str, str]]:
             target_layer = _layer_for(target)
             if target_layer is None or target_layer == source_layer:
                 continue
+            # Importing the public API is the intended dependency direction.
+            # The reverse direction remains visible and therefore forbidden.
+            if target_layer == "public_api":
+                continue
             edges.add((source, target))
     return frozenset(edges)
 
@@ -287,3 +292,12 @@ def test_relative_import_resolution_keeps_official_module_boundaries_visible():
 def test_package_init_uses_the_package_module_name():
     path = ROOT / "studio_official_modules" / "pinterest" / "__init__.py"
     assert _module_name(path) == "studio_official_modules.pinterest"
+
+
+def test_public_module_api_is_classified_as_its_own_dependency_boundary():
+    assert _layer_for("studio_module_api") == "public_api"
+    local_dependencies = {
+        target for target in _imports(ROOT / "studio_module_api.py")
+        if _layer_for(target) is not None
+    }
+    assert local_dependencies == set()

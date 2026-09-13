@@ -5,7 +5,7 @@ No board creation, scheduling, external publication or paid calls occur here.
 """
 from functools import partial
 
-from studio_module_runtime import (
+from studio_module_api import (
     CommandDeclaration, DocumentTypeDeclaration, ModuleRegistration, PageDeclaration,
 )
 

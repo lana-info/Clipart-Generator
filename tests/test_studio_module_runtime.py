@@ -18,6 +18,7 @@ from studio_module_runtime import (
     CommandDeclaration, DocumentTypeDeclaration, ModuleAuthorizationError,
     ModuleRegistration, ModuleRuntimeError, ModuleRuntimeHost, PageDeclaration,
 )
+from studio_module_api import CapabilityRequirement
 from studio_modules import ModulePackageError, ModuleStore, canonical_manifest
 
 
@@ -182,6 +183,62 @@ class StudioModuleRuntimeTests(unittest.TestCase):
         host = self.installed_host(code=code)
         host.activate("fictional-export")
         self.assertEqual("ModuleRuntimeError", host.invoke_command("fictional-export", "run", host))
+
+
+    def test_missing_required_capability_fails_before_registration_publish(self):
+        code = """from studio_module_api import CapabilityRequirement, ModuleRegistration
+def register(context):
+    return ModuleRegistration(context.module_id, context.version,
+        capabilities=(CapabilityRequirement("providers.text", 1),))
+"""
+        package = self.package(module_id="text-probe", code=code)
+        self.store.install(package)
+        host = ModuleRuntimeHost(
+            self.store,
+            lambda _module, _action: True,
+            supported_capabilities=(),
+        )
+        with self.assertRaisesRegex(ModuleRuntimeError, "capability"):
+            host.activate("text-probe", "1.0.0")
+        self.assertIsNone(host.registration("text-probe"))
+        self.assertIsNone(self.store.state("text-probe")["active"])
+
+
+    def test_required_capability_version_mismatch_fails_closed(self):
+        code = """from studio_module_api import CapabilityRequirement, ModuleRegistration
+def register(context):
+    return ModuleRegistration(context.module_id, context.version,
+        capabilities=(CapabilityRequirement("providers.text", 1),))
+"""
+        package = self.package(module_id="text-probe-v", code=code)
+        self.store.install(package)
+        host = ModuleRuntimeHost(
+            self.store,
+            lambda _module, _action: True,
+            supported_capabilities=(CapabilityRequirement("providers.text", 2),),
+        )
+        with self.assertRaisesRegex(ModuleRuntimeError, "providers.text.v1"):
+            host.activate("text-probe-v", "1.0.0")
+        self.assertIsNone(host.registration("text-probe-v"))
+        self.assertIsNone(self.store.state("text-probe-v")["active"])
+
+    def test_exact_required_capability_version_can_register(self):
+        code = """from studio_module_api import CapabilityRequirement, ModuleRegistration, CommandDeclaration
+def register(context):
+    return ModuleRegistration(context.module_id, context.version,
+        commands=(CommandDeclaration("echo", lambda value: value),),
+        capabilities=(CapabilityRequirement("providers.text", 1),))
+"""
+        package = self.package(module_id="text-probe-ok", code=code)
+        self.store.install(package)
+        host = ModuleRuntimeHost(
+            self.store,
+            lambda _module, _action: True,
+            supported_capabilities=(CapabilityRequirement("providers.text", 1),),
+        )
+        info = host.activate("text-probe-ok", "1.0.0")
+        self.assertEqual(info.module_id, "text-probe-ok")
+        self.assertEqual(host.invoke_command("text-probe-ok", "echo", "ready"), "ready")
 
 
 if __name__ == "__main__":

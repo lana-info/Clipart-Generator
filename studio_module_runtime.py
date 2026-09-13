@@ -9,27 +9,25 @@ from __future__ import annotations
 import importlib.util
 import inspect
 import json
-import re
 import sys
 import threading
-import types
 import uuid
 from concurrent.futures import Future
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Collection, Mapping
 
+from studio_module_api import (
+    MODULE_API_VERSION, CapabilityRequirement, CommandDeclaration, DocumentTypeDeclaration, ModuleApiError,
+    ModuleCommand, ModuleContext, ModuleDocumentType, ModulePage, ModuleRegistration,
+    PageDeclaration,
+)
 from studio_modules import ModulePackageError, ModuleStore
 
-MODULE_API_VERSION = 1
+ModuleRuntimeError = ModuleApiError
 _BYTECODE_EXECUTION_LOCK = threading.RLock()
-_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
-
-
-class ModuleRuntimeError(RuntimeError):
-    """A module could not be loaded, published, or invoked safely."""
 
 
 class ModuleAuthorizationError(ModuleRuntimeError):
@@ -37,97 +35,9 @@ class ModuleAuthorizationError(ModuleRuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class CommandDeclaration:
-    """A trusted host-only executable declaration; do not expose handlers to UI code."""
-    name: str
-    handler: Callable[..., Any] = field(repr=False, compare=False)
+class _LegacyModuleContext:
+    """Temporary private context for pre-capability adapters only."""
 
-    def __post_init__(self) -> None:
-        _declaration_name(self.name)
-        if not callable(self.handler):
-            raise ModuleRuntimeError("Command handler must be callable")
-
-
-@dataclass(frozen=True, slots=True)
-class PageDeclaration:
-    """A trusted host-only executable declaration; do not expose factories to UI code."""
-    name: str
-    factory: Callable[..., Any] = field(repr=False, compare=False)
-
-    def __post_init__(self) -> None:
-        _declaration_name(self.name)
-        if not callable(self.factory):
-            raise ModuleRuntimeError("Page factory must be callable")
-
-
-@dataclass(frozen=True, slots=True)
-class DocumentTypeDeclaration:
-    name: str
-    mime_type: str
-    schema_version: int
-
-    def __post_init__(self) -> None:
-        _declaration_name(self.name)
-        if (not isinstance(self.mime_type, str) or not self.mime_type or
-                any(c.isspace() for c in self.mime_type) or "/" not in self.mime_type):
-            raise ModuleRuntimeError("Document MIME type is invalid")
-        if type(self.schema_version) is not int or not 1 <= self.schema_version <= 65535:
-            raise ModuleRuntimeError("Document schema version is invalid")
-
-
-@dataclass(frozen=True, slots=True)
-class ModuleRegistration:
-    """Version-1 declarative registration returned by ``register(context)``.
-
-    The host never calls command handlers or page factories while registering.
-    Their qualified names are ``<module_id>.<name>`` and are exposed through
-    the immutable declaration mappings.
-    """
-
-    module_id: str
-    version: str
-    pages: tuple[PageDeclaration, ...] = ()
-    commands: tuple[CommandDeclaration, ...] = ()
-    document_types: tuple[DocumentTypeDeclaration, ...] = ()
-    api_version: int = MODULE_API_VERSION
-    _pages: Mapping[str, PageDeclaration] = field(init=False, repr=False, compare=False)
-    _commands: Mapping[str, CommandDeclaration] = field(init=False, repr=False, compare=False)
-    _document_types: Mapping[str, DocumentTypeDeclaration] = field(init=False, repr=False, compare=False)
-
-    def __post_init__(self) -> None:
-        _declaration_name(self.module_id)
-        _numeric_version(self.version)
-        if self.api_version != MODULE_API_VERSION or type(self.api_version) is not int:
-            raise ModuleRuntimeError("Unsupported module registration API")
-        pages = _frozen_declarations(self.module_id, self.pages, PageDeclaration)
-        commands = _frozen_declarations(self.module_id, self.commands, CommandDeclaration)
-        documents = _frozen_declarations(self.module_id, self.document_types, DocumentTypeDeclaration)
-        object.__setattr__(self, "pages", tuple(pages.values()))
-        object.__setattr__(self, "commands", tuple(commands.values()))
-        object.__setattr__(self, "document_types", tuple(documents.values()))
-        object.__setattr__(self, "_pages", MappingProxyType(pages))
-        object.__setattr__(self, "_commands", MappingProxyType(commands))
-        object.__setattr__(self, "_document_types", MappingProxyType(documents))
-
-    @property
-    def page_declarations(self) -> Mapping[str, PageDeclaration]:
-        return self._pages
-
-    @property
-    def command_declarations(self) -> Mapping[str, CommandDeclaration]:
-        return self._commands
-
-    @property
-    def document_type_declarations(self) -> Mapping[str, DocumentTypeDeclaration]:
-        return self._document_types
-
-    def qualified_name(self, name: str) -> str:
-        _declaration_name(name)
-        return f"{self.module_id}.{name}"
-
-
-@dataclass(frozen=True, slots=True)
-class ModuleContext:
     module_id: str
     version: str
     services: Mapping[str, Any]
@@ -199,7 +109,8 @@ class ModuleRuntimeHost:
     """
 
     def __init__(self, store: ModuleStore, authorize: Callable[[str, str], bool] | None = None,
-                 *, services: Mapping[str, Any] | None = None):
+                 *, services: Mapping[str, Any] | None = None,
+                 supported_capabilities: Collection[CapabilityRequirement] | None = None):
         if not isinstance(store, ModuleStore):
             raise TypeError("store must be a ModuleStore")
         if authorize is not None and not callable(authorize):
@@ -207,6 +118,10 @@ class ModuleRuntimeHost:
         self.store = store
         self._authorize_callback = authorize
         self._services = MappingProxyType(dict(services or {}))
+        capabilities = tuple(supported_capabilities or ())
+        if any(not isinstance(item, CapabilityRequirement) for item in capabilities):
+            raise TypeError("supported_capabilities must contain CapabilityRequirement values")
+        self._supported_capabilities = frozenset(capabilities)
         self._loaded: dict[str, _LoadedModule] = {}
         self._active_jobs: dict[str, int] = {}
         self._page_leases: dict[str, set[str]] = {}
@@ -342,11 +257,20 @@ class ModuleRuntimeHost:
             register = getattr(module, "register", None)
             if not callable(register):
                 raise ModuleRuntimeError("Module entrypoint must export register(context)")
-            registration = register(ModuleContext(manifest["module_id"], manifest["version"], self._services))
+            context = (_LegacyModuleContext(manifest["module_id"], manifest["version"], self._services)
+                       if self._services else ModuleContext(manifest["module_id"], manifest["version"]))
+            registration = register(context)
         if not isinstance(registration, ModuleRegistration):
             raise ModuleRuntimeError("register(context) must return ModuleRegistration")
         if (registration.module_id != manifest["module_id"] or registration.version != manifest["version"]):
             raise ModuleRuntimeError("Module registration identity mismatch")
+        missing = tuple(
+            requirement for requirement in registration.capabilities
+            if requirement not in self._supported_capabilities
+        )
+        if missing:
+            names = ", ".join(requirement.key for requirement in missing)
+            raise ModuleRuntimeError(f"Required module capability is not supported: {names}")
         return registration
 
     def _current_loaded(self, module_id: str) -> _LoadedModule:
@@ -434,36 +358,6 @@ class ModuleRuntimeHost:
         for key in [key for key in sys.modules if key == namespace or key.startswith(namespace + ".")]:
             sys.modules.pop(key, None)
 
-
-def _declaration_name(value: str) -> str:
-    if not isinstance(value, str) or not _NAME.fullmatch(value):
-        raise ModuleRuntimeError("Invalid module declaration name")
-    return value
-
-
-def _numeric_version(value: str) -> str:
-    if not isinstance(value, str) or not re.fullmatch(r"\d{1,5}\.\d{1,5}\.\d{1,5}", value):
-        raise ModuleRuntimeError("Invalid module registration version")
-    return value
-
-
-def _frozen_declarations(module_id: str, values: Any, expected: type[Any]) -> dict[str, Any]:
-    if not isinstance(values, (tuple, list)):
-        raise ModuleRuntimeError("Module declarations must be a sequence")
-    result: dict[str, Any] = {}
-    for value in values:
-        qualified_name = f"{module_id}.{getattr(value, 'name', '')}"
-        if not isinstance(value, expected) or qualified_name in result:
-            raise ModuleRuntimeError("Invalid or duplicate module declaration")
-        result[qualified_name] = value
-    return result
-
-
-# Short aliases make the public v1 contract convenient without adding a second
-# representation for declarations.
-ModuleCommand = CommandDeclaration
-ModulePage = PageDeclaration
-ModuleDocumentType = DocumentTypeDeclaration
 
 
 def _module_info(registration: ModuleRegistration) -> ModuleInfo:
