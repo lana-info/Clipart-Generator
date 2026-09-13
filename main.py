@@ -1638,7 +1638,8 @@ class WorkerThread(QThread):
         )
         self._emit_file_progress(idx, total, 18)
         from chroma_generation_record import (
-            bind_generation_record, ensure_record_paths_available, write_generation_intent,
+            bind_generation_record, discard_generation_intent,
+            ensure_record_paths_available, write_generation_intent,
         )
 
         gen_path = os.path.join(raw_dir, f"gen_{idx:03d}_{self.run_stamp}.png")
@@ -1653,7 +1654,22 @@ class WorkerThread(QThread):
         self._emit_file_progress(idx, total, 36)
         self._ensure_running()
         self._download_file(image_url, gen_path)
-        bind_generation_record(gen_path, generation_intent, stage="raw")
+        raw_record_bound = True
+        try:
+            bind_generation_record(gen_path, generation_intent, stage="raw")
+        except (OSError, ValueError):
+            raw_record_bound = False
+            self.progress.emit(
+                "  Изображение получено; сведения raw-источника записать не удалось. "
+                "Платный запрос не повторяется."
+            )
+            try:
+                discard_generation_intent(gen_path, generation_intent)
+            except (OSError, ValueError):
+                self.progress.emit(
+                    "  Pending-сведения raw-источника очистить не удалось; "
+                    "продолжаю с явными параметрами текущего задания."
+                )
         self._ensure_running()
         self.progress.emit(f"  Сгенерировано: {gen_path}")
         self._emit_item_progress(
@@ -1683,6 +1699,7 @@ class WorkerThread(QThread):
                     "gen",
                     chroma_key_color=entry.get("chroma_key_color"),
                     result_kind=result_kind,
+                    ignore_generation_record=not raw_record_bound,
                 )
             elif self.edge_shrink_enabled and not preserve_surface:
                 with self._local_operation_lock:
@@ -2524,12 +2541,13 @@ class WorkerThread(QThread):
         *,
         chroma_key_color=None,
         result_kind="legacy",
+        ignore_generation_record=False,
     ):
         from result_background_policy import keeps_background
         from chroma_generation_record import load_generation_result_metadata
 
         source_is_final = False
-        if source_path:
+        if source_path and not ignore_generation_record:
             recorded_metadata = load_generation_result_metadata(source_path)
             if recorded_metadata:
                 recorded_result_kind = recorded_metadata["result_kind"]
@@ -2548,7 +2566,10 @@ class WorkerThread(QThread):
         self._item_context.metadata_cleaned = False
         self._item_context.manual_transparency_required = False
         selected_chroma_key_color = str(chroma_key_color or "").strip().lower()
-        if remove_background and self._uses_local_chroma_key_remove_bg() and source_path:
+        if (
+            remove_background and self._uses_local_chroma_key_remove_bg()
+            and source_path and not ignore_generation_record
+        ):
             from chroma_generation_record import load_generation_color
 
             recorded_color = load_generation_color(source_path)
@@ -2594,6 +2615,7 @@ class WorkerThread(QThread):
                 idx,
                 prefix,
                 source_path,
+                remove_background=remove_background,
             )
             self._ensure_running()
             return result
@@ -3620,8 +3642,13 @@ class WorkerThread(QThread):
                 "Задача KIE не была создана"
             )
 
-    def _run_kie_processing_pipeline(self, image_url, raw_dir, idx, prefix, source_image_path=""):
+    def _run_kie_processing_pipeline(
+        self, image_url, raw_dir, idx, prefix, source_image_path="", *,
+        remove_background=None,
+    ):
         pipeline_url = image_url
+        if remove_background is None:
+            remove_background = self.remove_bg
 
         if self.upscale:
             self._set_provider_diagnostic_context(
@@ -3640,7 +3667,7 @@ class WorkerThread(QThread):
             )
             self.progress.emit("  Этап обработки: upscale_before; status=complete")
 
-        if self.remove_bg:
+        if remove_background:
             self._set_provider_diagnostic_context(
                 "background_removal",
                 "kie",

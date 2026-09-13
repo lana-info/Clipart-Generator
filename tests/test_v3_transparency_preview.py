@@ -148,6 +148,46 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
 
             self.assertEqual(load_generation_result_kind(output), "clipart")
 
+
+    def test_document_save_rolls_png_mask_and_sidecar_back_when_sidecar_commit_fails(self):
+        from chroma_generation_record import (
+            bind_generation_record, record_path, write_generation_intent,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output" / "ready.png"
+            mask = root / "rough" / "ready-alpha-mask.png"
+            output.parent.mkdir(); mask.parent.mkdir()
+            Image.new("RGBA", (8, 8), (1, 2, 3, 255)).save(output)
+            Image.new("L", (8, 8), 255).save(mask)
+            intent = write_generation_intent(
+                output, color="green", prompt="flower", result_kind="clipart"
+            )
+            bind_generation_record(output, intent, stage="final")
+            sidecar = record_path(output)
+            before_png = output.read_bytes()
+            before_mask = mask.read_bytes()
+            before_sidecar = sidecar.read_bytes()
+            with Image.open(output) as opened:
+                document = MaskEditDocument(opened.convert("RGBA"))
+            document.begin_stroke()
+            document.extend_stroke(((4, 4),), radius=2, action="remove", hardness=100)
+            document.end_stroke()
+            original_replace = os.replace
+
+            def fail_sidecar_commit(source, destination):
+                if Path(destination) == sidecar and str(source).endswith(".tmp"):
+                    raise OSError("sidecar commit failed")
+                return original_replace(source, destination)
+
+            with patch("v3_transparency_preview.os.replace", side_effect=fail_sidecar_commit):
+                with self.assertRaises(OSError):
+                    document.save(output, mask)
+
+            self.assertEqual(output.read_bytes(), before_png)
+            self.assertEqual(mask.read_bytes(), before_mask)
+            self.assertEqual(sidecar.read_bytes(), before_sidecar)
+
     def test_document_save_preserves_png_dpi(self):
         source = Image.new("RGBA", (12, 12), (7, 8, 9, 255))
         source.info["dpi"] = (300.0, 300.0)
@@ -218,6 +258,39 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
                 self.assertEqual(restored_mask.getpixel((0, 0)), 77)
             self.assertFalse(marker.exists())
             self.assertFalse(any(backup.exists() for backup in backups))
+
+
+    def test_next_start_recovers_png_mask_and_sidecar_v2_transaction(self):
+        from chroma_generation_record import bind_generation_record, record_path, write_generation_intent
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "output" / "ready.png"
+            mask = root / "rough" / "ready-alpha-mask.png"
+            output.parent.mkdir(); mask.parent.mkdir()
+            Image.new("RGBA", (4, 4), (1, 2, 3, 255)).save(output)
+            Image.new("L", (4, 4), 77).save(mask)
+            intent = write_generation_intent(output, color="green", prompt="flower", result_kind="clipart")
+            bind_generation_record(output, intent, stage="final")
+            sidecar = record_path(output)
+            old_png, old_mask, old_sidecar = output.read_bytes(), mask.read_bytes(), sidecar.read_bytes()
+            marker, backups = MaskEditDocument._pair_transaction_paths(output, mask)
+            identity = marker.stem.rsplit("-", 1)[-1]
+            sidecar_backup = sidecar.with_name(f".{sidecar.name}.{identity}.backup")
+            MaskEditDocument._write_pair_transaction(
+                marker, phase="prepared", existed=(True, True, True), includes_sidecar=True
+            )
+            os.replace(output, backups[0]); os.replace(mask, backups[1]); os.replace(sidecar, sidecar_backup)
+            Image.new("RGBA", (8, 8), (200, 0, 0, 255)).save(output)
+            Image.new("L", (8, 8), 0).save(mask)
+            sidecar.write_text("new-but-uncommitted")
+
+            self.assertTrue(MaskEditDocument.recover_pair(output, mask))
+
+            self.assertEqual(output.read_bytes(), old_png)
+            self.assertEqual(mask.read_bytes(), old_mask)
+            self.assertEqual(sidecar.read_bytes(), old_sidecar)
+            self.assertFalse(marker.exists())
+            self.assertFalse(backups[0].exists() or backups[1].exists() or sidecar_backup.exists())
 
     def test_document_history_is_bounded_by_memory_not_only_step_count(self):
         document = MaskEditDocument(

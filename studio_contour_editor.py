@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
+import tempfile
 from typing import Literal
 
 import cv2
@@ -557,21 +559,26 @@ class ContourEditorDialog(QDialog):
             if destination.resolve() == self.source_path.resolve():
                 raise ValueError("Выберите отдельное имя: исходный PNG не перезаписывается.")
             from chroma_generation_record import (
-                capture_generation_record, ensure_record_paths_available,
-                rebind_generation_record,
+                capture_generation_record, publish_generation_copy,
             )
             generation_record = capture_generation_record(self.source_path)
-            if generation_record is not None:
-                ensure_record_paths_available(destination)
-            self.canvas.session.save_copy(destination)
-            if generation_record is not None:
+            if generation_record is None:
+                self.canvas.session.save_copy(destination)
+            else:
+                staged = None
                 try:
-                    rebind_generation_record(
-                        destination, generation_record, stage="final", overwrite=False
-                    )
-                except (OSError, ValueError):
-                    destination.unlink(missing_ok=True)
-                    raise
+                    with tempfile.NamedTemporaryFile(
+                        dir=destination.parent, prefix=".contour-", suffix=".png", delete=False
+                    ) as temporary:
+                        staged = Path(temporary.name)
+                        Image.fromarray(self.canvas.session.current_rgba(), "RGBA").save(
+                            temporary, format="PNG"
+                        )
+                        temporary.flush(); os.fsync(temporary.fileno())
+                    publish_generation_copy(staged, destination, generation_record, stage="final")
+                finally:
+                    if staged is not None:
+                        staged.unlink(missing_ok=True)
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             self.status.setText(str(exc)); return
         self.saved_path=destination; self.accept()

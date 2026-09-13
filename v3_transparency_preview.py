@@ -204,7 +204,9 @@ class MaskEditDocument:
         destination.parent.mkdir(parents=True, exist_ok=True)
         mask_destination.parent.mkdir(parents=True, exist_ok=True)
         self.recover_pair(destination, mask_destination)
-        from chroma_generation_record import capture_generation_record
+        from chroma_generation_record import (
+            capture_generation_record, record_path, stage_rebound_generation_record,
+        )
         generation_record = (
             capture_generation_record(destination) if destination.exists() else None
         )
@@ -214,23 +216,28 @@ class MaskEditDocument:
             self._save_info,
         )
         mask_temporary: Path | None = None
+        sidecar_temporary: Path | None = None
         try:
             mask_temporary = self._stage_png(self.mask, mask_destination, {})
+            if generation_record is not None:
+                sidecar_temporary = stage_rebound_generation_record(
+                    output_temporary, generation_record, stage="final",
+                    directory=destination.parent,
+                )
             self._replace_pair(
                 output_temporary,
                 destination,
                 mask_temporary,
                 mask_destination,
+                sidecar_temporary=sidecar_temporary,
+                sidecar_destination=(record_path(destination) if sidecar_temporary else None),
             )
-            if generation_record is not None:
-                from chroma_generation_record import rebind_generation_record
-                rebind_generation_record(
-                    destination, generation_record, stage="final", overwrite=True
-                )
         finally:
             output_temporary.unlink(missing_ok=True)
             if mask_temporary is not None:
                 mask_temporary.unlink(missing_ok=True)
+            if sidecar_temporary is not None:
+                sidecar_temporary.unlink(missing_ok=True)
         self._saved_mask = self.mask.copy()
 
     @staticmethod
@@ -281,13 +288,15 @@ class MaskEditDocument:
         marker: Path,
         *,
         phase: str,
-        existed: tuple[bool, bool],
+        existed: tuple[bool, ...],
+        includes_sidecar: bool = False,
     ) -> None:
         payload = json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2 if includes_sidecar else 1,
                 "phase": phase,
                 "existed": list(existed),
+                **({"includes_sidecar": True} if includes_sidecar else {}),
             },
             ensure_ascii=True,
             separators=(",", ":"),
@@ -321,18 +330,29 @@ class MaskEditDocument:
         try:
             payload = json.loads(marker.read_text(encoding="utf-8"))
             existed_raw = payload.get("existed")
+            version = payload.get("schema_version")
+            includes_sidecar = version == 2 and payload.get("includes_sidecar") is True
+            expected_count = 3 if includes_sidecar else 2
             if (
-                payload.get("schema_version") != 1
+                version not in {1, 2}
+                or (version == 2 and not includes_sidecar)
                 or payload.get("phase") not in {"prepared", "committed"}
                 or not isinstance(existed_raw, list)
-                or len(existed_raw) != 2
+                or len(existed_raw) != expected_count
                 or not all(isinstance(value, bool) for value in existed_raw)
             ):
                 raise ValueError("Повреждён журнал сохранения PNG/mask")
-            existed = (existed_raw[0], existed_raw[1])
+            existed = tuple(existed_raw)
             committed = payload["phase"] == "committed"
         except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
             raise OSError("Не удалось восстановить прерванное сохранение PNG/mask")
+
+        if includes_sidecar:
+            from chroma_generation_record import record_path
+            sidecar = record_path(destinations[0])
+            identity = marker.stem.rsplit("-", 1)[-1]
+            destinations = (*destinations, sidecar)
+            backups = (*backups, sidecar.with_name(f".{sidecar.name}.{identity}.backup"))
 
         if committed and all(destination.is_file() for destination in destinations):
             for backup in backups:
@@ -364,12 +384,28 @@ class MaskEditDocument:
         output_destination: Path,
         mask_temporary: Path,
         mask_destination: Path,
+        *,
+        sidecar_temporary: Path | None = None,
+        sidecar_destination: Path | None = None,
     ) -> None:
+        if (sidecar_temporary is None) != (sidecar_destination is None):
+            raise ValueError("Sidecar transaction is incomplete")
         destinations = (output_destination, mask_destination)
         temporaries = (output_temporary, mask_temporary)
         marker, backups = cls._pair_transaction_paths(*destinations)
-        existed = (output_destination.exists(), mask_destination.exists())
-        cls._write_pair_transaction(marker, phase="prepared", existed=existed)
+        includes_sidecar = sidecar_temporary is not None
+        if includes_sidecar:
+            identity = marker.stem.rsplit("-", 1)[-1]
+            destinations = (*destinations, sidecar_destination)
+            temporaries = (*temporaries, sidecar_temporary)
+            backups = (*backups, sidecar_destination.with_name(
+                f".{sidecar_destination.name}.{identity}.backup"
+            ))
+        existed = tuple(destination.exists() for destination in destinations)
+        cls._write_pair_transaction(
+            marker, phase="prepared", existed=existed,
+            includes_sidecar=includes_sidecar,
+        )
         try:
             for destination, backup, previously_existed in zip(
                 destinations,
@@ -385,6 +421,7 @@ class MaskEditDocument:
                 marker,
                 phase="committed",
                 existed=existed,
+                includes_sidecar=includes_sidecar,
             )
         except BaseException:
             cls.recover_pair(output_destination, mask_destination)

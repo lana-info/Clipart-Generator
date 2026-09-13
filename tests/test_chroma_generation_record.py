@@ -7,8 +7,8 @@ from PIL import Image
 
 from chroma_generation_record import (
     bind_generation_record, capture_generation_record, ensure_record_paths_available,
-    load_generation_color, load_generation_result_kind, rebind_generation_record,
-    record_path, write_generation_intent,
+    load_generation_color, load_generation_result_kind, publish_generation_copy,
+    rebind_generation_record, record_path, recover_generation_copy, write_generation_intent,
 )
 
 
@@ -172,6 +172,56 @@ class GenerationRecordTests(unittest.TestCase):
                         ensure_record_paths_available(self.source, final)
                     target.unlink()
         ensure_record_paths_available(self.source, final)
+
+
+    def test_recover_generation_copy_removes_matching_partial_publish_after_crash(self):
+        from unittest.mock import patch
+        import chroma_generation_record as records
+
+        intent = write_generation_intent(
+            self.source, color="green", prompt="flower", result_kind="clipart"
+        )
+        Image.new("RGBA", (8, 8), (1, 2, 3, 0)).save(self.source)
+        bind_generation_record(self.source, intent, stage="final")
+        captured = capture_generation_record(self.source)
+        staged = self.source.with_name("staged.png")
+        Image.new("RGBA", (8, 8), (9, 8, 7, 0)).save(staged)
+        destination = self.source.with_name("copy.png")
+        original_publish = records.publish_atomic
+
+        def crash_on_sidecar(source, target, *, overwrite=False):
+            if Path(target) == record_path(destination):
+                raise SystemExit("simulated crash")
+            return original_publish(source, target, overwrite=overwrite)
+
+        with patch("chroma_generation_record.publish_atomic", side_effect=crash_on_sidecar):
+            with self.assertRaises(SystemExit):
+                publish_generation_copy(staged, destination, captured)
+
+        self.assertTrue(destination.exists())
+        self.assertFalse(record_path(destination).exists())
+        self.assertTrue(recover_generation_copy(destination))
+        self.assertFalse(destination.exists())
+        self.assertFalse(record_path(destination).exists())
+
+    def test_rebind_refuses_when_cooperative_record_lock_is_held(self):
+        intent = write_generation_intent(
+            self.source, color="green", prompt="flower", result_kind="clipart"
+        )
+        Image.new("RGBA", (8, 8), (1, 2, 3, 0)).save(self.source)
+        bind_generation_record(self.source, intent, stage="final")
+        captured = capture_generation_record(self.source)
+        sidecar = record_path(self.source)
+        before = sidecar.read_bytes()
+        lock = sidecar.with_name(sidecar.name + ".lock")
+        lock.write_text("held")
+        Image.new("RGBA", (8, 8), (9, 8, 7, 0)).save(self.source)
+        try:
+            with self.assertRaises(ValueError):
+                rebind_generation_record(self.source, captured, stage="final")
+        finally:
+            lock.unlink(missing_ok=True)
+        self.assertEqual(sidecar.read_bytes(), before)
 
     def test_future_schema_extra_fields_and_symlink_are_rejected(self):
         self.prepare()

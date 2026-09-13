@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from contextlib import contextmanager
 import re
 import tempfile
 
@@ -104,6 +105,27 @@ def write_generation_intent(image_path, *, color: str | None, prompt: str,
     return data
 
 
+def discard_generation_intent(image_path, intent: dict) -> bool:
+    """Remove only the caller-owned pending intent after a post-payment bind failure."""
+    target = record_path(image_path, pending=True)
+    if not target.exists() and not target.is_symlink():
+        return False
+    if target.is_symlink():
+        raise ValueError("Недопустимая ссылка в сведениях о генерации")
+    try:
+        raw = target.read_bytes()
+        if len(raw) > 4096:
+            raise ValueError("Record too large")
+        existing = _validate(json.loads(raw), pending=True)
+        expected = _validate(intent, pending=True)
+    except (OSError, ValueError, RecursionError, json.JSONDecodeError) as error:
+        raise ValueError("Pending-сведения генерации изменились; удаление остановлено") from error
+    if existing != expected:
+        raise ValueError("Pending-сведения генерации изменились; удаление остановлено")
+    target.unlink()
+    return True
+
+
 def bind_generation_record(image_path, intent: dict, *, stage: str = "raw") -> None:
     pending = isinstance(intent, dict) and intent.get("source_sha256") is None
     data = _validate(intent, pending=pending)
@@ -178,18 +200,175 @@ def capture_generation_record(image_path) -> dict | None:
     return dict(data)
 
 
-def rebind_generation_record(image_path, captured: dict, *, stage: str = "final",
-                             overwrite: bool = True) -> None:
-    """Bind captured v2 lineage to current bytes after a trusted local edit/copy."""
+
+def _file_sha256(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _copy_marker_path(destination: str | Path) -> Path:
+    target = Path(destination)
+    identity = hashlib.sha256(
+        str(target.resolve(strict=False)).encode("utf-8")
+    ).hexdigest()[:16]
+    return target.parent / f".vibix-generation-copy-{identity}.json"
+
+
+def _write_copy_marker(marker: Path, payload: dict, *, overwrite: bool) -> None:
+    staged = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=marker.parent, prefix=f".{marker.name}.", suffix=".tmp", delete=False
+        ) as stream:
+            staged = Path(stream.name)
+            stream.write((json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8"))
+            stream.flush(); os.fsync(stream.fileno())
+        publish_atomic(staged, marker, overwrite=overwrite)
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+
+
+def recover_generation_copy(destination: str | Path) -> bool:
+    """Recover an interrupted no-clobber PNG + generation-sidecar Save As."""
+    target = Path(destination)
+    marker = _copy_marker_path(target)
+    if not marker.is_file():
+        return False
+    sidecar = record_path(target)
+    try:
+        raw = marker.read_bytes()
+        if len(raw) > 4096:
+            raise ValueError("marker too large")
+        payload = json.loads(raw)
+        if (
+            payload.get("schema_version") != 1
+            or payload.get("phase") not in {"prepared", "committed"}
+            or not _HASH.fullmatch(str(payload.get("image_sha256") or ""))
+            or not _HASH.fullmatch(str(payload.get("record_sha256") or ""))
+        ):
+            raise ValueError("invalid marker")
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise OSError("Не удалось восстановить прерванное сохранение PNG/provenance") from error
+
+    expected = ((target, payload["image_sha256"]), (sidecar, payload["record_sha256"]))
+    if payload["phase"] == "committed":
+        if not all(path.is_file() and _file_sha256(path) == digest for path, digest in expected):
+            raise OSError("Сохранение PNG/provenance было изменено извне; восстановление остановлено")
+        marker.unlink(missing_ok=True)
+        return True
+
+    for path, digest in expected:
+        if path.exists() or path.is_symlink():
+            if path.is_symlink() or not path.is_file() or _file_sha256(path) != digest:
+                raise OSError("Частично сохранённый PNG/provenance изменён извне; удаление остановлено")
+            path.unlink()
+    marker.unlink(missing_ok=True)
+    return True
+
+
+def publish_generation_copy(staged_image_path: str | Path, destination: str | Path,
+                            captured: dict, *, stage: str = "final") -> Path:
+    """Publish a new PNG and its v2 sidecar as one recoverable no-clobber unit."""
+    source = Path(staged_image_path)
+    target = Path(destination)
+    if not source.is_file():
+        raise FileNotFoundError(source)
+    if target.suffix.casefold() != ".png":
+        raise ValueError("Portable generation copy must be PNG")
+    if not target.parent.is_dir():
+        raise FileNotFoundError("destination directory does not exist")
+    recover_generation_copy(target)
+    if target.exists() or target.is_symlink():
+        raise FileExistsError(f"refusing to overwrite existing output: {target}")
+    ensure_record_paths_available(target)
+    staged_record = stage_rebound_generation_record(
+        source, captured, stage=stage, directory=target.parent
+    )
+    sidecar = record_path(target)
+    marker = _copy_marker_path(target)
+    payload = {
+        "schema_version": 1,
+        "phase": "prepared",
+        "image_sha256": _file_sha256(source),
+        "record_sha256": _file_sha256(staged_record),
+    }
+    _write_copy_marker(marker, payload, overwrite=False)
+    image_published = False
+    sidecar_published = False
+    try:
+        publish_atomic(source, target, overwrite=False); image_published = True
+        publish_atomic(staged_record, sidecar, overwrite=False); sidecar_published = True
+        payload["phase"] = "committed"
+        _write_copy_marker(marker, payload, overwrite=True)
+        marker.unlink(missing_ok=True)
+        return target
+    except Exception:
+        if sidecar_published and sidecar.is_file() and _file_sha256(sidecar) == payload["record_sha256"]:
+            sidecar.unlink()
+        if image_published and target.is_file() and _file_sha256(target) == payload["image_sha256"]:
+            target.unlink()
+        marker.unlink(missing_ok=True)
+        raise
+    finally:
+        staged_record.unlink(missing_ok=True)
+
+
+@contextmanager
+def _exclusive_record_lock(target: Path):
+    lock = target.with_name(target.name + ".lock")
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as error:
+        raise ValueError("Сведения генерации уже изменяются другим процессом") from error
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(str(os.getpid()))
+            stream.flush(); os.fsync(stream.fileno())
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+def _rebound_generation_data(image_path, captured: dict, *, stage: str = "final") -> dict:
     data = _validate(captured, pending=False)
     if data["schema_version"] != 2:
         raise ValueError("Legacy generation record has no confirmed result kind")
     if stage not in {"raw", "final"}:
         raise ValueError("Unsupported generation record stage")
+    data["stage"] = stage
+    data["source_sha256"] = image_digest(image_path)
+    return _validate(data)
+
+
+def stage_rebound_generation_record(image_path, captured: dict, *, stage: str = "final",
+                                    directory: str | Path | None = None) -> Path:
+    """Stage a complete rebound v2 record without publishing it."""
+    data = _rebound_generation_data(image_path, captured, stage=stage)
+    parent = Path(directory) if directory is not None else Path(image_path).parent
+    with tempfile.NamedTemporaryFile(
+        dir=parent, prefix=".generation-", suffix=".tmp", delete=False
+    ) as stream:
+        temporary = Path(stream.name)
+        stream.write((json.dumps(data, indent=2) + "\n").encode("utf-8"))
+        stream.flush()
+        os.fsync(stream.fileno())
+    return temporary
+
+
+def rebind_generation_record(image_path, captured: dict, *, stage: str = "final",
+                             overwrite: bool = True) -> None:
+    """Bind captured v2 lineage to current bytes after a trusted local edit/copy."""
+    data = _rebound_generation_data(image_path, captured, stage=stage)
     target = record_path(image_path)
-    if overwrite and target.exists():
-        if target.is_symlink():
-            raise ValueError("Недопустимая ссылка в сведениях о генерации")
+    if not overwrite:
+        _write(target, data, overwrite=False)
+        return
+    with _exclusive_record_lock(target):
+        if not target.exists() or target.is_symlink():
+            raise ValueError("Сведения генерации исчезли или стали недопустимой ссылкой")
         try:
             raw = target.read_bytes()
             if len(raw) > 4096:
@@ -199,6 +378,4 @@ def rebind_generation_record(image_path, captured: dict, *, stage: str = "final"
             raise ValueError("Сведения генерации изменились; обновление остановлено") from error
         if existing != captured:
             raise ValueError("Сведения генерации изменились; обновление остановлено")
-    data["stage"] = stage
-    data["source_sha256"] = image_digest(image_path)
-    _write(target, _validate(data), overwrite=overwrite)
+        _write(target, data, overwrite=True)
