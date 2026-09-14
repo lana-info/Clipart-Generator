@@ -22,6 +22,7 @@ class _WorkflowCapability:
     runtime_settings_provider: Any = None
     worker_factory: Any = None
     authorization_provider: Any = None
+    run_preparer: Any = None
 
 
 _CAPABILITIES: dict[str, _WorkflowCapability] = {}
@@ -52,6 +53,7 @@ def register_workflow_capability(
     runtime_settings_provider=None,
     worker_factory=None,
     authorization_provider=None,
+    run_preparer=None,
 ) -> str:
     try:
         scope = ProjectMode(module_id)
@@ -72,6 +74,7 @@ def register_workflow_capability(
         _store_callback(runtime_settings_provider),
         _store_callback(worker_factory),
         _store_callback(authorization_provider),
+        _store_callback(run_preparer),
     )
     return token
 
@@ -284,6 +287,16 @@ def host_authorize_run(capability_id: str):
         from license_client import LicenseError
         raise LicenseError("Лицензионный сервис не настроен")
     return authorize()
+
+
+def host_prepare_run(capability_id: str):
+    entry = _CAPABILITIES.get(str(capability_id))
+    if entry is None:
+        raise RuntimeError("Workflow capability is unavailable")
+    preparer = _load_callback(entry.run_preparer, "run preparation")
+    if preparer is None:
+        raise OSError("Core run preparation service is unavailable")
+    return preparer()
 
 
 def host_create_worker_job(capability_id: str, **kwargs):

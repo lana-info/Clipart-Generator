@@ -149,6 +149,63 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
             ),
         )
 
+    def test_deferred_selective_regeneration_uses_real_pinterest_worker_path(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-regeneration-production-") as temp:
+            state = ProjectState(mode=ProjectMode.PINTEREST)
+            state.common.work_dir = temp
+            product_path = Path(temp) / "product.png"
+            Image.new("RGBA", (8, 10), (20, 40, 60, 255)).save(product_path)
+            state.pinterest.pin.product_paths = [str(product_path)]
+            state.set_output_dir_for_mode(temp, ProjectMode.PINTEREST)
+            shell = AppShell(state)
+            controller = install_pinterest_flow(
+                WorkflowHost(
+                    shell,
+                    "pinterest",
+                    authorization_provider=lambda: None,
+                    run_preparer=lambda: None,
+                )
+            )
+            preview = PinterestPinPreviewPage(
+                controller.adapter_state,
+                shell.mark_dirty,
+                regenerate_handler=controller.regenerate_variant,
+            )
+            controller.pages._factories.pop(StepId.RESULTS, None)
+            controller.pages._materialized[StepId.RESULTS] = preview
+
+            request = controller.regenerate_variant("template-01")
+
+            self.assertIsInstance(request, PinterestPinRunRequest)
+            self.assertIsInstance(controller.worker, PinterestPinWorkerAdapter)
+            self.assertEqual(
+                request.queue_items,
+                ({"variant_id": "template-01", "variant_kind": "template"},),
+            )
+            self.assertTrue(controller.worker.wait(2_000))
+            self.app.processEvents()
+
+    def test_module_owned_pinterest_worker_is_blocked_when_core_save_fails(self):
+        with tempfile.TemporaryDirectory(prefix="pinterest-core-save-") as temp:
+            view = V3ApplicationView(draft_path=Path(temp) / "draft.json")
+            view._handle_mode_selected(ProjectMode.PINTEREST.value)
+            controller = view.shell.workflow_controller("pinterest")
+            request = PinterestPinRunRequest(
+                work_dir=temp,
+                product_path=str(Path(temp) / "product.png"),
+                pin=PinterestPinData(product_paths=[str(Path(temp) / "product.png")]),
+                settings={"output_dir": temp},
+                queue_items=({"variant_id": "template-01", "variant_kind": "template"},),
+            )
+            with patch.object(
+                view._project_store, "save", side_effect=OSError("disk")
+            ), patch.object(v3_pinterest_flow, "PinterestPinWorkerAdapter") as worker_type:
+                with self.assertRaises(OSError):
+                    controller.create_worker_for_request(request)
+                worker_type.assert_not_called()
+            view.close()
+            view.deleteLater()
+
     def test_pinterest_ready_prompt_omits_clipart_chroma_controls(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         page = PinterestPromptInputPage(state, lambda: None)

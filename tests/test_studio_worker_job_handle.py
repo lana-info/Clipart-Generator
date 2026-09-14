@@ -7,6 +7,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from studio_job_services import CoreWorkerJobHandle
+import _studio_worker_core
 from v3_mode_selection import V3ApplicationView
 from v3_project_state import ProjectMode
 
@@ -61,6 +62,16 @@ def test_core_worker_handle_does_not_store_raw_worker_reference():
     handle = CoreWorkerJobHandle(raw)
     assert not hasattr(handle, "_CoreWorkerJobHandle__worker")
     assert raw not in __import__("gc").get_referents(handle)
+
+def test_worker_capability_releases_on_completed_terminal_signal():
+    raw = RawWorker()
+    handle = CoreWorkerJobHandle(raw)
+    token = handle._capability_id
+    assert token in _studio_worker_core._WORKERS
+    raw.completed.emit("done")
+    assert token not in _studio_worker_core._WORKERS
+    assert handle.isRunning() is False
+
 
 def test_application_core_wraps_worker_before_builtin_workflow_receives_it():
     app = QApplication.instance() or QApplication([])

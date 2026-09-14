@@ -687,15 +687,14 @@ class PinterestPinWorkerAdapter(QThread):
 
 
 def build_pinterest_run_request(
-    state: ProjectState,
+    state: Any,
     runtime_settings: Mapping[str, Any] | None = None,
     *,
     locale: str = "ru",
     provider_capabilities: Mapping[str, object] | None = None,
 ) -> PinterestPinRunRequest:
     del runtime_settings
-    if not isinstance(state, ProjectState):
-        raise TypeError("state must be a ProjectState")
+    _pinterest_data(state)
     if state.mode is not ProjectMode.PINTEREST:
         raise PinterestFlowError(message_for("pinterest.error.run_wrong_mode", locale=locale))
     work_dir = Path(state.common.work_dir).expanduser()
@@ -1540,6 +1539,18 @@ class PinterestFlowController(QObject):
             raise PinterestFlowError("В текущем запуске нет операций Fal.ai")
         return estimate_fal_cost(api_key, quantities)
 
+    def create_worker_for_request(
+        self, request: FlowRunRequest | PinterestPinRunRequest
+    ):
+        if isinstance(request, PinterestPinRunRequest):
+            # The six-slot worker is module-owned/local. Core still performs
+            # the authoritative save immediately before it is constructed.
+            self.shell.prepare_run()
+            return PinterestPinWorkerAdapter(request)
+        if isinstance(request, FlowRunRequest):
+            return self.shell.create_worker_job(**request.worker_kwargs())
+        raise TypeError("Unsupported Pinterest run request")
+
     def start(self) -> FlowRunRequest | None:
         if self.shell.another_run_is_active(self):
             message = _pinterest_text("regeneration_another_run_active", locale=self.locale)
@@ -1564,7 +1575,7 @@ class PinterestFlowController(QObject):
                     "Укажите в настройках: " + ", ".join(missing)
                 )
             self.shell.authorize_run()
-            worker = self.shell.create_worker_job(**request.worker_kwargs())
+            worker = self.create_worker_for_request(request)
         except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             message = _safe_runtime_error(
                 error,
@@ -1610,7 +1621,12 @@ class PinterestFlowController(QObject):
             runtime_settings = self.shell.runtime_settings()
             if not isinstance(runtime_settings, Mapping):
                 raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
-            request = self._request(runtime_settings)
+            request = build_pinterest_run_request(
+                self.shell.state,
+                runtime_settings,
+                locale=self.locale,
+                provider_capabilities=self.provider_capabilities_provider(),
+            )
             cached_product = self._product_layer
             if cached_product is not None and cached_product.source_path != request.product_path:
                 cached_product = None

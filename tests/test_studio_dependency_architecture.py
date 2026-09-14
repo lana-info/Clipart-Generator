@@ -323,6 +323,13 @@ def test_builtin_workflow_adapters_are_scanned_in_their_module_layers():
     assert _layer_for("studio_builtin_workflows.processing.entry") == "processing"
 
 
+def test_builtin_workflows_use_public_host_boundary_not_private_core_dispatch():
+    private_core = {"_studio_workflow_core", "_studio_worker_core"}
+    for module_id in ("clipart", "pinterest", "processing"):
+        entry = ROOT / "studio_builtin_workflows" / module_id / "entry.py"
+        assert not (_imports(entry) & private_core)
+
+
 def test_public_provider_and_job_apis_are_isolated_dependency_boundaries():
     for module_name in ("studio_provider_api", "studio_job_api", "studio_project_api"):
         assert _layer_for(module_name) == "public_api"

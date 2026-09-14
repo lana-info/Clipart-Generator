@@ -45,20 +45,27 @@ def register_worker(worker: Any, handle: Any) -> str:
     _bridge(worker, "diagnostic", handle.diagnostic.emit)
     _bridge(worker, "error", handle.error.emit)
     completed = getattr(worker, "completed", None)
-    if completed is not None and hasattr(completed, "connect"):
-        completed.connect(
-            lambda message="": handle.completed.emit(str(message or ""))
-        )
-    else:
-        finished = getattr(worker, "finished", None)
-        if finished is not None and hasattr(finished, "connect"):
-            finished.connect(
-                lambda *args: handle.completed.emit(
-                    str(args[0] if args else "")
-                )
-            )
     finished = getattr(worker, "finished", None)
-    if finished is not None and hasattr(finished, "connect"):
+    has_completed = completed is not None and hasattr(completed, "connect")
+    has_finished = finished is not None and hasattr(finished, "connect")
+    if has_completed:
+        if has_finished:
+            completed.connect(
+                lambda message="": handle.completed.emit(str(message or ""))
+            )
+        else:
+            def terminal_completed(message="", *, capability_id=token) -> None:
+                handle.completed.emit(str(message or ""))
+                release_worker(capability_id)
+
+            completed.connect(terminal_completed)
+    elif has_finished:
+        def terminal_finished(*args, capability_id=token) -> None:
+            handle.completed.emit(str(args[0] if args else ""))
+            release_worker(capability_id)
+
+        finished.connect(terminal_finished)
+    if has_completed and has_finished:
         finished.connect(lambda *_args, capability_id=token: release_worker(capability_id))
     return token
 

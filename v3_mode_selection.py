@@ -893,31 +893,37 @@ class V3ApplicationView(QWidget):
             else "Не удалось сохранить изменения"
         )
 
+    def _prepare_project_run(self, shell: AppShell) -> str | None:
+        if shell is not self.shell:
+            raise ValueError("Откройте проект заново перед запуском")
+        if self._draft_path is None:
+            return None
+        if self._project_store is None or self._project_documents is None:
+            raise OSError("Не удалось сохранить проект. Проверьте доступ к папке приложения")
+        # Save immediately before any run worker is created, including retries
+        # and module-owned local workers. A failed save blocks the run.
+        state = shell.state
+        name = state.common.project_name.strip() or "Без названия"
+        try:
+            if self._active_project_id is None:
+                record = self._project_documents.create(
+                    state.mode.value, "project", name, state.to_dict()
+                )
+                self._active_project_id = record.project_id
+            else:
+                self._project_documents.save(
+                    self._active_project_id, name, state.to_dict()
+                )
+        except (OSError, ValueError) as error:
+            raise OSError("Не удалось сохранить проект. Запуск не начат") from error
+        return self._active_project_id
+
     def _create_project_worker(self, shell: AppShell, **kwargs: Any) -> Any:
         from v3_runtime_adapter import DEFAULT_LEGACY_RUNTIME_ADAPTER
 
-        if shell is not self.shell:
-            raise ValueError("Откройте проект заново перед запуском")
-        if self._draft_path is not None:
-            if self._project_store is None or self._project_documents is None:
-                raise OSError("Не удалось сохранить проект. Проверьте доступ к папке приложения")
-            # Save before creating a worker, including retries. Failure must
-            # not silently fall back to a shared journal and submit paid work.
-            state = shell.state
-            name = state.common.project_name.strip() or "Без названия"
-            try:
-                if self._active_project_id is None:
-                    record = self._project_documents.create(
-                        state.mode.value, "project", name, state.to_dict()
-                    )
-                    self._active_project_id = record.project_id
-                else:
-                    self._project_documents.save(
-                        self._active_project_id, name, state.to_dict()
-                    )
-            except (OSError, ValueError) as error:
-                raise OSError("Не удалось сохранить проект. Запуск не начат") from error
-            kwargs["project_id"] = self._active_project_id
+        project_id = self._prepare_project_run(shell)
+        if project_id is not None:
+            kwargs["project_id"] = project_id
         factory = self._worker_factory or DEFAULT_LEGACY_RUNTIME_ADAPTER.create_worker
         raw_worker = factory(**kwargs)
         from studio_job_services import CoreWorkerJobHandle
@@ -963,11 +969,19 @@ class V3ApplicationView(QWidget):
                 raise OSError("Core worker service is unavailable")
             return view._create_project_worker(scoped_shell, **kwargs)
 
+        def prepare_run():
+            view = view_ref()
+            scoped_shell = shell_ref()
+            if view is None or scoped_shell is None:
+                raise OSError("Core run preparation service is unavailable")
+            return view._prepare_project_run(scoped_shell)
+
         host = WorkflowHost(
             shell,
             module_id,
             runtime_settings_provider=self._runtime_settings,
             worker_factory=create_worker,
+            run_preparer=prepare_run,
             authorization_provider=(
                 self._license_gate.authorize_run
                 if self._license_gate is not None

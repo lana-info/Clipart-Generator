@@ -18,6 +18,7 @@ from _studio_workflow_core import (
     host_runtime_settings,
     host_authorize_run,
     host_create_worker_job,
+    host_prepare_run,
     host_mark_dirty,
     host_refresh,
     host_register_workflow_controller,
@@ -178,6 +179,7 @@ class WorkflowHost:
         runtime_settings_provider=None,
         worker_factory=None,
         authorization_provider=None,
+        run_preparer=None,
     ) -> None:
         if not isinstance(module_id, str) or not module_id:
             raise ValueError("Workflow module id is invalid")
@@ -194,6 +196,7 @@ class WorkflowHost:
             runtime_settings_provider=runtime_settings_provider,
             worker_factory=worker_factory,
             authorization_provider=authorization_provider,
+            run_preparer=run_preparer,
         )
         self._capability_id = capability_id
         self.module_id = module_id
@@ -232,6 +235,9 @@ class WorkflowHost:
 
     def create_worker_job(self, **kwargs):
         return host_create_worker_job(self._capability_id, **kwargs)
+
+    def prepare_run(self):
+        return host_prepare_run(self._capability_id)
 
     def go_next(self) -> None:
         host_go_next(self._capability_id)
