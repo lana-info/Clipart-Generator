@@ -81,6 +81,22 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual((view.width(), view.height()), expected)
 
+    def test_shell_tracks_arbitrary_workflow_controller_by_module_id(self):
+        view = V3ApplicationView()
+        view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        shell = view.shell
+        controller = Mock()
+        controller.worker = object()
+        controller.runtime_adapter.is_running = Mock(return_value=True)
+        controller.run_queue.session = None
+
+        shell.register_workflow_controller("text-probe", controller)
+        self.assertIs(shell.workflow_controller("text-probe"), controller)
+        self.assertIs(shell.active_run_controller(), controller)
+        self.assertFalse(hasattr(shell, "text_probe_flow_controller"))
+        view.close()
+        view.deleteLater()
+
     def test_mode_switch_is_blocked_while_any_run_is_active(self):
         view = V3ApplicationView()
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()

@@ -56,6 +56,7 @@ Write-Host "==> Build app with PyInstaller"
     --add-data "assets/studio-patterns-cover.png;assets" `
     --add-data "assets/studio-mockups-cover.png;assets" `
     --add-data "assets/vibix-images.svg;assets" `
+    --add-data "studio_builtin_workflows;studio_builtin_workflows" `
     --add-data "release/VERSION.txt;release" `
     --add-data "third_party/remove_ai_watermarks_gemini/assets;third_party/remove_ai_watermarks_gemini/assets" `
     --add-data "third_party/remove_ai_watermarks_gemini/LICENSE;third_party/remove_ai_watermarks_gemini" `
@@ -64,6 +65,7 @@ Write-Host "==> Build app with PyInstaller"
     --add-data "third_party/migan/LICENSE;third_party/migan" `
     --add-data "third_party/migan/NOTICE.md;third_party/migan" `
     --add-data "realesrgan-ncnn-vulkan-20211212-windows;realesrgan-ncnn-vulkan-20211212-windows" `
+    --collect-submodules "studio_builtin_workflows" `
     --collect-submodules "scipy._external.array_api_compat" `
     --collect-submodules "rembg.sessions" `
     --copy-metadata "rembg" `

@@ -42,9 +42,7 @@ from studio_projects import ProjectStore
 from studio_project_documents import ProjectDocumentService
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
 from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
-from v3_clipart_flow import install_clipart_flow
-from v3_pinterest_flow import install_pinterest_flow
-from v3_processing_flow import install_processing_flow
+from studio_workflow_registry import WorkflowRegistry, discover_workflows
 from v3_localization import app_locale_from_settings
 from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
@@ -395,6 +393,7 @@ class V3ApplicationView(QWidget):
         diagnostic_journal: Any | None = None,
         update_client: Any | None = None,
         legacy_project: ProjectState | None = None,
+        workflow_registry: WorkflowRegistry | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
@@ -407,6 +406,8 @@ class V3ApplicationView(QWidget):
         self._diagnostic_journal = diagnostic_journal
         self._update_client = update_client
         self._legacy_project = legacy_project
+        workflow_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "studio_builtin_workflows"
+        self._workflow_registry = workflow_registry or discover_workflows(workflow_root)
         self._update_controller = None
         self._initialization_overlay: InitializationProgressOverlay | None = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
@@ -931,36 +932,23 @@ class V3ApplicationView(QWidget):
         self._save_draft()
 
     def _ensure_mode_controller(self, shell: AppShell, mode: ProjectMode) -> Any:
-        attribute_by_mode = {
-            ProjectMode.CLIPART: "clipart_flow_controller",
-            ProjectMode.PINTEREST: "pinterest_flow_controller",
-            ProjectMode.PROCESSING: "processing_flow_controller",
-        }
-        attribute = attribute_by_mode[mode]
-        existing = getattr(shell, attribute, None)
+        module_id = mode.value
+        existing = shell.workflow_controller(module_id)
         if existing is not None:
             return existing
-
-        installer_by_mode = {
-            ProjectMode.CLIPART: install_clipart_flow,
-            ProjectMode.PINTEREST: install_pinterest_flow,
-            ProjectMode.PROCESSING: install_processing_flow,
-        }
-        installer_kwargs = {
-            "runtime_settings_provider": self._runtime_settings,
-            "worker_factory": lambda **kwargs: self._create_project_worker(shell, **kwargs),
-            "authorization_provider": (
+        registration = self._workflow_registry.require(module_id)
+        controller = registration.install(
+            shell,
+            runtime_settings_provider=self._runtime_settings,
+            worker_factory=lambda **kwargs: self._create_project_worker(shell, **kwargs),
+            authorization_provider=(
                 self._license_gate.authorize_run
                 if self._license_gate is not None
                 else None
             ),
-        }
-        if mode is ProjectMode.PINTEREST:
-            installer_kwargs["locale"] = app_locale_from_settings(self._preferences)
-        controller = installer_by_mode[mode](
-            shell,
-            **installer_kwargs,
+            locale=app_locale_from_settings(self._preferences),
         )
+        shell.register_workflow_controller(module_id, controller)
         return controller
 
     def _show_initialization_stage(

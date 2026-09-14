@@ -151,6 +151,7 @@ class AppShell(QWidget):
         self._invalid_key: tuple[ProjectMode, StepId] | None = None
         self._run_request_key: tuple[ProjectMode, StepId] | None = None
         self._pages: dict[tuple[ProjectMode, StepId], QWidget] = {}
+        self._workflow_controllers: dict[str, object] = {}
         self._page_factories: dict[
             tuple[ProjectMode, StepId], Callable[[], QWidget]
         ] = {}
@@ -205,16 +206,22 @@ class AppShell(QWidget):
         self._create_default_pages()
         self.refresh()
 
+    def register_workflow_controller(self, module_id: str, controller: object) -> None:
+        if not isinstance(module_id, str) or not module_id or len(module_id) > 64:
+            raise ValueError("Workflow module id is invalid")
+        if controller is None:
+            raise ValueError("Workflow controller is required")
+        existing = self._workflow_controllers.get(module_id)
+        if existing is not None and existing is not controller:
+            raise RuntimeError("Workflow controller is already registered")
+        self._workflow_controllers[module_id] = controller
+
+    def workflow_controller(self, module_id: str) -> object | None:
+        return self._workflow_controllers.get(module_id)
+
     def active_run_controller(self) -> object | None:
-        """Return the one application controller that still owns an active run."""
-        for attribute in (
-            "clipart_flow_controller",
-            "pinterest_flow_controller",
-            "processing_flow_controller",
-        ):
-            controller = getattr(self, attribute, None)
-            if controller is None:
-                continue
+        """Return the one registered workflow controller that still owns an active run."""
+        for controller in tuple(self._workflow_controllers.values()):
             worker = getattr(controller, "worker", None)
             adapter = getattr(controller, "runtime_adapter", None)
             is_running = getattr(adapter, "is_running", None)

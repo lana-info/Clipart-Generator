@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OFFICIAL_MODULES_ROOT = ROOT / "studio_official_modules"
+BUILTIN_WORKFLOWS_ROOT = ROOT / "studio_builtin_workflows"
 
 LEGACY_LAYER_MODULES = {
     "clipart": frozenset({
@@ -89,9 +90,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_evidence_center', 'v3_components'),
     ('v3_evidence_center', 'v3_project_state'),
     ('v3_evidence_center', 'watermark_status'),
-    ('v3_mode_selection', 'v3_clipart_flow'),
-    ('v3_mode_selection', 'v3_pinterest_flow'),
-    ('v3_mode_selection', 'v3_processing_flow'),
     ('v3_pinterest_flow', 'license_client'),
     ('v3_pinterest_flow', 'security_redaction'),
     ('v3_pinterest_flow', 'v3_clipart_flow'),
@@ -144,6 +142,11 @@ def _layer_for(module_name: str) -> str | None:
     parts = module_name.split(".")
     if parts[0] in {"studio_module_api", "studio_asset_api"}:
         return "public_api"
+    if parts[0] == "studio_builtin_workflows":
+        if len(parts) == 1:
+            return "builtin_registry"
+        module_id = parts[1]
+        return module_id if module_id in LEGACY_LAYER_MODULES else f"builtin:{module_id}"
     if parts[0] == "studio_official_modules" and len(parts) >= 2:
         return f"official:{parts[1]}"
     root_name = parts[0]
@@ -157,11 +160,12 @@ def _layer_for(module_name: str) -> str | None:
 
 def _production_sources() -> tuple[Path, ...]:
     sources = list(ROOT.glob("*.py"))
-    if OFFICIAL_MODULES_ROOT.is_dir():
-        sources.extend(
-            path for path in OFFICIAL_MODULES_ROOT.rglob("*.py")
-            if "__pycache__" not in path.parts
-        )
+    for package_root in (OFFICIAL_MODULES_ROOT, BUILTIN_WORKFLOWS_ROOT):
+        if package_root.is_dir():
+            sources.extend(
+                path for path in package_root.rglob("*.py")
+                if "__pycache__" not in path.parts
+            )
     return tuple(sorted(sources))
 
 
@@ -309,3 +313,11 @@ def test_public_asset_api_is_classified_as_its_own_dependency_boundary():
         if _layer_for(target) is not None
     }
     assert local_dependencies == set()
+
+
+def test_builtin_workflow_adapters_are_scanned_in_their_module_layers():
+    clipart_entry = ROOT / "studio_builtin_workflows" / "clipart" / "entry.py"
+    assert clipart_entry in _production_sources()
+    assert _layer_for("studio_builtin_workflows.clipart.entry") == "clipart"
+    assert _layer_for("studio_builtin_workflows.pinterest.entry") == "pinterest"
+    assert _layer_for("studio_builtin_workflows.processing.entry") == "processing"
