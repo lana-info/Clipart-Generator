@@ -149,7 +149,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         view.mode_selection.mode_cards[ProjectMode.PROCESSING].start_button.click()
         self.app.processEvents()
 
-        pages = view.shell.processing_flow_controller.pages
+        pages = view.shell.workflow_controller("processing").pages
         self.assertEqual(
             set(step for step in pages if step in route_for_mode(ProjectMode.PROCESSING)),
             set(route_for_mode(ProjectMode.PROCESSING)),

@@ -88,7 +88,7 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_clipart_flow', 'v3_run_queue'),
     ('v3_clipart_flow', 'v3_runtime_adapter'),
     ('v3_clipart_flow', 'v3_transparency_preview'),
-    ('v3_clipart_flow', 'v3_wizard'),
+    ('v3_clipart_flow', 'studio_workflow_host'),
     ('v3_clipart_flow', 'workflow_definitions'),
     ('v3_evidence_center', 'metadata_cleanup'),
     ('v3_evidence_center', 'metadata_inspector'),
@@ -107,7 +107,7 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_pinterest_flow', 'v3_prompt_generator'),
     ('v3_pinterest_flow', 'v3_run_queue'),
     ('v3_pinterest_flow', 'v3_runtime_adapter'),
-    ('v3_pinterest_flow', 'v3_wizard'),
+    ('v3_pinterest_flow', 'studio_workflow_host'),
     ('v3_pinterest_flow', 'workflow_definitions'),
     ('v3_processing_editor', 'v3_image_processing_ui'),
     ('v3_processing_editor', 'v3_project_state'),
@@ -123,7 +123,7 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_processing_flow', 'v3_run_queue'),
     ('v3_processing_flow', 'v3_runtime_adapter'),
     ('v3_processing_flow', 'v3_transparency_preview'),
-    ('v3_processing_flow', 'v3_wizard'),
+    ('v3_processing_flow', 'studio_workflow_host'),
     ('v3_processing_flow', 'workflow_definitions'),
 })
 

@@ -144,7 +144,7 @@ from v3_provider_registry import (
     upscale_model_preserves_alpha,
 )
 from workflow_definitions import workflow_for_mode
-from v3_wizard import AppShell
+from studio_workflow_host import WorkflowHost, workflow_host_for
 from v3_lazy_loading import LazyPageRegistry
 from v3_transparency_preview import ClipartTransparencyEditorPage
 from model_catalog import (
@@ -163,10 +163,18 @@ ClipartRunRequest = FlowRunRequest
 MAX_CLIPART_REQUESTS = MAX_IMAGE_GENERATION_REQUESTS
 
 
-def estimate_clipart_cost(state: ProjectState) -> CostEstimate:
-    if not isinstance(state, ProjectState):
-        raise TypeError("state must be a ProjectState")
-    return estimate_image_generation_cost(state.clipart)
+def _clipart_data(state: Any):
+    try:
+        return state.data
+    except AttributeError:
+        try:
+            return state.clipart
+        except AttributeError as exc:
+            raise TypeError("state must expose Clipart workflow data") from exc
+
+
+def estimate_clipart_cost(state: Any) -> CostEstimate:
+    return estimate_image_generation_cost(_clipart_data(state))
 
 
 def clipart_pipeline_steps(operations: ImageOperationData) -> tuple[str, ...]:
@@ -174,27 +182,24 @@ def clipart_pipeline_steps(operations: ImageOperationData) -> tuple[str, ...]:
 
 
 def build_clipart_run_request(
-    state: ProjectState,
+    state: Any,
     runtime_settings: Mapping[str, Any] | None = None,
 ) -> FlowRunRequest:
-    if not isinstance(state, ProjectState):
-        raise TypeError("state must be a ProjectState")
+    _clipart_data(state)
     if state.mode is not ProjectMode.CLIPART:
         raise ClipartFlowError("Запуск клипарта доступен только в режиме clipart")
     return build_image_generation_run_request(
         state.common,
         state.runtime,
-        state.clipart,
+        _clipart_data(state),
         state.output_dir_for_mode(ProjectMode.CLIPART),
         runtime_settings,
         upscale_alpha_checker=upscale_model_preserves_alpha,
     )
 
 
-def fal_endpoint_quantities(state: ProjectState) -> dict[str, int]:
-    if not isinstance(state, ProjectState):
-        raise TypeError("state must be a ProjectState")
-    return _image_fal_endpoint_quantities(state.clipart)
+def fal_endpoint_quantities(state: Any) -> dict[str, int]:
+    return _image_fal_endpoint_quantities(_clipart_data(state))
 
 
 
@@ -387,7 +392,7 @@ class ClipartPromptInputPage(PromptInputPage):
         advance: Callable[[], Any] | None = None,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
-        super().__init__(state, state.clipart, changed, advance=advance, tokens=tokens)
+        super().__init__(state, _clipart_data(state), changed, advance=advance, tokens=tokens)
 
 class ClipartPromptReviewPage(PromptReviewPage):
     def _file_dialog_type(self):
@@ -400,7 +405,7 @@ class ClipartPromptReviewPage(PromptReviewPage):
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
-        super().__init__(state, state.clipart, changed, tokens=tokens)
+        super().__init__(state, _clipart_data(state), changed, tokens=tokens)
 
 
 class PromptWorkspacePage(_ScrollableStepPage):
@@ -472,7 +477,7 @@ class ClipartGenerationPage(ImageGenerationSettingsPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         self.state = state
-        super().__init__(state.clipart, changed, tokens=tokens)
+        super().__init__(_clipart_data(state), changed, tokens=tokens)
 
 
 
@@ -518,7 +523,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
         self.state = state
         self.changed = changed
         self.operation_widgets: dict[str, QWidget] = {}
-        operations = state.clipart.operations
+        operations = _clipart_data(state).operations
         if not UPSCALE_AFTER_UI_ENABLED:
             operations.upscale_after = False
         self.operations = operations
@@ -862,13 +867,13 @@ class ClipartProcessingPage(_ScrollableStepPage):
         raise TypeError(f"Unsupported control: {type(control).__name__}")
 
     def _sync(self, *_: Any) -> None:
-        current = self.state.clipart.operations.to_dict()
+        current = _clipart_data(self.state).operations.to_dict()
         for name, control in self.operation_widgets.items():
             current[name] = self._value(control)
         if not UPSCALE_AFTER_UI_ENABLED:
             current["upscale_after"] = False
         current["visible_mark_cleanup_mode"] = "gemini_auto"
-        self.state.clipart.operations = ImageOperationData(**current)
+        _clipart_data(self.state).operations = ImageOperationData(**current)
         self._refresh_control_visibility()
         self._refresh_pipeline()
         self.changed()
@@ -886,7 +891,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
                 label.setVisible(visible)
 
     def _refresh_control_visibility(self) -> None:
-        operations = self.state.clipart.operations
+        operations = _clipart_data(self.state).operations
         before_controls = set(provider_visible_controls(operations.upscale_before_provider))
         after_controls = set(provider_visible_controls(operations.upscale_after_provider))
         remove_controls = set(provider_visible_controls(operations.remove_background_provider))
@@ -942,7 +947,7 @@ class ClipartProcessingPage(_ScrollableStepPage):
         )
 
     def _refresh_pipeline(self) -> None:
-        steps = clipart_pipeline_steps(self.state.clipart.operations)
+        steps = clipart_pipeline_steps(_clipart_data(self.state).operations)
         text = "Порядок: " + " → ".join(steps)
         self.pipeline_label.setText(text)
         self.pipeline_label.setAccessibleName(text)
@@ -957,7 +962,7 @@ class _SharedClipartProcessingPage(ProcessingPipelineEditor):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__(
-            state.clipart,
+            _clipart_data(state),
             changed,
             title="Обработка изображений",
             description="",
@@ -986,7 +991,7 @@ class ClipartReviewRunPage(ImageReviewRunPage):
         self.state = state
         super().__init__(
             state.common,
-            state.clipart,
+            _clipart_data(state),
             lambda: state.output_dir_for_mode(ProjectMode.CLIPART),
             lambda value: state.set_output_dir_for_mode(value, ProjectMode.CLIPART),
             tokens=tokens,
@@ -1024,14 +1029,15 @@ class ClipartFlowController(QObject):
 
     def __init__(
         self,
-        shell: AppShell,
+        shell: WorkflowHost,
         *,
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
         authorization_provider: Callable[[], Any] | None = None,
     ) -> None:
-        super().__init__(shell)
-        self.shell = shell
+        host = workflow_host_for(shell, "clipart")
+        super().__init__(host)
+        self.shell = host
         from v3_runtime_adapter import runtime_adapter_for
 
         self.runtime_adapter = runtime_adapter_for(
@@ -1052,16 +1058,16 @@ class ClipartFlowController(QObject):
             ProjectMode.CLIPART,
             results_extension=ClipartRunResultsExtension(),
         )
-        self.pages = LazyPageRegistry(shell, ProjectMode.CLIPART)
+        self.pages = LazyPageRegistry(self.shell, ProjectMode.CLIPART)
         self._install_pages()
         self.run_queue.page.transparency_requested.connect(
             self._open_transparency_editor
         )
-        shell.step_changed.connect(self._step_changed)
-        shell.run_requested.connect(self._run_requested)
+        self.shell.step_changed.connect(self._step_changed)
+        self.shell.run_requested.connect(self._run_requested)
         if (
-            shell.state.mode is ProjectMode.CLIPART
-            and shell.state.current_step is StepId.REVIEW_RUN
+            self.shell.state.mode is ProjectMode.CLIPART
+            and self.shell.state.current_step is StepId.REVIEW_RUN
         ):
             self._refresh_preflight()
 
@@ -1070,7 +1076,7 @@ class ClipartFlowController(QObject):
         raise LicenseError("Лицензионный сервис не настроен")
 
     def start_processing_again(self) -> None:
-        self.shell.state.clipart.prompts.clear()
+        _clipart_data(self.shell.state).prompts.clear()
         self.shell.state.set_step(StepId.PROJECT)
         self.pages[StepId.PROJECT].refresh_from_state()
         self.shell.mark_dirty()
@@ -1309,22 +1315,21 @@ class ClipartFlowController(QObject):
 
 
 def install_clipart_flow(
-    shell: AppShell,
+    shell: Any,
     *,
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
     authorization_provider: Callable[[], Any] | None = None,
 ) -> ClipartFlowController:
-    if not isinstance(shell, AppShell):
-        raise TypeError("shell must be an AppShell")
-    existing = getattr(shell, "clipart_flow_controller", None)
+    host = workflow_host_for(shell, "clipart")
+    existing = host.workflow_controller("clipart")
     if isinstance(existing, ClipartFlowController):
         return existing
     controller = ClipartFlowController(
-        shell,
+        host,
         runtime_settings_provider=runtime_settings_provider,
         worker_factory=worker_factory,
         authorization_provider=authorization_provider,
     )
-    shell.clipart_flow_controller = controller
+    host.register_workflow_controller("clipart", controller)
     return controller

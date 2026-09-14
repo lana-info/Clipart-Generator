@@ -63,6 +63,16 @@ class EvidenceCenterError(ValueError):
     pass
 
 
+def _processing_data(state: Any):
+    try:
+        return state.data
+    except AttributeError:
+        try:
+            return state.processing
+        except AttributeError as exc:
+            raise TypeError("state must expose Processing workflow data") from exc
+
+
 class EvidenceCard(QGroupBox):
     def __init__(
         self,
@@ -122,14 +132,14 @@ def _record_for_file(
         raise EvidenceCenterError(
             "Центр проверки доступен только в режиме обработки"
         )
-    if file_path not in state.processing.selected_files:
+    if file_path not in _processing_data(state).selected_files:
         raise EvidenceCenterError("Файл не входит в текущий проект")
-    for record in state.processing.verification_records:
+    for record in _processing_data(state).verification_records:
         if record.file_path == file_path:
             return record
     record = VerificationRecordData(file_path=file_path)
     if create:
-        state.processing.verification_records.append(record)
+        _processing_data(state).verification_records.append(record)
     return record
 
 
@@ -282,8 +292,8 @@ def build_evidence_report(
     )
 
     c2pa = inspection.get("c2pa", {})
-    file_index = state.processing.selected_files.index(file_path) + 1
-    options = cleanup_options_from_operations(state.processing.operations)
+    file_index = _processing_data(state).selected_files.index(file_path) + 1
+    options = cleanup_options_from_operations(_processing_data(state).operations)
     return {
         "schema_version": 1,
         "file": {
@@ -656,8 +666,8 @@ class EvidenceCenterPage(QScrollArea):
         self._refresh_cards()
 
     def _cleanup_changed(self, field: str, checked: bool) -> None:
-        setattr(self.state.processing.operations, field, bool(checked))
-        self.state.processing.recipe = "custom"
+        setattr(_processing_data(self.state).operations, field, bool(checked))
+        _processing_data(self.state).recipe = "custom"
         self.changed()
         self._refresh_cards()
 
@@ -666,8 +676,8 @@ class EvidenceCenterPage(QScrollArea):
             "remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text",
             "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa",
         ):
-            setattr(self.state.processing.operations, field, bool(checked))
-        self.state.processing.recipe = "custom"
+            setattr(_processing_data(self.state).operations, field, bool(checked))
+        _processing_data(self.state).recipe = "custom"
         self.changed()
         self._refresh_cards()
 
@@ -822,7 +832,7 @@ class EvidenceCenterPage(QScrollArea):
         self.openai_stage.setEnabled(
             record.openai_status in _CHECKED_STATUSES
         )
-        operations = self.state.processing.operations
+        operations = _processing_data(self.state).operations
         for field, checkbox in self.cleanup_widgets.items():
             checkbox.blockSignals(True)
             checkbox.setChecked(bool(getattr(operations, field)))
@@ -849,7 +859,7 @@ class EvidenceCenterPage(QScrollArea):
         selected_path = self._current_path()
         self.file_combo.blockSignals(True)
         self.file_combo.clear()
-        for file_path in self.state.processing.selected_files:
+        for file_path in _processing_data(self.state).selected_files:
             self.file_combo.addItem(Path(file_path).name, file_path)
         if selected_path:
             index = self.file_combo.findData(selected_path)

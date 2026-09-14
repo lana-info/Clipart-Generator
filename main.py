@@ -10014,7 +10014,7 @@ def run_packaged_entrypoint_check(
             QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
             QApplication.processEvents()
             prompt_review_page = (
-                packaged_view.shell.clipart_flow_controller.pages[
+                packaged_view.shell.workflow_controller("clipart").pages[
                     StepId.PROMPT_REVIEW
                 ]
             )

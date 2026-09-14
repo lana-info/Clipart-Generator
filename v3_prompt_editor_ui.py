@@ -26,7 +26,7 @@ from v3_project_state import (
     MAX_REFERENCES_PER_PROMPT, MAX_TEXT_LENGTH, ProjectMode, ProjectState, PromptEntry, PromptGeneratorData,
 )
 from v3_prompt_csv_import import PromptCsvImportDialog
-from v3_prompt_generator import PromptGeneratorError, generate_prompt_series, replace_project_prompts
+from v3_prompt_generator import PromptGeneratorError, generate_prompt_series, normalize_prompt_entries
 from v3_provider_registry import CHROMA_KEY_COLOR_OPTIONS
 
 MAX_CSV_BYTES = 2 * 1024 * 1024
@@ -1073,11 +1073,8 @@ class PromptInputPage(ScrollableStepPage):
         if self.generator_mode is None:
             self.card.set_state("error", "Режим генерации промптов не настроен")
             return False
-        replace_project_prompts(
-            self.state,
-            self.generator_mode,
-            normalized,
-            deduplicate=deduplicate,
+        self.data.prompts = normalize_prompt_entries(
+            normalized, deduplicate=deduplicate
         )
         self.card.set_state("default")
         self.refresh_from_state()

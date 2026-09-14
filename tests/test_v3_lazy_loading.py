@@ -33,16 +33,16 @@ class V3LazyLoadingTests(unittest.TestCase):
 
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
 
-        self.assertTrue(hasattr(view.shell, "clipart_flow_controller"))
-        self.assertFalse(hasattr(view.shell, "pinterest_flow_controller"))
-        self.assertFalse(hasattr(view.shell, "processing_flow_controller"))
+        self.assertIsNotNone(view.shell.workflow_controller("clipart"))
+        self.assertIsNone(view.shell.workflow_controller("pinterest"))
+        self.assertIsNone(view.shell.workflow_controller("processing"))
         view.close()
         view.deleteLater()
 
     def test_pages_materialize_on_first_visit_and_are_cached(self) -> None:
         view = V3ApplicationView()
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
-        controller = view.shell.clipart_flow_controller
+        controller = view.shell.workflow_controller("clipart")
 
         self.assertEqual(
             controller.pages.materialized_steps - {StepId.RESULTS},
@@ -68,17 +68,17 @@ class V3LazyLoadingTests(unittest.TestCase):
     def test_first_mode_switch_installs_target_once_and_reuses_it(self) -> None:
         view = V3ApplicationView()
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
-        clipart_controller = view.shell.clipart_flow_controller
+        clipart_controller = view.shell.workflow_controller("clipart")
 
         view.show_mode_switcher()
         view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
-        pinterest_controller = view.shell.pinterest_flow_controller
+        pinterest_controller = view.shell.workflow_controller("pinterest")
 
         view.show_mode_switcher()
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
 
-        self.assertIs(view.shell.clipart_flow_controller, clipart_controller)
-        self.assertIs(view.shell.pinterest_flow_controller, pinterest_controller)
+        self.assertIs(view.shell.workflow_controller("clipart"), clipart_controller)
+        self.assertIs(view.shell.workflow_controller("pinterest"), pinterest_controller)
         view.close()
         view.deleteLater()
 
@@ -183,7 +183,7 @@ class V3LazyLoadingTests(unittest.TestCase):
             view.mode_selection.mode_cards[
                 ProjectMode.PROCESSING
             ].start_button.click()
-            view.shell.processing_flow_controller.pages[StepId.PIPELINE]
+            view.shell.workflow_controller("processing").pages[StepId.PIPELINE]
 
         probe.assert_not_called()
         view.close()

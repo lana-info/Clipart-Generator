@@ -43,6 +43,7 @@ from studio_project_documents import ProjectDocumentService
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
 from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
 from studio_workflow_registry import WorkflowRegistry, discover_workflows
+from studio_workflow_host import WorkflowHost
 from v3_localization import app_locale_from_settings
 from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
@@ -947,8 +948,9 @@ class V3ApplicationView(QWidget):
         if existing is not None:
             return existing
         registration = self._workflow_registry.require(module_id)
+        host = WorkflowHost(shell, module_id)
         controller = registration.install(
-            shell,
+            host,
             runtime_settings_provider=self._runtime_settings,
             worker_factory=lambda **kwargs: self._create_project_worker(shell, **kwargs),
             authorization_provider=(

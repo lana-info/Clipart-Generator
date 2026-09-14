@@ -101,7 +101,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         view = V3ApplicationView()
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
         self.app.processEvents()
-        controller = view.shell.clipart_flow_controller
+        controller = view.shell.workflow_controller("clipart")
         controller.worker = Mock()
         controller.runtime_adapter.is_running = Mock(return_value=True)
 
@@ -243,7 +243,7 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
             self.app.processEvents()
 
-            controller = view.shell.pinterest_flow_controller
+            controller = view.shell.workflow_controller("pinterest")
             self.assertEqual(
                 controller.pages[StepId.PROJECT].card.title_label.text(),
                 "Work folder",
@@ -591,7 +591,7 @@ class V3ModeSelectionTests(unittest.TestCase):
             route_for_mode(ProjectMode.PINTEREST)[0],
         )
         self.assertIs(view.stack.currentWidget(), view.shell)
-        results_page = view.shell.pinterest_flow_controller.pages[StepId.RESULTS]
+        results_page = view.shell.workflow_controller("pinterest").pages[StepId.RESULTS]
         self.assertIsNot(view.shell.current_page, results_page)
         view.close()
         view.deleteLater()

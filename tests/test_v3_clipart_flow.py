@@ -263,7 +263,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
         self.app.processEvents()
 
-        controller = view.shell.clipart_flow_controller
+        controller = view.shell.workflow_controller("clipart")
         self.assertEqual(set(controller.pages), set(view.shell.state.route))
         self.assertIsInstance(controller.pages[StepId.PROJECT], ClipartProjectPage)
         self.assertFalse(

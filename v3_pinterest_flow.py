@@ -73,7 +73,7 @@ from v3_project_state import (
 )
 from v3_prompt_generator import PromptGeneratorError
 from v3_image_processing_ui import ProcessingPipelineEditor
-from v3_wizard import AppShell
+from studio_workflow_host import WorkflowHost, workflow_host_for
 from v3_lazy_loading import LazyPageRegistry
 from v3_localization import message_for, normalize_locale
 from workflow_definitions import workflow_for_mode
@@ -81,6 +81,18 @@ from workflow_definitions import workflow_for_mode
 
 class PinterestFlowError(ValueError):
     pass
+
+
+
+
+def _pinterest_data(state: Any):
+    try:
+        return state.data
+    except AttributeError:
+        try:
+            return state.pinterest
+        except AttributeError as exc:
+            raise TypeError("state must expose Pinterest workflow data") from exc
 
 
 _PINTEREST_REFERENCE_MODEL_BY_TEXT = {
@@ -427,9 +439,8 @@ class _PinterestDataAdapter:
         self.data.results = value
 
 
-def _pinterest_project_adapter(state: ProjectState) -> ProjectState:
-    if not isinstance(state, ProjectState):
-        raise TypeError("state must be a ProjectState")
+def _pinterest_project_adapter(state: Any) -> ProjectState:
+    _pinterest_data(state)
     adapter = ProjectState(mode=ProjectMode.CLIPART)
     adapter.common = CommonProjectData.from_dict(state.common.to_dict())
     adapter.common.output_dir = state.output_dir_for_mode(ProjectMode.PINTEREST)
@@ -438,7 +449,7 @@ def _pinterest_project_adapter(state: ProjectState) -> ProjectState:
         adapter.common.output_dir = str(Path(adapter.common.work_dir) / "output")
         state.set_output_dir_for_mode(adapter.common.output_dir, ProjectMode.PINTEREST)
     adapter.runtime = state.runtime
-    adapter.clipart = _PinterestDataAdapter(state.pinterest)
+    adapter.clipart = _PinterestDataAdapter(_pinterest_data(state))
     return adapter
 
 
@@ -689,7 +700,7 @@ def build_pinterest_run_request(
     work_dir = Path(state.common.work_dir).expanduser()
     if not work_dir.is_dir():
         raise PinterestFlowError(message_for("pinterest.error.work_folder", locale=locale))
-    pin = PinterestPinData.from_dict(state.pinterest.pin.to_dict())
+    pin = PinterestPinData.from_dict(_pinterest_data(state).pin.to_dict())
     if not pin.product_paths:
         raise PinterestFlowError(message_for("pinterest.error.missing_product", locale=locale))
     product_path = Path(pin.product_paths[pin.selected_product_index]).expanduser()
@@ -1357,7 +1368,7 @@ class PinterestFlowController(QObject):
 
     def __init__(
         self,
-        shell: AppShell,
+        shell: WorkflowHost,
         *,
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
@@ -1365,8 +1376,9 @@ class PinterestFlowController(QObject):
         provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
         locale: str = "ru",
     ) -> None:
-        super().__init__(shell)
-        self.shell = shell
+        host = workflow_host_for(shell, "pinterest")
+        super().__init__(host)
+        self.shell = host
         self.locale = normalize_locale(locale)
         from v3_runtime_adapter import runtime_adapter_for
 
@@ -1387,12 +1399,12 @@ class PinterestFlowController(QObject):
         from v3_run_queue import RunQueueSupport
 
         self.run_queue = RunQueueSupport(self, ProjectMode.PINTEREST)
-        self.adapter_state = _pinterest_project_adapter(shell.state)
-        self.pages = LazyPageRegistry(shell, ProjectMode.PINTEREST)
+        self.adapter_state = _pinterest_project_adapter(self.shell.state)
+        self.pages = LazyPageRegistry(self.shell, ProjectMode.PINTEREST)
         self._install_pages()
-        shell.step_changed.connect(self._step_changed)
-        shell.run_requested.connect(self._run_requested)
-        if shell.state.current_step is StepId.REVIEW_RUN:
+        self.shell.step_changed.connect(self._step_changed)
+        self.shell.run_requested.connect(self._run_requested)
+        if self.shell.state.current_step is StepId.REVIEW_RUN:
             self._refresh_preflight()
 
     @staticmethod
@@ -1414,7 +1426,7 @@ class PinterestFlowController(QObject):
         )
 
     def start_processing_again(self) -> None:
-        self.shell.state.pinterest.prompts.clear()
+        _pinterest_data(self.shell.state).prompts.clear()
         self.shell.state.set_step(StepId.PROJECT)
         self.pages[StepId.PROJECT].refresh_from_state()
         self.shell.mark_dirty()
@@ -1750,7 +1762,7 @@ class PinterestFlowController(QObject):
 
 
 def install_pinterest_flow(
-    shell: AppShell,
+    shell: Any,
     *,
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
@@ -1758,18 +1770,17 @@ def install_pinterest_flow(
     provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
     locale: str = "ru",
 ) -> PinterestFlowController:
-    if not isinstance(shell, AppShell):
-        raise TypeError("shell must be an AppShell")
-    existing = getattr(shell, "pinterest_flow_controller", None)
+    host = workflow_host_for(shell, "pinterest")
+    existing = host.workflow_controller("pinterest")
     if isinstance(existing, PinterestFlowController):
         return existing
     controller = PinterestFlowController(
-        shell,
+        host,
         runtime_settings_provider=runtime_settings_provider,
         worker_factory=worker_factory,
         authorization_provider=authorization_provider,
         provider_capabilities_provider=provider_capabilities_provider,
         locale=locale,
     )
-    shell.pinterest_flow_controller = controller
+    host.register_workflow_controller("pinterest", controller)
     return controller

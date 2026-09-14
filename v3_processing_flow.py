@@ -59,7 +59,7 @@ from v3_project_state import (
     route_for_mode,
 )
 from v3_transparency_preview import ClipartTransparencyEditorPage
-from v3_wizard import AppShell
+from studio_workflow_host import WorkflowHost, workflow_host_for
 from v3_lazy_loading import LazyPageRegistry
 from workflow_definitions import workflow_for_mode
 from config_schema import resolve_output_directory
@@ -75,6 +75,16 @@ MAX_PROCESSING_FILES = 200
 
 class ProcessingFlowError(ValueError):
     pass
+
+
+def _processing_data(state: Any):
+    try:
+        return state.data
+    except AttributeError:
+        try:
+            return state.processing
+        except AttributeError as exc:
+            raise TypeError("state must expose Processing workflow data") from exc
 
 
 @dataclass(frozen=True)
@@ -210,11 +220,11 @@ def apply_processing_recipe(state: ProjectState, recipe: str) -> None:
         raise ProcessingFlowError("Рецепт доступен только в режиме обработки")
     if recipe not in PROCESSING_RECIPES:
         raise ProcessingFlowError("Неизвестный рецепт обработки")
-    state.processing.recipe = recipe
+    _processing_data(state).recipe = recipe
     preset = PROCESSING_RECIPES[recipe].operations
     if preset is None:
         return
-    current = state.processing.operations
+    current = _processing_data(state).operations
     for name in _OPERATION_FIELDS:
         setattr(current, name, getattr(preset, name))
 
@@ -595,7 +605,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.changed()
 
     def _set_collision_policy(self, overwrite: bool) -> None:
-        self.state.processing.overwrite_existing = bool(overwrite)
+        _processing_data(self.state).overwrite_existing = bool(overwrite)
         self.changed()
 
     def _choose_files(self) -> None:
@@ -612,7 +622,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
         accepted: list[LocalImageInfo] = []
         existing = {
             os.path.normcase(os.path.abspath(path))
-            for path in self.state.processing.selected_files
+            for path in _processing_data(self.state).selected_files
         }
         errors: list[str] = []
         for raw_path in paths:
@@ -629,7 +639,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
                 continue
             accepted.append(info)
             existing.add(normalized)
-            self.state.processing.selected_files.append(info.path)
+            _processing_data(self.state).selected_files.append(info.path)
         if accepted:
             self.changed()
         self.error_label.setText(" ".join(errors[:3]))
@@ -637,10 +647,10 @@ class ProcessingFilesPage(_ScrollableStepPage):
         return tuple(accepted)
 
     def clear_files(self) -> None:
-        if not self.state.processing.selected_files:
+        if not _processing_data(self.state).selected_files:
             return
-        self.state.processing.selected_files.clear()
-        self.state.processing.verification_records.clear()
+        _processing_data(self.state).selected_files.clear()
+        _processing_data(self.state).verification_records.clear()
         self.file_infos.clear()
         self.error_label.clear()
         self.changed()
@@ -648,18 +658,18 @@ class ProcessingFilesPage(_ScrollableStepPage):
 
     def remove_file(self, path: str) -> None:
         target = os.path.normcase(os.path.abspath(path))
-        before = len(self.state.processing.selected_files)
-        self.state.processing.selected_files = [
+        before = len(_processing_data(self.state).selected_files)
+        _processing_data(self.state).selected_files = [
             existing
-            for existing in self.state.processing.selected_files
+            for existing in _processing_data(self.state).selected_files
             if os.path.normcase(os.path.abspath(existing)) != target
         ]
-        self.state.processing.verification_records = [
+        _processing_data(self.state).verification_records = [
             record
-            for record in self.state.processing.verification_records
+            for record in _processing_data(self.state).verification_records
             if os.path.normcase(os.path.abspath(record.file_path)) != target
         ]
-        if len(self.state.processing.selected_files) != before:
+        if len(_processing_data(self.state).selected_files) != before:
             self.changed()
         self.refresh_from_state()
 
@@ -691,11 +701,11 @@ class ProcessingFilesPage(_ScrollableStepPage):
         if not self.output_selector.path():
             self.output_selector.set_path(selected_output or default_output)
         self.overwrite_checkbox.blockSignals(True)
-        self.overwrite_checkbox.setChecked(self.state.processing.overwrite_existing)
+        self.overwrite_checkbox.setChecked(_processing_data(self.state).overwrite_existing)
         self.overwrite_checkbox.blockSignals(False)
         infos: list[LocalImageInfo] = []
         errors: list[str] = []
-        for path in self.state.processing.selected_files:
+        for path in _processing_data(self.state).selected_files:
             try:
                 infos.append(inspect_local_image(path))
             except ProcessingFlowError:
@@ -746,9 +756,9 @@ class ProcessingFilesPage(_ScrollableStepPage):
             placeholder = QLabel("Файлы пока не выбраны")
             self.files_layout.addWidget(placeholder)
         self.file_count_label.setText(
-            f"Выбрано изображений: {len(self.state.processing.selected_files)}"
+            f"Выбрано изображений: {len(_processing_data(self.state).selected_files)}"
         )
-        self.clear_button.setEnabled(bool(self.state.processing.selected_files))
+        self.clear_button.setEnabled(bool(_processing_data(self.state).selected_files))
         if errors:
             self.error_label.setText(
                 "Недоступны или недопустимы: " + ", ".join(errors[:3])
@@ -761,13 +771,13 @@ class ProcessingFilesPage(_ScrollableStepPage):
 
     def validation_issues(self) -> tuple[str, ...]:
         issues: list[str] = []
-        if not self.state.processing.selected_files:
+        if not _processing_data(self.state).selected_files:
             issues.append("selected_files_required")
-        if len(self.file_infos) != len(self.state.processing.selected_files):
+        if len(self.file_infos) != len(_processing_data(self.state).selected_files):
             issues.append("invalid_selected_files")
-        if len(self.state.processing.selected_files) > MAX_PROCESSING_FILES:
+        if len(_processing_data(self.state).selected_files) > MAX_PROCESSING_FILES:
             issues.append("processing_file_limit_exceeded")
-        if duplicate_output_names(self.state.processing.selected_files):
+        if duplicate_output_names(_processing_data(self.state).selected_files):
             issues.append("duplicate_output_names")
         return tuple(issues)
 
@@ -807,10 +817,10 @@ class ProcessingRecipePage(_ScrollableStepPage):
         self.changed()
 
     def refresh_from_state(self) -> None:
-        selected = self.state.processing.recipe
+        selected = _processing_data(self.state).recipe
         if selected not in self.buttons:
             selected = "custom"
-            self.state.processing.recipe = selected
+            _processing_data(self.state).recipe = selected
         button = self.buttons[selected]
         button.blockSignals(True)
         button.setChecked(True)
@@ -973,8 +983,8 @@ class _LegacyProcessingPipelinePage(_ScrollableStepPage):
         self._set_value(field, bool(checked))
 
     def _set_value(self, field: str, value: Any) -> None:
-        setattr(self.project_state.processing.operations, field, value)
-        self.project_state.processing.recipe = "custom"
+        setattr(_processing_data(self.project_state).operations, field, value)
+        _processing_data(self.project_state).recipe = "custom"
         self.changed()
         self._refresh_order()
 
@@ -985,13 +995,13 @@ class _LegacyProcessingPipelinePage(_ScrollableStepPage):
             combo.setCurrentIndex(index)
 
     def _refresh_order(self) -> None:
-        steps = processing_pipeline_steps(self.project_state.processing.operations)
+        steps = processing_pipeline_steps(_processing_data(self.project_state).operations)
         self.order_label.setText(
             "Порядок: " + (" → ".join(steps) if steps else "операции не выбраны")
         )
 
     def refresh_from_state(self) -> None:
-        operations = self.project_state.processing.operations
+        operations = _processing_data(self.project_state).operations
         for name, checkbox in self.operation_widgets.items():
             checkbox.blockSignals(True)
             checkbox.setChecked(bool(getattr(operations, name)))
@@ -1021,7 +1031,7 @@ class _LegacyProcessingPipelinePage(_ScrollableStepPage):
 
     def validation_issues(self) -> tuple[str, ...]:
         return operation_validation_issues(
-            self.project_state.processing.operations,
+            _processing_data(self.project_state).operations,
             allow_full_image_changes=self.allow_full_image_changes.isChecked(),
         )
 
@@ -1035,7 +1045,7 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__(
-            state.processing,
+            _processing_data(state),
             changed,
             title="Обработка изображений",
             description="Операции выполняются сверху вниз; рецепт можно полностью изменить.",
@@ -1044,19 +1054,19 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
             tokens=tokens,
         )
         self.project_state = state
-        state.processing.operations.invisible_watermark_cleanup = False
-        state.processing.deep_watermark_consent = False
+        _processing_data(state).operations.invisible_watermark_cleanup = False
+        _processing_data(state).deep_watermark_consent = False
         self.allow_full_image_changes = self.operation_widgets[
             "invisible_watermark_cleanup"
         ]
 
     def _sync_consent(self, value: bool) -> None:
-        self.project_state.processing.deep_watermark_consent = bool(value)
+        _processing_data(self.project_state).deep_watermark_consent = bool(value)
         self.changed()
 
     def validation_issues(self) -> tuple[str, ...]:
         return operation_validation_issues(
-            self.project_state.processing.operations,
+            _processing_data(self.project_state).operations,
             allow_full_image_changes=self.allow_full_image_changes.isChecked(),
         )
 
@@ -1106,8 +1116,8 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         self.refresh_from_state()
 
     def refresh_from_state(self) -> None:
-        operations = self.state.processing.operations
-        files = self.state.processing.selected_files
+        operations = _processing_data(self.state).operations
+        files = _processing_data(self.state).selected_files
         work_dir = self.state.common.work_dir
         output_dir = self.state.output_dir_for_mode(ProjectMode.PROCESSING).strip()
         if not output_dir and work_dir:
@@ -1119,7 +1129,7 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         removed, preserved = processing_change_summary(operations)
         cost = estimate_processing_cost(operations, len(files))
         recipe = PROCESSING_RECIPES.get(
-            self.state.processing.recipe,
+            _processing_data(self.state).recipe,
             PROCESSING_RECIPES["custom"],
         )
         self.summary_label.setText(
@@ -1200,42 +1210,42 @@ def build_processing_run_request(
                 "Рабочая папка не существует или недоступна для записи"
             )
     configured_output = resolve_output_directory(workspace_root, configured_output)
-    if not state.processing.selected_files:
+    if not _processing_data(state).selected_files:
         raise ProcessingFlowError("Добавьте хотя бы один файл")
-    if len(state.processing.selected_files) > MAX_PROCESSING_FILES:
+    if len(_processing_data(state).selected_files) > MAX_PROCESSING_FILES:
         raise ProcessingFlowError(f"Максимум {MAX_PROCESSING_FILES} файлов за запуск")
-    duplicates = duplicate_output_names(state.processing.selected_files)
-    if duplicates and not state.processing.overwrite_existing:
+    duplicates = duplicate_output_names(_processing_data(state).selected_files)
+    if duplicates and not _processing_data(state).overwrite_existing:
         raise ProcessingFlowError(
             "Одинаковые имена создадут один путь результата: "
             + ", ".join(duplicates[:3])
         )
-    for path in state.processing.selected_files:
+    for path in _processing_data(state).selected_files:
         inspect_local_image(path)
-    validate_processing_providers(state.processing.operations)
-    if uses_external_processing(state.processing.operations) and not external_transfer_consent:
+    validate_processing_providers(_processing_data(state).operations)
+    if uses_external_processing(_processing_data(state).operations) and not external_transfer_consent:
         raise ProcessingFlowError(
             "Подтвердите разрешение на передачу файлов внешнему провайдеру"
         )
     issues = operation_validation_issues(
-        state.processing.operations,
+        _processing_data(state).operations,
         allow_full_image_changes=allow_full_image_changes,
     )
     if issues:
         raise ProcessingFlowError("Исправьте настройки pipeline: " + ", ".join(issues))
     settings = build_image_worker_settings(
-        state.runtime, GenerationData(), state.processing.operations, runtime_settings,
+        state.runtime, GenerationData(), _processing_data(state).operations, runtime_settings,
         run_mode="process_only",
     )
     settings["output_dir"] = str(configured_output)
     settings["workspace_root"] = str(workspace_root)
-    settings["overwrite_existing"] = state.processing.overwrite_existing
+    settings["overwrite_existing"] = _processing_data(state).overwrite_existing
     settings["skip_remover_for_alpha"] = True
     return FlowRunRequest(
         mode="mode2_process",
         work_dir=str(work_dir),
         settings=settings,
-        selected_files=list(state.processing.selected_files),
+        selected_files=list(_processing_data(state).selected_files),
     )
 
 
@@ -1248,14 +1258,15 @@ class ProcessingFlowController(QObject):
 
     def __init__(
         self,
-        shell: AppShell,
+        shell: WorkflowHost,
         *,
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
         authorization_provider: Callable[[], Any] | None = None,
     ) -> None:
-        super().__init__(shell)
-        self.shell = shell
+        host = workflow_host_for(shell, "processing")
+        super().__init__(host)
+        self.shell = host
         from v3_runtime_adapter import runtime_adapter_for
 
         self.runtime_adapter = runtime_adapter_for(
@@ -1271,19 +1282,19 @@ class ProcessingFlowController(QObject):
         from v3_run_queue import RunQueueSupport
 
         self.run_queue = RunQueueSupport(self, ProjectMode.PROCESSING)
-        self.pages = LazyPageRegistry(shell, ProjectMode.PROCESSING)
+        self.pages = LazyPageRegistry(self.shell, ProjectMode.PROCESSING)
         self._install_pages()
         self.run_queue.page.transparency_requested.connect(self._open_transparency_editor)
-        shell.step_changed.connect(self._step_changed)
-        shell.run_requested.connect(self._run_requested)
+        self.shell.step_changed.connect(self._step_changed)
+        self.shell.run_requested.connect(self._run_requested)
 
     @staticmethod
     def _missing_authorization() -> None:
         raise LicenseError("Лицензионный сервис не настроен")
 
     def start_processing_again(self) -> None:
-        self.shell.state.processing.selected_files.clear()
-        self.shell.state.processing.verification_records.clear()
+        _processing_data(self.shell.state).selected_files.clear()
+        _processing_data(self.shell.state).verification_records.clear()
         self.shell.state.set_step(StepId.FILES)
         self.files_page.refresh_from_state()
         self.shell.mark_dirty()
@@ -1504,22 +1515,21 @@ class ProcessingFlowController(QObject):
 
 
 def install_processing_flow(
-    shell: AppShell,
+    shell: Any,
     *,
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
     authorization_provider: Callable[[], Any] | None = None,
 ) -> ProcessingFlowController:
-    if not isinstance(shell, AppShell):
-        raise TypeError("shell must be an AppShell")
-    existing = getattr(shell, "processing_flow_controller", None)
+    host = workflow_host_for(shell, "processing")
+    existing = host.workflow_controller("processing")
     if isinstance(existing, ProcessingFlowController):
         return existing
     controller = ProcessingFlowController(
-        shell,
+        host,
         runtime_settings_provider=runtime_settings_provider,
         worker_factory=worker_factory,
         authorization_provider=authorization_provider,
     )
-    shell.processing_flow_controller = controller
+    host.register_workflow_controller("processing", controller)
     return controller

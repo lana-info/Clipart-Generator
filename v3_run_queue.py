@@ -2049,10 +2049,16 @@ class RunResultsPage(QWidget):
             for name, status in sorted(item.stage_statuses.items())
         ) or "not_started"
         self.stages_label.setText(f"Этапы обработки: {stage_text}")
+        verification_records = ()
+        if self.state.mode is ProjectMode.PROCESSING:
+            mode_data = getattr(self.state, "data", None)
+            if mode_data is None:
+                mode_data = getattr(self.state, "processing", None)
+            verification_records = getattr(mode_data, "verification_records", ())
         record = next(
             (
                 candidate
-                for candidate in self.state.processing.verification_records
+                for candidate in verification_records
                 if candidate.file_path == item.source_path
             ),
             None,

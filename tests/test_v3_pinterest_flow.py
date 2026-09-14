@@ -135,7 +135,7 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
         view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
         self.app.processEvents()
 
-        controller = view.shell.pinterest_flow_controller
+        controller = view.shell.workflow_controller("pinterest")
         self.assertEqual(
             tuple(controller.pages),
             (
@@ -716,7 +716,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
         self.app.processEvents()
 
-        controller = view.shell.pinterest_flow_controller
+        controller = view.shell.workflow_controller("pinterest")
         self.assertEqual(set(controller.pages), set(view.shell.state.route))
         self.assertEqual(
             tuple(controller.pages),

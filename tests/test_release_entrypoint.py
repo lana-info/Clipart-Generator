@@ -44,16 +44,13 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.app.processEvents()
         gate = window._license_gate
         self.assertIsNotNone(gate)
-        controllers = [window.shell.clipart_flow_controller]
-        self.assertFalse(hasattr(window.shell, "pinterest_flow_controller"))
-        self.assertFalse(hasattr(window.shell, "processing_flow_controller"))
-        for mode, attribute in (
-            (ProjectMode.PINTEREST, "pinterest_flow_controller"),
-            (ProjectMode.PROCESSING, "processing_flow_controller"),
-        ):
+        controllers = [window.shell.workflow_controller(ProjectMode.CLIPART.value)]
+        self.assertIsNone(window.shell.workflow_controller(ProjectMode.PINTEREST.value))
+        self.assertIsNone(window.shell.workflow_controller(ProjectMode.PROCESSING.value))
+        for mode in (ProjectMode.PINTEREST, ProjectMode.PROCESSING):
             window.show_mode_switcher()
             window.mode_selection.mode_cards[mode].start_button.click()
-            controllers.append(getattr(window.shell, attribute))
+            controllers.append(window.shell.workflow_controller(mode.value))
         self.assertTrue(
             all(
                 getattr(controller.authorization_provider, "__self__", None) is gate

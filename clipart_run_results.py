@@ -26,12 +26,22 @@ def _resolved(value: Any) -> str:
         return ""
 
 
+def _clipart_data(state: Any):
+    try:
+        return state.data
+    except AttributeError:
+        try:
+            return state.clipart
+        except AttributeError as exc:
+            raise TypeError("state must expose Clipart workflow data") from exc
+
+
 class ClipartRunResultsExtension:
     export_action_label = "Экспорт наборов ZIP"
     def on_edited_output(
         self, state: Any, previous_keys: Sequence[str], destination: Path,
     ) -> None:
-        membership = state.clipart.export_membership
+        membership = _clipart_data(state).export_membership
         previous = None
         for key in previous_keys:
             previous = membership.get(str(key))
@@ -51,10 +61,10 @@ class ClipartRunResultsExtension:
             previous,
             memberships=[dict(link) for link in previous["memberships"]],
         )
-        state.clipart.export_membership = validate_export_membership(membership)
+        _clipart_data(state).export_membership = validate_export_membership(membership)
 
     def _recipe_plan(self, state: Any):
-        recipe_data = state.clipart.recipe
+        recipe_data = _clipart_data(state).recipe
         if not isinstance(recipe_data, dict):
             return None
         recipe = ClipartRecipe.from_dict(recipe_data)
@@ -67,7 +77,7 @@ class ClipartRunResultsExtension:
             if recipe_and_plan is None:
                 return False
             _recipe, plan = recipe_and_plan
-            membership = validate_export_membership(state.clipart.export_membership)
+            membership = validate_export_membership(_clipart_data(state).export_membership)
         except (TypeError, ValueError):
             return False
         exported = {str(path.resolve()) for path in export_paths}
@@ -101,7 +111,7 @@ class ClipartRunResultsExtension:
             membership = validate_export_membership(candidate)
             changed = True
         if changed:
-            state.clipart.export_membership = membership
+            _clipart_data(state).export_membership = membership
         return changed
 
     def export_issues(
@@ -156,7 +166,7 @@ class ClipartRunResultsExtension:
         }
         opening_roles: dict[str, bool] = {}
         try:
-            recipe_data = state.clipart.recipe
+            recipe_data = _clipart_data(state).recipe
             recipe = (
                 ClipartRecipe.from_dict(recipe_data)
                 if isinstance(recipe_data, dict) else None
@@ -204,7 +214,7 @@ class ClipartRunResultsExtension:
         dialog = SetExportDialog(
             paths,
             parent,
-            membership=state.clipart.export_membership,
+            membership=_clipart_data(state).export_membership,
             review_issues=review_issues,
             quality_reports=quality_reports,
         )
@@ -213,7 +223,7 @@ class ClipartRunResultsExtension:
         dialog.exec()
 
     def save_membership(self, state: Any, membership: Any) -> None:
-        state.clipart.export_membership = validate_export_membership(membership)
+        _clipart_data(state).export_membership = validate_export_membership(membership)
 
 
 __all__ = ["ClipartRunResultsExtension"]
