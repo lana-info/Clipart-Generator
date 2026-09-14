@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation
 import json
 import requests
 
-from studio_text_client import TextGenerationError
+from studio_text_errors import TextGenerationError
 
 
 def fetch_text_model_info(model, api_key):

@@ -15,9 +15,7 @@ from studio_text_models import resolve_text_model
 MAX_RESPONSE_BYTES = 2_000_000
 
 
-class TextGenerationError(RuntimeError):
-    pass
-
+from studio_text_errors import TextGenerationError
 
 def parse_text_response(data, provider):
     """Reject truncated, refused and tool-only responses; never use thoughts."""
