@@ -198,13 +198,42 @@ class ModuleStore:
             raise ModulePackageError("Incomplete manifest") from exc
         return manifest, signed
 
-    def install(self, package: Path) -> dict:
+    def inspect_package(self, package: Path) -> dict:
+        """Verify package identity/compatibility without writing or activating it."""
+        package = Path(package)
+        try:
+            size = package.stat().st_size
+        except OSError as exc:
+            raise ModulePackageError("Module package is unavailable") from exc
+        if size > MAX_PACKAGE_BYTES:
+            raise ModulePackageError("Package exceeds limit")
+        try:
+            with zipfile.ZipFile(package) as archive:
+                manifest, _ = self._verify(archive)
+        except (OSError, zipfile.BadZipFile) as exc:
+            raise ModulePackageError("Invalid module package archive") from exc
+        return dict(manifest)
+
+    def install(
+        self, package: Path, *, expected_module_id: str | None = None,
+        expected_version: str | None = None,
+    ) -> dict:
         """Verify and stage a package. Does not activate or import its code."""
         package = Path(package)
+        if expected_module_id is not None:
+            _identifier(expected_module_id)
+        if expected_version is not None:
+            _version(expected_version)
         if package.stat().st_size > MAX_PACKAGE_BYTES:
             raise ModulePackageError("Package exceeds limit")
         with zipfile.ZipFile(package) as archive:
             manifest, _ = self._verify(archive)
+            if (
+                expected_module_id is not None and manifest["module_id"] != expected_module_id
+            ) or (
+                expected_version is not None and manifest["version"] != expected_version
+            ):
+                raise ModulePackageError("Module package identity changed before staging")
             parent = self._module_dir(manifest["module_id"])
             parent.mkdir(exist_ok=True)
             destination = parent / manifest["version"]
@@ -224,6 +253,33 @@ class ModuleStore:
                 if staging.exists():
                     shutil.rmtree(staging)
         return manifest
+
+    def installed_versions(self, module_id: str) -> tuple[str, ...]:
+        """Return verified installed versions without changing activation state."""
+        parent = self._module_dir(module_id)
+        if not parent.exists():
+            return ()
+        if parent.is_symlink() or not parent.is_dir():
+            raise ModulePackageError("Module path must be a non-symlink directory")
+        versions: list[str] = []
+        try:
+            entries = list(parent.iterdir())
+        except OSError as exc:
+            raise ModulePackageError("Module store cannot be read") from exc
+        for entry in entries:
+            if entry.name == "active.json" or entry.name.startswith("."):
+                continue
+            if entry.is_symlink():
+                raise ModulePackageError("Unsafe installed module entry")
+            if not entry.is_dir():
+                raise ModulePackageError("Unexpected installed module entry")
+            try:
+                _version(entry.name)
+            except ModulePackageError as exc:
+                raise ModulePackageError("Unexpected installed module version") from exc
+            self._verified_version(module_id, entry.name)
+            versions.append(entry.name)
+        return tuple(sorted(versions, key=_version))
 
     def state(self, module_id: str) -> dict:
         """Informational pointer only; loaders must call verified_active_path()."""
@@ -311,6 +367,24 @@ class ModuleStore:
         if previous is None:
             raise ModulePackageError("No previous version")
         self.activate(module_id, previous, busy=busy)
+
+    def uninstall(self, module_id: str, *, busy: bool = False) -> None:
+        """Remove package versions while leaving all user data outside ModuleStore untouched."""
+        if busy:
+            raise ModulePackageError("Module has running tasks")
+        versions = self.installed_versions(module_id)
+        if not versions:
+            return
+        parent = self._module_dir(module_id)
+        self._write_state(module_id, {"active": None, "previous": None, "enabled": False})
+        for version in versions:
+            path = parent / version
+            if path.is_symlink() or not path.is_dir():
+                raise ModulePackageError("Unsafe installed module entry")
+            try:
+                shutil.rmtree(path)
+            except OSError as exc:
+                raise ModulePackageError("Installed module package could not be removed") from exc
 
     def disable(self, module_id: str, *, busy: bool = False) -> None:
         if busy:

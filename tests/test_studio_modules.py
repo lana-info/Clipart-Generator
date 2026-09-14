@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 import zipfile
+import pytest
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -173,3 +174,19 @@ class ModuleStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_install_expected_identity_mismatch_writes_nothing(tmp_path):
+    private = Ed25519PrivateKey.generate()
+    public = private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    store = ModuleStore(tmp_path / "modules", studio_version="3.2.0",
+                        platform="linux-x64", trusted_keys={"test": public})
+    # Reuse the class helper by constructing a temporary test case around this store.
+    case = ModuleStoreTests(methodName="runTest")
+    case.root = tmp_path
+    case.key = private
+    case.store = store
+    package = case.package(module="patterns", version="1.0.0")
+    with pytest.raises(ModulePackageError, match="identity"):
+        store.install(package, expected_module_id="clipart", expected_version="1.0.0")
+    assert not (store.root / "patterns").exists()
