@@ -19,7 +19,7 @@ from v3_project_state import ProjectState
 def builder(monkeypatch):
     app = QApplication.instance() or QApplication([])
     monkeypatch.setattr('v3_api_settings.load_credentials', lambda: {'openrouter_api_key': 'dummy-key'})
-    dialog = ClipartBuilderDialog(ProjectState())
+    dialog = ClipartBuilderDialog(ProjectState().clipart)
     dialog.theme.setText('Мишки и самолёты')
     dialog.object_editor.items = fill_recipe([], dialog.recipe.counts)
     dialog.object_editor.refresh()
@@ -48,8 +48,8 @@ def test_provider_filter_and_save_selection(builder):
     panel.provider.setCurrentIndex(1)
     panel.model.setCurrentIndex(panel.model.findData('openai/gpt-5-mini'))
     builder._apply()
-    assert builder.state.clipart.recipe['assistant']['model'] == 'openai/gpt-5-mini'
-    assert 'dummy-key' not in json.dumps(builder.state.to_dict())
+    assert builder.data.recipe['assistant']['model'] == 'openai/gpt-5-mini'
+    assert 'dummy-key' not in json.dumps(builder.data.to_dict())
 
 
 def test_declined_quote_never_generates(builder, monkeypatch):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from v3_project_state import ImageOperationData, ProjectState
+from v3_project_state import ImageOperationData, ProjectMode, ProjectState
 from v3_image_processing_ui import (
     CLEANUP_OPERATION_LABELS, ProcessingPipelineEditor, RunPlanBuilder,
     UPSCALE_AFTER_UI_ENABLED, configure_unavailable_synthid, processing_pipeline_steps,
@@ -89,15 +89,28 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
     ),
 }
 
-def apply_processing_recipe(state: ProjectState, recipe: str) -> None:
+def _processing_data(state: Any):
+    scope = getattr(state, "scope", None)
+    if scope is not None:
+        if scope is not ProjectMode.PROCESSING:
+            raise ValueError("Processing recipe state is outside processing scope")
+        return state.data
+    try:
+        return state.processing
+    except AttributeError as exc:
+        raise TypeError("state must expose processing workflow data") from exc
+
+
+def apply_processing_recipe(state: Any, recipe: str) -> None:
     if recipe == "check_cleanup":
         recipe = "metadata_cleanup"
     if recipe not in PROCESSING_RECIPES:
         raise ValueError("Неизвестный рецепт обработки")
-    state.processing.recipe = recipe
+    data = _processing_data(state)
+    data.recipe = recipe
     preset = PROCESSING_RECIPES[recipe].operations
     if preset is None:
         return
-    current = state.processing.operations
+    current = data.operations
     for name in ImageOperationData.__dataclass_fields__:
         setattr(current, name, getattr(preset, name))

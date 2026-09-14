@@ -32,7 +32,7 @@ class ReferenceTests(unittest.TestCase):
             path = Path(folder) / 'reference.png'
             Image.new('RGB', (30, 30), (50, 100, 150)).save(path)
             state = ProjectState()
-            dialog = ClipartBuilderDialog(state)
+            dialog = ClipartBuilderDialog(state.clipart)
             dialog.theme.setText('Звери')
             editor = dialog.reference_editor
             editor.add_reference(path)
@@ -45,7 +45,7 @@ class ReferenceTests(unittest.TestCase):
             save_project_draft(state, destination)
             restored = load_project_draft(destination)
             before = copy.deepcopy(restored.to_dict())
-            again = ClipartBuilderDialog(restored)
+            again = ClipartBuilderDialog(restored.clipart)
             self.assertTrue(again.reference_editor.roles['technique'].isChecked())
             self.assertEqual(again.palette.text(), '#326496')
             again.reference_editor._remove()

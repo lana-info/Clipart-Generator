@@ -1,3 +1,4 @@
+from studio_workflow_host import WorkflowHost
 import ast
 import csv
 import os
@@ -291,7 +292,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.prompts = [PromptEntry("old prompt")]
         state.set_step(StepId.RESULTS)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell)
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"))
 
         controller.run_queue.process_more()
         self.app.processEvents()
@@ -305,7 +306,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             state = ProjectState(mode=ProjectMode.CLIPART)
             shell = AppShell(state)
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=WorkerFactory(),
             )
@@ -343,7 +344,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_prompt_input_presents_three_clear_source_choices(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROMPTS]
 
         self.assertEqual(
@@ -634,7 +635,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_generator_page_creates_editable_prompt_entries(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROMPTS]
         page.theme_edit.setText("Children's watercolor illustration")
         page.subjects_edit.setPlainText("Fox\nBear")
@@ -977,7 +978,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_invalid_folder_and_malformed_csv_fail_closed(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROJECT]
         page.work_dir_edit.setText("Z:/definitely/missing/clipart-folder")
 
@@ -992,7 +993,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_paste_add_and_duplicate_enforce_prompt_entry_limit(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         input_page = controller.pages[StepId.PROMPTS]
         state.clipart.prompts = [
             PromptEntry(f"Prompt {index}") for index in range(MAX_PROMPT_ENTRIES)
@@ -1017,7 +1018,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_prompt_review_duplicate_preserves_object_id(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         state.clipart.prompts = [PromptEntry("First", object_id="obj-1")]
         review_page = controller.pages[StepId.PROMPT_REVIEW]
         review_page.refresh_from_state()
@@ -1054,7 +1055,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_processing_page_exposes_every_supported_operation_setting(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROCESSING_OPTIONS]
         field_names = {definition.name for definition in dataclass_fields(ImageOperationData)}
 
@@ -1327,7 +1328,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             factory = WorkerFactory()
             shell = AppShell(state)
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=factory,
                 authorization_provider=lambda: None,
@@ -1351,7 +1352,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {},
                 worker_factory=WorkerFactory(),
             )
@@ -1482,7 +1483,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=WorkerFactory(),
             )
@@ -1494,7 +1495,7 @@ class V3ClipartFlowTests(unittest.TestCase):
     def test_processing_page_hides_irrelevant_provider_parameters(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROCESSING_OPTIONS]
         widgets = page.operation_widgets
 
@@ -1543,7 +1544,7 @@ class V3ClipartFlowTests(unittest.TestCase):
                 raise ValueError(f"provider rejected {secret}")
 
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": secret},
                 worker_factory=failing_factory,
                 authorization_provider=lambda: None,
@@ -1565,7 +1566,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"fal_api_key": secret},
                 worker_factory=lambda **_kwargs: (_ for _ in ()).throw(
                     ValueError(f"Fal rejected {secret}")
@@ -1594,7 +1595,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         state = ProjectState(mode=ProjectMode.CLIPART)
         state.clipart.prompts = [PromptEntry("Original")]
         shell = AppShell(state)
-        controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+        controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
         page = controller.pages[StepId.PROMPT_REVIEW]
         page.table.item(0, 0).setText("x" * (20_000 + 1))
         self.assertEqual(state.clipart.prompts[0].prompt, "Original")
@@ -1863,7 +1864,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-ui-") as temp:
             state = self.make_state(temp)
             shell = AppShell(state)
-            controller = install_clipart_flow(shell, worker_factory=WorkerFactory())
+            controller = install_clipart_flow(WorkflowHost(shell, "clipart"), worker_factory=WorkerFactory())
             shell.resize(980, 700)
             shell.show()
             self.app.processEvents()

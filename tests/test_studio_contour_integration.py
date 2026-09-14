@@ -1,3 +1,4 @@
+from studio_workflow_host import WorkflowHost
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,7 +32,7 @@ class ContourIntegrationTests(unittest.TestCase):
             state = ProjectState(mode=ProjectMode.CLIPART)
             state.clipart.export_membership[str(source)] = {'title': 'Garden', 'included': True}
             shell = AppShell(state)
-            controller = install_clipart_flow(shell)
+            controller = install_clipart_flow(WorkflowHost(shell, "clipart"))
             request = SimpleNamespace(work_dir=str(root), settings={}, generated_prompts=[{'prompt': 'flower'}])
             session = RunQueueSession(request, ProjectMode.CLIPART)
             session.items = [RunItem(1, source.name, status=RunItemStatus.SUCCEEDED, output_path=str(source))]

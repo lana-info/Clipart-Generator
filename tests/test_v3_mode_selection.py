@@ -86,8 +86,8 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
         shell = view.shell
         controller = Mock()
-        controller.worker = object()
-        controller.runtime_adapter.is_running = Mock(return_value=True)
+        controller.worker = Mock()
+        controller.worker.isRunning = Mock(return_value=True)
         controller.run_queue.session = None
 
         shell.register_workflow_controller("text-probe", controller)
@@ -103,7 +103,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.app.processEvents()
         controller = view.shell.workflow_controller("clipart")
         controller.worker = Mock()
-        controller.runtime_adapter.is_running = Mock(return_value=True)
+        controller.worker.isRunning = Mock(return_value=True)
 
         view.show_mode_switcher()
         self.app.processEvents()

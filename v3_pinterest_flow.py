@@ -442,7 +442,8 @@ class _PinterestDataAdapter:
 def _pinterest_project_adapter(state: Any) -> ProjectState:
     _pinterest_data(state)
     adapter = ProjectState(mode=ProjectMode.CLIPART)
-    adapter.common = CommonProjectData.from_dict(state.common.to_dict())
+    adapter.common.project_name = state.common.project_name
+    adapter.common.work_dir = state.common.work_dir
     adapter.common.output_dir = state.output_dir_for_mode(ProjectMode.PINTEREST)
     adapter.common.output_dirs[ProjectMode.CLIPART.value] = adapter.common.output_dir
     if not adapter.common.output_dir and adapter.common.work_dir:
@@ -1368,7 +1369,7 @@ class PinterestFlowController(QObject):
 
     def __init__(
         self,
-        shell: WorkflowHost,
+        host: WorkflowHost,
         *,
         runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
         worker_factory: Callable[..., Any] | None = None,
@@ -1376,19 +1377,12 @@ class PinterestFlowController(QObject):
         provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
         locale: str = "ru",
     ) -> None:
-        host = workflow_host_for(shell, "pinterest")
-        super().__init__(host)
+        host = workflow_host_for(host, "pinterest")
+        super().__init__()
         self.shell = host
         self.locale = normalize_locale(locale)
-        from v3_runtime_adapter import runtime_adapter_for
-
-        self.runtime_adapter = runtime_adapter_for(
-            runtime_settings_provider, worker_factory
-        )
-        self.runtime_settings_provider = (
-            runtime_settings_provider or self.runtime_adapter.read_settings
-        )
-        self.worker_factory = worker_factory or self.runtime_adapter.create_worker
+        self.runtime_settings_provider = runtime_settings_provider or (lambda: {})
+        self.worker_factory = worker_factory or self._missing_worker_factory
         self.authorization_provider = authorization_provider or self._missing_authorization
         self.provider_capabilities_provider = (
             provider_capabilities_provider or self._safe_template_capabilities
@@ -1410,6 +1404,10 @@ class PinterestFlowController(QObject):
     @staticmethod
     def _missing_authorization() -> None:
         raise LicenseError(message_for("pinterest.error.authorization_unavailable"))
+
+    @staticmethod
+    def _missing_worker_factory(**_kwargs: Any) -> Any:
+        raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale="ru"))
 
     @staticmethod
     def _safe_template_capabilities() -> Mapping[str, object]:
@@ -1554,7 +1552,7 @@ class PinterestFlowController(QObject):
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
             return None
-        if self.worker is not None and self.runtime_adapter.is_running(self.worker):
+        if self.worker is not None and bool(getattr(self.worker, "isRunning", lambda: False)()):
             message = _pinterest_text("regeneration_already_running", locale=self.locale)
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
@@ -1572,7 +1570,7 @@ class PinterestFlowController(QObject):
                     "Укажите в настройках: " + ", ".join(missing)
                 )
             self.authorization_provider()
-            worker = self.runtime_adapter.create_worker(**request.worker_kwargs())
+            worker = self.worker_factory(**request.worker_kwargs())
         except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             message = _safe_runtime_error(
                 error,
@@ -1585,7 +1583,7 @@ class PinterestFlowController(QObject):
         self.worker = worker
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
-        self.runtime_adapter.start(worker)
+        worker.start()
         self.shell.show_results()
         message = "Запуск передан существующему pipeline 2.0"
         self.review_page.set_run_status(message)
@@ -1602,7 +1600,7 @@ class PinterestFlowController(QObject):
                 )
             )
             return None
-        if self.worker is not None and self.runtime_adapter.is_running(self.worker):
+        if self.worker is not None and bool(getattr(self.worker, "isRunning", lambda: False)()):
             self.error.emit(
                 _pinterest_text(
                     "regeneration_already_running",
@@ -1643,7 +1641,7 @@ class PinterestFlowController(QObject):
         self.worker = worker
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
-        self.runtime_adapter.start(worker)
+        worker.start()
         self.review_page.set_run_status(
             _pinterest_text("regeneration_started", locale=self.locale)
         )
@@ -1669,7 +1667,7 @@ class PinterestFlowController(QObject):
 
     def stop(self) -> None:
         if self.worker is not None:
-            self.runtime_adapter.stop(self.worker)
+            self.worker.stop()
 
     def _sync_preview_results_from_queue(self) -> None:
         """Project the dedicated Pinterest queue into its fixed result slots."""
@@ -1762,7 +1760,7 @@ class PinterestFlowController(QObject):
 
 
 def install_pinterest_flow(
-    shell: Any,
+    host: WorkflowHost,
     *,
     runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
     worker_factory: Callable[..., Any] | None = None,
@@ -1770,7 +1768,7 @@ def install_pinterest_flow(
     provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
     locale: str = "ru",
 ) -> PinterestFlowController:
-    host = workflow_host_for(shell, "pinterest")
+    host = workflow_host_for(host, "pinterest")
     existing = host.workflow_controller("pinterest")
     if isinstance(existing, PinterestFlowController):
         return existing

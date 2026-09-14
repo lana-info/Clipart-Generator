@@ -40,7 +40,7 @@ class ObjectTests(unittest.TestCase):
     def test_gui_handoff_roundtrip_and_validation_atomicity(self):
         state = ProjectState()
         state.clipart.prompts = [PromptEntry('Existing prompt')]
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.theme.setText('Мишки')
         dialog.total.setValue(1)
         for _ in range(4):
@@ -120,7 +120,7 @@ class ObjectTests(unittest.TestCase):
             validate_objects(items)
 
     def test_back_next_does_not_resurrect_deleted_object(self):
-        dialog = ClipartBuilderDialog(ProjectState())
+        dialog = ClipartBuilderDialog(ProjectState().clipart)
         dialog.theme.setText('Звери')
         dialog.total.setValue(3)
         for _ in range(4):

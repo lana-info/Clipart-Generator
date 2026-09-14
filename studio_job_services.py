@@ -48,3 +48,65 @@ class CoreJobService:
         except BaseException:
             lease.close()
             raise
+
+
+# Compatibility handle for the legacy desktop WorkerThread. Core owns the
+# underlying worker; built-in workflows receive only this narrow lifecycle and
+# event surface while the job system migrates onto the public jobs capability.
+from PyQt6.QtCore import QObject, pyqtSignal
+
+
+class CoreWorkerJobHandle(QObject):
+    progress = pyqtSignal(str)
+    item_progress = pyqtSignal(object)
+    completed = pyqtSignal(str)
+    error = pyqtSignal(str)
+    progress_value = pyqtSignal(int)
+    diagnostic = pyqtSignal(object)
+
+    def __init__(self, worker) -> None:
+        super().__init__()
+        if worker is None:
+            raise TypeError("worker is required")
+        self.__worker = worker
+        self.__bridge("progress", self.progress.emit)
+        self.__bridge("item_progress", self.item_progress.emit)
+        self.__bridge("progress_value", self.progress_value.emit)
+        self.__bridge("diagnostic", self.diagnostic.emit)
+        self.__bridge("error", self.error.emit)
+        completed = getattr(worker, "completed", None)
+        if completed is not None and hasattr(completed, "connect"):
+            completed.connect(lambda message="": self.completed.emit(str(message or "")))
+        else:
+            finished = getattr(worker, "finished", None)
+            if finished is not None and hasattr(finished, "connect"):
+                finished.connect(
+                    lambda *args: self.completed.emit(str(args[0] if args else ""))
+                )
+
+    def __bridge(self, name: str, emit) -> None:
+        signal = getattr(self.__worker, name, None)
+        if signal is not None and hasattr(signal, "connect"):
+            signal.connect(emit)
+
+    def start(self) -> None:
+        start = getattr(self.__worker, "start", None)
+        if not callable(start):
+            raise RuntimeError("Core worker cannot be started")
+        start()
+
+    def stop(self) -> None:
+        stop = getattr(self.__worker, "stop", None)
+        if callable(stop):
+            stop()
+
+    def request_stop_after_current(self) -> None:
+        request = getattr(self.__worker, "request_stop_after_current", None)
+        if callable(request):
+            request()
+        else:
+            self.stop()
+
+    def isRunning(self) -> bool:
+        running = getattr(self.__worker, "isRunning", None)
+        return bool(running()) if callable(running) else False

@@ -1,3 +1,4 @@
+from studio_workflow_host import WorkflowHost
 import hashlib
 import os
 import tempfile
@@ -168,7 +169,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             shell = AppShell(state)
             runtime_settings: dict[str, str] = {}
             controller = install_processing_flow(
-                shell,
+                WorkflowHost(shell, "processing"),
                 runtime_settings_provider=lambda: runtime_settings,
                 worker_factory=WorkerFactory(),
             )
@@ -192,7 +193,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="processing-more-") as temp:
             state, source = self.make_state(temp)
             shell = AppShell(state)
-            controller = install_processing_flow(shell, worker_factory=WorkerFactory())
+            controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
             request = build_processing_run_request(
                 state,
                 {},
@@ -231,7 +232,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="processing-files-") as temp:
             state = ProjectState(mode=ProjectMode.PROCESSING)
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             source = Path(temp) / "sample.png"
             Image.new("RGBA", (7, 9), (1, 2, 3, 255)).save(source)
 
@@ -250,7 +251,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             Image.new("RGB", (4, 4), "green").save(source)
             state = ProjectState(mode=ProjectMode.PROCESSING)
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             page = controller.files_page
             event = FakeDropEvent([source])
 
@@ -265,7 +266,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
     def test_files_screen_uses_single_overwrite_toggle_and_visible_drop_zone(self):
         state = ProjectState(mode=ProjectMode.PROCESSING)
         shell = AppShell(state)
-        controller = install_processing_flow(shell)
+        controller = install_processing_flow(WorkflowHost(shell, "processing"))
         page = controller.files_page
 
         self.assertFalse(page.overwrite_checkbox.isChecked())
@@ -542,7 +543,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         ):
             setattr(operations, field, False)
         shell = AppShell(state)
-        install_processing_flow(shell, worker_factory=WorkerFactory())
+        install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
 
         shell.go_next()
 
@@ -555,7 +556,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             f"C:/images/{index}.png" for index in range(MAX_PROCESSING_FILES + 1)
         ]
         shell = AppShell(state)
-        controller = install_processing_flow(shell, worker_factory=WorkerFactory())
+        controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
         self.assertIn(
             "processing_file_limit_exceeded",
             controller.files_page.validation_issues(),
@@ -589,7 +590,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             shell = AppShell(state)
             factory = WorkerFactory()
             controller = install_processing_flow(
-                shell,
+                WorkflowHost(shell, "processing"),
                 runtime_settings_provider=lambda: {},
                 worker_factory=factory,
                 authorization_provider=lambda: None,

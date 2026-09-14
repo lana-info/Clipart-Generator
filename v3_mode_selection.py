@@ -918,7 +918,11 @@ class V3ApplicationView(QWidget):
                 raise OSError("Не удалось сохранить проект. Запуск не начат") from error
             kwargs["project_id"] = self._active_project_id
         factory = self._worker_factory or DEFAULT_LEGACY_RUNTIME_ADAPTER.create_worker
-        return factory(**kwargs)
+        raw_worker = factory(**kwargs)
+        from studio_job_services import CoreWorkerJobHandle
+        if isinstance(raw_worker, CoreWorkerJobHandle):
+            return raw_worker
+        return CoreWorkerJobHandle(raw_worker)
 
     def _replace_shell(self, state: ProjectState) -> None:
         previous = self.shell

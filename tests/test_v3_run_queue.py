@@ -1,3 +1,4 @@
+from studio_workflow_host import WorkflowHost
 import hashlib
 import json
 import os
@@ -238,7 +239,7 @@ class V3RunQueueTests(unittest.TestCase):
                 common=CommonProjectData(work_dir=temp),
             )
             shell = AppShell(state)
-            controller = install_clipart_flow(shell)
+            controller = install_clipart_flow(WorkflowHost(shell, "clipart"))
             session = RunQueueSession(
                 generation_request(temp, count=1), ProjectMode.CLIPART
             )
@@ -271,7 +272,7 @@ class V3RunQueueTests(unittest.TestCase):
                 common=CommonProjectData(work_dir=temp),
             )
             shell = AppShell(state)
-            controller = install_clipart_flow(shell)
+            controller = install_clipart_flow(WorkflowHost(shell, "clipart"))
             session = RunQueueSession(
                 generation_request(temp, count=1), ProjectMode.CLIPART
             )
@@ -324,7 +325,7 @@ class V3RunQueueTests(unittest.TestCase):
                 common=CommonProjectData(work_dir=temp),
             )
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             session = RunQueueSession(
                 processing_request(temp, [source]), ProjectMode.PROCESSING
             )
@@ -360,7 +361,7 @@ class V3RunQueueTests(unittest.TestCase):
                 common=CommonProjectData(work_dir=temp),
             )
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             session = RunQueueSession(
                 processing_request(temp, [source]), ProjectMode.PROCESSING
             )
@@ -433,7 +434,7 @@ class V3RunQueueTests(unittest.TestCase):
             shell = AppShell(state)
             factory = WorkerFactory()
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
                 worker_factory=factory,
                 authorization_provider=Mock(return_value=None),
@@ -472,7 +473,7 @@ class V3RunQueueTests(unittest.TestCase):
             shell = AppShell(state)
             factory = WorkerFactory()
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
                 worker_factory=factory,
                 authorization_provider=Mock(return_value=None),
@@ -1228,7 +1229,7 @@ class V3RunQueueTests(unittest.TestCase):
             factory = WorkerFactory()
             authorization = Mock(return_value=None)
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {
                     "kie_api_key": SECRET_KEY
                 },
@@ -1415,7 +1416,7 @@ class V3RunQueueTests(unittest.TestCase):
             state.processing.selected_files = [str(root / "input.png")]
             state.set_step(StepId.RESULTS)
             shell = AppShell(state)
-            controller = install_processing_flow(shell, worker_factory=WorkerFactory())
+            controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
             session = controller.run_queue.start_new(
                 processing_request(root, [root / "input.png"])
             )
@@ -1462,7 +1463,7 @@ class V3RunQueueTests(unittest.TestCase):
                 common=CommonProjectData(work_dir=temp),
             )
             shell = AppShell(state)
-            controller = install_processing_flow(shell, worker_factory=WorkerFactory())
+            controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
             session = controller.run_queue.start_new(
                 processing_request(temp, [Path(temp) / "input.png"])
             )
@@ -1598,7 +1599,7 @@ class V3RunQueueTests(unittest.TestCase):
                 side_effect=[None, LicenseError("Сервер лицензий недоступен")]
             )
             controller = install_clipart_flow(
-                shell,
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
                 worker_factory=factory,
                 authorization_provider=authorization,

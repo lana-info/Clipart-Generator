@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from studio_workflow_host import WorkflowHost
+
 import os
 import tempfile
 import unittest
@@ -35,7 +37,7 @@ class V3OutputPathsTests(unittest.TestCase):
             state.common.work_dir = temp
             state.processing.selected_files = [str(first), str(second)]
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             page = controller.pages[StepId.FILES]
             page.refresh_from_state()
 
@@ -52,7 +54,7 @@ class V3OutputPathsTests(unittest.TestCase):
             state = ProjectState(mode=ProjectMode.PROCESSING)
             state.common.work_dir = temp
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             page = controller.pages[StepId.FILES]
 
             expected_default = str(Path(temp))

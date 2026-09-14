@@ -1,3 +1,4 @@
+from studio_workflow_host import WorkflowHost
 import hashlib
 import json
 import os
@@ -72,7 +73,7 @@ class V3EvidenceCenterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="evidence-route-") as temp:
             state, _ = self.make_state(temp)
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             page = controller.pages[StepId.EVIDENCE]
 
             self.assertIsInstance(page, EvidenceCenterPage)
@@ -192,7 +193,7 @@ class V3EvidenceCenterTests(unittest.TestCase):
                 "v3_evidence_center.inspect_image_metadata",
                 return_value={"status": "invalid", "categories": {}, "c2pa": {}},
             ) as inspector:
-                controller = install_processing_flow(shell)
+                controller = install_processing_flow(WorkflowHost(shell, "processing"))
                 self.assertNotIn(
                     "file_rights_confirmation_required",
                     controller.files_page.validation_issues(),
@@ -316,7 +317,7 @@ class V3EvidenceCenterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="evidence-lifecycle-") as temp:
             state, source = self.make_state(temp)
             shell = AppShell(state)
-            controller = install_processing_flow(shell)
+            controller = install_processing_flow(WorkflowHost(shell, "processing"))
             self.assertEqual(state.processing.verification_records, [])
 
             controller.pages[StepId.EVIDENCE].refresh_from_state()

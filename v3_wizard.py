@@ -223,11 +223,10 @@ class AppShell(QWidget):
         """Return the one registered workflow controller that still owns an active run."""
         for controller in tuple(self._workflow_controllers.values()):
             worker = getattr(controller, "worker", None)
-            adapter = getattr(controller, "runtime_adapter", None)
-            is_running = getattr(adapter, "is_running", None)
+            is_running = getattr(worker, "isRunning", None)
             if worker is not None and callable(is_running):
                 try:
-                    if bool(is_running(worker)):
+                    if bool(is_running()):
                         return controller
                 except (RuntimeError, TypeError):
                     pass

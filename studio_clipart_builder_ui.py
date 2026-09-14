@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget, QFrame, QSizePolicy,
 )
 from studio_clipart_recipe import ClipartRecipe, ROLES
+from v3_project_state import ClipartModeData
 from v3_components import apply_v3_theme
 
 ROLE_LABELS = ("Главные объекты", "Композиции", "Венки", "Бордюры и рамки", "Мелкий декор")
@@ -28,11 +29,13 @@ def combo(values):
 
 class ClipartBuilderDialog(QDialog):
     """Changes remain local until Apply; cancellation preserves the project."""
-    def __init__(self, state, parent=None):
+    def __init__(self, data: ClipartModeData, parent=None):
+        if not isinstance(data, ClipartModeData):
+            raise TypeError("ClipartBuilderDialog requires ClipartModeData")
         super().__init__(parent)
-        self.state = state
-        self.recipe = (ClipartRecipe.from_dict(state.clipart.recipe)
-                       if state.clipart.recipe is not None else ClipartRecipe())
+        self.data = data
+        self.recipe = (ClipartRecipe.from_dict(data.recipe)
+                       if data.recipe is not None else ClipartRecipe())
         self.setWindowTitle("Clipart · Настройка набора")
         self.resize(1080, 720)
         self.setMinimumSize(760, 560)
@@ -105,7 +108,7 @@ class ClipartBuilderDialog(QDialog):
 
     def _style(self):
         layout = self._page()
-        generator = self.state.clipart.prompt_generator
+        generator = self.data.prompt_generator
         self.technique = combo(["", *(profile.title for profile in all_style_profiles())])
         self.technique.setCurrentText(generator.style)
         self.mood = combo(["", "Уютное", "Весёлое", "Сказочное", "Нежное", "Спокойное", "Праздничное"])
@@ -508,7 +511,7 @@ class ClipartBuilderDialog(QDialog):
             self.error.setText("Сократите описание стиля до 4000 символов")
             return
         from v3_project_state import PromptGeneratorData, MAX_PROMPT_ENTRIES
-        generator = PromptGeneratorData.from_dict(self.state.clipart.prompt_generator.to_dict())
+        generator = PromptGeneratorData.from_dict(self.data.prompt_generator.to_dict())
         generator.style = style
         generator.palette = self.palette.text().strip()
         prompts = []
@@ -516,13 +519,13 @@ class ClipartBuilderDialog(QDialog):
             from studio_clipart_objects import compile_objects
             try:
                 prompts = compile_objects(self.recipe, generator)
-                if len(self.state.clipart.prompts) + len(prompts) > MAX_PROMPT_ENTRIES:
+                if len(self.data.prompts) + len(prompts) > MAX_PROMPT_ENTRIES:
                     raise ValueError('Общий список промптов превышает допустимый размер')
             except ValueError as error:
                 self.error.setText(str(error))
                 return
-        self.state.clipart.recipe = value
-        self.state.clipart.prompt_generator.style = style
-        self.state.clipart.prompt_generator.palette = self.palette.text().strip()
-        self.state.clipart.prompts.extend(prompts)
+        self.data.recipe = value
+        self.data.prompt_generator.style = style
+        self.data.prompt_generator.palette = self.palette.text().strip()
+        self.data.prompts.extend(prompts)
         self.accept()

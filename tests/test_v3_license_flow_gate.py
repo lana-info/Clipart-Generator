@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from studio_workflow_host import WorkflowHost
+
 import os
 import tempfile
 import unittest
@@ -38,8 +40,9 @@ class LicenseFlowGateTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             factory = ClipartFactory()
             authorize = Mock(side_effect=self.denied)
+            shell = AppShell(state)
             controller = install_clipart_flow(
-                AppShell(state),
+                WorkflowHost(shell, "clipart"),
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=factory,
                 authorization_provider=authorize,
@@ -58,8 +61,9 @@ class LicenseFlowGateTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             factory = PinterestFactory()
             authorize = Mock(side_effect=self.denied)
+            shell = AppShell(state)
             controller = install_pinterest_flow(
-                AppShell(state),
+                WorkflowHost(shell, "pinterest"),
                 runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
                 worker_factory=factory,
                 authorization_provider=authorize,
@@ -81,8 +85,9 @@ class LicenseFlowGateTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             factory = ProcessingFactory()
             authorize = Mock(side_effect=self.denied)
+            shell = AppShell(state)
             controller = install_processing_flow(
-                AppShell(state),
+                WorkflowHost(shell, "processing"),
                 runtime_settings_provider=lambda: {},
                 worker_factory=factory,
                 authorization_provider=authorize,

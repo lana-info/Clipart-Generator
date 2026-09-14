@@ -14,7 +14,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_edit_save_reopen(self):
         state = ProjectState()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.theme.setText('Мишки Тедди')
         dialog.context.setCurrentText('Мой праздник')
         dialog.motifs.setText('машинки, самолёты')
@@ -34,7 +34,7 @@ class BuilderTests(unittest.TestCase):
             path = Path(folder) / 'project.json'
             save_project_draft(state, path)
             restored = load_project_draft(path)
-            reopened = ClipartBuilderDialog(restored)
+            reopened = ClipartBuilderDialog(restored.clipart)
             self.assertEqual(reopened.theme.text(), 'Мишки Тедди')
             self.assertEqual(reopened.counts['hero'].value(), 7)
             self.assertEqual(reopened.technique.currentText(), 'Гуашь')
@@ -47,7 +47,7 @@ class BuilderTests(unittest.TestCase):
         dialog.close()
 
     def test_style_page_fits_1120_width_without_horizontal_scroll(self):
-        dialog = ClipartBuilderDialog(ProjectState())
+        dialog = ClipartBuilderDialog(ProjectState().clipart)
         dialog.resize(1120, 780)
         dialog.pages.setCurrentIndex(1)
         dialog.show()
@@ -57,7 +57,7 @@ class BuilderTests(unittest.TestCase):
         dialog.close()
 
     def test_style_library_all_view_is_compact_featured_six(self):
-        dialog = ClipartBuilderDialog(ProjectState())
+        dialog = ClipartBuilderDialog(ProjectState().clipart)
         dialog.style_category.setCurrentText('Все')
         dialog._refresh_style_library()
         self.assertEqual(len(dialog.style_cards), 6)
@@ -69,7 +69,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_style_library_recommends_teddy_christmas_and_filters_categories(self):
         state = ProjectState()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.theme.setText('Teddy Bear')
         dialog.context.setCurrentText('Christmas')
         dialog._refresh_style_recommendations()
@@ -83,7 +83,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_style_selection_modifiers_and_roundtrip_keep_collection_profile(self):
         state = ProjectState()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.theme.setText('Teddy Bear')
         dialog._select_style_profile('watercolor')
         self.assertEqual(dialog.technique.currentText(), 'Акварель')
@@ -93,7 +93,7 @@ class BuilderTests(unittest.TestCase):
         self.assertIn('Уютный', dialog.mood.currentText())
         dialog._apply()
         self.assertIn('watercolor', state.clipart.prompt_generator.style.casefold())
-        restored = ClipartBuilderDialog(state)
+        restored = ClipartBuilderDialog(state.clipart)
         self.assertEqual(restored.technique.currentText(), 'Акварель')
         self.assertTrue(restored.style_modifier_buttons['gentle'].isChecked())
         self.assertTrue(restored.style_modifier_buttons['cozy'].isChecked())
@@ -101,7 +101,7 @@ class BuilderTests(unittest.TestCase):
         dialog.close()
 
     def test_manual_custom_style_clears_known_style_card_selection(self):
-        dialog = ClipartBuilderDialog(ProjectState())
+        dialog = ClipartBuilderDialog(ProjectState().clipart)
         dialog._select_style_profile('watercolor')
         self.assertTrue(any(card['button'].isChecked() for card in dialog.style_cards
                             if card['key'] == 'watercolor'))
@@ -112,7 +112,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_custom_style_text_is_preserved_without_forcing_known_profile(self):
         state = ProjectState()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.theme.setText('Botanical objects')
         dialog.technique.setCurrentText('Мой авторский штрих')
         dialog.mood.setCurrentText('')
@@ -123,7 +123,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_palette_library_uses_five_swatch_cards_and_holiday_recommendation(self):
         state = ProjectState()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.theme.setText('Мишки Тедди')
         dialog.context.setCurrentText('Christmas')
         dialog._refresh_palette_recommendations()
@@ -135,7 +135,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_palette_category_filter_and_selection_keep_plain_palette_value(self):
         state = ProjectState()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.palette_category.setCurrentText('Природа')
         dialog._refresh_palette_library()
         self.assertTrue(dialog.palette_cards)
@@ -147,7 +147,7 @@ class BuilderTests(unittest.TestCase):
     def test_cancel_does_not_mutate_state(self):
         state = ProjectState()
         before = state.to_dict()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog.theme.setText('Проба')
         dialog.total.setValue(99)
         dialog._suggest()
@@ -167,7 +167,7 @@ class BuilderTests(unittest.TestCase):
 
     def test_validation_blocks_empty_theme_and_zero_total(self):
         state = ProjectState()
-        dialog = ClipartBuilderDialog(state)
+        dialog = ClipartBuilderDialog(state.clipart)
         dialog._navigate(1)
         self.assertEqual(dialog.pages.currentIndex(), 0)
         self.assertTrue(dialog.error.text())
