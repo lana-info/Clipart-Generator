@@ -49,6 +49,9 @@ from PyQt6.QtWidgets import (
 )
 
 from license_client import LicenseError
+from v3_flow_runtime import FlowRunRequest, safe_runtime_error as _safe_runtime_error
+from v3_flow_ui import ScrollableStepPage as _ScrollableStepPage
+from v3_image_worker_settings import build_image_worker_settings
 from chroma_key import chroma_key_prompt_block
 from chroma_key_selection import select_chroma_key_color
 from provider_error_messages import friendly_provider_error
@@ -211,33 +214,8 @@ class CostEstimate:
         )
 
 
-@dataclass
-class ClipartRunRequest:
-    mode: str
-    work_dir: str
-    settings: dict[str, Any] = field(repr=False)
-    generated_prompts: list[dict[str, Any]] = field(default_factory=list)
-    selected_files: list[str] = field(default_factory=list, repr=False)
-
-    def worker_kwargs(self) -> dict[str, Any]:
-        return {
-            "mode": self.mode,
-            "work_dir": self.work_dir,
-            "settings": dict(self.settings),
-            "selected_files": list(self.selected_files),
-            "generated_prompts": [
-                {
-                    "prompt": entry["prompt"],
-                    "references": list(entry["references"]),
-                    "chroma_key_color": str(entry.get("chroma_key_color") or ""),
-                    "result_kind": str(entry.get("result_kind") or "legacy"),
-                    **({"object_id": str(entry["object_id"])}
-                       if entry.get("object_id") else {}),
-                }
-                for entry in self.generated_prompts
-            ],
-        }
-
+# Compatibility name retained while callers migrate to the neutral runtime contract.
+ClipartRunRequest = FlowRunRequest
 
 _LEGACY_VISIBLE_GENERATION_MODEL_IDS = {
     "gpt-image/1.5-text-to-image",
@@ -635,99 +613,10 @@ def _worker_settings(
     state: ProjectState,
     runtime_settings: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    source = runtime_settings or {}
-    settings = {
-        name: value
-        for name in (
-            "kie_api_key",
-            "photoroom_api_key",
-            "fal_api_key",
-            "local_realesrgan_dir",
-        )
-        if isinstance((value := source.get(name)), str)
-    }
-    settings.update(RuntimeData.from_dict(state.runtime.to_dict()).to_dict())
-    generation = state.clipart.generation
-    operations = state.clipart.operations
-    settings.update(
-        {
-            "run_mode": (
-                "both" if _processing_requested(operations) else "generate_only"
-            ),
-            "text_generation_model": generation.model,
-            "text_generation_ratio": generation.ratio,
-            "text_generation_resolution": generation.resolution,
-            "reference_generation_model": generation.reference_model,
-            "reference_generation_ratio": generation.reference_ratio,
-            "reference_generation_resolution": generation.reference_resolution,
-            "visible_mark_cleanup_enabled": operations.visible_mark_cleanup,
-            "visible_mark_cleanup_mode": operations.visible_mark_cleanup_mode,
-            "invisible_watermark_cleanup_enabled": operations.invisible_watermark_cleanup,
-            "upscale": operations.upscale_before,
-            "upscale_provider": operations.upscale_before_provider,
-            "upscale_after": operations.upscale_after,
-            "upscale_after_provider": operations.upscale_after_provider,
-            "upscale_factor": operations.upscale_factor,
-            "kie_upscale_model": operations.kie_upscale_model,
-            "kie_upscale_after_model": operations.kie_upscale_after_model,
-            "fal_upscale_model": operations.fal_upscale_model,
-            "fal_upscale_after_model": operations.fal_upscale_after_model,
-            "fal_upscale_scale": normalize_fal_upscale_factor(
-                operations.fal_upscale_model,
-                operations.fal_upscale_scale,
-            ),
-            "fal_upscale_after_scale": operations.fal_upscale_after_scale,
-            "local_realesrgan_profile": operations.local_realesrgan_profile,
-            "local_realesrgan_scale": operations.local_realesrgan_scale,
-            "local_realesrgan_after_scale": (
-                operations.local_realesrgan_after_scale
-            ),
-            "remove_bg": operations.remove_background,
-            "skip_remover_for_alpha": True,
-            "remove_bg_provider": operations.remove_background_provider,
-            "kie_remove_bg_model": operations.kie_remove_bg_model,
-            "fal_remove_bg_model": operations.fal_remove_bg_model,
-            "fal_birefnet_model": operations.fal_birefnet_model,
-            "fal_birefnet_resolution": operations.fal_birefnet_resolution,
-            "fal_birefnet_refine_foreground": operations.fal_birefnet_refine_foreground,
-            "fal_rembg_crop_to_bbox": operations.fal_rembg_crop_to_bbox,
-            "local_rembg_profile": operations.local_rembg_profile,
-            "local_rembg_model": operations.local_rembg_model,
-            "local_rembg_edge_quality": operations.local_rembg_edge_quality,
-            "local_ben2_refine_foreground": (
-                operations.local_ben2_refine_foreground
-            ),
-            "local_ben2_alpha_threshold": (
-                operations.local_ben2_alpha_threshold
-            ),
-            "local_ben2_edge_softness": operations.local_ben2_edge_softness,
-            "local_ben2_corner_radius": operations.local_ben2_corner_radius,
-            "chroma_key_color": operations.chroma_key_color,
-            "unsharp_enabled": operations.unsharp,
-            "unsharp_amount": operations.unsharp_amount,
-            "unsharp_radius": operations.unsharp_radius,
-            "unsharp_threshold": operations.unsharp_threshold,
-            "edge_shrink_enabled": operations.edge_shrink,
-            "edge_shrink_pixels": operations.edge_shrink_pixels,
-            "trim_enabled": operations.trim,
-            "trim_mode": operations.trim_mode,
-            "export_300_dpi": operations.export_300_dpi,
-            "cleanup_remove_exif": operations.remove_exif,
-            "cleanup_remove_xmp": operations.remove_xmp,
-            "cleanup_remove_iptc": operations.remove_iptc,
-            "cleanup_remove_comments_text": operations.remove_comments_text,
-            "cleanup_remove_embedded_thumbnail": (
-                operations.remove_embedded_thumbnail
-            ),
-            "cleanup_remove_generator_fields": (
-                operations.remove_generator_fields
-            ),
-            "cleanup_remove_embedded_c2pa": operations.remove_embedded_c2pa,
-            "cleanup_preserve_icc": operations.preserve_icc,
-            "cleanup_preserve_dpi": operations.preserve_dpi,
-        }
+    return build_image_worker_settings(
+        state.runtime, state.clipart.generation, state.clipart.operations, runtime_settings,
+        run_mode=("both" if _processing_requested(state.clipart.operations) else "generate_only"),
     )
-    return settings
 
 
 def _validate_prompt_references(prompts: Sequence[PromptEntry]) -> None:
@@ -1129,39 +1018,6 @@ def export_prompt_csv(
                     "References": "|".join(entry.references),
                 }
             )
-
-
-class _ScrollableStepPage(QScrollArea):
-    def __init__(
-        self,
-        title: str,
-        description: str,
-        *,
-        tokens: V3DesignTokens = DEFAULT_TOKENS,
-    ) -> None:
-        super().__init__()
-        self.setWidgetResizable(True)
-        self.setFrameShape(QScrollArea.Shape.NoFrame)
-        self.setSizeAdjustPolicy(
-            QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored
-        )
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setMinimumSize(0, 0)
-        self.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Expanding,
-        )
-        self.card = FormCard(title, description, tokens=tokens)
-        self.setWidget(self.card)
-        self.setAccessibleName(title)
-        self.setAccessibleDescription(description)
-
-    def add_widget(self, widget: QWidget) -> None:
-        self.card.add_widget(widget)
-
-    def refresh_from_state(self) -> None:
-        return
 
 
 def _supported_local_reference(path: str) -> bool:
@@ -4211,37 +4067,6 @@ def _read_legacy_runtime_settings() -> Mapping[str, Any]:
     except (OSError, UnicodeError, json.JSONDecodeError):
         return {}
     return dict(value) if isinstance(value, Mapping) else {}
-
-
-def _safe_runtime_error(
-    error: Any,
-    runtime_settings: Mapping[str, Any] | None = None,
-) -> str:
-    import main
-
-    if isinstance(error, PermissionError) or getattr(error, "winerror", None) == 5:
-        return (
-            "Нет доступа к файлу или папке. Выберите другую папку результата "
-            "или проверьте права доступа."
-        )
-    source = runtime_settings or {}
-    secrets = tuple(
-        source.get(name)
-        for name in ("kie_api_key", "photoroom_api_key", "fal_api_key")
-        if isinstance(source.get(name), str)
-    )
-    safe_message = main.safe_error_text(error, secrets=secrets, limit=500)
-    lowered = safe_message.casefold()
-    if any(token in lowered for token in (
-        "chroma", "birefnet", "rembg", "ben2", "photoroom",
-        "remove-background", "remove_background", "background removal",
-    )):
-        return (
-            "Не удалось подготовить прозрачный фон. "
-            "Проверьте исходное изображение и повторите."
-        )
-    classified = friendly_provider_error(safe_message)
-    return classified[1] if classified is not None else safe_message
 
 
 def _legacy_worker_factory(**kwargs: Any) -> Any:

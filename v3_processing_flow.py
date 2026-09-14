@@ -31,13 +31,9 @@ from PyQt6.QtWidgets import (
 
 from license_client import LicenseError
 
-from v3_clipart_flow import (
-    ClipartFlowError,
-    ClipartRunRequest,
-    _ScrollableStepPage,
-    _safe_runtime_error,
-    _worker_settings,
-)
+from v3_flow_runtime import FlowRunRequest, safe_runtime_error as _safe_runtime_error
+from v3_flow_ui import ScrollableStepPage as _ScrollableStepPage
+from v3_image_worker_settings import build_image_worker_settings
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_processing_editor import (
     CLEANUP_OPERATION_LABELS,
@@ -415,7 +411,7 @@ def processing_change_summary(operations: ImageOperationData) -> tuple[str, str]
     )
 
 def missing_processing_runtime_requirements(
-    request: ClipartRunRequest,
+    request: FlowRunRequest,
 ) -> tuple[str, ...]:
     settings = request.settings
     missing: list[str] = []
@@ -821,18 +817,6 @@ class ProcessingRecipePage(_ScrollableStepPage):
         button.blockSignals(False)
 
 
-class _ProcessingStateAdapter:
-    class _ClipartProxy:
-        def __init__(self, state: ProjectState) -> None:
-            self.operations = state.processing.operations
-            self.generation = GenerationData()
-
-    def __init__(self, state: ProjectState) -> None:
-        self.common = state.common
-        self.runtime = state.runtime
-        self.clipart = self._ClipartProxy(state)
-
-
 class _LegacyProcessingPipelinePage(_ScrollableStepPage):
     _BOOL_LABELS = {
         "visible_mark_cleanup": "Удалить видимую метку — локальная реконструкция пикселей",
@@ -1200,7 +1184,7 @@ def build_processing_run_request(
     *,
     allow_full_image_changes: bool,
     external_transfer_consent: bool,
-) -> ClipartRunRequest:
+) -> FlowRunRequest:
     if state.mode is not ProjectMode.PROCESSING:
         raise ProcessingFlowError("Запуск доступен только в режиме обработки")
     work_dir = Path(state.common.work_dir).expanduser()
@@ -1239,14 +1223,15 @@ def build_processing_run_request(
     )
     if issues:
         raise ProcessingFlowError("Исправьте настройки pipeline: " + ", ".join(issues))
-    adapter = _ProcessingStateAdapter(state)
-    settings = _worker_settings(adapter, runtime_settings)
-    settings["run_mode"] = "process_only"
+    settings = build_image_worker_settings(
+        state.runtime, GenerationData(), state.processing.operations, runtime_settings,
+        run_mode="process_only",
+    )
     settings["output_dir"] = str(configured_output)
     settings["workspace_root"] = str(workspace_root)
     settings["overwrite_existing"] = state.processing.overwrite_existing
     settings["skip_remover_for_alpha"] = True
-    return ClipartRunRequest(
+    return FlowRunRequest(
         mode="mode2_process",
         work_dir=str(work_dir),
         settings=settings,
@@ -1433,7 +1418,7 @@ class ProcessingFlowController(QObject):
         if StepId(step) is StepId.REVIEW_RUN:
             self._refresh_preflight()
 
-    def _request(self) -> ClipartRunRequest:
+    def _request(self) -> FlowRunRequest:
         file_issues = self.files_page.validation_issues()
         if file_issues:
             raise ProcessingFlowError(
@@ -1469,7 +1454,7 @@ class ProcessingFlowController(QObject):
         if mode == ProjectMode.PROCESSING.value:
             self.start()
 
-    def start(self) -> ClipartRunRequest | None:
+    def start(self) -> FlowRunRequest | None:
         if self.shell.another_run_is_active(self):
             message = "Сначала завершите текущее задание в другом режиме"
             self.review_page.set_run_status(message, error=True)

@@ -53,14 +53,12 @@ LEGACY_LAYER_MODULES = {
 LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('clipart_prompt_schema', 'v3_project_state'),
     ('pinterest_pin_composer', 'main'),
-    ('studio_clipart_builder_ui', 'v3_components'),
     ('studio_clipart_builder_ui', 'v3_project_state'),
     ('studio_clipart_objects', 'v3_project_state'),
     ('studio_clipart_objects', 'v3_prompt_generator'),
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),
     ('studio_set_export', 'studio_delivery'),
-    ('studio_set_export_ui', 'v3_components'),
     ('studio_text_pricing', 'studio_text_client'),
     ('v3_clipart_flow', 'chroma_key'),
     ('v3_clipart_flow', 'chroma_key_selection'),
@@ -70,10 +68,8 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_clipart_flow', 'model_catalog'),
     ('v3_clipart_flow', 'output_naming'),
     ('v3_clipart_flow', 'processing_cleanup'),
-    ('v3_clipart_flow', 'provider_error_messages'),
     ('v3_clipart_flow', 'result_background_policy'),
     ('v3_clipart_flow', 'v3_api_settings'),
-    ('v3_clipart_flow', 'v3_components'),
     ('v3_clipart_flow', 'v3_lazy_loading'),
     ('v3_clipart_flow', 'v3_processing_editor'),
     ('v3_clipart_flow', 'v3_project_state'),
@@ -87,11 +83,9 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_clipart_flow', 'workflow_definitions'),
     ('v3_evidence_center', 'metadata_cleanup'),
     ('v3_evidence_center', 'metadata_inspector'),
-    ('v3_evidence_center', 'v3_components'),
     ('v3_evidence_center', 'v3_project_state'),
     ('v3_evidence_center', 'watermark_status'),
     ('v3_pinterest_flow', 'license_client'),
-    ('v3_pinterest_flow', 'security_redaction'),
     ('v3_pinterest_flow', 'v3_clipart_flow'),
     ('v3_pinterest_flow', 'v3_lazy_loading'),
     ('v3_pinterest_flow', 'v3_localization'),
@@ -102,7 +96,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_pinterest_flow', 'v3_runtime_adapter'),
     ('v3_pinterest_flow', 'v3_wizard'),
     ('v3_pinterest_flow', 'workflow_definitions'),
-    ('v3_processing_editor', 'v3_components'),
     ('v3_processing_editor', 'v3_project_state'),
     ('v3_processing_editor', 'v3_provider_registry'),
     ('v3_processing_flow', 'config_schema'),
@@ -110,8 +103,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_processing_flow', 'main'),
     ('v3_processing_flow', 'output_naming'),
     ('v3_processing_flow', 'processing_contract'),
-    ('v3_processing_flow', 'v3_clipart_flow'),
-    ('v3_processing_flow', 'v3_components'),
     ('v3_processing_flow', 'v3_lazy_loading'),
     ('v3_processing_flow', 'v3_project_state'),
     ('v3_processing_flow', 'v3_provider_registry'),
@@ -142,6 +133,12 @@ def _layer_for(module_name: str) -> str | None:
     parts = module_name.split(".")
     if parts[0] in {"studio_module_api", "studio_asset_api", "studio_provider_api", "studio_job_api", "studio_project_api"}:
         return "public_api"
+    if parts[0] in {
+        "v3_flow_runtime", "v3_flow_ui", "v3_image_worker_settings",
+        "provider_upscale_contract", "provider_error_messages", "security_redaction",
+        "v3_components",
+    }:
+        return "shared_api"
     if parts[0] == "studio_builtin_workflows":
         if len(parts) == 1:
             return "builtin_registry"
@@ -230,7 +227,7 @@ def _cross_layer_edges() -> frozenset[tuple[str, str]]:
                 continue
             # Importing the public API is the intended dependency direction.
             # The reverse direction remains visible and therefore forbidden.
-            if target_layer == "public_api":
+            if target_layer in {"public_api", "shared_api"}:
                 continue
             edges.add((source, target))
     return frozenset(edges)
@@ -331,3 +328,13 @@ def test_public_provider_and_job_apis_are_isolated_dependency_boundaries():
             if _layer_for(target) is not None
         }
         assert local_dependencies == set()
+
+
+def test_processing_flow_does_not_import_clipart_implementation():
+    imports = _imports(ROOT / "v3_processing_flow.py")
+    assert "v3_clipart_flow" not in imports
+
+
+def test_neutral_workflow_primitives_are_shared_api_boundaries():
+    for module_name in ("v3_flow_runtime", "v3_flow_ui", "v3_image_worker_settings"):
+        assert _layer_for(module_name) == "shared_api"
