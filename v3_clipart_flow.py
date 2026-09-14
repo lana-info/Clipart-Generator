@@ -101,14 +101,12 @@ from v3_components import (
     V3Button,
     V3DesignTokens,
 )
-from v3_processing_editor import (
-    ProcessingPipelineEditor,
-    RunPlanBuilder,
+from v3_image_processing_ui import (
+    METADATA_CLEANUP_FIELDS, ProcessingPipelineEditor, RunPlanBuilder,
     UPSCALE_AFTER_UI_ENABLED,
 )
 from v3_provider_registry import CHROMA_KEY_COLOR_OPTIONS
 from fal_model_catalog import is_fal_generation_model, is_fal_model_id
-from processing_cleanup import METADATA_CLEANUP_FIELDS
 from output_naming import workspace_layout
 from v3_prompt_csv_import import PromptCsvImportDialog
 from v3_project_state import (

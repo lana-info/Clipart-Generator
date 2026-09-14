@@ -1,11 +1,4 @@
-"""Shared metadata-cleanup field contract for all processing modes."""
+"""Compatibility re-export for the shared metadata-cleanup field contract."""
+from v3_image_processing_ui import METADATA_CLEANUP_FIELDS
 
-METADATA_CLEANUP_FIELDS = (
-    "remove_exif",
-    "remove_xmp",
-    "remove_iptc",
-    "remove_comments_text",
-    "remove_embedded_thumbnail",
-    "remove_generator_fields",
-    "remove_embedded_c2pa",
-)
+__all__ = ["METADATA_CLEANUP_FIELDS"]

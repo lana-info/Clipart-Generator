@@ -35,13 +35,13 @@ from v3_flow_runtime import FlowRunRequest, safe_runtime_error as _safe_runtime_
 from v3_flow_ui import ScrollableStepPage as _ScrollableStepPage
 from v3_image_worker_settings import build_image_worker_settings
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
-from v3_processing_editor import (
-    CLEANUP_OPERATION_LABELS,
-    PROCESSING_RECIPES as _SHARED_PROCESSING_RECIPES,
-    ProcessingPipelineEditor,
-    RunPlanBuilder,
-    apply_processing_recipe as _shared_apply_processing_recipe,
+from v3_image_processing_ui import (
+    CLEANUP_OPERATION_LABELS, ProcessingPipelineEditor, RunPlanBuilder,
     configure_unavailable_synthid,
+)
+from v3_processing_editor import (
+    PROCESSING_RECIPES as _SHARED_PROCESSING_RECIPES,
+    apply_processing_recipe as _shared_apply_processing_recipe,
 )
 from v3_provider_registry import (
     KIE_MODEL_OPTIONS,

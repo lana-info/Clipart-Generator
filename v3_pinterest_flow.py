@@ -72,7 +72,7 @@ from v3_project_state import (
     StepId,
 )
 from v3_prompt_generator import PromptGeneratorError
-from v3_processing_editor import ProcessingPipelineEditor
+from v3_image_processing_ui import ProcessingPipelineEditor
 from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
 from v3_localization import message_for, normalize_locale
