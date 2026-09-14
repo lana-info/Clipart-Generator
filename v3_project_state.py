@@ -11,6 +11,9 @@ from typing import Any, Mapping, Sequence
 
 from chroma_key import KEY_COLORS
 from studio_project_documents import PreparedProjectDocument
+from studio_project_state_extensions import (
+    before_project_state_replace, normalize_project_state,
+)
 from v3_provider_registry import (
     FAL_BRIA_UPSCALE_MODEL_ID,
     KIE_TOPAZ_MODEL_ID,
@@ -896,6 +899,20 @@ def clipart_operation_defaults() -> ImageOperationData:
         export_300_dpi=True,
     )
 
+def _json_mapping_copy(value: Any, name: str, *, allow_none: bool = False):
+    if value is None and allow_none:
+        return None
+    if not isinstance(value, Mapping):
+        raise ProjectStateError(f"Project draft field {name} must be an object")
+    try:
+        copied = json.loads(json.dumps(dict(value), ensure_ascii=False, allow_nan=False))
+    except (TypeError, ValueError) as exc:
+        raise ProjectStateError(f"Project draft field {name} must contain JSON values only") from exc
+    if not isinstance(copied, dict):
+        raise ProjectStateError(f"Project draft field {name} must be an object")
+    return copied
+
+
 @dataclass
 class ClipartModeData:
     prompts: list[PromptEntry] = field(default_factory=list)
@@ -904,32 +921,37 @@ class ClipartModeData:
     )
     generation: GenerationData = field(default_factory=GenerationData)
     operations: ImageOperationData = field(default_factory=clipart_operation_defaults)
-    # Optional for legacy drafts; appended to preserve positional construction.
+    # Module-owned payloads remain opaque to Core.
     recipe: dict[str, Any] | None = None
     export_membership: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        from studio_export_membership import validate_export_membership
-        membership = validate_export_membership(self.export_membership)
+        recipe = _json_mapping_copy(self.recipe, "clipart.recipe", allow_none=True)
+        membership = _json_mapping_copy(
+            self.export_membership, "clipart.export_membership"
+        )
         return {
             "prompts": [entry.to_dict() for entry in self.prompts],
             "prompt_generator": self.prompt_generator.to_dict(),
             "generation": self.generation.to_dict(),
             "operations": self.operations.to_dict(),
-            **({"recipe": self.recipe} if self.recipe is not None else {}),
+            **({"recipe": recipe} if recipe is not None else {}),
             **({"export_membership": membership} if membership else {}),
         }
 
     @classmethod
-    def from_dict(cls, value: Any) -> ClipartModeData:
+    def from_dict(cls, value: Any) -> "ClipartModeData":
         data = value if isinstance(value, Mapping) else {}
-        from studio_clipart_recipe import ClipartRecipe
-        from studio_export_membership import validate_export_membership
-        recipe = (ClipartRecipe.from_dict(data["recipe"]).to_dict()
-                  if "recipe" in data else None)
+        recipe = (
+            _json_mapping_copy(data["recipe"], "clipart.recipe")
+            if "recipe" in data else None
+        )
+        membership = _json_mapping_copy(
+            data.get("export_membership", {}), "clipart.export_membership"
+        )
         return cls(
             recipe=recipe,
-            export_membership=validate_export_membership(data.get('export_membership', {})),
+            export_membership=membership,
             prompts=_prompt_entries(data.get("prompts", [])),
             prompt_generator=PromptGeneratorData.from_dict(
                 data.get("prompt_generator", {}),
@@ -1742,18 +1764,10 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         ("prompts", "prompt_generator", "generation", "operations", "recipe", "export_membership"),
         "clipart",
     )
-    if "export_membership" in clipart:
-        from studio_export_membership import validate_export_membership
-        try:
-            validate_export_membership(clipart['export_membership'])
-        except ValueError as error:
-            raise ProjectStateError(str(error)) from error
-    if "recipe" in clipart:
-        from studio_clipart_recipe import ClipartRecipe
-        try:
-            ClipartRecipe.from_dict(clipart["recipe"])
-        except ValueError as error:
-            raise ProjectStateError(str(error)) from error
+    if "export_membership" in clipart and not isinstance(clipart["export_membership"], Mapping):
+        raise ProjectStateError("Project draft field clipart.export_membership must be an object")
+    if "recipe" in clipart and not isinstance(clipart["recipe"], Mapping):
+        raise ProjectStateError("Project draft field clipart.recipe must be an object")
     _validate_prompt_section(clipart, "clipart")
     if "prompt_generator" in clipart:
         _validate_prompt_generator_section(
@@ -2056,9 +2070,13 @@ class ProjectState:
         return result
 
     @classmethod
-    def from_dict(cls, value: Any) -> ProjectState:
+    def from_dict(cls, value: Any, *, extensions=()) -> ProjectState:
         if not isinstance(value, Mapping):
             raise ProjectStateError("Project draft root must be an object")
+        try:
+            value = normalize_project_state(dict(value), extensions)
+        except (TypeError, ValueError) as error:
+            raise ProjectStateError(str(error)) from error
         schema_version = value.get("schema_version")
         if type(schema_version) is not int or schema_version != PROJECT_STATE_SCHEMA_VERSION:
             raise ProjectStateError("Unsupported project draft schema")
@@ -2187,37 +2205,40 @@ class V3ProjectDocumentAdapter:
     document_type = "project"
     current_version = PROJECT_STATE_SCHEMA_VERSION
 
-    def __init__(self, module_id: str) -> None:
+    def __init__(self, module_id: str, *, extensions=()) -> None:
         try:
             self.module_id = ProjectMode(module_id).value
         except (TypeError, ValueError) as exc:
             raise ProjectStateError("Unsupported V3 project module") from exc
+        self._extensions = tuple(extensions or ())
 
     def open_state(self, state: dict[str, Any], version: int) -> dict[str, Any]:
         if version != self.current_version:
             raise ProjectStateError("Unsupported V3 project document version")
-        return ProjectState.from_dict(state).to_dict()
+        return ProjectState.from_dict(state, extensions=self._extensions).to_dict()
 
     def prepare_save(
         self, state: dict[str, Any], source_version: int | None,
     ) -> PreparedProjectDocument:
         if source_version not in (None, self.current_version):
             raise ProjectStateError("Unsupported V3 project document version")
-        normalized = ProjectState.from_dict(state).to_dict()
+        normalized = ProjectState.from_dict(
+            state, extensions=self._extensions
+        ).to_dict()
         return PreparedProjectDocument(self.current_version, normalized)
 
     def before_save(self, store, existing, prepared: PreparedProjectDocument) -> None:
         if existing is None:
             return
-        from studio_export_membership import backup_membership_migration
-        backup_membership_migration(
+        before_project_state_replace(
             store.project_path(existing.project_id),
             prepared.state,
             max_bytes=MAX_DRAFT_BYTES,
+            extensions=self._extensions,
         )
 
 
-def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> None:
+def save_project_draft(state: ProjectState, path: str | os.PathLike[str], *, extensions=()) -> None:
     if not isinstance(state, ProjectState):
         raise ProjectStateError("state must be a ProjectState")
     destination = Path(path)
@@ -2225,7 +2246,10 @@ def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> Non
     if not parent.is_dir():
         raise ProjectStateError("Project draft directory does not exist")
 
-    draft = state.to_dict()
+    try:
+        draft = normalize_project_state(state.to_dict(), extensions)
+    except (TypeError, ValueError) as error:
+        raise ProjectStateError(str(error)) from error
     _validate_project_draft_shape(draft)
     payload = json.dumps(
         draft,
@@ -2238,8 +2262,9 @@ def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> Non
 
     temporary_path: Path | None = None
     try:
-        from studio_export_membership import backup_membership_migration
-        backup_membership_migration(destination, draft, max_bytes=MAX_DRAFT_BYTES)
+        before_project_state_replace(
+            destination, draft, max_bytes=MAX_DRAFT_BYTES, extensions=extensions
+        )
         with tempfile.NamedTemporaryFile(
             mode="wb",
             dir=parent,
@@ -2261,7 +2286,7 @@ def save_project_draft(state: ProjectState, path: str | os.PathLike[str]) -> Non
         raise ProjectStateError("Could not save project draft") from error
 
 
-def load_project_draft(path: str | os.PathLike[str]) -> ProjectState:
+def load_project_draft(path: str | os.PathLike[str], *, extensions=()) -> ProjectState:
     source = Path(path)
     try:
         size = source.stat().st_size
@@ -2277,4 +2302,4 @@ def load_project_draft(path: str | os.PathLike[str]) -> ProjectState:
         data = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise ProjectStateError("Project draft is not valid UTF-8 JSON") from error
-    return ProjectState.from_dict(data)
+    return ProjectState.from_dict(data, extensions=extensions)

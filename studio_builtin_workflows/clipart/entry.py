@@ -19,3 +19,8 @@ def install(shell, *, runtime_settings_provider, worker_factory, authorization_p
         worker_factory=worker_factory,
         authorization_provider=authorization_provider,
     )
+
+
+def project_state_extension():
+    from clipart_project_state import ClipartProjectStateExtension
+    return ClipartProjectStateExtension()

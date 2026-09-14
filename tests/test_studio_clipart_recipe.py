@@ -3,7 +3,10 @@ import unittest
 from pathlib import Path
 
 from studio_clipart_recipe import ClipartRecipe, ROLES, propose_recipes
+from clipart_project_state import ClipartProjectStateExtension
 from v3_project_state import ProjectState, ProjectStateError, load_project_draft, save_project_draft
+
+CLIPART_EXTENSIONS = (ClipartProjectStateExtension(),)
 
 
 class RecipeTests(unittest.TestCase):
@@ -46,14 +49,14 @@ class RecipeTests(unittest.TestCase):
         state.clipart.recipe = recipe.to_dict()
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'project.json'
-            save_project_draft(state, path)
-            restored = load_project_draft(path)
+            save_project_draft(state, path, extensions=CLIPART_EXTENSIONS)
+            restored = load_project_draft(path, extensions=CLIPART_EXTENSIONS)
             self.assertEqual(restored.clipart.recipe, recipe.to_dict())
             self.assertEqual(restored.clipart.prompts, [])
             state.clipart.recipe['counts']['hero'] += 1
             with self.assertRaises((ProjectStateError, ValueError)):
-                save_project_draft(state, path)
-            self.assertEqual(load_project_draft(path).clipart.recipe, recipe.to_dict())
+                save_project_draft(state, path, extensions=CLIPART_EXTENSIONS)
+            self.assertEqual(load_project_draft(path, extensions=CLIPART_EXTENSIONS).clipart.recipe, recipe.to_dict())
 
     def test_legacy_draft_has_no_new_recipe(self):
         value = ProjectState().to_dict()

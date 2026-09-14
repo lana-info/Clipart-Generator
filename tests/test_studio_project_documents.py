@@ -92,6 +92,7 @@ def test_adapter_owns_document_validation_and_save_preparation():
 
 
 def test_v3_adapter_migrates_in_memory_and_backs_up_before_first_save():
+    from clipart_project_state import ClipartProjectStateExtension
     from v3_project_state import ProjectState, V3ProjectDocumentAdapter
 
     with tempfile.TemporaryDirectory() as temp:
@@ -103,7 +104,10 @@ def test_v3_adapter_migrates_in_memory_and_backs_up_before_first_save():
         record = store.create("clipart", "Old", legacy)
         path = store.project_path(record.project_id)
         original = path.read_bytes()
-        service = ProjectDocumentService(store, (V3ProjectDocumentAdapter("clipart"),))
+        extension = ClipartProjectStateExtension()
+        service = ProjectDocumentService(
+            store, (V3ProjectDocumentAdapter("clipart", extensions=(extension,)),)
+        )
 
         session = service.open(record.project_id)
         assert session.editable is True
@@ -119,6 +123,7 @@ def test_v3_adapter_migrates_in_memory_and_backs_up_before_first_save():
 
 
 def test_v3_adapter_backup_failure_preserves_existing_envelope(monkeypatch):
+    from clipart_project_state import ClipartProjectStateExtension
     from studio_project_documents import ProjectDocumentError
     from v3_project_state import ProjectState, V3ProjectDocumentAdapter
 
@@ -131,7 +136,10 @@ def test_v3_adapter_backup_failure_preserves_existing_envelope(monkeypatch):
         record = store.create("clipart", "Old", legacy)
         path = store.project_path(record.project_id)
         original = path.read_bytes()
-        service = ProjectDocumentService(store, (V3ProjectDocumentAdapter("clipart"),))
+        extension = ClipartProjectStateExtension()
+        service = ProjectDocumentService(
+            store, (V3ProjectDocumentAdapter("clipart", extensions=(extension,)),)
+        )
         session = service.open(record.project_id)
 
         def fail(*_args, **_kwargs):

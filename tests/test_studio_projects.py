@@ -22,7 +22,11 @@ class ProjectStoreTests(unittest.TestCase):
             }
             record = store.create('clipart', 'Garden', state.to_dict())
             store.save(record.project_id, 'clipart', 'Garden', state.to_dict())
-            restored = ProjectState.from_dict(ProjectStore(store.root).load(record.project_id).state)
+            from clipart_project_state import ClipartProjectStateExtension
+            restored = ProjectState.from_dict(
+                ProjectStore(store.root).load(record.project_id).state,
+                extensions=(ClipartProjectStateExtension(),),
+            )
             from studio_export_membership import validate_export_membership
             self.assertEqual(restored.clipart.export_membership,
                              validate_export_membership(state.clipart.export_membership))

@@ -95,3 +95,13 @@ def test_build_collects_builtin_workflow_adapters_generically():
     build = (Path(__file__).resolve().parents[1] / "build.ps1").read_text(encoding="utf-8")
     assert '--add-data "studio_builtin_workflows;studio_builtin_workflows"' in build
     assert '--collect-submodules "studio_builtin_workflows"' in build
+
+
+def test_builtin_registry_exposes_optional_project_state_extensions_without_name_switch():
+    root = Path(__file__).resolve().parents[1] / "studio_builtin_workflows"
+    registry = discover_workflows(root)
+    extensions = registry.project_state_extensions()
+    assert len(extensions) == 1
+    extension = extensions[0]
+    assert callable(getattr(extension, "normalize_state", None))
+    assert callable(getattr(extension, "before_replace", None))

@@ -127,13 +127,15 @@ def test_membership_save_reopen_and_preserve_other_runs(images, tmp_path):
 
 
 def test_invalid_membership_cannot_overwrite_draft(images, tmp_path):
+    from clipart_project_state import ClipartProjectStateExtension
+    extensions = (ClipartProjectStateExtension(),)
     state = ProjectState()
     path = tmp_path / 'project.json'
-    save_project_draft(state, path)
+    save_project_draft(state, path, extensions=extensions)
     before = path.read_bytes()
     state.clipart.export_membership = {'image.png': {'title': 'test', 'included': 'yes'}}
     with pytest.raises(ValueError):
-        save_project_draft(state, path)
+        save_project_draft(state, path, extensions=extensions)
     assert path.read_bytes() == before
 
 

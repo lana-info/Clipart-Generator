@@ -7,7 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from studio_export_membership import validate_export_membership
+from clipart_project_state import ClipartProjectStateExtension
 from v3_project_state import ProjectState, save_project_draft, load_project_draft
+
+CLIPART_EXTENSIONS = (ClipartProjectStateExtension(),)
 
 
 class MembershipTests(unittest.TestCase):
@@ -19,15 +22,15 @@ class MembershipTests(unittest.TestCase):
                 'missing.png': {'title': 'Old', 'included': False}}
             raw = json.dumps(legacy).encode()
             path.write_bytes(raw)
-            state = load_project_draft(path)
+            state = load_project_draft(path, extensions=CLIPART_EXTENSIONS)
             self.assertEqual(path.read_bytes(), raw)
-            save_project_draft(state, path)
+            save_project_draft(state, path, extensions=CLIPART_EXTENSIONS)
             backups = list(path.parent.glob('*.bak'))
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_bytes(), raw)
-            save_project_draft(load_project_draft(path), path)
+            save_project_draft(load_project_draft(path, extensions=CLIPART_EXTENSIONS), path, extensions=CLIPART_EXTENSIONS)
             self.assertEqual(list(path.parent.glob('*.bak')), backups)
-            self.assertFalse(load_project_draft(backups[0]).clipart.export_membership[
+            self.assertFalse(load_project_draft(backups[0], extensions=CLIPART_EXTENSIONS).clipart.export_membership[
                 'missing.png']['memberships'][0]['included'])
 
     def test_draft_migration_backup_value_error_is_project_state_error(self):
@@ -41,7 +44,7 @@ class MembershipTests(unittest.TestCase):
             with patch('studio_export_membership.backup_membership_migration',
                        side_effect=ValueError('unsafe backup')):
                 with self.assertRaises(ProjectStateError):
-                    save_project_draft(state, path)
+                    save_project_draft(state, path, extensions=CLIPART_EXTENSIONS)
 
     def test_studio_migration_backup_failure_preserves_original(self):
         from studio_project_documents import ProjectDocumentError, ProjectDocumentService
@@ -55,7 +58,7 @@ class MembershipTests(unittest.TestCase):
             record = store.create('clipart', 'Old', legacy)
             path = store.project_path(record.project_id)
             original = path.read_bytes()
-            service = ProjectDocumentService(store, (V3ProjectDocumentAdapter('clipart'),))
+            service = ProjectDocumentService(store, (V3ProjectDocumentAdapter('clipart', extensions=CLIPART_EXTENSIONS),))
             migrated = service.open(record.project_id).state
             with patch('studio_export_membership.backup_membership_migration', side_effect=OSError('disk full')):
                 with self.assertRaises(ProjectDocumentError):
@@ -102,8 +105,8 @@ class MembershipTests(unittest.TestCase):
         state.clipart.export_membership = value
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'draft.json'
-            save_project_draft(state, path)
-            restored = load_project_draft(path).clipart.export_membership['one.png']
+            save_project_draft(state, path, extensions=CLIPART_EXTENSIONS)
+            restored = load_project_draft(path, extensions=CLIPART_EXTENSIONS).clipart.export_membership['one.png']
         self.assertEqual(restored['asset_id'], original_id)
         self.assertEqual([link['included'] for link in restored['memberships']], [True, False, True, True])
         self.assertEqual(restored, item)

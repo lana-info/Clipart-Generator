@@ -408,6 +408,7 @@ class V3ApplicationView(QWidget):
         self._legacy_project = legacy_project
         workflow_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "studio_builtin_workflows"
         self._workflow_registry = workflow_registry or discover_workflows(workflow_root)
+        self._project_state_extensions = self._workflow_registry.project_state_extensions()
         self._update_controller = None
         self._initialization_overlay: InitializationProgressOverlay | None = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
@@ -419,7 +420,12 @@ class V3ApplicationView(QWidget):
                 self._project_store = ProjectStore(self._draft_path.parent / "projects")
                 self._project_documents = ProjectDocumentService(
                     self._project_store,
-                    tuple(V3ProjectDocumentAdapter(mode.value) for mode in ProjectMode),
+                    tuple(
+                        V3ProjectDocumentAdapter(
+                            mode.value, extensions=self._project_state_extensions
+                        )
+                        for mode in ProjectMode
+                    ),
                 )
             except (OSError, ValueError):
                 self._project_store_unavailable = True
@@ -765,7 +771,9 @@ class V3ApplicationView(QWidget):
         if path is None or not path.is_file():
             return None
         try:
-            return load_project_draft(path)
+            return load_project_draft(
+                path, extensions=self._project_state_extensions
+            )
         except ProjectStateError:
             return None
 
@@ -870,7 +878,9 @@ class V3ApplicationView(QWidget):
                     )
             # The separate project is authoritative. Never write a newer legacy
             # draft first, then hide it behind an older project after a failure.
-            save_project_draft(self.shell.state, path)
+            save_project_draft(
+                self.shell.state, path, extensions=self._project_state_extensions
+            )
             preferences_saved = self._save_preferences()
             self._recent_project = ProjectState.from_dict(self.shell.state.to_dict())
         except (OSError, ValueError):

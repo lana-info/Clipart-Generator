@@ -12,6 +12,7 @@ BUILTIN_WORKFLOWS_ROOT = ROOT / "studio_builtin_workflows"
 LEGACY_LAYER_MODULES = {
     "clipart": frozenset({
         "clipart_prompt_generator",
+        "clipart_project_state",
         "clipart_prompt_schema",
         "studio_alpha_qc",
         "studio_bundle_planner",
@@ -122,8 +123,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_processing_flow', 'v3_transparency_preview'),
     ('v3_processing_flow', 'v3_wizard'),
     ('v3_processing_flow', 'workflow_definitions'),
-    ('v3_project_state', 'studio_clipart_recipe'),
-    ('v3_project_state', 'studio_export_membership'),
     ('v3_run_queue', 'studio_alpha_qc'),
     ('v3_run_queue', 'studio_bundle_planner'),
     ('v3_run_queue', 'studio_clipart_recipe'),
@@ -370,3 +369,9 @@ def test_clipart_and_pinterest_use_shared_image_processing_ui_not_processing_mod
 
 def test_core_prompt_generator_does_not_import_clipart_schema():
     assert "clipart_prompt_schema" not in _imports(ROOT / "v3_prompt_generator.py")
+
+
+def test_project_state_core_does_not_import_clipart_persistence_modules():
+    imports = _imports(ROOT / "v3_project_state.py")
+    assert "studio_clipart_recipe" not in imports
+    assert "studio_export_membership" not in imports

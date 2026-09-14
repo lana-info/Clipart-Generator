@@ -20,12 +20,18 @@ class WorkflowRegistryError(ValueError):
 class WorkflowRegistration:
     module: ModuleRegistration
     install: Callable[..., object]
+    project_state_extension_factory: Callable[[], object] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.module, ModuleRegistration):
             raise WorkflowRegistryError("Invalid public module registration")
         if not callable(self.install):
             raise WorkflowRegistryError("Workflow installer must be callable")
+        if (
+            self.project_state_extension_factory is not None
+            and not callable(self.project_state_extension_factory)
+        ):
+            raise WorkflowRegistryError("Project state extension factory must be callable")
 
     @property
     def module_id(self) -> str:
@@ -55,6 +61,23 @@ class WorkflowRegistry:
         except (KeyError, TypeError) as exc:
             raise WorkflowRegistryError("Workflow module is not registered") from exc
 
+    def project_state_extensions(self) -> tuple[object, ...]:
+        result = []
+        for module_id in self.module_ids:
+            factory = self._registrations[module_id].project_state_extension_factory
+            if factory is None:
+                continue
+            try:
+                extension = factory()
+            except Exception as exc:
+                raise WorkflowRegistryError("Project state extension could not be created") from exc
+            if not callable(getattr(extension, "normalize_state", None)) or not callable(
+                getattr(extension, "before_replace", None)
+            ):
+                raise WorkflowRegistryError("Project state extension is invalid")
+            result.append(extension)
+        return tuple(result)
+
 
 def _load_entry(path: Path) -> WorkflowRegistration:
     if path.is_symlink() or not path.is_file():
@@ -68,6 +91,7 @@ def _load_entry(path: Path) -> WorkflowRegistration:
         exec(compile(source, str(path), "exec"), namespace, namespace)
         register = namespace.get("register")
         install = namespace.get("install")
+        extension_factory = namespace.get("project_state_extension")
         if not callable(register):
             raise WorkflowRegistryError("Workflow entry must export register(context)")
         module = register(context)
@@ -75,7 +99,7 @@ def _load_entry(path: Path) -> WorkflowRegistration:
             raise WorkflowRegistryError("Workflow register(context) returned invalid registration")
         if module.module_id != context.module_id or module.version != context.version:
             raise WorkflowRegistryError("Workflow registration identity mismatch")
-        return WorkflowRegistration(module, install)
+        return WorkflowRegistration(module, install, extension_factory)
     except WorkflowRegistryError:
         raise
     except ModuleApiError as exc:
