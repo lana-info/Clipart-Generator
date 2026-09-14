@@ -113,7 +113,7 @@ def test_text_probe_fixture_is_text_only_public_api_consumer():
             project_imports.update(alias.name.split(".", 1)[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             project_imports.add(node.module.split(".", 1)[0])
-    assert project_imports == {"studio_module_api"}
+    assert project_imports == {"studio_module_api", "studio_project_api", "studio_provider_api", "studio_job_api"}
     lowered = source.casefold()
     assert "clipart" not in lowered
     assert "image" not in lowered
@@ -150,11 +150,11 @@ class _ScopedTextContract:
     def __init__(self, module_id):
         self.module_id = module_id
 
-    def normalize(self, value):
-        return f"{self.module_id}:" + " ".join(str(value).split())
+    def execute(self, request):
+        return {"text": f"{self.module_id}:" + " ".join(str(request.input_payload["text"]).split())}
 
 
-def test_signed_text_probe_negotiates_capability_without_ui_or_runtime_internals():
+def test_signed_text_probe_negotiates_scoped_public_capabilities():
     with tempfile.TemporaryDirectory() as folder:
         root = Path(folder)
         private = Ed25519PrivateKey.generate()
@@ -177,6 +177,14 @@ def test_signed_text_probe_negotiates_capability_without_ui_or_runtime_internals
                 CapabilityRequirement("providers.text", 1),
                 lambda module_id: scoped_modules.append(module_id) or _ScopedTextContract(module_id),
             ),
+            CapabilityProvider(
+                CapabilityRequirement("projects", 1),
+                lambda module_id: scoped_modules.append(module_id) or object(),
+            ),
+            CapabilityProvider(
+                CapabilityRequirement("jobs", 1),
+                lambda module_id: scoped_modules.append(module_id) or object(),
+            ),
         ))
         host = ModuleRuntimeHost(
             store,
@@ -193,10 +201,10 @@ def test_signed_text_probe_negotiates_capability_without_ui_or_runtime_internals
         )
         info = host.activate("text-probe", "1.0.0")
         assert info.module_id == "text-probe"
-        assert info.pages == ()
+        assert [page.name for page in info.pages] == ["home"]
         assert info.document_types[0].mime_type == "application/vnd.vibix.text-probe+json"
         assert host.invoke_command("text-probe", "normalize", "  alpha   beta ") == "text-probe:alpha beta"
-        assert scoped_modules == ["text-probe"]
+        assert scoped_modules == ["text-probe", "text-probe", "text-probe"]
         assert set(authorized_ids) == {"text-probe"}
 
 
@@ -228,3 +236,93 @@ def test_capability_broker_scopes_exact_provider_factory_to_module_identity():
     assert calls == ["text-probe"]
     with pytest.raises(ModuleRuntimeError, match="providers.text.v2"):
         broker.scope("text-probe", (CapabilityRequirement("providers.text", 2),))
+
+
+def test_extended_text_probe_uses_only_public_capability_apis_and_optional_page():
+    source = FIXTURE.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    project_imports = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            project_imports.update(alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            project_imports.add(node.module.split(".", 1)[0])
+    assert project_imports == {
+        "studio_module_api", "studio_project_api", "studio_provider_api", "studio_job_api",
+    }
+    lowered = source.casefold()
+    assert "clipart" not in lowered
+    assert "image" not in lowered
+    assert "pyqt" not in lowered
+
+
+def test_extended_text_probe_runs_projects_provider_job_and_page_end_to_end():
+    from studio_job_services import CoreJobService, JobLauncher
+    from studio_project_capability import ScopedProjectCapability
+    from studio_project_documents import PreparedProjectDocument, ProjectDocumentService
+    from studio_projects import ProjectStore
+    from studio_provider_services import CoreProviderFacade, ProtectedProviderExecutor
+
+    class TextAdapter:
+        module_id = "text-probe"
+        document_type = "note"
+        current_version = 1
+        def open_state(self, state, version): return dict(state)
+        def prepare_save(self, state, source_version):
+            return PreparedProjectDocument(1, dict(state))
+        def before_save(self, store, existing, prepared): return None
+
+    class TextExecutor(ProtectedProviderExecutor):
+        def preflight(self, module_id, request):
+            return {"estimated_cost": "0", "currency": "USD"}
+        def execute_protected(self, module_id, request, preflight):
+            return {"text": f"{module_id}:" + " ".join(request.input_payload["text"].split())}
+
+    with tempfile.TemporaryDirectory() as folder:
+        root = Path(folder)
+        private = Ed25519PrivateKey.generate()
+        store = ModuleStore(
+            root / "modules", studio_version="3.2.0", platform="test",
+            trusted_keys={"fixture": private.public_key().public_bytes_raw()},
+        )
+        store.install(_signed_text_probe_package(root, private))
+        documents = ProjectDocumentService(ProjectStore(root / "projects"), (TextAdapter(),))
+        host_box = {}
+        launched = []
+
+        def launch(module_id, request, complete):
+            launched.append((module_id, request.operation, dict(request.payload)))
+            complete()
+            return "job-1"
+
+        broker = CapabilityBroker((
+            CapabilityProvider(
+                CapabilityRequirement("projects", 1),
+                lambda module_id: ScopedProjectCapability(module_id, documents),
+            ),
+            CapabilityProvider(
+                CapabilityRequirement("providers.text", 1),
+                lambda module_id: CoreProviderFacade(
+                    module_id, "text", TextExecutor(), lambda *_args: True,
+                ),
+            ),
+            CapabilityProvider(
+                CapabilityRequirement("jobs", 1),
+                lambda module_id: CoreJobService(
+                    module_id, host_box["host"], (JobLauncher("normalize_job", launch),),
+                ),
+            ),
+        ))
+        host = ModuleRuntimeHost(store, lambda _module, _action: True, capability_broker=broker)
+        host_box["host"] = host
+        info = host.activate("text-probe", "1.0.0")
+        assert [page.name for page in info.pages] == ["home"]
+        page = host.create_page("text-probe", "home")
+        assert page.value == "text-probe.home"
+        page.close()
+
+        project_id = host.invoke_command("text-probe", "create_note", "Note", "hello")
+        assert host.invoke_command("text-probe", "read_note", project_id) == "hello"
+        assert host.invoke_command("text-probe", "normalize", "  alpha   beta ") == "text-probe:alpha beta"
+        assert host.invoke_command("text-probe", "run_job", "queued") == "job-1"
+        assert launched == [("text-probe", "normalize_job", {"text": "queued"})]

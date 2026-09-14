@@ -140,7 +140,7 @@ def _module_name(path: Path) -> str:
 
 def _layer_for(module_name: str) -> str | None:
     parts = module_name.split(".")
-    if parts[0] in {"studio_module_api", "studio_asset_api", "studio_provider_api", "studio_job_api"}:
+    if parts[0] in {"studio_module_api", "studio_asset_api", "studio_provider_api", "studio_job_api", "studio_project_api"}:
         return "public_api"
     if parts[0] == "studio_builtin_workflows":
         if len(parts) == 1:
@@ -324,7 +324,7 @@ def test_builtin_workflow_adapters_are_scanned_in_their_module_layers():
 
 
 def test_public_provider_and_job_apis_are_isolated_dependency_boundaries():
-    for module_name in ("studio_provider_api", "studio_job_api"):
+    for module_name in ("studio_provider_api", "studio_job_api", "studio_project_api"):
         assert _layer_for(module_name) == "public_api"
         local_dependencies = {
             target for target in _imports(ROOT / f"{module_name}.py")
