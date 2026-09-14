@@ -4,6 +4,10 @@ import unittest
 from pathlib import Path
 
 import v3_prompt_generator
+from clipart_prompt_generator import (
+    generate_clipart_into_project,
+    generate_clipart_prompt_series,
+)
 from v3_project_state import (
     MAX_PROMPT_GENERATOR_ITEMS,
     MAX_PROMPT_GENERATOR_TEXT_LENGTH,
@@ -59,8 +63,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
                     backend_id=self.backend_id,
                 )
 
-        prompts = generate_prompt_series(
-            ProjectMode.CLIPART,
+        prompts = generate_clipart_prompt_series(
             PromptGeneratorData(subjects=["лиса"]),
             translation_backend=FakeTranslator(),
             provider_language="en",
@@ -70,8 +73,8 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertNotIn("Объект:", prompts[0].prompt)
 
     def test_same_input_produces_the_same_ordered_series(self):
-        first = generate_prompt_series(ProjectMode.CLIPART, self.sample_data())
-        second = generate_prompt_series(ProjectMode.CLIPART, self.sample_data())
+        first = generate_clipart_prompt_series(self.sample_data())
+        second = generate_clipart_prompt_series(self.sample_data())
 
         self.assertEqual(
             [entry.to_dict() for entry in first],
@@ -85,8 +88,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertNotIn("Series item", first[-1].prompt)
 
     def test_clipart_prompt_uses_structured_sections_for_provider_prompt(self):
-        prompts = generate_prompt_series(
-            ProjectMode.CLIPART,
+        prompts = generate_clipart_prompt_series(
             PromptGeneratorData(
                 theme="весенняя коллекция",
                 subjects=["лиса"],
@@ -107,8 +109,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertIn("с корзинкой", prompts[1].prompt)
 
     def test_clipart_prompt_can_add_local_chroma_key_instructions(self):
-        prompts = generate_prompt_series(
-            ProjectMode.CLIPART,
+        prompts = generate_clipart_prompt_series(
             PromptGeneratorData(
                 subjects=["winter wreath"],
                 style="watercolor",
@@ -122,8 +123,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertEqual(prompts[0].chroma_key_color, "blue")
 
     def test_clipart_series_chooses_key_per_prompt_without_manual_default(self):
-        prompts = generate_prompt_series(
-            ProjectMode.CLIPART,
+        prompts = generate_clipart_prompt_series(
             PromptGeneratorData(
                 subjects=["blue ribbon with green leaves"],
                 chroma_key_enabled=True,
@@ -136,8 +136,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
         self.assertNotIn("#0000FF", prompts[0].prompt)
 
     def test_clipart_series_keeps_selected_chroma_materials(self):
-        prompts = generate_prompt_series(
-            ProjectMode.CLIPART,
+        prompts = generate_clipart_prompt_series(
             PromptGeneratorData(
                 subjects=["eucalyptus branch"],
                 chroma_key_enabled=True,
@@ -195,7 +194,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
             restrictions=[long_value],
         )
 
-        prompts = generate_prompt_series(ProjectMode.CLIPART, data)
+        prompts = generate_clipart_prompt_series(data)
 
         self.assertEqual(len(prompts), 1)
         prompt = prompts[0].prompt
@@ -261,7 +260,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
             variations=["sitting"],
         )
 
-        prompts = generate_prompt_series(ProjectMode.CLIPART, data)
+        prompts = generate_clipart_prompt_series(data)
 
         self.assertEqual(
             [entry.prompt for entry in prompts],
@@ -273,15 +272,14 @@ class V3PromptGeneratorTests(unittest.TestCase):
 
     def test_empty_input_and_processing_mode_fail_clearly(self):
         with self.assertRaisesRegex(PromptGeneratorError, "field|object"):
-            generate_prompt_series(ProjectMode.CLIPART, PromptGeneratorData())
+            generate_clipart_prompt_series(PromptGeneratorData())
         with self.assertRaisesRegex(PromptGeneratorError, "only available"):
             prompt_generator_defaults(ProjectMode.PROCESSING)
 
     def test_results_use_editable_prompt_entry_contract(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
-        entries = generate_into_project(
+        entries = generate_clipart_into_project(
             state,
-            ProjectMode.CLIPART,
             self.sample_data(),
         )
 
@@ -328,7 +326,7 @@ class V3PromptGeneratorTests(unittest.TestCase):
     def test_generator_fields_and_manual_edits_survive_project_draft(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
         data = self.sample_data()
-        generate_into_project(state, ProjectMode.CLIPART, data)
+        generate_clipart_into_project(state, data)
         state.clipart.prompts[0].prompt = "Edited after generation"
 
         with tempfile.TemporaryDirectory(prefix="clipart-v3-generator-") as temp:

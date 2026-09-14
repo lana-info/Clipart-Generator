@@ -1020,12 +1020,14 @@ class PromptInputPage(ScrollableStepPage):
         self._preview()
         self.changed()
 
+    def _generate_series(self, data: PromptGeneratorData) -> list[PromptEntry]:
+        if self.generator_mode is None:
+            raise PromptGeneratorError("Prompt generator mode is not configured")
+        return generate_prompt_series(self.generator_mode, data)
+
     def _preview(self, *_: Any) -> None:
         try:
-            entries = generate_prompt_series(
-                self.generator_mode,
-                self._generator_data(),
-            )
+            entries = self._generate_series(self._generator_data())
         except PromptGeneratorError as error:
             self._generated_variants = []
             self.preview_label.setText("Заполните хотя бы одно поле конструктора.")

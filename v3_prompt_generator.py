@@ -18,9 +18,6 @@ from v3_project_state import (
     clipart_prompt_generator_defaults,
     pinterest_prompt_generator_defaults,
 )
-from clipart_prompt_schema import ClipartPromptFields, render_clipart_prompt
-from chroma_key import chroma_key_prompt_block
-from chroma_key_selection import select_chroma_key_color
 from prompt_translation import (
     PromptTranslationBackend,
     translate_prompt_fields,
@@ -123,28 +120,6 @@ def _prompt_sentence(value: str) -> str:
     return normalized
 
 
-def _prompt_language_for_clipart(data: PromptGeneratorData) -> str:
-    """Keep section labels in the same language as entered field values.
-
-    This is intentionally language detection, not translation. A future
-    translation backend must transform values explicitly before rendering an
-    English provider prompt.
-    """
-
-    values = (
-        data.theme,
-        *data.subjects,
-        *data.variations,
-        data.style,
-        data.palette,
-        data.composition,
-        data.background,
-        data.consistency,
-        *data.restrictions,
-    )
-    return "ru" if any(any("а" <= character.casefold() <= "я" for character in value) for value in values) else "en"
-
-
 def generate_prompt_series(
     mode: ProjectMode | str,
     data: PromptGeneratorData,
@@ -152,22 +127,23 @@ def generate_prompt_series(
     translation_backend: PromptTranslationBackend | None = None,
     provider_language: str | None = None,
 ) -> list[PromptEntry]:
-    normalized_mode = (
-        mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
-    )
+    normalized_mode = mode if isinstance(mode, ProjectMode) else ProjectMode(mode)
+    if normalized_mode is ProjectMode.CLIPART:
+        raise PromptGeneratorError(
+            "Clipart prompt rendering is owned by the Clipart module"
+        )
+    if normalized_mode is not ProjectMode.PINTEREST:
+        raise PromptGeneratorError(
+            "Prompt generation is only available for clipart and Pinterest"
+        )
+    del translation_backend, provider_language
     normalized = normalize_generator_data(normalized_mode, data)
     fixed_parts = (
-        normalized.theme,
-        normalized.style,
-        normalized.palette,
-        normalized.composition,
-        normalized.background,
-        normalized.consistency,
-        *normalized.restrictions,
+        normalized.theme, normalized.style, normalized.palette, normalized.composition,
+        normalized.background, normalized.consistency, *normalized.restrictions,
     )
     if not normalized.subjects and not normalized.variations and not any(fixed_parts):
         raise PromptGeneratorError("At least one field or object is required")
-
     subjects = normalized.subjects or [""]
     variations = normalized.variations or [""]
     if len(subjects) * len(variations) > MAX_PROMPT_SERIES_COUNT:
@@ -177,81 +153,18 @@ def generate_prompt_series(
     prompts: list[PromptEntry] = []
     for subject in subjects:
         for variation in variations:
-            chroma_key_color = ""
-            if normalized_mode is ProjectMode.CLIPART:
-                clipart_fields = ClipartPromptFields(
-                    object=subject,
-                    scene=normalized.theme,
-                    style=normalized.style,
-                    palette=normalized.palette,
-                    composition=normalized.composition,
-                    background=normalized.background,
-                    details=variation,
-                    restrictions=tuple(normalized.restrictions),
-                    technical_requirements=normalized.consistency,
-                )
-                source_language = _prompt_language_for_clipart(normalized)
-                target_language = provider_language or source_language
-                translation = translate_prompt_fields(
-                    clipart_fields.to_dict(),
-                    source_language=source_language,
-                    target_language=target_language,
-                    backend=translation_backend,
-                )
-                if translation.translated:
-                    translated_fields = dict(translation.fields)
-                    translated_fields["restrictions"] = tuple(
-                        translated_fields.get("restrictions", ())
-                    )
-                    clipart_fields = ClipartPromptFields(
-                        **translated_fields,
-                    )
-                prompt = render_clipart_prompt(
-                    clipart_fields,
-                    language=target_language if translation.translated else source_language,
-                )
-                if normalized.chroma_key_enabled:
-                    # A user should not have to predict what colour is safe.
-                    # Choose per prompt because one series can mix subjects.
-                    chroma_key_color = select_chroma_key_color(prompt).color
-                    try:
-                        key_block = chroma_key_prompt_block(
-                            chroma_key_color,
-                            watercolor="watercolor" in " ".join(
-                                (normalized.style, normalized.theme)
-                            ).casefold()
-                            or "акварел" in " ".join(
-                                (normalized.style, normalized.theme)
-                            ).casefold(),
-                            materials=normalized.chroma_key_materials,
-                        )
-                    except ValueError as error:
-                        raise PromptGeneratorError(str(error)) from error
-                    prompt += "\n" + key_block
-            else:
-                prompt_parts = (
-                    normalized.theme,
-                    subject,
-                    variation,
-                    normalized.style,
-                    normalized.palette,
-                    normalized.composition,
-                    normalized.background,
-                    normalized.consistency,
-                    *normalized.restrictions,
-                )
-                prompt = " ".join(
-                    sentence
-                    for part in prompt_parts
-                    if (sentence := _prompt_sentence(part))
-                )
-            prompts.append(
-                PromptEntry(prompt=prompt, chroma_key_color=chroma_key_color)
+            prompt_parts = (
+                normalized.theme, subject, variation, normalized.style, normalized.palette,
+                normalized.composition, normalized.background, normalized.consistency,
+                *normalized.restrictions,
             )
+            prompt = " ".join(
+                sentence for part in prompt_parts
+                if (sentence := _prompt_sentence(part))
+            )
+            prompts.append(PromptEntry(prompt=prompt))
     return normalize_prompt_entries(
-        prompts,
-        limit=MAX_PROMPT_SERIES_COUNT,
-        deduplicate=False,
+        prompts, limit=MAX_PROMPT_SERIES_COUNT, deduplicate=False
     )
 
 

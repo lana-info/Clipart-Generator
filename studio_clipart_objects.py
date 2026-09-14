@@ -53,7 +53,7 @@ def fill_recipe(items, counts):
 
 def compile_objects(recipe, generator):
     from v3_project_state import ProjectMode, PromptGeneratorData
-    from v3_prompt_generator import generate_prompt_series
+    from clipart_prompt_generator import generate_clipart_prompt_series
     recipe.validate()
     items = validate_objects(recipe.objects)
     if not items or any(not item['name'].strip() for item in items):
@@ -92,7 +92,7 @@ def compile_objects(recipe, generator):
         if any(len(s) > 4000 for s in (fields['theme'], fields['composition'], *fields['variations'])):
             raise ValueError('Сократите объединённое описание объекта до 4000 символов')
         # Use the existing language/chroma pipeline, preserving its validation.
-        entry = generate_prompt_series(ProjectMode.CLIPART, PromptGeneratorData(**fields))[0]
+        entry = generate_clipart_prompt_series(PromptGeneratorData(**fields))[0]
         entry.result_kind = 'clipart'
         entry.object_id = item['id']
         prompts.append(entry)

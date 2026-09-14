@@ -11,6 +11,7 @@ BUILTIN_WORKFLOWS_ROOT = ROOT / "studio_builtin_workflows"
 
 LEGACY_LAYER_MODULES = {
     "clipart": frozenset({
+        "clipart_prompt_generator",
         "clipart_prompt_schema",
         "studio_alpha_qc",
         "studio_bundle_planner",
@@ -50,11 +51,15 @@ LEGACY_LAYER_MODULES = {
 # Exact reviewed legacy debt at baseline 8ff2c54. Remove entries as those
 # dependencies disappear; any new edge requires explicit architectural review.
 LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
+    ('clipart_prompt_generator', 'chroma_key'),
+    ('clipart_prompt_generator', 'chroma_key_selection'),
+    ('clipart_prompt_generator', 'prompt_translation'),
+    ('clipart_prompt_generator', 'v3_project_state'),
+    ('clipart_prompt_generator', 'v3_prompt_generator'),
     ('clipart_prompt_schema', 'v3_project_state'),
     ('pinterest_pin_composer', 'main'),
     ('studio_clipart_builder_ui', 'v3_project_state'),
     ('studio_clipart_objects', 'v3_project_state'),
-    ('studio_clipart_objects', 'v3_prompt_generator'),
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),
     ('studio_set_export', 'studio_delivery'),
@@ -119,7 +124,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_processing_flow', 'workflow_definitions'),
     ('v3_project_state', 'studio_clipart_recipe'),
     ('v3_project_state', 'studio_export_membership'),
-    ('v3_prompt_generator', 'clipart_prompt_schema'),
     ('v3_run_queue', 'studio_alpha_qc'),
     ('v3_run_queue', 'studio_bundle_planner'),
     ('v3_run_queue', 'studio_clipart_recipe'),
@@ -362,3 +366,7 @@ def test_clipart_and_pinterest_use_shared_image_processing_ui_not_processing_mod
         assert "v3_processing_editor" not in imports
         assert "processing_cleanup" not in imports
         assert "v3_image_processing_ui" in imports
+
+
+def test_core_prompt_generator_does_not_import_clipart_schema():
+    assert "clipart_prompt_schema" not in _imports(ROOT / "v3_prompt_generator.py")

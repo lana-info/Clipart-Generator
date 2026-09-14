@@ -124,10 +124,10 @@ from v3_project_state import (
     RuntimeData,
     StepId,
 )
+from clipart_prompt_generator import generate_clipart_prompt_series
 from v3_prompt_generator import (
     PromptGeneratorError,
     generate_into_project,
-    generate_prompt_series,
     replace_project_prompts,
 )
 from v3_provider_registry import (
@@ -369,6 +369,9 @@ class ClipartProjectPage(ProjectDirectoryPage):
 class ClipartPromptInputPage(PromptInputPage):
     generator_mode = ProjectMode.CLIPART
     supports_prompt_chroma = True
+
+    def _generate_series(self, data: PromptGeneratorData) -> list[PromptEntry]:
+        return generate_clipart_prompt_series(data)
 
     def _file_dialog_type(self):
         return QFileDialog
