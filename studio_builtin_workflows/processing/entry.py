@@ -11,11 +11,6 @@ def register(context):
     )
 
 
-def install(host, *, runtime_settings_provider, worker_factory, authorization_provider, locale):
+def install(host, *, locale):
     from v3_processing_flow import install_processing_flow
-    return install_processing_flow(
-        host,
-        runtime_settings_provider=runtime_settings_provider,
-        worker_factory=worker_factory,
-        authorization_provider=authorization_provider,
-    )
+    return install_processing_flow(host)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
@@ -952,16 +953,29 @@ class V3ApplicationView(QWidget):
         if existing is not None:
             return existing
         registration = self._workflow_registry.require(module_id)
-        host = WorkflowHost(shell, module_id)
-        controller = registration.install(
-            host,
+        view_ref = weakref.ref(self)
+        shell_ref = weakref.ref(shell)
+
+        def create_worker(**kwargs):
+            view = view_ref()
+            scoped_shell = shell_ref()
+            if view is None or scoped_shell is None:
+                raise OSError("Core worker service is unavailable")
+            return view._create_project_worker(scoped_shell, **kwargs)
+
+        host = WorkflowHost(
+            shell,
+            module_id,
             runtime_settings_provider=self._runtime_settings,
-            worker_factory=lambda **kwargs: self._create_project_worker(shell, **kwargs),
+            worker_factory=create_worker,
             authorization_provider=(
                 self._license_gate.authorize_run
                 if self._license_gate is not None
                 else None
             ),
+        )
+        controller = registration.install(
+            host,
             locale=app_locale_from_settings(self._preferences),
         )
         shell.register_workflow_controller(module_id, controller)

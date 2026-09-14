@@ -41,12 +41,7 @@ class LicenseFlowGateTests(unittest.TestCase):
             factory = ClipartFactory()
             authorize = Mock(side_effect=self.denied)
             shell = AppShell(state)
-            controller = install_clipart_flow(
-                WorkflowHost(shell, "clipart"),
-                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
-                worker_factory=factory,
-                authorization_provider=authorize,
-            )
+            controller = install_clipart_flow(WorkflowHost(shell, 'clipart', runtime_settings_provider=lambda: {'kie_api_key': 'test-key'}, worker_factory=factory, authorization_provider=authorize))
             result = controller.start()
 
         self.assertIsNone(result)
@@ -62,12 +57,7 @@ class LicenseFlowGateTests(unittest.TestCase):
             factory = PinterestFactory()
             authorize = Mock(side_effect=self.denied)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
-                worker_factory=factory,
-                authorization_provider=authorize,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: {'kie_api_key': 'test-key'}, worker_factory=factory, authorization_provider=authorize))
             result = controller.start()
 
         self.assertIsNone(result)
@@ -86,12 +76,7 @@ class LicenseFlowGateTests(unittest.TestCase):
             factory = ProcessingFactory()
             authorize = Mock(side_effect=self.denied)
             shell = AppShell(state)
-            controller = install_processing_flow(
-                WorkflowHost(shell, "processing"),
-                runtime_settings_provider=lambda: {},
-                worker_factory=factory,
-                authorization_provider=authorize,
-            )
+            controller = install_processing_flow(WorkflowHost(shell, 'processing', runtime_settings_provider=lambda: {}, worker_factory=factory, authorization_provider=authorize))
             result = controller.start()
 
         self.assertIsNone(result)

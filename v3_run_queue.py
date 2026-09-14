@@ -2525,14 +2525,7 @@ class RunQueueSupport:
         if not self.session.failed_indices:
             return None
         try:
-            authorization_provider = getattr(
-                self.controller,
-                "authorization_provider",
-                None,
-            )
-            if not callable(authorization_provider):
-                raise RunQueueError("Лицензионный сервис не настроен")
-            authorization_provider()
+            self.controller.shell.authorize_run()
         except Exception as error:
             self.controller._error(str(error))
             return None
@@ -2544,7 +2537,7 @@ class RunQueueSupport:
             worker = (
                 create_worker(request)
                 if callable(create_worker)
-                else self.controller.worker_factory(**request.worker_kwargs())
+                else self.controller.shell.create_worker_job(**request.worker_kwargs())
             )
         except Exception as error:
             self.controller._error(str(error))

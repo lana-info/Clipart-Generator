@@ -1256,20 +1256,10 @@ class ProcessingFlowController(QObject):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(
-        self,
-        host: WorkflowHost,
-        *,
-        runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
-        worker_factory: Callable[..., Any] | None = None,
-        authorization_provider: Callable[[], Any] | None = None,
-    ) -> None:
+    def __init__(self, host: WorkflowHost) -> None:
         host = workflow_host_for(host, "processing")
         super().__init__()
         self.shell = host
-        self.runtime_settings_provider = runtime_settings_provider or (lambda: {})
-        self.worker_factory = worker_factory or self._missing_worker_factory
-        self.authorization_provider = authorization_provider or self._missing_authorization
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
@@ -1432,7 +1422,7 @@ class ProcessingFlowController(QObject):
             raise ProcessingFlowError(
                 "Подтвердите права и повторно проверьте выбранные файлы"
             )
-        runtime = self.runtime_settings_provider()
+        runtime = self.shell.runtime_settings()
         if not isinstance(runtime, Mapping):
             raise ProcessingFlowError("Настройки запуска повреждены")
         self._runtime_settings = runtime
@@ -1478,8 +1468,8 @@ class ProcessingFlowController(QObject):
                 raise ProcessingFlowError(
                     "Укажите в настройках: " + ", ".join(missing)
                 )
-            self.authorization_provider()
-            worker = self.worker_factory(**request.worker_kwargs())
+            self.shell.authorize_run()
+            worker = self.shell.create_worker_job(**request.worker_kwargs())
         except Exception as error:
             message = _safe_runtime_error(error, self._runtime_settings)
             self.review_page.set_run_status(message, error=True)
@@ -1511,22 +1501,11 @@ class ProcessingFlowController(QObject):
             self.worker.stop()
 
 
-def install_processing_flow(
-    host: WorkflowHost,
-    *,
-    runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
-    worker_factory: Callable[..., Any] | None = None,
-    authorization_provider: Callable[[], Any] | None = None,
-) -> ProcessingFlowController:
+def install_processing_flow(host: WorkflowHost) -> ProcessingFlowController:
     host = workflow_host_for(host, "processing")
     existing = host.workflow_controller("processing")
     if isinstance(existing, ProcessingFlowController):
         return existing
-    controller = ProcessingFlowController(
-        host,
-        runtime_settings_provider=runtime_settings_provider,
-        worker_factory=worker_factory,
-        authorization_provider=authorization_provider,
-    )
+    controller = ProcessingFlowController(host)
     host.register_workflow_controller("processing", controller)
     return controller

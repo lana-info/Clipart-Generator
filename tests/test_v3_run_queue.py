@@ -433,12 +433,7 @@ class V3RunQueueTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
             factory = WorkerFactory()
-            controller = install_clipart_flow(
-                WorkflowHost(shell, "clipart"),
-                runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
-                worker_factory=factory,
-                authorization_provider=Mock(return_value=None),
-            )
+            controller = install_clipart_flow(WorkflowHost(shell, 'clipart', runtime_settings_provider=lambda: {'kie_api_key': SECRET_KEY}, worker_factory=factory, authorization_provider=Mock(return_value=None)))
             shell.go_next()
             worker = factory.workers[0]
 
@@ -472,12 +467,7 @@ class V3RunQueueTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
             factory = WorkerFactory()
-            controller = install_clipart_flow(
-                WorkflowHost(shell, "clipart"),
-                runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
-                worker_factory=factory,
-                authorization_provider=Mock(return_value=None),
-            )
+            controller = install_clipart_flow(WorkflowHost(shell, 'clipart', runtime_settings_provider=lambda: {'kie_api_key': SECRET_KEY}, worker_factory=factory, authorization_provider=Mock(return_value=None)))
             shell.go_next()
             worker = factory.workers[0]
 
@@ -1228,14 +1218,7 @@ class V3RunQueueTests(unittest.TestCase):
             shell = AppShell(state)
             factory = WorkerFactory()
             authorization = Mock(return_value=None)
-            controller = install_clipart_flow(
-                WorkflowHost(shell, "clipart"),
-                runtime_settings_provider=lambda: {
-                    "kie_api_key": SECRET_KEY
-                },
-                worker_factory=factory,
-                authorization_provider=authorization,
-            )
+            controller = install_clipart_flow(WorkflowHost(shell, 'clipart', runtime_settings_provider=lambda: {'kie_api_key': SECRET_KEY}, worker_factory=factory, authorization_provider=authorization))
 
             shell.go_next()
             self.assertIs(state.current_step, StepId.RESULTS)
@@ -1416,7 +1399,7 @@ class V3RunQueueTests(unittest.TestCase):
             state.processing.selected_files = [str(root / "input.png")]
             state.set_step(StepId.RESULTS)
             shell = AppShell(state)
-            controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
+            controller = install_processing_flow(WorkflowHost(shell, 'processing', worker_factory=WorkerFactory()))
             session = controller.run_queue.start_new(
                 processing_request(root, [root / "input.png"])
             )
@@ -1463,7 +1446,7 @@ class V3RunQueueTests(unittest.TestCase):
                 common=CommonProjectData(work_dir=temp),
             )
             shell = AppShell(state)
-            controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
+            controller = install_processing_flow(WorkflowHost(shell, 'processing', worker_factory=WorkerFactory()))
             session = controller.run_queue.start_new(
                 processing_request(temp, [Path(temp) / "input.png"])
             )
@@ -1598,12 +1581,7 @@ class V3RunQueueTests(unittest.TestCase):
             authorization = Mock(
                 side_effect=[None, LicenseError("Сервер лицензий недоступен")]
             )
-            controller = install_clipart_flow(
-                WorkflowHost(shell, "clipart"),
-                runtime_settings_provider=lambda: {"kie_api_key": SECRET_KEY},
-                worker_factory=factory,
-                authorization_provider=authorization,
-            )
+            controller = install_clipart_flow(WorkflowHost(shell, 'clipart', runtime_settings_provider=lambda: {'kie_api_key': SECRET_KEY}, worker_factory=factory, authorization_provider=authorization))
 
             shell.go_next()
             worker = factory.workers[0]

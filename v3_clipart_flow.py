@@ -1021,20 +1021,10 @@ class ClipartFlowController(QObject):
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(
-        self,
-        host: WorkflowHost,
-        *,
-        runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
-        worker_factory: Callable[..., Any] | None = None,
-        authorization_provider: Callable[[], Any] | None = None,
-    ) -> None:
+    def __init__(self, host: WorkflowHost) -> None:
         host = workflow_host_for(host, "clipart")
         super().__init__()
         self.shell = host
-        self.runtime_settings_provider = runtime_settings_provider or (lambda: {})
-        self.worker_factory = worker_factory or self._missing_worker_factory
-        self.authorization_provider = authorization_provider or self._missing_authorization
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
@@ -1206,7 +1196,7 @@ class ClipartFlowController(QObject):
 
     def _refresh_preflight(self) -> None:
         try:
-            runtime_settings = self.runtime_settings_provider()
+            runtime_settings = self.shell.runtime_settings()
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError("Настройки запуска повреждены")
             runtime_settings = dict(runtime_settings)
@@ -1234,7 +1224,7 @@ class ClipartFlowController(QObject):
             self.start()
 
     def _refresh_fal_cost(self) -> tuple[float, str]:
-        runtime_settings = self.runtime_settings_provider()
+        runtime_settings = self.shell.runtime_settings()
         if not isinstance(runtime_settings, Mapping):
             raise ClipartFlowError("Настройки запуска повреждены")
         api_key = str(runtime_settings.get("fal_api_key") or "").strip()
@@ -1257,7 +1247,7 @@ class ClipartFlowController(QObject):
             self.error.emit(message)
             return None
         try:
-            runtime_settings = self.runtime_settings_provider()
+            runtime_settings = self.shell.runtime_settings()
             if not isinstance(runtime_settings, Mapping):
                 raise ClipartFlowError("Настройки запуска повреждены")
             runtime_settings = dict(runtime_settings)
@@ -1271,8 +1261,8 @@ class ClipartFlowController(QObject):
                 raise ClipartFlowError(
                     "Укажите в настройках: " + ", ".join(missing)
                 )
-            self.authorization_provider()
-            worker = self.worker_factory(**request.worker_kwargs())
+            self.shell.authorize_run()
+            worker = self.shell.create_worker_job(**request.worker_kwargs())
         except (ClipartFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             message = _safe_runtime_error(error, locals().get("runtime_settings"))
             self.review_page.set_run_status(message, error=True)
@@ -1305,22 +1295,11 @@ class ClipartFlowController(QObject):
         self.error.emit(safe_message)
 
 
-def install_clipart_flow(
-    host: WorkflowHost,
-    *,
-    runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
-    worker_factory: Callable[..., Any] | None = None,
-    authorization_provider: Callable[[], Any] | None = None,
-) -> ClipartFlowController:
+def install_clipart_flow(host: WorkflowHost) -> ClipartFlowController:
     host = workflow_host_for(host, "clipart")
     existing = host.workflow_controller("clipart")
     if isinstance(existing, ClipartFlowController):
         return existing
-    controller = ClipartFlowController(
-        host,
-        runtime_settings_provider=runtime_settings_provider,
-        worker_factory=worker_factory,
-        authorization_provider=authorization_provider,
-    )
+    controller = ClipartFlowController(host)
     host.register_workflow_controller("clipart", controller)
     return controller

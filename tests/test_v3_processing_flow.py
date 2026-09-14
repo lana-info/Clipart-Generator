@@ -168,11 +168,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
             shell = AppShell(state)
             runtime_settings: dict[str, str] = {}
-            controller = install_processing_flow(
-                WorkflowHost(shell, "processing"),
-                runtime_settings_provider=lambda: runtime_settings,
-                worker_factory=WorkerFactory(),
-            )
+            controller = install_processing_flow(WorkflowHost(shell, 'processing', runtime_settings_provider=lambda: runtime_settings, worker_factory=WorkerFactory()))
             page = controller.review_page
             controller._refresh_preflight()
             self.assertFalse(page.requirements_label.isHidden())
@@ -193,7 +189,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="processing-more-") as temp:
             state, source = self.make_state(temp)
             shell = AppShell(state)
-            controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
+            controller = install_processing_flow(WorkflowHost(shell, 'processing', worker_factory=WorkerFactory()))
             request = build_processing_run_request(
                 state,
                 {},
@@ -543,7 +539,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
         ):
             setattr(operations, field, False)
         shell = AppShell(state)
-        install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
+        install_processing_flow(WorkflowHost(shell, 'processing', worker_factory=WorkerFactory()))
 
         shell.go_next()
 
@@ -556,7 +552,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             f"C:/images/{index}.png" for index in range(MAX_PROCESSING_FILES + 1)
         ]
         shell = AppShell(state)
-        controller = install_processing_flow(WorkflowHost(shell, "processing"), worker_factory=WorkerFactory())
+        controller = install_processing_flow(WorkflowHost(shell, 'processing', worker_factory=WorkerFactory()))
         self.assertIn(
             "processing_file_limit_exceeded",
             controller.files_page.validation_issues(),
@@ -589,12 +585,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
             shell = AppShell(state)
             factory = WorkerFactory()
-            controller = install_processing_flow(
-                WorkflowHost(shell, "processing"),
-                runtime_settings_provider=lambda: {},
-                worker_factory=factory,
-                authorization_provider=lambda: None,
-            )
+            controller = install_processing_flow(WorkflowHost(shell, 'processing', runtime_settings_provider=lambda: {}, worker_factory=factory, authorization_provider=lambda: None))
             shell.go_next()
             self.assertEqual(len(factory.workers), 1)
             self.assertTrue(factory.workers[0].started)

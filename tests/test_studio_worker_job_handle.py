@@ -55,6 +55,13 @@ def test_core_worker_handle_forwards_only_narrow_lifecycle_and_events():
     assert raw.started is False
 
 
+
+def test_core_worker_handle_does_not_store_raw_worker_reference():
+    raw = RawWorker()
+    handle = CoreWorkerJobHandle(raw)
+    assert not hasattr(handle, "_CoreWorkerJobHandle__worker")
+    assert raw not in __import__("gc").get_referents(handle)
+
 def test_application_core_wraps_worker_before_builtin_workflow_receives_it():
     app = QApplication.instance() or QApplication([])
     raw = RawWorker()

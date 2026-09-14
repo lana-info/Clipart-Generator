@@ -51,9 +51,14 @@ class CoreJobService:
 
 
 # Compatibility handle for the legacy desktop WorkerThread. Core owns the
-# underlying worker; built-in workflows receive only this narrow lifecycle and
-# event surface while the job system migrates onto the public jobs capability.
+# underlying worker in a private capability registry; built-in workflows
+# receive only this narrow lifecycle and event surface.
 from PyQt6.QtCore import QObject, pyqtSignal
+
+from _studio_worker_core import (
+    register_worker, worker_is_running, worker_request_stop_after_current,
+    worker_start, worker_stop,
+)
 
 
 class CoreWorkerJobHandle(QObject):
@@ -64,49 +69,20 @@ class CoreWorkerJobHandle(QObject):
     progress_value = pyqtSignal(int)
     diagnostic = pyqtSignal(object)
 
+    __slots__ = ("_capability_id",)
+
     def __init__(self, worker) -> None:
         super().__init__()
-        if worker is None:
-            raise TypeError("worker is required")
-        self.__worker = worker
-        self.__bridge("progress", self.progress.emit)
-        self.__bridge("item_progress", self.item_progress.emit)
-        self.__bridge("progress_value", self.progress_value.emit)
-        self.__bridge("diagnostic", self.diagnostic.emit)
-        self.__bridge("error", self.error.emit)
-        completed = getattr(worker, "completed", None)
-        if completed is not None and hasattr(completed, "connect"):
-            completed.connect(lambda message="": self.completed.emit(str(message or "")))
-        else:
-            finished = getattr(worker, "finished", None)
-            if finished is not None and hasattr(finished, "connect"):
-                finished.connect(
-                    lambda *args: self.completed.emit(str(args[0] if args else ""))
-                )
-
-    def __bridge(self, name: str, emit) -> None:
-        signal = getattr(self.__worker, name, None)
-        if signal is not None and hasattr(signal, "connect"):
-            signal.connect(emit)
+        self._capability_id = register_worker(worker, self)
 
     def start(self) -> None:
-        start = getattr(self.__worker, "start", None)
-        if not callable(start):
-            raise RuntimeError("Core worker cannot be started")
-        start()
+        worker_start(self._capability_id)
 
     def stop(self) -> None:
-        stop = getattr(self.__worker, "stop", None)
-        if callable(stop):
-            stop()
+        worker_stop(self._capability_id)
 
     def request_stop_after_current(self) -> None:
-        request = getattr(self.__worker, "request_stop_after_current", None)
-        if callable(request):
-            request()
-        else:
-            self.stop()
+        worker_request_stop_after_current(self._capability_id)
 
     def isRunning(self) -> bool:
-        running = getattr(self.__worker, "isRunning", None)
-        return bool(running()) if callable(running) else False
+        return worker_is_running(self._capability_id)

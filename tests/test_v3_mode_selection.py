@@ -497,17 +497,17 @@ class V3ModeSelectionTests(unittest.TestCase):
             for mode in (ProjectMode.CLIPART, ProjectMode.PROCESSING, ProjectMode.PINTEREST):
                 view._handle_mode_selected(mode.value)
                 controller = view._ensure_mode_controller(view.shell, mode)
-                controller.worker_factory(mode="test", work_dir=temp, settings={})
+                controller.shell.create_worker_job(mode="test", work_dir=temp, settings={})
                 first = factory.call_args.kwargs
                 self.assertEqual(first["project_id"], view._active_project_id)
                 self.assertNotIn("project_id", first["settings"])
-                controller.worker_factory(mode="test", work_dir=temp, settings={})
+                controller.shell.create_worker_job(mode="test", work_dir=temp, settings={})
                 self.assertEqual(factory.call_args.kwargs["project_id"], first["project_id"])
                 identities.append(first["project_id"])
                 view.show_new_project()
             self.assertEqual(len(set(identities)), 3)
             self.assertTrue(view.continue_saved_project(identities[0]))
-            view._ensure_mode_controller(view.shell, ProjectMode.CLIPART).worker_factory(
+            view._ensure_mode_controller(view.shell, ProjectMode.CLIPART).shell.create_worker_job(
                 mode="test", work_dir=temp, settings={})
             self.assertEqual(factory.call_args.kwargs["project_id"], identities[0])
             with patch.object(view._project_store, "save", side_effect=OSError("disk")):

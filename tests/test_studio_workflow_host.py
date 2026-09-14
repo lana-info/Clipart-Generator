@@ -64,6 +64,25 @@ def test_workflow_host_for_requires_existing_host_and_validates_scope():
     shell.close()
 
 
+
+def test_workflow_facades_store_no_raw_shell_or_project_state_reference():
+    shell = AppShell(ProjectState(mode=ProjectMode.CLIPART))
+    host = WorkflowHost(shell, "clipart")
+    forbidden = (
+        "_WorkflowHost__shell_ref",
+        "_WorkflowStateView__state_ref",
+        "_WorkflowCommonView__state_ref",
+    )
+    objects = (host, host.state, host.state.common)
+    for obj, name in zip(objects, forbidden):
+        assert not hasattr(obj, name), name
+    import gc
+    for obj in objects:
+        referents = gc.get_referents(obj)
+        assert shell not in referents
+        assert shell.state not in referents
+    shell.close()
+
 def test_workflow_host_has_no_qobject_parent_escape():
     shell = AppShell(ProjectState(mode=ProjectMode.CLIPART))
     host = WorkflowHost(shell, "clipart")
@@ -102,6 +121,64 @@ def test_common_and_current_step_are_mode_scoped():
     assert host.state.current_step is StepId.PROMPTS
     shell.close()
 
+
+
+
+def test_core_capability_registry_does_not_keep_shell_alive_via_bound_callbacks():
+    import gc
+    import weakref
+    from _studio_workflow_core import _CAPABILITIES
+
+    class SignalStub:
+        def connect(self, _callback): pass
+        def disconnect(self, _callback=None): pass
+        def emit(self, *_args): pass
+
+    class ShellStub:
+        def __init__(self):
+            self.state = ProjectState(mode=ProjectMode.CLIPART)
+            self.tokens = object()
+            self.step_changed = SignalStub()
+            self.run_requested = SignalStub()
+            self.state_changed = SignalStub()
+            self.finish_requested = SignalStub()
+        def workflow_definition(self, _mode): return object()
+        def set_step_page(self, *_args): pass
+        def ensure_step_page(self, *_args): return object()
+        def register_workflow_controller(self, *_args): pass
+        def workflow_controller(self, *_args): return None
+
+    class Owner:
+        def __init__(self, shell): self.shell = shell
+        def settings(self): return {}
+
+    shell = ShellStub()
+    owner = Owner(shell)
+    shell_ref = weakref.ref(shell)
+    host = WorkflowHost(shell, "clipart", runtime_settings_provider=owner.settings)
+    token = host._capability_id
+    assert token in _CAPABILITIES
+    del owner
+    del shell
+    gc.collect()
+    assert shell_ref() is None
+    assert token not in _CAPABILITIES
+
+def test_builtin_controller_stores_no_core_service_callbacks():
+    shell = AppShell(ProjectState(mode=ProjectMode.CLIPART))
+    host = WorkflowHost(
+        shell,
+        "clipart",
+        runtime_settings_provider=lambda: {},
+        worker_factory=lambda **_kwargs: object(),
+        authorization_provider=lambda: None,
+    )
+    controller = install_clipart_flow(host)
+    for name in (
+        "runtime_settings_provider", "worker_factory", "authorization_provider",
+    ):
+        assert not hasattr(controller, name), name
+    shell.close()
 
 def test_builtin_flows_do_not_import_app_shell_implementation():
     for filename in (

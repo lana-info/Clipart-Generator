@@ -164,7 +164,7 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
             PromptEntry("Pin with reference", ["reference.png"]),
         ]
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         page = controller.pages[StepId.PIN_FORMAT_MODEL]
 
         self.assertFalse(hasattr(page, "reference_advanced"))
@@ -543,10 +543,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
             orchestrator = CancellationAwarePinterestOrchestrator(variants)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None))
             workers: list[PinterestPinWorkerAdapter] = []
 
             def create_worker(request):
@@ -609,10 +606,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 )
             ]
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None))
             request = build_pinterest_run_request(state)
             session = RunQueueSession(request, ProjectMode.PINTEREST)
             for item in session.items:
@@ -682,11 +676,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             state.pinterest.pin.product_paths = [str(product_path)]
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                worker_factory=Mock(side_effect=AssertionError("legacy worker must not run")),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=Mock(side_effect=AssertionError('legacy worker must not run')), authorization_provider=lambda: None))
 
             shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
             request = controller.start()
@@ -742,7 +732,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         """Clipart prompt/content and cleanup pages must not leak into Pinterest."""
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
 
         self.assertEqual(
             state.route,
@@ -808,11 +798,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             state = self.make_state(temp)
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-                locale="en",
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None), locale='en')
             shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
 
             request = controller.start()
@@ -831,7 +817,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         """Combining the source product with copy fields makes the two-step route deceptive."""
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
 
         product_page = controller.pages[StepId.PROJECT]
         copy_page = controller.pages[StepId.PROMPTS]
@@ -846,7 +832,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         """Inherited generation controls must not leak Russian status into the English route."""
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory(), locale="en")
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()), locale='en')
 
         page = controller.pages[StepId.PIN_FORMAT_MODEL]
 
@@ -878,7 +864,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             Image.new("RGBA", (8, 10), "black").save(second_product)
             state = ProjectState(mode=ProjectMode.PINTEREST)
             shell = AppShell(state)
-            controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
             page = controller.pages[StepId.PROJECT]
 
             page.set_product_paths((str(first_product), str(second_product)))
@@ -921,11 +907,7 @@ class V3PinterestFlowTests(unittest.TestCase):
     def test_install_propagates_locale_to_real_pinterest_pages(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(
-            WorkflowHost(shell, "pinterest"),
-            worker_factory=WorkerFactory(),
-            locale="en-US",
-        )
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()), locale='en-US')
 
         self.assertEqual(
             controller.pages[StepId.PROMPTS].card.title_label.text(),
@@ -995,7 +977,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             ]
             factory = WorkerFactory()
             shell = AppShell(state)
-            controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=factory)
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=factory))
             page = controller.pages[StepId.RESULTS]
 
             self.assertEqual(len(page.variant_cards), 6)
@@ -1025,10 +1007,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             state = self.make_state(temp)
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None))
             shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
             self.assertIsNotNone(controller.start())
             self.assertTrue(self.wait_for_worker(controller.worker))
@@ -1104,7 +1083,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 ),
             ]
             shell = AppShell(state)
-            controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
             page = controller.pages[StepId.RESULTS]
 
             exported = page.export_accepted()
@@ -1179,11 +1158,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
             state.pinterest.results = [previous]
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: (),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: (), authorization_provider=lambda: None))
 
             self.assertIsNone(controller.regenerate_variant("template-01"))
 
@@ -1213,10 +1188,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             def reject_authorization() -> None:
                 raise v3_pinterest_flow.LicenseError("authorization failed")
 
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=reject_authorization,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=reject_authorization))
 
             self.assertIsNone(controller.regenerate_variant("template-01"))
 
@@ -1242,10 +1214,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
             state.pinterest.results = [previous]
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None))
 
             def fail_worker_creation(_: PinterestPinRunRequest) -> PinterestPinWorkerAdapter:
                 raise OSError("worker creation failed")
@@ -1272,11 +1241,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 )
             ]
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-                locale="en",
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None), locale='en')
             controller.create_worker_for_request = (  # type: ignore[method-assign]
                 lambda _: FakeWorker()
             )
@@ -1293,10 +1258,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             state = self.make_state(temp)
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None))
 
             shell.go_next()
             self.assertTrue(self.wait_for_worker(controller.worker))
@@ -1326,10 +1288,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             state = self.make_state(temp)
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', authorization_provider=lambda: None))
 
             shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
             controller.start()
@@ -1354,7 +1313,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
         ]
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
 
         controller.pages[StepId.RESULTS]
 
@@ -1376,7 +1335,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
         ]
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         page = controller.pages[StepId.PROMPTS]
 
         page.title_edit.setText("Text-only revision")
@@ -1396,7 +1355,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             )
         ]
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         page = controller.pages[StepId.RESULTS]
 
         warning_copy = " ".join(
@@ -1407,7 +1366,7 @@ class V3PinterestFlowTests(unittest.TestCase):
     def test_pinterest_pages_omit_clipart_transparency_and_background_cleanup_controls(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         pages = (
             controller.pages[StepId.PROJECT],
             controller.pages[StepId.PROMPTS],
@@ -1449,7 +1408,7 @@ class V3PinterestFlowTests(unittest.TestCase):
     def test_pinterest_route_omits_legacy_prompt_review_page(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         self.assertNotIn(StepId.PROMPT_REVIEW, controller.pages)
 
     def test_vertical_ratio_is_default_and_supported_ratio_can_change(self):
@@ -1457,7 +1416,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         self.assertEqual(state.pinterest.generation.ratio, "9:16")
         self.assertEqual(state.pinterest.generation.reference_ratio, "9:16")
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         page = controller.pages[StepId.PIN_FORMAT_MODEL]
 
         self.assertEqual(page.ratio_combo.currentText(), "9:16")
@@ -1481,11 +1440,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             Image.new("RGB", (4, 6), "white").save(image_path)
             state = self.make_state(temp)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
-                worker_factory=WorkerFactory(),
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: {'kie_api_key': 'test-key'}, worker_factory=WorkerFactory()))
             page = controller.pages[StepId.PIN_FORMAT_MODEL]
             page.ratio_combo.setCurrentText("16:9")
             page.resolution_combo.setCurrentText("2K")
@@ -1516,7 +1471,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         )
         state.switch_mode(ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         page = controller.pages[StepId.PIN_FORMAT_MODEL]
 
         self.assertEqual(state.pinterest.generation.model, "gpt-image-2")
@@ -1540,11 +1495,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             reference_path = Path(temp) / "reference.png"
             Image.new("RGB", (4, 6), "white").save(reference_path)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
-                worker_factory=WorkerFactory(),
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: {'kie_api_key': 'test-key'}, worker_factory=WorkerFactory()))
             page = controller.pages[StepId.PIN_FORMAT_MODEL]
             self.assertFalse(page.reference_advanced.isVisible())
 
@@ -1584,7 +1535,7 @@ class V3PinterestFlowTests(unittest.TestCase):
     def test_pinterest_state_does_not_expose_processing_page(self):
         state = ProjectState(mode=ProjectMode.PINTEREST)
         shell = AppShell(state)
-        controller = install_pinterest_flow(WorkflowHost(shell, "pinterest"), worker_factory=WorkerFactory())
+        controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
         self.assertNotIn(StepId.PROCESSING_OPTIONS, controller.pages)
 
     def test_successful_new_run_clears_stale_result_acceptance_and_metadata(self):
@@ -1604,12 +1555,7 @@ class V3PinterestFlowTests(unittest.TestCase):
                 )
             ]
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
-                worker_factory=WorkerFactory(),
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: {'kie_api_key': 'test-key'}, worker_factory=WorkerFactory(), authorization_provider=lambda: None))
 
             shell._run_request_key = (ProjectMode.PINTEREST, StepId.REVIEW_RUN)
             controller.start()
@@ -1647,11 +1593,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-nav-") as temp:
             state = ProjectState(mode=ProjectMode.PINTEREST)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
-                worker_factory=WorkerFactory(),
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: {'kie_api_key': 'test-key'}, worker_factory=WorkerFactory()))
             state.common.work_dir = temp
             self.assertEqual(shell.go_next(), StepId.PROMPTS)
             prompts = controller.pages[StepId.PROMPTS]
@@ -1673,12 +1615,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             factory = WorkerFactory()
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
-                worker_factory=factory,
-                authorization_provider=lambda: None,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: {'kie_api_key': 'test-key'}, worker_factory=factory, authorization_provider=lambda: None))
 
             self.assertEqual(factory.workers, [])
             review_copy = " ".join(
@@ -1698,11 +1635,7 @@ class V3PinterestFlowTests(unittest.TestCase):
             state.set_step(StepId.REVIEW_RUN)
             factory = WorkerFactory()
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                runtime_settings_provider=lambda: {},
-                worker_factory=factory,
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', runtime_settings_provider=lambda: {}, worker_factory=factory))
             self.assertIn("фотографию товара", controller.review_page.preflight_status_label.text())
             shell.go_next()
             self.assertEqual(factory.workers, [])
@@ -1711,10 +1644,7 @@ class V3PinterestFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="pinterest-v3-ui-") as temp:
             state = self.make_state(temp)
             shell = AppShell(state)
-            controller = install_pinterest_flow(
-                WorkflowHost(shell, "pinterest"),
-                worker_factory=WorkerFactory(),
-            )
+            controller = install_pinterest_flow(WorkflowHost(shell, 'pinterest', worker_factory=WorkerFactory()))
             shell.resize(980, 700)
             shell.show()
             self.app.processEvents()

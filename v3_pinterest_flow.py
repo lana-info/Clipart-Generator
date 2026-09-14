@@ -1371,9 +1371,6 @@ class PinterestFlowController(QObject):
         self,
         host: WorkflowHost,
         *,
-        runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
-        worker_factory: Callable[..., Any] | None = None,
-        authorization_provider: Callable[[], Any] | None = None,
         provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
         locale: str = "ru",
     ) -> None:
@@ -1381,9 +1378,6 @@ class PinterestFlowController(QObject):
         super().__init__()
         self.shell = host
         self.locale = normalize_locale(locale)
-        self.runtime_settings_provider = runtime_settings_provider or (lambda: {})
-        self.worker_factory = worker_factory or self._missing_worker_factory
-        self.authorization_provider = authorization_provider or self._missing_authorization
         self.provider_capabilities_provider = (
             provider_capabilities_provider or self._safe_template_capabilities
         )
@@ -1511,7 +1505,7 @@ class PinterestFlowController(QObject):
 
     def _refresh_preflight(self) -> None:
         try:
-            runtime_settings = self.runtime_settings_provider()
+            runtime_settings = self.shell.runtime_settings()
             if not isinstance(runtime_settings, Mapping):
                 raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             runtime_settings = dict(runtime_settings)
@@ -1535,7 +1529,7 @@ class PinterestFlowController(QObject):
             self.start()
 
     def _refresh_fal_cost(self) -> tuple[float, str]:
-        runtime_settings = self.runtime_settings_provider()
+        runtime_settings = self.shell.runtime_settings()
         if not isinstance(runtime_settings, Mapping):
             raise PinterestFlowError("Настройки запуска повреждены")
         api_key = str(runtime_settings.get("fal_api_key") or "").strip()
@@ -1558,7 +1552,7 @@ class PinterestFlowController(QObject):
             self.error.emit(message)
             return None
         try:
-            runtime_settings = self.runtime_settings_provider()
+            runtime_settings = self.shell.runtime_settings()
             if not isinstance(runtime_settings, Mapping):
                 raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             runtime_settings = dict(runtime_settings)
@@ -1569,8 +1563,8 @@ class PinterestFlowController(QObject):
                 raise PinterestFlowError(
                     "Укажите в настройках: " + ", ".join(missing)
                 )
-            self.authorization_provider()
-            worker = self.worker_factory(**request.worker_kwargs())
+            self.shell.authorize_run()
+            worker = self.shell.create_worker_job(**request.worker_kwargs())
         except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             message = _safe_runtime_error(
                 error,
@@ -1613,7 +1607,7 @@ class PinterestFlowController(QObject):
             raise RuntimeError("Pinterest preview page is not installed")
         result = preview._find_result(variant_id)
         try:
-            runtime_settings = self.runtime_settings_provider()
+            runtime_settings = self.shell.runtime_settings()
             if not isinstance(runtime_settings, Mapping):
                 raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             request = self._request(runtime_settings)
@@ -1631,7 +1625,7 @@ class PinterestFlowController(QObject):
                 product_layer=cached_product,
             )
             self._runtime_settings = runtime_settings
-            self.authorization_provider()
+            self.shell.authorize_run()
             worker = self.create_worker_for_request(request)
         except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             self.error.emit(_safe_runtime_error(error, locals().get("runtime_settings")))
@@ -1762,9 +1756,6 @@ class PinterestFlowController(QObject):
 def install_pinterest_flow(
     host: WorkflowHost,
     *,
-    runtime_settings_provider: Callable[[], Mapping[str, Any]] | None = None,
-    worker_factory: Callable[..., Any] | None = None,
-    authorization_provider: Callable[[], Any] | None = None,
     provider_capabilities_provider: Callable[[], Mapping[str, object]] | None = None,
     locale: str = "ru",
 ) -> PinterestFlowController:
@@ -1774,9 +1765,6 @@ def install_pinterest_flow(
         return existing
     controller = PinterestFlowController(
         host,
-        runtime_settings_provider=runtime_settings_provider,
-        worker_factory=worker_factory,
-        authorization_provider=authorization_provider,
         provider_capabilities_provider=provider_capabilities_provider,
         locale=locale,
     )

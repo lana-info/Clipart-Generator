@@ -40,10 +40,12 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertEqual(len(cards), 3)
         self.assertTrue(all(isinstance(card, ModeCard) for card in cards))
         self.assertTrue(all(card.accessibleName() for card in cards))
-        window.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
-        self.app.processEvents()
         gate = window._license_gate
         self.assertIsNotNone(gate)
+        authorize = Mock(return_value=None)
+        gate.authorize_run = authorize
+        window.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+        self.app.processEvents()
         controllers = [window.shell.workflow_controller(ProjectMode.CLIPART.value)]
         self.assertIsNone(window.shell.workflow_controller(ProjectMode.PINTEREST.value))
         self.assertIsNone(window.shell.workflow_controller(ProjectMode.PROCESSING.value))
@@ -52,11 +54,11 @@ class ReleaseEntrypointTests(unittest.TestCase):
             window.mode_selection.mode_cards[mode].start_button.click()
             controllers.append(window.shell.workflow_controller(mode.value))
         self.assertTrue(
-            all(
-                getattr(controller.authorization_provider, "__self__", None) is gate
-                for controller in controllers
-            )
+            all(not hasattr(controller, "authorization_provider") for controller in controllers)
         )
+        for controller in controllers:
+            controller.shell.authorize_run()
+        self.assertEqual(authorize.call_count, len(controllers))
         window.close()
 
     def test_v3_runtime_includes_bundled_local_realesrgan_path(self):
