@@ -44,6 +44,7 @@ from v3_project_state import ProjectMode, ProjectState
 from v3_runtime_adapter import LEGACY_STAGE_PREFIXES, legacy_progress_stage
 from run_lifecycle import RunLifecycle
 from v3_transparency_preview import ClipartTransparencyPreview
+from studio_run_results_extension import RunResultsExtension
 
 
 MAX_RUN_ITEMS = 10_000
@@ -1525,9 +1526,11 @@ class RunResultsPage(QWidget):
         state: ProjectState,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        results_extension: RunResultsExtension | None = None,
     ) -> None:
         super().__init__()
         self.state = state
+        self.results_extension = results_extension
         self.session: RunQueueSession | None = None
         self._completion_dialog: RunCompletionDialog | None = None
         self._completion_shown_at: float | None = None
@@ -1649,7 +1652,12 @@ class RunResultsPage(QWidget):
             ButtonVariant.PRIMARY,
         )
         self.open_folder_button.clicked.connect(self._open_folder)
-        self.export_sets_button = V3Button('Экспорт наборов ZIP', ButtonVariant.SECONDARY)
+        export_label = str(
+            getattr(self.results_extension, "export_action_label", "") or ""
+        ).strip()
+        self.export_sets_button = V3Button(
+            export_label or "Дополнительный экспорт", ButtonVariant.SECONDARY
+        )
         self.export_sets_button.clicked.connect(self._export_sets)
         self.check_transparency_button = V3Button(
             "Проверить прозрачность",
@@ -1720,8 +1728,14 @@ class RunResultsPage(QWidget):
 
     def refresh_from_state(self) -> None:
         session = self.session
-        self.export_sets_button.setVisible(self.state.mode is ProjectMode.CLIPART)
-        self.export_sets_button.setEnabled(bool(session and not session.running and self._export_paths()))
+        export_supported = bool(
+            self.results_extension is not None
+            and str(getattr(self.results_extension, "export_action_label", "") or "").strip()
+        )
+        self.export_sets_button.setVisible(export_supported)
+        self.export_sets_button.setEnabled(
+            bool(export_supported and session and not session.running and self._export_paths())
+        )
         if session is None:
             self._transparency_paths = []
             self.stop_button.hide()
@@ -1817,171 +1831,51 @@ class RunResultsPage(QWidget):
         for item in self.session.items:
             if (item.status is RunItemStatus.SUCCEEDED and item.output_path
                     and Path(item.output_path).resolve() == source.resolve()):
-                membership = self.state.clipart.export_membership
-                previous = membership.get(item.output_path) or membership.get(str(source.resolve()))
-                if previous is not None:
-                    from studio_export_membership import validate_export_membership
-                    membership = validate_export_membership(membership)
-                    previous = membership.get(item.output_path) or membership[str(source.resolve())]
-                    membership[str(destination)] = dict(previous, memberships=[
-                        dict(link) for link in previous['memberships']])
-                    self.state.clipart.export_membership = membership
+                if self.results_extension is not None:
+                    self.results_extension.on_edited_output(
+                        self.state,
+                        (item.output_path, str(source.resolve())),
+                        destination,
+                    )
                 item.output_path = str(destination)
                 item.editor_output_path = str(destination)
         self.membership_changed.emit()
         self.session.changed.emit()
 
     def _seed_bundle_membership(self):
-        if self.state.mode is not ProjectMode.CLIPART or not self.session:
+        if self.results_extension is None or self.session is None:
             return False
-        recipe_data = self.state.clipart.recipe
-        if not isinstance(recipe_data, dict):
-            return False
-        try:
-            from studio_clipart_recipe import ClipartRecipe
-            from studio_bundle_planner import validate_bundle_plan
-            from studio_export_membership import (
-                asset_id_for_path, validate_export_membership,
-            )
-            recipe = ClipartRecipe.from_dict(recipe_data)
-            plan = validate_bundle_plan(recipe.bundle_plan, recipe.objects)
-            membership = validate_export_membership(self.state.clipart.export_membership)
-        except (TypeError, ValueError):
-            return False
-        export_paths = {str(path.resolve()): path.resolve() for path in self._export_paths()}
-        by_object = {}
-        for item in self.session.items:
-            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path \
-                    or not isinstance(item.payload, dict):
-                continue
-            object_id = str(item.payload.get('object_id') or '').strip()
-            try:
-                resolved = str(Path(item.output_path).resolve())
-            except OSError:
-                continue
-            if object_id and resolved in export_paths:
-                by_object.setdefault(object_id, set()).add(resolved)
-        changed = False
-        for object_id, outputs in by_object.items():
-            if len(outputs) != 1:
-                continue
-            path = next(iter(outputs))
-            if path in membership:
-                continue
-            links = [
-                {'set_id': entry['set_id'], 'title': entry['title'], 'included': True}
-                for entry in plan['sets'] if object_id in entry['item_ids']
-            ]
-            if not links:
-                continue
-            candidate = dict(membership)
-            candidate[path] = {
-                'version': 2, 'asset_id': asset_id_for_path(path), 'memberships': links,
-            }
-            membership = validate_export_membership(candidate)
-            changed = True
+        changed = bool(self.results_extension.seed_membership(
+            self.state, self.session, self._export_paths()
+        ))
         if changed:
-            self.state.clipart.export_membership = membership
             self.membership_changed.emit()
         return changed
 
     def _bundle_export_issues(self):
-        if self.state.mode is not ProjectMode.CLIPART or not self.session:
+        if self.results_extension is None or self.session is None:
             return []
-        recipe_data = self.state.clipart.recipe
-        if not isinstance(recipe_data, dict):
-            return []
-        try:
-            from studio_clipart_recipe import ClipartRecipe
-            from studio_bundle_planner import validate_bundle_plan
-            recipe = ClipartRecipe.from_dict(recipe_data)
-            plan = validate_bundle_plan(recipe.bundle_plan, recipe.objects)
-        except (TypeError, ValueError):
-            return []
-        expected = []
-        seen = set()
-        for entry in plan['sets']:
-            for object_id in entry['item_ids']:
-                if object_id not in seen:
-                    expected.append(object_id)
-                    seen.add(object_id)
-        paths_by_object = {object_id: set() for object_id in expected}
-        export_paths = {str(path.resolve()) for path in self._export_paths()}
-        for item in self.session.items:
-            if (item.status is not RunItemStatus.SUCCEEDED or not item.output_path
-                    or not isinstance(item.payload, dict)):
-                continue
-            object_id = str(item.payload.get('object_id') or '').strip()
-            if object_id not in paths_by_object:
-                continue
-            try:
-                resolved = str(Path(item.output_path).resolve())
-            except OSError:
-                continue
-            if resolved in export_paths:
-                paths_by_object[object_id].add(resolved)
-        issues = []
-        for object_id in expected:
-            paths = sorted(paths_by_object[object_id])
-            count = len(paths)
-            if count == 0:
-                issues.append({'kind': 'missing', 'object_id': object_id, 'count': 0, 'paths': []})
-            elif count > 1:
-                issues.append({'kind': 'ambiguous', 'object_id': object_id, 'count': count, 'paths': paths})
-        return issues
+        return list(self.results_extension.export_issues(
+            self.state, self.session, self._export_paths()
+        ))
 
     def _alpha_qc_reports(self, paths=None):
-        """Inspect transparent-intent final PNGs locally, without changing files."""
-        if self.state.mode is not ProjectMode.CLIPART or self.session is None:
+        if self.results_extension is None or self.session is None:
             return []
-        from result_background_policy import keeps_background
-        from studio_alpha_qc import inspect_alpha_png
-
-        requested = {
-            str(Path(path).resolve()) for path in (paths if paths is not None else self._export_paths())
-        }
-        opening_roles = {}
-        recipe_data = self.state.clipart.recipe
-        if isinstance(recipe_data, dict):
-            try:
-                from studio_clipart_recipe import ClipartRecipe
-                recipe = ClipartRecipe.from_dict(recipe_data)
-                opening_roles = {}
-                for obj in recipe.objects:
-                    role = obj['role']
-                    text = ' '.join(str(obj.get(key) or '') for key in ('name', 'layout')).casefold()
-                    opening_roles[obj['id']] = (
-                        role == 'wreath' or (role == 'border' and ('frame' in text or 'рамк' in text))
-                    )
-            except (TypeError, ValueError):
-                opening_roles = {}
-        reports = []
-        seen = set()
-        for item in self.session.items:
-            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
-                continue
-            try:
-                resolved = str(Path(item.output_path).resolve())
-            except OSError:
-                continue
-            if resolved not in requested or resolved in seen:
-                continue
-            payload = item.payload if isinstance(item.payload, dict) else {}
-            result_kind = str(payload.get('result_kind') or 'legacy')
-            try:
-                if keeps_background(result_kind):
+        requested = None
+        export_paths = ()
+        if paths is not None:
+            requested = []
+            for path in paths:
+                try:
+                    requested.append(Path(path).resolve())
+                except OSError:
                     continue
-            except ValueError:
-                result_kind = 'legacy'
-            object_id = str(payload.get('object_id') or '').strip()
-            report = inspect_alpha_png(
-                resolved,
-                residue_hint=str(payload.get('chroma_key_color') or '') or None,
-                expect_interior_opening=bool(opening_roles.get(object_id, False)),
-            )
-            reports.append(report)
-            seen.add(resolved)
-        return reports
+        else:
+            export_paths = tuple(self._export_paths())
+        return list(self.results_extension.quality_reports(
+            self.state, self.session, export_paths, requested
+        ))
 
     def _request_quality_fix(self, path):
         if self.session is None:
@@ -2002,24 +1896,26 @@ class RunResultsPage(QWidget):
                 return
 
     def _export_sets(self):
-        if self.state.mode is not ProjectMode.CLIPART:
+        if self.results_extension is None:
             return
         self._seed_bundle_membership()
         paths = self._export_paths()
-        if paths:
-            from studio_set_export_ui import SetExportDialog
-            dialog = SetExportDialog(
-                paths, self, membership=self.state.clipart.export_membership,
-                review_issues=self._bundle_export_issues(),
-                quality_reports=self._alpha_qc_reports(paths),
-            )
-            dialog.membership_saved.connect(self._save_export_membership)
-            dialog.fix_requested.connect(self._request_quality_fix)
-            dialog.exec()
+        if not paths:
+            return
+        self.results_extension.open_export_dialog(
+            self,
+            self.state,
+            paths,
+            review_issues=self._bundle_export_issues(),
+            quality_reports=self._alpha_qc_reports(paths),
+            on_membership_saved=self._save_export_membership,
+            on_fix_requested=self._request_quality_fix,
+        )
 
     def _save_export_membership(self, membership):
-        from studio_export_membership import validate_export_membership
-        self.state.clipart.export_membership = validate_export_membership(membership)
+        if self.results_extension is None:
+            return
+        self.results_extension.save_membership(self.state, membership)
         self.membership_changed.emit()
 
     @staticmethod
@@ -2358,7 +2254,10 @@ def _safe_progress_text(message: Any) -> str:
 
 
 class RunQueueSupport:
-    def __init__(self, controller: Any, mode: ProjectMode) -> None:
+    def __init__(
+        self, controller: Any, mode: ProjectMode, *,
+        results_extension: RunResultsExtension | None = None,
+    ) -> None:
         self.controller = controller
         self.mode = mode
         self.session: RunQueueSession | None = None
@@ -2368,6 +2267,7 @@ class RunQueueSupport:
         self.page = RunResultsPage(
             controller.shell.state,
             tokens=controller.shell.tokens,
+            results_extension=results_extension,
         )
         self.page.stop_requested.connect(self.stop_after_current)
         self.page.immediate_stop_requested.connect(self.stop_now)

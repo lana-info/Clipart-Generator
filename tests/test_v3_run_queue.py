@@ -36,6 +36,7 @@ from v3_run_queue import (
     transparency_candidate_paths,
     _failure_reason,
 )
+from clipart_run_results import ClipartRunResultsExtension
 from v3_wizard import AppShell
 
 
@@ -1853,7 +1854,9 @@ def test_run_results_alpha_qc_checks_only_transparent_intent(tmp_path):
     Image.new('RGBA', (20, 20), (10, 20, 30, 255)).save(clipart)
     Image.new('RGB', (20, 20), (10, 20, 30)).save(surface)
     state = ProjectState(mode=ProjectMode.CLIPART)
-    page = RunResultsPage(state)
+    page = RunResultsPage(
+        state, results_extension=ClipartRunResultsExtension()
+    )
     page.session = type('Session', (), {
         'items': [
             RunItem(1, 'clipart', status=RunItemStatus.SUCCEEDED, output_path=str(clipart),
@@ -1914,7 +1917,9 @@ def test_run_results_requests_interior_opening_qc_for_wreath_role_only(tmp_path,
                              payload={'result_kind': 'clipart', 'object_id': obj['id']}))
     state = ProjectState(mode=ProjectMode.CLIPART)
     state.clipart.recipe = recipe.to_dict()
-    page = RunResultsPage(state)
+    page = RunResultsPage(
+        state, results_extension=ClipartRunResultsExtension()
+    )
     page.session = type('Session', (), {'items': items})()
     seen = {}
     def fake(path, **kwargs):

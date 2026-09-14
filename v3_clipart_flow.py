@@ -1045,8 +1045,13 @@ class ClipartFlowController(QObject):
         self.worker: Any | None = None
         self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
+        from clipart_run_results import ClipartRunResultsExtension
 
-        self.run_queue = RunQueueSupport(self, ProjectMode.CLIPART)
+        self.run_queue = RunQueueSupport(
+            self,
+            ProjectMode.CLIPART,
+            results_extension=ClipartRunResultsExtension(),
+        )
         self.pages = LazyPageRegistry(shell, ProjectMode.CLIPART)
         self._install_pages()
         self.run_queue.page.transparency_requested.connect(

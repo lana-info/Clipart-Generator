@@ -10,8 +10,15 @@ from PyQt6.QtWidgets import QApplication, QFileDialog
 
 from studio_set_export import export_clipart_sets, ExportCancelled
 from studio_set_export_ui import SetExportDialog
+from clipart_run_results import ClipartRunResultsExtension
 from v3_project_state import ProjectState, ProjectMode, PromptEntry, save_project_draft, load_project_draft
 from v3_run_queue import RunResultsPage, RunItem, RunItemStatus
+
+
+def _clipart_results_page(state):
+    return RunResultsPage(
+        state, results_extension=ClipartRunResultsExtension()
+    )
 
 
 @pytest.fixture
@@ -82,7 +89,7 @@ def test_cancel_before_publish_removes_staging(images, tmp_path):
 
 
 def test_results_only_export_current_successes(images, tmp_path):
-    page = RunResultsPage(ProjectState(mode=ProjectMode.CLIPART))
+    page = _clipart_results_page(ProjectState(mode=ProjectMode.CLIPART))
     page.session = SimpleNamespace(running=False, output_dir=tmp_path, items=[
         RunItem(1, 'success', status=RunItemStatus.SUCCEEDED, output_path=str(images[0])),
         RunItem(2, 'failed', status=RunItemStatus.FAILED, output_path=str(images[1])),
@@ -106,7 +113,7 @@ def test_membership_save_reopen_and_preserve_other_runs(images, tmp_path):
     state.clipart.export_membership = {'/older/result.png': {'title': 'Старый набор', 'included': True}}
     current = _membership_for_sets(images, ['Мини', 'Полный'])
     state.clipart.export_membership.update(current)
-    page = RunResultsPage(state)
+    page = _clipart_results_page(state)
     dialog = SetExportDialog(images, membership=state.clipart.export_membership)
     dialog.membership_saved.connect(page._save_export_membership)
     changed = []
@@ -149,7 +156,7 @@ def test_many_memberships_edit_save_reopen_preserves_other_links(images, tmp_pat
             {key: {'title': title, 'included': True}})[key]['memberships'])
     state = ProjectState(mode=ProjectMode.CLIPART)
     state.clipart.export_membership = membership
-    page = RunResultsPage(state)
+    page = _clipart_results_page(state)
     dialog = SetExportDialog([images[0]], membership=membership)
     dialog.membership_saved.connect(page._save_export_membership)
     dialog._show_manual_editor()
@@ -209,7 +216,7 @@ def test_bundle_plan_seeds_four_memberships_without_duplicate_generation(images)
     recipe.bundle_plan = propose_bundle_plan(recipe.objects)
     state = ProjectState(mode=ProjectMode.CLIPART)
     state.clipart.recipe = recipe.to_dict()
-    page = RunResultsPage(state)
+    page = _clipart_results_page(state)
     root = images[0].parent
     object_id = recipe.bundle_plan['sets'][0]['item_ids'][0]
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
@@ -238,7 +245,7 @@ def test_bundle_plan_does_not_overwrite_manual_membership_or_choose_ambiguous_va
     state.clipart.recipe = recipe.to_dict()
     existing = validate_export_membership({str(images[0].resolve()): {'title': 'Manual', 'included': False}})
     state.clipart.export_membership = existing
-    page = RunResultsPage(state)
+    page = _clipart_results_page(state)
     root = images[0].parent
     ids = recipe.bundle_plan['sets'][-1]['item_ids']
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
@@ -342,7 +349,7 @@ def test_bundle_export_issues_report_missing_and_ambiguous_results(images):
     recipe.bundle_plan = propose_bundle_plan(recipe.objects)
     state = ProjectState(mode=ProjectMode.CLIPART)
     state.clipart.recipe = recipe.to_dict()
-    page = RunResultsPage(state)
+    page = _clipart_results_page(state)
     root = images[0].parent
     ids = recipe.bundle_plan['sets'][-1]['item_ids']
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
@@ -384,7 +391,7 @@ def test_bundle_export_issues_deduplicates_same_png_for_same_object(images):
     recipe.bundle_plan = propose_bundle_plan(recipe.objects)
     state = ProjectState(mode=ProjectMode.CLIPART)
     state.clipart.recipe = recipe.to_dict()
-    page = RunResultsPage(state)
+    page = _clipart_results_page(state)
     root = images[0].parent
     object_id = recipe.bundle_plan['sets'][-1]['item_ids'][0]
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
@@ -438,7 +445,7 @@ def test_bundle_membership_seed_deduplicates_duplicate_session_records(images):
     recipe.bundle_plan = propose_bundle_plan(recipe.objects)
     state = ProjectState(mode=ProjectMode.CLIPART)
     state.clipart.recipe = recipe.to_dict()
-    page = RunResultsPage(state)
+    page = _clipart_results_page(state)
     root = images[0].parent
     object_id = recipe.bundle_plan['sets'][-1]['item_ids'][0]
     page.session = SimpleNamespace(running=False, output_dir=root, items=[
