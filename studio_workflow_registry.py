@@ -1,14 +1,15 @@
 """Generic discovery for trusted built-in workflow compatibility adapters."""
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Callable, Mapping
 
-_MODULE_ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
+from studio_module_api import ModuleApiError, ModuleContext, ModuleRegistration
+
 MAX_ENTRY_BYTES = 128 * 1024
+BUILTIN_WORKFLOW_VERSION = "1.0.0"
 
 
 class WorkflowRegistryError(ValueError):
@@ -17,14 +18,18 @@ class WorkflowRegistryError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class WorkflowRegistration:
-    module_id: str
+    module: ModuleRegistration
     install: Callable[..., object]
 
     def __post_init__(self) -> None:
-        if not isinstance(self.module_id, str) or not _MODULE_ID.fullmatch(self.module_id):
-            raise WorkflowRegistryError("Invalid workflow module id")
+        if not isinstance(self.module, ModuleRegistration):
+            raise WorkflowRegistryError("Invalid public module registration")
         if not callable(self.install):
             raise WorkflowRegistryError("Workflow installer must be callable")
+
+    @property
+    def module_id(self) -> str:
+        return self.module.module_id
 
 
 class WorkflowRegistry:
@@ -57,15 +62,24 @@ def _load_entry(path: Path) -> WorkflowRegistration:
     try:
         if path.stat().st_size > MAX_ENTRY_BYTES:
             raise WorkflowRegistryError("Workflow entry exceeds size limit")
+        context = ModuleContext(path.parent.name, BUILTIN_WORKFLOW_VERSION)
         source = path.read_text(encoding="utf-8")
-        namespace = {
-            "__name__": f"_studio_builtin_{path.parent.name}",
-            "__file__": str(path),
-        }
+        namespace = {"__name__": f"_studio_builtin_{path.parent.name}", "__file__": str(path)}
         exec(compile(source, str(path), "exec"), namespace, namespace)
-        return WorkflowRegistration(namespace.get("MODULE_ID"), namespace.get("install"))
+        register = namespace.get("register")
+        install = namespace.get("install")
+        if not callable(register):
+            raise WorkflowRegistryError("Workflow entry must export register(context)")
+        module = register(context)
+        if not isinstance(module, ModuleRegistration):
+            raise WorkflowRegistryError("Workflow register(context) returned invalid registration")
+        if module.module_id != context.module_id or module.version != context.version:
+            raise WorkflowRegistryError("Workflow registration identity mismatch")
+        return WorkflowRegistration(module, install)
     except WorkflowRegistryError:
         raise
+    except ModuleApiError as exc:
+        raise WorkflowRegistryError("Invalid workflow module registration") from exc
     except Exception as exc:
         raise WorkflowRegistryError("Workflow entry could not be loaded") from exc
 
@@ -89,5 +103,6 @@ def discover_workflows(root: str | Path) -> WorkflowRegistry:
 
 
 __all__ = [
-    "WorkflowRegistration", "WorkflowRegistry", "WorkflowRegistryError", "discover_workflows",
+    "BUILTIN_WORKFLOW_VERSION", "WorkflowRegistration", "WorkflowRegistry",
+    "WorkflowRegistryError", "discover_workflows",
 ]
