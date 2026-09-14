@@ -43,29 +43,18 @@ from pinterest_pin_templates import (
 )
 from security_redaction import redact_text
 
-from v3_clipart_flow import (
-    DEFAULT_TOKENS,
-    ClipartFlowError,
-    ClipartGenerationPage,
-    ClipartProjectPage,
-    ClipartPromptInputPage,
-    ClipartPromptReviewPage,
-    ClipartReviewRunPage,
-    ClipartRunRequest,
-    CostEstimate,
-    ButtonVariant,
-    V3DesignTokens,
-    V3Button,
-    _ScrollableStepPage,
-    _safe_runtime_error,
-    build_clipart_run_request,
-    estimate_clipart_cost,
-    estimate_fal_cost,
+from v3_api_settings import estimate_fal_cost
+from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
+from v3_flow_runtime import CostEstimate, FlowRunRequest, safe_runtime_error as _safe_runtime_error
+from v3_image_generation_ui import ImageGenerationSettingsPage
+from v3_image_review_ui import ImageReviewRunPage
+from v3_prompt_editor_ui import PromptInputPage, PromptReviewPage
+from v3_image_generation_runtime import (
+    build_image_generation_run_request,
     fal_endpoint_quantities,
-    generate_prompt_series,
     missing_runtime_requirements,
-    replace_project_prompts,
 )
+from v3_flow_ui import ProjectDirectoryPage, ScrollableStepPage as _ScrollableStepPage
 from v3_project_state import (
     CommonProjectData,
     GenerationData,
@@ -88,6 +77,10 @@ from v3_wizard import AppShell
 from v3_lazy_loading import LazyPageRegistry
 from v3_localization import message_for, normalize_locale
 from workflow_definitions import workflow_for_mode
+
+
+class PinterestFlowError(ValueError):
+    pass
 
 
 _PINTEREST_REFERENCE_MODEL_BY_TEXT = {
@@ -692,16 +685,16 @@ def build_pinterest_run_request(
     if not isinstance(state, ProjectState):
         raise TypeError("state must be a ProjectState")
     if state.mode is not ProjectMode.PINTEREST:
-        raise ClipartFlowError(message_for("pinterest.error.run_wrong_mode", locale=locale))
+        raise PinterestFlowError(message_for("pinterest.error.run_wrong_mode", locale=locale))
     work_dir = Path(state.common.work_dir).expanduser()
     if not work_dir.is_dir():
-        raise ClipartFlowError(message_for("pinterest.error.work_folder", locale=locale))
+        raise PinterestFlowError(message_for("pinterest.error.work_folder", locale=locale))
     pin = PinterestPinData.from_dict(state.pinterest.pin.to_dict())
     if not pin.product_paths:
-        raise ClipartFlowError(message_for("pinterest.error.missing_product", locale=locale))
+        raise PinterestFlowError(message_for("pinterest.error.missing_product", locale=locale))
     product_path = Path(pin.product_paths[pin.selected_product_index]).expanduser()
     if not product_path.is_file():
-        raise ClipartFlowError(message_for("pinterest.error.product_unavailable", locale=locale))
+        raise PinterestFlowError(message_for("pinterest.error.product_unavailable", locale=locale))
     output_dir = state.output_dir_for_mode(ProjectMode.PINTEREST)
     if not output_dir:
         output_dir = str(work_dir / "output")
@@ -710,7 +703,7 @@ def build_pinterest_run_request(
     try:
         output_path.mkdir(parents=True, exist_ok=True)
     except OSError:
-        raise ClipartFlowError(message_for("pinterest.error.output_folder", locale=locale))
+        raise PinterestFlowError(message_for("pinterest.error.output_folder", locale=locale))
     capabilities = provider_capabilities if isinstance(provider_capabilities, Mapping) else {}
     supports_scene = bool(capabilities.get("background_generation", True))
     protects_product = bool(capabilities.get("protected_product", True))
@@ -927,7 +920,7 @@ class PinterestProductInputPage(_ScrollableStepPage):
             self._syncing = False
 
 
-class PinterestCopyLayoutPage(ClipartPromptInputPage):
+class PinterestCopyLayoutPage(PromptInputPage):
     """Pinterest prompt input: ready prompt with references or CSV only."""
 
     generator_mode = ProjectMode.PINTEREST
@@ -943,7 +936,7 @@ class PinterestCopyLayoutPage(ClipartPromptInputPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         self.locale = normalize_locale(locale)
-        super().__init__(state, changed, advance=advance, tokens=tokens)
+        super().__init__(state, state.clipart, changed, advance=advance, tokens=tokens)
         self.card.title_label.setText(
             _pinterest_text("prompt_input_title", locale=self.locale)
         )
@@ -967,7 +960,7 @@ class PinterestPromptInputPage(PinterestCopyLayoutPage):
     """Compatibility name for the former copy input page."""
 
 
-class PinterestProjectPage(ClipartProjectPage):
+class PinterestProjectPage(ProjectDirectoryPage):
     """Pinterest-localized shell for the shared project-folder editor."""
 
     def __init__(
@@ -979,7 +972,7 @@ class PinterestProjectPage(ClipartProjectPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         self.locale = normalize_locale(locale)
-        super().__init__(state, changed, tokens=tokens)
+        super().__init__(state, changed, output_mode=ProjectMode.CLIPART, tokens=tokens)
         self._set_pinterest_copy()
 
     def _set_pinterest_copy(self) -> None:
@@ -996,7 +989,7 @@ class PinterestProjectPage(ClipartProjectPage):
         )
 
 
-class PinterestPromptReviewPage(ClipartPromptReviewPage):
+class PinterestPromptReviewPage(PromptReviewPage):
     """Pinterest-localized shell for the shared prompt-review editor."""
 
     def __init__(
@@ -1008,7 +1001,7 @@ class PinterestPromptReviewPage(ClipartPromptReviewPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         self.locale = normalize_locale(locale)
-        super().__init__(state, changed, tokens=tokens)
+        super().__init__(state, state.clipart, changed, tokens=tokens)
         title = _pinterest_text("prompt_review_title", locale=self.locale)
         description = _pinterest_text("prompt_review_description", locale=self.locale)
         self.card.title_label.setText(title)
@@ -1262,7 +1255,7 @@ class PinterestPinPreviewPage(_ScrollableStepPage):
         self._rebuild_cards()
 
 
-class PinterestFormatModelPage(ClipartGenerationPage):
+class PinterestFormatModelPage(ImageGenerationSettingsPage):
     allow_shared_text_models = True
     allow_fal_models = True
     shared_generation_settings = False
@@ -1280,7 +1273,8 @@ class PinterestFormatModelPage(ClipartGenerationPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         self.locale = normalize_locale(locale)
-        super().__init__(state, changed, tokens=tokens)
+        self.state = state
+        super().__init__(state.clipart, changed, tokens=tokens)
         self.card.title_label.setText(_pinterest_text("format_title", locale=self.locale))
         self.card.description_label.hide()
         self.setAccessibleName(_pinterest_text("format_accessible", locale=self.locale))
@@ -1323,7 +1317,7 @@ class PinterestProcessingPage(ProcessingPipelineEditor):
         )
 
 
-class PinterestReviewRunPage(ClipartReviewRunPage):
+class PinterestReviewRunPage(ImageReviewRunPage):
     """Pinterest uses the shared prompt-only generation review."""
 
     def __init__(
@@ -1335,8 +1329,12 @@ class PinterestReviewRunPage(ClipartReviewRunPage):
         fal_cost_refresh: Callable[[], tuple[float, str]] | None = None,
     ) -> None:
         self.locale = normalize_locale(locale)
+        self.state = state
         super().__init__(
-            state,
+            state.common,
+            state.clipart,
+            lambda: state.output_dir_for_mode(ProjectMode.CLIPART),
+            lambda value: state.set_output_dir_for_mode(value, ProjectMode.CLIPART),
             tokens=tokens,
             fal_cost_refresh=fal_cost_refresh,
         )
@@ -1406,11 +1404,14 @@ class PinterestFlowController(QObject):
         """No Pinterest AI-scene provider is installed, so protect the product locally."""
         return {"background_generation": False, "protected_product": True}
 
-    def _request(self, runtime_settings: Mapping[str, Any]) -> ClipartRunRequest:
-        self.adapter_state.common.output_dirs[ProjectMode.CLIPART.value] = (
-            self.adapter_state.common.output_dir
+    def _request(self, runtime_settings: Mapping[str, Any]) -> FlowRunRequest:
+        return build_image_generation_run_request(
+            self.adapter_state.common,
+            self.adapter_state.runtime,
+            self.adapter_state.clipart,
+            self.adapter_state.common.output_dir,
+            runtime_settings,
         )
-        return build_clipart_run_request(self.adapter_state, runtime_settings)
 
     def start_processing_again(self) -> None:
         self.shell.state.pinterest.prompts.clear()
@@ -1502,11 +1503,11 @@ class PinterestFlowController(QObject):
         try:
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
+                raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             runtime_settings = dict(runtime_settings)
             request = self._request(runtime_settings)
             missing = missing_runtime_requirements(request)
-        except (ClipartFlowError, OSError, TypeError, ValueError) as error:
+        except (PinterestFlowError, OSError, TypeError, ValueError) as error:
             self.review_page.set_preflight_status(str(error)[:500], ready=False)
             return
         if missing:
@@ -1526,16 +1527,16 @@ class PinterestFlowController(QObject):
     def _refresh_fal_cost(self) -> tuple[float, str]:
         runtime_settings = self.runtime_settings_provider()
         if not isinstance(runtime_settings, Mapping):
-            raise ClipartFlowError("Настройки запуска повреждены")
+            raise PinterestFlowError("Настройки запуска повреждены")
         api_key = str(runtime_settings.get("fal_api_key") or "").strip()
         if not api_key:
-            raise ClipartFlowError("Добавьте Fal.ai API Key в настройках API")
-        quantities = fal_endpoint_quantities(self.adapter_state)
+            raise PinterestFlowError("Добавьте Fal.ai API Key в настройках API")
+        quantities = fal_endpoint_quantities(self.adapter_state.clipart)
         if not quantities:
-            raise ClipartFlowError("В текущем запуске нет операций Fal.ai")
+            raise PinterestFlowError("В текущем запуске нет операций Fal.ai")
         return estimate_fal_cost(api_key, quantities)
 
-    def start(self) -> ClipartRunRequest | None:
+    def start(self) -> FlowRunRequest | None:
         if self.shell.another_run_is_active(self):
             message = _pinterest_text("regeneration_another_run_active", locale=self.locale)
             self.review_page.set_run_status(message, error=True)
@@ -1549,18 +1550,18 @@ class PinterestFlowController(QObject):
         try:
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
+                raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             runtime_settings = dict(runtime_settings)
             request = self._request(runtime_settings)
             self._runtime_settings = runtime_settings
             missing = missing_runtime_requirements(request)
             if missing:
-                raise ClipartFlowError(
+                raise PinterestFlowError(
                     "Укажите в настройках: " + ", ".join(missing)
                 )
             self.authorization_provider()
             worker = self.runtime_adapter.create_worker(**request.worker_kwargs())
-        except (ClipartFlowError, LicenseError, OSError, TypeError, ValueError) as error:
+        except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             message = _safe_runtime_error(
                 error,
                 locals().get("runtime_settings"),
@@ -1604,7 +1605,7 @@ class PinterestFlowController(QObject):
         try:
             runtime_settings = self.runtime_settings_provider()
             if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
+                raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             request = self._request(runtime_settings)
             cached_product = self._product_layer
             if cached_product is not None and cached_product.source_path != request.product_path:
@@ -1622,7 +1623,7 @@ class PinterestFlowController(QObject):
             self._runtime_settings = runtime_settings
             self.authorization_provider()
             worker = self.create_worker_for_request(request)
-        except (ClipartFlowError, LicenseError, OSError, TypeError, ValueError) as error:
+        except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
             self.error.emit(_safe_runtime_error(error, locals().get("runtime_settings")))
             return None
 

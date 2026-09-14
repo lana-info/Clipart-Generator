@@ -3,10 +3,30 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
 from provider_error_messages import friendly_provider_error
 from security_redaction import redact_text
+
+
+@dataclass(frozen=True)
+class CostEstimate:
+    request_count: int
+    estimated_usd: Decimal
+    complete: bool
+    generation_request_count: int = 0
+    processing_request_count: int = 0
+    generation_usd: Decimal = Decimal("0")
+    processing_usd: Decimal = Decimal("0")
+    provider_usd: Mapping[str, Decimal] = field(default_factory=dict)
+    incomplete_providers: tuple[str, ...] = ()
+
+    @property
+    def summary(self) -> str:
+        if not self.complete:
+            return f"{self.request_count} запросов · стоимость не рассчитана полностью"
+        return f"{self.request_count} запросов · ориентировочно ${self.estimated_usd:.3f}"
 
 
 @dataclass
