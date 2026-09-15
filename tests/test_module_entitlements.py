@@ -48,6 +48,33 @@ class ModuleEntitlementTests(unittest.TestCase):
     def verify(self, envelope):
         return self.client._verify_authorization(envelope, "device", "nonce", now=self.now)
 
+    def test_license_service_backend_v1_wire_contract_parses_without_adapter(self):
+        payload = {
+            "license_id": "fixture",
+            "product_id": "clipart-generator",
+            "device_key": "device",
+            "issued_at": self.now.isoformat(),
+            "expires_at": (self.now + timedelta(minutes=5)).isoformat(),
+            "nonce": "nonce",
+            "correlation_id": "correlation",
+            "module_entitlements": {
+                "schema_version": 1,
+                "grants": [{
+                    "module_id": "clipart",
+                    "not_before": self.now.isoformat(),
+                    "expires_at": (self.now + timedelta(days=7)).isoformat(),
+                }],
+            },
+        }
+        envelope = {
+            "schema_version": 1, "algorithm": "Ed25519", "kid": "test",
+            "payload": payload, "signature": encoded(self.key.sign(rfc8785.dumps(payload))),
+        }
+        authorization = self.verify(envelope)
+        self.assertTrue(authorization.allows_module("clipart", now=self.now))
+        self.assertFalse(authorization.allows_module("pinterest", now=self.now))
+        self.assertEqual(authorization.module_entitlements[0].expires_at, self.now + timedelta(days=7))
+
     def test_legacy_authorization_has_no_module_rights(self):
         auth = self.verify(self.envelope())
         self.assertFalse(auth.allows_module("clipart", now=self.now))
