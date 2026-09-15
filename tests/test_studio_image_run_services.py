@@ -171,3 +171,46 @@ def test_worker_signal_error_is_redacted_before_handle_emits_it():
 
     assert seen
     assert secret not in seen[-1]
+
+
+def local_realesrgan_request() -> FlowRunRequest:
+    return FlowRunRequest(
+        mode="mode2_process",
+        work_dir=".",
+        settings={
+            "upscale": True,
+            "upscale_provider": "local_realesrgan",
+        },
+        selected_files=["input.png"],
+    )
+
+
+def test_preflight_never_exposes_core_local_realesrgan_path():
+    private_path = "/home/private-user/tools/realesrgan-missing"
+    gateway = CoreImageRunGateway(
+        runtime_settings_provider=lambda: {"local_realesrgan_dir": private_path},
+        authorization_provider=lambda: None,
+        run_preparer=lambda: None,
+        worker_factory=lambda **_kwargs: RawWorker(),
+    )
+    missing = gateway.preflight(local_realesrgan_request())
+    assert missing == ("Local Real-ESRGAN",)
+    assert private_path not in " ".join(missing)
+
+
+def test_launch_never_exposes_core_local_realesrgan_path():
+    private_path = "/home/private-user/tools/realesrgan-missing"
+    gateway = CoreImageRunGateway(
+        runtime_settings_provider=lambda: {"local_realesrgan_dir": private_path},
+        authorization_provider=lambda: None,
+        run_preparer=lambda: None,
+        worker_factory=lambda **_kwargs: RawWorker(),
+    )
+    try:
+        gateway.launch(local_realesrgan_request())
+    except ImageRunGatewayError as error:
+        message = str(error)
+    else:
+        raise AssertionError("launch should fail preflight")
+    assert "Local Real-ESRGAN" in message
+    assert private_path not in message

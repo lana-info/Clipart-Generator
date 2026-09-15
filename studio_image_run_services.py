@@ -101,7 +101,10 @@ class CoreImageRunGateway:
         request = self._require_request(request)
         runtime = self._runtime_snapshot()
         internal = self._enriched_request(request, runtime)
-        return tuple(missing_runtime_requirements(internal))
+        return tuple(
+            self._safe_message(label, runtime)
+            for label in missing_runtime_requirements(internal)
+        )
 
     def estimate_fal_cost(
         self, endpoint_quantities: Mapping[str, int]
@@ -120,7 +123,10 @@ class CoreImageRunGateway:
         request = self._require_request(request)
         runtime = self._runtime_snapshot()
         internal = self._enriched_request(request, runtime)
-        missing = tuple(missing_runtime_requirements(internal))
+        missing = tuple(
+            self._safe_message(label, runtime)
+            for label in missing_runtime_requirements(internal)
+        )
         if missing:
             raise ImageRunGatewayError(
                 "Укажите в настройках: " + ", ".join(missing)

@@ -629,7 +629,7 @@ def missing_runtime_requirements(request: FlowRunRequest) -> tuple[str, ...]:
             request.settings.get("local_realesrgan_dir")
         )
         if local_error:
-            missing.append(local_error)
+            missing.append("Local Real-ESRGAN")
     return tuple(missing)
 
 
