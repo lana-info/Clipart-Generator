@@ -200,11 +200,12 @@ def test_preflight_never_exposes_core_local_realesrgan_path():
 
 def test_launch_never_exposes_core_local_realesrgan_path():
     private_path = "/home/private-user/tools/realesrgan-missing"
+    calls = []
     gateway = CoreImageRunGateway(
         runtime_settings_provider=lambda: {"local_realesrgan_dir": private_path},
-        authorization_provider=lambda: None,
-        run_preparer=lambda: None,
-        worker_factory=lambda **_kwargs: RawWorker(),
+        authorization_provider=lambda: calls.append("authorize"),
+        run_preparer=lambda: calls.append("prepare"),
+        worker_factory=lambda **_kwargs: calls.append("worker") or RawWorker(),
     )
     try:
         gateway.launch(local_realesrgan_request())
@@ -214,3 +215,4 @@ def test_launch_never_exposes_core_local_realesrgan_path():
         raise AssertionError("launch should fail preflight")
     assert "Local Real-ESRGAN" in message
     assert private_path not in message
+    assert calls == []
