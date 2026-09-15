@@ -25,13 +25,16 @@ def release_worker(capability_id: str) -> None:
     _WORKERS.pop(str(capability_id), None)
 
 
-def _bridge(worker, name: str, emit) -> None:
+def _bridge(worker, name: str, emit, transform=None) -> None:
     signal = getattr(worker, name, None)
     if signal is not None and hasattr(signal, "connect"):
-        signal.connect(emit)
+        if callable(transform):
+            signal.connect(lambda value: emit(transform(value)))
+        else:
+            signal.connect(emit)
 
 
-def register_worker(worker: Any, handle: Any) -> str:
+def register_worker(worker: Any, handle: Any, message_redactor=None) -> str:
     if worker is None:
         raise TypeError("worker is required")
     token = uuid.uuid4().hex
@@ -39,11 +42,12 @@ def register_worker(worker: Any, handle: Any) -> str:
     destroyed = getattr(handle, "destroyed", None)
     if destroyed is not None and hasattr(destroyed, "connect"):
         destroyed.connect(lambda *_args, capability_id=token: release_worker(capability_id))
-    _bridge(worker, "progress", handle.progress.emit)
+    redact = message_redactor if callable(message_redactor) else (lambda value: str(value or ""))
+    _bridge(worker, "progress", handle.progress.emit, redact)
     _bridge(worker, "item_progress", handle.item_progress.emit)
     _bridge(worker, "progress_value", handle.progress_value.emit)
     _bridge(worker, "diagnostic", handle.diagnostic.emit)
-    _bridge(worker, "error", handle.error.emit)
+    _bridge(worker, "error", handle.error.emit, redact)
     completed = getattr(worker, "completed", None)
     finished = getattr(worker, "finished", None)
     has_completed = completed is not None and hasattr(completed, "connect")
@@ -51,17 +55,17 @@ def register_worker(worker: Any, handle: Any) -> str:
     if has_completed:
         if has_finished:
             completed.connect(
-                lambda message="": handle.completed.emit(str(message or ""))
+                lambda message="": handle.completed.emit(redact(message))
             )
         else:
             def terminal_completed(message="", *, capability_id=token) -> None:
-                handle.completed.emit(str(message or ""))
+                handle.completed.emit(redact(message))
                 release_worker(capability_id)
 
             completed.connect(terminal_completed)
     elif has_finished:
         def terminal_finished(*args, capability_id=token) -> None:
-            handle.completed.emit(str(args[0] if args else ""))
+            handle.completed.emit(redact(args[0] if args else ""))
             release_worker(capability_id)
 
         finished.connect(terminal_finished)

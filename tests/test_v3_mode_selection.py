@@ -489,6 +489,37 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.close()
             view.deleteLater()
 
+    def test_composed_image_gateway_enriches_secret_only_at_worker_factory(self):
+        from v3_flow_runtime import FlowRunRequest
+
+        raw_worker = Mock()
+        factory = Mock(return_value=raw_worker)
+        gate = Mock()
+        gate.authorize_run = Mock(return_value=None)
+        view = V3ApplicationView(
+            runtime_settings_provider=lambda: {"kie_api_key": "core-secret"},
+            worker_factory=factory,
+            license_gate=gate,
+        )
+        view._handle_mode_selected(ProjectMode.CLIPART.value)
+        controller = view.shell.workflow_controller("clipart")
+        request = FlowRunRequest(
+            mode="mode1_generate_only",
+            work_dir=".",
+            settings={"text_generation_model": "gpt-image-2"},
+            generated_prompts=[{"prompt": "test", "references": []}],
+        )
+
+        self.assertEqual(controller.shell.image_run_preflight(request), ())
+        handle = controller.shell.image_run_launch(request)
+
+        self.assertIsNotNone(handle)
+        self.assertEqual(factory.call_args.kwargs["settings"]["kie_api_key"], "core-secret")
+        self.assertNotIn("kie_api_key", request.settings)
+        gate.authorize_run.assert_called_once_with()
+        view.close()
+        view.deleteLater()
+
     def test_worker_factory_uses_saved_project_identity_for_all_modes(self):
         with tempfile.TemporaryDirectory() as temp:
             factory = Mock()

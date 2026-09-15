@@ -70,11 +70,8 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_clipart_flow', 'chroma_key'),
     ('v3_clipart_flow', 'chroma_key_selection'),
     ('v3_clipart_flow', 'fal_model_catalog'),
-    ('v3_clipart_flow', 'license_client'),
-    ('v3_clipart_flow', 'main'),
     ('v3_clipart_flow', 'model_catalog'),
     ('v3_clipart_flow', 'output_naming'),
-    ('v3_clipart_flow', 'v3_api_settings'),
     ('v3_clipart_flow', 'v3_image_generation_runtime'),
     ('v3_clipart_flow', 'v3_image_generation_ui'),
     ('v3_clipart_flow', 'v3_image_review_ui'),
@@ -94,7 +91,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_evidence_center', 'v3_project_state'),
     ('v3_evidence_center', 'watermark_status'),
     ('v3_pinterest_flow', 'license_client'),
-    ('v3_pinterest_flow', 'v3_api_settings'),
     ('v3_pinterest_flow', 'v3_image_generation_runtime'),
     ('v3_pinterest_flow', 'v3_image_generation_ui'),
     ('v3_pinterest_flow', 'v3_image_review_ui'),
@@ -110,8 +106,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_processing_editor', 'v3_image_processing_ui'),
     ('v3_processing_editor', 'v3_project_state'),
     ('v3_processing_flow', 'config_schema'),
-    ('v3_processing_flow', 'license_client'),
-    ('v3_processing_flow', 'main'),
     ('v3_processing_flow', 'output_naming'),
     ('v3_processing_flow', 'processing_contract'),
     ('v3_processing_flow', 'v3_image_processing_ui'),
@@ -339,6 +333,20 @@ def test_public_provider_and_job_apis_are_isolated_dependency_boundaries():
         }
         assert local_dependencies == set()
 
+
+
+
+def test_builtin_image_flows_do_not_handle_core_credentials_or_runtime_snapshots():
+    forbidden = (
+        "kie_api_key", "fal_api_key", "photoroom_api_key", "runpod_api_key",
+        "self.shell.runtime_settings()",
+    )
+    for filename in (
+        "v3_clipart_flow.py", "v3_processing_flow.py", "v3_pinterest_flow.py",
+    ):
+        source = (ROOT / filename).read_text(encoding="utf-8")
+        for marker in forbidden:
+            assert marker not in source, f"{filename} exposes Core runtime marker: {marker}"
 
 def test_processing_flow_does_not_import_clipart_implementation():
     imports = _imports(ROOT / "v3_processing_flow.py")

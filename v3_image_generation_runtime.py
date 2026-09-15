@@ -19,7 +19,7 @@ from model_catalog import (
 )
 from output_naming import workspace_layout
 from v3_flow_runtime import CostEstimate, FlowRunRequest
-from v3_image_worker_settings import build_image_worker_settings
+from v3_image_worker_settings import build_image_run_settings
 from v3_project_state import ImageOperationData, PromptEntry
 from v3_provider_registry import (
     provider_requires_api_key, provider_supports_operation, upscale_model_preserves_alpha,
@@ -352,8 +352,9 @@ def _worker_settings(
     data: Any,
     runtime_settings: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
-    return build_image_worker_settings(
-        runtime, data.generation, data.operations, runtime_settings,
+    del runtime_settings  # compatibility parameter; Core owns runtime enrichment.
+    return build_image_run_settings(
+        runtime, data.generation, data.operations,
         run_mode=("both" if _processing_requested(data.operations) else "generate_only"),
     )
 

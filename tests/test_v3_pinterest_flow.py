@@ -128,6 +128,11 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_prompt_only_pinterest_uses_core_image_gateway_not_raw_runtime_settings(self):
+        source = Path(v3_pinterest_flow.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("self.shell.runtime_settings()", source)
+        self.assertIn("self.shell.image_run_launch(", source)
+
     def test_application_installs_the_active_prompt_only_route(self):
         view = V3ApplicationView(
             runtime_settings_provider=lambda: {"kie_api_key": "test-key"},
@@ -187,7 +192,11 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
 
     def test_module_owned_pinterest_worker_is_blocked_when_core_save_fails(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-core-save-") as temp:
-            view = V3ApplicationView(draft_path=Path(temp) / "draft.json")
+            gate = Mock()
+            gate.authorize_run = Mock(return_value=None)
+            view = V3ApplicationView(
+                draft_path=Path(temp) / "draft.json", license_gate=gate
+            )
             view._handle_mode_selected(ProjectMode.PINTEREST.value)
             controller = view.shell.workflow_controller("pinterest")
             request = PinterestPinRunRequest(

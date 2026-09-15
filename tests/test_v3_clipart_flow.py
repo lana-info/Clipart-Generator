@@ -1,4 +1,5 @@
 from studio_workflow_host import WorkflowHost
+from studio_image_run_services import CoreImageRunGateway
 import ast
 import csv
 import os
@@ -43,7 +44,6 @@ from v3_clipart_flow import (
     fal_endpoint_quantities,
     generation_model_options,
     install_clipart_flow,
-    missing_runtime_requirements,
     parse_prompt_csv,
     _safe_runtime_error,
     apply_prompt_text_edit,
@@ -82,6 +82,15 @@ class FakeWorker(QObject):
     def isRunning(self):
         return self.started
 
+
+
+def _test_image_gateway(runtime_settings):
+    return CoreImageRunGateway(
+        runtime_settings_provider=lambda: dict(runtime_settings),
+        authorization_provider=lambda: None,
+        run_preparer=lambda: None,
+        worker_factory=lambda **_kwargs: FakeWorker(),
+    )
 
 class WorkerFactory:
     def __init__(self):
@@ -1338,7 +1347,7 @@ class V3ClipartFlowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-guard-") as temp:
             state = self.make_state(temp)
             request = build_clipart_run_request(state, {})
-            self.assertEqual(missing_runtime_requirements(request), ("KIE API Key",))
+            self.assertEqual(_test_image_gateway({}).preflight(request), ("KIE API Key",))
 
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
@@ -1360,7 +1369,10 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.clipart.generation.model = "fal-ai/flux/schnell"
             request = build_clipart_run_request(state, {"kie_api_key": "test-key"})
 
-        self.assertEqual(missing_runtime_requirements(request), ("Fal.ai API Key",))
+        self.assertEqual(
+            _test_image_gateway({"kie_api_key": "test-key"}).preflight(request),
+            ("Fal.ai API Key",),
+        )
 
     def test_fal_review_keeps_price_refresh_optional_without_confirmation(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-fal-review-") as temp:
@@ -1432,6 +1444,30 @@ class V3ClipartFlowTests(unittest.TestCase):
                 self.assertNotIn(forbidden, lowered)
             self.assertIn("прозрач", lowered)
 
+    def test_clipart_controller_uses_core_image_gateway_not_raw_runtime_settings(self):
+        source = Path(v3_clipart_flow.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("self.shell.runtime_settings()", source)
+        self.assertIn("self.shell.image_run_launch(", source)
+
+    def test_clipart_run_request_never_contains_core_runtime_credentials(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-secret-free-plan-") as temp:
+            state = self.make_state(temp)
+            request = build_clipart_run_request(
+                state,
+                {
+                    "kie_api_key": "kie-secret",
+                    "fal_api_key": "fal-secret",
+                    "photoroom_api_key": "photo-secret",
+                    "runpod_api_key": "runpod-secret",
+                    "local_realesrgan_dir": "/core-only/realesrgan",
+                },
+            )
+            for key in (
+                "kie_api_key", "fal_api_key", "photoroom_api_key",
+                "runpod_api_key", "local_realesrgan_dir",
+            ):
+                self.assertNotIn(key, request.settings)
+
     def test_runtime_settings_are_allowlisted_and_project_bounds_win(self):
         with tempfile.TemporaryDirectory(prefix="clipart-v3-runtime-") as temp:
             state = self.make_state(temp)
@@ -1500,7 +1536,7 @@ class V3ClipartFlowTests(unittest.TestCase):
             state.clipart.operations.upscale_before_provider = "local_realesrgan"
             request = build_clipart_run_request(state, {"kie_api_key": "test-key"})
 
-        missing = missing_runtime_requirements(request)
+        missing = _test_image_gateway({"kie_api_key": "test-key"}).preflight(request)
         self.assertTrue(any("Real-ESRGAN" in item for item in missing))
 
     def test_reference_preflight_rejects_malformed_url_and_non_image_file(self):
@@ -1526,14 +1562,29 @@ class V3ClipartFlowTests(unittest.TestCase):
             def failing_factory(**_):
                 raise ValueError(f"provider rejected {secret}")
 
-            controller = install_clipart_flow(WorkflowHost(shell, 'clipart', runtime_settings_provider=lambda: {'kie_api_key': secret}, worker_factory=failing_factory, authorization_provider=lambda: None))
+            controller = install_clipart_flow(WorkflowHost(
+                shell, 'clipart',
+                runtime_settings_provider=lambda: {'kie_api_key': secret},
+                worker_factory=failing_factory,
+                authorization_provider=lambda: None,
+            ))
             controller.start()
             self.assertNotIn(secret, controller.review_page.run_status_label.text())
 
-            controller._runtime_settings = {"kie_api_key": secret}
+            signal_shell = AppShell(state)
+            signal_shell._run_request_key = (ProjectMode.CLIPART, StepId.REVIEW_RUN)
+            factory = WorkerFactory()
+            signal_controller = install_clipart_flow(WorkflowHost(
+                signal_shell, 'clipart',
+                runtime_settings_provider=lambda: {'kie_api_key': secret},
+                worker_factory=factory,
+                authorization_provider=lambda: None,
+            ))
+            self.assertIsNotNone(signal_controller.start())
             errors = []
-            controller.error.connect(errors.append)
-            controller._error(f"worker failed bearer abc and {secret}")
+            signal_controller.error.connect(errors.append)
+            factory.workers[0].error.emit(f"worker failed bearer abc and {secret}")
+            self.app.processEvents()
             self.assertNotIn(secret, errors[-1])
             self.assertNotIn("bearer abc", errors[-1].lower())
 
@@ -1541,15 +1592,26 @@ class V3ClipartFlowTests(unittest.TestCase):
         secret = "FAL-TEST-SECRET"
         with tempfile.TemporaryDirectory(prefix="clipart-v3-fal-redact-") as temp:
             state = self.make_state(temp)
+            state.clipart.generation.model = "fal-ai/flux/schnell"
+            state.clipart.operations.upscale_before = False
+            state.clipart.operations.remove_background = False
             state.set_step(StepId.REVIEW_RUN)
             shell = AppShell(state)
-            controller = install_clipart_flow(WorkflowHost(shell, 'clipart', runtime_settings_provider=lambda: {'fal_api_key': secret}, worker_factory=lambda **_kwargs: (_ for _ in ()).throw(ValueError(f'Fal rejected {secret}')), authorization_provider=lambda: None))
-
-            controller.start()
+            factory = WorkerFactory()
+            shell._run_request_key = (ProjectMode.CLIPART, StepId.REVIEW_RUN)
+            controller = install_clipart_flow(WorkflowHost(
+                shell, 'clipart',
+                runtime_settings_provider=lambda: {
+                    'fal_api_key': secret, 'kie_api_key': 'kie-reference-test'
+                },
+                worker_factory=factory,
+                authorization_provider=lambda: None,
+            ))
+            self.assertIsNotNone(controller.start())
             errors = []
             controller.error.connect(errors.append)
-            controller._error(f"worker failed with {secret}")
-
+            factory.workers[0].error.emit(f"worker failed with {secret}")
+            self.app.processEvents()
             self.assertNotIn(secret, errors[-1])
 
     def test_csv_and_table_reject_oversized_input_without_truncation(self):
@@ -1645,7 +1707,7 @@ class V3ClipartFlowTests(unittest.TestCase):
 
         request = build_clipart_run_request(state)
 
-        self.assertEqual(missing_runtime_requirements(request), ("Fal.ai API Key",))
+        self.assertEqual(_test_image_gateway({}).preflight(request), ("Fal.ai API Key",))
 
     def test_review_summary_is_compact_and_left_aligned(self):
         state = ProjectState(mode=ProjectMode.CLIPART)

@@ -29,11 +29,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from license_client import LicenseError
-
 from v3_flow_runtime import FlowRunRequest, safe_runtime_error as _safe_runtime_error
 from v3_flow_ui import ScrollableStepPage as _ScrollableStepPage
-from v3_image_worker_settings import build_image_worker_settings
+from v3_image_worker_settings import build_image_run_settings
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_image_processing_ui import (
     CLEANUP_OPERATION_LABELS, ProcessingPipelineEditor, RunPlanBuilder,
@@ -46,7 +44,6 @@ from v3_processing_editor import (
 from v3_provider_registry import (
     KIE_MODEL_OPTIONS,
     processing_provider_options,
-    provider_requires_api_key,
     provider_requires_network,
     provider_supports_operation,
 )
@@ -419,59 +416,6 @@ def processing_change_summary(operations: ImageOperationData) -> tuple[str, str]
         ", ".join(removed) if removed else "ничего",
         ", ".join(preserved) if preserved else "нет специальных гарантий",
     )
-
-def missing_processing_runtime_requirements(
-    request: FlowRunRequest,
-) -> tuple[str, ...]:
-    settings = request.settings
-    missing: list[str] = []
-    seen: set[str] = set()
-    def add_missing(label: str) -> None:
-        if label not in seen:
-            seen.add(label)
-            missing.append(label)
-    for enabled_field, provider_field in (
-        ("upscale", "upscale_provider"),
-        ("upscale_after", "upscale_after_provider"),
-        ("remove_bg", "remove_bg_provider"),
-    ):
-        if not settings.get(enabled_field):
-            continue
-        provider_id = str(settings.get(provider_field) or "")
-        api_key_name = (
-            "photoroom_api_key"
-            if provider_id == "photoroom"
-            else "fal_api_key"
-            if provider_id == "fal"
-            else "kie_api_key"
-        )
-        if provider_requires_api_key(provider_id) and not str(settings.get(api_key_name) or "").strip():
-            add_missing(
-                "KIE API Key"
-                if api_key_name == "kie_api_key"
-                else "PhotoRoom API Key"
-                if api_key_name == "photoroom_api_key"
-                else "Fal.ai API Key"
-            )
-    needs_local_upscale = bool(
-        (
-            settings.get("upscale")
-            and settings.get("upscale_provider") == "local_realesrgan"
-        )
-        or (
-            settings.get("upscale_after")
-            and settings.get("upscale_after_provider") == "local_realesrgan"
-        )
-    )
-    if needs_local_upscale:
-        import main
-
-        _, local_error = main.validate_local_realesrgan_exe(
-            settings.get("local_realesrgan_dir")
-        )
-        if local_error:
-            missing.append(local_error)
-    return tuple(missing)
 
 def inspect_local_image(path: str | os.PathLike[str]) -> LocalImageInfo:
     source = Path(path).expanduser()
@@ -1233,8 +1177,9 @@ def build_processing_run_request(
     )
     if issues:
         raise ProcessingFlowError("Исправьте настройки pipeline: " + ", ".join(issues))
-    settings = build_image_worker_settings(
-        state.runtime, GenerationData(), _processing_data(state).operations, runtime_settings,
+    del runtime_settings  # compatibility parameter; Core owns runtime enrichment.
+    settings = build_image_run_settings(
+        state.runtime, GenerationData(), _processing_data(state).operations,
         run_mode="process_only",
     )
     settings["output_dir"] = str(configured_output)
@@ -1261,7 +1206,6 @@ class ProcessingFlowController(QObject):
         super().__init__()
         self.shell = host
         self.worker: Any | None = None
-        self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
 
         self.run_queue = RunQueueSupport(self, ProjectMode.PROCESSING)
@@ -1422,23 +1366,23 @@ class ProcessingFlowController(QObject):
             raise ProcessingFlowError(
                 "Подтвердите права и повторно проверьте выбранные файлы"
             )
-        runtime = self.shell.runtime_settings()
-        if not isinstance(runtime, Mapping):
-            raise ProcessingFlowError("Настройки запуска повреждены")
-        self._runtime_settings = runtime
         return build_processing_run_request(
             self.shell.state,
-            runtime,
             allow_full_image_changes=(
                 self.pipeline_page.allow_full_image_changes.isChecked()
             ),
             external_transfer_consent=True,
         )
 
+    def create_worker_for_request(self, request: FlowRunRequest):
+        if not isinstance(request, FlowRunRequest):
+            raise TypeError("Unsupported Processing run request")
+        return self.shell.image_run_launch(request)
+
     def _refresh_preflight(self) -> None:
         try:
             request = self._request()
-            missing = missing_processing_runtime_requirements(request)
+            missing = self.shell.image_run_preflight(request)
             if missing:
                 raise ProcessingFlowError(
                     "Укажите в настройках: " + ", ".join(missing)
@@ -1463,15 +1407,9 @@ class ProcessingFlowController(QObject):
             return None
         try:
             request = self._request()
-            missing = missing_processing_runtime_requirements(request)
-            if missing:
-                raise ProcessingFlowError(
-                    "Укажите в настройках: " + ", ".join(missing)
-                )
-            self.shell.authorize_run()
-            worker = self.shell.create_worker_job(**request.worker_kwargs())
+            worker = self.create_worker_for_request(request)
         except Exception as error:
-            message = _safe_runtime_error(error, self._runtime_settings)
+            message = _safe_runtime_error(error)
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
             return None
@@ -1486,13 +1424,13 @@ class ProcessingFlowController(QObject):
 
     def _finished(self, message: str) -> None:
         self.run_queue.finished()
-        safe = _safe_runtime_error(message, self._runtime_settings)
+        safe = _safe_runtime_error(message)
         self.review_page.set_run_status(safe)
         self.finished.emit(safe)
 
     def _error(self, message: str) -> None:
         self.run_queue.fatal_error(message)
-        safe = _safe_runtime_error(message, self._runtime_settings)
+        safe = _safe_runtime_error(message)
         self.review_page.set_run_status(safe, error=True)
         self.error.emit(safe)
 

@@ -7,21 +7,20 @@ from typing import Any
 from provider_upscale_contract import normalize_fal_upscale_factor
 
 
-def build_image_worker_settings(
+_CORE_RUNTIME_KEYS = (
+    "kie_api_key", "photoroom_api_key", "fal_api_key", "local_realesrgan_dir"
+)
+
+
+def build_image_run_settings(
     runtime: Any,
     generation: Any,
     operations: Any,
-    runtime_settings: Mapping[str, Any] | None,
     *,
     run_mode: str,
 ) -> dict[str, Any]:
-    source = runtime_settings or {}
-    settings = {
-        name: value
-        for name in ("kie_api_key", "photoroom_api_key", "fal_api_key", "local_realesrgan_dir")
-        if isinstance((value := source.get(name)), str)
-    }
-    settings.update(dict(runtime.to_dict()))
+    """Build the module-visible, credential-free image run plan settings."""
+    settings = dict(runtime.to_dict())
     settings.update({
         "run_mode": run_mode,
         "text_generation_model": generation.model,
@@ -84,3 +83,32 @@ def build_image_worker_settings(
         "cleanup_preserve_dpi": operations.preserve_dpi,
     })
     return settings
+
+
+def enrich_image_worker_settings(
+    plan_settings: Mapping[str, Any],
+    runtime_settings: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Add Core-owned runtime fields only to the internal WorkerThread snapshot."""
+    settings = dict(plan_settings)
+    source = runtime_settings or {}
+    for name in _CORE_RUNTIME_KEYS:
+        value = source.get(name)
+        if isinstance(value, str):
+            settings[name] = value
+    return settings
+
+
+def build_image_worker_settings(
+    runtime: Any,
+    generation: Any,
+    operations: Any,
+    runtime_settings: Mapping[str, Any] | None,
+    *,
+    run_mode: str,
+) -> dict[str, Any]:
+    """Compatibility builder for direct legacy WorkerThread callers/tests."""
+    return enrich_image_worker_settings(
+        build_image_run_settings(runtime, generation, operations, run_mode=run_mode),
+        runtime_settings,
+    )

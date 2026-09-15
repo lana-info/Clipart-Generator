@@ -43,7 +43,6 @@ from pinterest_pin_templates import (
 )
 from security_redaction import redact_text
 
-from v3_api_settings import estimate_fal_cost
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_flow_runtime import CostEstimate, FlowRunRequest, safe_runtime_error as _safe_runtime_error
 from v3_image_generation_ui import ImageGenerationSettingsPage
@@ -52,7 +51,6 @@ from v3_prompt_editor_ui import PromptInputPage, PromptReviewPage
 from v3_image_generation_runtime import (
     build_image_generation_run_request,
     fal_endpoint_quantities,
-    missing_runtime_requirements,
 )
 from v3_flow_ui import ProjectDirectoryPage, ScrollableStepPage as _ScrollableStepPage
 from v3_project_state import (
@@ -1382,7 +1380,6 @@ class PinterestFlowController(QObject):
         )
         self.worker: Any | None = None
         self._product_layer: ProductLayer | None = None
-        self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
 
         self.run_queue = RunQueueSupport(self, ProjectMode.PINTEREST)
@@ -1407,13 +1404,12 @@ class PinterestFlowController(QObject):
         """No Pinterest AI-scene provider is installed, so protect the product locally."""
         return {"background_generation": False, "protected_product": True}
 
-    def _request(self, runtime_settings: Mapping[str, Any]) -> FlowRunRequest:
+    def _request(self) -> FlowRunRequest:
         return build_image_generation_run_request(
             self.adapter_state.common,
             self.adapter_state.runtime,
             self.adapter_state.clipart,
             self.adapter_state.common.output_dir,
-            runtime_settings,
         )
 
     def start_processing_again(self) -> None:
@@ -1504,13 +1500,9 @@ class PinterestFlowController(QObject):
 
     def _refresh_preflight(self) -> None:
         try:
-            runtime_settings = self.shell.runtime_settings()
-            if not isinstance(runtime_settings, Mapping):
-                raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
-            runtime_settings = dict(runtime_settings)
-            request = self._request(runtime_settings)
-            missing = missing_runtime_requirements(request)
-        except (PinterestFlowError, OSError, TypeError, ValueError) as error:
+            request = self._request()
+            missing = self.shell.image_run_preflight(request)
+        except (PinterestFlowError, OSError, RuntimeError, TypeError, ValueError) as error:
             self.review_page.set_preflight_status(str(error)[:500], ready=False)
             return
         if missing:
@@ -1528,27 +1520,22 @@ class PinterestFlowController(QObject):
             self.start()
 
     def _refresh_fal_cost(self) -> tuple[float, str]:
-        runtime_settings = self.shell.runtime_settings()
-        if not isinstance(runtime_settings, Mapping):
-            raise PinterestFlowError("Настройки запуска повреждены")
-        api_key = str(runtime_settings.get("fal_api_key") or "").strip()
-        if not api_key:
-            raise PinterestFlowError("Добавьте Fal.ai API Key в настройках API")
         quantities = fal_endpoint_quantities(self.adapter_state.clipart)
         if not quantities:
             raise PinterestFlowError("В текущем запуске нет операций Fal.ai")
-        return estimate_fal_cost(api_key, quantities)
+        return self.shell.image_run_estimate_fal_cost(quantities)
 
     def create_worker_for_request(
         self, request: FlowRunRequest | PinterestPinRunRequest
     ):
         if isinstance(request, PinterestPinRunRequest):
-            # The six-slot worker is module-owned/local. Core still performs
-            # the authoritative save immediately before it is constructed.
+            # The six-slot worker is module-owned/local. Keep license and
+            # authoritative save admission together so retries cannot bypass it.
+            self.shell.authorize_run()
             self.shell.prepare_run()
             return PinterestPinWorkerAdapter(request)
         if isinstance(request, FlowRunRequest):
-            return self.shell.create_worker_job(**request.worker_kwargs())
+            return self.shell.image_run_launch(request)
         raise TypeError("Unsupported Pinterest run request")
 
     def start(self) -> FlowRunRequest | None:
@@ -1563,24 +1550,10 @@ class PinterestFlowController(QObject):
             self.error.emit(message)
             return None
         try:
-            runtime_settings = self.shell.runtime_settings()
-            if not isinstance(runtime_settings, Mapping):
-                raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
-            runtime_settings = dict(runtime_settings)
-            request = self._request(runtime_settings)
-            self._runtime_settings = runtime_settings
-            missing = missing_runtime_requirements(request)
-            if missing:
-                raise PinterestFlowError(
-                    "Укажите в настройках: " + ", ".join(missing)
-                )
-            self.shell.authorize_run()
+            request = self._request()
             worker = self.create_worker_for_request(request)
-        except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
-            message = _safe_runtime_error(
-                error,
-                locals().get("runtime_settings"),
-            )
+        except (PinterestFlowError, OSError, RuntimeError, TypeError, ValueError) as error:
+            message = _safe_runtime_error(error)
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
             return None
@@ -1618,12 +1591,8 @@ class PinterestFlowController(QObject):
             raise RuntimeError("Pinterest preview page is not installed")
         result = preview._find_result(variant_id)
         try:
-            runtime_settings = self.shell.runtime_settings()
-            if not isinstance(runtime_settings, Mapping):
-                raise PinterestFlowError(_pinterest_text("error.runtime_settings", locale=self.locale))
             request = build_pinterest_run_request(
                 self.shell.state,
-                runtime_settings,
                 locale=self.locale,
                 provider_capabilities=self.provider_capabilities_provider(),
             )
@@ -1640,11 +1609,9 @@ class PinterestFlowController(QObject):
                 ),
                 product_layer=cached_product,
             )
-            self._runtime_settings = runtime_settings
-            self.shell.authorize_run()
             worker = self.create_worker_for_request(request)
         except (PinterestFlowError, LicenseError, OSError, TypeError, ValueError) as error:
-            self.error.emit(_safe_runtime_error(error, locals().get("runtime_settings")))
+            self.error.emit(_safe_runtime_error(error))
             return None
 
         preview._mark_variant_for_regeneration(variant_id)
@@ -1758,13 +1725,13 @@ class PinterestFlowController(QObject):
 
     def _finished(self, message: str) -> None:
         self.run_queue.finished()
-        safe_message = _safe_runtime_error(message, self._runtime_settings)
+        safe_message = _safe_runtime_error(message)
         self.review_page.set_run_status(safe_message)
         self.finished.emit(safe_message)
 
     def _error(self, message: str) -> None:
         self.run_queue.fatal_error(message)
-        safe_message = _safe_runtime_error(message, self._runtime_settings)
+        safe_message = _safe_runtime_error(message)
         self.review_page.set_run_status(safe_message, error=True)
         self.error.emit(safe_message)
 

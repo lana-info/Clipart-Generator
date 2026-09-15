@@ -1,4 +1,6 @@
 from studio_workflow_host import WorkflowHost
+from studio_image_run_services import CoreImageRunGateway
+import v3_processing_flow
 import hashlib
 import os
 import tempfile
@@ -24,7 +26,6 @@ from v3_processing_flow import (
     estimate_processing_cost,
     inspect_local_image,
     install_processing_flow,
-    missing_processing_runtime_requirements,
     operation_validation_issues,
     processing_change_summary,
     processing_pipeline_steps,
@@ -94,6 +95,15 @@ class FakeWorker(QObject):
         return self.started
 
 
+
+def _test_image_gateway(runtime_settings):
+    return CoreImageRunGateway(
+        runtime_settings_provider=lambda: dict(runtime_settings),
+        authorization_provider=lambda: None,
+        run_preparer=lambda: None,
+        worker_factory=lambda **_kwargs: FakeWorker(),
+    )
+
 class WorkerFactory:
     def __init__(self):
         self.workers = []
@@ -117,6 +127,32 @@ class V3ProcessingFlowTests(unittest.TestCase):
         state.processing.selected_files = [str(source)]
         apply_processing_recipe(state, "basic_enhancement")
         return state, source
+
+    def test_processing_controller_uses_core_image_gateway_not_raw_runtime_settings(self):
+        source = Path(v3_processing_flow.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("self.shell.runtime_settings()", source)
+        self.assertIn("self.shell.image_run_launch(", source)
+
+    def test_processing_run_request_never_contains_core_runtime_credentials(self):
+        with tempfile.TemporaryDirectory(prefix="processing-secret-free-plan-") as temp:
+            state, _source = self.make_state(temp)
+            request = build_processing_run_request(
+                state,
+                {
+                    "kie_api_key": "kie-secret",
+                    "fal_api_key": "fal-secret",
+                    "photoroom_api_key": "photo-secret",
+                    "runpod_api_key": "runpod-secret",
+                    "local_realesrgan_dir": "/core-only/realesrgan",
+                },
+                allow_full_image_changes=True,
+                external_transfer_consent=True,
+            )
+            for key in (
+                "kie_api_key", "fal_api_key", "photoroom_api_key",
+                "runpod_api_key", "local_realesrgan_dir",
+            ):
+                self.assertNotIn(key, request.settings)
 
     def test_local_image_summary_shows_only_requested_metadata(self):
         info = LocalImageInfo(
@@ -372,7 +408,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertEqual(request.settings["run_mode"], "process_only")
             self.assertEqual(request.selected_files, [str(source)])
             self.assertNotIn(str(source), repr(request))
-            self.assertEqual(missing_processing_runtime_requirements(request), ())
+            self.assertEqual(_test_image_gateway({}).preflight(request), ())
 
     def test_local_chroma_run_plan_keeps_only_the_selected_preset_color(self):
         with tempfile.TemporaryDirectory(prefix="processing-chroma-request-") as temp:
@@ -396,7 +432,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
             self.assertNotIn("chroma_key_custom_color", request.settings)
             self.assertNotIn("chroma_key_tolerance", request.settings)
             self.assertNotIn("chroma_key_softness", request.settings)
-            self.assertEqual(missing_processing_runtime_requirements(request), ())
+            self.assertEqual(_test_image_gateway({}).preflight(request), ())
 
     def test_processing_request_preserves_selected_output_directory(self):
         with tempfile.TemporaryDirectory(prefix="processing-output-") as temp:
@@ -434,7 +470,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 external_transfer_consent=True,
             )
             self.assertEqual(
-                missing_processing_runtime_requirements(request),
+                _test_image_gateway({}).preflight(request),
                 ("KIE API Key",),
             )
 
@@ -453,7 +489,10 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 external_transfer_consent=True,
             )
 
-            self.assertEqual(missing_processing_runtime_requirements(request), ())
+            self.assertEqual(
+                _test_image_gateway({"fal_api_key": "fal-test-key"}).preflight(request),
+                (),
+            )
 
             missing = build_processing_run_request(
                 state,
@@ -462,7 +501,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 external_transfer_consent=True,
             )
             self.assertEqual(
-                missing_processing_runtime_requirements(missing),
+                _test_image_gateway({"kie_api_key": "kie-test-key"}).preflight(missing),
                 ("Fal.ai API Key",),
             )
 
@@ -491,7 +530,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
                 allow_full_image_changes=True,
                 external_transfer_consent=False,
             )
-            self.assertEqual(missing_processing_runtime_requirements(request), ())
+            self.assertEqual(_test_image_gateway({}).preflight(request), ())
 
     def test_duplicate_output_names_are_rejected_before_worker(self):
         with tempfile.TemporaryDirectory(prefix="processing-collision-") as temp:

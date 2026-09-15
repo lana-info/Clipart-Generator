@@ -2524,21 +2524,14 @@ class RunQueueSupport:
             return None
         if not self.session.failed_indices:
             return None
-        try:
-            self.controller.shell.authorize_run()
-        except Exception as error:
-            self.controller._error(str(error))
-            return None
         request = self.session.prepare_retry()
         if request is None:
             return None
         try:
             create_worker = getattr(self.controller, "create_worker_for_request", None)
-            worker = (
-                create_worker(request)
-                if callable(create_worker)
-                else self.controller.shell.create_worker_job(**request.worker_kwargs())
-            )
+            if not callable(create_worker):
+                raise RunQueueError("Core retry service is unavailable")
+            worker = create_worker(request)
         except Exception as error:
             self.controller._error(str(error))
             return None

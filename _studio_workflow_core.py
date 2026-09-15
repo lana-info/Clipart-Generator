@@ -23,6 +23,7 @@ class _WorkflowCapability:
     worker_factory: Any = None
     authorization_provider: Any = None
     run_preparer: Any = None
+    image_run_gateway: Any = None
 
 
 _CAPABILITIES: dict[str, _WorkflowCapability] = {}
@@ -54,6 +55,7 @@ def register_workflow_capability(
     worker_factory=None,
     authorization_provider=None,
     run_preparer=None,
+    image_run_gateway=None,
 ) -> str:
     try:
         scope = ProjectMode(module_id)
@@ -75,6 +77,7 @@ def register_workflow_capability(
         _store_callback(worker_factory),
         _store_callback(authorization_provider),
         _store_callback(run_preparer),
+        image_run_gateway,
     )
     return token
 
@@ -261,6 +264,25 @@ def diagnostic_record_structured(capability_id: str, *args, **kwargs):
     recorder = getattr(journal, "record_structured", None)
     return recorder(*args, **kwargs) if callable(recorder) else None
 
+
+
+def _image_run_gateway(capability_id: str):
+    entry = _CAPABILITIES.get(str(capability_id))
+    if entry is None or entry.image_run_gateway is None:
+        raise RuntimeError("Core image run gateway is unavailable")
+    return entry.image_run_gateway
+
+
+def host_image_run_preflight(capability_id: str, request):
+    return _image_run_gateway(capability_id).preflight(request)
+
+
+def host_image_run_estimate_fal_cost(capability_id: str, endpoint_quantities):
+    return _image_run_gateway(capability_id).estimate_fal_cost(endpoint_quantities)
+
+
+def host_image_run_launch(capability_id: str, request):
+    return _image_run_gateway(capability_id).launch(request)
 
 def host_runtime_settings(capability_id: str) -> dict[str, Any]:
     entry = _CAPABILITIES.get(str(capability_id))

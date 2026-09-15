@@ -19,6 +19,9 @@ from _studio_workflow_core import (
     host_authorize_run,
     host_create_worker_job,
     host_prepare_run,
+    host_image_run_preflight,
+    host_image_run_estimate_fal_cost,
+    host_image_run_launch,
     host_mark_dirty,
     host_refresh,
     host_register_workflow_controller,
@@ -180,6 +183,7 @@ class WorkflowHost:
         worker_factory=None,
         authorization_provider=None,
         run_preparer=None,
+        image_run_gateway=None,
     ) -> None:
         if not isinstance(module_id, str) or not module_id:
             raise ValueError("Workflow module id is invalid")
@@ -190,6 +194,22 @@ class WorkflowHost:
         )
         if any(not hasattr(shell, name) for name in required):
             raise TypeError("Workflow host source does not expose required shell contract")
+        if image_run_gateway is None:
+            from studio_image_run_services import CoreImageRunGateway
+            from license_client import LicenseError
+
+            def missing_authorization():
+                raise LicenseError("Лицензионный сервис не настроен")
+
+            def missing_worker(**_kwargs):
+                raise OSError("Core worker service is unavailable")
+
+            image_run_gateway = CoreImageRunGateway(
+                runtime_settings_provider=runtime_settings_provider or (lambda: {}),
+                authorization_provider=authorization_provider or missing_authorization,
+                run_preparer=run_preparer or (lambda: None),
+                worker_factory=worker_factory or missing_worker,
+            )
         capability_id = register_workflow_capability(
             shell,
             module_id,
@@ -197,6 +217,7 @@ class WorkflowHost:
             worker_factory=worker_factory,
             authorization_provider=authorization_provider,
             run_preparer=run_preparer,
+            image_run_gateway=image_run_gateway,
         )
         self._capability_id = capability_id
         self.module_id = module_id
@@ -238,6 +259,17 @@ class WorkflowHost:
 
     def prepare_run(self):
         return host_prepare_run(self._capability_id)
+
+    def image_run_preflight(self, request):
+        return host_image_run_preflight(self._capability_id, request)
+
+    def image_run_estimate_fal_cost(self, endpoint_quantities):
+        return host_image_run_estimate_fal_cost(
+            self._capability_id, endpoint_quantities
+        )
+
+    def image_run_launch(self, request):
+        return host_image_run_launch(self._capability_id, request)
 
     def go_next(self) -> None:
         host_go_next(self._capability_id)

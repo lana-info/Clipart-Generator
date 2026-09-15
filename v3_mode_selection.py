@@ -918,18 +918,28 @@ class V3ApplicationView(QWidget):
             raise OSError("Не удалось сохранить проект. Запуск не начат") from error
         return self._active_project_id
 
-    def _create_project_worker(self, shell: AppShell, **kwargs: Any) -> Any:
+    def _create_raw_project_worker(self, shell: AppShell, **kwargs: Any) -> Any:
         from v3_runtime_adapter import DEFAULT_LEGACY_RUNTIME_ADAPTER
 
-        project_id = self._prepare_project_run(shell)
-        if project_id is not None:
-            kwargs["project_id"] = project_id
+        if shell is not self.shell:
+            raise ValueError("Откройте проект заново перед запуском")
         factory = self._worker_factory or DEFAULT_LEGACY_RUNTIME_ADAPTER.create_worker
-        raw_worker = factory(**kwargs)
+        return factory(**kwargs)
+
+    def _create_prepared_project_worker(
+        self, shell: AppShell, **kwargs: Any
+    ) -> Any:
+        raw_worker = self._create_raw_project_worker(shell, **kwargs)
         from studio_job_services import CoreWorkerJobHandle
         if isinstance(raw_worker, CoreWorkerJobHandle):
             return raw_worker
         return CoreWorkerJobHandle(raw_worker)
+
+    def _create_project_worker(self, shell: AppShell, **kwargs: Any) -> Any:
+        project_id = self._prepare_project_run(shell)
+        if project_id is not None:
+            kwargs["project_id"] = project_id
+        return self._create_prepared_project_worker(shell, **kwargs)
 
     def _replace_shell(self, state: ProjectState) -> None:
         previous = self.shell
@@ -976,17 +986,38 @@ class V3ApplicationView(QWidget):
                 raise OSError("Core run preparation service is unavailable")
             return view._prepare_project_run(scoped_shell)
 
+        def create_prepared_worker(**kwargs):
+            view = view_ref()
+            scoped_shell = shell_ref()
+            if view is None or scoped_shell is None:
+                raise OSError("Core worker service is unavailable")
+            return view._create_raw_project_worker(scoped_shell, **kwargs)
+
+        def authorize_run():
+            view = view_ref()
+            if view is None:
+                raise OSError("Core authorization service is unavailable")
+            if view._license_gate is None:
+                from license_client import LicenseError
+                raise LicenseError("Лицензионный сервис не настроен")
+            return view._license_gate.authorize_run()
+
+        from studio_image_run_services import CoreImageRunGateway
+        image_run_gateway = CoreImageRunGateway(
+            runtime_settings_provider=self._runtime_settings,
+            authorization_provider=authorize_run,
+            run_preparer=prepare_run,
+            worker_factory=create_prepared_worker,
+        )
+
         host = WorkflowHost(
             shell,
             module_id,
             runtime_settings_provider=self._runtime_settings,
             worker_factory=create_worker,
             run_preparer=prepare_run,
-            authorization_provider=(
-                self._license_gate.authorize_run
-                if self._license_gate is not None
-                else None
-            ),
+            authorization_provider=authorize_run,
+            image_run_gateway=image_run_gateway,
         )
         controller = registration.install(
             host,

@@ -48,7 +48,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from license_client import LicenseError
 from v3_flow_runtime import CostEstimate, FlowRunRequest, safe_runtime_error as _safe_runtime_error
 from v3_image_generation_ui import ImageGenerationSettingsPage
 from v3_image_review_ui import ImageReviewRunPage
@@ -84,14 +83,11 @@ from v3_image_generation_runtime import (
     fal_endpoint_quantities as _image_fal_endpoint_quantities,
     generation_model_options,
     image_generation_pipeline_steps,
-    missing_runtime_requirements,
 )
 from v3_flow_ui import ProjectDirectoryPage, ScrollableStepPage as _ScrollableStepPage
-from v3_image_worker_settings import build_image_worker_settings
 from chroma_key import chroma_key_prompt_block
 from chroma_key_selection import select_chroma_key_color
 from provider_error_messages import friendly_provider_error
-from v3_api_settings import estimate_fal_cost
 
 from v3_components import (
     AdvancedSection,
@@ -999,20 +995,6 @@ class ClipartReviewRunPage(ImageReviewRunPage):
         )
 
 
-def _read_legacy_runtime_settings() -> Mapping[str, Any]:
-    import main
-
-    path = Path(main.CONFIG_FILE)
-    if not path.is_file():
-        return {}
-    try:
-        if path.stat().st_size > MAX_CSV_BYTES:
-            return {}
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return {}
-    return dict(value) if isinstance(value, Mapping) else {}
-
 
 class ClipartFlowController(QObject):
     started = pyqtSignal(object)
@@ -1026,7 +1008,6 @@ class ClipartFlowController(QObject):
         super().__init__()
         self.shell = host
         self.worker: Any | None = None
-        self._runtime_settings: Mapping[str, Any] = {}
         from v3_run_queue import RunQueueSupport
         from clipart_run_results import ClipartRunResultsExtension
 
@@ -1196,16 +1177,9 @@ class ClipartFlowController(QObject):
 
     def _refresh_preflight(self) -> None:
         try:
-            runtime_settings = self.shell.runtime_settings()
-            if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError("Настройки запуска повреждены")
-            runtime_settings = dict(runtime_settings)
-            request = build_clipart_run_request(
-                self.shell.state,
-                runtime_settings,
-            )
-            missing = missing_runtime_requirements(request)
-        except (ClipartFlowError, OSError, TypeError, ValueError) as error:
+            request = build_clipart_run_request(self.shell.state)
+            missing = self.shell.image_run_preflight(request)
+        except (ClipartFlowError, OSError, RuntimeError, TypeError, ValueError) as error:
             self.review_page.set_preflight_status(str(error)[:500], ready=False)
             return
         if missing:
@@ -1224,16 +1198,15 @@ class ClipartFlowController(QObject):
             self.start()
 
     def _refresh_fal_cost(self) -> tuple[float, str]:
-        runtime_settings = self.shell.runtime_settings()
-        if not isinstance(runtime_settings, Mapping):
-            raise ClipartFlowError("Настройки запуска повреждены")
-        api_key = str(runtime_settings.get("fal_api_key") or "").strip()
-        if not api_key:
-            raise ClipartFlowError("Добавьте Fal.ai API Key в настройках API")
         quantities = fal_endpoint_quantities(self.shell.state)
         if not quantities:
             raise ClipartFlowError("В текущем запуске нет операций Fal.ai")
-        return estimate_fal_cost(api_key, quantities)
+        return self.shell.image_run_estimate_fal_cost(quantities)
+
+    def create_worker_for_request(self, request: FlowRunRequest):
+        if not isinstance(request, FlowRunRequest):
+            raise TypeError("Unsupported Clipart run request")
+        return self.shell.image_run_launch(request)
 
     def start(self) -> ClipartRunRequest | None:
         if self.shell.another_run_is_active(self):
@@ -1247,24 +1220,10 @@ class ClipartFlowController(QObject):
             self.error.emit(message)
             return None
         try:
-            runtime_settings = self.shell.runtime_settings()
-            if not isinstance(runtime_settings, Mapping):
-                raise ClipartFlowError("Настройки запуска повреждены")
-            runtime_settings = dict(runtime_settings)
-            request = build_clipart_run_request(
-                self.shell.state,
-                runtime_settings,
-            )
-            self._runtime_settings = runtime_settings
-            missing = missing_runtime_requirements(request)
-            if missing:
-                raise ClipartFlowError(
-                    "Укажите в настройках: " + ", ".join(missing)
-                )
-            self.shell.authorize_run()
-            worker = self.shell.create_worker_job(**request.worker_kwargs())
-        except (ClipartFlowError, LicenseError, OSError, TypeError, ValueError) as error:
-            message = _safe_runtime_error(error, locals().get("runtime_settings"))
+            request = build_clipart_run_request(self.shell.state)
+            worker = self.create_worker_for_request(request)
+        except (ClipartFlowError, OSError, RuntimeError, TypeError, ValueError) as error:
+            message = _safe_runtime_error(error)
             self.review_page.set_run_status(message, error=True)
             self.error.emit(message)
             return None
@@ -1284,13 +1243,13 @@ class ClipartFlowController(QObject):
 
     def _finished(self, message: str) -> None:
         self.run_queue.finished()
-        safe_message = _safe_runtime_error(message, self._runtime_settings)
+        safe_message = _safe_runtime_error(message)
         self.review_page.set_run_status(safe_message)
         self.finished.emit(safe_message)
 
     def _error(self, message: str) -> None:
         self.run_queue.fatal_error(message)
-        safe_message = _safe_runtime_error(message, self._runtime_settings)
+        safe_message = _safe_runtime_error(message)
         self.review_page.set_run_status(safe_message, error=True)
         self.error.emit(safe_message)
 

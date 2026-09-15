@@ -1232,8 +1232,13 @@ class V3RunQueueTests(unittest.TestCase):
             worker.started = False
             worker.finished.emit("Готово (0/1)")
             self.app.processEvents()
-            controller.run_queue.page.retry_button.click()
-            self.app.processEvents()
+            with patch.object(
+                type(controller.shell),
+                "authorize_run",
+                side_effect=AssertionError("RunQueue must not authorize separately"),
+            ):
+                controller.run_queue.page.retry_button.click()
+                self.app.processEvents()
             self.assertEqual(authorization.call_count, 2)
 
             self.assertEqual(len(factory.workers), 2)

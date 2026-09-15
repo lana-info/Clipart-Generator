@@ -71,9 +71,11 @@ class CoreWorkerJobHandle(QObject):
 
     __slots__ = ("_capability_id",)
 
-    def __init__(self, worker) -> None:
+    def __init__(self, worker, *, message_redactor=None) -> None:
         super().__init__()
-        self._capability_id = register_worker(worker, self)
+        self._capability_id = register_worker(
+            worker, self, message_redactor=message_redactor
+        )
 
     def start(self) -> None:
         worker_start(self._capability_id)

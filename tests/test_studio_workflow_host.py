@@ -27,6 +27,32 @@ def _qt_app():
     app.processEvents()
 
 
+
+def test_workflow_host_delegates_image_run_operations_to_core_gateway():
+    from v3_flow_runtime import FlowRunRequest
+
+    class Gateway:
+        def __init__(self): self.calls = []
+        def preflight(self, request):
+            self.calls.append(("preflight", request))
+            return ("KIE API Key",)
+        def estimate_fal_cost(self, quantities):
+            self.calls.append(("cost", dict(quantities)))
+            return 1.5, "USD"
+        def launch(self, request):
+            self.calls.append(("launch", request))
+            return "job-handle"
+
+    shell = AppShell(ProjectState(mode=ProjectMode.CLIPART))
+    gateway = Gateway()
+    host = WorkflowHost(shell, "clipart", image_run_gateway=gateway)
+    request = FlowRunRequest(mode="mode1_generate_only", work_dir=".", settings={})
+    assert host.image_run_preflight(request) == ("KIE API Key",)
+    assert host.image_run_estimate_fal_cost({"fal-ai/flux/schnell": 2}) == (1.5, "USD")
+    assert host.image_run_launch(request) == "job-handle"
+    assert [name for name, _value in gateway.calls] == ["preflight", "cost", "launch"]
+    shell.close()
+
 def test_workflow_host_exposes_scoped_state_not_full_shell():
     shell = AppShell(ProjectState(mode=ProjectMode.CLIPART))
     host = WorkflowHost(shell, "clipart")
