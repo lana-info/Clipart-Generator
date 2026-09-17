@@ -7,11 +7,19 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from license_client import LicenseAuthorization
+from license_client import LicenseAuthorization, LicenseError
 
 
 class AuthorizationGate(Protocol):
     def authorize_run(self) -> LicenseAuthorization: ...
+
+
+def authorize_module_run(gate: AuthorizationGate, module_id: str) -> LicenseAuthorization:
+    """Return fresh signed authorization only when this exact module is granted."""
+    authorization = gate.authorize_run()
+    if not isinstance(authorization, LicenseAuthorization) or not authorization.allows_module(module_id):
+        raise LicenseError("Нет доступа к этому модулю")
+    return authorization
 
 
 class ModuleAccessPolicy:

@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -19,6 +20,7 @@ from PyQt6.QtWidgets import QApplication, QAbstractButton, QLabel
 
 import v3_localization
 import v3_pinterest_flow
+from license_client import LicenseAuthorization, ModuleEntitlement
 from v3_mode_selection import V3ApplicationView
 from v3_pinterest_flow import (
     PinVariant,
@@ -193,7 +195,12 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
     def test_module_owned_pinterest_worker_is_blocked_when_core_save_fails(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-core-save-") as temp:
             gate = Mock()
-            gate.authorize_run = Mock(return_value=None)
+            now = datetime.now(timezone.utc)
+            gate.authorize_run = Mock(return_value=LicenseAuthorization(
+                license_id="fixture", product_id="clipart-generator", device_key="device",
+                issued_at=now, expires_at=now + timedelta(minutes=5),
+                module_entitlements=(ModuleEntitlement("pinterest", now, now + timedelta(days=1)),),
+            ))
             view = V3ApplicationView(
                 draft_path=Path(temp) / "draft.json", license_gate=gate
             )

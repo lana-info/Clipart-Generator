@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -12,6 +13,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
+from license_client import LicenseAuthorization, ModuleEntitlement
 from v3_components import V3_WINDOW_DEFAULT_SIZE, V3_WINDOW_MINIMUM_SIZE
 from v3_mode_selection import (
     MODE_CARD_SPECS,
@@ -495,7 +497,12 @@ class V3ModeSelectionTests(unittest.TestCase):
         raw_worker = Mock()
         factory = Mock(return_value=raw_worker)
         gate = Mock()
-        gate.authorize_run = Mock(return_value=None)
+        now = datetime.now(timezone.utc)
+        gate.authorize_run = Mock(return_value=LicenseAuthorization(
+            license_id="fixture", product_id="clipart-generator", device_key="device",
+            issued_at=now, expires_at=now + timedelta(minutes=5),
+            module_entitlements=(ModuleEntitlement("clipart", now, now + timedelta(days=1)),),
+        ))
         view = V3ApplicationView(
             runtime_settings_provider=lambda: {"kie_api_key": "core-secret"},
             worker_factory=factory,

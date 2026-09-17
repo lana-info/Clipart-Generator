@@ -12,7 +12,7 @@ import rfc8785
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from license_client import LicenseClient, LicenseError
-from studio_module_access import ModuleAccessPolicy
+from studio_module_access import ModuleAccessPolicy, authorize_module_run
 from tests.test_license_client_security import FakeOpener, SignedLicenseResponder
 
 
@@ -120,6 +120,20 @@ class ModuleEntitlementTests(unittest.TestCase):
         self.assertTrue(offline.allows_module("clipart", now=tomorrow))
         self.assertFalse(offline.allows_module("patterns", now=tomorrow))
         self.assertFalse(offline.allows_module("clipart", now=online.issued_at + timedelta(days=3)))
+
+    def test_authorize_module_run_requires_the_specific_signed_grant(self):
+        gate = Mock()
+        allowed = self.verify(self.envelope(self.grants()))
+        gate.authorize_run.return_value = allowed
+        self.assertIs(authorize_module_run(gate, "clipart"), allowed)
+        with self.assertRaises(LicenseError):
+            authorize_module_run(gate, "pinterest")
+        self.assertEqual(gate.authorize_run.call_count, 2)
+
+    def test_production_v3_wiring_uses_module_specific_authorization(self):
+        source = (Path(__file__).parents[1] / "v3_mode_selection.py").read_text(encoding="utf-8")
+        self.assertIn("authorize_module_run(view._license_gate, module_id)", source)
+        self.assertNotIn("return view._license_gate.authorize_run()", source)
 
     def test_policy_reauthorizes_each_call_and_never_uses_cached_rights_after_denial(self):
         gate = Mock()

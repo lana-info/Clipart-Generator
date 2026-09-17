@@ -4,6 +4,7 @@ import sys
 import tempfile
 import types
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -13,7 +14,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QWidget
 from PIL import Image
 
 import main
-from license_client import LicenseError, LicenseUnavailableError
+from license_client import LicenseAuthorization, LicenseError, LicenseUnavailableError, ModuleEntitlement
 from main import (
     APP_VERSION,
     create_authorized_v3_application_window,
@@ -42,7 +43,19 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertTrue(all(card.accessibleName() for card in cards))
         gate = window._license_gate
         self.assertIsNotNone(gate)
-        authorize = Mock(return_value=None)
+        now = datetime.now(timezone.utc)
+        authorization = LicenseAuthorization(
+            license_id="fixture",
+            product_id="clipart-generator",
+            device_key="device",
+            issued_at=now,
+            expires_at=now + timedelta(minutes=5),
+            module_entitlements=tuple(
+                ModuleEntitlement(mode.value, now, now + timedelta(days=1))
+                for mode in (ProjectMode.CLIPART, ProjectMode.PINTEREST, ProjectMode.PROCESSING)
+            ),
+        )
+        authorize = Mock(return_value=authorization)
         gate.authorize_run = authorize
         window.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
         self.app.processEvents()

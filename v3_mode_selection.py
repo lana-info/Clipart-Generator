@@ -45,6 +45,7 @@ from studio_catalog import CatalogEntry, ModuleAvailability, card_action
 from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
 from studio_workflow_registry import WorkflowRegistry, discover_workflows
 from studio_workflow_host import WorkflowHost
+from studio_module_access import authorize_module_run
 from v3_localization import app_locale_from_settings
 from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
@@ -1000,7 +1001,7 @@ class V3ApplicationView(QWidget):
             if view._license_gate is None:
                 from license_client import LicenseError
                 raise LicenseError("Лицензионный сервис не настроен")
-            return view._license_gate.authorize_run()
+            return authorize_module_run(view._license_gate, module_id)
 
         from studio_image_run_services import CoreImageRunGateway
         image_run_gateway = CoreImageRunGateway(
