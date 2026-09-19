@@ -22,7 +22,9 @@ license rights. Future automatic Clipart uses `auto-clipart` and remains unrelea
 - [x] Connect corrected user-facing update controls with background progress,
   exact rights, signature verification, activation and error preservation.
   9 HTTPS/Qt scenarios pass; production download stays disabled without trust keys.
-- [ ] Admin module-release UI and controlled publication workflow.
+- [x] Admin module-release UI: shell/module fields, compatibility, private ZIP,
+  type/search filters, serialized draft creation and recoverable upload errors.
+  Matching service branch remains undeployed.
 - [x] Controlled official release-set preparation and verified HTTPS admin draft
   upload; metadata/bytes checked, no automatic publish or retry.
 - [x] Provision dedicated publisher key outside Git and pin its public half in

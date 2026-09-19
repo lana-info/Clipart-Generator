@@ -29,8 +29,13 @@ CLI refuses credential prompts without an interactive terminal, avoiding echoed
 getpass fallback. All six actual candidate package/platform combinations verify
 under the shell-pinned publisher key.
 Windows-native DPAPI/file sharing and installed desktop acceptance remain untested.
-Next: finish/admin-verify module release panel, then decide staging/installed
-acceptance before production publication; separate automatic Clipart remains next.
+Matching service panel now exposes module releases, private ZIPs, compatibility
+and filters, with serialized draft creation and recoverable errors. Service's full
+PostgreSQL suite passed 185 tests; browser evidence is in its
+`docs/verification/module-release-ui-2026-09-19/` directory.
+Next decision requested from owner: isolated Windows candidate + test server, or
+admin-only browser acceptance first. Production remains unchanged. Automatic
+Clipart remains a separate next implementation after existing-workflow acceptance.
 
 ## Module update controls connected, 2026-09-19
 
