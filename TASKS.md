@@ -4,6 +4,7 @@
 
 - [x] Publisher preparation API: explicit payload, signature, client-compatible verification.
 - [x] Verify generated package install/update/rollback and user-data preservation (43 tests).
+- [x] Bind staged package identity to the selected module/version before writes; 49 affected tests pass.
 - [ ] Server-side module releases and licensed delivery.
 - [ ] Studio launch/runtime connection and updater integration.
 - [ ] Publisher key provisioning and controlled build/publication workflow.

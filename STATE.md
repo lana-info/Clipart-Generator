@@ -11,6 +11,15 @@ install/update/rollback with preserved user data; 43 packaging/store/runtime/
 lifecycle tests passed. This is an internal preparation API, not a finished
 build CLI or server publishing workflow.
 
+Follow-up connection audit: the home emits module_action_requested but the
+application view does not subscribe to it; the catalog entries remain unreleased.
+The existing image-generation workflow exposes the Clipart builder as a nested
+dialog, while the future Clipart catalog card is a separate intended product
+flow. Do not label the legacy generation workflow as the finished new module.
+Lifecycle staging now binds a received package to the selected module/version
+before writing its inventory. Store/runtime/lifecycle/publisher/Pinterest adapter
+checks: 49 passed. Remote publication/download and live home wiring remain open.
+
 Remaining: remote module release storage, publication and licensed download;
 trusted publisher key provisioning; connection of ModuleStore/RuntimeHost to
 the running Studio; actual official module extraction where needed; owner-

@@ -6,7 +6,7 @@ from typing import Callable
 
 from studio_catalog import ModuleAvailability
 from studio_module_runtime import ModuleRuntimeHost
-from studio_modules import ModuleStore
+from studio_modules import ModuleStore, ModulePackageError
 
 
 class ModuleLifecycleAuthorizationError(PermissionError):
@@ -38,10 +38,14 @@ class ModuleLifecycleService:
         if self._authorize(module_id, action) is not True:
             raise ModuleLifecycleAuthorizationError("Module lifecycle operation is not authorized")
 
-    def stage_package(self, package: str | Path) -> dict:
+    def stage_package(self, package: str | Path, *, expected_module_id: str | None = None,
+                      expected_version: str | None = None) -> dict:
         """Verify first, authorize the identified module, then stage without activation."""
         manifest = self.store.inspect_package(Path(package))
         module_id = manifest["module_id"]
+        if ((expected_module_id is not None and module_id != expected_module_id)
+                or (expected_version is not None and manifest["version"] != expected_version)):
+            raise ModulePackageError("Package does not match the selected release")
         self._allowed(module_id, "download")
         # Reverify on install so a package changed after inspection cannot bypass trust checks.
         return self.store.install(

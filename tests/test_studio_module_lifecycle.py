@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from studio_module_lifecycle import ModuleLifecycleAuthorizationError, ModuleLifecycleService
 from studio_module_runtime import ModuleRuntimeError, ModuleRuntimeHost
-from studio_modules import ModuleStore, canonical_manifest
+from studio_modules import ModuleStore, ModulePackageError, canonical_manifest
 
 
 def _package(root, private, module_id="text-probe", version="1.0.0"):
@@ -74,6 +74,27 @@ def test_package_is_not_written_when_download_right_is_denied(tmp_path):
     with pytest.raises(ModuleLifecycleAuthorizationError):
         service.stage_package(package)
     assert store.installed_versions("text-probe") == ()
+
+
+@pytest.mark.parametrize('identity', [
+    {'expected_module_id': 'other-module'},
+    {'expected_module_id': 'text-probe', 'expected_version': '2.0.0'},
+])
+def test_selected_release_identity_is_checked_before_install(tmp_path, identity):
+    private, store, host, service, rights = _fixture(tmp_path)
+    package = _package(tmp_path, private)
+    with pytest.raises(ModulePackageError, match='selected release'):
+        service.stage_package(package, **identity)
+    assert store.installed_versions('text-probe') == ()
+
+
+def test_selected_release_can_be_staged_and_activated(tmp_path):
+    private, store, host, service, rights = _fixture(tmp_path)
+    service.stage_package(_package(tmp_path, private), expected_module_id='text-probe',
+                          expected_version='1.0.0')
+    service.activate('text-probe', '1.0.0')
+    assert host.registration('text-probe').version == '1.0.0'
+    host.unload('text-probe')
 
 
 def test_staged_update_can_wait_but_activation_is_blocked_by_live_job(tmp_path):
