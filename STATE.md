@@ -1,5 +1,24 @@
 # Project state
 
+## Existing module connection verification, 2026-09-19
+
+Owner clarified order: existing image generation, processing, Pinterest first;
+new automatic Clipart afterwards. The three existing home cards already open
+their actual controllers. Added `tests/test_studio_existing_module_launch.py`
+covering all three real card/controller compositions, wrong-module grants,
+fresh authorization on each run and revocation, saved-project roundtrips without
+automatic work, and Pinterest's separate local-worker authorization/save gate.
+7 new integration tests passed. Together with workflow registry, core run service
+and package/runtime tests: 72 passed; existing home/catalog tests: 34 passed.
+Workers and authorizations are fixtures; no paid provider or real customer
+license was used. This verifies existing connections, not remote module updates.
+No runtime source change, build or deployment in this checkpoint.
+
+Existing generation uses `clipart` in project and entitlement contracts. The
+future automatic Clipart card currently shares that identifier in presentation;
+it remains unreleased. Resolve the identity distinction before enabling separate
+delivery, without renaming existing projects or breaking existing key grants.
+
 ## Module release preparation, 2026-09-19
 
 Branch `codex/feature-module-release-packaging-20260919` adds publisher-side

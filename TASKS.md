@@ -2,6 +2,13 @@
 
 ## Independent module updates, 2026-09-19
 
+Owner priority: preserve and connect the existing image generation, processing,
+and Pinterest first; then deliver the separate automatic Clipart workflow.
+Existing generation retains the legacy `clipart` identity for saved projects and
+license rights. Do not silently repurpose it as the new automatic Clipart module.
+
+- [x] Verify real existing home cards, controller admission, exact module rights,
+  revocation, and saved-project resume without automatic work (7 integration tests).
 - [x] Publisher preparation API: explicit payload, signature, client-compatible verification.
 - [x] Verify generated package install/update/rollback and user-data preservation (43 tests).
 - [x] Bind staged package identity to the selected module/version before writes; 49 affected tests pass.
