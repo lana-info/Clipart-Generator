@@ -126,6 +126,7 @@ class ModeSelectionScreen(QWidget):
     project_requested = pyqtSignal(str)
     all_projects_requested = pyqtSignal()
     module_action_requested = pyqtSignal(str, str)
+    module_updates_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -188,7 +189,13 @@ class ModeSelectionScreen(QWidget):
         title = QLabel("Модули")
         title.setProperty("v3Title", True)
         title.setAccessibleName(title.text())
-        layout.addWidget(title)
+        catalog_heading = QHBoxLayout()
+        catalog_heading.addWidget(title)
+        catalog_heading.addStretch()
+        self.module_updates_button = V3Button("Обновления модулей", ButtonVariant.SECONDARY)
+        self.module_updates_button.clicked.connect(self.module_updates_requested.emit)
+        catalog_heading.addWidget(self.module_updates_button)
+        layout.addLayout(catalog_heading)
 
         self.cards_container = QWidget()
         cards_layout = QGridLayout(self.cards_container)
@@ -410,6 +417,7 @@ class V3ApplicationView(QWidget):
         self._diagnostic_journal = diagnostic_journal
         self._update_client = update_client
         self._module_delivery = module_delivery
+        self._module_updates_dialog = None
         self._legacy_project = legacy_project
         workflow_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "studio_builtin_workflows"
         self._workflow_registry = workflow_registry or discover_workflows(workflow_root)
@@ -460,6 +468,8 @@ class V3ApplicationView(QWidget):
         layout.addWidget(self.stack)
 
         self.mode_selection = ModeSelectionScreen(tokens=tokens)
+        self.mode_selection.module_updates_button.setVisible(module_delivery is not None)
+        self.mode_selection.module_updates_requested.connect(self._show_module_updates)
         self.mode_selection.mode_selected.connect(self._handle_mode_selected)
         self.mode_selection.continue_last_project_requested.connect(
             self.continue_last_project
@@ -490,6 +500,17 @@ class V3ApplicationView(QWidget):
         if self._update_controller is None:
             return False
         return self._update_controller.start_check()
+
+    def _show_module_updates(self):
+        if self._module_delivery is None:
+            return
+        from studio_module_update_ui import ModuleUpdatesDialog
+        if self._module_updates_dialog is None:
+            self._module_updates_dialog = ModuleUpdatesDialog(
+                self._module_delivery, parent=self,
+                busy_module=lambda module: self.shell is not None and self.shell.workflow_controller(module) is not None,
+            )
+        self._module_updates_dialog.open()
 
     def _runtime_settings(self) -> Mapping[str, Any]:
         base = dict(self._runtime_settings_provider() or {}) if self._runtime_settings_provider else {}
@@ -1079,6 +1100,9 @@ class V3ApplicationView(QWidget):
 
 
     def closeEvent(self, event) -> None:
+        if self._module_updates_dialog is not None and self._module_updates_dialog.busy:
+            event.ignore()
+            return
         self._diagnostic_event(
             "application_exit",
             "Приложение закрыто штатно.",

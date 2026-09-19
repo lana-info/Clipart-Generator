@@ -1,5 +1,17 @@
 # Module Update Proposal
 
+Implementation checkpoint, 2026-09-19: the owner approved the corrected layout.
+`studio_module_update_ui.py` implements the dialog; home wiring is in
+`v3_mode_selection.py`. `render_actual.py` captures these real controls using
+synthetic releases and controlled background workers, with no provider access.
+`actual-available/downloading/verifying/installed/no-access/error.png` are the
+implementation comparison at 1120x780. Transfer has real byte-driven progress;
+verification uses the animated indeterminate bar (pixel change asserted).
+Close is blocked while an operation runs. Open workflows require finishing work
+and restarting Studio before their update. Empty publisher trust disables delivery
+explicitly. The 9 local TLS integration tests separately exercise actual signed
+delivery; screenshots alone are not proof of networking or production readiness.
+
 Status: owner accepted the base layout with two corrections on 2026-09-19:
 remove the future-module footer and show visible download progress. Both corrections
 are reflected here. These are synthetic 1120x780 Qt mockups, not

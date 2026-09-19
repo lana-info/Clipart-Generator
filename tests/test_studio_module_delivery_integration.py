@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import ed25519, rsa
 from cryptography.x509.oid import NameOID
 from PyQt6.QtCore import QCoreApplication, QEvent
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtTest import QTest
 
 from license_client import LicenseClient
 from studio_module_delivery import StudioModuleDelivery
@@ -205,6 +206,44 @@ def test_revoked_installed_module_preserves_open_project(delivery, app, tmp_path
         assert view._active_project_id == project_id
         assert view.shell.state.mode is ProjectMode.PROCESSING
     finally:
+        view.close()
+        view.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+@pytest.mark.parametrize("mode", tuple(ProjectMode))
+def test_real_update_dialog_downloads_and_opens_workflow(delivery, app, tmp_path, mode):
+    bridge, publish, gate, *_ = delivery
+    publish(mode.value)
+    view = V3ApplicationView(draft_path=tmp_path / "draft.json", license_gate=gate, module_delivery=bridge)
+    view.show()
+
+    def finish(dialog):
+        for _ in range(1500):
+            app.processEvents()
+            if not dialog.busy:
+                return
+            QTest.qWait(10)
+        pytest.fail("Module UI operation timed out")
+
+    try:
+        view.mode_selection.module_updates_button.click()
+        dialog = view._module_updates_dialog
+        assert dialog.isVisible()
+        dialog.check_button.click()
+        finish(dialog)
+        assert dialog.rows[mode.value][2].isEnabled()
+        dialog.rows[mode.value][2].click()
+        finish(dialog)
+        assert bridge.store.state(mode.value)["active"] == "1.0.0", dialog.status.text()
+        assert dialog.rows[mode.value][0].text() == "1.0.0"
+        dialog.close_button.click()
+        view.mode_selection.mode_cards[mode].start_button.click()
+        assert view.shell.workflow_controller(mode.value).__class__.__module__.startswith("_studio_module_")
+    finally:
+        if view._module_updates_dialog is not None:
+            view._module_updates_dialog._shutdown()
+            finish(view._module_updates_dialog)
         view.close()
         view.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

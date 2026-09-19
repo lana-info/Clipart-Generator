@@ -19,8 +19,9 @@ license rights. Future automatic Clipart uses `auto-clipart` and remains unrelea
 - [x] Official workflow inventory packaging API and CLI; no manual ZIP assembly.
 - [x] Base module-update layout accepted with corrections: no future-module footer;
   visible transfer percent/MB and indeterminate checking/verification indicators.
-- [ ] Connect corrected user-facing update controls from
-  `docs/ui/3.2/module-delivery/`; no download buttons enabled prematurely.
+- [x] Connect corrected user-facing update controls with background progress,
+  exact rights, signature verification, activation and error preservation.
+  9 HTTPS/Qt scenarios pass; production download stays disabled without trust keys.
 - [ ] Admin module-release UI and controlled publication workflow.
 - [ ] Provision production publisher keys (current client trust set is empty).
 - [ ] Full installed Windows acceptance and separately authorized desktop release.

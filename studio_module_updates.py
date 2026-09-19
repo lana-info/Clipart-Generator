@@ -50,7 +50,7 @@ class ModuleUpdateClient(UpdateClient):
         return max(candidates, key=lambda item: _version(item.version), default=None)
 
     def install_release(self, release: ModuleRelease, lifecycle: ModuleLifecycleService,
-                        *, cancelled=None, progress=None) -> dict:
+                        *, cancelled=None, progress=None, phase=None) -> dict:
         """Download and stage only; activation stays on the runtime owner thread."""
         if not isinstance(release, ModuleRelease):
             raise UpdateError("Expected a module release")
@@ -59,10 +59,16 @@ class ModuleUpdateClient(UpdateClient):
         self._parse_release({**vars(release), "platform": self.platform_id, "channel": "stable"}, "")
         package = self.download(release, cancelled=cancelled, progress=progress)
         try:
+            if cancelled is not None and cancelled():
+                raise UpdateError("Module download cancelled")
+            if phase is not None:
+                phase("verifying")
             manifest = lifecycle.store.inspect_package(package)
             if (manifest["studio_min"] != release.studio_min
                     or manifest["studio_max_exclusive"] != release.studio_max_exclusive):
                 raise ModulePackageError("Package compatibility differs from the selected release")
+            if cancelled is not None and cancelled():
+                raise UpdateError("Module download cancelled")
             return lifecycle.stage_package(package, expected_module_id=release.module_id,
                                            expected_version=release.version)
         finally:

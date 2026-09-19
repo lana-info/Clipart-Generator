@@ -1,5 +1,34 @@
 # Project state
 
+## Module update controls connected, 2026-09-19
+
+Owner approved the revised mockups. The home now opens the real
+`ModuleUpdatesDialog`: explicit check, exact-license availability, per-module
+transfer, percent/MB, animated indeterminate package verification and installation.
+Checks/download/verification/staging run on a serialized QThread; runtime activation
+remains on its owner thread, including its existing authorization checks.
+Fresh download grants are obtained on each explicit action; changed version/hash/
+size/compatibility is rejected. Activation retries reuse already staged packages,
+which the runtime reverifies. Errors keep the previous active version and never
+display raw exceptions. Open workflows block updates; the message asks the user
+to finish work and restart Studio. Close/Escape are disabled during an operation;
+application shutdown requests interruption and joins the worker before destruction.
+
+Production publisher trust is still empty: the real dialog truthfully disables
+checking/downloading and reports unavailable module updates until keys are provisioned.
+The separate Studio installer notification flow is unchanged. No deployment/build,
+real customer-license writes or paid operations were performed.
+
+Verification: 109 affected tests passed, 1 native Windows skip; after adding two
+negative cases, all 7 dedicated UI tests passed. All 9 loopback HTTPS/Qt integration
+tests passed, including all three real workflows via the new dialog's buttons.
+Actual production-widget screenshots (synthetic release/network fixtures) are
+`docs/ui/3.2/module-delivery/actual-*.png`; checked against the accepted 1120x780
+proposal. The render check validates dimensions/button text and animated bar pixels.
+The earlier full-suite Azure version mismatch remains outside this UI task.
+Next: admin module-release UI/publication and production trust provisioning, then
+separately authorized deployment and installed Windows acceptance.
+
 ## Module update mockup corrections, 2026-09-19
 
 Owner accepted the base layout with corrections: remove the footer advertising
