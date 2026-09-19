@@ -1,5 +1,23 @@
 # Project state
 
+## Module release preparation, 2026-09-19
+
+Branch `codex/feature-module-release-packaging-20260919` adds publisher-side
+`studio_module_packaging.prepare_module_release`. Explicit payload bytes are
+hashed and signed, then inspected using the existing client ModuleStore before
+returning an artifact. No module code is executed, no keys are generated for
+production, and no directory is swept into a package. Tests demonstrate
+install/update/rollback with preserved user data; 43 packaging/store/runtime/
+lifecycle tests passed. This is an internal preparation API, not a finished
+build CLI or server publishing workflow.
+
+Remaining: remote module release storage, publication and licensed download;
+trusted publisher key provisioning; connection of ModuleStore/RuntimeHost to
+the running Studio; actual official module extraction where needed; owner-
+approved Windows release. Current main application does not instantiate this
+module lifecycle. Existing built-in features are not independently updated by
+this change. Do not claim that end-to-end modular updates are already shipped.
+
 Updated: 2026-09-12
 
 ## Current handoff: portable PNG result intent implemented, 2026-09-12

@@ -1,5 +1,14 @@
 # TASKS
 
+## Independent module updates, 2026-09-19
+
+- [x] Publisher preparation API: explicit payload, signature, client-compatible verification.
+- [x] Verify generated package install/update/rollback and user-data preservation (43 tests).
+- [ ] Server-side module releases and licensed delivery.
+- [ ] Studio launch/runtime connection and updater integration.
+- [ ] Publisher key provisioning and controlled build/publication workflow.
+- [ ] Full installed Windows acceptance and separately authorized desktop release.
+
 ## Preparation gate before new implementation
 
 - [x] Reproduce and fix review P2s: contour copy to current result/export,
