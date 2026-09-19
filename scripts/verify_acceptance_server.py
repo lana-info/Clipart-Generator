@@ -30,15 +30,17 @@ def main():
     delivery = StudioModuleDelivery(root=client_root / "modules", studio_version="3.2.0",
         platform="windows-x64", license_client=client, license_gate=OnlineLicenseGate(client),
         trusted_keys={name: base64.b64decode(value) for name, value in profile["publisher_keys"].items()})
+    downloaded = 0
     for module in ("clipart", "processing", "pinterest"):
         release = delivery.check(module)
         if release:
             delivery.install(release)
             delivery.activate(module, release.version)
+            downloaded += 1
         else:
             delivery.host.load_active(module)
         assert delivery.has_active_workflow(module)
-    print("PASS: real HTTPS activation, manifests, three downloads, signatures and runtime activation")
+    print(f"PASS: HTTPS activation/manifests; {downloaded} new downloads; three verified active workflows")
 
 
 if __name__ == "__main__":

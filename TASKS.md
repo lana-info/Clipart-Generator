@@ -6,8 +6,12 @@
 - [x] Separate build-time trust, app data, installer AppId/name and overwrite guard.
 - [x] Deploy separate test database/API, expiring test licenses and signed test modules.
 - [x] Verify real external HTTPS activation/download/install for all three modules.
-- [ ] Run Windows acceptance build, native security/installer guards and installed smoke.
-- [ ] Deliver test installer and short user acceptance steps, without exposing secrets.
+- [x] Run Windows acceptance build, native security/installer guards and installed smoke.
+  Run `35443570132`, source `47fe5a2`, downloaded SHA/provenance verified.
+- [x] Prepare test installer and private owner kit with short acceptance instructions;
+  no private keys or test license contents enter Git, public artifacts or logs.
+- [ ] Owner Windows activation, three module updates with progress, opening/restart
+  acceptance using `docs/testing/module-delivery-windows-acceptance.ru.md`.
 
 ## Independent module updates, 2026-09-19
 

@@ -23,8 +23,21 @@ Full local suite: 1650 passed, 57 skipped, 14 deselected. Windows run 3544319113
 passed native protection and packaged startup checks, but installer compilation
 failed: the pinned Inno Setup 6.7.1 uses Integer registry roots, not the HKEY type
 shown in newer documentation. Corrected against its tagged source and added a
-regression assertion. Installed overwrite guard and screenshots await the retry;
-no distributable Windows artifact exists yet. Production publisher off-host backup
+regression assertion; 15 affected tests passed. Retry **35443570132** succeeded
+from source **47fe5a24fd3fa2434ec02c5d4dbf307028529a7a**: native Windows security,
+packaged test-profile startup, compiled installer, production overwrite refusal,
+installed startup/UI capture and local-processing smoke all passed. Downloaded
+artifact `test-windows-3.2.0` (GitHub artifact ID 10585425858) and verified SHA-256:
+`1c1a6933cd49f70fe0025a0ae8edbc27d45842609ee1a831d36426aaeed98a85`.
+Three installed-copy fixture screenshots were inspected: nonblank/readable;
+these are not evidence of a live licensed Windows module-update session.
+Installer/evidence and private owner test kit are retained outside Git under
+`artifacts/windows-acceptance-3.2.0-35443570132`; instructions are
+`docs/testing/module-delivery-windows-acceptance.ru.md`.
+Owner Windows activation/module-update/restart acceptance is now the next gate.
+The separate service runs frozen source `a34f6ba`; restart plus HTTPS smoke
+verified the three existing active modules without redownloading them.
+Production publisher off-host backup
 still remains a gate before a customer release, not for isolated test keys.
 
 ## Controlled publisher preparation, 2026-09-19
