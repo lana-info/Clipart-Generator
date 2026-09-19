@@ -15,7 +15,23 @@ Packaged startup now exercises automatic Clipart prompt compilation, durable
 project resume and a Windows screenshot with a local no-worker fixture. Added
 explicit Qt deferred cleanup to prevent a stale fixture timer touching later
 test windows. Affected startup/architecture tests: 38 passed. Build execution
-and final artifact evidence follow below when available.
+completed successfully as `35465131655` from source `7dd7c99584ffb53ca50de63500948194332c253e`.
+Final pre-build full suite: 1682 passed, 57 skipped, 18 deselected (90.14s);
+sensitive-artifact guard passed. External HTTPS downloaded and activated all four
+1.1.0 packages. Real licensed downloaded controllers all opened; automatic
+prompts/save/reopen passed without provider calls. Separately verified that
+Studio 3.2.0 sees only the three compatible 1.0.0 packages and no automatic module.
+Windows checks passed: native security, packaged startup, automatic collection
+compile/save/reopen, installer compilation, production overwrite refusal, installed
+startup and local-processing inference. Artifact `test-windows-3.2.1` (ID
+10591176315) downloaded; provenance and installer SHA-256 verified:
+`b7e4bb3323ec8d58ea2444b235d4d71c59f61485768ee5ecd099e446c9e5a9cf`.
+Windows automatic Clipart screenshot inspected: nonblank and eight-step route
+present, with internal scrollbars on the runner's constrained desktop.
+Private owner kit (includes existing expiring test license, never committed):
+`/root/projects/Clipart Generator/artifacts/windows-acceptance-3.2.1-35465131655/Vibix-Studio-Test-3.2.1-private.zip`.
+Next: owner installation/activation on their Windows machine and a separately
+budgeted real provider test. Production publication/key-backup gates are unchanged.
 
 ## Automatic Clipart Package Delivery Connected, 2026-09-19
 

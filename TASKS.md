@@ -21,8 +21,12 @@ not offer collection planning or bundle tools.
   ZIP/PDF export, edited-result restoration and exact rights; gated source catalogue.
 - [x] Extend signed package inventory/delivery to automatic Clipart; verify real
   loopback HTTPS download, signed runtime load, update/rollback and exact rights.
-- [ ] Separately authorized Windows build/installed acceptance and live paid
-  provider smoke. Existing test installer/server do not contain this increment.
+- [x] Authorized isolated Windows 3.2.1 build and installed automated acceptance;
+  run 35465131655, source 7dd7c99; verified installer/private owner kit downloaded.
+- [x] Test server: four packages 1.1.0 for Studio >=3.2.1, automatic rights on
+  two expiring test licenses, backup and external HTTPS/runtime checks passed.
+- [ ] Owner Windows installation/activation and separately budgeted live provider
+  smoke. No paid generation or production publication performed.
 
 Detailed current evidence and next-step constraints are at the top of STATE.md.
 

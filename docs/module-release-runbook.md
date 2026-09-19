@@ -29,7 +29,7 @@ python studio_module_release.py prepare \
   --key-file /root/.local/share/vibix-studio-signing/publisher-v1.pem \
   --key-id vibix-publisher-v1 \
   --output /absolute/path/to/new-release-directory \
-  --version 1.0.0 --studio-min 3.2.0 --studio-max-exclusive 3.3.0 \
+  --version 1.1.0 --studio-min 3.2.1 --studio-max-exclusive 3.3.0 \
   --platform windows-x64 --platform macos-x64
 ```
 
@@ -49,9 +49,10 @@ be packaged from the new source checkpoint. Its payload includes the automatic
 controller and a package-local copy of the reused generation controller, so an
 ordinary generator update cannot silently replace that base. The eight-step Core
 shell, state adapter, planner and export services remain dependencies of the shell.
-Do not offer this package to the historical test installer: it lacks that Core
-composition despite carrying the same pre-release 3.2.0 version. A new installed
-acceptance build is required before publishing automatic Clipart.
+Do not offer this package to the historical 3.2.0 test installer: it lacks that
+Core composition. The current test packages use minimum Studio 3.2.1, keeping
+older installers on their compatible legacy module releases. A new installed
+acceptance build is required before production publication of automatic Clipart.
 
 ## Draft Upload
 

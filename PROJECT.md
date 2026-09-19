@@ -11,8 +11,10 @@ collection tools. Core module identity is now independent of its reusable legacy
 state scope. Different module identities cannot bind the same scope in one live
 shell or relabel each other's saved project envelopes. The separate built-in
 automatic workflow now uses eight steps and restores its own saved runs and export
-state. This is locally implemented source, not a released installer or independently
-downloadable package; the release gates remain in TASKS.md and STATE.md.
+state. The workflow is available in the isolated Windows Test 3.2.1 installer and
+as a signed 1.1.0 test-server module requiring that shell. This is not a customer
+production release; owner acceptance and paid-provider gates remain in TASKS.md
+and STATE.md.
 
 ## Acceptance Isolation, 2026-09-19
 
@@ -24,7 +26,7 @@ The test service has its own database and exposes no administrator routes.
 
 ## Independent workflow delivery contract, 2026-09-19
 
-Legacy generation keeps project/entitlement ID `clipart`; the separate future
+Legacy generation keeps project/entitlement ID `clipart`; the separate
 automatic Clipart catalog uses `auto-clipart`. Signed official workflow packages
 may replace the three legacy and automatic Clipart built-in controllers through ModuleRuntimeHost,
 without replacing the shell. Shared Core UI, project schemas and provider services
