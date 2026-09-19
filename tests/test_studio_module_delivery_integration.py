@@ -79,6 +79,7 @@ def delivery(tmp_path, monkeypatch):
     key, record = service.generate_license("clipart-generator", now - timedelta(seconds=1))
     for mode in ProjectMode:
         service.grant_module(record.license_id, mode.value, now - timedelta(seconds=1), source="purchase")
+    service.grant_module(record.license_id, "auto-clipart", now - timedelta(seconds=1), source="purchase")
     client.activate(key)
     publisher = ed25519.Ed25519PrivateKey.generate()
     gate = OnlineLicenseGate(client)
@@ -115,7 +116,7 @@ def app():
     return QApplication.instance() or QApplication([])
 
 
-@pytest.mark.parametrize("module_id", ["clipart", "processing", "pinterest"])
+@pytest.mark.parametrize("module_id", ["clipart", "processing", "pinterest", "auto-clipart"])
 def test_publisher_https_admin_draft_then_licensed_install(delivery, tmp_path, module_id):
     from license_service.admin import current_totp
     from studio_module_release import AdminDraftUploader
@@ -145,10 +146,10 @@ def test_publisher_https_admin_draft_then_licensed_install(delivery, tmp_path, m
         uploader.close()
 
 
-@pytest.mark.parametrize("mode", tuple(ProjectMode))
+@pytest.mark.parametrize("mode", (*ProjectMode, "auto-clipart"))
 def test_https_release_to_real_home_controller_and_independent_update(delivery, app, tmp_path, mode):
     bridge, publish, gate, service, record = delivery
-    module = mode.value
+    module = mode.value if isinstance(mode, ProjectMode) else mode
     publish(module)
     first = bridge.check(module)
     assert first.version == "1.0.0"
@@ -158,11 +159,17 @@ def test_https_release_to_real_home_controller_and_independent_update(delivery, 
     view = V3ApplicationView(draft_path=tmp_path / "draft.json", license_gate=gate,
                              module_delivery=bridge, worker_factory=workers)
     try:
-        view.mode_selection.mode_cards[mode].start_button.click()
+        if module == "auto-clipart":
+            view.mode_selection.module_cards[module].start_button.click()
+        else:
+            view.mode_selection.mode_cards[mode].start_button.click()
         controller = view.shell.workflow_controller(module)
         assert controller is not None
         assert controller.__class__.__module__.startswith("_studio_module_")
-        view.project_state.common.project_name = "Preserved project"
+        if module == "auto-clipart":
+            controller.brief.project_name.setText("Preserved project")
+        else:
+            view.project_state.common.project_name = "Preserved project"
         view.shell.mark_dirty()
         saved = view.project_state.to_dict()
         project_id = view._active_project_id
@@ -194,23 +201,24 @@ def test_https_release_to_real_home_controller_and_independent_update(delivery, 
     assert bridge.store.state(module)["active"] == "1.0.0"
 
 
-def test_revoked_link_untrusted_key_and_wrong_identity_never_install(delivery):
+@pytest.mark.parametrize("module", ["pinterest", "auto-clipart"])
+def test_revoked_link_untrusted_key_and_wrong_identity_never_install(delivery, module):
     bridge, publish, _gate, service, record = delivery
-    publish("pinterest")
-    release = bridge.check("pinterest")
+    publish(module)
+    release = bridge.check(module)
     with pytest.raises(ModulePackageError):
         bridge.install(replace(release, module_id="processing"))
     assert bridge.store.installed_versions("processing") == ()
-    publish("pinterest", "1.1.0", private_key=ed25519.Ed25519PrivateKey.generate())
+    publish(module, "1.1.0", private_key=ed25519.Ed25519PrivateKey.generate())
     with pytest.raises(ModulePackageError):
-        bridge.install(bridge.check("pinterest"))
-    assert bridge.store.installed_versions("pinterest") == ()
-    service.revoke_module(record.license_id, "pinterest", "test revocation")
+        bridge.install(bridge.check(module))
+    assert bridge.store.installed_versions(module) == ()
+    service.revoke_module(record.license_id, module, "test revocation")
     with pytest.raises(UpdateError):
         bridge.install(release)
     with pytest.raises(UpdateError):
-        bridge.check("pinterest")
-    assert bridge.store.installed_versions("pinterest") == ()
+        bridge.check(module)
+    assert bridge.store.installed_versions(module) == ()
 
 
 def test_newer_incompatible_release_does_not_hide_compatible_version(delivery):
@@ -245,10 +253,11 @@ def test_revoked_installed_module_preserves_open_project(delivery, app, tmp_path
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
-@pytest.mark.parametrize("mode", tuple(ProjectMode))
+@pytest.mark.parametrize("mode", (*ProjectMode, "auto-clipart"))
 def test_real_update_dialog_downloads_and_opens_workflow(delivery, app, tmp_path, mode):
     bridge, publish, gate, *_ = delivery
-    publish(mode.value)
+    module = mode.value if isinstance(mode, ProjectMode) else mode
+    publish(module)
     view = V3ApplicationView(draft_path=tmp_path / "draft.json", license_gate=gate, module_delivery=bridge)
     view.show()
 
@@ -266,14 +275,17 @@ def test_real_update_dialog_downloads_and_opens_workflow(delivery, app, tmp_path
         assert dialog.isVisible()
         dialog.check_button.click()
         finish(dialog)
-        assert dialog.rows[mode.value][2].isEnabled()
-        dialog.rows[mode.value][2].click()
+        assert dialog.rows[module][2].isEnabled()
+        dialog.rows[module][2].click()
         finish(dialog)
-        assert bridge.store.state(mode.value)["active"] == "1.0.0", dialog.status.text()
-        assert dialog.rows[mode.value][0].text() == "1.0.0"
+        assert bridge.store.state(module)["active"] == "1.0.0", dialog.status.text()
+        assert dialog.rows[module][0].text() == "1.0.0"
         dialog.close_button.click()
-        view.mode_selection.mode_cards[mode].start_button.click()
-        assert view.shell.workflow_controller(mode.value).__class__.__module__.startswith("_studio_module_")
+        if module == "auto-clipart":
+            view.mode_selection.module_cards[module].start_button.click()
+        else:
+            view.mode_selection.mode_cards[mode].start_button.click()
+        assert view.shell.workflow_controller(module).__class__.__module__.startswith("_studio_module_")
     finally:
         if view._module_updates_dialog is not None:
             view._module_updates_dialog._shutdown()

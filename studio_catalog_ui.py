@@ -9,7 +9,7 @@ from v3_components import ModeCard, DEFAULT_TOKENS
 
 
 BUILTIN_CATALOG = (
-    CatalogEntry("auto-clipart", "Clipart", "Автоматические наборы клипартов", "clipart"),
+    CatalogEntry("auto-clipart", "Clipart", "Автоматические наборы клипартов", "clipart", released=True),
     CatalogEntry("patterns", "Patterns", "Паттерны, повторения и плитки", "patterns"),
     CatalogEntry("mockups", "Mockups", "Ваши иллюстрации на товарах", "mockups"),
 )

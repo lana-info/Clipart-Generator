@@ -34,9 +34,11 @@ class PlanningWorker(QRunnable):
 
 
 class PlanningPanel(QWidget):
+    busy_changed = pyqtSignal()
     def __init__(self, snapshot, editor, selection=None, parent=None, reference_images=None, clear_reference_images=None):
         super().__init__(parent)
         self.snapshot, self.editor = snapshot, editor
+        self.authorize = None
         self.reference_images = reference_images or (lambda: ())
         self.clear_reference_images = clear_reference_images or (lambda: None)
         self.pending = None
@@ -83,6 +85,7 @@ class PlanningPanel(QWidget):
         for widget in (self.provider, self.model, self.all_button, self.one_button):
             widget.setEnabled(not busy)
         self.cancel_button.setEnabled(busy)
+        self.busy_changed.emit()
 
     def cancel(self):
         if self.pending:
@@ -242,6 +245,10 @@ class PlanningPanel(QWidget):
                 )
 
                 def work():
+                    if token.is_set():
+                        return None
+                    if self.authorize is not None:
+                        self.authorize()
                     if token.is_set():
                         return None
                     return generate_plan(

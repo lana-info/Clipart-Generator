@@ -53,6 +53,15 @@ LEGACY_LAYER_MODULES = {
 # Exact reviewed legacy debt at baseline 8ff2c54. Remove entries as those
 # dependencies disappear; any new edge requires explicit architectural review.
 LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
+    # Automatic collections reuse the reviewed legacy collection implementation.
+    ('studio_auto_clipart_flow', 'studio_bundle_planner'),
+    ('studio_auto_clipart_flow', 'studio_clipart_builder_ui'),
+    ('studio_auto_clipart_flow', 'studio_clipart_objects'),
+    ('studio_auto_clipart_flow', 'studio_clipart_recipe'),
+    ('studio_auto_clipart_flow', 'studio_style_profiles'),
+    ('studio_auto_clipart_flow', 'v3_clipart_flow'),
+    ('studio_builtin_workflows.auto-clipart.entry', 'studio_auto_clipart_flow'),
+    ('studio_builtin_workflows.auto-clipart.entry', 'studio_auto_clipart_state'),
     ('clipart_prompt_generator', 'chroma_key'),
     ('clipart_prompt_generator', 'chroma_key_selection'),
     ('clipart_prompt_generator', 'prompt_translation'),

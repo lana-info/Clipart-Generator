@@ -13,12 +13,16 @@ not offer collection planning or bundle tools.
   retain legacy metadata/edited-output compatibility and individual image tools.
 - [x] Label the ordinary workflow `Генерация изображений`; verify 1120x780 Qt view
   and fix stale sidebar-label overlap.
-- [ ] Implement separate automatic controller, eight-step navigation and resume
+- [x] Implement separate automatic controller, eight-step navigation and resume
   keyed by project envelope module ID, not its reused legacy state mode.
-- [ ] Connect recipe/style/palette/references/structure/objects to prompt preview,
+- [x] Connect recipe/style/palette/references/structure/objects to prompt preview,
   explicit cost-confirmed run, Review and per-set export.
-- [ ] Verify complete automatic workflow before enabling catalogue/download or
-  dispatching another separately authorized Windows test build.
+- [x] Verify local automatic workflow with mocked paid worker, real fixture PNG,
+  ZIP/PDF export, edited-result restoration and exact rights; gated source catalogue.
+- [x] Extend signed package inventory/delivery to automatic Clipart; verify real
+  loopback HTTPS download, signed runtime load, update/rollback and exact rights.
+- [ ] Separately authorized Windows build/installed acceptance and live paid
+  provider smoke. Existing test installer/server do not contain this increment.
 
 Detailed current evidence and next-step constraints are at the top of STATE.md.
 

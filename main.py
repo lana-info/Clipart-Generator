@@ -10121,6 +10121,8 @@ def run_packaged_entrypoint_check(
         is None
     )
     smoke_window.deleteLater()
+    from studio_auto_clipart_smoke import check_automatic_clipart
+    automatic_clipart_is_available = check_automatic_clipart(evidence_dir)
     return 0 if (
         len(MODE_CARD_SPECS) == 3
         and V3ApplicationView
@@ -10133,6 +10135,7 @@ def run_packaged_entrypoint_check(
         and pictures_default_is_safe
         and update_channel_is_connected
         and startup_is_blocked
+        and automatic_clipart_is_available
         and (expected_app_version is None or APP_VERSION == expected_app_version)
     ) else 1
 

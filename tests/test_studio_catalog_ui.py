@@ -28,7 +28,9 @@ class CatalogUiTests(unittest.TestCase):
         self.assertEqual({card.height() for card in cards}, {248})
         self.assertLessEqual(max(card.width() for card in cards) - min(card.width() for card in cards), 1)
         self.assertTrue(all(card.start_button.isEnabled() for card in screen.mode_cards.values()))
-        self.assertTrue(all(card.start_button.text() == "Скоро выйдет" for card in screen.module_cards.values()))
+        self.assertTrue(all(card.start_button.text() == "Скоро выйдет"
+                            for key, card in screen.module_cards.items() if key != "auto-clipart"))
+        self.assertNotEqual(screen.module_cards["auto-clipart"].start_button.text(), "Скоро выйдет")
         self.assertTrue(all(not card.start_button.isEnabled() for card in screen.module_cards.values()))
         screen.resize(980, 700)
         self.app.processEvents()

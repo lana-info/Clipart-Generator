@@ -1,5 +1,96 @@
 # Project state
 
+## Automatic Clipart Windows Acceptance Authorized, 2026-09-19
+
+Owner explicitly requested making the remaining installation/server path work.
+Preparing an isolated Windows **3.2.1** build, not production. New four-module
+test packages **1.1.0** require Studio >=3.2.1 so historical 3.2.0 test installers
+cannot install controllers requiring the new Core. Previous legacy 1.0.0 rows
+remain published; the initial auto-clipart 1.0.0 row was withdrawn before handoff.
+Test database backup: `/opt/vibix-studio-acceptance/20260919/before-auto-clipart.dump`
+(private). Only the two existing expiring test licenses gained `auto-clipart`;
+production keys/licenses/service were not modified. No paid generation.
+
+Packaged startup now exercises automatic Clipart prompt compilation, durable
+project resume and a Windows screenshot with a local no-worker fixture. Added
+explicit Qt deferred cleanup to prevent a stale fixture timer touching later
+test windows. Affected startup/architecture tests: 38 passed. Build execution
+and final artifact evidence follow below when available.
+
+## Automatic Clipart Package Delivery Connected, 2026-09-19
+
+Owner requested completion of the remaining work. The explicit official inventory
+now includes `auto-clipart` (automatic controller plus its package-local generation
+base), delivery admits its exact ID, and the existing update dialog lists the
+fourth module with the same progress/signature/activation safeguards. Closing the
+update dialog refreshes catalogue entitlement state; otherwise a newly installed
+automatic module could remain disabled until a later refresh.
+
+Real loopback HTTPS verification against
+`/root/projects/Clipart Generator/license-release-catalog-worktree/src`:
+15 integration cases passed (18.54s), including automatic-module administrator
+draft upload, download, signature inspection, real packaged Qt controller,
+independent update, live-page lease protection, project resume and rollback.
+Additional denied/revoked-link/untrusted-key coverage: 2 passed (2.09s), including
+the automatic module while legacy rights remain granted. Packaging/release/update
+UI checks: 25 passed. An initial run against the older design service checkout
+failed because that source lacks module releases; no production service was used
+or modified. Use the release-catalog source above for reproducible integration.
+Actual four-row Qt screenshot: `docs/ui/3.2/automatic-clipart/module-updates.png`.
+Final full isolated suite: 1682 passed, 57 skipped, 18 deselected (86.44s).
+Native Windows, unavailable Real-ESRGAN and deferred Pinterest skips remain;
+network tests are separately exercised above. `git diff --check` passed.
+
+The release integration gap from the prior checkpoint is closed in source. No
+production signing key, real license, deployed test service, or installer was
+modified. All network test keys/data were ephemeral. Current edits remain
+uncommitted. New Windows test build approval was requested explicitly; no build
+has been dispatched. Live paid generation still requires a bounded approved test.
+
+## Automatic Clipart Workflow Implemented Locally, 2026-09-19
+
+Continuation in `studio-auto-clipart-worktree` on
+`codex/feature-auto-clipart-identity-20260919`. Owner explicitly authorized
+implementation without further routine approval. New `auto-clipart` built-in
+registration, Core shell and controller expose eight distinct steps: idea,
+visual direction/palette, references, role counts, objects/AI assistance,
+prompt review/model/cost confirmation, PNG review/editor, and set export.
+Ordinary generation remains separate and has no collection planner.
+
+Reuses existing recipe, planner, compiler, generation pipeline, alpha review,
+membership and transactional ZIP/PDF exporter. Automatic background removal uses
+the registered local provider `local_chroma_key`; paid upscale is not enabled.
+Every paid planning batch rechecks exact `auto-clipart` authorization. Generation
+requires explicit confirmation; opening, navigating and restoring do not start
+provider work. Export shows actual set membership; its dialog handles review,
+exclusions, editing and archive creation.
+
+Automatic project envelopes and the export step retain module identity on reopen.
+Persisted run metadata restores completed PNGs, including explicitly edited copies
+outside the output folder. Interrupted rows require an explicit retry; no automatic
+resubmission. Unchanged brief preserves manually edited prompts. Auto projects do
+not overwrite the ordinary legacy draft or preferences. Failed save blocks close
+and switching away; malformed restore reports failure without replacing saved data.
+
+Verification: full isolated suite 1675 passed, 57 skipped, 14 deselected (82.55s)
+before final edited-copy/restore hardening; final affected suite: 105 passed
+(29.05s), covering auto workflow/identity, Core mode selection, registry,
+dependency boundary and planning authorization. `git diff --check` passed.
+Qt offscreen 1120x780 captures for all eight steps and model/cost tabs are in
+`docs/ui/3.2/automatic-clipart/`. Inspected actual Qt views, not mockups. Images in
+result screenshots are local fixtures. The integration test confirms launch,
+progress, transparent PNG, ZIP + overview PDF and reopen without another worker.
+No live paid provider request, dependency installation, build or deployment.
+
+Remaining release gates: installed Windows acceptance and a live owner-approved
+provider run. The existing Windows installer and isolated server remain unchanged
+and do NOT yet contain this module. Source catalogue access is entitlement-gated;
+this is not a published module release. Independent signed package inventory and
+delivery still support only the three existing workflows; automatic Clipart needs
+that separate release integration before it can be offered as a downloadable
+update. No license grants or publisher keys were modified. Current edits remain
+uncommitted for review.
+
 ## Automatic Clipart Separation In Progress, 2026-09-19
 
 Owner requested automatic Clipart development now, independently of pending owner
@@ -29,7 +120,7 @@ Affected checks: 179 passed. Final full isolated suite: 1666 passed, 57 skipped,
 Real-ESRGAN and deferred Pinterest flows. `git diff --check` passed. Visual proof:
 `docs/ui/3.2/auto-clipart-separation/ordinary-generation-1120x780.png`.
 
-Next implementation: separate automatic controller, eight-screen route and
+Historical next implementation (completed by the checkpoint above): separate automatic controller, eight-screen route and
 project restoration using record module identity, never inferred from the reused
 legacy `state.mode`. Then connect the existing recipe/style/reference/object/
 bundle/export services. Do not simply expose the old six-step builder or enable

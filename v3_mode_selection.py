@@ -438,6 +438,8 @@ class V3ApplicationView(QWidget):
                             mode.value, extensions=self._project_state_extensions
                         )
                         for mode in ProjectMode
+                    ) + (
+                        V3ProjectDocumentAdapter("auto-clipart", extensions=self._project_state_extensions),
                     ),
                 )
             except (OSError, ValueError):
@@ -471,6 +473,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.module_updates_button.setVisible(module_delivery is not None)
         self.mode_selection.module_updates_requested.connect(self._show_module_updates)
         self.mode_selection.mode_selected.connect(self._handle_mode_selected)
+        self.mode_selection.module_action_requested.connect(self._handle_module_action)
         self.mode_selection.continue_last_project_requested.connect(
             self.continue_last_project
         )
@@ -510,6 +513,7 @@ class V3ApplicationView(QWidget):
                 self._module_delivery, parent=self,
                 busy_module=lambda module: self.shell is not None and self.shell.workflow_controller(module) is not None,
             )
+            self._module_updates_dialog.finished.connect(self.refresh_license_status)
         self._module_updates_dialog.open()
 
     def _runtime_settings(self) -> Mapping[str, Any]:
@@ -601,6 +605,31 @@ class V3ApplicationView(QWidget):
             status = self._license_gate.status_text
             verification = self._license_gate.verification_text
         self.mode_selection.set_license_status(status, verification)
+        from license_client import LicenseAuthorization
+        authorization = getattr(self._license_gate, "current_authorization", None)
+        card = self.mode_selection.module_cards.get("auto-clipart")
+        if card is not None:
+            card.set_availability(ModuleAvailability(
+                installed=True, open_supported=True,
+                entitled=isinstance(authorization, LicenseAuthorization)
+                and authorization.allows_module("auto-clipart"),
+            ))
+
+    def _handle_module_action(self, module_id: str, action: str) -> None:
+        if module_id != "auto-clipart" or action != "open":
+            return
+        if not self._save_automatic_before_leaving():
+            return
+        if self.shell is not None and self.shell.active_run_controller() is not None:
+            return
+        state = ProjectState(mode=ProjectMode.CLIPART)
+        self._apply_preferences(state, ProjectMode.CLIPART)
+        previous = self._active_project_id
+        self._active_project_id = None
+        if not self._replace_shell(state, module_id=module_id):
+            self._active_project_id = previous
+            return
+        self.new_project_started.emit(module_id)
 
     @property
     def project_state(self) -> ProjectState | None:
@@ -636,6 +665,8 @@ class V3ApplicationView(QWidget):
         )
 
     def show_new_project(self, *, trigger: str = "new_project_requested") -> None:
+        if not self._save_automatic_before_leaving():
+            return
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self.mode_selection.reset_selection()
         self.mode_selection.set_mode_switch_context(False)
@@ -645,6 +676,8 @@ class V3ApplicationView(QWidget):
         self._set_application_screen(self.mode_selection, "mode_selection", trigger)
 
     def show_mode_switcher(self) -> None:
+        if not self._save_automatic_before_leaving():
+            return
         if self.shell is None:
             self.show_new_project()
             return
@@ -681,6 +714,8 @@ class V3ApplicationView(QWidget):
         return True
 
     def _handle_mode_selected(self, mode_value: str) -> None:
+        if not self._save_automatic_before_leaving():
+            return
         mode = ProjectMode(mode_value)
         self._diagnostic_event(
             "mode_selected",
@@ -691,6 +726,7 @@ class V3ApplicationView(QWidget):
         if (
             self._selection_intent is SelectionIntent.SWITCH_MODE
             and self.shell is not None
+            and getattr(self.shell, "module_id", None) != "auto-clipart"
         ):
             if self.shell.active_run_controller() is not None:
                 self._set_application_screen(
@@ -757,6 +793,8 @@ class V3ApplicationView(QWidget):
             self.mode_selection.recent_project_card.hide()
 
     def continue_saved_project(self, project_id: str) -> bool:
+        if not self._save_automatic_before_leaving():
+            return False
         if self._project_store is None:
             return False
         if self.shell is not None and self.shell.active_run_controller() is not None:
@@ -769,15 +807,18 @@ class V3ApplicationView(QWidget):
             if not session.editable:
                 raise ValueError("Project document is read-only")
             state = ProjectState.from_dict(session.state)
+            if (session.record.module_id == "auto-clipart"
+                    and session.state.get("current_step_by_mode", {}).get("clipart") == "transparency"):
+                state.set_step("transparency")
         except (OSError, ValueError):
             QMessageBox.warning(self, "Проект", "Не удалось открыть сохранённый проект.")
             return False
         previous_project_id = self._active_project_id
         self._active_project_id = session.record.project_id
-        if not self._replace_shell(state):
+        if not self._replace_shell(state, module_id=session.record.module_id):
             self._active_project_id = previous_project_id
             return False
-        self.project_continued.emit(state.mode.value)
+        self.project_continued.emit(session.record.module_id)
         return True
 
     def _show_all_projects(self) -> None:
@@ -891,11 +932,24 @@ class V3ApplicationView(QWidget):
             return False
         return True
 
-    def _save_draft(self) -> None:
+    def _save_automatic_before_leaving(self) -> bool:
+        if self.shell is None or getattr(self.shell, "module_id", None) != "auto-clipart":
+            return True
+        controller = self.shell.workflow_controller("auto-clipart")
+        if controller is not None and controller.is_busy():
+            self.shell.set_save_error("Дождитесь завершения текущего задания или остановите его.")
+            return False
+        return self._save_draft()
+
+    def _save_draft(self) -> bool:
         path = self._draft_path
         if path is None or self.shell is None:
-            return
+            return True
         try:
+            module_id = getattr(self.shell, "module_id", self.shell.state.mode.value)
+            controller = self.shell.workflow_controller(module_id)
+            if module_id == "auto-clipart" and controller is not None:
+                controller.flush()
             path.parent.mkdir(parents=True, exist_ok=True)
             if self._project_store is not None:
                 if self._project_documents is None:
@@ -904,7 +958,7 @@ class V3ApplicationView(QWidget):
                 name = state.common.project_name.strip() or "Без названия"
                 if self._active_project_id is None:
                     record = self._project_documents.create(
-                        state.mode.value, "project", name, state.to_dict()
+                        module_id, "project", name, state.to_dict()
                     )
                     self._active_project_id = record.project_id
                 else:
@@ -913,18 +967,22 @@ class V3ApplicationView(QWidget):
                     )
             # The separate project is authoritative. Never write a newer legacy
             # draft first, then hide it behind an older project after a failure.
-            save_project_draft(
-                self.shell.state, path, extensions=self._project_state_extensions
-            )
-            preferences_saved = self._save_preferences()
-            self._recent_project = ProjectState.from_dict(self.shell.state.to_dict())
+            if module_id != "auto-clipart":
+                save_project_draft(
+                    self.shell.state, path, extensions=self._project_state_extensions
+                )
+                preferences_saved = self._save_preferences()
+                self._recent_project = ProjectState.from_dict(self.shell.state.to_dict())
+            else:
+                preferences_saved = True
         except (OSError, ValueError):
             self.shell.set_save_error("Не удалось сохранить изменения")
-            return
+            return False
         self.shell.set_save_error(
             None if preferences_saved and not self._project_store_unavailable
             else "Не удалось сохранить изменения"
         )
+        return bool(preferences_saved and not self._project_store_unavailable)
 
     def _prepare_project_run(self, shell: AppShell) -> str | None:
         if shell is not self.shell:
@@ -940,7 +998,7 @@ class V3ApplicationView(QWidget):
         try:
             if self._active_project_id is None:
                 record = self._project_documents.create(
-                    state.mode.value, "project", name, state.to_dict()
+                    getattr(shell, "module_id", state.mode.value), "project", name, state.to_dict()
                 )
                 self._active_project_id = record.project_id
             else:
@@ -974,12 +1032,32 @@ class V3ApplicationView(QWidget):
             kwargs["project_id"] = project_id
         return self._create_prepared_project_worker(shell, **kwargs)
 
-    def _replace_shell(self, state: ProjectState) -> bool:
+    def _replace_shell(self, state: ProjectState, *, module_id: str | None = None) -> bool:
         previous = self.shell
-        shell = AppShell(state, tokens=self.tokens)
+        if module_id == "auto-clipart":
+            from license_client import LicenseError
+            try:
+                if self._license_gate is None:
+                    raise LicenseError("Лицензия не настроена")
+                authorize_module_run(self._license_gate, module_id)
+            except LicenseError:
+                QMessageBox.warning(self, "Clipart", "Нет доступа к автоматическому Clipart.")
+                return False
+            from studio_auto_clipart_shell import AutoClipartShell
+            shell = AutoClipartShell(state, tokens=self.tokens)
+        else:
+            shell = AppShell(state, tokens=self.tokens)
         shell.diagnostic_journal = self._diagnostic_journal
         shell.initialization_stage.connect(self._show_initialization_stage)
-        if self._try_ensure_mode_controller(shell, state.mode) is None:
+        try:
+            controller = self._try_ensure_mode_controller(shell, state.mode)
+        except (ValueError, OSError):
+            shell.deleteLater()
+            if module_id != "auto-clipart":
+                raise
+            QMessageBox.warning(self, "Clipart", "Не удалось восстановить проект. Сохранённые данные не изменены.")
+            return False
+        if controller is None:
             shell.deleteLater()
             return False
         if previous is not None:
@@ -1009,7 +1087,7 @@ class V3ApplicationView(QWidget):
             return None
 
     def _ensure_mode_controller(self, shell: AppShell, mode: ProjectMode) -> Any:
-        module_id = mode.value
+        module_id = getattr(shell, "module_id", mode.value)
         existing = shell.workflow_controller(module_id)
         if existing is not None:
             return existing
@@ -1100,6 +1178,14 @@ class V3ApplicationView(QWidget):
 
 
     def closeEvent(self, event) -> None:
+        if self.shell is not None and getattr(self.shell, "module_id", None) == "auto-clipart":
+            controller = self.shell.workflow_controller("auto-clipart")
+            if controller is not None and controller.is_busy():
+                event.ignore()
+                return
+            if not self._save_draft():
+                event.ignore()
+                return
         if self._module_updates_dialog is not None and self._module_updates_dialog.busy:
             event.ignore()
             return

@@ -988,6 +988,8 @@ class ClipartReviewRunPage(ImageReviewRunPage):
 
 
 class ClipartFlowController(QObject):
+    module_id = "clipart"
+    collections_enabled = False
     started = pyqtSignal(object)
     progress = pyqtSignal(str)
     progress_value = pyqtSignal(int)
@@ -995,7 +997,7 @@ class ClipartFlowController(QObject):
     error = pyqtSignal(str)
 
     def __init__(self, host: WorkflowHost) -> None:
-        host = workflow_host_for(host, "clipart")
+        host = workflow_host_for(host, self.module_id)
         super().__init__()
         self.shell = host
         self.worker: Any | None = None
@@ -1005,7 +1007,7 @@ class ClipartFlowController(QObject):
             self,
             ProjectMode.CLIPART,
             # Preserve old edited-output links without exposing collection tools.
-            results_extension=ClipartRunResultsExtension(collections_enabled=False),
+            results_extension=ClipartRunResultsExtension(collections_enabled=self.collections_enabled),
         )
         self.pages = LazyPageRegistry(self.shell, ProjectMode.CLIPART)
         self._install_pages()

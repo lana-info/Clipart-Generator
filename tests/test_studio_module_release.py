@@ -51,7 +51,7 @@ def test_prepare_all_real_workflows_are_verified_and_output_never_overwritten(pu
                 version="1.0.0", studio_min="3.2.0", studio_max_exclusive="3.3.0",
                 platforms=["windows-x64", "macos-x64"])
     rows = prepare_release_set(**args)
-    assert {r["module_id"] for r in rows} == {"clipart", "processing", "pinterest"}
+    assert {r["module_id"] for r in rows} == {"clipart", "processing", "pinterest", "auto-clipart"}
     for row in rows:
         store = ModuleStore(tmp_path / "inspect", studio_version="3.2.0",
                             platform="windows-x64", trusted_keys=trust)

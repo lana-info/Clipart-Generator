@@ -302,6 +302,28 @@ def test_large_planning_is_split_into_bounded_paid_batches(builder, monkeypatch)
     assert builder.planning.pending is None
 
 
+def test_authorization_is_rechecked_before_each_paid_batch(builder, monkeypatch):
+    _make_large_collection(builder, 81)
+    jobs = queued(builder.planning)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    generate = MagicMock(side_effect=lambda recipe, *, palette='', replace_ids=None, **kwargs:
+                         _fake_batch_result(recipe, palette, replace_ids))
+    monkeypatch.setattr('studio_planning_ui.generate_plan', generate)
+    authorize = MagicMock(side_effect=[None, ValueError('Access revoked')])
+    builder.planning.authorize = authorize
+    builder.planning.start(False)
+    before = copy.deepcopy(builder.object_editor.items)
+    jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text',)), None)
+    jobs[1][1](jobs[1][0](), None)
+    with pytest.raises(ValueError, match='Access revoked'):
+        jobs[2][0]()
+    jobs[2][1](None, 'Access revoked')
+    assert authorize.call_count == 2
+    generate.assert_called_once()
+    assert builder.object_editor.items == before
+    assert builder.planning.pending is None
+
+
 def test_large_planning_failure_keeps_editor_atomic(builder, monkeypatch):
     _make_large_collection(builder, 81)
     jobs = queued(builder.planning)

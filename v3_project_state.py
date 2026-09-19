@@ -925,6 +925,7 @@ class ClipartModeData:
     # Module-owned payloads remain opaque to Core.
     recipe: dict[str, Any] | None = None
     export_membership: dict[str, Any] = field(default_factory=dict)
+    automatic: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         recipe = _json_mapping_copy(self.recipe, "clipart.recipe", allow_none=True)
@@ -938,6 +939,7 @@ class ClipartModeData:
             "operations": self.operations.to_dict(),
             **({"recipe": recipe} if recipe is not None else {}),
             **({"export_membership": membership} if membership else {}),
+            **({"automatic": _json_mapping_copy(self.automatic, "clipart.automatic")} if self.automatic else {}),
         }
 
     @classmethod
@@ -953,6 +955,7 @@ class ClipartModeData:
         return cls(
             recipe=recipe,
             export_membership=membership,
+            automatic=_json_mapping_copy(data.get("automatic", {}), "clipart.automatic"),
             prompts=_prompt_entries(data.get("prompts", [])),
             prompt_generator=PromptGeneratorData.from_dict(
                 data.get("prompt_generator", {}),
@@ -1762,7 +1765,7 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
     clipart = _draft_object(value, "clipart")
     _reject_unknown_fields(
         clipart,
-        ("prompts", "prompt_generator", "generation", "operations", "recipe", "export_membership"),
+        ("prompts", "prompt_generator", "generation", "operations", "recipe", "export_membership", "automatic"),
         "clipart",
     )
     if "export_membership" in clipart and not isinstance(clipart["export_membership"], Mapping):
@@ -2218,6 +2221,10 @@ class V3ProjectDocumentAdapter:
         parsed = ProjectState.from_dict(state, extensions=self._extensions)
         if self.module_id == AUTO_CLIPART_MODULE_ID and parsed.mode is not self._state_scope:
             raise ProjectStateError("Automatic Clipart document is outside its state scope")
+        if (self.module_id == AUTO_CLIPART_MODULE_ID
+                and state.get("current_step_by_mode", {}).get("clipart") == StepId.TRANSPARENCY.value):
+            # In this module the final step is durable export, not a live editor.
+            parsed.set_step(StepId.TRANSPARENCY)
         return parsed.to_dict()
 
     def open_state(self, state: dict[str, Any], version: int) -> dict[str, Any]:

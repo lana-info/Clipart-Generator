@@ -24,6 +24,7 @@ from studio_modules import (
 
 
 OFFICIAL_WORKFLOW_FILES = {
+    "auto-clipart": ("studio_auto_clipart_flow.py", "v3_clipart_flow.py"),
     "clipart": ("v3_clipart_flow.py",),
     "processing": ("v3_processing_flow.py",),
     "pinterest": ("v3_pinterest_flow.py", "pinterest_pin_composer.py",
@@ -56,7 +57,7 @@ def prepare_official_workflow_release(*, source_root: Path, module_id: str, **me
         files[name] = ast.unparse(tree).encode("utf-8")
     flow = Path(inventory[0]).stem
     installer = {"clipart": "install_clipart_flow", "processing": "install_processing_flow",
-                 "pinterest": "install_pinterest_flow"}[module_id]
+                 "pinterest": "install_pinterest_flow", "auto-clipart": "install_auto_clipart_flow"}[module_id]
     arguments = "host, locale=locale" if module_id == "pinterest" else "host"
     files["entry.py"] = (
         "from studio_module_api import ModuleRegistration, CommandDeclaration\n"

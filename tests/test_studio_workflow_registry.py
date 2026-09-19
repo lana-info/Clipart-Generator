@@ -101,7 +101,7 @@ def test_builtin_registry_exposes_optional_project_state_extensions_without_name
     root = Path(__file__).resolve().parents[1] / "studio_builtin_workflows"
     registry = discover_workflows(root)
     extensions = registry.project_state_extensions()
-    assert len(extensions) == 1
-    extension = extensions[0]
-    assert callable(getattr(extension, "normalize_state", None))
-    assert callable(getattr(extension, "before_replace", None))
+    assert len(extensions) == 2
+    for extension in extensions:
+        assert callable(getattr(extension, "normalize_state", None))
+        assert callable(getattr(extension, "before_replace", None))

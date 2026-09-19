@@ -33,7 +33,7 @@ python studio_module_release.py prepare \
   --platform windows-x64 --platform macos-x64
 ```
 
-This prepares all three existing workflows from explicit inventories, signs each
+This prepares all four workflows (including `auto-clipart`) from explicit inventories, signs each
 package, and verifies it with the desktop installer for every declared platform.
 It outputs ZIPs and `release-set.json` with SHA-256/size/compatibility. It never
 imports payload code, runs providers, sweeps user directories or overwrites an
@@ -43,8 +43,15 @@ directory; do not publish it without successful verification.
 The 2026-09-19 candidate artifacts are in
 `/root/projects/Clipart Generator/artifacts/official-modules-1.0.0-20260919`.
 These are independently signed workflow packages, not desktop installers.
-The legacy generation module is `clipart`; the future automatic collection
-workflow remains the separate `auto-clipart` identity.
+Those historical artifacts contain only the three legacy workflows. The legacy
+generation module is `clipart`; automatic collections use `auto-clipart` and must
+be packaged from the new source checkpoint. Its payload includes the automatic
+controller and a package-local copy of the reused generation controller, so an
+ordinary generator update cannot silently replace that base. The eight-step Core
+shell, state adapter, planner and export services remain dependencies of the shell.
+Do not offer this package to the historical test installer: it lacks that Core
+composition despite carrying the same pre-release 3.2.0 version. A new installed
+acceptance build is required before publishing automatic Clipart.
 
 ## Draft Upload
 
@@ -73,7 +80,7 @@ administrator publishes it. Use the panel to publish or withdraw releases.
 
 - Test service migration 012 on a disposable database first; production rollout
   must preserve the active deployment override in the service runbook.
-- Verify an installed shell trusts the publisher and opens all three workflows;
+- Verify an installed shell trusts the publisher and opens all four workflows;
   check download progress, interruption, bad signature and denied/revoked rights.
 - Check existing projects and the separate video product registration unchanged.
 - Test Windows installer/update and native UI on Windows; offscreen Linux Qt

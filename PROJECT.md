@@ -9,8 +9,10 @@ generation, processing and individual image editing; legacy `clipart` identifier
 and saved collection metadata are preserved for compatibility, not exposed as new
 collection tools. Core module identity is now independent of its reusable legacy
 state scope. Different module identities cannot bind the same scope in one live
-shell or relabel each other's saved project envelopes. This is the first internal
-separation increment, not the released eight-screen automatic workflow.
+shell or relabel each other's saved project envelopes. The separate built-in
+automatic workflow now uses eight steps and restores its own saved runs and export
+state. This is locally implemented source, not a released installer or independently
+downloadable package; the release gates remain in TASKS.md and STATE.md.
 
 ## Acceptance Isolation, 2026-09-19
 
@@ -24,7 +26,7 @@ The test service has its own database and exposes no administrator routes.
 
 Legacy generation keeps project/entitlement ID `clipart`; the separate future
 automatic Clipart catalog uses `auto-clipart`. Signed official workflow packages
-may replace the three existing built-in controllers through ModuleRuntimeHost,
+may replace the three legacy and automatic Clipart built-in controllers through ModuleRuntimeHost,
 without replacing the shell. Shared Core UI, project schemas and provider services
 remain shell dependencies within the declared Studio compatibility range.
 Remote release metadata is separately signed and exact module rights are checked

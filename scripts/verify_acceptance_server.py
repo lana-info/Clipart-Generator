@@ -17,6 +17,7 @@ from v3_license import OnlineLicenseGate
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument("--studio-version", default="3.2.0")
     args = parser.parse_args()
     root = args.state_dir.resolve()
     if root.parent != Path("/opt/vibix-studio-acceptance"):
@@ -27,11 +28,11 @@ def main():
     client = LicenseClient(base_url=profile["service_url"], public_keys=profile["license_keys"],
         product_id="clipart-generator", state_path=client_root / "license.json")
     client.activate((root / "smoke-license.txt").read_text().strip())
-    delivery = StudioModuleDelivery(root=client_root / "modules", studio_version="3.2.0",
+    delivery = StudioModuleDelivery(root=client_root / "modules", studio_version=args.studio_version,
         platform="windows-x64", license_client=client, license_gate=OnlineLicenseGate(client),
         trusted_keys={name: base64.b64decode(value) for name, value in profile["publisher_keys"].items()})
     downloaded = 0
-    for module in ("clipart", "processing", "pinterest"):
+    for module in ("clipart", "processing", "pinterest", "auto-clipart"):
         release = delivery.check(module)
         if release:
             delivery.install(release)
@@ -40,7 +41,7 @@ def main():
         else:
             delivery.host.load_active(module)
         assert delivery.has_active_workflow(module)
-    print(f"PASS: HTTPS activation/manifests; {downloaded} new downloads; three verified active workflows")
+    print(f"PASS: HTTPS activation/manifests; {downloaded} new downloads; four verified active workflows")
 
 
 if __name__ == "__main__":
