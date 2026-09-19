@@ -17,7 +17,9 @@ license rights. Future automatic Clipart uses `auto-clipart` and remains unrelea
 - [x] Connect installed signed workflow packages to real Studio controller launch;
   verify HTTPS download/install/update/rollback/project preservation for all three flows.
 - [x] Official workflow inventory packaging API and CLI; no manual ZIP assembly.
-- [ ] Approve and connect user-facing update controls. Mockups pending in
+- [x] Base module-update layout accepted with corrections: no future-module footer;
+  visible transfer percent/MB and indeterminate checking/verification indicators.
+- [ ] Connect corrected user-facing update controls from
   `docs/ui/3.2/module-delivery/`; no download buttons enabled prematurely.
 - [ ] Admin module-release UI and controlled publication workflow.
 - [ ] Provision production publisher keys (current client trust set is empty).

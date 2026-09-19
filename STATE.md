@@ -1,5 +1,15 @@
 # Project state
 
+## Module update mockup corrections, 2026-09-19
+
+Owner accepted the base layout with corrections: remove the footer advertising
+future Clipart/Patterns/Mockups and visibly show download activity. Updated the
+synthetic Qt proposals: determinate progress bar + percent + received/total MB,
+and indeterminate indicators for checking releases/verifying the package.
+The module check button remains module-only; Studio's existing startup notification
+and installer flow are separate. This is a mockup revision, not live updater UI.
+Next: implement the accepted module-update layout with these corrections.
+
 ## Licensed module delivery integration, 2026-09-19
 
 Current branches remain `codex/feature-module-release-packaging-20260919` and
@@ -49,9 +59,9 @@ provisioning, admin module-release UI/publication automation, user-facing update
 controls and Windows installed acceptance remain open. Runtime APIs and test fixtures
 do not make updates available to current customers. No production migration/deploy,
 build, Actions, real license modification or paid call was performed.
-UI approval is pending for `docs/ui/3.2/module-delivery/proposal-*.png`; these are
-synthetic proposals, not implemented screens. Implement only after owner approval.
-Next: approve/connect module update controls, add approved admin module-release
+The base UI in `docs/ui/3.2/module-delivery/proposal-*.png` was subsequently accepted
+with corrections recorded above; these remain synthetic proposals, not implemented screens.
+Next: connect corrected module update controls, add approved admin module-release
 controls and publisher key provisioning, then separately authorized deployment/build.
 
 Reproduce integration: set `LICENSE_SERVICE_SOURCE` to the matching service `src`,
