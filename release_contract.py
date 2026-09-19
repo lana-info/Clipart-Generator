@@ -33,8 +33,9 @@ def resolve_release_version(release_root: str | Path) -> str:
     return parse_version(raw)
 
 
-def expected_installer_name(version: str) -> str:
-    return INSTALLER_NAME_TEMPLATE.format(version=parse_version(version))
+def expected_installer_name(version: str, *, acceptance: bool = False) -> str:
+    template = "VibixImages-Test-Setup-{version}.exe" if acceptance else INSTALLER_NAME_TEMPLATE
+    return template.format(version=parse_version(version))
 
 
 def validate_release_contract(
@@ -44,10 +45,12 @@ def validate_release_contract(
     executable_path: str | Path | None = None,
     checksum_path: str | Path | None = None,
     manifest: dict | None = None,
+    acceptance: bool = False,
 ) -> None:
     version = parse_version(version)
-    if installer_name is not None and installer_name != expected_installer_name(version):
-        raise ReleaseContractError(f"Installer name must be {expected_installer_name(version)}")
+    expected_name = expected_installer_name(version, acceptance=acceptance)
+    if installer_name is not None and installer_name != expected_name:
+        raise ReleaseContractError(f"Installer name must be {expected_name}")
     if executable_path is not None:
         path = Path(executable_path)
         if path.name != APP_EXECUTABLE_NAME or path.parent.name != "Vibix Images":
@@ -56,7 +59,6 @@ def validate_release_contract(
             )
     if checksum_path is not None:
         checksum = Path(checksum_path)
-        expected_name = expected_installer_name(version)
         if checksum.name != expected_name.replace(".exe", ".sha256"):
             raise ReleaseContractError("Checksum filename differs from the release artifact")
         try:
@@ -74,7 +76,7 @@ def validate_release_contract(
     url = manifest.get("download_url")
     if not isinstance(url, str) or urlparse(url).scheme != "https":
         raise ReleaseContractError("Update manifest download_url must be HTTPS")
-    if Path(urlparse(url).path).name != expected_installer_name(version):
+    if Path(urlparse(url).path).name != expected_name:
         raise ReleaseContractError("Update manifest artifact name differs from the release")
     checksum = str(manifest.get("sha256", ""))
     if not re.fullmatch(r"[0-9a-fA-F]{64}", checksum):
@@ -98,6 +100,7 @@ if __name__ == "__main__":
     parser.add_argument("--executable", required=True)
     parser.add_argument("--checksum")
     parser.add_argument("--manifest")
+    parser.add_argument("--acceptance", action="store_true")
     args = parser.parse_args()
     release_version = resolve_release_version(Path(args.version_file).parent)
     validate_release_contract(
@@ -106,4 +109,5 @@ if __name__ == "__main__":
         executable_path=args.executable,
         checksum_path=args.checksum,
         manifest=load_manifest(args.manifest) if args.manifest else None,
+        acceptance=args.acceptance,
     )

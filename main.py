@@ -195,11 +195,8 @@ def resolve_app_version(resource_root=None):
 
 APP_VERSION = resolve_app_version()
 UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/lana-info/Clipart-Generator-Updates/main/version.json"
-LICENSE_SERVICE_BASE_URL = "https://services.etsyneuroclub.com/licenses"
+from runtime_profile import IS_ACCEPTANCE, LICENSE_SERVICE_BASE_URL, LICENSE_PUBLIC_KEYS, MODULE_PUBLISHER_KEYS
 LICENSE_PRODUCT_ID = "clipart-generator"
-LICENSE_PUBLIC_KEYS = {
-    "license-v1": "2J5W6NVq8-zE5g0MocublzW5aER1hzRqwFLGuzKuwMw",
-}
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 PHOTOROOM_LAUNCH_INTERVAL_SECONDS = 1.0
 MAX_REMOTE_CONCURRENCY = 6
@@ -9792,7 +9789,7 @@ def create_v3_application_window():
     module_delivery = StudioModuleDelivery(
         root=Path(app_data) / "modules", studio_version=APP_VERSION,
         platform=current_platform_id(), license_client=license_client,
-        license_gate=license_gate,
+        license_gate=license_gate, trusted_keys=MODULE_PUBLISHER_KEYS,
     )
     window = V3ApplicationView(
         runtime_settings_provider=lambda: build_runtime_settings(config, secrets),
@@ -10232,6 +10229,10 @@ if __name__ == "__main__":
                 expected_version = argument.split("=", 1)[1]
             elif argument.startswith("--ui-evidence-dir="):
                 evidence_dir = argument.split("=", 1)[1]
+            elif argument.startswith("--expected-profile="):
+                expected_profile = argument.split("=", 1)[1]
+                if expected_profile != ("acceptance" if IS_ACCEPTANCE else "production"):
+                    sys.exit(2)
         sys.exit(
             run_packaged_entrypoint_check(
                 expected_version,

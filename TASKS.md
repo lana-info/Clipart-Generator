@@ -1,5 +1,14 @@
 # TASKS
 
+## Isolated Acceptance, 2026-09-19
+
+- [x] Owner delegated recommended test Windows/server setup; no production release.
+- [x] Separate build-time trust, app data, installer AppId/name and overwrite guard.
+- [x] Deploy separate test database/API, expiring test licenses and signed test modules.
+- [x] Verify real external HTTPS activation/download/install for all three modules.
+- [ ] Run Windows acceptance build, native security/installer guards and installed smoke.
+- [ ] Deliver test installer and short user acceptance steps, without exposing secrets.
+
 ## Independent module updates, 2026-09-19
 
 Owner priority: preserve and connect the existing image generation, processing,

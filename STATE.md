@@ -1,5 +1,29 @@
 # Project state
 
+## Isolated Windows acceptance preparation, 2026-09-19
+
+Owner delegated the testing choice to the implementer; proceed with the recommended
+isolated Windows candidate and test server. This authorizes its build dispatch,
+not a production rollout. `runtime_profile.py` preserves production defaults;
+only a generated build-time `_acceptance_build.py` selects the public test profile.
+There are no environment/user-file trust overrides. Test identity is
+`Vibix Studio Test`, with separate configuration, Qt app data and publisher/license
+trust. Installer has a separate AppId/output and guards production directories,
+including silent installation. Build flag/profile mismatch fails closed.
+
+Isolated service deployed at `https://services.etsyneuroclub.com/studio-test`:
+separate PostgreSQL/container, test signing keys, two 14-day test licenses, and
+three test module releases. Administrative routes are not exposed (404).
+Production `/licenses` service/image/data remain unchanged; only new nginx routes
+were added after syntax and before/after health checks. External HTTPS smoke passed
+activation, manifests, all three package downloads/signatures/runtime activation.
+Private staging state is outside Git under `/opt/vibix-studio-acceptance/20260919`.
+
+62 affected source/build/profile tests passed. Native Windows build, installed
+overwrite guard and screenshots are the next verification; no Windows artifact
+has been produced for this checkpoint yet. Production publisher off-host backup
+still remains a gate before a customer release, not for isolated test keys.
+
 ## Controlled publisher preparation, 2026-09-19
 
 The owner authorized autonomous continuation without routine implementation/UI

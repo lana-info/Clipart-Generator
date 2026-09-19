@@ -1,0 +1,10 @@
+{
+  "kind": "acceptance",
+  "service_url": "https://services.etsyneuroclub.com/studio-test",
+  "license_keys": {
+    "license-v1": "XuXs2Biv3s2ldNERALFaRwv49Pa2MUPOd7ryDNf6j30="
+  },
+  "publisher_keys": {
+    "acceptance-publisher-v1": "IOZ3w0h0jZMrqXdpYFlyWUtxaA2k0sif0aQTIU7a+ZA="
+  }
+}

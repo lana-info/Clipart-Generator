@@ -1,4 +1,10 @@
-#define AppName "Vibix Images"
+#ifdef AcceptanceBuild
+  #define AppName "Vibix Studio Test"
+  #define AppId "{{617F3BD6-AB32-4544-AC32-FF055B7F5F8C}"
+#else
+  #define AppName "Vibix Images"
+  #define AppId "{{B8D6B3F4-4E5F-4B6E-9D13-9A8E3B2F3C7A}"
+#endif
 #ifndef AppVersion
   #error "AppVersion must be supplied from release/VERSION.txt by the release build"
 #endif
@@ -6,7 +12,7 @@
 #define AppExeName "Vibix Images.exe"
 
 [Setup]
-AppId={{B8D6B3F4-4E5F-4B6E-9D13-9A8E3B2F3C7A}
+AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
@@ -28,7 +34,11 @@ WizardBackColor=#101827
 WizardImageBackColor=#101827
 WizardKeepAspectRatio=yes
 OutputDir=release
+#ifdef AcceptanceBuild
+OutputBaseFilename=VibixImages-Test-Setup-{#AppVersion}
+#else
 OutputBaseFilename=VibixImages-Setup-{#AppVersion}
+#endif
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 CloseApplications=yes
@@ -44,13 +54,13 @@ ButtonFinish=Готово
 WelcomeLabel1=1 из 3 · Добро пожаловать%n%n{#AppName}
 WelcomeLabel2=Массовая генерация изображений в нейросетях, в том числе клипартов.%n%n• Создать клипарт%n• Создать Pinterest-пины%n• Обработать изображения%n%nНажмите «Продолжить», чтобы установить приложение.
 WizardSelectDir=2 из 3 · Установка
-SelectDirDesc=Выберите папку для Vibix Images.
+SelectDirDesc=Выберите папку для {#AppName}.
 WizardSelectTasks=2 из 3 · Установка
 SelectTasksDesc=Выберите дополнительные параметры.
 WizardInstalling=2 из 3 · Установка
-InstallingLabel=Подождите, пока Vibix Images устанавливается на компьютер.
+InstallingLabel=Подождите, пока {#AppName} устанавливается на компьютер.
 FinishedHeadingLabel=3 из 3 · Готово
-FinishedLabel=Vibix Images установлен.%n%nЗапустите приложение и активируйте лицензию, чтобы начать массовую генерацию и обработку изображений.
+FinishedLabel={#AppName} установлен.%n%nЗапустите приложение и активируйте лицензию, чтобы начать массовую генерацию и обработку изображений.
 ClickFinish=Нажмите «Готово», чтобы закрыть установщик.
 
 [Tasks]
@@ -73,6 +83,85 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 Filename: "{app}\{#AppExeName}"; Description: "Запустить {#AppName}"; Flags: nowait postinstall skipifsilent
 
 [Code]
+#ifdef AcceptanceBuild
+const
+  ProductionUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B8D6B3F4-4E5F-4B6E-9D13-9A8E3B2F3C7A}_is1';
+  AcceptanceUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{617F3BD6-AB32-4544-AC32-FF055B7F5F8C}_is1';
+
+function SameInstallDir(const LeftPath, RightPath: String): Boolean;
+begin
+  Result := PathSame(
+    RemoveBackslashUnlessRoot(LeftPath),
+    RemoveBackslashUnlessRoot(RightPath)
+  );
+end;
+
+function RegistryInstallDirMatches(
+  RootKey: HKEY;
+  const UninstallKey, SelectedDir: String
+): Boolean;
+var
+  InstallLocation: String;
+begin
+  Result :=
+    RegQueryStringValue(RootKey, UninstallKey, 'InstallLocation', InstallLocation) and
+    SameInstallDir(InstallLocation, SelectedDir);
+end;
+
+function IsRegisteredInstallDir(
+  const SelectedDir, UninstallKey: String
+): Boolean;
+begin
+  Result :=
+    RegistryInstallDirMatches(HKEY_LOCAL_MACHINE_64, UninstallKey, SelectedDir) or
+    RegistryInstallDirMatches(HKEY_LOCAL_MACHINE_32, UninstallKey, SelectedDir) or
+    RegistryInstallDirMatches(HKEY_CURRENT_USER_64, UninstallKey, SelectedDir) or
+    RegistryInstallDirMatches(HKEY_CURRENT_USER_32, UninstallKey, SelectedDir);
+end;
+
+function IsRegisteredAcceptanceInstallDir(const SelectedDir: String): Boolean;
+begin
+  Result := IsRegisteredInstallDir(SelectedDir, AcceptanceUninstallKey);
+end;
+
+function AcceptanceInstallConflict(const SelectedDir: String): String;
+begin
+  Result := '';
+
+  if SameInstallDir(SelectedDir, ExpandConstant('{autopf}\Vibix Images')) then
+  begin
+    Result := 'Тестовую сборку нельзя установить в стандартную папку Vibix Images. Выберите отдельную папку для Vibix Studio Test.';
+    Exit;
+  end;
+
+  if IsRegisteredInstallDir(SelectedDir, ProductionUninstallKey) then
+  begin
+    Result := 'В выбранной папке зарегистрирована рабочая установка Vibix Images. Выберите отдельную папку для Vibix Studio Test.';
+    Exit;
+  end;
+
+  if FileExists(AddBackslash(SelectedDir) + '{#AppExeName}') and
+     not IsRegisteredAcceptanceInstallDir(SelectedDir) then
+    Result := 'В выбранной папке уже находится Vibix Images. Чтобы не перезаписать рабочую установку, выберите отдельную папку для Vibix Studio Test.';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Conflict: String;
+begin
+  Result := True;
+  if CurPageID = wpSelectDir then
+  begin
+    Conflict := AcceptanceInstallConflict(WizardDirValue);
+    if Conflict <> '' then
+    begin
+      SuppressibleMsgBox(Conflict, mbError, MB_OK, IDOK);
+      Result := False;
+    end;
+  end;
+end;
+#endif
+
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpWelcome then
@@ -87,6 +176,11 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
+#ifdef AcceptanceBuild
+  Result := AcceptanceInstallConflict(WizardDirValue);
+  if Result <> '' then
+    Exit;
+#endif
   Result := '';
   ExtractTemporaryFile('vc_redist.x64.exe');
   WizardForm.StatusLabel.Caption := 'Установка системных компонентов Microsoft...';
@@ -106,7 +200,7 @@ begin
   if ResultCode = 3010 then
   begin
     NeedsRestart := True;
-    Result := 'Для завершения установки системных компонентов Microsoft требуется перезагрузка Windows. Перезагрузите компьютер и затем снова запустите установщик Vibix Images.';
+    Result := 'Для завершения установки системных компонентов Microsoft требуется перезагрузка Windows. Перезагрузите компьютер и затем снова запустите установщик {#AppName}.';
   end
   else if (ResultCode <> 0) and (ResultCode <> 1638) then
     Result := 'Не удалось установить системные компоненты Microsoft (код ' +

@@ -1,5 +1,13 @@
 # Vibix Images
 
+## Acceptance Isolation, 2026-09-19
+
+An explicitly requested acceptance build uses a compiled public-only profile,
+separate application/storage/installer identity and independent test license and
+publisher keys. Production has no runtime trust/endpoint override. Test installers
+cannot replace a production executable; the CI installed smoke tests this guard.
+The test service has its own database and exposes no administrator routes.
+
 ## Independent workflow delivery contract, 2026-09-19
 
 Legacy generation keeps project/entitlement ID `clipart`; the separate future

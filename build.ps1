@@ -1,11 +1,15 @@
 param(
-    [string]$AppVersion = ""
+    [string]$AppVersion = "",
+    [switch]$AcceptanceBuild
 )
 
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $projectRoot
+if ($AcceptanceBuild -ne (Test-Path -LiteralPath "_acceptance_build.py")) {
+    throw "Acceptance build flag must match the generated profile; production cannot bundle test trust."
+}
 $pythonExe = Join-Path $projectRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $pythonExe)) {
     $pythonExe = "python"
