@@ -1,4 +1,5 @@
 """Application composition for verified, independently versioned workflows."""
+import base64
 from pathlib import Path
 
 from studio_module_access import ModuleAccessPolicy
@@ -9,9 +10,10 @@ from studio_module_updates import ModuleUpdateClient
 from studio_modules import ModuleStore
 
 
-# Populated only by the controlled application release, never from a package.
-# An empty trust set deliberately leaves remote module installation unavailable.
-OFFICIAL_PUBLISHER_KEYS: dict[str, bytes] = {}
+# Pinned by the controlled shell release, never supplied by a downloaded package.
+OFFICIAL_PUBLISHER_KEYS: dict[str, bytes] = {
+    "vibix-publisher-v1": base64.b64decode("sUMfFDeHQIpSFmUCNbZJb+Ts4jMkiWy4CUcNhVO19v0="),
+}
 EXISTING_WORKFLOW_IDS = frozenset({"clipart", "processing", "pinterest"})
 
 

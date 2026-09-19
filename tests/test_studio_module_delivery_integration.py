@@ -50,7 +50,7 @@ def delivery(tmp_path, monkeypatch):
     license_key = ed25519.Ed25519PrivateKey.generate()
     api, _ = create_staging_api(signing_key_bytes=license_key.private_bytes_raw(), artifact_min_free_bytes=0)
     service = api._service
-    server = make_server(api, port=0)
+    server = make_server(api, port=0, admin=api.admin_service)
     now = datetime.now(timezone.utc)
     tls_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
@@ -85,6 +85,10 @@ def delivery(tmp_path, monkeypatch):
     bridge = StudioModuleDelivery(root=tmp_path / "client-modules", studio_version="3.2.0",
                                   platform="windows-x64", license_client=client, license_gate=gate,
                                   trusted_keys={"test-publisher": publisher.public_key().public_bytes_raw()})
+    # Expose only ephemeral fixture objects for the real administrative upload test.
+    bridge.test_admin = api.admin_service
+    bridge.test_service_url = base
+    bridge.test_publisher = publisher
 
     def publish(module_id, version="1.0.0", **overrides):
         args = dict(source_root=Path(__file__).resolve().parents[1], module_id=module_id,
@@ -109,6 +113,36 @@ def delivery(tmp_path, monkeypatch):
 @pytest.fixture(scope="module")
 def app():
     return QApplication.instance() or QApplication([])
+
+
+@pytest.mark.parametrize("module_id", ["clipart", "processing", "pinterest"])
+def test_publisher_https_admin_draft_then_licensed_install(delivery, tmp_path, module_id):
+    from license_service.admin import current_totp
+    from studio_module_release import AdminDraftUploader
+
+    bridge, _publish, _gate, service, _record = delivery
+    bootstrap = bridge.test_admin.bootstrap("fixture-admin-password-only")
+    secret = base64.b32decode(bootstrap.totp_secret_base32 + "=" * (-len(bootstrap.totp_secret_base32) % 8))
+    uploader = AdminDraftUploader(bridge.test_service_url)
+    uploader.login("admin", "fixture-admin-password-only", current_totp(secret))
+    package = tmp_path / "official.zip"
+    package.write_bytes(prepare_official_workflow_release(
+        source_root=Path(__file__).resolve().parents[1], module_id=module_id, version="1.0.0",
+        studio_min="3.2.0", studio_max_exclusive="3.3.0", platforms=["windows-x64"],
+        key_id="test-publisher", private_key=bridge.test_publisher))
+    try:
+        receipt = uploader.upload(package, product_id="clipart-generator", platform="windows-x64",
+            studio_version="3.2.0", trusted_keys=bridge.store.trusted_keys)
+        assert receipt["status"] == "draft"
+        assert bridge.check(module_id) is None
+        service.set_release_status(receipt["draft_id"], "published")
+        release = bridge.check(module_id)
+        assert release.version == "1.0.0"
+        bridge.install(release)
+        bridge.activate(module_id, release.version)
+        assert bridge.has_active_workflow(module_id)
+    finally:
+        uploader.close()
 
 
 @pytest.mark.parametrize("mode", tuple(ProjectMode))

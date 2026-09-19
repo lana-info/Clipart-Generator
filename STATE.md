@@ -1,5 +1,37 @@
 # Project state
 
+## Controlled publisher preparation, 2026-09-19
+
+The owner authorized autonomous continuation without routine implementation/UI
+approvals, stopping for decisions needed to test the application or server.
+`studio_module_release.py` now prepares all three official workflows, requires
+the signing key to match the shell's pinned public key, verifies every package,
+and optionally uploads a verified ZIP as an authenticated admin draft over HTTPS.
+It never publishes, retries uploads automatically, persists admin credentials or
+follows redirects. Signed package metadata supplies the draft identity; the server
+must echo it before receiving bytes, protecting against old shell-only servers.
+Reported draft IDs support recovery after an interrupted upload.
+
+Dedicated `vibix-publisher-v1` key provisioned outside Git with owner-only access;
+only its public half is pinned in Studio. Three verified 1.0.0 candidate packages
+for Windows x64/macOS x64 are under
+`../artifacts/official-modules-1.0.0-20260919`, compatible with Studio >=3.2.0,<3.3.0.
+No verified off-host key backup exists yet. Custody and release instructions:
+`docs/module-release-runbook.md`. No production upload, deployment, customer-data
+change, desktop build or paid provider call was performed.
+
+Fixed the preexisting Azure default-version mismatch to match release 3.2.0;
+no workflow was dispatched. Full isolated Studio suite: 1640 passed, 57 skipped,
+14 deselected. After adding the old-server regression guard, focused publisher
+and real loopback HTTPS integration: 25 passed (13 local + 12 HTTPS/Qt).
+Additional terminal-safety guard passed in all 14 dedicated publisher tests:
+CLI refuses credential prompts without an interactive terminal, avoiding echoed
+getpass fallback. All six actual candidate package/platform combinations verify
+under the shell-pinned publisher key.
+Windows-native DPAPI/file sharing and installed desktop acceptance remain untested.
+Next: finish/admin-verify module release panel, then decide staging/installed
+acceptance before production publication; separate automatic Clipart remains next.
+
 ## Module update controls connected, 2026-09-19
 
 Owner approved the revised mockups. The home now opens the real

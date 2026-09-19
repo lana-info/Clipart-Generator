@@ -23,10 +23,24 @@ license rights. Future automatic Clipart uses `auto-clipart` and remains unrelea
   exact rights, signature verification, activation and error preservation.
   9 HTTPS/Qt scenarios pass; production download stays disabled without trust keys.
 - [ ] Admin module-release UI and controlled publication workflow.
-- [ ] Provision production publisher keys (current client trust set is empty).
+- [x] Controlled official release-set preparation and verified HTTPS admin draft
+  upload; metadata/bytes checked, no automatic publish or retry.
+- [x] Provision dedicated publisher key outside Git and pin its public half in
+  candidate shell; prepare verified 1.0.0 workflow artifacts for Windows/macOS.
+- [ ] Verify off-host publisher key recovery custody before production publication.
 - [ ] Full installed Windows acceptance and separately authorized desktop release.
-- [ ] Resolve existing release-check mismatch (`azure-pipelines.yml` 3.1.1 vs
-  release 3.2.0) in the authorized release/build scope; full pytest is not green.
+- [x] Align Azure default with release 3.2.0, without launching a build;
+  full isolated pytest: 1640 passed, 57 skipped, 14 deselected.
+
+Separate automatic Clipart next-slice constraints (read-only audit):
+`v3_clipart_flow.py` currently opens `ClipartBuilderDialog` inside legacy
+`clipart`; this is not a separate released module. Before routing catalog
+`auto-clipart`, separate workflow/license/project identity from the reusable
+legacy state scope in `_studio_workflow_core.py`, `studio_workflow_host.py` and
+`V3ProjectDocumentAdapter`. Do not rename legacy projects or infer auto access
+from `clipart`. Preserve shared planner/recipe/objects/bundle/export services,
+and use the eight-screen PRD, not the superseded six-screen proposal.
+Deliver and verify the existing workflows first, as requested by the owner.
 
 ## Preparation gate before new implementation
 

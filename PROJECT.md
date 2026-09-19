@@ -9,8 +9,10 @@ without replacing the shell. Shared Core UI, project schemas and provider servic
 remain shell dependencies within the declared Studio compatibility range.
 Remote release metadata is separately signed and exact module rights are checked
 at manifest, download and runtime boundaries. Publisher package trust must be
-provisioned independently of downloaded packages. Production trust/controls are
-not enabled yet; current implementation and acceptance limits are in STATE.md.
+provisioned independently of downloaded packages. The candidate shell pins a
+dedicated publisher public key; private custody, draft-upload procedure and release
+gates are in `docs/module-release-runbook.md`. Installed acceptance and production
+rollout remain pending; current verification limits are in STATE.md.
 
 ## Portable PNG result-intent checkpoint, 2026-09-12
 
