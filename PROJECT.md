@@ -1,5 +1,17 @@
 # Vibix Images
 
+## Independent workflow delivery contract, 2026-09-19
+
+Legacy generation keeps project/entitlement ID `clipart`; the separate future
+automatic Clipart catalog uses `auto-clipart`. Signed official workflow packages
+may replace the three existing built-in controllers through ModuleRuntimeHost,
+without replacing the shell. Shared Core UI, project schemas and provider services
+remain shell dependencies within the declared Studio compatibility range.
+Remote release metadata is separately signed and exact module rights are checked
+at manifest, download and runtime boundaries. Publisher package trust must be
+provisioned independently of downloaded packages. Production trust/controls are
+not enabled yet; current implementation and acceptance limits are in STATE.md.
+
 ## Portable PNG result-intent checkpoint, 2026-09-12
 
 Generated PNGs now receive a hash-bound `.generation.json` schema-v2 sidecar that carries `result_kind`, stage (`raw`/`final`), optional chroma provenance and prompt SHA-256 without storing prompt text, credentials or local paths. The pending record is created before paid submission for every generated result; raw and final records are bound to actual PNG bytes. `stage` describes background-readiness rather than folder location: surface outputs are final, while Clipart is final only when the published PNG contains a meaningful transparent area (at least 4 near-transparent pixels and at least 0.1% of the canvas); isolated alpha noise does not qualify, and an opaque chroma Clipart remains raw so later removal can use its recorded color. Final records never return a chroma color for re-keying, and `stage=final` prevents automatic background removal from running again on a finished PNG. Re-imported PNGs can restore confirmed result intent; an explicit conflicting intent fails closed. Transparency edits rebind the record to new bytes and Contour copies inherit validated v2 lineage. Legacy schema v1 remains readable for chroma only and never invents a result kind. `ClipartRunRequest.worker_kwargs()` and `WorkerThread` normalization now preserve `chroma_key_color`, `result_kind` and `object_id` end-to-end. A final sidecar write failure after a paid image is already published is reported as a local warning rather than converting the paid generation into a retryable failure. Affected verification after independent review fixes: 257 passed, 1 skipped, 11 subtests; full isolated pytest: 1494 passed, 57 skipped, 2 deselected, 239 subtests in 64.86s. Independent review findings were verified and fixed: final schema-v2 PNGs cannot enter the legacy KIE remover path; raw-sidecar bind/cleanup failures after a paid generation no longer make the current run retryable; Transparency Editor commits PNG/mask/provenance in one recoverable transaction; and Contour Save As publishes PNG+sidecar recoverably. A second independent review of `0001da1..e73675a` found concurrency gaps in recovery/capture plus a stale-file lock. These are now closed by one OS advisory per-destination lock held across recovery, capture and commit; the lock is released automatically by the OS on process death, while a stale lock file alone never blocks later work. Planned raw/final pending/completed sidecar paths remain preflighted before the paid provider POST.

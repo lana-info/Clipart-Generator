@@ -169,6 +169,8 @@ class UpdateClient:
         if platform_id not in _PLATFORM_ARTIFACT:
             raise UpdateError("Эта платформа обновлений не поддерживается")
         self.platform_id = platform_id
+        self._artifact_suffix, self._artifact_mime = _PLATFORM_ARTIFACT[platform_id]
+        self._artifact_max_bytes = MAX_UPDATE_INSTALLER_BYTES
         self.download_directory = Path(download_directory)
         self.timeout = max(1, min(int(timeout), self.lifecycle_policy.timeout_seconds))
         self._public_keys = {
@@ -177,11 +179,17 @@ class UpdateClient:
         _version(current_version)
 
     def check(self) -> UpdateRelease | None:
+        payload = self._request_manifest("/api/v1/releases/manifest")
+        valid = [self._parse_release(item, payload.get("correlation_id", "")) for item in payload["releases"]]
+        newer = [item for item in valid if _version(item.version) > _version(self.current_version)]
+        return max(newer, key=lambda item: _version(item.version), default=None)
+
+    def _request_manifest(self, path: str, extra: Mapping[str, object] | None = None) -> dict:
         self._ensure_update_key()
         try:
             envelope, device_key, nonce = self.license_client.authenticated_request(
-                "/api/v1/releases/manifest",
-                {"platform": self.platform_id},
+                path,
+                {"platform": self.platform_id, "channel": "stable", **(extra or {})},
             )
         except LicenseError as exc:
             raise UpdateError("Не удалось проверить обновления на сервере") from exc
@@ -201,9 +209,8 @@ class UpdateClient:
         releases = payload.get("releases")
         if not isinstance(releases, list) or len(releases) > 100:
             raise UpdateError("Сервер вернул некорректный список обновлений")
-        valid = [self._parse_release(item, correlation_id) for item in releases]
-        newer = [item for item in valid if _version(item.version) > _version(self.current_version)]
-        return max(newer, key=lambda item: _version(item.version), default=None)
+        payload["correlation_id"] = correlation_id
+        return payload
 
     def _ensure_update_key(self) -> None:
         if any(key_id in self._public_keys for key_id in ("updates-v1", "updates-v2")):
@@ -252,14 +259,14 @@ class UpdateClient:
         sha256 = item.get("sha256")
         download_url = item.get("download_url")
         notes = item.get("notes") or ""
-        expected_suffix = _PLATFORM_ARTIFACT[self.platform_id][0]
+        expected_suffix = self._artifact_suffix
         if (
             not isinstance(filename, str)
             or not _FILENAME.fullmatch(filename)
             or not filename.lower().endswith(expected_suffix)
         ):
             raise UpdateError("Некорректное имя файла обновления")
-        if not isinstance(size, int) or isinstance(size, bool) or size <= 0 or size > MAX_UPDATE_INSTALLER_BYTES:
+        if not isinstance(size, int) or isinstance(size, bool) or size <= 0 or size > self._artifact_max_bytes:
             raise UpdateError("Некорректный размер обновления")
         if not isinstance(sha256, str) or not _SHA256.fullmatch(sha256):
             raise UpdateError("Некорректная контрольная сумма обновления")
@@ -314,7 +321,7 @@ class UpdateClient:
         received = 0
         req = request.Request(
             release.download_url,
-            headers={"Accept": _PLATFORM_ARTIFACT[self.platform_id][1]},
+            headers={"Accept": self._artifact_mime},
             method="GET",
         )
         try:

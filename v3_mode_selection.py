@@ -397,6 +397,7 @@ class V3ApplicationView(QWidget):
         update_client: Any | None = None,
         legacy_project: ProjectState | None = None,
         workflow_registry: WorkflowRegistry | None = None,
+        module_delivery: Any | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
@@ -408,6 +409,7 @@ class V3ApplicationView(QWidget):
         self._license_gate = license_gate
         self._diagnostic_journal = diagnostic_journal
         self._update_client = update_client
+        self._module_delivery = module_delivery
         self._legacy_project = legacy_project
         workflow_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "studio_builtin_workflows"
         self._workflow_registry = workflow_registry or discover_workflows(workflow_root)
@@ -676,7 +678,9 @@ class V3ApplicationView(QWidget):
                     "workflow_still_running",
                 )
                 return
-            controller = self._ensure_mode_controller(self.shell, mode)
+            controller = self._try_ensure_mode_controller(self.shell, mode)
+            if controller is None:
+                return
             if self.shell.state.mode is not mode:
                 self.shell.request_mode_switch(mode)
             if not controller.run_queue.reset_for_new_workflow():
@@ -696,8 +700,11 @@ class V3ApplicationView(QWidget):
 
         state = ProjectState(mode=mode)
         self._apply_preferences(state, mode)
+        previous_project_id = self._active_project_id
         self._active_project_id = None
-        self._replace_shell(state)
+        if not self._replace_shell(state):
+            self._active_project_id = previous_project_id
+            return
         self.new_project_started.emit(mode.value)
 
     def continue_last_project(self) -> bool:
@@ -706,7 +713,8 @@ class V3ApplicationView(QWidget):
         if self._recent_project is None:
             return False
         state = ProjectState.from_dict(self._recent_project.to_dict())
-        self._replace_shell(state)
+        if not self._replace_shell(state):
+            return False
         self._diagnostic_event(
             "project_continued",
             "Продолжен последний черновик.",
@@ -743,8 +751,11 @@ class V3ApplicationView(QWidget):
         except (OSError, ValueError):
             QMessageBox.warning(self, "Проект", "Не удалось открыть сохранённый проект.")
             return False
+        previous_project_id = self._active_project_id
         self._active_project_id = session.record.project_id
-        self._replace_shell(state)
+        if not self._replace_shell(state):
+            self._active_project_id = previous_project_id
+            return False
         self.project_continued.emit(state.mode.value)
         return True
 
@@ -942,17 +953,18 @@ class V3ApplicationView(QWidget):
             kwargs["project_id"] = project_id
         return self._create_prepared_project_worker(shell, **kwargs)
 
-    def _replace_shell(self, state: ProjectState) -> None:
+    def _replace_shell(self, state: ProjectState) -> bool:
         previous = self.shell
+        shell = AppShell(state, tokens=self.tokens)
+        shell.diagnostic_journal = self._diagnostic_journal
+        shell.initialization_stage.connect(self._show_initialization_stage)
+        if self._try_ensure_mode_controller(shell, state.mode) is None:
+            shell.deleteLater()
+            return False
         if previous is not None:
             previous.state_changed.disconnect(self._save_draft)
             self.stack.removeWidget(previous)
             previous.deleteLater()
-
-        shell = AppShell(state, tokens=self.tokens)
-        shell.diagnostic_journal = self._diagnostic_journal
-        shell.initialization_stage.connect(self._show_initialization_stage)
-        self._ensure_mode_controller(shell, state.mode)
         shell.state_changed.connect(self._save_draft)
         shell.step_changed.connect(self._record_workflow_step)
         shell.mode_picker_requested.connect(self.show_mode_switcher)
@@ -963,6 +975,17 @@ class V3ApplicationView(QWidget):
         self.stack.addWidget(shell)
         self._set_application_screen(shell, "wizard", "project_opened")
         self._save_draft()
+        return True
+
+    def _try_ensure_mode_controller(self, shell: AppShell, mode: ProjectMode):
+        from license_client import LicenseError
+        from studio_module_api import ModuleApiError
+        from studio_modules import ModulePackageError
+        try:
+            return self._ensure_mode_controller(shell, mode)
+        except (LicenseError, ModuleApiError, ModulePackageError):
+            QMessageBox.warning(self, "Модуль", "Не удалось открыть модуль. Проверьте доступ и установленную версию.")
+            return None
 
     def _ensure_mode_controller(self, shell: AppShell, mode: ProjectMode) -> Any:
         module_id = mode.value
@@ -1020,10 +1043,13 @@ class V3ApplicationView(QWidget):
             authorization_provider=authorize_run,
             image_run_gateway=image_run_gateway,
         )
-        controller = registration.install(
-            host,
-            locale=app_locale_from_settings(self._preferences),
-        )
+        locale = app_locale_from_settings(self._preferences)
+        if self._module_delivery is not None and self._module_delivery.has_active_workflow(module_id):
+            controller = self._module_delivery.install_workflow(
+                module_id, host, locale=locale, owner=shell,
+            )
+        else:
+            controller = registration.install(host, locale=locale)
         shell.register_workflow_controller(module_id, controller)
         return controller
 

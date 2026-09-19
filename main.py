@@ -9787,10 +9787,18 @@ def create_v3_application_window():
         platform_id=current_platform_id(),
         timeout=20,
     )
+    from studio_module_delivery import StudioModuleDelivery
+    license_gate = OnlineLicenseGate(license_client)
+    module_delivery = StudioModuleDelivery(
+        root=Path(app_data) / "modules", studio_version=APP_VERSION,
+        platform=current_platform_id(), license_client=license_client,
+        license_gate=license_gate,
+    )
     window = V3ApplicationView(
         runtime_settings_provider=lambda: build_runtime_settings(config, secrets),
         draft_path=os.path.join(app_data, "project_state.json"),
-        license_gate=OnlineLicenseGate(license_client),
+        license_gate=license_gate,
+        module_delivery=module_delivery,
         diagnostic_journal=diagnostic_journal,
         update_client=update_client,
         legacy_project=migrate_v2_config(config) if config else None,

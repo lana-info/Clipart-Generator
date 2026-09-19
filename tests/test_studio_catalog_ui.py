@@ -49,7 +49,7 @@ class CatalogUiTests(unittest.TestCase):
         card.action_requested.connect(lambda *args: received.append(args))
         self.assertEqual(card.start_button.text(), "Скачать")
         card.start_button.click()
-        self.assertEqual(received, [("clipart", "download")])
+        self.assertEqual(received, [("auto-clipart", "download")])
         card.set_availability(ModuleAvailability())
         self.assertEqual(card.start_button.text(), "Купить")
         card.start_button.click()

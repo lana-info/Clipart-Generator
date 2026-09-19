@@ -5,17 +5,25 @@
 Owner priority: preserve and connect the existing image generation, processing,
 and Pinterest first; then deliver the separate automatic Clipart workflow.
 Existing generation retains the legacy `clipart` identity for saved projects and
-license rights. Do not silently repurpose it as the new automatic Clipart module.
+license rights. Future automatic Clipart uses `auto-clipart` and remains unreleased.
 
 - [x] Verify real existing home cards, controller admission, exact module rights,
   revocation, and saved-project resume without automatic work (7 integration tests).
 - [x] Publisher preparation API: explicit payload, signature, client-compatible verification.
 - [x] Verify generated package install/update/rollback and user-data preservation (43 tests).
 - [x] Bind staged package identity to the selected module/version before writes; 49 affected tests pass.
-- [ ] Server-side module releases and licensed delivery.
-- [ ] Studio launch/runtime connection and updater integration.
-- [ ] Publisher key provisioning and controlled build/publication workflow.
+- [x] Server module-release API/private delivery, with exact rights on manifest/download;
+  migration 012 tested on disposable PostgreSQL, not deployed.
+- [x] Connect installed signed workflow packages to real Studio controller launch;
+  verify HTTPS download/install/update/rollback/project preservation for all three flows.
+- [x] Official workflow inventory packaging API and CLI; no manual ZIP assembly.
+- [ ] Approve and connect user-facing update controls. Mockups pending in
+  `docs/ui/3.2/module-delivery/`; no download buttons enabled prematurely.
+- [ ] Admin module-release UI and controlled publication workflow.
+- [ ] Provision production publisher keys (current client trust set is empty).
 - [ ] Full installed Windows acceptance and separately authorized desktop release.
+- [ ] Resolve existing release-check mismatch (`azure-pipelines.yml` 3.1.1 vs
+  release 3.2.0) in the authorized release/build scope; full pytest is not green.
 
 ## Preparation gate before new implementation
 

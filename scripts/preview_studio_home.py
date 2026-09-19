@@ -45,7 +45,7 @@ def main():
         screen.set_license_status("Тестовые состояния каталога", "Синтетические данные, без покупки и скачивания")
         released = [replace(entry, released=True) for entry in BUILTIN_CATALOG]
         screen.set_module_catalog(released, {
-            "clipart": ModuleAvailability(entitled=True, download_supported=True),
+            "auto-clipart": ModuleAvailability(entitled=True, download_supported=True),
             "patterns": ModuleAvailability(purchase_supported=True),
             "mockups": ModuleAvailability(compatible=False),
         })

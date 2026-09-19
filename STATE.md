@@ -1,5 +1,64 @@
 # Project state
 
+## Licensed module delivery integration, 2026-09-19
+
+Current branches remain `codex/feature-module-release-packaging-20260919` and
+service `codex/feature-multi-product-release-catalog-20260919`.
+`StudioModuleDelivery` now composes ModuleStore, runtime, access policy and a
+signed HTTPS module-update client in the real application startup. Existing
+home cards use an active installed workflow package when present; otherwise
+they retain their existing built-in workflow. A denied/broken installed module
+does not silently fall back, replace the current shell or lose its project ID.
+Live shells pin their package until Qt destruction, preventing mid-project swaps.
+
+`prepare_official_workflow_release` packages explicit inventories for the legacy
+generation (`clipart`), processing and Pinterest controllers. Pinterest includes
+its composer/templates/schema helpers. Package-owned imports are made relative;
+shared Core UI/services remain shell dependencies, bounded by Studio compatibility.
+The new CLI prepares and signs a ZIP without manual file selection/ZIP assembly.
+It never generates a production key or publishes a release. The older Pinterest
+adapter remains for compatibility tests; new official packages carry actual flow code.
+The future automatic Clipart catalog ID is now `auto-clipart`; old project and
+license IDs remain `clipart`. Automatic Clipart remains unreleased.
+
+Matching service code adds migration 012, module-specific release metadata,
+private ZIP delivery and `/api/v1/modules/manifest`. Shell releases remain separate.
+Both manifest and download recheck exact current module rights, including future
+start dates, revocation and update expiry. Client verifies the signed response,
+request identity, compatible range, bounded bytes/SHA-256, pinned package signature
+and selected module/version before installation. Shared update requests now send
+the required `channel=stable`, fixing a real client/server contract mismatch.
+
+Verification: local TLS loopback server with ephemeral keys and licenses, real
+HTTP requests and real offscreen Qt controllers: 6 passed (three existing flows,
+independent update/rollback, saved-project reopening, busy guard, untrusted publisher,
+wrong identity, revoked download and installed-module denial, compatibility selection).
+Workers never execute paid operations. Service full unittest: 185 passed with a
+new disposable PostgreSQL and all 13 migrations. Studio full isolated pytest:
+1619 passed, 57 skipped, 8 deselected, 1 pre-existing failure:
+`test_azure_default_matches_release_version` (`3.1.1` pipeline vs `3.2.0` release).
+Those version/workflow files are unchanged; no full-suite green claim is valid.
+After the packaging CLI addition, affected Studio checks: 78 passed, 1 Windows
+skip. After the server ZIP validation cleanup: 37 affected checks passed.
+Compilation, sensitive-artifact guard and diff whitespace checks passed. Real
+application startup smoke passed with isolated AppData/config and mocked credential
+loading, so no user `.env` was read; all three cards and module composition exist.
+
+Not shipped: production publisher trust set is deliberately empty; controlled key
+provisioning, admin module-release UI/publication automation, user-facing update
+controls and Windows installed acceptance remain open. Runtime APIs and test fixtures
+do not make updates available to current customers. No production migration/deploy,
+build, Actions, real license modification or paid call was performed.
+UI approval is pending for `docs/ui/3.2/module-delivery/proposal-*.png`; these are
+synthetic proposals, not implemented screens. Implement only after owner approval.
+Next: approve/connect module update controls, add approved admin module-release
+controls and publisher key provisioning, then separately authorized deployment/build.
+
+Reproduce integration: set `LICENSE_SERVICE_SOURCE` to the matching service `src`,
+`QT_QPA_PLATFORM=offscreen`, `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`; use the existing
+license-entitlements venv and run `pytest -q -m network
+tests/test_studio_module_delivery_integration.py`. All networking is loopback TLS.
+
 ## Existing module connection verification, 2026-09-19
 
 Owner clarified order: existing image generation, processing, Pinterest first;

@@ -6,6 +6,7 @@ tree, imports module code, or reads the publisher's private key from disk.
 from __future__ import annotations
 
 import base64
+import ast
 import hashlib
 import io
 import json
@@ -20,6 +21,53 @@ from studio_modules import (
     MAX_FILES, MAX_PACKAGE_BYTES, MAX_MANIFEST_BYTES,
     ModulePackageError, ModuleStore, canonical_manifest, _member, _version,
 )
+
+
+OFFICIAL_WORKFLOW_FILES = {
+    "clipart": ("v3_clipart_flow.py",),
+    "processing": ("v3_processing_flow.py",),
+    "pinterest": ("v3_pinterest_flow.py", "pinterest_pin_composer.py",
+                  "pinterest_pin_templates.py", "pinterest_prompt_schema.py"),
+}
+
+
+def prepare_official_workflow_release(*, source_root: Path, module_id: str, **metadata) -> bytes:
+    """Package an explicit first-party workflow inventory, without manual ZIP assembly.
+
+    Workflow-owned helpers are imported relatively inside the verified package;
+    shared Core APIs retain their existing imports and compatibility range.
+    """
+    try:
+        inventory = OFFICIAL_WORKFLOW_FILES[module_id]
+    except KeyError as exc:
+        raise ModulePackageError("Unknown official workflow") from exc
+    owned = {Path(name).stem for name in inventory}
+    files = {}
+    for name in inventory:
+        source = Path(source_root) / name
+        if source.is_symlink() or not source.is_file() or source.stat().st_size > MAX_PACKAGE_BYTES:
+            raise ModulePackageError("Invalid official workflow source")
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=name)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module in owned:
+                node.level = 1
+            elif isinstance(node, ast.Import) and any(alias.name in owned for alias in node.names):
+                raise ModulePackageError("Workflow-owned imports must use from syntax")
+        files[name] = ast.unparse(tree).encode("utf-8")
+    flow = Path(inventory[0]).stem
+    installer = {"clipart": "install_clipart_flow", "processing": "install_processing_flow",
+                 "pinterest": "install_pinterest_flow"}[module_id]
+    arguments = "host, locale=locale" if module_id == "pinterest" else "host"
+    files["entry.py"] = (
+        "from studio_module_api import ModuleRegistration, CommandDeclaration\n"
+        "def install(host, *, locale):\n"
+        f"    from .{flow} import {installer}\n"
+        f"    return {installer}({arguments})\n"
+        "def register(context):\n"
+        "    return ModuleRegistration(context.module_id, context.version,\n"
+        "        commands=(CommandDeclaration('install_workflow', install),))\n"
+    ).encode("utf-8")
+    return prepare_module_release(module_id=module_id, entrypoint="entry.py", files=files, **metadata)
 
 
 def prepare_module_release(
@@ -93,3 +141,51 @@ def prepare_module_release(
                                 platform=platform, trusted_keys={key_id: public})
             store.inspect_package(package)
     return artifact
+
+
+def main(argv=None) -> int:
+    """Controlled release entrypoint; never publishes or generates signing keys."""
+    import argparse
+    import os
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+    parser = argparse.ArgumentParser(description="Prepare a signed official Studio workflow package")
+    parser.add_argument("--module", choices=sorted(OFFICIAL_WORKFLOW_FILES), required=True)
+    parser.add_argument("--version", required=True)
+    parser.add_argument("--studio-min", required=True)
+    parser.add_argument("--studio-max-exclusive", required=True)
+    parser.add_argument("--platform", action="append", required=True)
+    parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parent)
+    parser.add_argument("--key-id", required=True)
+    parser.add_argument("--signing-key-file", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args(argv)
+    if args.output.suffix.lower() != ".zip":
+        parser.error("output must be a new ZIP file")
+    if args.signing_key_file.stat().st_size > 16384:
+        parser.error("invalid signing key file")
+    key = load_pem_private_key(args.signing_key_file.read_bytes(), password=None)
+    if not isinstance(key, Ed25519PrivateKey):
+        parser.error("an Ed25519 signing key is required")
+    content = prepare_official_workflow_release(
+        source_root=args.source_root, module_id=args.module, version=args.version,
+        studio_min=args.studio_min, studio_max_exclusive=args.studio_max_exclusive,
+        platforms=args.platform, key_id=args.key_id, private_key=key,
+    )
+    # Exclusive creation preserves any previous release artifact.
+    with args.output.open("xb") as handle:
+        try:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        except Exception:
+            args.output.unlink(missing_ok=True)
+            raise
+    print(json.dumps({"module_id": args.module, "version": args.version,
+                      "filename": args.output.name, "size": len(content),
+                      "sha256": hashlib.sha256(content).hexdigest()}))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
