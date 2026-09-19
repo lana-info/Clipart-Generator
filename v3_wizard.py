@@ -34,7 +34,7 @@ from workflow_definitions import WorkflowDefinition, workflow_for_mode
 
 
 MODE_TITLES: dict[ProjectMode, str] = {
-    ProjectMode.CLIPART: "Клипарт",
+    ProjectMode.CLIPART: "Генерация изображений",
     ProjectMode.PINTEREST: "Pinterest-пины",
     ProjectMode.PROCESSING: "Обработка изображений",
 }
@@ -533,6 +533,7 @@ class AppShell(QWidget):
             item = self.steps_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                widget.hide()
                 widget.deleteLater()
         self.step_labels.clear()
 
@@ -563,6 +564,7 @@ class AppShell(QWidget):
                 label.setProperty("v3Description", True)
             label.setAccessibleName(f"{STEP_TITLES[step]}: {status}")
             self.steps_layout.addWidget(label)
+            label.show()
             self.step_labels.append(label)
         self.steps_layout.addStretch()
 

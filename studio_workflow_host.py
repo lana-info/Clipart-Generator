@@ -45,6 +45,7 @@ from _studio_workflow_core import (
     state_set_step,
 )
 from v3_project_state import ProjectMode, StepId
+from studio_workflow_identity import workflow_state_scope
 
 
 class WorkflowSignal:
@@ -123,7 +124,7 @@ class WorkflowStateView:
         data: Any,
     ) -> None:
         try:
-            scope = ProjectMode(module_id)
+            scope = ProjectMode(workflow_state_scope(module_id))
         except (TypeError, ValueError) as exc:
             raise ValueError("Workflow state scope is invalid") from exc
         self._capability_id = capability_id

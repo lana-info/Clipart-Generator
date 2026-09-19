@@ -38,6 +38,12 @@ def _clipart_data(state: Any):
 
 class ClipartRunResultsExtension:
     export_action_label = "Экспорт наборов ZIP"
+
+    def __init__(self, *, collections_enabled: bool = True) -> None:
+        self.collections_enabled = collections_enabled
+        if not collections_enabled:
+            self.export_action_label = ""
+
     def on_edited_output(
         self, state: Any, previous_keys: Sequence[str], destination: Path,
     ) -> None:
@@ -64,6 +70,8 @@ class ClipartRunResultsExtension:
         _clipart_data(state).export_membership = validate_export_membership(membership)
 
     def _recipe_plan(self, state: Any):
+        if not self.collections_enabled:
+            return None
         recipe_data = _clipart_data(state).recipe
         if not isinstance(recipe_data, dict):
             return None
@@ -166,7 +174,7 @@ class ClipartRunResultsExtension:
         }
         opening_roles: dict[str, bool] = {}
         try:
-            recipe_data = _clipart_data(state).recipe
+            recipe_data = _clipart_data(state).recipe if self.collections_enabled else None
             recipe = (
                 ClipartRecipe.from_dict(recipe_data)
                 if isinstance(recipe_data, dict) else None
@@ -211,6 +219,8 @@ class ClipartRunResultsExtension:
         review_issues: Sequence[dict[str, Any]], quality_reports: Sequence[Any],
         on_membership_saved, on_fix_requested,
     ) -> None:
+        if not self.collections_enabled:
+            return
         dialog = SetExportDialog(
             paths,
             parent,
@@ -223,6 +233,8 @@ class ClipartRunResultsExtension:
         dialog.exec()
 
     def save_membership(self, state: Any, membership: Any) -> None:
+        if not self.collections_enabled:
+            return
         _clipart_data(state).export_membership = validate_export_membership(membership)
 
 

@@ -11,6 +11,7 @@ from typing import Any, Mapping, Sequence
 
 from chroma_key import KEY_COLORS
 from studio_project_documents import PreparedProjectDocument
+from studio_workflow_identity import AUTO_CLIPART_MODULE_ID, workflow_state_scope
 from studio_project_state_extensions import (
     before_project_state_replace, normalize_project_state,
 )
@@ -2207,24 +2208,29 @@ class V3ProjectDocumentAdapter:
 
     def __init__(self, module_id: str, *, extensions=()) -> None:
         try:
-            self.module_id = ProjectMode(module_id).value
+            self._state_scope = ProjectMode(workflow_state_scope(module_id))
         except (TypeError, ValueError) as exc:
             raise ProjectStateError("Unsupported V3 project module") from exc
+        self.module_id = module_id
         self._extensions = tuple(extensions or ())
+
+    def _normalize(self, state: dict[str, Any]) -> dict[str, Any]:
+        parsed = ProjectState.from_dict(state, extensions=self._extensions)
+        if self.module_id == AUTO_CLIPART_MODULE_ID and parsed.mode is not self._state_scope:
+            raise ProjectStateError("Automatic Clipart document is outside its state scope")
+        return parsed.to_dict()
 
     def open_state(self, state: dict[str, Any], version: int) -> dict[str, Any]:
         if version != self.current_version:
             raise ProjectStateError("Unsupported V3 project document version")
-        return ProjectState.from_dict(state, extensions=self._extensions).to_dict()
+        return self._normalize(state)
 
     def prepare_save(
         self, state: dict[str, Any], source_version: int | None,
     ) -> PreparedProjectDocument:
         if source_version not in (None, self.current_version):
             raise ProjectStateError("Unsupported V3 project document version")
-        normalized = ProjectState.from_dict(
-            state, extensions=self._extensions
-        ).to_dict()
+        normalized = self._normalize(state)
         return PreparedProjectDocument(self.current_version, normalized)
 
     def before_save(self, store, existing, prepared: PreparedProjectDocument) -> None:

@@ -1,5 +1,17 @@
 # Vibix Images
 
+## Automatic Clipart Separation, 2026-09-19
+
+Owner explicitly excludes collection planning, palettes/recipes, object/bundle
+composition and set export from ordinary image generation. Those belong to the
+separate `auto-clipart` module. Ordinary generation retains prompt input/import,
+generation, processing and individual image editing; legacy `clipart` identifiers
+and saved collection metadata are preserved for compatibility, not exposed as new
+collection tools. Core module identity is now independent of its reusable legacy
+state scope. Different module identities cannot bind the same scope in one live
+shell or relabel each other's saved project envelopes. This is the first internal
+separation increment, not the released eight-screen automatic workflow.
+
 ## Acceptance Isolation, 2026-09-19
 
 An explicitly requested acceptance build uses a compiled public-only profile,

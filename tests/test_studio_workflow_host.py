@@ -230,16 +230,11 @@ def test_processing_recipe_applies_through_scoped_host():
     shell.close()
 
 
-def test_clipart_builder_opens_through_scoped_host(monkeypatch):
-    from PyQt6.QtWidgets import QDialog
-    from studio_clipart_builder_ui import ClipartBuilderDialog
-
+def test_ordinary_generation_host_does_not_expose_collection_builder():
     shell = AppShell(ProjectState(mode=ProjectMode.CLIPART))
     host = WorkflowHost(shell, "clipart")
     controller = install_clipart_flow(host)
     page = controller.pages[StepId.PROJECT]
-    monkeypatch.setattr(
-        ClipartBuilderDialog, "exec", lambda self: QDialog.DialogCode.Rejected
-    )
-    page._open_builder()
+    assert not hasattr(page, "builder_button")
+    assert not hasattr(page, "_open_builder")
     shell.close()

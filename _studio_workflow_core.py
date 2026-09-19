@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from v3_project_state import ProjectMode, StepId
+from studio_workflow_identity import workflow_state_scope
 
 
 _SIGNAL_NAMES = frozenset({
@@ -18,6 +19,7 @@ _COMMON_FIELDS = frozenset({"project_name", "work_dir"})
 @dataclass(slots=True)
 class _WorkflowCapability:
     shell_ref: weakref.ReferenceType[Any]
+    module_id: str
     scope: ProjectMode
     runtime_settings_provider: Any = None
     worker_factory: Any = None
@@ -58,9 +60,13 @@ def register_workflow_capability(
     image_run_gateway=None,
 ) -> str:
     try:
-        scope = ProjectMode(module_id)
+        scope = ProjectMode(workflow_state_scope(module_id))
     except (TypeError, ValueError) as exc:
         raise ValueError("Workflow capability scope is invalid") from exc
+    # Reusing a schema must not let two different modules mutate one live draft.
+    for entry in tuple(_CAPABILITIES.values()):
+        if entry.shell_ref() is shell and entry.scope is scope and entry.module_id != module_id:
+            raise ValueError("Workflow state scope is already bound to another module")
     token = uuid.uuid4().hex
 
     def release(_ref, *, capability_id=token) -> None:
@@ -72,6 +78,7 @@ def register_workflow_capability(
         raise TypeError("Workflow capability source must support weak references") from exc
     _CAPABILITIES[token] = _WorkflowCapability(
         shell_ref,
+        module_id,
         scope,
         _store_callback(runtime_settings_provider),
         _store_callback(worker_factory),
@@ -234,13 +241,13 @@ def host_ensure_step_page(capability_id: str, step):
 
 
 def host_workflow_controller(capability_id: str):
-    shell, scope = _resolve(capability_id)
-    return shell.workflow_controller(scope.value)
+    shell, _scope = _resolve(capability_id)
+    return shell.workflow_controller(_CAPABILITIES[capability_id].module_id)
 
 
 def host_register_workflow_controller(capability_id: str, controller: object) -> None:
-    shell, scope = _resolve(capability_id)
-    shell.register_workflow_controller(scope.value, controller)
+    shell, _scope = _resolve(capability_id)
+    shell.register_workflow_controller(_CAPABILITIES[capability_id].module_id, controller)
 
 
 def has_diagnostic_journal(capability_id: str) -> bool:

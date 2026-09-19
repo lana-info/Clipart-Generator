@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from studio_workflow_identity import LEGACY_WORKFLOW_IDS
 
 
 SCHEMA_VERSION = 2
@@ -148,6 +149,8 @@ class ProjectStore:
             legacy_mode_switch = (
                 existing.document_type == document_type == "project"
                 and existing.document_version == document_version == 1
+                and existing.module_id in LEGACY_WORKFLOW_IDS
+                and module_id in LEGACY_WORKFLOW_IDS
             )
             if existing.module_id != module_id and not legacy_mode_switch:
                 raise ProjectStoreError("Project document identity cannot change")

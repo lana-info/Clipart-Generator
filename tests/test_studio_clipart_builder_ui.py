@@ -154,13 +154,13 @@ class BuilderTests(unittest.TestCase):
         dialog.reject()
         self.assertEqual(state.to_dict(), before)
 
-    def test_builder_entry_is_only_on_clipart_page(self):
+    def test_collection_builder_is_not_exposed_by_ordinary_generation(self):
         from v3_clipart_flow import ClipartProjectPage
         from v3_pinterest_flow import PinterestProjectPage
         state = ProjectState()
         clipart = ClipartProjectPage(state, lambda: None)
         pinterest = PinterestProjectPage(state, lambda: None)
-        self.assertTrue(hasattr(clipart, 'builder_button'))
+        self.assertFalse(hasattr(clipart, 'builder_button'))
         self.assertFalse(hasattr(pinterest, 'builder_button'))
         clipart.close()
         pinterest.close()

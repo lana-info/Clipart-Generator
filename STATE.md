@@ -1,5 +1,42 @@
 # Project state
 
+## Automatic Clipart Separation In Progress, 2026-09-19
+
+Owner requested automatic Clipart development now, independently of pending owner
+Windows acceptance, then clarified that ordinary generation must not contain a
+collection planner or related tools. Active continuation is
+`/root/projects/Clipart Generator/studio-auto-clipart-worktree`, branch
+`codex/feature-auto-clipart-identity-20260919`, based on the integrated 3.2
+module-delivery checkpoint `2317ac4`. The previous test installer/server remain
+unchanged; do not rebuild/deploy them implicitly.
+
+Implemented the first internal increment: Core-owned `auto-clipart` identity may
+reuse the `clipart` state schema without taking its controller/project identity.
+Conflicting aliases cannot bind one shell scope. Project storage permits its old
+mode-switch exception only among the three legacy IDs; it refuses automatic/
+legacy relabeling before any write. The automatic adapter rejects unrelated
+active state modes and remains read-only when its own adapter is absent. Tests
+cover saved recipe roundtrip, unchanged legacy project bytes, exact module rights
+and revocation before preparation/worker creation (mocked, no provider calls).
+
+Removed the collection-builder entry from ordinary generation and disabled its
+set ZIP export/planning hooks. Existing edited-image membership links are still
+preserved by the compatibility hook. Header now says `Генерация изображений`.
+Fixed stale step-label overlap by hiding removed labels before deferred deletion
+and showing their replacements. Real Qt 1120x780 window inspected, no overlap.
+Affected checks: 179 passed. Final full isolated suite: 1666 passed, 57 skipped,
+14 deselected (75.44s). Skips remain native Windows contracts, unavailable local
+Real-ESRGAN and deferred Pinterest flows. `git diff --check` passed. Visual proof:
+`docs/ui/3.2/auto-clipart-separation/ordinary-generation-1120x780.png`.
+
+Next implementation: separate automatic controller, eight-screen route and
+project restoration using record module identity, never inferred from the reused
+legacy `state.mode`. Then connect the existing recipe/style/reference/object/
+bundle/export services. Do not simply expose the old six-step builder or enable
+the unreleased catalogue card. Automatic module is not yet registered/routed in
+the app or released as a signed package. No live paid generation or new Windows
+acceptance was performed for this increment.
+
 ## Isolated Windows acceptance preparation, 2026-09-19
 
 Owner delegated the testing choice to the implementer; proceed with the recommended

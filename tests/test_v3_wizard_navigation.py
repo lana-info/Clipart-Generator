@@ -111,7 +111,9 @@ class V3WizardNavigationTests(unittest.TestCase):
         shell.show()
         self.app.processEvents()
 
+        replaced = tuple(shell.step_labels)
         shell.refresh()
+        self.assertTrue(all(label.isHidden() for label in replaced))
         shell.refresh()
         visible_steps = [
             label

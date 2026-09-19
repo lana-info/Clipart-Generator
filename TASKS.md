@@ -1,5 +1,27 @@
 # TASKS
 
+## Automatic Clipart, 2026-09-19
+
+Owner requested development now; previous Windows owner acceptance stays open
+but no longer gates this independent implementation. Ordinary generation must
+not offer collection planning or bundle tools.
+
+- [x] Separate module identity from reusable legacy state scope in Core/host.
+- [x] Preserve automatic project identity and block cross-module relabeling;
+  verify recipe save/reopen and exact entitlement/revocation without paid calls.
+- [x] Remove builder entry and collection export from ordinary generation;
+  retain legacy metadata/edited-output compatibility and individual image tools.
+- [x] Label the ordinary workflow `Генерация изображений`; verify 1120x780 Qt view
+  and fix stale sidebar-label overlap.
+- [ ] Implement separate automatic controller, eight-step navigation and resume
+  keyed by project envelope module ID, not its reused legacy state mode.
+- [ ] Connect recipe/style/palette/references/structure/objects to prompt preview,
+  explicit cost-confirmed run, Review and per-set export.
+- [ ] Verify complete automatic workflow before enabling catalogue/download or
+  dispatching another separately authorized Windows test build.
+
+Detailed current evidence and next-step constraints are at the top of STATE.md.
+
 ## Isolated Acceptance, 2026-09-19
 
 - [x] Owner delegated recommended test Windows/server setup; no production release.

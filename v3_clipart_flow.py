@@ -352,15 +352,6 @@ class ClipartProjectPage(ProjectDirectoryPage):
         tokens: V3DesignTokens = DEFAULT_TOKENS,
     ) -> None:
         super().__init__(state, changed, output_mode=ProjectMode.CLIPART, tokens=tokens)
-        self.builder_button = V3Button("Настроить набор клипартов", ButtonVariant.SECONDARY)
-        self.builder_button.clicked.connect(self._open_builder)
-        self.add_widget(self.builder_button)
-
-    def _open_builder(self) -> None:
-        from studio_clipart_builder_ui import ClipartBuilderDialog
-        dialog = ClipartBuilderDialog(_clipart_data(self.state), self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.changed()
 
 
 
@@ -1010,11 +1001,11 @@ class ClipartFlowController(QObject):
         self.worker: Any | None = None
         from v3_run_queue import RunQueueSupport
         from clipart_run_results import ClipartRunResultsExtension
-
         self.run_queue = RunQueueSupport(
             self,
             ProjectMode.CLIPART,
-            results_extension=ClipartRunResultsExtension(),
+            # Preserve old edited-output links without exposing collection tools.
+            results_extension=ClipartRunResultsExtension(collections_enabled=False),
         )
         self.pages = LazyPageRegistry(self.shell, ProjectMode.CLIPART)
         self._install_pages()
