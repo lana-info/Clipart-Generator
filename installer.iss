@@ -97,7 +97,7 @@ begin
 end;
 
 function RegistryInstallDirMatches(
-  RootKey: HKEY;
+  RootKey: Integer;
   const UninstallKey, SelectedDir: String
 ): Boolean;
 var

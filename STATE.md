@@ -19,9 +19,12 @@ were added after syntax and before/after health checks. External HTTPS smoke pas
 activation, manifests, all three package downloads/signatures/runtime activation.
 Private staging state is outside Git under `/opt/vibix-studio-acceptance/20260919`.
 
-62 affected source/build/profile tests passed. Native Windows build, installed
-overwrite guard and screenshots are the next verification; no Windows artifact
-has been produced for this checkpoint yet. Production publisher off-host backup
+Full local suite: 1650 passed, 57 skipped, 14 deselected. Windows run 35443191136
+passed native protection and packaged startup checks, but installer compilation
+failed: the pinned Inno Setup 6.7.1 uses Integer registry roots, not the HKEY type
+shown in newer documentation. Corrected against its tagged source and added a
+regression assertion. Installed overwrite guard and screenshots await the retry;
+no distributable Windows artifact exists yet. Production publisher off-host backup
 still remains a gate before a customer release, not for isolated test keys.
 
 ## Controlled publisher preparation, 2026-09-19

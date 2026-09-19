@@ -96,6 +96,9 @@ class AcceptanceInstallerContractTests(unittest.TestCase):
         ):
             self.assertIn(registry_root, source)
         self.assertIn("RegQueryStringValue", source)
+        # Inno Setup 6.7.1 exposes registry roots as Integer, not HKEY.
+        self.assertIn("RootKey: Integer;", source)
+        self.assertNotIn("RootKey: HKEY;", source)
         self.assertIn("InstallLocation", source)
         self.assertIn("FileExists(AddBackslash(SelectedDir) + '{#AppExeName}')", source)
         self.assertIn("IsRegisteredAcceptanceInstallDir", source)
