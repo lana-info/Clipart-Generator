@@ -1,5 +1,20 @@
 # Project state
 
+## Stability And Lightweight Studio Roadmap, 2026-09-20
+
+Owner asked to record the post-module work explicitly. `TASKS.md` now contains a
+four-phase plan: measure actual packaging/startup/memory first; move only
+heavy platform-specific local ML payloads behind an explicit verified install;
+exercise paid-run and update recovery failures; then validate the result on
+Windows and both Mac architectures. This is deliberately not approved to remove
+current local-processing capability or to make a remote provider mandatory.
+
+Automatic Clipart needs no new product feature before this roadmap begins. It is
+functionally complete in the isolated test environment. Remaining acceptance is
+owner installation/activation on Windows plus one small, separately budgeted real
+provider run through generation, PNG review and export. macOS package support is
+also deferred until its architecture-specific payload compatibility is tested.
+
 ## Automatic Clipart Windows Acceptance Authorized, 2026-09-19
 
 Owner explicitly requested making the remaining installation/server path work.

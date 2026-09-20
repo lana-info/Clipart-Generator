@@ -30,6 +30,65 @@ not offer collection planning or bundle tools.
 
 Detailed current evidence and next-step constraints are at the top of STATE.md.
 
+## Stability And Lightweight Studio, 2026-09-20
+
+Goal: keep Studio as a reliable shell, make expensive local tools optional, and
+reduce installation/startup cost without weakening project recovery, package
+signatures or offline image-processing capability.
+
+### Phase 1: Measure Before Changing Packaging
+
+- [ ] Produce a reproducible size inventory for the Windows installer and the
+  unpacked application: Python/Qt, local background removal, ONNX models,
+  Real-ESRGAN, assets and each bundled workflow.
+- [ ] Measure cold startup time, first-open time for each mode and idle memory on
+  Windows Test and macOS; publish the environment and measurements with results.
+- [ ] Identify imports and initialization that happen before a user opens local
+  processing; add regression checks so a non-processing workflow does not load
+  models or start a model download.
+
+### Phase 2: Optional Local Processing Payload
+
+- [ ] Define a signed, platform-specific optional payload contract for local
+  background removal and upscale. It must support Windows, macOS Intel and
+  macOS Apple Silicon separately where binary files differ.
+- [ ] Keep the base Studio capable of opening projects and using remote image
+  generation without local ML payloads. Show one clear install action when a
+  user explicitly chooses a local operation.
+- [ ] Download optional payloads only after explicit user action, display size,
+  transfer progress and verification, and retain a completed verified payload
+  for offline reuse. Never hide a provider or model download behind a paid run.
+- [ ] Make payload install/update transactional with checksum/signature checks,
+  cancellation, resume/retry rules and a safe previous-version fallback.
+- [ ] Verify uninstall/cleanup removes only optional caches, never projects,
+  exported PNGs, credentials or installed workflow packages.
+
+### Phase 3: Reliability And Recovery
+
+- [ ] Add fault-injection coverage for application termination, internet loss,
+  disk-full and permission errors at project save, provider submission, result
+  publication, module update and optional-payload update boundaries.
+- [ ] Audit durable run records so every paid submission has an idempotency or
+  recovery state before sending; after restart, require explicit confirmation
+  before any retry that could incur another charge.
+- [ ] Add a visible recovery centre for incomplete local work: saved project,
+  completed files, failed local step and a safe next action. It must not expose
+  credentials or full local paths in diagnostics.
+- [ ] Define and test cache limits, low-disk warning thresholds and an explicit
+  cache-management screen with a size preview before deletion.
+
+### Phase 4: Release Confidence
+
+- [ ] Run the same optional-payload, recovery and update matrix on Windows and
+  both macOS architectures before declaring cross-platform compatibility.
+- [ ] Compare final installer size, startup and memory against the Phase 1
+  baseline. Keep the old packaging if measurements do not show a meaningful
+  improvement or recovery guarantees weaken.
+
+Decision rule: do not split existing workflows merely because their code is
+small. Split only heavyweight platform-specific processing payloads after the
+measurement baseline confirms the benefit.
+
 ## Isolated Acceptance, 2026-09-19
 
 - [x] Owner delegated recommended test Windows/server setup; no production release.
