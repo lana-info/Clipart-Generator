@@ -15,13 +15,31 @@ the package. These are local ModuleStore checks, not native Windows/HTTPS tests.
 
 A new shell is REQUIRED: chroma v5, upscale/provider, editor, export and working
 file changes are shared Core code and are not present in the workflow-only ZIP.
-No new Windows installer has been built; no new module was uploaded/published.
 Owner approved commit/push and the necessary isolated build/test delivery work
 on 2026-09-21. No production rollout or paid provider spending was authorized.
-Next: commit/push, dispatch existing Windows workflow with
-app_version=3.2.2 and acceptance_build=true, verify installed artifact, then stage
-only on the isolated test service and verify update delivery. Keep production
-untouched. Paid generation/upscale acceptance requires its own budget decision.
+Source committed/pushed as `a1483eb0f429542de2872b9efd20550ac94e5c8c`.
+Windows workflow `35642029789` succeeded with app_version=3.2.2 and
+acceptance_build=true (12m23s). Native security, packaged launch, installer,
+production overwrite guard, installed launch/local processing and release
+contract checks all passed. Downloaded artifact `test-windows-3.2.2`
+(ID 10659098457); source provenance and installer SHA-256 match:
+`2cf2fc4ce7f1d7877ac5ff4688739a55adf0d72a78c12046c62839a0f427576c`.
+Installer size: 239817522 bytes. Inspected native automatic-clipart screenshot;
+eight-step route and compiled prompts are visible, with internal scrollbars on
+the runner's constrained desktop. Artifact directory:
+`/root/projects/Clipart Generator/artifacts/windows-acceptance-3.2.2-35642029789`.
+Test-service database was backed up to the private acceptance directory as
+`before-auto-clipart-1.2.0-20260921.dump`. Only the isolated test service received
+published auto-clipart 1.2.0, release `73bdd10f-2691-28f3-eabd-06ae0f1cfe1b`.
+External HTTPS verification passed: online test license, signed manifest,
+download/progress, package verification, activation persistence, no redundant
+update, downloaded controller opening and project save/reopen. Studio 3.2.1 still
+selects 1.1.0. Evidence: `https-checks.json`, `test-server-publication.json`, and
+`downloaded-module-1120x780.png` beside the ZIP. These are Linux Qt checks, not
+Windows-installed acceptance. Production was untouched; paid calls were zero.
+Next: owner installation/update acceptance and real-image edge-quality review.
+Full paid provider cycle has not been exercised. The private owner kit includes
+the existing expiring test license, never committed or uploaded to GitHub.
 
 Resolved the prior Pinterest test failure: its opaque input invoked real rembg
 imports in a deferred legacy template worker. The routing test now supplies an

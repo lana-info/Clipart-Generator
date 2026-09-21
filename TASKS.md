@@ -7,9 +7,12 @@
   and the real worker returns a successful variant; keep the original timeout.
 - [x] Prepare test-signed auto-clipart 1.2.0 requiring Studio >=3.2.2; verify
   actual 1.1.0 -> 1.2.0 installation, reopen and rollback locally.
-- [ ] Build isolated Windows Studio Test 3.2.2 after source commit/push approval,
-  then stage module 1.2.0 on the test service and verify HTTPS update delivery.
+- [x] Build isolated Windows Studio Test 3.2.2 (run 35642029789), verify installed
+  launch/local processing, stage module 1.2.0 on the test service and verify HTTPS
+  update delivery, downloaded controller opening and project save/reopen.
   A module-only ZIP cannot update the shared chroma/editor/provider components.
+- [ ] Owner acceptance of Studio Test 3.2.2 and auto-clipart 1.2.0: update/restart,
+  real-image edges/editor/export/cleanup, then separately approved paid cycle.
 - [x] Implement bounded provisional-rim reclassification with same-object
   references and small-island protection; persist reproducible visual reports.
 - [x] Fix source-RGB restoration reintroducing a cleaned opaque rim; retain only
