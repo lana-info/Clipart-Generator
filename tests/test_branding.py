@@ -120,7 +120,7 @@ class BrandingTests(unittest.TestCase):
         installer_art = PROJECT_ROOT / "assets" / "installer-wizard-hq.png"
         self.assertEqual(
             hashlib.sha256(installer_art.read_bytes()).hexdigest(),
-            "577f19f18b35a753852081afa41b1d0139dcff642202aff03ddf098258a1c76b",
+            "a63efd286053a076efd785aa75cb6154fc04194e8ba5decc09de13da6359c483",
         )
 
         handoff = (

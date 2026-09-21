@@ -40,6 +40,7 @@ class ClipartBuilderDialog(QDialog):
         self.resize(1080, 720)
         self.setMinimumSize(760, 560)
         apply_v3_theme(self)
+        self.setStyleSheet(self.styleSheet() + "\nQPushButton {background:#1f2937;color:#eef3f7;border:1px solid #405363;border-radius:4px;min-height:30px;padding:3px 8px;} QPushButton:checked {background:#20c9b7;color:#071d1a;border:1px solid #20c9b7;} QPushButton:disabled {color:#718496;} QComboBox::drop-down {width:24px;}")
         layout = QVBoxLayout(self)
         self.heading = QLabel()
         self.heading.setStyleSheet("font-size:24px;font-weight:600")
@@ -119,8 +120,17 @@ class ClipartBuilderDialog(QDialog):
                                       (self.technique, self.mood, self.line, self.material, self.detail)))
         for key, value in self.recipe.visual.items():
             self.visual_fields[key].setCurrentText(value)
+        for field in (self.line, self.material, self.detail):
+            saved_value = field.currentText()
+            if saved_value and field.findText(saved_value) < 0:
+                field.addItem(saved_value)
+            field.setEditable(False)
+            field.setCurrentText(saved_value)
+            field.setPlaceholderText("Не выбрано")
+            if not field.currentText():
+                field.setCurrentIndex(-1)
 
-        style_title = QLabel("Рекомендуем стиль для вашей темы")
+        style_title = QLabel("Рекомендуемые базовые стили")
         style_title.setStyleSheet("font-size:16px;font-weight:600")
         layout.addWidget(style_title)
         style_hint = QLabel("Базовый стиль применяется ко всей коллекции; характер можно дополнить ниже.")
@@ -132,7 +142,7 @@ class ClipartBuilderDialog(QDialog):
         self.recommended_style_grid = QGridLayout(recommended_style_group)
         layout.addWidget(recommended_style_group)
 
-        style_library_group = QGroupBox("Библиотека стилей")
+        style_library_group = QGroupBox("Библиотека базовых стилей")
         style_library_layout = QVBoxLayout(style_library_group)
         self.style_category = QComboBox()
         self.style_category.addItems(["Все", *style_categories()])
@@ -143,7 +153,7 @@ class ClipartBuilderDialog(QDialog):
         style_library_layout.addWidget(self.style_library_host)
         layout.addWidget(style_library_group)
 
-        modifier_group = QGroupBox("Характер стиля")
+        modifier_group = QGroupBox("Характер стиля · до двух характеристик")
         modifier_layout = QGridLayout(modifier_group)
         self.style_modifier_buttons = {}
         for index, modifier in enumerate(all_style_modifiers()):
@@ -208,11 +218,17 @@ class ClipartBuilderDialog(QDialog):
         self.technique.currentTextChanged.connect(self._refresh_style_card_checks)
         self.recommended_palette_cards = []
         self.palette_cards = []
+        self.palette.textChanged.connect(self._refresh_palette_checks)
+        reset_palette = QPushButton("Сбросить палитру")
+        reset_palette.clicked.connect(self.palette.clear)
+        custom.addWidget(reset_palette)
         self.theme.textChanged.connect(self._refresh_style_recommendations)
         self.context.currentTextChanged.connect(self._refresh_style_recommendations)
         self.theme.textChanged.connect(self._refresh_palette_recommendations)
         self.context.currentTextChanged.connect(self._refresh_palette_recommendations)
         self._restore_style_modifier_buttons()
+        for button in self.style_modifier_buttons.values():
+            button.setEnabled(button.isChecked() or sum(b.isChecked() for b in self.style_modifier_buttons.values()) < 2)
         self._refresh_style_recommendations()
         self._refresh_style_library()
         self._refresh_palette_recommendations()
@@ -251,7 +267,7 @@ class ClipartBuilderDialog(QDialog):
         self._clear_layout(self.style_library_grid)
         self.style_cards = []
         category = self.style_category.currentText() if hasattr(self, 'style_category') else 'Все'
-        profiles = (list(featured_style_profiles()) if category == 'Все' else
+        profiles = (list(all_style_profiles()) if category == 'Все' else
                     [profile for profile in all_style_profiles() if profile.category == category])
         for index, profile in enumerate(profiles):
             self._style_card(profile, self.style_library_grid, index, self.style_cards)
@@ -291,6 +307,8 @@ class ClipartBuilderDialog(QDialog):
         selected = [modifier for modifier in all_style_modifiers()
                     if self.style_modifier_buttons[modifier.key].isChecked()]
         self.mood.setCurrentText(', '.join(modifier.title for modifier in selected))
+        for button in self.style_modifier_buttons.values():
+            button.setEnabled(button.isChecked() or len(selected) < 2)
 
     @staticmethod
     def _clear_layout(layout):
@@ -298,18 +316,36 @@ class ClipartBuilderDialog(QDialog):
             item = layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                widget.hide()
                 widget.deleteLater()
 
     def _select_palette(self, colors):
         self.palette.setText(' '.join(colors))
+        self._refresh_palette_checks()
+
+    def _refresh_palette_checks(self, *_):
+        current = self.palette.text().strip().casefold()
+        for card in self.recommended_palette_cards + self.palette_cards:
+            card['button'].setChecked(current == ' '.join(card['colors']).casefold())
 
     def _palette_card(self, preset, grid, index, target):
         card = QFrame()
         card.setProperty('v3Card', True)
         card_layout = QVBoxLayout(card)
-        top = QHBoxLayout()
+        top = QVBoxLayout()
         button = QPushButton(preset.title)
-        button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        button.setCheckable(True)
+        button.setMinimumHeight(42)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        title = QLabel(preset.title, button)
+        title.setWordWrap(True)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        button.setText("")
+        button_layout = QVBoxLayout(button)
+        button_layout.setContentsMargins(4, 2, 4, 2)
+        button_layout.addWidget(title)
+        button.setAccessibleName(preset.title)
         button.setToolTip(preset.title)
         button.clicked.connect(lambda checked=False, colors=preset.colors: self._select_palette(colors))
         top.addWidget(button, 1)
@@ -331,7 +367,8 @@ class ClipartBuilderDialog(QDialog):
         card_layout.addLayout(swatches)
         grid.addWidget(card, index // 3, index % 3)
         target.append(dict(key=preset.key, title=preset.title, category=preset.category,
-                           character=preset.character, colors=list(preset.colors), widget=card))
+                           character=preset.character, colors=list(preset.colors), widget=card, button=button))
+        button.setChecked(self.palette.text().strip().casefold() == ' '.join(preset.colors).casefold())
 
     def _refresh_palette_recommendations(self, *_):
         if not hasattr(self, 'recommended_palette_grid'):
@@ -418,6 +455,8 @@ class ClipartBuilderDialog(QDialog):
 
     def _planning_snapshot(self):
         from copy import deepcopy
+        if len(style_modifier_keys(self.mood.currentText())) > 2:
+            raise ValueError('Оставьте не более двух характеристик стиля')
         recipe = deepcopy(self.recipe)
         recipe.theme = self.theme.text().strip()
         if not recipe.theme:

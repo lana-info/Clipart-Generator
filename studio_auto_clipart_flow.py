@@ -2,19 +2,21 @@
 from copy import deepcopy
 import hashlib
 import json
+from datetime import datetime
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFormLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QPushButton, QSizePolicy, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
 from studio_clipart_objects import compile_objects, fill_recipe
 from studio_clipart_recipe import ClipartRecipe, ROLES
 from studio_bundle_planner import propose_bundle_plan
-from studio_style_profiles import style_prompt_text
+from studio_style_profiles import style_modifier_keys, style_prompt_text
 from studio_workflow_host import workflow_host_for
 from v3_clipart_flow import (
     ClipartFlowController, ClipartGenerationPage, ClipartPromptReviewPage,
@@ -45,6 +47,19 @@ class CollectionBrief(ClipartBuilderDialog):
         self.next.hide()
         self.layout().itemAt(self.layout().count() - 1).layout().itemAt(0).widget().hide()
         self.make_prompts.hide()
+        self.planning.configure_automatic()
+        self.reference_editor.set_compact_mode()
+        self.palette_reference_button.hide()
+        self.planning.reference_images = lambda: ()
+        self.planning.clear_reference_images = lambda: None
+        self.object_editor.hide()
+        edit_ideas = QPushButton("Изменить одну идею")
+        edit_ideas.setCheckable(True)
+        edit_ideas.toggled.connect(self.object_editor.setVisible)
+        edit_ideas.toggled.connect(self.planning.one_button.setVisible)
+        self.pages.widget(4).widget().layout().addWidget(edit_ideas)
+        self.pages.widget(4).widget().layout().addStretch(1)
+        self.planning.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         form = QFormLayout()
         self.project_name = QLineEdit(state.common.project_name)
         self.project_name.setMaxLength(200)
@@ -53,8 +68,11 @@ class CollectionBrief(ClipartBuilderDialog):
         choose = QPushButton("Выбрать папку")
         choose.clicked.connect(self._choose_directory)
         form.addRow("Название проекта", self.project_name)
-        form.addRow("Рабочая папка", self.directory)
-        form.addRow("", choose)
+        folder_row = QHBoxLayout()
+        folder_row.addWidget(self.directory, 1)
+        folder_row.addWidget(choose)
+        form.addRow("Рабочая папка", folder_row)
+        self.project_name.setPlaceholderText("Клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M"))
         self.pages.widget(0).widget().layout().insertLayout(0, form)
 
     def _choose_directory(self):
@@ -70,6 +88,8 @@ class CollectionBrief(ClipartBuilderDialog):
             self.pages.setCurrentIndex(BRIEF_STEPS.index(self.workflow_state.current_step))
 
     def snapshot(self):
+        if len(style_modifier_keys(self.mood.currentText())) > 2:
+            raise ValueError('Выберите не более двух характеристик стиля')
         recipe = deepcopy(self.recipe)
         recipe.theme = self.theme.text().strip()
         recipe.context = self.context.currentText().strip()
@@ -150,6 +170,7 @@ class AutoClipartFlowController(ClipartFlowController):
         self.save_timer.timeout.connect(self._autosave)
         self.save_timer.start()
         self._last_snapshot = None
+        self._restore_prompt_references()
         self._restore_run()
         self.pages[self.shell.state.current_step].refresh_from_state()
         self.shell.refresh()
@@ -185,7 +206,11 @@ class AutoClipartFlowController(ClipartFlowController):
             self.shell.state.data.recipe = recipe.to_dict()
             self.brief.recipe = recipe
             self.shell.state.data.prompt_generator = generator
-            self.shell.state.common.project_name = self.brief.project_name.text().strip()
+            name = self.brief.project_name.text().strip()
+            if not name:
+                name = "Клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M")
+                self.brief.project_name.setText(name)
+            self.shell.state.common.project_name = name
             self.shell.state.common.work_dir = self.brief.directory.text().strip()
             self.shell.state.common.output_dir = str(Path(self.shell.state.common.work_dir) / "output")
         finally:
@@ -200,10 +225,20 @@ class AutoClipartFlowController(ClipartFlowController):
         self.shell.mark_dirty()
 
     def _refresh_launch(self):
+        self._restore_prompt_references()
         self._refresh_upscale_controls()
         for page in (self.prompt_page, self.generation_page, self._review_page):
             page.refresh_from_state()
         self._refresh_preflight()
+
+    def _restore_prompt_references(self):
+        # Older compiled plans kept attachments in the recipe only. The recipe
+        # owns reference participation; manual prompt text remains untouched.
+        references = [ref['path'] for ref in self.brief.reference_editor.value()]
+        object_ids = {item['id'] for item in self.brief.object_editor.items}
+        for prompt in self.shell.state.data.prompts:
+            if prompt.object_id in object_ids:
+                prompt.references = list(references)
 
     def _install_upscale_controls(self):
         panel = QWidget()
@@ -347,7 +382,12 @@ class AutoClipartFlowController(ClipartFlowController):
                 self.brief.object_editor.refresh()
             if index == 4:
                 recipe, generator = self.brief.snapshot()
+                if not recipe.objects or any(not item['name'].strip() for item in recipe.objects):
+                    self.brief.planning.start(False)
+                    return
                 prompts = compile_objects(recipe, generator)
+                for prompt in prompts:
+                    prompt.references = [ref['path'] for ref in recipe.references]
                 # Re-entering launch without editing the brief preserves manual prompt edits.
                 fingerprint = hashlib.sha256(json.dumps(
                     [recipe.to_dict(), generator.to_dict()], sort_keys=True,
@@ -372,11 +412,21 @@ class AutoClipartFlowController(ClipartFlowController):
                 self.flush()
                 self._refresh_launch()
                 cost = estimate_clipart_cost(self.shell.state)
+                prepared = build_clipart_run_request(self.shell.state)
+                references = {path for entry in prepared.generated_prompts for path in entry['references']}
+                snapshots = self.brief.reference_editor.generation_reference_snapshot(references)
                 message = f"Создать изображения для {len(self.shell.state.data.prompts)} объектов?\n{cost.summary}"
+                if references:
+                    message += '\nРеференсы будут переданы модели ' + self.shell.state.data.generation.reference_model
+                    message += ':\n' + '\n'.join(Path(path).name for path in sorted(references))
                 if QMessageBox.question(self.launch_page, "Подтвердить запуск", message,
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
-                    self.start()
+                    self._reference_consent = (deepcopy(prepared), snapshots)
+                    try:
+                        self.start()
+                    finally:
+                        self._reference_consent = None
                 return
             if index == 7:
                 self.run_queue.page._export_sets()
@@ -417,6 +467,74 @@ class AutoClipartFlowController(ClipartFlowController):
     def start_processing_again(self):
         self.shell.state.data.automatic.pop("run", None)
         self._select_step(StepId.PROJECT)
+
+    def create_worker_for_request(self, request):
+        consent = getattr(self, '_reference_consent', None)
+        self._reference_consent = None
+        if consent is not None and request != consent[0]:
+            raise ValueError('Настройки изменились. Подтвердите запуск заново')
+        references = {path for entry in request.generated_prompts for path in entry['references']}
+        if not references:
+            return super().create_worker_for_request(request)
+        if consent is None:
+            raise ValueError('Подтвердите запуск с выбранными референсами заново')
+        directory = TemporaryDirectory(prefix='vibix-reference-')
+        try:
+            copies = {}
+            for index, path in enumerate(sorted(references)):
+                with open(path, 'rb') as source:
+                    data = source.read(10 * 1024 * 1024 + 1)
+                if len(data) > 10 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != consent[1][path]:
+                    raise ValueError('Референс изменился. Подтвердите запуск заново')
+                target = Path(directory.name) / f'{index}{Path(path).suffix.lower()}'
+                target.write_bytes(data)
+                copies[path] = str(target)
+            run = deepcopy(request)
+            for entry in run.generated_prompts:
+                entry['references'] = [copies[path] for path in entry['references']]
+            worker = super().create_worker_for_request(run)
+            worker.completed.connect(lambda *_: directory.cleanup())
+            self._reference_run_directory = directory
+            return worker
+        except Exception:
+            directory.cleanup()
+            raise
+
+    def confirm_retry_request(self, request):
+        self._reference_consent = None
+        approved = deepcopy(request)
+        references = {path for entry in approved.generated_prompts for path in entry['references']}
+        try:
+            snapshots = self.brief.reference_editor.generation_reference_snapshot(references)
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(self.run_queue.page, 'Повтор запуска', str(error)[:500])
+            return False
+        models = {approved.settings.get('reference_generation_model' if entry['references']
+                                       else 'text_generation_model', '')
+                  for entry in approved.generated_prompts}
+        message = (
+            f'Повторить неудачные запросы: {len(approved.generated_prompts)}?\n'
+            'Успешные изображения не будут созданы заново.\n'
+            'Стоимость повтора не рассчитана; запросы оплачиваются отдельно.\n'
+            'Модель: ' + ', '.join(sorted(models))
+        )
+        if references:
+            message += '\nМодели будут переданы референсы:\n' + '\n'.join(
+                Path(path).name for path in sorted(references))
+        if QMessageBox.question(self.run_queue.page, 'Подтвердить повтор', message,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
+            return False
+        try:
+            if request != approved:
+                raise ValueError('Настройки изменились. Подтвердите повтор заново')
+            if self.brief.reference_editor.generation_reference_snapshot(references) != snapshots:
+                raise ValueError('Референс изменился. Подтвердите повтор заново')
+        except (OSError, ValueError) as error:
+            QMessageBox.warning(self.run_queue.page, 'Повтор запуска', str(error)[:500])
+            return False
+        self._reference_consent = (approved, snapshots)
+        return True
 
     def start(self):
         data = self.shell.state.data

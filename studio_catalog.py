@@ -57,11 +57,12 @@ class ModuleAvailability:
     open_supported: bool = False
     download_supported: bool = False
     purchase_supported: bool = False
+    entitlement_known: bool = True
 
     def __post_init__(self) -> None:
         for name in (
             "installed", "entitled", "compatible", "update_available",
-            "open_supported", "download_supported", "purchase_supported",
+            "open_supported", "download_supported", "purchase_supported", "entitlement_known",
         ):
             _flag(getattr(self, name), name)
 
@@ -90,14 +91,14 @@ def card_action(entry: CatalogEntry, availability: ModuleAvailability) -> CardAc
         return CardAction("soon", "Скоро выйдет", False, "Модуль ещё не выпущен.")
     if not availability.compatible:
         return CardAction("unavailable", "Недоступно", False, "Модуль несовместим с этой версией Studio.")
+    if not availability.entitlement_known:
+        return CardAction("verify", "Проверить доступ", True, "Требуется проверка лицензии.")
 
     if availability.entitled and availability.installed:
-        # Opening is the first-slice primary action.  An available update stays
-        # secondary until a later catalogue slice explicitly models it.
-        if availability.open_supported:
-            return CardAction("open", "Открыть", True, "")
         if availability.update_available and availability.download_supported:
             return CardAction("update", "Обновить", True, "")
+        if availability.open_supported:
+            return CardAction("open", "Открыть", True, "")
         return CardAction("open", "Открыть", False, "Открытие модуля сейчас недоступно.")
 
     if availability.entitled:

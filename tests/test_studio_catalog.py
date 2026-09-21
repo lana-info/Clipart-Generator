@@ -40,9 +40,9 @@ class StudioCatalogTests(unittest.TestCase):
             installed=True, entitled=True, compatible=False, open_supported=True,
         )
 
-    def test_installed_entitled_opens_even_when_an_update_is_available(self):
+    def test_installed_entitled_offers_verified_update(self):
         self.assert_action(
-            CardAction("open", "Открыть", True, ""),
+            CardAction("update", "Обновить", True, ""),
             installed=True, entitled=True, open_supported=True,
             update_available=True, download_supported=True,
         )

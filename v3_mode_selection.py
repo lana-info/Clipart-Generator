@@ -5,6 +5,7 @@ import sys
 import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,7 @@ from studio_module_access import authorize_module_run
 from v3_localization import app_locale_from_settings
 from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
+from license_client import LicenseError
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
 from app_identity import APP_NAME
 from config_schema import load_preferences, resolve_output_directory, save_preferences_atomic
@@ -281,6 +283,11 @@ class ModeSelectionScreen(QWidget):
         self.saved_project_buttons: list[V3Button] = []
         self.saved_projects_card.hide()
         layout.insertWidget(1, self.saved_projects_card)
+        self.news_label = QLabel("Новости Studio: обновления ещё не проверены")
+        self.news_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.news_label.setWordWrap(True)
+        self.news_label.setMaximumHeight(88)
+        layout.insertWidget(2, self.news_label)
 
         self.cancel_button = V3Button(
             "Вернуться",
@@ -335,7 +342,10 @@ class ModeSelectionScreen(QWidget):
             item.widget().deleteLater()
         self.saved_project_buttons = []
         for project in projects[:3]:
-            button = V3Button(project.name, ButtonVariant.SECONDARY)
+            title = {"auto-clipart": "Автоматический Clipart", "clipart": "Генерация изображений",
+                     "processing": "Обработка изображений", "pinterest": "Pinterest"}.get(project.module_id, project.module_id)
+            button = V3Button(f"{project.name}\n{title} · {project.updated_at[:16].replace('T', ' ')}", ButtonVariant.SECONDARY)
+            button.setMinimumHeight(64)
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
             button.setToolTip(f"{project.name}\n{project.updated_at}")
             button.setAccessibleName(f"Продолжить проект: {project.name}")
@@ -514,6 +524,7 @@ class V3ApplicationView(QWidget):
                 busy_module=lambda module: self.shell is not None and self.shell.workflow_controller(module) is not None,
             )
             self._module_updates_dialog.finished.connect(self.refresh_license_status)
+            self._module_updates_dialog.news_changed.connect(self.mode_selection.news_label.setText)
         self._module_updates_dialog.open()
 
     def _runtime_settings(self) -> Mapping[str, Any]:
@@ -607,15 +618,42 @@ class V3ApplicationView(QWidget):
         self.mode_selection.set_license_status(status, verification)
         from license_client import LicenseAuthorization
         authorization = getattr(self._license_gate, "current_authorization", None)
+        if isinstance(authorization, LicenseAuthorization):
+            deadline = authorization.grace_expires_at if authorization.is_offline_grace else authorization.expires_at
+            if deadline is None or datetime.now(timezone.utc) >= deadline:
+                authorization = None
         card = self.mode_selection.module_cards.get("auto-clipart")
         if card is not None:
+            installed = "auto-clipart" in self._workflow_registry.module_ids
+            compatible = True
+            if self._module_delivery is not None:
+                try:
+                    if self._module_delivery.has_active_workflow("auto-clipart"):
+                        installed = self._module_delivery.store.verified_active_path("auto-clipart") is not None
+                except (OSError, ValueError):
+                    compatible = False
             card.set_availability(ModuleAvailability(
-                installed=True, open_supported=True,
+                installed=installed, open_supported=installed, compatible=compatible,
+                download_supported=self._module_delivery is not None,
+                update_available=bool(self._module_updates_dialog is not None
+                    and "auto-clipart" in self._module_updates_dialog.releases),
+                entitlement_known=isinstance(authorization, LicenseAuthorization),
                 entitled=isinstance(authorization, LicenseAuthorization)
                 and authorization.allows_module("auto-clipart"),
             ))
 
     def _handle_module_action(self, module_id: str, action: str) -> None:
+        if module_id == "auto-clipart" and action in {"update", "download"}:
+            self._show_module_updates()
+            return
+        if module_id == "auto-clipart" and action == "verify":
+            if self._license_gate is not None:
+                try:
+                    self._license_gate.authorize_run()
+                except LicenseError as exc:
+                    QMessageBox.warning(self, "Доступ к модулю", str(exc))
+                self.refresh_license_status()
+            return
         if module_id != "auto-clipart" or action != "open":
             return
         if not self._save_automatic_before_leaving():
@@ -693,9 +731,10 @@ class V3ApplicationView(QWidget):
             return
         self._selection_intent = SelectionIntent.SWITCH_MODE
         self.mode_selection.reset_selection()
-        self.mode_selection.set_mode_switch_context(True)
+        self.mode_selection.set_mode_switch_context(False)
         self.mode_selection.set_recent_project_summary(None)
-        self.mode_selection.set_saved_projects([])
+        self._refresh_saved_projects()
+        self.refresh_license_status()
         self._set_application_screen(
             self.mode_selection,
             "mode_selection",

@@ -20,7 +20,9 @@ def fetch_text_model_info(model, api_key):
                     raise ValueError
             data = json.loads(raw)
         entry = next(row for row in data['data'] if row['id'] == model)
-        prices = {key: Decimal(entry['pricing'][key]) for key in ('prompt', 'completion', 'request')}
+        prices = {key: Decimal(entry['pricing'][key]) for key in ('prompt', 'completion')}
+        # OpenRouter omits the request field for token-only models.
+        prices['request'] = Decimal(entry['pricing'].get('request', '0'))
         if any(not value.is_finite() or value < 0 or value > 1000 for value in prices.values()):
             raise ValueError
         if prices['request'] != 0:

@@ -85,7 +85,9 @@ the coordinated Windows installer artwork:
 The website copies must remain byte-identical to the canonical application
 assets. `assets/installer-wizard-hq.png` is the approved installer composition
 derived from the same visual family; its SHA-256 is
-`577f19f18b35a753852081afa41b1d0139dcff642202aff03ddf098258a1c76b`.
+`a63efd286053a076efd785aa75cb6154fc04194e8ba5decc09de13da6359c483`.
+
+2026-09-21 acceptance correction: installer artwork now reads `VIBIX Studio`.
 Any intentional replacement requires explicit owner approval plus an update to
 the brand handoff and branding regression hashes.
 

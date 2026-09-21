@@ -1,17 +1,22 @@
 """Local reference selection, roles and editable observations."""
 from pathlib import Path
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtGui import QImage, QPixmap, QIcon
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                              QListWidget, QLabel, QCheckBox, QPlainTextEdit, QFileDialog, QRadioButton, QButtonGroup)
 from studio_clipart_references import (
     REFERENCE_ROLES, validate_references, reference_thumbnail, extract_palette,
     reference_file_info,
+    reference_image_upload_info,
 )
 
 
 class ReferenceEditor(QWidget):
     palette_selected = pyqtSignal(str)
+
+    @staticmethod
+    def generation_reference_snapshot(paths):
+        return {path: reference_image_upload_info(path)['sha256'] for path in paths}
 
     def __init__(self, references, parent=None):
         super().__init__(parent)
@@ -87,6 +92,36 @@ class ReferenceEditor(QWidget):
         if not self.references:
             self._select(-1)
 
+    def set_compact_mode(self):
+        self.setAcceptDrops(True)
+        self.files.setAcceptDrops(False)
+        self.files.setMinimumHeight(180)
+        self.files.setMaximumHeight(340)
+        self.files.setIconSize(QSize(64, 64))
+        right = self.layout().itemAt(1).layout()
+        for index in range(right.count()):
+            widget = right.itemAt(index).widget()
+            if widget is not None and widget not in (self.preview, self.reference_info, self.status):
+                widget.hide()
+        self.preview.setMaximumHeight(300)
+        for index, item in enumerate(self.references):
+            self.files.item(index).setIcon(QIcon(item['path']))
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls() and all(url.isLocalFile() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            try:
+                self.add_reference(url.toLocalFile())
+            except (OSError, ValueError) as error:
+                self.status.setText(str(error))
+                break
+        event.acceptProposedAction()
+
     def _choose(self):
         paths, _ = QFileDialog.getOpenFileNames(self, "Референсы", "", "Изображения (*.png *.jpg *.jpeg *.webp)")
         for path in paths:
@@ -105,6 +140,7 @@ class ReferenceEditor(QWidget):
         validate_references([item])
         self.references.append(item)
         self.files.addItem(Path(path).name)
+        self.files.item(self.files.count() - 1).setIcon(QIcon(path))
         self.files.setCurrentRow(len(self.references) - 1)
 
     def _store(self):

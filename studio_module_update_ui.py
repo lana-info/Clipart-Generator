@@ -63,6 +63,7 @@ class ModuleUpdateWorker(QThread):
 
 
 class ModuleUpdatesDialog(QDialog):
+    news_changed = pyqtSignal(str)
     def __init__(self, delivery, *, busy_module=lambda _module: False, parent=None):
         super().__init__(parent)
         self.delivery = delivery
@@ -205,11 +206,18 @@ class ModuleUpdatesDialog(QDialog):
             if self._shutting_down:
                 return
             if worker.failed:
+                self.news_changed.emit("Новости Studio: не удалось проверить обновления")
                 if worker.release is None:
                     for _installed, available, _button in self.rows.values():
                         available.setText("Ошибка проверки")
                 self.status.setText("Не удалось проверить или скачать обновление. Текущая версия сохранена.")
             elif worker.release is None:
+                news = [f"{MODULE_TITLES[module]} {release.version}: {release.notes}"[:500]
+                        for module, (state, release) in (worker.result or {}).items()
+                        if state == "ready" and release is not None]
+                self.news_changed.emit("Новости Studio\n" + "\n".join(news[:3]) if news else
+                    "Новости Studio: обновления не найдены" if all(state == "ready" for state, _ in (worker.result or {}).values())
+                    else "Новости Studio: не все модули удалось проверить")
                 for module, (state, release) in (worker.result or {}).items():
                     installed, available, button = self.rows[module]
                     available.setText({"denied": "Нет доступа", "error": "Ошибка проверки"}.get(

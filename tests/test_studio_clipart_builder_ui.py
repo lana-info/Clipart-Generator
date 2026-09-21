@@ -56,14 +56,15 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(page.horizontalScrollBar().maximum(), 0)
         dialog.close()
 
-    def test_style_library_all_view_is_compact_featured_six(self):
+    def test_style_library_all_view_contains_every_profile(self):
         dialog = ClipartBuilderDialog(ProjectState().clipart)
         dialog.style_category.setCurrentText('Все')
         dialog._refresh_style_library()
-        self.assertEqual(len(dialog.style_cards), 6)
+        from studio_style_profiles import all_style_profiles
+        self.assertEqual(len(dialog.style_cards), len(all_style_profiles()))
         self.assertEqual(
             [card['key'] for card in dialog.style_cards],
-            ['watercolor', 'gouache', 'storybook', 'kawaii', 'cottagecore', 'gothic-dark'],
+            [profile.key for profile in all_style_profiles()],
         )
         dialog.close()
 

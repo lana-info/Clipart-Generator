@@ -601,7 +601,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertEqual(view.selection_intent, SelectionIntent.SWITCH_MODE)
         self.assertIs(view.stack.currentWidget(), view.mode_selection)
         self.assertTrue(view.mode_selection.recent_project_card.isHidden())
-        self.assertFalse(view.mode_selection.cancel_button.isHidden())
+        self.assertTrue(view.mode_selection.cancel_button.isHidden())
 
         view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
         self.assertIs(view.stack.currentWidget(), view.shell)

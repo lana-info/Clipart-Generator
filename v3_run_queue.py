@@ -1181,21 +1181,10 @@ class RunQueueSession(QObject):
         )
         self.changed.emit()
 
-    def prepare_retry(self) -> Any | None:
+    def preview_retry(self) -> Any | None:
         failed = self.failed_indices
         if self.running or not failed:
             return None
-        self.active_order = list(failed)
-        for index in failed:
-            item = self.items[index]
-            item.status = RunItemStatus.PENDING
-            item.short_message = "Ожидает повторного запуска."
-            item.output_path = ""
-            item.editor_output_path = ""
-            item.stage_statuses.clear()
-            if isinstance(item.payload, dict):
-                item.source_path = ""
-            item.attempts += 1
         queue_items = tuple(getattr(self.request, "queue_items", ()) or ())
         generated = list(getattr(self.request, "generated_prompts", []) or [])
         if queue_items:
@@ -1234,6 +1223,24 @@ class RunQueueSession(QObject):
                 ],
                 generated_prompts=[],
             )
+        return retry_request
+
+    def prepare_retry(self) -> Any | None:
+        retry_request = self.preview_retry()
+        if retry_request is None:
+            return None
+        failed = self.failed_indices
+        self.active_order = list(failed)
+        for index in failed:
+            item = self.items[index]
+            item.status = RunItemStatus.PENDING
+            item.short_message = "Ожидает повторного запуска."
+            item.output_path = ""
+            item.editor_output_path = ""
+            item.stage_statuses.clear()
+            if isinstance(item.payload, dict):
+                item.source_path = ""
+            item.attempts += 1
         self.current_index = None
         self._item_progress.clear()
         self._last_progress = 0
@@ -2531,6 +2538,13 @@ class RunQueueSupport:
             return None
         if not self.session.failed_indices:
             return None
+        confirm = getattr(self.controller, "confirm_retry_request", None)
+        if callable(confirm):
+            preview = self.session.preview_retry()
+            if preview is None or not confirm(preview):
+                return None
+            if self.session.preview_retry() != preview:
+                return None
         request = self.session.prepare_retry()
         if request is None:
             return None

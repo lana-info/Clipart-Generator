@@ -243,6 +243,7 @@ class ParallelGenerationTests(unittest.TestCase):
         self.assertEqual(all_providers._remote_worker_limit(), 6)
 
     def test_fal_generation_preserves_per_item_mapping_under_parallel_load(self):
+        batch_ready = threading.Barrier(3)
         with tempfile.TemporaryDirectory(prefix="parallel-fal-generation-") as temp_dir:
             worker = main.WorkerThread(
                 "mode1_generate_only",
@@ -282,7 +283,7 @@ class ParallelGenerationTests(unittest.TestCase):
 
                 def wait_for_result(self, request_id, **_kwargs):
                     nonlocal active
-                    time.sleep(0.03)
+                    batch_ready.wait(timeout=2)
                     with lock:
                         active -= 1
                     return {

@@ -28,6 +28,53 @@ from network_security import HttpsOnlyRedirectHandler
 from runtime_settings import PROVIDER_CONCURRENCY_CHOICES, normalize_provider_concurrency
 
 
+def check_openrouter_balance(api_key: str, timeout: float = 15.0) -> str:
+    import requests
+    from decimal import Decimal, InvalidOperation
+    key = str(api_key or '').strip()
+    if not key:
+        raise ValueError('Введите OpenRouter API Key')
+    def read(endpoint):
+        with requests.get('https://openrouter.ai/api/v1/' + endpoint,
+                          headers={'Authorization': f'Bearer {key}'},
+                          timeout=timeout, allow_redirects=False, stream=True) as response:
+            if response.status_code == 403 and endpoint == 'credits':
+                return None
+            if response.status_code in (401, 403):
+                raise ValueError('OpenRouter отклонил ключ или у ключа недостаточно прав')
+            if response.status_code != 200:
+                raise ValueError('OpenRouter не вернул баланс. Повторите проверку позже')
+            raw = bytearray()
+            for chunk in response.iter_content(8192):
+                raw.extend(chunk)
+                if len(raw) > 65536:
+                    raise ValueError('Ответ OpenRouter слишком большой')
+            data = json.loads(raw)['data']
+            if not isinstance(data, dict):
+                raise ValueError('OpenRouter вернул неподдерживаемый формат баланса')
+            return data
+    try:
+        data = read('credits')
+        if data is None:
+            data = read('key')
+            remaining = data.get('limit_remaining')
+            if remaining is None:
+                return 'Ключ OpenRouter действителен. Лимит ключа не задан; баланс аккаунта доступен в кабинете OpenRouter.'
+            balance = Decimal(str(remaining))
+            if not balance.is_finite():
+                raise ValueError('Некорректный лимит OpenRouter')
+            return f'Остаток лимита ключа OpenRouter: {balance:.2f} USD (не баланс аккаунта)'
+        else:
+            balance = Decimal(str(data['total_credits'])) - Decimal(str(data['total_usage']))
+            if not balance.is_finite():
+                raise ValueError('Некорректный баланс OpenRouter')
+        return f'Баланс OpenRouter: {balance:.2f} USD'
+    except requests.RequestException:
+        raise RuntimeError('Не удалось обратиться к OpenRouter') from None
+    except (KeyError, TypeError, InvalidOperation, json.JSONDecodeError):
+        raise RuntimeError('OpenRouter вернул неподдерживаемый формат баланса') from None
+
+
 def _fal_platform_request(
     api_key: str,
     path: str,
@@ -324,7 +371,12 @@ class ApiSettingsDialog(QDialog):
         self.balance_button.clicked.connect(self._check_balance)
         kie_row.addWidget(self.balance_button)
         form.addRow("KIE API Key", kie_row)
-        form.addRow("OpenRouter API Key (текстовый помощник)", self.openrouter_edit)
+        openrouter_row = QHBoxLayout()
+        openrouter_row.addWidget(self.openrouter_edit)
+        self.openrouter_balance_button = V3Button("Проверить баланс", ButtonVariant.SECONDARY)
+        self.openrouter_balance_button.clicked.connect(self._check_openrouter_balance)
+        openrouter_row.addWidget(self.openrouter_balance_button)
+        form.addRow("OpenRouter API Key", openrouter_row)
         photo_row = QHBoxLayout()
         photo_row.addWidget(self.photo_edit)
         self.photo_balance_button = V3Button("Проверить баланс", ButtonVariant.SECONDARY)
@@ -386,6 +438,12 @@ class ApiSettingsDialog(QDialog):
         try:
             self.status.setText(check_kie_balance(self.kie_edit.text()))
         except (RuntimeError, ValueError) as error:
+            self.status.setText(str(error))
+
+    def _check_openrouter_balance(self) -> None:
+        try:
+            self.status.setText(check_openrouter_balance(self.openrouter_edit.text()))
+        except (ValueError, RuntimeError) as error:
             self.status.setText(str(error))
 
     def _check_photoroom_balance(self) -> None:

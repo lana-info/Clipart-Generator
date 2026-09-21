@@ -73,6 +73,23 @@ class PlanningPanel(QWidget):
         self.one_button.clicked.connect(lambda: self.start(True))
         self.cancel_button.clicked.connect(self.cancel)
 
+    def configure_automatic(self):
+        self.automatic = True
+        if self.provider.currentData() != 'openrouter':
+            self.provider.setCurrentIndex(self.provider.findData('openrouter'))
+        self.provider.hide()
+        self.model.hide()
+        self.all_button.setText('Подготовить набор')
+        self.all_button.setStyleSheet('background:#20c9b7;color:#071d1a;min-height:36px;font-weight:600')
+        self.one_button.setText('Перегенерировать эту идею')
+        self.one_button.hide()
+        self.cancel_button.setText('Остановить подбор')
+        self.cancel_button.hide()
+        ready = sum(bool(item.get('name', '').strip()) for item in self.editor.items)
+        total = len(self.editor.items)
+        self.status.setText(f'Подготовлено {ready} из {total}. Можно перейти к промптам.'
+                            if total and ready == total else 'Набор ещё не подготовлен')
+
     def _models(self):
         self.model.clear()
         for route in text_models_for(self.provider.currentData()):
@@ -85,6 +102,8 @@ class PlanningPanel(QWidget):
         for widget in (self.provider, self.model, self.all_button, self.one_button):
             widget.setEnabled(not busy)
         self.cancel_button.setEnabled(busy)
+        if getattr(self, 'automatic', False):
+            self.cancel_button.setVisible(busy)
         self.busy_changed.emit()
 
     def cancel(self):
@@ -231,7 +250,7 @@ class PlanningPanel(QWidget):
                         )
                         self.editor.items = items
                         self.editor.refresh()
-                        self._finish('Идеи предложены. Проверьте набор и сохраните настройки.')
+                        self._finish(f'Подготовлено {len(items)} идей. Можно перейти к промптам.')
                     except ValueError as exc:
                         self._finish(f'{exc} Набор не изменён.')
                     return
@@ -240,8 +259,7 @@ class PlanningPanel(QWidget):
                 batch_recipe = copy.deepcopy(working_recipe)
                 expected_request = planning_request(batch_recipe, palette, batch)
                 self.status.setText(
-                    f'Подбираю идеи: запрос {batch_index + 1} из {len(batches)}. '
-                    'Можно отменить ожидание; автоповтора нет.'
+                    f'Подготовлено {len(collected)} из {len(target_ids)}. Подбираем следующие идеи…'
                 )
 
                 def work():

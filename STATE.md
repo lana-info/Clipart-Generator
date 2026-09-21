@@ -1,5 +1,62 @@
 # Project state
 
+## Acceptance Corrections Implementation, 2026-09-21
+
+Owner authorized implementation and a new isolated test release. Changes now
+cover the Studio home/project return path, tri-state license presentation,
+OpenRouter credit checking and optional request pricing, automatic bulk ideas,
+complete style catalogue, two modifiers, dropdowns, palette selection, compact
+reference input and Studio installer branding. Both shell and module must update:
+target Studio Test 3.2.3 and auto-clipart 1.3.0 (minimum Studio 3.2.3).
+
+Astra source review findings are fixed: legacy reference migration and removal,
+retry consent and worker lifecycle; custom visual values survive dropdown
+migration. Reference regression suite: 9 passed; affected integration: 107 passed
+and 5 subtests. No paid provider calls or production deployment have occurred.
+Final full suite: 1747 passed, 57 skipped, 18 deselected, 265 subtests, with one
+timing-dependent Fal parallel-test failure (30ms sleep did not guarantee three
+overlapping fake requests). The fixture now synchronizes batches with a barrier,
+retaining the exact concurrency and mapping assertions; targeted rerun passed:
+66 tests and 7 subtests. Sensitive-artifact scan and diff whitespace check passed.
+Signed 1.3.0 package verified; actual 1.2.0 -> 1.3.0 upgrade, reopen, rollback
+and rejection by old Studio 3.2.2 passed. Native build is still pending.
+Real offline screenshots are in
+`docs/ui/3.2/acceptance-corrections/`. Earlier documentation-only checkpoint below
+is historical, not the current working-tree status.
+
+## Owner Acceptance Findings and Architecture Review, 2026-09-21
+
+No production code, tests, package build, deployment or paid provider request ran
+in this checkpoint. The owner reported acceptance findings from the installed
+Studio Test 3.2.2 and Automatic Clipart 1.2.0 flow. The complete corrective
+scope and evidence are recorded as open items at the top of `TASKS.md`; the
+authoritative product requirements were reconciled in
+`PRD_VIBIX_STUDIO_3.2_V2.ru.md`.
+
+The priority changes are a real `Главная Studio` with the three most recent
+projects and trusted update notes; correct card rendering for an installed,
+licensed signed module; automatic bulk preparation of all Clipart ideas; and a
+compact no-technical-control reference/style/palette workflow. The architecture
+review found that the current catalogue conflates unknown entitlement with a
+denial and can show `Купить` for installed Clipart. The corrective design uses
+confirmed-grant / confirmed-denial / unknown entitlement states plus exact
+signed-package and compatibility checks, repeated at each action boundary.
+
+For 100 automatic ideas, the required contract is one explicit text-planning
+consent and internal <=80 sequential batching with atomic application, followed
+by a separate image-generation consent. Attached reference images go only to the
+actual compatible image provider after ordinary generation confirmation bound to
+their bytes and route; they do not go to the text planner. There is no manual
+object-entry fallback, silent provider change or hidden paid retry.
+
+An Astra architecture review was completed against the PRD, tasks and relevant
+catalogue/planning code. It reconciled obsolete PRD checkpoints and added
+acceptance matrices for entitlement, planning, references, style/palette and
+home-screen edge cases. `git diff --check` passed. Next work is implementation
+in the dependency order stated in `TASKS.md`, starting with trusted availability
+and planning-readiness contracts, followed by visual approval and Windows
+acceptance. The current changes are uncommitted documentation only.
+
 ## Next Acceptance Package Prepared, 2026-09-21
 
 Owner requested a module build to exercise updates and end-to-end edge quality.

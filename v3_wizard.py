@@ -291,7 +291,7 @@ class AppShell(QWidget):
         layout.addStretch()
 
         self.change_mode_button = V3Button(
-            "Сменить режим",
+            "Главная Studio",
             ButtonVariant.GHOST,
         )
         self.change_mode_button.clicked.connect(self.mode_picker_requested.emit)

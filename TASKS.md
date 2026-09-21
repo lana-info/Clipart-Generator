@@ -1,6 +1,23 @@
 # TASKS
 
+## Acceptance Correction Delivery, 2026-09-21
+
+- [x] Implement first source pass for the owner's acceptance corrections below.
+- [x] Astra review of production changes; preserve legacy custom dropdown values.
+- [x] Resolve reference upgrade/retry/lifecycle findings with regression tests.
+- [ ] Complete full offline tests, signed package and native Windows build.
+- [ ] Deliver Studio Test 3.2.3 plus auto-clipart 1.3.0 to isolated acceptance.
+- [ ] Owner verifies installed UI and real generation/edges. The detailed items
+  below stay open until their full stated acceptance evidence exists; source
+  implementation alone does not mark native or paid acceptance complete.
+
 ## Automatic Clipart, 2026-09-19
+
+Acceptance requirements dated 2026-09-21 below supersede older checkpoint
+directions for planner-image upload, mandatory object forms and six-style `All`
+views. Historical completion marks describe earlier increments, not acceptance
+of this new workflow. Scope is `auto-clipart` and Studio home; legacy `clipart`
+rights/projects and other modules do not acquire the new behavior implicitly.
 
 - [x] Diagnose deferred Pinterest worker-routing test timeout: opaque fixture
   invoked real rembg imports. Use a pre-cut PNG, assert remover is never called
@@ -13,6 +30,200 @@
   A module-only ZIP cannot update the shared chroma/editor/provider components.
 - [ ] Owner acceptance of Studio Test 3.2.2 and auto-clipart 1.2.0: update/restart,
   real-image edges/editor/export/cleanup, then separately approved paid cycle.
+- [ ] Automatic Clipart first-step feedback from owner test, 2026-09-21:
+  an empty project-name field is currently saved as an empty string, so the
+  project is hard to identify later. On first save, assign an editable default
+  name `Клипарт — DD.MM.YYYY HH:MM` only when the owner left it blank; never
+  replace a name the owner entered. Show this default in the field and use it
+  consistently in saved-project and result labels.
+- [ ] Automatic Clipart first-step feedback from owner test, 2026-09-21:
+  move the `Выбрать папку` control onto the same row as `Рабочая папка`, at the
+  right edge of the path field. Style and size it as the existing compact
+  in-app folder chooser controls, not as a full-width outlined command button.
+  Preserve keyboard focus, the visible full path and the native folder dialog.
+- [ ] API settings feedback from owner test, 2026-09-21: change the visible label
+  from `OpenRouter API Key (текстовый помощник)` to `OpenRouter API Key`.
+  The parenthetical description is misleading and unnecessary.
+- [ ] API settings feedback from owner test, 2026-09-21: add `Проверить баланс`
+  beside the OpenRouter key, matching the other provider rows. On explicit click,
+  use the entered OpenRouter key to request its available credit/balance and show
+  a concise USD result or a clear invalid-key/network/provider error. Do not save
+  the key merely because balance was checked; never log or display its value.
+- [ ] Automatic Clipart style-step feedback from owner test, 2026-09-21: make the
+  meaning of the two upper areas explicit. `Рекомендуемые базовые стили` is a
+  theme-specific shortlist; `Библиотека базовых стилей` is the same single-choice
+  catalogue, not a second layer of style. A selected base style must be obvious,
+  and selecting another must visibly unselect the previous one in both areas.
+  `Характер стиля` stays a separate, clearly labelled optional modifier layer.
+- [ ] Automatic Clipart style-step feedback from owner test, 2026-09-21: replace
+  the current misleading `Все` category behavior. It currently renders only six
+  featured profiles out of 19 registered base styles, not every available profile.
+  The owner screenshot confirms that this block has no scrollbar and the other
+  13 styles cannot be reached. Add an explicit `Показать все стили` action that
+  reveals the complete catalogue, keep category filters, and ensure the page has
+  a visible working vertical scrollbar for the expanded list. Verify that every
+  supported profile can be reached and selected. Evidence: owner screenshot
+  `codex-clipboard-c328a580-d71a-40a3-8f8e-e8e5517d64da.png`.
+- [ ] Automatic Clipart style-step feedback from owner test, 2026-09-21: revise
+  style-card and modifier-button affordances. Inactive controls should read as
+  calm, compact buttons with a subtle neutral border; only the chosen base style
+  and selected modifiers use the Studio turquoise active state. Do not use the
+  current blue-looking treatment that makes every option seem selected or leaves
+  the click target unclear. Verify default, hover, keyboard focus and selected
+  states in the real 1120x780 Windows view.
+- [ ] Automatic Clipart style-step feedback from owner test, 2026-09-21: cap
+  `Характер стиля` at two simultaneous modifiers. The current screen permits all
+  12, producing contradictory and diluted prompt instructions. Two covers useful
+  pairs such as `Нежный + Детский / nursery` and `Винтажный + Уютный` while
+  retaining a clear base style. State the limit visibly as `До двух характеристик`;
+  after two are selected, keep the other choices visibly unavailable until one is
+  deselected. Selected modifiers use only the Studio turquoise state. Evidence:
+  owner screenshot `codex-clipboard-ef4c987c-3c20-4dff-946f-c26c304abaf2.png`.
+- [ ] Automatic Clipart style-step feedback from owner test, 2026-09-21: make
+  `Художественная линия`, `Материал / фактура` and `Детализация` visibly normal
+  single-select dropdowns, not blank text-entry-looking boxes. Default each to
+  `Не выбрано`; expose the curated available choices in its menu and do not ask
+  the owner to invent or type a technical style term. Keep `Базовый стиль / своя
+  формулировка` as the only place where a custom style phrase is allowed. Verify
+  that dropdown arrows, placeholder, selection and reset are readable at 1120x780.
+  Evidence: owner screenshot
+  `codex-clipboard-9e285e38-3f84-4300-917c-222f88cc75dc.png`.
+- [ ] Automatic Clipart palette-step feedback from owner test, 2026-09-21: retain
+  the three theme recommendations at the top, but do not silently preselect or
+  apply one. They are suggestions only until the owner explicitly chooses one.
+  A palette selection must be single-choice across recommendations and library:
+  visibly mark the chosen card in Studio turquoise, unmark the prior card, update
+  the actual palette value used by prompt generation, and expose a short selected
+  name plus a clear reset action. The current click writes colors internally but
+  has no visible selected state, making it appear broken.
+- [ ] Automatic Clipart palette-step feedback from owner test, 2026-09-21: prevent
+  palette titles and character descriptions from clipping. Long names such as
+  `День святого Валентина`, `День благодарения` and `4 июля / День независимости`
+  must wrap or receive enough stable card space, without truncating the beginning
+  of the name. Preserve swatch visibility and the three-column layout at 1120x780.
+  Evidence: owner screenshot
+  `codex-clipboard-11502498-8288-483e-8cd9-3f031a689c98.png`.
+- [ ] Automatic Clipart reference-step feedback from owner test, 2026-09-21:
+  support drag-and-drop of PNG, JPEG and WebP reference files onto a compact,
+  obvious drop target, while retaining click-to-add as an equivalent path. Replace
+  the oversized empty left list with a thumbnail list/grid and compact remove
+  action. Make the whole reference step fit one 1120x780 screen without requiring
+  the owner to discover a second section by scrolling.
+- [ ] Automatic Clipart reference-step feedback from owner test, 2026-09-21:
+  remove the manual role checkboxes, free-text `Опишите нужные признаки`, palette
+  extraction command, AI-planning send/no-send radio choices, privacy/preflight
+  paragraphs and temporary `0 из 4` counter. They duplicate earlier choices for
+  style, palette and composition or expose technical transport policy.
+- [ ] Automatic Clipart reference-step product decision, 2026-09-21: an attached
+  reference is automatically used as an image reference by the actual selected
+  image-generation model, not sent to a separate AI object-planning request.
+  The module chooses this one path without per-image participation checkboxes.
+  At launch preflight, require the configured reference-capable image model and
+  show a concise blocking error if unavailable; never silently drop the reference
+  or fall back to a text-only model. Keep the reference locally in the project
+  until the normal generation handoff, and avoid separate planner upload.
+  Evidence: owner screenshots
+  `codex-clipboard-7e67b1eb-7769-47a0-9032-43c4b27a2ecc.png` and
+  `codex-clipboard-df2e202e-a7a1-4107-8195-3f6c0c645b0f.png`.
+- [ ] Installer branding regression from owner test, 2026-09-21: the left-side
+  illustration on the first Studio Test installer page still says `VIBIX Images`,
+  while the window and product are `Vibix Studio Test`. Replace the embedded
+  artwork/text with `Vibix Studio`, rebuild the isolated installer and inspect
+  the real Windows welcome page. Evidence: owner screenshot
+  `codex-clipboard-83be8f24-8e1c-4fe0-8d85-c4d8b2163a78.png`.
+- [ ] Automatic Clipart object-step feedback from owner test, 2026-09-21:
+  replace the current mandatory master/detail object editor with a default
+  automatic bulk workflow. After theme, style, palette, references and quantity
+  are set, this step must offer one clear action, `Подготовить набор`, which
+  prepares every idea, title, role, pose, composition and extra detail for the
+  entire requested quantity. For 100 images, batching is internal and the
+  progress reports plain meaningful status such as `Подготовлено 42 из 100`;
+  the owner must never fill 100 object forms. On completion, show a compact
+  summary and allow going straight to prompt generation. Individual editing may
+  be available behind an explicit optional `Изменить одну идею` action, never as
+  the required path. Remove the initial empty labels `001 · Укажите объект`.
+- [ ] Automatic Clipart object-step wording and controls, owner feedback
+  2026-09-21: replace internal planning vocabulary with user-facing actions.
+  The initial bulk action is `Подготовить набор`, not `Подобрать
+  незакреплённые`; show `Перегенерировать эту идею` only inside the optional
+  one-item editor, not beside the main action; do not expose the `закреплённая`
+  concept in the normal workflow. Hide cancellation when nothing is running;
+  while a request is genuinely active, label it `Остановить подбор` and state
+  that an already sent paid request can still be charged. Do not show the
+  provider/model selector on the normal object screen.
+- [ ] Automatic Clipart planning-provider readiness, owner feedback 2026-09-21:
+  choose the configured, supported text-planning route internally for the normal
+  workflow and make a single paid-batch confirmation only after its availability
+  and price can be established. An OpenRouter tariff lookup failure or KIE route
+  that is not available must not strand the owner at a manual object form or
+  make them choose a provider. If no usable route is configured, present one
+  concise blocking setup message with a direct `Настройки API` action, preserve
+  the project, and permit retry after setup. Never silently make a paid call,
+  silently switch provider, or require manual names/actions/poses as a fallback.
+  When the automatic preparation succeeds, persist generated names for all
+  objects so prompt compilation never asks the owner to name every object.
+  Evidence: owner screenshots `codex-clipboard-89e25148-b7b9-4f08-af89-740234b8ae95.png`,
+  `codex-clipboard-3aaa3c4b-e650-451d-a7c3-f90659507830.png`,
+  `codex-clipboard-919b877d-a202-40ca-b183-50eee93ba389.png` and
+  `codex-clipboard-e2df4503-556a-4764-ab36-d0db69b6d6f8.png`.
+- [ ] Studio home-screen feedback from owner test, 2026-09-21: rename the top
+  workflow action `Сменить режим` to `Главная Studio` and make it open a real
+  Studio home screen rather than a catalogue-only page. The home screen must
+  place `Продолжить работу` first and show the three most recently saved
+  projects, with their project name, module, last-change date and a concise
+  saved state (for example, draft or prompts prepared); clicking one resumes it
+  with its saved intermediate data. Provide `Все проекты` for the full list.
+  Keep the module catalogue below this useful work area, and remove the
+  redundant full-width `Вернуться` command.
+- [ ] Studio home-screen feedback from owner test, 2026-09-21: add a compact
+  `Новости Studio` block to the home screen. It should show actual Studio/module
+  release notes and update availability from trusted signed update metadata,
+  not invented generic news; when no new item is available, state the installed
+  versions succinctly. Keep the existing module-update dialog as the detailed
+  update action.
+- [ ] Installed Auto Clipart card regression from owner test, 2026-09-21: the
+  signed Auto Clipart 1.2.0 module was installed through the Studio Test update
+  flow, but its catalogue card shows disabled `Купить` instead of `Открыть`.
+  Reconcile the trusted installed-module registry, active test-license
+  entitlement and catalogue availability before rendering the card, then retain
+  the runtime authorization check on click. A valid installed-and-entitled
+  module must show `Открыть`; an update must show `Обновить`; a copied or
+  unentitled package must remain non-openable. Do not represent an entitlement
+  lookup failure as an invitation to buy. Add regression coverage for the real
+  signed-install/update path and inspect the Windows screen after rebuilding.
+  Evidence: owner screenshot
+  `codex-clipboard-ee26fcd0-fb6f-4adb-94b1-cd4619b42539.png`.
+- [ ] Implement the acceptance corrections in dependency order: resolve trusted
+  availability and planning readiness contracts, obtain required visual approval
+  for revised home/builder states, then wire the automatic workflow and verify
+  native Windows acceptance. New UI requirements do not count as approved mockups.
+- [ ] Catalogue acceptance matrix: signed installed/entitled, entitled/not
+  installed, revoked/expired, unknown/failed entitlement lookup, tampered package,
+  incompatible shell, compatible signed update, restart and offline grace. Unknown
+  rights must neither grant access nor become `Buy`; check exact `auto-clipart`
+  rights and current trust at every open/download/update boundary. An available
+  compatible update must not prevent opening the valid installed version.
+- [ ] Reference handoff contract: carry attachments through saved recipe, prompt
+  entries and the actual image-provider adapter; send no images to text planning.
+  Keep one-shot disclosure/consent in the normal generation confirmation, bind it
+  to exact file bytes and route, enforce the selected endpoint's real limits and
+  block missing/changed/unsupported files. Removing role/privacy controls must
+  not authorize an upload on attach/save/reopen. Preserve legacy reference data.
+- [ ] Automatic planning acceptance: 100 targets use the existing <=80 sequential
+  batching with one total estimate/confirmation, validated progress and atomic
+  application. Cover second-batch failure, cancel, stale brief, malformed response,
+  duplicate/missing IDs, preserved manual edits and saved-plan reopen. No hidden
+  paid readiness probe, retry, provider switch or PNG generation; a new paid
+  attempt requires new consent. Persist successful names before prompt handoff.
+- [ ] Style/palette acceptance: changing recommendations/categories never changes
+  the selection implicitly; reset and save/reopen preserve the actual prompt
+  inputs. Old recipes with more than two modifiers retain their saved data and
+  ask for a valid selection before a new plan/prompt instead of silent truncation.
+- [ ] Home acceptance: 0/1/2/3+ projects, save-time ordering, full-list access,
+  resume without paid work, save failure and unavailable module; signed news,
+  offline/error versus no update, and safe plain-text notes. News failure must not
+  block local work. Final checks require 1120x780 Windows views and the signed
+  installed/update path; source/offscreen checks alone do not close acceptance.
 - [x] Implement bounded provisional-rim reclassification with same-object
   references and small-island protection; persist reproducible visual reports.
 - [x] Fix source-RGB restoration reintroducing a cleaned opaque rim; retain only
