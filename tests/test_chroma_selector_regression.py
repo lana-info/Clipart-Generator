@@ -52,15 +52,20 @@ class ChromaSelectorRegressionTests(unittest.TestCase):
         fixture = load_golden_fixture(manifest, case)
         before = fixture.input_image.tobytes()
         legacy = remove_chroma_key_automatic(fixture.input_image, fixture.key_color)
+        stages = {}
         opaque = remove_chroma_key_automatic(
             fixture.input_image, fixture.key_color, subject_profile="opaque_clipart",
+            stage_observer=lambda name, image: stages.update({name: image}),
         )
         # Known-truth pixel: foreground (75,172,226), coverage163. The existing
         # matte still overestimates coverage here. The material-specific repair
         # must not additionally replace R107 with R142 in the opaque profile.
         self.assertEqual(legacy.getpixel((79, 53)), (142, 142, 185, 255))
         self.assertEqual(opaque.getpixel((79, 53)), (107, 142, 185, 255))
-        self.assertEqual(opaque.getchannel("A").tobytes(), legacy.getchannel("A").tobytes())
+        # Skipping the translucent-material heuristic does not change alpha;
+        # the subsequent bounded AA reconstruction is allowed to refine it.
+        self.assertEqual(stages["source_rgb_restore"].getchannel("A").tobytes(),
+                         legacy.getchannel("A").tobytes())
         self.assertEqual(fixture.input_image.tobytes(), before)
 
     def test_nearby_rendered_key_colours_recover_opaque_subject_and_partial_edge(self):

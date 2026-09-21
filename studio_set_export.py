@@ -1,6 +1,5 @@
 """Explicit per-set archives. No inference of set membership or alpha quality."""
 import hashlib
-import json
 import os
 from pathlib import Path
 import tempfile
@@ -15,11 +14,11 @@ class ExportCancelled(RuntimeError):
     pass
 
 
-def export_clipart_sets(sets, destination, *, cancelled=lambda: False):
+def export_clipart_sets(sets, destination, *, cancelled=lambda: False, exported_hashes=None):
     """Publish a fresh folder only after all ZIPs are complete.
 
 sets is a list of {title: str, images: list[path]}. Caller supplies reviewed
-final PNGs and explicit membership. No source metadata/prompts/keys in manifest.
+final PNGs and explicit membership.
 """
     destination = Path(destination)
     def check_cancelled():
@@ -31,6 +30,7 @@ final PNGs and explicit membership. No source metadata/prompts/keys in manifest.
     if not isinstance(sets, list) or not 1 <= len(sets) <= 100:
         raise ValueError('Допускается от 1 до 100 наборов')
     prepared = []
+    snapshots = {}
     for group in sets:
         if (not isinstance(group, dict) or set(group) != {'title', 'images'}
                 or not isinstance(group['title'], str) or not group['title'].strip()
@@ -51,7 +51,7 @@ final PNGs and explicit membership. No source metadata/prompts/keys in manifest.
             check_cancelled()
             with tempfile.TemporaryDirectory(prefix='set-', dir=staging) as set_temp:
                 work = Path(set_temp)
-                copied, records = [], []
+                copied = []
                 for ordinal, source in enumerate(paths, 1):
                     check_cancelled()
                     if not source.is_file() or source.stat().st_size > 64 * 1024 * 1024:
@@ -64,14 +64,16 @@ final PNGs and explicit membership. No source metadata/prompts/keys in manifest.
                     name = output_filename(ordinal, source.stem)
                     target = work / name
                     target.write_bytes(data)
+                    source_key = str(source.resolve())
+                    fingerprint = hashlib.sha256(data).hexdigest()
+                    if source_key in snapshots and snapshots[source_key] != fingerprint:
+                        raise ValueError('PNG изменился во время экспорта')
+                    snapshots[source_key] = fingerprint
                     with Image.open(target) as image:
                         if image.format != 'PNG' or image.width * image.height > 100_000_000:
                             raise ValueError('Экспорт принимает только PNG допустимого размера')
-                        width, height = image.size
                         image.verify()
                     copied.append(target)
-                    records.append(dict(file=f'png/{name}', width=width, height=height,
-                                        sha256=hashlib.sha256(data).hexdigest()))
                 sheet = create_contact_sheet_pdf(copied, work / 'overview.pdf')
                 check_cancelled()
                 archive = bundles / f'{number:03d}_{slug_from_title(title)}.zip'
@@ -79,9 +81,11 @@ final PNGs and explicit membership. No source metadata/prompts/keys in manifest.
                     for path in copied:
                         zip_file.write(path, f'png/{path.name}')
                     zip_file.write(sheet, 'overview.pdf')
-                    zip_file.writestr('manifest.json', json.dumps(
-                        dict(schema_version=1, title=title, count=len(records), files=records),
-                        ensure_ascii=False, indent=2))
+                with ZipFile(archive) as zip_file:
+                    if zip_file.testzip() is not None:
+                        raise ValueError('Не удалось проверить архив')
         check_cancelled()
         os.rename(bundles, output)
+    if exported_hashes is not None:
+        exported_hashes.update(snapshots)
     return sorted(output.glob('*.zip'))

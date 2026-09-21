@@ -9,6 +9,7 @@ from typing import Final
 import cv2
 import numpy as np
 from PIL import Image
+from chroma_rim import reclassify_rim
 
 
 KEY_COLORS: Final[dict[str, tuple[int, int, int]]] = {
@@ -743,9 +744,66 @@ def _neutralize_translucent_complement(
     return Image.fromarray(pixels, mode="RGBA")
 
 
+def _refine_opaque_boundary(
+    source: Image.Image,
+    result: Image.Image,
+    measured_key: np.ndarray,
+) -> Image.Image:
+    """Unmix narrow AA coverage using a nearby opaque interior reference.
+
+    Never reinterpret fully opaque colours or borrow a distant reference for
+    thin isolated details. A low RGB reconstruction residual is required; this
+    is a bounded local correction, not a general material-opacity estimator.
+    """
+    pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8)
+    partial = (pixels[..., 3] > 0) & (pixels[..., 3] < 255)
+    if not np.any(partial):
+        return result
+    core = cv2.erode(
+        (pixels[..., 3] == 255).astype(np.uint8),
+        np.ones((3, 3), dtype=np.uint8),
+    ).astype(bool)
+    if not np.any(core):
+        return result
+    distance, nearest = cv2.distanceTransformWithLabels(
+        (~core).astype(np.uint8), cv2.DIST_L2, 5,
+        labelType=cv2.DIST_LABEL_PIXEL,
+    )
+    source_pixels = np.asarray(source.convert("RGBA"), dtype=np.uint8)
+    edge = partial & (distance <= 3.0) & (source_pixels[..., 3] == 255)
+    if not np.any(edge):
+        return result
+    foreground = np.empty((int(np.count_nonzero(edge)), 3), dtype=np.float32)
+    lookup = np.zeros(int(nearest.max()) + 1, dtype=np.float32)
+    core_labels, edge_labels = nearest[core], nearest[edge]
+    for channel in range(3):
+        lookup[core_labels] = pixels[..., channel][core]
+        foreground[:, channel] = lookup[edge_labels]
+    observed = source_pixels[..., :3][edge].astype(np.float32)
+    direction = foreground - measured_key
+    denominator = np.sum(direction * direction, axis=1)
+    alpha = np.divide(
+        np.sum((observed - measured_key) * direction, axis=1), denominator,
+        out=np.zeros_like(denominator), where=denominator > 1.0,
+    )
+    residual = np.linalg.norm(observed - (measured_key + alpha[:, None] * direction), axis=1)
+    reliable = (denominator > 2500.0) & (residual < 4.0) & (alpha > 0.02) & (alpha < 1.0)
+    if not np.any(reliable):
+        return result
+    corrected = pixels[edge].copy()
+    recovered = (observed[reliable] - (1.0 - alpha[reliable, None]) * measured_key) / alpha[reliable, None]
+    corrected[reliable, :3] = np.rint(np.clip(recovered, 0.0, 255.0)).astype(np.uint8)
+    corrected[reliable, 3] = np.rint(alpha[reliable] * 255.0).astype(np.uint8)
+    pixels = pixels.copy()
+    pixels[edge] = corrected
+    return Image.fromarray(pixels, mode="RGBA")
+
+
 def _preserve_fully_opaque_source_rgb(
     source: Image.Image,
     result: Image.Image,
+    *,
+    measured_key: np.ndarray | None = None,
 ) -> Image.Image:
     """Keep original colour where keying found no background contribution."""
     pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8).copy()
@@ -759,8 +817,52 @@ def _preserve_fully_opaque_source_rgb(
     )
     opaque_interior = fully_opaque & (distance_from_edge > 6.0)
     source_rgb = np.asarray(source.convert("RGB"), dtype=np.uint8)
+    if measured_key is not None and np.any(opaque_interior):
+        opaque_interior &= ~_supported_rim_correction(
+            source_rgb, pixels, measured_key, distance_from_edge,
+        )
     pixels[..., :3][opaque_interior] = source_rgb[opaque_interior]
     return Image.fromarray(pixels, mode="RGBA")
+
+
+def _supported_rim_correction(
+    source_rgb: np.ndarray,
+    cleaned: np.ndarray,
+    key: np.ndarray,
+    depth: np.ndarray,
+) -> np.ndarray:
+    """Keep an existing correction only for a bounded, edge-connected key mix.
+
+    Colour similarity alone is not evidence for recolouring an interior detail.
+    Require the source to reconstruct from the cleaned colour plus measured key,
+    and the corrected region to reach the boundary. This never invents new RGB
+    or alpha: it prevents source restoration from undoing supported rim cleanup.
+    """
+    limit = min(32.0, max(8.0, min(depth.shape) / 16.0))
+    candidate = (cleaned[..., 3] > 0) & (depth <= limit)
+    supported = np.zeros(depth.shape, dtype=bool)
+    if not np.any(candidate):
+        return supported
+    foreground = cleaned[..., :3][candidate].astype(np.float32)
+    observed = source_rgb[candidate].astype(np.float32)
+    direction = key - foreground
+    denominator = np.sum(direction * direction, axis=1)
+    mixture = np.divide(
+        np.sum((observed - foreground) * direction, axis=1), denominator,
+        out=np.zeros_like(denominator), where=denominator > 1.0,
+    )
+    residual = np.linalg.norm(observed - (foreground + mixture[:, None] * direction), axis=1)
+    supported[candidate] = (
+        (denominator >= _MIN_OPAQUE_REFERENCE_DISTANCE ** 2)
+        & (mixture >= 0.03) & (mixture <= 0.65) & (residual <= 3.0)
+    )
+    _, labels = cv2.connectedComponents(supported.astype(np.uint8), connectivity=8)
+    boundary_labels = np.unique(labels[supported & (depth <= 2.0)])
+    if not len(boundary_labels):
+        return np.zeros(depth.shape, dtype=bool)
+    connected = np.zeros(int(labels.max()) + 1, dtype=bool)
+    connected[boundary_labels] = True
+    return supported & connected[labels]
 
 
 def _remove_chroma_key_staged(
@@ -1194,9 +1296,19 @@ def remove_chroma_key_automatic(
                 result = _neutralize_translucent_complement(image, result, key_color)
                 if stage_observer is not None:
                     stage_observer("translucent_complement", result.copy())
-            result = _preserve_fully_opaque_source_rgb(image, result)
+            result = _preserve_fully_opaque_source_rgb(
+                image, result,
+                measured_key=measured_key if subject_profile == "opaque_clipart" else None,
+            )
             if stage_observer is not None:
                 stage_observer("source_rgb_restore", result.copy())
+            if subject_profile == "opaque_clipart":
+                result = _refine_opaque_boundary(image, result, measured_key)
+                if stage_observer is not None:
+                    stage_observer("opaque_boundary", result.copy())
+                result = reclassify_rim(image, result, measured_key)
+                if stage_observer is not None:
+                    stage_observer("rim_reclassification", result.copy())
             return result
     result = _remove_chroma_key_staged(image, key_color)
     if stage_observer is not None:
@@ -1208,9 +1320,19 @@ def remove_chroma_key_automatic(
         result = _neutralize_translucent_complement(image, result, key_color)
         if stage_observer is not None:
             stage_observer("translucent_complement", result.copy())
-    result = _preserve_fully_opaque_source_rgb(image, result)
+    result = _preserve_fully_opaque_source_rgb(
+        image, result,
+        measured_key=measured_key if subject_profile == "opaque_clipart" else None,
+    )
     if stage_observer is not None:
         stage_observer("source_rgb_restore", result.copy())
+    if subject_profile == "opaque_clipart":
+        result = _refine_opaque_boundary(image, result, measured_key)
+        if stage_observer is not None:
+            stage_observer("opaque_boundary", result.copy())
+        result = reclassify_rim(image, result, measured_key)
+        if stage_observer is not None:
+            stage_observer("rim_reclassification", result.copy())
     return result
 
 

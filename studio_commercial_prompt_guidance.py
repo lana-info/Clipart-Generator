@@ -6,6 +6,14 @@ from studio_clipart_objects import OBJECT_ROLES
 
 _PLANNING = {
     "collection_first": True,
+    "material_policy": (
+        "All subjects and decorative details must be fully opaque. Do not propose "
+        "glass, transparent or translucent materials, see-through petals, tulle, "
+        "veils, smoke, mist or glow. Watercolor is an opaque painted texture, "
+        "never a translucent wash. If a theme implies a transparent material, "
+        "depict it as a solid opaque illustration. Background and real gaps "
+        "between parts are removed later; preserve clean, anti-aliased boundaries."
+    ),
     "principles": [
         "commercial_purpose",
         "no_filler",
@@ -42,12 +50,16 @@ _PROMPT_GUIDANCE = {
     "ru": {
         "consistency": (
             "единый стиль, палитра и уровень детализации всей коллекции; "
-            "объект полностью видим; достаточные поля со всех сторон; читаемый силуэт"
+            "объект полностью видим; достаточные поля со всех сторон; читаемый силуэт; "
+            "все части объекта полностью непрозрачны; акварель только как текстура "
+            "непрозрачной краски; это правило важнее описания материала"
         ),
         "common_restrictions": (
             "без обрезания",
             "без случайных лишних объектов",
             "без случайно дублированных элементов",
+            "без стекла, просвечивающих лепестков, полупрозрачных материалов, "
+            "тюля, вуалей, дыма, тумана и свечения; фон не просвечивает сквозь объект",
         ),
         "composition": {
             "hero": "ясный главный объект с читаемой позой или действием",
@@ -67,12 +79,16 @@ _PROMPT_GUIDANCE = {
     "en": {
         "consistency": (
             "consistent style, palette and detail level across the collection; "
-            "subject fully visible; generous margins on all sides; readable silhouette"
+            "subject fully visible; generous margins on all sides; readable silhouette; "
+            "all parts of the subject fully opaque; watercolor only as an opaque "
+            "painted texture; this rule overrides material descriptions"
         ),
         "common_restrictions": (
             "no cropping",
             "no accidental extra objects",
             "no accidental duplicated elements",
+            "no glass, see-through petals, translucent or semi-transparent materials, "
+            "tulle, veils, smoke, mist or glow; background never shows through the subject",
         ),
         "composition": {
             "hero": "clear main subject with a readable pose or action",

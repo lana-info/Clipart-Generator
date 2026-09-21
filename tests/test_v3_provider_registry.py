@@ -43,7 +43,7 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertFalse(provider_supports_operation("local_realesrgan", "remove_background"))
         self.assertTrue(provider_supports_operation("fal", "remove_background"))
         self.assertTrue(provider_supports_operation("fal", "upscale_before"))
-        self.assertFalse(provider_supports_operation("fal", "upscale_after"))
+        self.assertTrue(provider_supports_operation("fal", "upscale_after"))
         self.assertTrue(provider_requires_api_key("kie"))
         self.assertTrue(provider_requires_api_key("photoroom"))
         self.assertFalse(provider_requires_api_key("local_rembg"))
@@ -56,6 +56,10 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertTrue(upscale_model_preserves_alpha("kie", "topaz/image-upscale"))
         self.assertTrue(upscale_model_preserves_alpha("local_realesrgan", ""))
         self.assertTrue(upscale_model_preserves_alpha("fal", "bria/upscale/creative"))
+        self.assertTrue(upscale_model_preserves_alpha("fal", "bria/increase-resolution"))
+        self.assertTrue(
+            upscale_model_preserves_alpha("fal", "topaz/upscale/image/transparent")
+        )
         self.assertFalse(
             upscale_model_preserves_alpha("fal", "topaz/upscale/image/precision")
         )
@@ -72,7 +76,7 @@ class ProviderRegistryTests(unittest.TestCase):
                 ("Local Real-ESRGAN", "local_realesrgan"),
             ),
         )
-        self.assertNotIn(
+        self.assertIn(
             ("Fal.ai", "fal"),
             processing_provider_options("upscale_after_provider"),
         )
@@ -92,6 +96,8 @@ class ProviderRegistryTests(unittest.TestCase):
             FAL_UPSCALE_MODEL_OPTIONS,
             (
                 ("Bria Creative 2× — сохраняет прозрачность", "bria/upscale/creative"),
+                ("Bria Increase Resolution — PNG с прозрачностью", "bria/increase-resolution"),
+                ("Topaz Transparent 4× — PNG с прозрачностью", "topaz/upscale/image/transparent"),
                 ("Topaz Precision", "topaz/upscale/image/precision"),
                 ("Recraft Crisp 4× — без прозрачности", "fal-ai/recraft/upscale/crisp"),
             ),

@@ -157,11 +157,16 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
         )
 
     def test_deferred_selective_regeneration_uses_real_pinterest_worker_path(self):
-        with tempfile.TemporaryDirectory(prefix="pinterest-regeneration-production-") as temp:
+        with tempfile.TemporaryDirectory(prefix="pinterest-regeneration-production-") as temp, patch(
+            "pinterest_pin_composer._mask_from_provider",
+            side_effect=AssertionError("This worker-routing test must not run background removal"),
+        ) as remove_background:
             state = ProjectState(mode=ProjectMode.PINTEREST)
             state.common.work_dir = temp
             product_path = Path(temp) / "product.png"
-            Image.new("RGBA", (8, 10), (20, 40, 60, 255)).save(product_path)
+            product = Image.new("RGBA", (8, 10), (20, 40, 60, 255))
+            product.putpixel((0, 0), (20, 40, 60, 0))
+            product.save(product_path)
             state.pinterest.pin.product_paths = [str(product_path)]
             state.set_output_dir_for_mode(temp, ProjectMode.PINTEREST)
             shell = AppShell(state)
@@ -191,6 +196,8 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
             )
             self.assertTrue(controller.worker.wait(2_000))
             self.app.processEvents()
+            remove_background.assert_not_called()
+            self.assertEqual(controller.worker.variants[0].status, "success")
 
     def test_module_owned_pinterest_worker_is_blocked_when_core_save_fails(self):
         with tempfile.TemporaryDirectory(prefix="pinterest-core-save-") as temp:

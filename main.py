@@ -133,6 +133,7 @@ from v3_provider_registry import (
     normalize_fal_upscale_model,
     normalize_fal_upscale_factor,
     normalize_topaz_upscale_factor,
+    upscale_model_preserves_alpha,
 )
 
 try:
@@ -871,17 +872,14 @@ def validate_photoroom_input(image_path):
 
 
 def validate_upscale_after_background_order(remove_bg, upscale_after, provider, model):
-    if (
-        remove_bg
-        and upscale_after
-        and str(provider or "").strip() == "kie"
-        and str(model or "").strip() == "recraft/crisp-upscale"
-    ):
+    provider_id = str(provider or "").strip()
+    model_id = str(model or "").strip()
+    if remove_bg and upscale_after and not upscale_model_preserves_alpha(provider_id, model_id):
         return (
-            "Recraft Crisp нельзя использовать после удаления фона: "
-            "удаление фона создаёт прозрачное изображение, а модель не поддерживает "
-            "прозрачный вход. Используйте Local Real-ESRGAN после удаления фона "
-            "или перенесите Recraft Crisp до удаления фона."
+            "Выбранный апскейлер нельзя использовать после удаления фона: "
+            "удаление фона создаёт прозрачное изображение, а эта модель не сохраняет "
+            "прозрачность. Выберите прозрачный Fal.ai/Topaz вариант, "
+            "Local Real-ESRGAN или перенесите этот апскейл до удаления фона."
         )
     return ""
 
@@ -1027,6 +1025,7 @@ class WorkerThread(QThread):
         self._kie_uploaded_content_ids: dict[str, str] = {}
         self._precleaned_paths: set[str] = set()
         self._item_context = threading.local()
+        self._completed_working_outputs = {}
         self.run_stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         self.run_id = uuid.uuid4().hex
         self._run_raw_dir = None
@@ -1142,15 +1141,18 @@ class WorkerThread(QThread):
         self.fal_upscale_model = normalize_fal_upscale_model(
             settings.get("fal_upscale_model", FAL_BRIA_UPSCALE_MODEL_ID)
         )
-        self.fal_upscale_after_model = FAL_BRIA_UPSCALE_MODEL_ID
+        self.fal_upscale_after_model = normalize_fal_upscale_model(
+            settings.get("fal_upscale_after_model", FAL_BRIA_UPSCALE_MODEL_ID)
+        )
         self._has_fal_upscale_scale = "fal_upscale_scale" in settings
         self._has_fal_upscale_after_scale = "fal_upscale_after_scale" in settings
         self.fal_upscale_scale = normalize_fal_upscale_factor(
             self.fal_upscale_model,
             settings.get("fal_upscale_scale", 4),
         )
-        self.fal_upscale_after_scale = normalize_local_realesrgan_scale(
-            settings.get("fal_upscale_after_scale", 4)
+        self.fal_upscale_after_scale = normalize_fal_upscale_factor(
+            self.fal_upscale_after_model,
+            settings.get("fal_upscale_after_scale", 4),
         )
         self.kie_remove_bg_model = settings.get("kie_remove_bg_model", "recraft/remove-background")
         self.fal_remove_bg_model = settings.get("fal_remove_bg_model", "fal-ai/bria/background/remove")
@@ -2344,6 +2346,7 @@ class WorkerThread(QThread):
 
     def _persist_rough_outputs(self, raw_dir):
         """Publish meaningful PNG intermediates with short stable names."""
+        from studio_working_files import digest, write_receipt
         rough_dir = Path(self.workspace_root) / "rough"
         rough_dir.mkdir(parents=True, exist_ok=True)
         stage_markers = (
@@ -2363,6 +2366,11 @@ class WorkerThread(QThread):
             re.IGNORECASE,
         )
         counters = {}
+        owned = {}
+        item_name = re.compile(
+            rf"^(gen|file)(?:_[a-z0-9_]+)?_(\d{{3,}})_{re.escape(self.run_stamp)}\.png$",
+            re.IGNORECASE,
+        )
         for source in sorted(Path(raw_dir).glob("*.png")):
             lower_name = source.name.casefold()
             stage = next(
@@ -2375,10 +2383,32 @@ class WorkerThread(QThread):
                 continue
             counters[stage] = counters.get(stage, 0) + 1
             target = rough_dir / f"rough_{counters[stage]:02d}_{stage}.png"
-            while target.exists():
-                counters[stage] += 1
-                target = rough_dir / f"rough_{counters[stage]:02d}_{stage}.png"
-            shutil.copy2(source, target)
+            while True:
+                try:
+                    with target.open('xb') as destination, source.open('rb') as original:
+                        shutil.copyfileobj(original, destination)
+                    break
+                except FileExistsError:
+                    counters[stage] += 1
+                    target = rough_dir / f"rough_{counters[stage]:02d}_{stage}.png"
+            match = item_name.fullmatch(source.name)
+            if match:
+                owner = self._completed_working_outputs.get((match[1], int(match[2])))
+                if owner:
+                    try:
+                        record = owned.setdefault((match[1], int(match[2])),
+                                                  {'outputs': [owner], 'files': []})
+                        record['files'].append({
+                            'name': target.name, 'sha256': digest(target),
+                            'category': 'generated' if stage == 'generated' else 'intermediate',
+                        })
+                    except OSError:
+                        pass
+        if owned:
+            try:
+                write_receipt(self.workspace_root, self.run_id, list(owned.values()))
+            except (OSError, ValueError):
+                self.progress.emit("  Черновики сохранены; автоматическая очистка для них недоступна")
         transient = Path(self.workspace_root) / ".run"
         try:
             owned_run = Path(str(self._run_raw_dir or "")).resolve()
@@ -2580,7 +2610,9 @@ class WorkerThread(QThread):
             remove_background,
             self.upscale_after,
             self.upscale_after_provider,
-            self.kie_upscale_after_model,
+            self.fal_upscale_after_model
+            if self.upscale_after_provider == "fal"
+            else self.kie_upscale_after_model,
         )
         if order_error:
             raise ValueError(order_error)
@@ -2945,6 +2977,18 @@ class WorkerThread(QThread):
             self._ensure_running()
 
         if self.upscale_after:
+            current_path = self._ensure_local_path(
+                current_path, current_url, raw_dir, idx, prefix, "before_final_upscale"
+            )
+            with Image.open(current_path) as source:
+                source_size = source.size
+                source_alpha = source.convert("RGBA").getchannel("A")
+                preserve_alpha = source_alpha.getextrema()[0] < 255
+            scale = self._upscale_pass_factor(
+                self.upscale_after_provider, self.local_realesrgan_after_scale,
+                self.kie_upscale_after_model, self.fal_upscale_after_model,
+                self.fal_upscale_after_scale,
+            )
             current_path, current_url, local_result = self._run_upscale_pass(
                 current_path=current_path,
                 current_url=current_url,
@@ -2957,8 +3001,44 @@ class WorkerThread(QThread):
                 kie_model=self.kie_upscale_after_model,
             )
             self._ensure_running()
+            current_path = self._ensure_local_path(
+                current_path, current_url, raw_dir, idx, prefix, "final_upscale_result"
+            )
+            try:
+                validate_local_image_input(current_path)
+                with Image.open(current_path) as result:
+                    result.load()
+                    result_size = result.size
+                    extrema = result.convert("RGBA").getchannel("A").getextrema()
+            except (OSError, ValueError) as error:
+                raise ValueError(
+                    "Апскейлер вернул повреждённое изображение. "
+                    "Исходник до апскейла сохранён в промежуточных файлах."
+                ) from error
+            if extrema[1] == 0:
+                raise ValueError(
+                    "Апскейлер вернул пустое изображение. "
+                    "Исходник до апскейла сохранён в промежуточных файлах."
+                )
+            expected_size = (source_size[0] * scale, source_size[1] * scale)
+            if result_size != expected_size:
+                self.progress.emit(
+                    f"  Апскейл: получено {result_size[0]}x{result_size[1]} px "
+                    f"вместо {expected_size[0]}x{expected_size[1]} px. "
+                    "Изображение сохранится; проверьте размер перед экспортом."
+                )
+            if preserve_alpha and extrema[0] == 255:
+                self._item_context.manual_transparency_required = True
+                self.progress.emit(
+                    "  Апскейлер потерял прозрачность. Изображение сохранится "
+                    "для ручной коррекции; перед экспортом набора требуется удалить фон."
+                )
+            # Publish the bytes that were checked, without downloading the URL again.
+            current_url = None
+            local_result = True
 
-        if self.edge_shrink_enabled and not preserve_surface:
+        if (self.edge_shrink_enabled and not preserve_surface
+                and not self._item_context.manual_transparency_required):
             self._diagnostic_context.stage = "edge_cleanup"
             edge_started = time.monotonic()
             self._emit_diagnostic(
@@ -4037,6 +4117,14 @@ class WorkerThread(QThread):
             if self.export_300_dpi:
                 self._verify_png_dpi(stage_path, dpi=300)
             self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
+            try:
+                from studio_working_files import digest
+                with self._shared_state_lock:
+                    self._completed_working_outputs[(prefix, idx)] = {
+                        'path': str(Path(output_path).resolve()), 'sha256': digest(output_path),
+                    }
+            except OSError:
+                self.progress.emit("  PNG сохранён; связь с рабочими файлами записать не удалось")
             if capture_receipt:
                 try:
                     published_digest = self._item_context.chroma_published_digest

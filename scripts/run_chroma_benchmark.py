@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from functools import partial
 import sys
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--algorithm",
-        choices=("baseline", "automatic"),
+        choices=("baseline", "automatic", "opaque-clipart"),
         default="baseline",
     )
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -37,6 +38,10 @@ def main(argv: list[str] | None = None) -> int:
         "automatic": (
             remove_chroma_key_automatic,
             "automatic-color-difference-v1",
+        ),
+        "opaque-clipart": (
+            partial(remove_chroma_key_automatic, subject_profile="opaque_clipart"),
+            "automatic-opaque-clipart-v5",
         ),
     }[args.algorithm]
 

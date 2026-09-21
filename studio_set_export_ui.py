@@ -6,7 +6,7 @@ from threading import Event
 from PyQt6.QtCore import QEvent, QPoint, QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QCursor, QPixmap
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QApplication, QDialog, QFileDialog, QFrame, QGridLayout,
+    QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout,
     QHeaderView, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QStackedWidget,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
@@ -16,16 +16,23 @@ from v3_components import apply_v3_theme
 
 
 class ExportWorker(QThread):
-    def __init__(self, groups, destination, parent=None):
+    def __init__(self, groups, destination, parent=None, *, workspace=None,
+                 delete_intermediates=False, delete_originals=False):
         super().__init__(parent)
         self.groups, self.destination = groups, destination
         self.cancelled = Event()
         self.paths, self.error = [], ''
+        self.workspace = workspace
+        self.delete_intermediates = delete_intermediates
+        self.delete_originals = delete_originals
+        self.cleanup_message = ''
 
     def run(self):
         try:
+            exported_hashes = {}
             self.paths = export_clipart_sets(
-                self.groups, self.destination, cancelled=self.cancelled.is_set
+                self.groups, self.destination, cancelled=self.cancelled.is_set,
+                exported_hashes=exported_hashes,
             )
         except ExportCancelled:
             self.error = 'Экспорт отменён. Наборы не опубликованы.'
@@ -34,14 +41,28 @@ class ExportWorker(QThread):
                 'Не удалось создать наборы. Проверьте PNG, свободное место и '
                 'доступ к папке. Неполные наборы не опубликованы.'
             )
+        if self.paths and not self.cancelled.is_set() and (self.delete_intermediates or self.delete_originals):
+            from studio_working_files import cleanup_working_files
+            try:
+                deleted, skipped = cleanup_working_files(
+                    self.workspace, exported_hashes,
+                    intermediates=self.delete_intermediates, originals=self.delete_originals,
+                )
+                self.cleanup_message = f' Рабочих файлов удалено: {deleted}.'
+                if skipped:
+                    self.cleanup_message += f' Оставлено без изменений: {skipped}.'
+            except (OSError, ValueError):
+                self.cleanup_message = ' Архивы сохранены, но очистку рабочих файлов завершить не удалось.'
 
 
 class SetExportDialog(QDialog):
     membership_saved = pyqtSignal(object)
     fix_requested = pyqtSignal(str)
 
-    def __init__(self, paths, parent=None, *, membership=None, review_issues=None, quality_reports=None):
+    def __init__(self, paths, parent=None, *, membership=None, review_issues=None, quality_reports=None,
+                 workspace=None):
         super().__init__(parent)
+        self.workspace = workspace
         from studio_export_membership import validate_export_membership
 
         saved = validate_export_membership(membership or {})
@@ -82,6 +103,12 @@ class SetExportDialog(QDialog):
         self.stack.addWidget(self.quality_page)
         self.stack.addWidget(self.manual_page)
         self.stack.setCurrentWidget(self.summary_page)
+
+        self.delete_intermediates = QCheckBox('Удалить промежуточные файлы после экспорта')
+        self.delete_originals = QCheckBox('Удалить сгенерированные исходники после экспорта')
+        for checkbox in (self.delete_intermediates, self.delete_originals):
+            checkbox.setEnabled(workspace is not None)
+            root.addWidget(checkbox)
 
         self.status = QLabel('')
         self.status.setTextFormat(Qt.TextFormat.PlainText)
@@ -188,7 +215,7 @@ class SetExportDialog(QDialog):
 
         self.delivery_note = QLabel(
             'Для каждого набора будет создан отдельный ZIP-архив. '
-            'Внутри: PNG, лист с превью и список файлов.'
+            'Внутри: PNG и лист с превью.'
         )
         self.delivery_note.setProperty('v3Description', True)
         self.delivery_note.setWordWrap(True)
@@ -707,7 +734,13 @@ class SetExportDialog(QDialog):
         folder = QFileDialog.getExistingDirectory(self, 'Папка для наборов')
         if not folder:
             return
-        self.worker = ExportWorker(groups, folder, self)
+        self.worker = ExportWorker(
+            groups, folder, self, workspace=self.workspace,
+            delete_intermediates=self.delete_intermediates.isChecked(),
+            delete_originals=self.delete_originals.isChecked(),
+        )
+        self.delete_intermediates.setEnabled(False)
+        self.delete_originals.setEnabled(False)
         self.worker.finished.connect(self._finished)
         self.export_button.setEnabled(False)
         self.quality_export_button.setEnabled(False)
@@ -730,11 +763,16 @@ class SetExportDialog(QDialog):
         elif worker.paths:
             self.status.setText(
                 f'Наборы созданы: {len(worker.paths)}. Папка: {worker.paths[0].parent}'
+                + worker.cleanup_message
             )
         else:
             self.status.setText('Наборы не созданы.')
         self.worker = None
         worker.deleteLater()
+        self.delete_intermediates.setChecked(False)
+        self.delete_originals.setChecked(False)
+        self.delete_intermediates.setEnabled(self.workspace is not None)
+        self.delete_originals.setEnabled(self.workspace is not None)
         self.edit_sets_button.setEnabled(True)
         self.save_membership.setEnabled(True)
         self.return_button.setEnabled(True)

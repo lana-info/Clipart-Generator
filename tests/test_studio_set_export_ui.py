@@ -1,7 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
 from zipfile import ZipFile
-import json
 
 import pytest
 from PIL import Image
@@ -67,12 +66,13 @@ def test_real_background_export_two_archives(images, tmp_path, monkeypatch):
     loop.exec()
     assert dialog.worker is None
     assert len(dialog.exported) == 2
-    counts = []
+    png_counts = []
     for archive in dialog.exported:
         with ZipFile(archive) as z:
-            counts.append(json.loads(z.read('manifest.json'))['count'])
+            pngs = [name for name in z.namelist() if name.startswith('png/')]
+            png_counts.append(len(pngs))
             assert z.read('overview.pdf').startswith(b'%PDF')
-    assert counts == [1, 3]
+    assert png_counts == [1, 3]
     assert dialog.export_button.isEnabled()
     dialog.reject()
 

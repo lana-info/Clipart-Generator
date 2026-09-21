@@ -15,6 +15,7 @@ from v3_provider_registry import (
     CHROMA_KEY_COLOR_OPTIONS,
     FAL_BIREFNET_MODEL_OPTIONS,
     FAL_BIREFNET_RESOLUTION_OPTIONS,
+    FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID,
     FAL_TOPAZ_PRECISION_MODEL_ID,
     FAL_REMOVE_BG_MODEL_OPTIONS,
     FAL_UPSCALE_MODEL_OPTIONS,
@@ -38,7 +39,7 @@ SYNTHID_UNAVAILABLE_TOOLTIP = (
     "Функция не включена: нет подтверждённого production-контракта "
     "обнаружения и удаления SynthID."
 )
-UPSCALE_AFTER_UI_ENABLED = False
+UPSCALE_AFTER_UI_ENABLED = True
 METADATA_CLEANUP_FIELDS = (
     "remove_exif",
     "remove_xmp",
@@ -796,9 +797,17 @@ class ProcessingPipelineEditor(QScrollArea):
             "fal_upscale_scale": (
                 operations.upscale_before
                 and operations.upscale_before_provider == "fal"
-                and operations.fal_upscale_model == FAL_TOPAZ_PRECISION_MODEL_ID
+                and operations.fal_upscale_model in {
+                    FAL_TOPAZ_PRECISION_MODEL_ID,
+                    FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID,
+                }
             ),
-            "fal_upscale_after_scale": False,
+            "fal_upscale_after_scale": (
+                operations.upscale_after
+                and operations.upscale_after_provider == "fal"
+                and operations.fal_upscale_after_model
+                == FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID
+            ),
             "upscale_factor": (
                 operations.upscale_before
                 and operations.upscale_before_provider == "kie"

@@ -33,10 +33,13 @@ class ChromaDiagnosticsTests(unittest.TestCase):
                 self.assertEqual(report["status"], "processed")
                 stages = report["stages"]
                 self.assertEqual([item["stage"] for item in stages], [
-                    "precise_result", "opaque_spill", "source_rgb_restore",
+                    "precise_result", "opaque_spill", "source_rgb_restore", "opaque_boundary",
+                    "rim_reclassification",
                 ])
                 self.assertTrue(all("quality" in item for item in stages))
-                self.assertTrue(all(item["changed_alpha_pixels"] == 0 for item in stages[1:]))
+                self.assertTrue(all(item["changed_alpha_pixels"] == 0 for item in stages[1:3]))
+                if fixture.case_id == "openings-blue":
+                    self.assertGreater(stages[-1]["changed_alpha_pixels"], 0)
 
     def test_no_truth_means_no_quality_claim(self):
         report, result = diagnose_chroma_key(self.source(), "blue")
@@ -90,6 +93,9 @@ class ChromaDiagnosticsTests(unittest.TestCase):
             if profile == "legacy":
                 expected.append("translucent_complement")
             expected.append("source_rgb_restore")
+            if profile == "opaque_clipart":
+                expected.append("opaque_boundary")
+                expected.append("rim_reclassification")
             self.assertEqual([s["stage"] for s in report["stages"]], expected)
             self.assertNotIn("private details", str(report))
 

@@ -569,8 +569,6 @@ class ImageOperationData:
             self.upscale_after_provider,
             limit=100,
         ) or "local_realesrgan"
-        if self.upscale_after_provider == "fal":
-            self.upscale_after_provider = "local_realesrgan"
         self.upscale_factor = normalize_topaz_upscale_factor(self.upscale_factor)
         self.kie_upscale_model = normalize_kie_upscale_model(
             _text(self.kie_upscale_model, limit=200)
@@ -581,13 +579,16 @@ class ImageOperationData:
         self.fal_upscale_model = normalize_fal_upscale_model(
             _text(self.fal_upscale_model, limit=200)
         )
-        self.fal_upscale_after_model = FAL_BRIA_UPSCALE_MODEL_ID
+        self.fal_upscale_after_model = normalize_fal_upscale_model(
+            _text(self.fal_upscale_after_model, limit=200)
+        )
         self.fal_upscale_scale = normalize_fal_upscale_factor(
             self.fal_upscale_model,
             self.fal_upscale_scale,
         )
-        self.fal_upscale_after_scale = self._realesrgan_scale(
-            self.fal_upscale_after_scale
+        self.fal_upscale_after_scale = normalize_fal_upscale_factor(
+            self.fal_upscale_after_model,
+            self.fal_upscale_after_scale,
         )
         self.local_realesrgan_profile = _text(
             self.local_realesrgan_profile,

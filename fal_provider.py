@@ -28,6 +28,7 @@ from pathlib import Path
 from network_security import HttpsOnlyRedirectHandler, NetworkSecurityError
 from provider_contract import MAX_PROVIDER_PAYLOAD_BYTES, ProviderTaskRequest
 from fal_model_catalog import fal_endpoint_profile
+from provider_upscale_contract import normalize_fal_upscale_factor
 
 
 MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -611,6 +612,16 @@ class FalClient:
         if operation == "upscale":
             if selected_model_id == "bria/upscale/creative":
                 arguments["preserve_alpha"] = True
+            elif selected_model_id == "bria/increase-resolution":
+                arguments.update(
+                    {
+                        "desired_increase": normalize_fal_upscale_factor(
+                            selected_model_id, scale
+                        ),
+                        "preserve_alpha": True,
+                        "output_type": "png",
+                    }
+                )
             elif selected_model_id == "topaz/upscale/image/precision":
                 arguments.update(
                     {
@@ -619,6 +630,8 @@ class FalClient:
                         "output_format": "png",
                     }
                 )
+            elif selected_model_id == "topaz/upscale/image/transparent":
+                arguments["output_format"] = "png"
         request = ProviderTaskRequest(
             provider_id="fal",
             operation=operation,

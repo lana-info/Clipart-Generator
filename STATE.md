@@ -1,5 +1,226 @@
 # Project state
 
+## Next Acceptance Package Prepared, 2026-09-21
+
+Owner requested a module build to exercise updates and end-to-end edge quality.
+Prepared test-signed `auto-clipart` 1.2.0 (Windows x64) requiring Studio >=3.2.2
+and <3.3.0. Artifact directory:
+`/root/projects/Clipart Generator/artifacts/auto-clipart-1.2.0-test-20260921`.
+ZIP size 15775 bytes; SHA-256
+`10692d8121ce4437593687f3edf48d0b293f9cc4ab536fef0c66dff3be06b340`.
+Uses the existing acceptance publisher, never the production private key.
+Verified actual old 1.1.0 -> new 1.2.0 install/activation, reopened storage,
+rollback and preservation of an adjacent dummy project. Old Studio 3.2.1 rejects
+the package. These are local ModuleStore checks, not native Windows/HTTPS tests.
+
+A new shell is REQUIRED: chroma v5, upscale/provider, editor, export and working
+file changes are shared Core code and are not present in the workflow-only ZIP.
+No new Windows installer has been built; no new module was uploaded/published.
+Owner approved commit/push and the necessary isolated build/test delivery work
+on 2026-09-21. No production rollout or paid provider spending was authorized.
+Next: commit/push, dispatch existing Windows workflow with
+app_version=3.2.2 and acceptance_build=true, verify installed artifact, then stage
+only on the isolated test service and verify update delivery. Keep production
+untouched. Paid generation/upscale acceptance requires its own budget decision.
+
+Resolved the prior Pinterest test failure: its opaque input invoked real rembg
+imports in a deferred legacy template worker. The routing test now supplies an
+already cut-out PNG, asserts no remover call and a successful real-worker variant.
+The original two-second timeout and production Pinterest code are unchanged.
+Full offline suite: 1732 passed, 57 skipped, 18 deselected, 265 subtests passed
+(203.72s). Focused packaging/release/routing: 19 passed, 9 subtests.
+Sensitive-artifact scan passes. Full JUnit XML and package-checks.json are stored
+beside the ZIP. Updated Windows acceptance checklist records the pending shell.
+
+## Reference-Backed Rim Reclassification, 2026-09-21
+
+Owner asked to see tests and use the Clipbrook approach. Rechecked its public
+README and stored run audit (commit c1473ae2); upstream was not rerun today.
+Recorded defaults improve some cases but erase a 16x16 island in one test.
+No AGPL upstream source or dependency was integrated; licensing is not decided.
+
+Independent `chroma_rim.py` reconsiders the provisional opaque boundary using
+original interior RGB, a bounded key mixture and a nearby reference in the SAME
+connected object. Small islands are never removed. This is not a complete
+six-stage rewrite or a claim of parity with the website. Profile v5 preserves
+v1..v4 receipt readability. Openings alpha MAE falls 0.002111 -> 0.000804 (62%);
+thin-line metrics are unchanged. Tests cover 80%-covered rows and nearby
+1/2/4/16px islands. Partial RGB error increases slightly on soft-edge and spill
+goldens despite improved alpha; real-image acceptance remains necessary.
+
+Persistent report with source/truth/v4/v5 PNGs, six contact sheets and metrics:
+`/root/projects/Clipart Generator/artifacts/chroma-quality-20260921/index.html`.
+Regenerate via `scripts/chroma_visual_report.py --output-dir <new-directory>`.
+Old /tmp screenshots and venv disappeared between sessions. The test venv was
+restored from existing requirements plus pytest, not a project dependency update.
+No paid generation, installer build or deployment ran.
+
+Verification: full offline suite on restored Python 3.12 environment: 1731 passed,
+1 failed, 57 skipped, 18 deselected, 265 subtests passed (229.55s). All chroma and
+visual-report tests passed. Remaining failure reproduces alone:
+`tests/test_v3_pinterest_flow.py:192`, worker.wait(2000) returns false in the deferred
+template regeneration test. Root cause is not yet established; no timeout was
+relaxed and no Pinterest code changed for this task. Full-suite success is NOT
+claimed. XML result is stored beside the visual report as `pytest-results.xml`.
+Focused chroma run: 133 passed, 46 subtests (before adding the report test).
+Python compilation and `git diff --check` pass.
+
+## Opaque Rim Restoration Fix, 2026-09-20
+
+Profile v4 fixes a reproduced stage conflict: `opaque_spill` already removed
+contamination, but restoring source RGB deeper than 6px brought back a ring.
+Opaque source restoration now retains existing corrections only where the
+original RGB reconstructs as a bounded mixture of corrected RGB and measured key,
+with <=3 RGB-unit residual, sufficient colour separation and a corrected region
+connected to the boundary. Depth is bounded to 8..32px by image size. Detached
+interior patches, unrelated colours and deeper areas retain source protection.
+This changes RGB restoration, not alpha. Legacy behaviour is unchanged.
+Provenance writes v4 and keeps v1/v2/v3 readable without relabeling.
+
+On the strong-spill golden, opaque RGB mean error decreases from 5.823914 to
+0.565291 (0..255 units), about 90.3%. All six goldens have identical alpha before
+and after this increment. Tests also rotate the spill case across all three key
+channels, preserve an unprovable interior colour patch and verify PNG/ZIP pixels.
+On the 4,890 contaminated opaque rim pixels alone, RGB MAE improves from 30.087
+to 2.704, p95 from 80 to 10, and maximum error from 88 to 62. The residual maximum
+is another reason not to claim a mathematically perfect reconstruction.
+Inspected before/after: `/tmp/chroma-rim-v4-comparison.png`.
+
+This does not establish perfection on real AI output: a genuine coloured outline
+can be numerically indistinguishable from key spill. The bounded reconstruction
+and boundary connection are confidence heuristics, not semantic proof. Very broad
+contamination and isolated thin details still need real final-PNG acceptance;
+no live upscaler, paid generation, installer build or deployment ran.
+Verification: final full offline suite 1724 passed, 57 skipped, 18 deselected,
+265 subtests passed (95.06s); focused chroma suite 125 passed and 46 subtests.
+Python compilation and diff checks pass. Informational 2048px resized-golden
+timings were 1.33..1.51s for v3 and 1.48..1.61s for v4 while tests were running;
+these are not an isolated performance acceptance measurement.
+
+## Bounded Opaque Boundary Repair, 2026-09-20
+
+Opaque profile v3 adds a narrow AA reconstruction stage after source-RGB restore.
+Channel-dominance alpha can leave key colour in the edge; v3 solves the local
+two-colour mixture only within 3px of a one-pixel-eroded opaque reference, with
+RGB separation/residual checks. Fully opaque pixels, zero-alpha background,
+existing source transparency and unsupported/distant thin details are unchanged.
+Legacy processing is unchanged. Stage diagnostics expose `opaque_boundary`;
+provenance writes v3 and still reads v1/v2 without relabeling old results.
+
+On the openings-blue golden, mean edge compositing error (0..255 RGB units)
+falls from 15.982 to 10.132 on black, 23.526 to 11.808 on white, and 13.972 to
+8.115 on magenta. Thin-line error is nearly unchanged. Strong opaque interior
+spill remains visible and is NOT fixed by this boundary-only stage. Spill-case
+IoU changes from 0.999016 to 0.996172; do not call the whole keyer accepted.
+All six goldens retain zero background leakage and zero opaque-subject loss.
+Inspected comparison: `/tmp/chroma-boundary-before-after.png`.
+
+Benchmark CLI now supports the actual app profile with `--algorithm opaque-clipart`.
+Report: `/tmp/vibix-chroma-boundary-v3/baseline_metrics.json`; 2048px median
+1.375587s, isolated peak RSS 411.172 MiB. Fixture generation's large Pillow min
+filter is slow outside the timed operation; the benchmark itself completed.
+No paid generation, installer build or deployment ran. Next: confidence-aware
+handling of contaminated opaque rims and real final-PNG acceptance after upscale.
+Verification: full offline run had 1715 passes, 57 skips, 18 deselections and one
+old assertion requiring legacy/opaque alpha equality. That assertion now checks
+equality before the new boundary stage, retaining the original colour safeguard.
+Final affected chroma/workflow suites pass: 144 tests and 46 subtests. Python
+compilation and diff checks pass; the full suite was not repeated after this
+test-only adjustment.
+
+## Optional Working File Cleanup, 2026-09-20
+
+Export now has two default-off checkboxes: intermediate copies and generated
+originals. Worker records per-item, hash-bound ownership in internal per-run
+`rough/.cleanup-*.json` receipts, not in delivery ZIPs. Only successfully published
+items get ownership; exclusive copy creation avoids overwriting another run's
+rough file. Explicit edited-result adoption preserves the ownership link.
+Exports capture source hashes and verify every ZIP before publication. Cleanup
+then deletes only unchanged owned rough PNGs belonging to the exported snapshot.
+Unknown legacy files, changed files, symlinks, unfinished/excluded items and final
+PNGs are retained. Cleanup errors are separate from export errors, and options
+reset after each attempt. Old files cannot safely be assigned retrospectively
+from operation names, so they are deliberately not auto-deleted.
+Qt export dialog inspected at 1040x720; controls fit and operate independently.
+Screenshot: `/tmp/clipart-export-cleanup.png`. No real user files were deleted;
+deletion tests use isolated temporary directories.
+The shared Core ownership service has no Clipart imports. The dependency baseline
+explicitly allows only the export UI to invoke this service after publication;
+the archive writer uses standard-library hashing and remains independent of it.
+Verification: final full offline suite 1706 passed, 57 skipped, 18 deselected,
+265 subtests passed (90.72s); focused suite 135 passed and 5 subtests passed.
+Python compilation and diff checks pass. No installer build or deployment ran.
+
+## Upscale validation recovery, 2026-09-20
+
+Supersedes the strict dimension/alpha rejection described below. A decodable,
+nonempty upscale with unexpected dimensions is retained, with expected and actual
+size reported in the run log. Lost alpha is retained for manual correction;
+automatic trimming/edge cleanup is skipped, and existing bundle alpha QC blocks
+export until transparency is fixed. Empty or corrupt output still fails only its
+item; the queue continues and pre-upscale intermediates remain available. No
+automatic paid retry was added. Tests cover all three providers, source retention,
+one upscale invocation and missing-alpha export QC on the published PNG.
+Verification: full offline suite 1693 passed, 57 skipped, 18 deselected and
+265 subtests passed (93.90s). After retaining the existing local image safety
+limits before decoding, focused checks passed: 18 tests and 18 subtests.
+Diff checks pass. No paid API request, installer build or deployment ran.
+
+## Opaque-only Clipart prompts, 2026-09-20
+
+Owner reaffirmed that Clipart has no translucent materials. The chroma suffix
+already required opaque subjects; commercial planning hints and RU/EN compiled
+object prompts now explicitly enforce this at the earlier stages as well,
+including opaque watercolor texture. Keep transparent backgrounds, real openings
+and boundary antialiasing. Earlier partial-alpha benchmark observations are not
+a release blocker for this opaque-only module. Colour spill on opaque object
+boundaries still needs checking. Prompt instructions do not prove that a real
+generation obeyed them; no paid generation was performed.
+Verification: affected planning, prompt compilation, mocked text-provider,
+automatic workflow and chroma tests: 65 passed and 19 subtests. Compilation and
+diff checks pass. Previously saved hand-edited prompts are not overwritten.
+
+## Final upscale output validation, 2026-09-20
+
+Worker validates the actual post-background upscale bytes before publishing:
+expected dimensions for the selected factor, decodable pixels, retained alpha
+when present in the input, and nonempty alpha. The validated local file becomes
+the publication source, avoiding a second remote download of unchecked bytes.
+Regression fixtures cover opaque, empty, wrong-size and valid output for all
+three provider routes, while preserving the source file.
+Verification: full offline suite 1693 passed, 57 skipped, 18 deselected and 262
+subtests passed (92.33s). After moving the dimension check before pixel decoding,
+the affected suite passed again: 18 tests and 15 subtests. Python compilation
+and diff checks pass. No paid request, deployment or installer build ran.
+
+The existing offline Chroma benchmark was rerun on all six synthetic cases:
+zero background leakage and opaque subject loss, but visible colour residue on
+soft/partial-alpha edges remains. Thin-line IoU is 0.914762; partial-alpha MAE is
+0.072714. At 2048px median runtime is 1.246s and isolated peak RSS 411.156 MiB.
+These are removal-only measurements, not real AI upscale quality acceptance.
+Reproduce: `scripts/run_chroma_benchmark.py --algorithm automatic --output-dir
+/tmp/vibix-chroma-current` using `/tmp/vibix32-venv/bin/python`. Inspected contact
+sheet and metrics are in that temporary directory. Next quality work must target
+the observed soft-edge/colour-spill defects against the existing Chroma PRD;
+do not describe the removal engine as visually complete based on unit tests.
+
+## Automatic Clipart upscale integration, 2026-09-20
+
+The automatic launch Model tab now exposes provider, alpha-safe model and scale
+selection. Selection survives project reopen and reaches the paid-run request;
+Bria Increase Resolution supports 2x/4x and Topaz Transparent fixes the scale at
+4x. Start enforces one post-background upscale even for previously saved drafts.
+The shared preflight now checks the actual Fal model rather than the KIE field.
+The automatic fixture run uses explicitly selected KIE with a mocked worker;
+missing local Real-ESRGAN still blocks real launch before spending credits.
+The actual Qt screen was inspected at 1120x780, with reachable controls and run
+button. Test environment found at `/tmp/vibix32-venv/bin/python` includes Qt and
+OpenCV; previous notes about unavailable dependencies are superseded.
+Verification: full offline suite 1692 passed, 57 skipped, 18 deselected,
+250 subtests passed (93.42s). Skips include Windows-native behavior, the missing
+local Real-ESRGAN binary and deferred Pinterest features. Compile and diff checks
+pass. No paid API or packaging ran; current installer does not contain this code.
+
 ## Stability And Lightweight Studio Roadmap, 2026-09-20
 
 Owner asked to record the post-module work explicitly. `TASKS.md` now contains a
@@ -9,8 +230,8 @@ exercise paid-run and update recovery failures; then validate the result on
 Windows and both Mac architectures. This is deliberately not approved to remove
 current local-processing capability or to make a remote provider mandatory.
 
-Automatic Clipart needs no new product feature before this roadmap begins. It is
-functionally complete in the isolated test environment. Remaining acceptance is
+Automatic Clipart requires the current source changes to be verified and packaged
+before they can be considered part of the isolated test build. Remaining acceptance is
 owner installation/activation on Windows plus one small, separately budgeted real
 provider run through generation, PNG review and export. macOS package support is
 also deferred until its architecture-specific payload compatibility is tested.
@@ -704,8 +925,9 @@ References still only supply manual text observations; no image transmission.
 Real Qt screen checked offscreen at 1120x780: /tmp/vibix-planning-ui.png (temporary).
 
 studio_set_export.export_clipart_sets accepts explicit final-PNG membership per set
-and publishes a new folder with one ZIP per set: PNGs, Letter overview.pdf and a
-minimal manifest with hashes/dimensions. Snapshots preserve source PNG bytes.
+and publishes a new folder with one ZIP per set: PNGs and Letter overview.pdf.
+Snapshots preserve source PNG bytes. The owner removed the non-user-facing
+manifest.json from delivered archives.
 All archives stage before publication; failure leaves no partial output folder.
 This export API is tested but NOT wired into result review UI; no set membership
 is inferred from completion order or filenames. Alpha quality is caller-reviewed,
@@ -863,9 +1085,9 @@ counts of hero objects, compositions, wreaths, borders/frames and small decor;
 the module proposes a few editable balanced set plans before any paid work.
 The brief uses a primary subject theme plus one optional context: a broad season
 or a specific holiday, never both at once.
-Delivery is a review sheet plus a ZIP of Ready PNGs and manifest; Review assets
-are visibly excluded by default. Every set gets its own ZIP, overview and
-manifest; multiple sets never silently merge into one archive. The former
+Delivery is a review sheet plus a ZIP of Ready PNGs; Review assets are visibly
+excluded by default. Every set gets its own ZIP and overview; multiple sets
+never silently merge into one archive. The former
 five-screen flow omitted the required visual-direction stage and is superseded.
 Owner corrected the proposed flow to eight focused steps: brief/context/target
 count, visual style, references, set structure, concrete objects, launch,
@@ -1260,9 +1482,12 @@ Visual review fixed unreadable dark labels; failed Open preserves current edits.
 Whole unittest regression: 1151 tests OK, 57 skipped. Documentation hygiene:
 4 passed; diff check clean. No paid calls, commit or installer build.
 Limits: synchronous full-mask Auto contour limited to 4*1024*1024 pixels; larger
-PNGs up to core 32M limit retain brush editing. No node insertion/deletion,
-corner/smooth mode, saved editable-history reload, QC invalidation or Windows
-packaged acceptance yet. VS-19/20/21 remain partial, not completed Studio 3.2.
+PNGs up to core 32M limit retain brush editing. A click in free space adds a
+node, a click on a node selects it, Delete/Backspace removes it, and a right
+click toggles its corner/smooth handles. An explicit magnetic alpha-edge toggle
+(`M`) is available; saved editable-history reload, QC invalidation and Windows
+packaged acceptance remain open. VS-19/20/21 remain partial, not completed
+Studio 3.2.
 
 ## Current increment: project-scoped task journals
 
@@ -2072,13 +2297,11 @@ authorized paid request. Publication remains a separate later decision.
 
 The owner approved a post-3.1 product direction for the 3.2.0 mask editor.
 Task 27 records visible zoom/brush shortcuts and a base «Умный контур» that
-automatically draws a smooth closed curve through movable user nodes without
-Bézier handles or image-edge snapping. The applied contour remains editable by
-the existing brush and is one undoable mask operation. Optional magnetic edge
-snapping with an on/off switch is a later stage so that hair, translucency and
-low-contrast failures always have a predictable manual fallback. No 3.2 UI
-mockup or implementation starts before 3.1.0 acceptance and a separate visual
-approval.
+automatically draws a smooth closed curve through movable user nodes. The
+applied contour remains editable by the existing brush and is one undoable mask
+operation. Magnetic alpha-edge snapping now has an explicit on/off switch and
+the `M` shortcut, so hair, translucency and low-contrast failures retain a
+predictable manual fallback.
 
 ## Historical implementation notes
 
@@ -2655,6 +2878,27 @@ The alpha/transparency brush editor on the Clipart results page is temporarily
 hidden for the stable client release, including corrected-PNG and alpha-mask
 save buttons. The implementation remains available for the future dedicated
 image-processing version.
+
+## Fal.ai transparent upscale routes — 2026-09-20
+
+The previous local catalog was incomplete: it exposed only legacy Bria Creative
+as alpha-safe and forcibly replaced Fal.ai after-background selection with the
+local upscaler. The shared Clipart/Processing state now keeps the selected Fal.ai
+provider and enables the second, post-background upscale stage. The catalog has
+two additional documented transparent PNG routes: `bria/increase-resolution`
+(2x/4x, `preserve_alpha=true`) and
+`topaz/upscale/image/transparent` (fixed 4x PNG). The worker, preflight,
+provider request payload, progress/report route, run estimate and Fal call-count
+summary use the chosen after-stage model. Models without an alpha guarantee are
+still rejected after background removal; no fallback spends credits silently.
+Automatic Clipart defaults to exactly one upscale: the pre-background pass is
+off and the post-background pass is on with local Real-ESRGAN until the owner
+selects KIE or Fal.ai.
+
+Offline contract verification passed for the Fal catalog and provider payloads
+(45 tests). The subsequent automatic integration at the top of this file closes
+the Qt/runtime test-environment blocker. Actual provider image-quality acceptance
+and packaging remain pending; no paid Fal.ai request or publication ran.
 
 ## Prohibited without explicit approval
 

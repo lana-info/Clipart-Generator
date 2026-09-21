@@ -149,6 +149,15 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         parameter_names=("preserve_alpha",),
     ),
     FalEndpointProfile(
+        model_id="bria/increase-resolution",
+        operation="upscale",
+        supports_references=True,
+        preserves_alpha=True,
+        output_formats=("png",),
+        price_note="model pricing must be refreshed before live use",
+        parameter_names=("desired_increase", "preserve_alpha", "output_type"),
+    ),
+    FalEndpointProfile(
         model_id="topaz/upscale/image/precision",
         operation="upscale",
         supports_references=True,
@@ -156,6 +165,15 @@ FAL_ENDPOINT_PROFILES: Final[tuple[FalEndpointProfile, ...]] = (
         output_formats=("png", "jpeg"),
         price_note="$0.08 per started 24 MP of output; refresh before live use",
         parameter_names=("model", "upscale_factor", "output_format"),
+    ),
+    FalEndpointProfile(
+        model_id="topaz/upscale/image/transparent",
+        operation="upscale",
+        supports_references=True,
+        preserves_alpha=True,
+        output_formats=("png",),
+        price_note="model pricing must be refreshed before live use",
+        parameter_names=("output_format",),
     ),
     FalEndpointProfile(
         model_id="fal-ai/recraft/upscale/crisp",

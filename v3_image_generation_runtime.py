@@ -262,6 +262,10 @@ def estimate_image_generation_cost(data: Any) -> CostEstimate:
     if operations.upscale_after and operations.upscale_after_provider == "kie":
         use_provider("kie")
         processing_models.append((operations.kie_upscale_after_model, output_count))
+    elif operations.upscale_after and operations.upscale_after_provider == "fal":
+        use_provider("fal")
+        incomplete_providers.add("fal")
+        processing_request_count += output_count
 
     processing_request_count += sum(count for _, count in processing_models)
     for model_id, count in processing_models:
@@ -430,7 +434,9 @@ def _validate_alpha_safe_upscale(operations: ImageOperationData, alpha_checker=u
         return
     if alpha_checker(
         operations.upscale_after_provider,
-        operations.kie_upscale_after_model,
+        operations.fal_upscale_after_model
+        if operations.upscale_after_provider == "fal"
+        else operations.kie_upscale_after_model,
     ):
         return
     if (
@@ -681,4 +687,6 @@ def fal_endpoint_quantities(data: Any) -> dict[str, int]:
     if operations.remove_background and operations.remove_background_provider == "fal":
         removal_count = sum(not keeps_background(entry.result_kind) for entry in data.prompts) * variants
         add(operations.fal_remove_bg_model, removal_count)
+    if operations.upscale_after and operations.upscale_after_provider == "fal":
+        add(operations.fal_upscale_after_model, output_count)
     return quantities

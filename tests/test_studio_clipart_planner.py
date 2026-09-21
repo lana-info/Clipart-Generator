@@ -85,6 +85,8 @@ class PlannerTests(unittest.TestCase):
     def test_commercial_collection_guidance_is_bounded_and_role_specific(self):
         request = planning_request(self.recipe)
         guidance = request["commercial"]
+        self.assertIn("fully opaque", guidance["material_policy"])
+        self.assertIn("opaque painted texture", guidance["material_policy"])
         self.assertTrue(guidance["collection_first"])
         self.assertIn("no_filler", guidance["principles"])
         self.assertIn("hero", guidance["roles"])

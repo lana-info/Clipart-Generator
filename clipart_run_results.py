@@ -227,6 +227,7 @@ class ClipartRunResultsExtension:
             membership=_clipart_data(state).export_membership,
             review_issues=review_issues,
             quality_reports=quality_reports,
+            workspace=getattr(getattr(parent, 'session', None), 'workspace_root', None),
         )
         dialog.membership_saved.connect(on_membership_saved)
         dialog.fix_requested.connect(on_fix_requested)

@@ -2,6 +2,46 @@
 
 ## Automatic Clipart, 2026-09-19
 
+- [x] Diagnose deferred Pinterest worker-routing test timeout: opaque fixture
+  invoked real rembg imports. Use a pre-cut PNG, assert remover is never called
+  and the real worker returns a successful variant; keep the original timeout.
+- [x] Prepare test-signed auto-clipart 1.2.0 requiring Studio >=3.2.2; verify
+  actual 1.1.0 -> 1.2.0 installation, reopen and rollback locally.
+- [ ] Build isolated Windows Studio Test 3.2.2 after source commit/push approval,
+  then stage module 1.2.0 on the test service and verify HTTPS update delivery.
+  A module-only ZIP cannot update the shared chroma/editor/provider components.
+- [x] Implement bounded provisional-rim reclassification with same-object
+  references and small-island protection; persist reproducible visual reports.
+- [x] Fix source-RGB restoration reintroducing a cleaned opaque rim; retain only
+  bounded edge-connected key-mixture corrections, with v4 provenance and tests
+  for three key colours, protected interior details and unchanged delivery pixels.
+- [x] Add bounded opaque AA-edge colour/alpha reconstruction, v3 provenance and
+  explicit app-profile benchmark; preserve opaque interior and legacy behaviour.
+- [ ] Remaining edge quality: contaminated fully opaque rims, isolated thin-detail
+  references and real final-PNG acceptance after upscale; v3 is partial progress.
+- [x] Add separate default-off export cleanup choices for intermediates and
+  generated originals; verify ZIPs first and delete only hash-bound owned copies.
+  Preserve legacy/untracked files and unfinished or excluded images.
+- [x] Soften final-upscale checks: keep unexpected-size output with a warning;
+  retain lost-alpha output for correction, with bundle export blocked by alpha QC.
+  Empty/corrupt output fails only that item, without automatic paid retries.
+- [x] Validate actual final upscale dimensions and retained/nonempty alpha;
+  publish the locally checked bytes rather than downloading the result twice.
+- [x] Rerun six-case synthetic removal benchmark and inspect contact sheet.
+- [x] Verify final-upscale guard: full offline suite 1693 passed, 57 skipped,
+  18 deselected, 262 subtests; affected suite 18 passed plus 15 subtests.
+- [x] Reinforce opaque-only subjects in planning and RU/EN object prompts,
+  including watercolor. Translucent materials are outside automatic Clipart scope.
+- [ ] Resolve colour residue on opaque subject boundaries under the existing
+  Chroma quality task; real provider upscale acceptance remains open.
+
+2026-09-20 source follow-up: automatic launch now offers provider/model/scale for
+one alpha-safe post-background upscale, retains it across reopen, and validates
+the actual Fal model before launch. Current source is newer than installer 3.2.1.
+Qt/OpenCV environment is available at `/tmp/vibix32-venv/bin/python`.
+Full offline verification: 1692 passed, 57 skipped, 18 deselected and 250 subtests
+passed. Actual provider quality and updated Windows packaging remain open.
+
 Owner requested development now; previous Windows owner acceptance stays open
 but no longer gates this independent implementation. Ordinary generation must
 not offer collection planning or bundle tools.
@@ -194,7 +234,7 @@ documentation commit.
 ## Result export now connected
 
 Clipart results now open explicit set membership / PNG inclusion / review dialog.
-Threaded export creates separate ZIPs with PDF and manifest; cancel cleans staging.
+Threaded export creates separate ZIPs with PNGs and PDF; cancel cleans staging.
 Only successful final PNGs of the current session are offered; no folder guessing.
 Membership now saves via the project draft and restores titles/exclusions across
 reopening, without restoring the review checkbox. Older-run assignments survive.
@@ -205,7 +245,7 @@ not certify cutout quality. See STATE.md tests and the saved Qt screenshot.
 
 - Done: OpenRouter key/settings, recipe provider/model persistence, async builder
   planning with current-tariff confirmation, cancel/stale guards and no auto retry.
-- Done: explicit multi-set export API, one ZIP per set with overview and manifest,
+- Done: explicit multi-set export API, one ZIP per set with overview PDF and PNGs,
   staged publication and unchanged source PNGs.
 - Pending: KIE tariff/launch gate, real image-reference analysis, paid live probes
   (new budget required), integrated QC and set-membership/export UI.
@@ -2307,3 +2347,24 @@ Status: Implemented on feature branch; owner acceptance pending
 - [x] Hide save-corrected-PNG and save-alpha-mask actions together with it.
 - [x] Preserve the implementation for the future image-processing release.
 - [x] Add a regression test and verify focused queue/navigation checks.
+
+### Task 77 - Fal.ai Transparent Upscale Selection
+
+Status: Implemented and offline verified; live quality and packaging pending
+
+- [x] Offer Fal.ai as a provider for the second upscale after transparent
+  background preparation.
+- [x] Add documented alpha-safe Fal.ai routes: Bria Increase Resolution (2x/4x)
+  and Topaz Transparent (fixed 4x PNG), alongside the existing legacy route.
+- [x] Preserve the selected model in project state, worker settings, request
+  payload, call-count summary and safe run report.
+- [x] Reject non-alpha-safe models after background preparation with a clear
+  local preflight error; do not silently substitute a paid provider.
+- [x] Make Automatic Clipart use exactly one default pass after background
+  preparation; leave the pre-background pass off.
+- [x] Verify 45 isolated Fal catalog/provider contract tests plus Python
+  compilation and diff integrity without a paid request.
+- [x] Run affected Qt/runtime tests and the full offline suite; inspect the
+  automatic launch screen at 1120x780 and test model selection after reopen.
+- [ ] Check actual upscaled PNG quality with the selected provider and prepare
+  updated packaging when separately authorized.

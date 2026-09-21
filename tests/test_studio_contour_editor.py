@@ -200,6 +200,83 @@ def test_small_roi_does_not_bypass_full_image_extraction_limit(tmp_path):
     dialog.close()
 
 
+def test_click_in_free_space_adds_node_while_clicking_node_only_selects_it(tmp_path):
+    source = tmp_path / "source.png"
+    make_png(source)
+    dialog = ContourEditorDialog(source)
+    dialog.show()
+    app().processEvents()
+    canvas = dialog.canvas
+    canvas.auto_contour()
+    app().processEvents()
+
+    before = canvas.alpha.copy()
+    free_space = canvas._to_screen((40, 30))
+    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=free_space.toPoint())
+
+    assert not np.array_equal(canvas.alpha, before)
+    assert "Точка добавлена" in dialog.status.text()
+    node = canvas._to_screen(canvas.nodes[0].point)
+    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=node.toPoint())
+    assert canvas._selected_node_index == 0
+    QTest.keyClick(canvas, Qt.Key.Key_Delete)
+    dialog.close()
+
+
+def test_right_click_toggles_selected_node_between_smooth_and_corner(tmp_path):
+    source = tmp_path / "source.png"
+    make_png(source)
+    dialog = ContourEditorDialog(source)
+    dialog.show()
+    app().processEvents()
+    canvas = dialog.canvas
+    canvas.auto_contour()
+    app().processEvents()
+
+    node = canvas._to_screen(canvas.nodes[0].point)
+    QTest.mouseClick(canvas, Qt.MouseButton.LeftButton, pos=node.toPoint())
+    QTest.mouseClick(canvas, Qt.MouseButton.RightButton, pos=node.toPoint())
+    assert "плавн" in dialog.status.text().casefold()
+    assert canvas._selected_node_index is not None
+    node = canvas._to_screen(canvas.nodes[canvas._selected_node_index].point)
+    QTest.mouseClick(canvas, Qt.MouseButton.RightButton, pos=node.toPoint())
+    assert "углов" in dialog.status.text().casefold()
+    dialog.close()
+
+
+def test_magnet_toggle_and_shortcut_snap_dragged_node_to_source_alpha_edge(tmp_path):
+    source = tmp_path / "source.png"
+    make_png(source)
+    dialog = ContourEditorDialog(source)
+    dialog.show()
+    app().processEvents()
+    canvas = dialog.canvas
+    canvas.auto_contour()
+    app().processEvents()
+
+    assert dialog.snap_button.isChecked() and canvas.snap_to_edge
+    canvas.setFocus()
+    QTest.keyClick(canvas, Qt.Key.Key_M)
+    assert not dialog.snap_button.isChecked() and not canvas.snap_to_edge
+    QTest.keyClick(canvas, Qt.Key.Key_M)
+    assert dialog.snap_button.isChecked() and canvas.snap_to_edge
+    assert canvas._snap_to_source_edge((21, 32))[0] == 20
+    canvas.snap_to_edge = False
+    assert canvas._snap_to_source_edge((21, 32)) == (21, 32)
+    canvas.snap_to_edge = True
+
+    node_index = min(range(len(canvas.nodes)), key=lambda index: canvas.nodes[index].point[0])
+    start = canvas._to_screen(canvas.nodes[node_index].point)
+    target = canvas._to_screen((21, 32))
+    QTest.mousePress(canvas, Qt.MouseButton.LeftButton, pos=start.toPoint())
+    QTest.mouseMove(canvas, target.toPoint())
+    QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, pos=target.toPoint())
+
+    # The source alpha rectangle begins at x=20, so a nearby dragged node snaps there.
+    assert any(abs(node.point[0] - 20) <= 0.01 for node in canvas.nodes)
+    dialog.close()
+
+
 def test_failed_open_keeps_current_edits_available(tmp_path):
     source = tmp_path / "source.png"
     make_png(source)

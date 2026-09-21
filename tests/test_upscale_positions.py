@@ -12,6 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PIL import Image, ImageDraw
 
 import main
+from studio_alpha_qc import inspect_alpha_png
 
 
 def processing_settings(**overrides):
@@ -45,6 +46,55 @@ class UpscalePositionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = main.QApplication.instance() or main.QApplication([])
+
+    def test_final_upscale_checks_actual_pixels_before_publication(self):
+        for provider in ("fal", "kie", "local_realesrgan"):
+            for defect in ("opaque", "empty", "corrupt", "wrong_size", "valid"):
+                with self.subTest(provider=provider, defect=defect), tempfile.TemporaryDirectory() as folder:
+                    root = Path(folder)
+                    source = root / "source.png"
+                    image = Image.new("RGBA", (32, 32))
+                    ImageDraw.Draw(image).ellipse((8, 8, 24, 24), fill=(200, 90, 50, 255))
+                    image.save(source)
+                    original = source.read_bytes()
+                    output = root / "upscaled.png"
+                    candidate = image.resize((128, 128))
+                    if defect == "opaque":
+                        candidate = candidate.convert("RGB")
+                    elif defect == "empty":
+                        candidate.putalpha(0)
+                    elif defect == "wrong_size":
+                        candidate = image
+                    candidate.save(output)
+                    if defect == "corrupt":
+                        output.write_bytes(b"not an image")
+                    worker = main.WorkerThread("mode2_process", folder, processing_settings(
+                        upscale=False, remove_bg=False, upscale_after=True,
+                        upscale_after_provider=provider, local_realesrgan_after_scale=4,
+                        fal_upscale_after_model="topaz/upscale/image/transparent",
+                        upscale_factor=4,
+                    ))
+                    messages = []
+                    worker.progress.connect(messages.append)
+                    with patch.object(worker, "_run_upscale_pass", return_value=(str(output), None, True)) as upscale:
+                        if defect in {"valid", "opaque", "wrong_size"}:
+                            result = worker._run_processing_pipeline(str(source), None, folder, 1, "file")
+                            self.assertEqual(result, str(output))
+                            self.assertEqual(worker._item_context.manual_transparency_required, defect == "opaque")
+                            if defect == "opaque":
+                                self.assertTrue(any("потерял прозрачность" in text for text in messages))
+                                saved = root / "final.png"
+                                worker._save_final_output(result, str(source), str(saved), folder, 1, "file")
+                                report = inspect_alpha_png(saved)
+                                self.assertEqual(report.status, "block")
+                                self.assertTrue(any(issue.code == "no_transparency" for issue in report.issues))
+                            if defect == "wrong_size":
+                                self.assertTrue(any("32x32 px вместо 128x128 px" in text for text in messages))
+                        else:
+                            with self.assertRaisesRegex(ValueError, "Исходник до апскейла сохранён"):
+                                worker._run_processing_pipeline(str(source), None, folder, 1, "file")
+                        upscale.assert_called_once()
+                    self.assertEqual(source.read_bytes(), original)
 
     def run_local_pipeline(self, temp_path, **overrides):
         source_path = temp_path / "source.png"
@@ -169,10 +219,32 @@ class UpscalePositionTests(unittest.TestCase):
                 remove_bg=False,
             ),
         )
+        bria_increase = main.WorkerThread(
+            "mode2_process",
+            ".",
+            processing_settings(
+                upscale_provider="fal",
+                fal_upscale_model="bria/increase-resolution",
+                fal_upscale_scale=4,
+                remove_bg=False,
+            ),
+        )
+        topaz_transparent = main.WorkerThread(
+            "mode2_process",
+            ".",
+            processing_settings(
+                upscale_provider="fal",
+                fal_upscale_model="topaz/upscale/image/transparent",
+                fal_upscale_scale=2,
+                remove_bg=False,
+            ),
+        )
 
         self.assertEqual(bria._combined_upscale_factor(), 2)
         self.assertEqual(topaz._combined_upscale_factor(), 4)
         self.assertEqual(recraft._combined_upscale_factor(), 4)
+        self.assertEqual(bria_increase._combined_upscale_factor(), 4)
+        self.assertEqual(topaz_transparent._combined_upscale_factor(), 4)
 
     def test_fal_ui_total_factor_matches_selected_endpoint_contract(self):
         fal_provider = types.SimpleNamespace(currentData=lambda: "fal")
@@ -257,7 +329,7 @@ class UpscalePositionTests(unittest.TestCase):
             def fake_download(worker_self, image_url, output_path):
                 calls.append("download")
                 with Image.open(source_path) as source:
-                    source.convert("RGBA").resize((32, 24), Image.Resampling.NEAREST).save(
+                    source.convert("RGBA").resize((256, 192), Image.Resampling.NEAREST).save(
                         output_path,
                         format="PNG",
                     )
@@ -269,7 +341,7 @@ class UpscalePositionTests(unittest.TestCase):
 
             self.assertEqual(calls[0], "upload")
             self.assertEqual(calls[1], ("recraft/crisp-upscale", None))
-            self.assertEqual(calls.count("download"), 2)
+            self.assertEqual(calls.count("download"), 1)
             self.assertEqual(len(list((temp_path / "output").glob("*.png"))), 1)
 
             missing_key_worker = main.WorkerThread(

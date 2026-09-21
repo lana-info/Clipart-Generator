@@ -330,7 +330,11 @@ class VisibleMarkPipelineTests(unittest.TestCase):
 
             def upscale_pass(self, current_path, current_url, **kwargs):
                 order.append(kwargs["step_name"])
-                return current_path, None, True
+                target = Path(raw_dir) / (kwargs["step_name"] + ".png")
+                with Image.open(current_path) as image:
+                    scale = kwargs["local_scale"]
+                    image.resize((image.width * scale, image.height * scale)).save(target)
+                return str(target), None, True
 
             def unsharp_step(self, input_path, *_args):
                 order.append("unsharp")

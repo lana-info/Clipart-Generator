@@ -1189,6 +1189,38 @@ class V3RunQueueTests(unittest.TestCase):
 
         self.assertEqual(report["settings"]["fal_upscale_scale"], "2")
 
+    def test_safe_report_keeps_bria_increase_resolution_scale(self):
+        request = processing_request(".", ["source.png"])
+        request.settings.update(
+            {
+                "upscale": True,
+                "upscale_provider": "fal",
+                "fal_upscale_model": "bria/increase-resolution",
+                "fal_upscale_scale": 4,
+            }
+        )
+        session = RunQueueSession(request, ProjectMode.PROCESSING)
+
+        report = build_safe_run_report(session)
+
+        self.assertEqual(report["settings"]["fal_upscale_scale"], "4")
+
+    def test_safe_report_normalizes_topaz_transparent_to_fixed_four_x(self):
+        request = processing_request(".", ["source.png"])
+        request.settings.update(
+            {
+                "upscale": True,
+                "upscale_provider": "fal",
+                "fal_upscale_model": "topaz/upscale/image/transparent",
+                "fal_upscale_scale": 2,
+            }
+        )
+        session = RunQueueSession(request, ProjectMode.PROCESSING)
+
+        report = build_safe_run_report(session)
+
+        self.assertEqual(report["settings"]["fal_upscale_scale"], "4")
+
     def test_safe_report_normalizes_recraft_to_fixed_four_x(self):
         request = processing_request(".", ["source.png"])
         request.settings.update(

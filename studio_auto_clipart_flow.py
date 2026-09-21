@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QDialog, QFileDialog, QFormLayout, QLabel, QLineEdit, QMessageBox,
+    QComboBox, QDialog, QFileDialog, QFormLayout, QLabel, QLineEdit, QMessageBox,
     QPushButton, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -22,6 +22,10 @@ from v3_clipart_flow import (
     build_clipart_run_request,
 )
 from v3_project_state import ProjectMode, PromptGeneratorData, StepId
+from v3_provider_registry import (
+    FAL_UPSCALE_MODEL_OPTIONS, KIE_MODEL_OPTIONS, processing_provider_options,
+    upscale_model_preserves_alpha, normalize_fal_upscale_factor,
+)
 
 
 BRIEF_STEPS = (StepId.PROJECT, StepId.PROMPTS, StepId.PROMPT_REVIEW,
@@ -123,6 +127,7 @@ class AutoClipartFlowController(ClipartFlowController):
         self.launch_page.addTab(self.prompt_page, "Промпты")
         self.launch_page.addTab(self.generation_page, "Модель")
         self.launch_page.addTab(self._review_page, "Проверка и стоимость")
+        self._install_upscale_controls()
         self.launch_page.refresh_from_state = self._refresh_launch
         self.pages.register_instance(StepId.REVIEW_RUN, self.launch_page)
         self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
@@ -195,9 +200,97 @@ class AutoClipartFlowController(ClipartFlowController):
         self.shell.mark_dirty()
 
     def _refresh_launch(self):
+        self._refresh_upscale_controls()
         for page in (self.prompt_page, self.generation_page, self._review_page):
             page.refresh_from_state()
         self._refresh_preflight()
+
+    def _install_upscale_controls(self):
+        panel = QWidget()
+        form = QFormLayout(panel)
+        self.upscale_provider = QComboBox()
+        self.upscale_model = QComboBox()
+        self.upscale_scale = QComboBox()
+        for label, value in processing_provider_options("upscale_after_provider"):
+            self.upscale_provider.addItem(label, value)
+        form.addRow("Апскейл PNG", self.upscale_provider)
+        form.addRow("Модель апскейла", self.upscale_model)
+        form.addRow("Масштаб", self.upscale_scale)
+        self.generation_page.add_widget(panel)
+        self._refresh_upscale_controls()
+        self.upscale_provider.currentIndexChanged.connect(self._upscale_provider_changed)
+        self.upscale_model.currentIndexChanged.connect(self._upscale_model_changed)
+        self.upscale_scale.currentIndexChanged.connect(self._upscale_scale_changed)
+
+    def _upscale_fields(self):
+        provider = self.shell.state.data.operations.upscale_after_provider
+        return {
+            "fal": ("fal_upscale_after_model", "fal_upscale_after_scale"),
+            "kie": ("kie_upscale_after_model", "upscale_factor"),
+            "local_realesrgan": ("local_realesrgan_profile", "local_realesrgan_after_scale"),
+        }[provider]
+
+    def _refresh_upscale_controls(self):
+        operations = self.shell.state.data.operations
+        provider = operations.upscale_after_provider
+        model_field, scale_field = self._upscale_fields()
+        options = (FAL_UPSCALE_MODEL_OPTIONS if provider == "fal" else
+                   KIE_MODEL_OPTIONS if provider == "kie" else
+                   (("Клипарт", "clipart"), ("Фото", "photo")))
+        controls = (self.upscale_provider, self.upscale_model, self.upscale_scale)
+        blocked = [control.blockSignals(True) for control in controls]
+        try:
+            self.upscale_provider.setCurrentIndex(self.upscale_provider.findData(provider))
+            self.upscale_model.clear()
+            for label, value in options:
+                if upscale_model_preserves_alpha(provider, value):
+                    self.upscale_model.addItem(label, value)
+            model = getattr(operations, model_field)
+            self.upscale_model.setCurrentIndex(self.upscale_model.findData(model))
+            scales = sorted({normalize_fal_upscale_factor(model, scale) for scale in (2, 4)}) if provider == "fal" else (2, 4)
+            self.upscale_scale.clear()
+            for scale in scales:
+                self.upscale_scale.addItem(f"{scale}x", scale)
+            self.upscale_scale.setCurrentIndex(self.upscale_scale.findData(getattr(operations, scale_field)))
+            self.upscale_scale.setEnabled(len(scales) > 1)
+        finally:
+            for control, previous in zip(controls, blocked):
+                control.blockSignals(previous)
+
+    def _upscale_provider_changed(self):
+        if self.is_busy():
+            self._refresh_upscale_controls()
+            return
+        self.shell.state.data.operations.upscale_after_provider = self.upscale_provider.currentData()
+        self._upscale_changed()
+
+    def _upscale_model_changed(self):
+        if self.is_busy():
+            self._refresh_upscale_controls()
+            return
+        operations = self.shell.state.data.operations
+        model_field, scale_field = self._upscale_fields()
+        model = self.upscale_model.currentData()
+        if model is None:
+            return
+        setattr(operations, model_field, model)
+        if operations.upscale_after_provider == "fal":
+            setattr(operations, scale_field, normalize_fal_upscale_factor(model, getattr(operations, scale_field)))
+        self._upscale_changed()
+
+    def _upscale_scale_changed(self):
+        if self.is_busy():
+            self._refresh_upscale_controls()
+            return
+        scale = self.upscale_scale.currentData()
+        if scale is None:
+            return
+        setattr(self.shell.state.data.operations, self._upscale_fields()[1], scale)
+        self._upscale_changed()
+
+    def _upscale_changed(self):
+        self.shell.mark_dirty()
+        self._refresh_launch()
 
     def _refresh_export(self):
         page = self.run_queue.page
@@ -272,7 +365,7 @@ class AutoClipartFlowController(ClipartFlowController):
                     self.shell.state.data.automatic["compiled"] = fingerprint
                 operations = self.shell.state.data.operations
                 operations.upscale_before = False
-                operations.upscale_after = False
+                operations.upscale_after = True
                 operations.remove_background = True
                 operations.remove_background_provider = "local_chroma_key"
             if index == 5:
@@ -330,6 +423,10 @@ class AutoClipartFlowController(ClipartFlowController):
         if not data.prompts or any(entry.result_kind != "clipart" or not entry.object_id for entry in data.prompts):
             self.review_page.set_run_status("Соберите промпты объектов на предыдущем шаге.", error=True)
             return None
+        data.operations.upscale_before = False
+        data.operations.upscale_after = True
+        data.operations.remove_background = True
+        data.operations.remove_background_provider = "local_chroma_key"
         request = super().start()
         if request is not None:
             self.run_queue.session.changed.connect(self._save_run)

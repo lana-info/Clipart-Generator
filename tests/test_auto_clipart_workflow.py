@@ -91,6 +91,7 @@ def test_eight_steps_prepare_prompts_without_paid_work(workspace):
     assert view.project_state.clipart.operations.remove_background
     assert view.project_state.clipart.operations.remove_background_provider == "local_chroma_key"
     assert not view.project_state.clipart.operations.upscale_before
+    assert view.project_state.clipart.operations.upscale_after
     worker.assert_not_called()
     record = view._project_store.load(view._active_project_id)
     assert record.module_id == "auto-clipart"
@@ -120,6 +121,36 @@ def test_cancelled_confirmation_does_not_create_worker(workspace, monkeypatch):
     assert view.project_state.current_step is StepId.REVIEW_RUN
 
 
+def test_upscale_selection_survives_reopen_and_builds_one_alpha_safe_pass(workspace):
+    from v3_clipart_flow import build_clipart_run_request, fal_endpoint_quantities
+
+    view, controller, gate, worker = workspace
+    prepare_launch(controller)
+    controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData("fal"))
+    assert controller.upscale_model.findData("topaz/upscale/image/precision") == -1
+    controller.upscale_model.setCurrentIndex(controller.upscale_model.findData("bria/increase-resolution"))
+    controller.upscale_scale.setCurrentIndex(controller.upscale_scale.findData(4))
+    request = build_clipart_run_request(controller.shell.state)
+    assert request.settings["upscale"] is False
+    assert request.settings["upscale_after"] is True
+    assert request.settings["fal_upscale_after_model"] == "bria/increase-resolution"
+    assert request.settings["fal_upscale_after_scale"] == 4
+    assert fal_endpoint_quantities(controller.shell.state) == {"bria/increase-resolution": 1}
+    project_id = view._active_project_id
+    controller.save_timer.stop()
+    assert view.continue_saved_project(project_id)
+    resumed = view.shell.workflow_controller("auto-clipart")
+    resumed.save_timer.stop()
+    assert resumed.upscale_provider.currentData() == "fal"
+    assert resumed.upscale_model.currentData() == "bria/increase-resolution"
+    assert resumed.upscale_scale.currentData() == 4
+    resumed.upscale_model.setCurrentIndex(resumed.upscale_model.findData("topaz/upscale/image/transparent"))
+    assert resumed.upscale_scale.currentData() == 4
+    assert not resumed.upscale_scale.isEnabled()
+    build_clipart_run_request(resumed.shell.state)
+    worker.assert_not_called()
+
+
 def test_ordinary_generator_does_not_install_automatic_controller(workspace):
     view, controller, gate, worker = workspace
     controller.save_timer.stop()
@@ -141,6 +172,7 @@ def test_confirmed_run_progress_results_export_and_resume(workspace, monkeypatch
     raw_worker = FixtureWorker()
     worker.return_value = raw_worker
     prepare_launch(controller)
+    controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData("kie"))
     errors = []
     controller.error.connect(errors.append)
     monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
@@ -175,7 +207,7 @@ def test_confirmed_run_progress_results_export_and_resume(workspace, monkeypatch
     archives = export_clipart_sets([dict(title="Winter flowers", images=paths)], tmp_path)
     with ZipFile(archives[0]) as archive:
         assert "overview.pdf" in archive.namelist()
-        assert "manifest.json" in archive.namelist()
+        assert "manifest.json" not in archive.namelist()
         assert any(name.endswith(".png") for name in archive.namelist())
     edited = tmp_path / "edited-flower.png"
     png.save(edited)

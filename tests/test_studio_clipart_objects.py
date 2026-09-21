@@ -85,6 +85,9 @@ class ObjectTests(unittest.TestCase):
         self.assertIn('читаемый силуэт', prompt)
         self.assertIn('без обрезания', prompt)
         self.assertIn('без случайных лишних объектов', prompt)
+        self.assertIn('все части объекта полностью непрозрачны', prompt)
+        self.assertIn('акварель только как текстура непрозрачной краски', prompt)
+        self.assertIn('без стекла, просвечивающих лепестков', prompt)
         self.assertNotIn('pure white background', prompt)
 
     def test_commercial_guidance_preserves_english_prompt_language(self):
@@ -96,6 +99,9 @@ class ObjectTests(unittest.TestCase):
         self.assertIn('Object: Teddy bear.', prompt)
         self.assertIn('fully visible', prompt.casefold())
         self.assertIn('no cropping', prompt.casefold())
+        self.assertIn('all parts of the subject fully opaque', prompt)
+        self.assertIn('watercolor only as an opaque painted texture', prompt)
+        self.assertIn('no glass, see-through petals', prompt)
         self.assertNotIn('Объект:', prompt)
         self.assertNotIn('без обрезания', prompt.casefold())
 

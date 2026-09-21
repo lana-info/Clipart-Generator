@@ -5,10 +5,16 @@ from typing import Final
 
 KIE_TOPAZ_MODEL_ID: Final = "topaz/image-upscale"
 FAL_BRIA_UPSCALE_MODEL_ID: Final = "bria/upscale/creative"
+FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID: Final = "bria/increase-resolution"
 FAL_TOPAZ_PRECISION_MODEL_ID: Final = "topaz/upscale/image/precision"
+FAL_TOPAZ_TRANSPARENT_MODEL_ID: Final = "topaz/upscale/image/transparent"
 FAL_RECRAFT_CRISP_MODEL_ID: Final = "fal-ai/recraft/upscale/crisp"
 FAL_UPSCALE_MODEL_IDS: Final = frozenset({
-    FAL_BRIA_UPSCALE_MODEL_ID, FAL_TOPAZ_PRECISION_MODEL_ID, FAL_RECRAFT_CRISP_MODEL_ID,
+    FAL_BRIA_UPSCALE_MODEL_ID,
+    FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID,
+    FAL_TOPAZ_PRECISION_MODEL_ID,
+    FAL_TOPAZ_TRANSPARENT_MODEL_ID,
+    FAL_RECRAFT_CRISP_MODEL_ID,
 })
 LEGACY_FAL_UPSCALE_MODEL_IDS: Final = frozenset({"fal-ai/esrgan"})
 LEGACY_KIE_TOPAZ_MODEL_IDS: Final = frozenset({"topaz/upscale"})
@@ -51,6 +57,6 @@ def normalize_fal_upscale_factor(model_id: object, value: object) -> int:
     model_id = normalize_fal_upscale_model(model_id)
     if model_id == FAL_BRIA_UPSCALE_MODEL_ID:
         return 2
-    if model_id == FAL_RECRAFT_CRISP_MODEL_ID:
+    if model_id in {FAL_TOPAZ_TRANSPARENT_MODEL_ID, FAL_RECRAFT_CRISP_MODEL_ID}:
         return 4
     return normalize_topaz_upscale_factor(value)

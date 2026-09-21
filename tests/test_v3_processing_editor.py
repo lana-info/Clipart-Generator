@@ -79,7 +79,7 @@ class ProcessingEditorTests(unittest.TestCase):
         profile = editor.operation_widgets["local_rembg_profile"]
         profile.setCurrentIndex(profile.findData("anime"))
         self.assertEqual(state.processing.operations.local_rembg_model, "isnet-anime")
-        self.assertTrue(editor.operation_widgets["upscale_after"].isHidden())
+        self.assertFalse(editor.operation_widgets["upscale_after"].isHidden())
         self.assertTrue(
             editor.operation_widgets["kie_upscale_after_model"].isHidden()
         )
@@ -120,7 +120,7 @@ class ProcessingEditorTests(unittest.TestCase):
             ),
         )
 
-    def test_ui_hides_and_disables_upscale_after_but_keeps_other_operations(self) -> None:
+    def test_ui_keeps_enabled_upscale_after_and_other_operations(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         operations = state.processing.operations
         operations.upscale_before = True
@@ -135,9 +135,9 @@ class ProcessingEditorTests(unittest.TestCase):
             include_cleanup=True,
         )
 
-        self.assertFalse(operations.upscale_after)
-        self.assertTrue(editor.operation_widgets["upscale_after"].isHidden())
-        self.assertTrue(
+        self.assertTrue(operations.upscale_after)
+        self.assertFalse(editor.operation_widgets["upscale_after"].isHidden())
+        self.assertFalse(
             editor.operation_widgets["upscale_after_provider"].isHidden()
         )
         self.assertFalse(editor.operation_widgets["upscale_before"].isHidden())

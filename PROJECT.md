@@ -1,5 +1,23 @@
 # Vibix Images
 
+## Optional Export Cleanup, 2026-09-20
+
+Set export offers independent, default-off deletion of intermediate working PNGs
+and generated originals. Cleanup follows successful archive publication and CRC
+verification, applies only to tracked rough copies of exported results, and never
+targets final PNGs, archives or user-imported originals. Untracked legacy files,
+changed copies and unfinished/excluded items are retained. Choices reset after
+each export. Cleanup failure must not report a successful export as failed.
+
+## Opaque Clipart Material Policy, 2026-09-20
+
+Automatic Clipart produces fully opaque illustrated subjects and details.
+Collection planning and compiled prompts exclude glass, translucent petals,
+see-through fabrics, smoke, mist and glow. Watercolor remains available as an
+opaque painted texture. This restriction concerns the subject, not the transparent
+PNG background, real openings between parts or boundary antialiasing. Translucent
+material benchmark cases are not acceptance requirements for this module.
+
 ## Automatic Clipart Separation, 2026-09-19
 
 Owner explicitly excludes collection planning, palettes/recipes, object/bundle

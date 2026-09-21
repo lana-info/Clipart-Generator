@@ -1,5 +1,3 @@
-import hashlib
-import json
 from zipfile import ZipFile
 
 from PIL import Image
@@ -20,13 +18,9 @@ def test_separate_archives_and_source_integrity(tmp_path):
     assert archives[0] != archives[1]
     for archive in archives:
         with ZipFile(archive) as z:
-            manifest = json.loads(z.read('manifest.json'))
-            assert manifest['count'] == 1
-            entry = manifest['files'][0]
-            assert z.read(entry['file']) == original
-            assert entry['sha256'] == hashlib.sha256(original).hexdigest()
+            assert z.namelist() == ['png/001_bear.png', 'overview.pdf']
+            assert z.read('png/001_bear.png') == original
             assert z.read('overview.pdf').startswith(b'%PDF')
-            assert str(tmp_path) not in json.dumps(manifest)
     assert source.read_bytes() == original
 
 

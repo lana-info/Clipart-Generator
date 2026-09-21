@@ -21,6 +21,14 @@ class FalModelCatalogTests(unittest.TestCase):
         self.assertTrue(
             fal_endpoint_profile("bria/upscale/creative", "upscale").preserves_alpha
         )
+        self.assertTrue(
+            fal_endpoint_profile("bria/increase-resolution", "upscale").preserves_alpha
+        )
+        self.assertTrue(
+            fal_endpoint_profile(
+                "topaz/upscale/image/transparent", "upscale"
+            ).preserves_alpha
+        )
         self.assertFalse(
             fal_endpoint_profile(
                 "topaz/upscale/image/precision", "upscale"
@@ -35,7 +43,9 @@ class FalModelCatalogTests(unittest.TestCase):
             [profile.model_id for profile in fal_endpoint_profiles("upscale")],
             [
                 "bria/upscale/creative",
+                "bria/increase-resolution",
                 "topaz/upscale/image/precision",
+                "topaz/upscale/image/transparent",
                 "fal-ai/recraft/upscale/crisp",
             ],
         )

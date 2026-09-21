@@ -75,6 +75,9 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),
     ('studio_set_export', 'studio_delivery'),
+    # Export invokes the shared, hash-bound rough-file ownership service only
+    # after verified publication. Core owns files; Clipart owns the opt-in UI.
+    ('studio_set_export_ui', 'studio_working_files'),
     ('studio_text_client', 'studio_text_errors'),
     ('v3_clipart_flow', 'chroma_key'),
     ('v3_clipart_flow', 'chroma_key_selection'),

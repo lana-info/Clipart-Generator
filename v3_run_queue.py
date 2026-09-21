@@ -345,10 +345,8 @@ def _provider_model_routes(
                 if stage == "upscale_after"
                 else "fal_upscale_scale"
             )
-            scale = (
-                "2"
-                if model == "bria/upscale/creative"
-                else str(source.get(scale_key) or "").strip()
+            scale = str(
+                normalize_fal_upscale_factor(model, source.get(scale_key, 4))
             )
             model = f"{model}-{scale}x" if model and scale else model
         if model:
@@ -1837,6 +1835,15 @@ class RunResultsPage(QWidget):
                         (item.output_path, str(source.resolve())),
                         destination,
                     )
+                    workspace = getattr(self.session, 'workspace_root', None)
+                    if workspace is not None:
+                        from studio_working_files import link_edited_output
+                        try:
+                            link_edited_output(workspace, (item.output_path,), destination)
+                        except (OSError, ValueError):
+                            self.summary_label.setText(
+                                'PNG сохранён; автоматическая очистка его рабочих файлов недоступна.'
+                            )
                 item.output_path = str(destination)
                 item.editor_output_path = str(destination)
         self.membership_changed.emit()

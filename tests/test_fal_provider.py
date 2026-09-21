@@ -546,6 +546,92 @@ class FalProviderTests(unittest.TestCase):
             },
         )
 
+    def test_bria_increase_resolution_submits_alpha_safe_png_payload(self):
+        model_id = "bria/increase-resolution"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        captured = {}
+
+        def submit(request):
+            captured.update(request.input_payload)
+            return {"request_id": "req-bria-increase"}
+
+        client.submit_task = submit
+        client.wait_for_result = lambda *_args, **_kwargs: {
+            "request_id": "req-bria-increase",
+            "status": "completed",
+            "result": {"image": {"url": "https://cdn.example/bria-increase.png"}},
+        }
+
+        client.run_image_operation(
+            "upscale",
+            "https://cdn.example/input.png",
+            model_id=model_id,
+            scale=4,
+        )
+
+        self.assertEqual(
+            captured,
+            {
+                "image_url": "https://cdn.example/input.png",
+                "desired_increase": 4,
+                "preserve_alpha": True,
+                "output_type": "png",
+            },
+        )
+
+    def test_bria_increase_resolution_normalizes_unsupported_scale(self):
+        model_id = "bria/increase-resolution"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        captured = {}
+        client.submit_task = lambda request: (
+            captured.update(request.input_payload) or {"request_id": "req-bria-scale"}
+        )
+        client.wait_for_result = lambda *_args, **_kwargs: {
+            "request_id": "req-bria-scale",
+            "status": "completed",
+            "result": {"image": {"url": "https://cdn.example/bria-scale.png"}},
+        }
+
+        client.run_image_operation(
+            "upscale",
+            "https://cdn.example/input.png",
+            model_id=model_id,
+            scale=3,
+        )
+
+        self.assertEqual(captured["desired_increase"], 4)
+
+    def test_topaz_transparent_submits_png_payload(self):
+        model_id = "topaz/upscale/image/transparent"
+        client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))
+        captured = {}
+
+        def submit(request):
+            captured.update(request.input_payload)
+            return {"request_id": "req-topaz-transparent"}
+
+        client.submit_task = submit
+        client.wait_for_result = lambda *_args, **_kwargs: {
+            "request_id": "req-topaz-transparent",
+            "status": "completed",
+            "result": {"image": {"url": "https://cdn.example/topaz-transparent.png"}},
+        }
+
+        client.run_image_operation(
+            "upscale",
+            "https://cdn.example/input.png",
+            model_id=model_id,
+            scale=2,
+        )
+
+        self.assertEqual(
+            captured,
+            {
+                "image_url": "https://cdn.example/input.png",
+                "output_format": "png",
+            },
+        )
+
     def test_recraft_crisp_upscale_submits_documented_image_only_payload(self):
         model_id = "fal-ai/recraft/upscale/crisp"
         client = FalClient(FalConfig(api_key="fal-secret", model_id=model_id))

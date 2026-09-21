@@ -16,8 +16,8 @@ from processing_contract import publish_atomic
 
 MAX_RECEIPT_BYTES = 8192
 MAX_IMAGE_BYTES = 256 * 1024 * 1024
-PROFILE_VERSION = "opaque-clipart-v2"
-_READABLE_PROFILES = ("opaque-clipart-v1", PROFILE_VERSION)
+PROFILE_VERSION = "opaque-clipart-v5"
+_READABLE_PROFILES = ("opaque-clipart-v1", "opaque-clipart-v2", "opaque-clipart-v3", "opaque-clipart-v4", PROFILE_VERSION)
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _COLOR = re.compile(r"#[0-9A-F]{6}\Z")
 _KEYS = {"schema_version", "profile", "status", "quality_status", "source_sha256",

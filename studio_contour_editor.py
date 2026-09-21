@@ -29,6 +29,7 @@ from studio_contour_session import ContourEditSession
 MAX_IMAGE_PIXELS = 32_000_000
 MAX_HISTORY = 30
 MAX_AUTO_CONTOUR_PIXELS = 4 * 1024 * 1024
+SNAP_RADIUS_PX = 12
 ROI = tuple[int, int, int, int]
 Point = tuple[float, float]
 
@@ -38,6 +39,7 @@ class _Node:
     point: Point
     in_handle: Point
     out_handle: Point
+    kind: Literal["corner", "smooth"] = "corner"
 
 
 @dataclass
@@ -48,7 +50,7 @@ class _Snapshot:
 
 
 def _clone_nodes(nodes: list[_Node]) -> list[_Node]:
-    return [_Node(n.point, n.in_handle, n.out_handle) for n in nodes]
+    return [_Node(n.point, n.in_handle, n.out_handle, n.kind) for n in nodes]
 
 
 def _load_rgba(path: Path) -> np.ndarray:
@@ -76,7 +78,9 @@ class ContourCanvas(QWidget):
         self.roi: ROI | None = None
         self.nodes: list[_Node] = []
         self._active_path_index: int | None = None
+        self._selected_node_index: int | None = None
         self.feather = 0
+        self.snap_to_edge = True
         self.background: Literal["checker", "black", "white"] = "checker"
         self.tool: Literal["select", "restore", "remove", "pan"] = "select"
         self.brush_radius = 8
@@ -113,17 +117,17 @@ class ContourCanvas(QWidget):
 
     def undo(self) -> None:
         if self.session.undo():
-            self.nodes.clear(); self._active_path_index = None
+            self.nodes.clear(); self._active_path_index = None; self._selected_node_index = None
             self.update(); self.changed.emit()
 
     def redo(self) -> None:
         if self.session.redo():
-            self.nodes.clear(); self._active_path_index = None
+            self.nodes.clear(); self._active_path_index = None; self._selected_node_index = None
             self.update(); self.changed.emit()
 
     def reset(self) -> None:
         if self.session.reset():
-            self.nodes.clear(); self._active_path_index = None; self.roi = None
+            self.nodes.clear(); self._active_path_index = None; self._selected_node_index = None; self.roi = None
             self.changed.emit(); self.update()
 
     def can_auto_contour(self) -> tuple[bool, str]:
@@ -167,7 +171,8 @@ class ContourCanvas(QWidget):
         # ContourDocument.apply_path when the exterior is moved.
         candidates.sort(key=lambda item: (item[1].fill_value != 255, -self._path_area(item[1])))
         self._active_path_index, path = candidates[0]
-        self.nodes = [_Node(node.point, node.in_handle or node.point, node.out_handle or node.point)
+        self._selected_node_index = None
+        self.nodes = [_Node(node.point, node.in_handle or node.point, node.out_handle or node.point, node.kind)
                       for node in path.nodes]
         if self.roi is None:
             points = sample_path(path)
@@ -184,16 +189,41 @@ class ContourCanvas(QWidget):
         candidates = [(index, path) for index, path in enumerate(self.session.document.paths)
                       if path.fill_value == fill_value]
         if not candidates:
-            self.nodes.clear(); self._active_path_index = None
+            self.nodes.clear(); self._active_path_index = None; self._selected_node_index = None
             return False
         def distance(item: tuple[int, BezierPath]) -> float:
             points = sample_path(item[1])
             centre = points.mean(axis=0)
             return float((centre[0] - target[0]) ** 2 + (centre[1] - target[1]) ** 2)
         self._active_path_index, path = min(candidates, key=distance)
-        self.nodes = [_Node(node.point, node.in_handle or node.point, node.out_handle or node.point)
+        self._selected_node_index = None
+        self.nodes = [_Node(node.point, node.in_handle or node.point, node.out_handle or node.point, node.kind)
                       for node in path.nodes]
         return True
+
+    def _select_nearest_node(self, target: Point, *, kind: Literal["corner", "smooth"] | None = None) -> None:
+        if not self.nodes:
+            self._selected_node_index = None
+            return
+        index = min(range(len(self.nodes)), key=lambda candidate: (
+            (self.nodes[candidate].point[0] - target[0]) ** 2
+            + (self.nodes[candidate].point[1] - target[1]) ** 2
+        ))
+        self._selected_node_index = index
+        if kind is None:
+            return
+        node = self.nodes[index]
+        node.kind = kind
+        if kind == "corner":
+            node.in_handle = node.point
+            node.out_handle = node.point
+            return
+        previous = np.asarray(self.nodes[index - 1].point, dtype=float)
+        following = np.asarray(self.nodes[(index + 1) % len(self.nodes)].point, dtype=float)
+        point = np.asarray(node.point, dtype=float)
+        tangent = (following - previous) / 6.0
+        node.in_handle = self._clamp_to_roi(tuple(point - tangent))
+        node.out_handle = self._clamp_to_roi(tuple(point + tangent))
 
     @staticmethod
     def _path_area(path: BezierPath) -> float:
@@ -246,6 +276,184 @@ class ContourCanvas(QWidget):
                     return kind, index
         return None
 
+    @staticmethod
+    def _lerp(left: Point, right: Point, amount: float) -> Point:
+        return (
+            left[0] + (right[0] - left[0]) * amount,
+            left[1] + (right[1] - left[1]) * amount,
+        )
+
+    def _nearest_segment(self, point: Point, *, maximum_distance: float | None = None) -> tuple[int, float] | None:
+        """Return the nearest cubic segment, optionally requiring a nearby hit."""
+        if len(self.nodes) < 3:
+            return None
+        if maximum_distance is None:
+            rect = self._image_rect()
+            maximum_distance = 10 * self.image_size[0] / max(1.0, rect.width())
+        best: tuple[float, int, float] | None = None
+        for index, node in enumerate(self.nodes):
+            following = self.nodes[(index + 1) % len(self.nodes)]
+            for step in range(1, 33):
+                amount = step / 32
+                inverse = 1 - amount
+                curve = (
+                    inverse ** 3 * np.asarray(node.point)
+                    + 3 * inverse ** 2 * amount * np.asarray(node.out_handle)
+                    + 3 * inverse * amount ** 2 * np.asarray(following.in_handle)
+                    + amount ** 3 * np.asarray(following.point)
+                )
+                distance = (curve[0] - point[0]) ** 2 + (curve[1] - point[1]) ** 2
+                candidate = (float(distance), index, amount)
+                if best is None or candidate < best:
+                    best = candidate
+        if best is None or best[0] > maximum_distance ** 2:
+            return None
+        return best[1], best[2]
+
+    def _expand_roi_for_point(self, point: Point) -> None:
+        """Keep the local alpha update bounded while allowing a new outer node."""
+        if self.roi is None:
+            self.roi = self._bounded_roi(round(point[0]), round(point[1]),
+                                         round(point[0]) + 1, round(point[1]) + 1)
+            return
+        left, top, right, bottom = self.roi
+        padding = 3
+        self.roi = self._bounded_roi(
+            min(left, round(point[0]) - padding),
+            min(top, round(point[1]) - padding),
+            max(right, round(point[0]) + padding + 1),
+            max(bottom, round(point[1]) + padding + 1),
+        )
+
+    def _insert_node(self, point: Point, *, free_position: bool) -> bool:
+        nearest = self._nearest_segment(point, maximum_distance=float("inf") if free_position else None)
+        if nearest is None:
+            self.status_changed.emit("Сначала постройте или выберите контур.")
+            return False
+        before = self._snapshot()
+        if free_position:
+            point = self._snap_to_source_edge(point)
+            self._expand_roi_for_point(point)
+            point = self._clamp_to_roi(point)
+        else:
+            point = self._clamp_to_roi(self._snap_to_source_edge(point))
+        index, amount = nearest
+        node = self.nodes[index]
+        following = self.nodes[(index + 1) % len(self.nodes)]
+        if free_position:
+            inserted = _Node(point, point, point, "corner")
+        else:
+            first = self._lerp(node.point, node.out_handle, amount)
+            second = self._lerp(node.out_handle, following.in_handle, amount)
+            third = self._lerp(following.in_handle, following.point, amount)
+            incoming = self._lerp(first, second, amount)
+            outgoing = self._lerp(second, third, amount)
+            position = self._lerp(incoming, outgoing, amount)
+            node.out_handle = first
+            following.in_handle = third
+            inserted = _Node(position, incoming, outgoing, "smooth")
+        inserted_index = index + 1
+        self.nodes.insert(inserted_index, inserted)
+        self._selected_node_index = inserted_index
+        if free_position:
+            try:
+                self._apply_nodes_locally()
+            except (IndexError, TypeError, ValueError) as exc:
+                self.nodes = before.nodes
+                self.roi = before.roi
+                self._selected_node_index = None
+                self.status_changed.emit(f"Контур не применён: {exc}")
+                return False
+            self._select_nearest_node(point, kind="corner")
+            if not np.array_equal(before.alpha, self.alpha):
+                self._commit(before)
+        self.status_changed.emit("Точка добавлена. Перетащите её, чтобы изменить контур.")
+        self.update()
+        return True
+
+    def _toggle_selected_node_kind(self) -> bool:
+        index = self._selected_node_index
+        if index is None or not 0 <= index < len(self.nodes):
+            self.status_changed.emit("Выберите точку контура для изменения типа.")
+            return False
+        before = self._snapshot()
+        node = self.nodes[index]
+        target = node.point
+        is_corner = node.kind == "corner"
+        if is_corner:
+            previous = np.asarray(self.nodes[index - 1].point, dtype=float)
+            following = np.asarray(self.nodes[(index + 1) % len(self.nodes)].point, dtype=float)
+            point = np.asarray(node.point, dtype=float)
+            tangent = (following - previous) / 6.0
+            node.in_handle = self._clamp_to_roi(tuple(point - tangent))
+            node.out_handle = self._clamp_to_roi(tuple(point + tangent))
+            node.kind = "smooth"
+            label = "плавной"
+        else:
+            node.in_handle = node.point
+            node.out_handle = node.point
+            node.kind = "corner"
+            label = "угловой"
+        try:
+            self._apply_nodes_locally()
+        except (IndexError, TypeError, ValueError) as exc:
+            self.nodes = before.nodes
+            self._selected_node_index = index
+            self.status_changed.emit(f"Контур не применён: {exc}")
+            return False
+        self._select_nearest_node(target, kind="smooth" if is_corner else "corner")
+        if not np.array_equal(before.alpha, self.alpha):
+            self._commit(before)
+        self.status_changed.emit(f"Точка стала {label}.")
+        self.update()
+        return True
+
+    def _delete_selected_node(self) -> bool:
+        index = self._selected_node_index
+        if index is None or not 0 <= index < len(self.nodes):
+            self.status_changed.emit("Выберите точку контура для удаления.")
+            return False
+        if len(self.nodes) <= 3:
+            self.status_changed.emit("В контуре должно остаться не менее трёх точек.")
+            return False
+        before = self._snapshot()
+        self.nodes.pop(index)
+        self._selected_node_index = min(index, len(self.nodes) - 1)
+        try:
+            self._apply_nodes_locally()
+        except (IndexError, TypeError, ValueError) as exc:
+            self.status_changed.emit(f"Контур не применён: {exc}")
+            self.nodes = before.nodes
+            self._selected_node_index = None
+            return False
+        if not np.array_equal(before.alpha, self.alpha):
+            self._commit(before)
+        self.status_changed.emit("Точка удалена.")
+        self.update()
+        return True
+
+    def _snap_to_source_edge(self, point: Point) -> Point:
+        """Snap only near the source alpha edge, never to arbitrary RGB texture."""
+        if not self.snap_to_edge:
+            return point
+        radius = SNAP_RADIUS_PX
+        width, height = self.image_size
+        left = max(0, int(round(point[0])) - radius)
+        top = max(0, int(round(point[1])) - radius)
+        right = min(width, int(round(point[0])) + radius + 1)
+        bottom = min(height, int(round(point[1])) + radius + 1)
+        source = (self.rgba[top:bottom, left:right, 3] > 0).astype(np.uint8)
+        edge = cv2.morphologyEx(source, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8))
+        ys, xs = np.nonzero(edge)
+        if not len(xs):
+            return point
+        candidates = np.column_stack((xs + left, ys + top)).astype(float)
+        distances = (candidates[:, 0] - point[0]) ** 2 + (candidates[:, 1] - point[1]) ** 2
+        closest = int(np.argmin(distances))
+        if distances[closest] > radius ** 2:
+            return point
+        return (float(candidates[closest, 0]), float(candidates[closest, 1]))
+
     def _stroke(self, start: Point, end: Point, value: int) -> None:
         if not self.roi: return
         before = self.alpha.copy()
@@ -270,7 +478,7 @@ class ContourCanvas(QWidget):
             return False
         previous = self.session.document.paths[self._active_path_index]
         replacement = BezierPath(
-            tuple(BezierNode(node.point, in_handle=node.in_handle, out_handle=node.out_handle)
+            tuple(BezierNode(node.point, node.kind, in_handle=node.in_handle, out_handle=node.out_handle)
                   for node in self.nodes),
             previous.fill_value, self.alpha.shape, previous.contour_id,
         )
@@ -285,7 +493,17 @@ class ContourCanvas(QWidget):
         image_pos = self._to_image(event.position())
         if event.button() == Qt.MouseButton.MiddleButton or self.tool == "pan" or self._space_pan:
             self._drag_mode = "pan"; self._last_image_pos = (event.position().x(), event.position().y()); return
-        if image_pos is None or event.button() != Qt.MouseButton.LeftButton: return
+        if image_pos is None:
+            return
+        if event.button() == Qt.MouseButton.RightButton and self.tool == "select":
+            hit = self._hit_node(image_pos)
+            if hit:
+                self._selected_node_index = hit[1]
+                self._toggle_selected_node_kind()
+                event.accept()
+            return
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
         self._before_drag = self._snapshot()
         if self.tool in ("remove", "restore") and self._point_in_roi(image_pos):
             # A raster brush edit makes cached vector proposals stale.  The next
@@ -297,11 +515,18 @@ class ContourCanvas(QWidget):
         if self.tool == "select":
             hit = self._hit_node(image_pos)
             if hit:
+                self._selected_node_index = hit[1]
                 if event.modifiers() & Qt.KeyboardModifier.AltModifier:
                     self._drag_mode = "in" if event.modifiers() & Qt.KeyboardModifier.ShiftModifier else "out"
                 else:
                     self._drag_mode = hit[0]
                 self._drag_index = hit[1]; return
+            if self.nodes and self._active_path_index is not None:
+                # A click adds a point; a drag that crosses the movement threshold
+                # instead becomes the familiar ROI selection gesture.
+                self._drag_mode = "pending_add"
+                self._roi_anchor = image_pos
+                return
             self._drag_mode = "roi"; self._roi_anchor = image_pos
             self.roi = self._bounded_roi(round(image_pos[0]), round(image_pos[1]), round(image_pos[0]) + 1, round(image_pos[1]) + 1)
 
@@ -310,7 +535,18 @@ class ContourCanvas(QWidget):
         if self._drag_mode == "pan" and self._last_image_pos:
             old = self._last_image_pos; self.pan += QPointF(event.position().x()-old[0], event.position().y()-old[1]); self._last_image_pos=(event.position().x(),event.position().y()); self.update(); return
         if image_pos is None: return
-        if self._drag_mode == "roi" and self.roi:
+        if self._drag_mode == "pending_add" and self._roi_anchor:
+            anchor = self._roi_anchor
+            rect = self._image_rect()
+            threshold = 4 * self.image_size[0] / max(1.0, rect.width())
+            if (image_pos[0] - anchor[0]) ** 2 + (image_pos[1] - anchor[1]) ** 2 >= threshold ** 2:
+                self._drag_mode = "roi"
+                self.roi = self._bounded_roi(
+                    round(min(anchor[0], image_pos[0])), round(min(anchor[1], image_pos[1])),
+                    round(max(anchor[0] + 1, image_pos[0])), round(max(anchor[1] + 1, image_pos[1])),
+                )
+                self.update()
+        elif self._drag_mode == "roi" and self.roi:
             anchor = self._roi_anchor or image_pos
             self.roi = self._bounded_roi(round(min(anchor[0], image_pos[0])), round(min(anchor[1], image_pos[1])), round(max(anchor[0] + 1, image_pos[0])), round(max(anchor[1] + 1, image_pos[1]))); self.update()
         elif self._drag_mode == "brush" and self._last_image_pos:
@@ -318,6 +554,7 @@ class ContourCanvas(QWidget):
         elif self._drag_mode in ("node", "in", "out") and 0 <= self._drag_index < len(self.nodes):
             node = self.nodes[self._drag_index]; p = self._clamp_to_roi(image_pos)
             if self._drag_mode == "node":
+                p = self._clamp_to_roi(self._snap_to_source_edge(p))
                 dx, dy = p[0]-node.point[0], p[1]-node.point[1]
                 node.point = p; node.in_handle = self._clamp_to_roi((node.in_handle[0]+dx,node.in_handle[1]+dy)); node.out_handle = self._clamp_to_roi((node.out_handle[0]+dx,node.out_handle[1]+dy))
             elif self._drag_mode == "in": node.in_handle = p
@@ -325,8 +562,12 @@ class ContourCanvas(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, event) -> None:
+        if self._drag_mode == "pending_add" and self._roi_anchor is not None:
+            self._insert_node(self._roi_anchor, free_position=True)
+            self._drag_mode = None; self._drag_index = -1; self._last_image_pos = None; self._before_drag = None; self._roi_anchor = None
+            return
         if self._drag_mode and self._before_drag:
-            if self._drag_mode in ("node", "in", "out"):
+            if self._drag_mode in ("node", "in", "out") and self._before_drag.nodes != self.nodes:
                 try:
                     self._apply_nodes_locally()
                 except (IndexError, TypeError, ValueError) as exc:
@@ -349,6 +590,8 @@ class ContourCanvas(QWidget):
             self.undo(); event.accept(); return
         if event.matches(QKeySequence.StandardKey.Redo):
             self.redo(); event.accept(); return
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self._delete_selected_node(); event.accept(); return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event) -> None:
@@ -389,11 +632,11 @@ class ContourCanvas(QWidget):
                 path.cubicTo(self._to_screen(node.out_handle), self._to_screen(nxt.in_handle), self._to_screen(nxt.point))
             p.setPen(QPen(QColor("#67e8f9"), 2)); p.drawPath(path)
             p.setPen(QPen(QColor("#8ccfd0"), 1))
-            for node in self.nodes:
+            for index, node in enumerate(self.nodes):
                 for handle in (node.in_handle,node.out_handle):
                     p.drawLine(self._to_screen(node.point),self._to_screen(handle))
                     p.setBrush(QColor("#101827")); p.drawEllipse(self._to_screen(handle),3,3)
-                p.setBrush(QColor("#f8fafc")); p.drawEllipse(self._to_screen(node.point),5,5)
+                p.setBrush(QColor("#fde68a") if index == self._selected_node_index else QColor("#f8fafc")); p.drawEllipse(self._to_screen(node.point),5,5)
         p.end()
 
 
@@ -417,6 +660,7 @@ class ContourEditorDialog(QDialog):
             ("B", lambda: self._set_tool("restore")),
             ("E", lambda: self._set_tool("remove")),
             ("H", lambda: self._set_tool("pan")),
+            ("M", self._toggle_snap),
         ):
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(action)
@@ -455,6 +699,14 @@ class ContourEditorDialog(QDialog):
         panel=QFrame(); panel.setObjectName("panel"); panel.setFixedWidth(254); right=QVBoxLayout(panel); right.setContentsMargins(16,14,16,14); right.setSpacing(9)
         label=QLabel("Контур и альфа"); label.setObjectName("title"); right.addWidget(label)
         self.auto_button=QPushButton("Автоконтур"); self.auto_button.setProperty("primary",True); self.auto_button.clicked.connect(self._auto); right.addWidget(self.auto_button)
+        self.snap_button = QToolButton()
+        self.snap_button.setText("Притягивание к краю")
+        self.snap_button.setToolTip("Притягивание точек к краю объекта. Клавиша M")
+        self.snap_button.setAccessibleName("Притягивание точек к краю объекта")
+        self.snap_button.setCheckable(True)
+        self.snap_button.setChecked(True)
+        self.snap_button.toggled.connect(self._set_snap)
+        right.addWidget(self.snap_button)
         reset=QPushButton("Сбросить изменения"); reset.clicked.connect(self._reset); right.addWidget(reset)
         right.addWidget(QLabel("Край")); self.feather_buttons=[]; row=QHBoxLayout()
         group=QButtonGroup(self)
@@ -513,6 +765,7 @@ class ContourEditorDialog(QDialog):
         self.feather_buttons[0].setChecked(True)
         self._set_brush(16)
         self._set_background("checker")
+        self._set_snap(self.snap_button.isChecked())
         self.view_buttons["checker"].setChecked(True)
         self.canvas_layout.addWidget(self.canvas); self.auto_button.setEnabled(True); self.save_button.setEnabled(True); self.status.setText("Выберите область или построьте контур по существующей альфа-маске."); self._update_history()
 
@@ -523,6 +776,13 @@ class ContourEditorDialog(QDialog):
 
     def _set_feather(self,value:int)->None:
         if hasattr(self,"canvas"): self.canvas.feather=value
+
+    def _set_snap(self, enabled: bool) -> None:
+        if hasattr(self, "canvas"):
+            self.canvas.snap_to_edge = bool(enabled)
+
+    def _toggle_snap(self) -> None:
+        self.snap_button.setChecked(not self.snap_button.isChecked())
 
     def _set_brush(self,value:int)->None:
         self.brush_buttons[value].setChecked(True)

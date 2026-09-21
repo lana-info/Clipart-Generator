@@ -29,7 +29,7 @@ from v3_project_state import (
 
 
 class ProjectRoutesTests(unittest.TestCase):
-    def test_fal_upscale_before_is_supported_but_after_stays_local(self):
+    def test_fal_upscale_is_supported_before_and_after(self):
         operations = ImageOperationData(
             upscale_before_provider="fal",
             upscale_after_provider="fal",
@@ -39,7 +39,7 @@ class ProjectRoutesTests(unittest.TestCase):
         self.assertEqual(operations.fal_upscale_model, "bria/upscale/creative")
         self.assertEqual(
             operations.upscale_after_provider,
-            "local_realesrgan",
+            "fal",
         )
 
     def test_retired_fal_esrgan_selection_migrates_to_bria(self):
@@ -60,6 +60,24 @@ class ProjectRoutesTests(unittest.TestCase):
 
         self.assertEqual(operations.fal_upscale_model, "fal-ai/recraft/upscale/crisp")
         self.assertEqual(operations.fal_upscale_scale, 4)
+
+    def test_transparent_fal_after_upscale_round_trips_with_its_endpoint_scale(self):
+        operations = ImageOperationData(
+            upscale_after_provider="fal",
+            fal_upscale_after_model="bria/increase-resolution",
+            fal_upscale_after_scale=2,
+        )
+
+        self.assertEqual(operations.upscale_after_provider, "fal")
+        self.assertEqual(operations.fal_upscale_after_model, "bria/increase-resolution")
+        self.assertEqual(operations.fal_upscale_after_scale, 2)
+        self.assertEqual(
+            ImageOperationData(
+                fal_upscale_after_model="topaz/upscale/image/transparent",
+                fal_upscale_after_scale=2,
+            ).fal_upscale_after_scale,
+            4,
+        )
 
     def test_legacy_topaz_settings_migrate_to_current_contract(self):
         operations = ImageOperationData(
