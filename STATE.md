@@ -13,13 +13,30 @@ Astra source review findings are fixed: legacy reference migration and removal,
 retry consent and worker lifecycle; custom visual values survive dropdown
 migration. Reference regression suite: 9 passed; affected integration: 107 passed
 and 5 subtests. No paid provider calls or production deployment have occurred.
-Final full suite: 1747 passed, 57 skipped, 18 deselected, 265 subtests, with one
-timing-dependent Fal parallel-test failure (30ms sleep did not guarantee three
-overlapping fake requests). The fixture now synchronizes batches with a barrier,
-retaining the exact concurrency and mapping assertions; targeted rerun passed:
+Final full suite: 1748 passed, 57 skipped, 18 deselected, 265 subtests (218.89s).
+A timing-dependent Fal parallel-test fixture used a 30ms sleep which did not
+guarantee three overlapping fake requests. It now synchronizes batches with a
+barrier, retaining exact concurrency and mapping assertions. Targeted checks:
 66 tests and 7 subtests. Sensitive-artifact scan and diff whitespace check passed.
 Signed 1.3.0 package verified; actual 1.2.0 -> 1.3.0 upgrade, reopen, rollback
-and rejection by old Studio 3.2.2 passed. Native build is still pending.
+and rejection by old Studio 3.2.2 passed. Source is committed and pushed as
+`d557cd987e750ca2928c51ac690043943336b61f`; isolated Windows build `35666003342`
+passed in 13m46s: native security, packaged startup, installer, installed launch
+and local processing, production overwrite guard and release contract.
+Artifact `test-windows-3.2.3`, ID `10669438415`, downloaded and verified against
+the source commit, provenance and checksum file. Installer SHA-256:
+`c059709dfeb405f6c2e42f22965903a04eca1cef8ccc861a65876a771570ab83`.
+Delivery directory: `/root/projects/Clipart Generator/artifacts/windows-acceptance-3.2.3-35666003342`.
+Owner archive: `Vibix-Studio-Test-3.2.3.zip` (installer plus README, no secrets).
+Native automatic-clipart screenshot inspected; runner uses a constrained desktop
+with reachable internal scrollbars. Owner Windows UI/paid generation/edge-quality
+acceptance remains pending; do not call that workflow proven by the offline suite.
+Module 1.3.0 published ONLY on the test service (release
+`bde2d7f3-51e4-0419-d7d3-a07529359aa4`), after a private database backup.
+External HTTPS smoke passed: signed manifest/download, package install,
+old-shell compatibility, no duplicate update, downloaded controller and
+home/project resume. Paid calls: zero. Package/evidence directory:
+`/root/projects/Clipart Generator/artifacts/auto-clipart-1.3.0-test-20260921`.
 Real offline screenshots are in
 `docs/ui/3.2/acceptance-corrections/`. Earlier documentation-only checkpoint below
 is historical, not the current working-tree status.

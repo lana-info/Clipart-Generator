@@ -5,8 +5,11 @@
 - [x] Implement first source pass for the owner's acceptance corrections below.
 - [x] Astra review of production changes; preserve legacy custom dropdown values.
 - [x] Resolve reference upgrade/retry/lifecycle findings with regression tests.
-- [ ] Complete full offline tests, signed package and native Windows build.
-- [ ] Deliver Studio Test 3.2.3 plus auto-clipart 1.3.0 to isolated acceptance.
+- [x] Complete full offline tests (1748 passed), signed package and native Windows
+  build (35666003342, Studio Test 3.2.3, installed startup/local processing passed).
+- [x] Deliver Studio Test 3.2.3 plus auto-clipart 1.3.0 to isolated acceptance;
+  signed HTTPS update/downloaded controller/home resume verified, installer
+  checksum/provenance verified, owner ZIP prepared with README and no secrets.
 - [ ] Owner verifies installed UI and real generation/edges. The detailed items
   below stay open until their full stated acceptance evidence exists; source
   implementation alone does not mark native or paid acceptance complete.
