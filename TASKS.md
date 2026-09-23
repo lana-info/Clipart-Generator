@@ -9,7 +9,8 @@
 - [x] Complete full offline checks and targeted final regression checks.
 - [x] Support4100px per side; background extraction/application and cancellation.
 - [x] Prove local ROI/full raster equivalence and benchmark2048/4096/4100 with UI heartbeat/RSS.
-- [ ] Build authorized ordinary Windows3.2.6 and verify installer/provenance/native smoke.
+- [x] Build ordinary Windows3.2.6 (35927420792); verify SHA/provenance, installed editor
+  and original3.1.4 upgrade. Final-source CI35927397240 passed.
 - Publication of3.2.6 has not occurred.
 
 

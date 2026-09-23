@@ -24,7 +24,15 @@ locally. Benchmarks:4096 simple0.086s extract/0.122s apply;4100 detailed0.127s/0
 peak process RSS584.5MiB, max Qt heartbeat gap53.5ms. Linux6-vCPU EPYC, synthetic
 fixtures, standalone editor, not full Studio or a desktop minimum-spec certification.
 Artifacts: `docs/ui/3.1/inline-transparency-tools/` (benchmark JSON and actual screens).
-Preparing authorized ordinary Windows3.2.6 build; not yet built/published.
+Ordinary Windows3.2.6 build35927420792 PASSED from240a0f92fc25e6ff13518a365930a068c4e8fec5.
+Artifact10779819830 downloaded; version, provenance and SHA256 verified:
+425ea93ecf7581a0229da178d702881e4372d8a29eb9911addbc886a3474049b,239840676 bytes.
+Location: sibling artifacts/windows-production-3.2.6-35927420792/.
+Native installed smoke (inline editor/alpha/RGB/history) and original3.1.4 upgrade
+passed, preserving five synthetic user files. Actual customer activation not tested.
+Final-source CI35927397240:1922 passed,57 skipped,19 deselected,1 known xfail,
+265 subtests passed. Application commit240a0f9 pushed on the task branch; no merge.
+3.2.6 installer is ready; no production publication or news for3.2.6 performed.
 Published3.2.5 remains unchanged.
 
 
