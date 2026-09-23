@@ -372,20 +372,22 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             Qt.ScrollBarPolicy.ScrollBarAsNeeded,
         )
         self.assertTrue(page.canvas.space_pan_enabled)
-        self.assertEqual(page.radius_slider.maximum(), 200)
+        self.assertEqual(tuple(page.diameter_buttons), (2, 6, 10, 16, 32, 64))
+        self.assertEqual(page.hardness_slider.value(), 85)
+        self.assertEqual(page.canvas.brush_action, "remove")
         page.deleteLater()
 
     def test_space_temporarily_enables_pan_and_hand_indicator_from_editor_controls(self):
         page = ClipartTransparencyEditorPage()
 
         QApplication.sendEvent(
-            page.radius_slider,
+            page.diameter_buttons[16],
             QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier),
         )
         self.assertTrue(page.canvas.space_pan_indicator_visible)
 
         QApplication.sendEvent(
-            page.radius_slider,
+            page.diameter_buttons[16],
             QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier),
         )
         self.assertFalse(page.canvas.space_pan_indicator_visible)

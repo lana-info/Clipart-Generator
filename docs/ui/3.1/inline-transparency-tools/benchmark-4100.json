@@ -1,0 +1,53 @@
+{
+  "platform": "Linux Qt offscreen; AMD EPYC virtual server, 6 logical CPUs; synthetic fixtures, not full Studio or desktop minimum requirements",
+  "results": [
+    {
+      "size": 2048,
+      "detail": false,
+      "nodes": 132,
+      "extract": {
+        "seconds": 0.036,
+        "max_ui_tick_gap_ms": 35.3
+      },
+      "apply": {
+        "seconds": 0.068,
+        "max_ui_tick_gap_ms": 23.7
+      },
+      "roi_pixels": 1950,
+      "peak_process_rss_mib": 255.2,
+      "logical_cpus": 6
+    },
+    {
+      "size": 4096,
+      "detail": false,
+      "nodes": 192,
+      "extract": {
+        "seconds": 0.086,
+        "max_ui_tick_gap_ms": 21.8
+      },
+      "apply": {
+        "seconds": 0.122,
+        "max_ui_tick_gap_ms": 48.5
+      },
+      "roi_pixels": 2265,
+      "peak_process_rss_mib": 599.3,
+      "logical_cpus": 6
+    },
+    {
+      "size": 4100,
+      "detail": true,
+      "nodes": 1255,
+      "extract": {
+        "seconds": 0.127,
+        "max_ui_tick_gap_ms": 51.7
+      },
+      "apply": {
+        "seconds": 0.261,
+        "max_ui_tick_gap_ms": 53.5
+      },
+      "roi_pixels": 345,
+      "peak_process_rss_mib": 584.5,
+      "logical_cpus": 6
+    }
+  ]
+}

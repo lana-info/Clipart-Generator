@@ -1,5 +1,14 @@
 # Vibix Images
 
+## Transparency editor requirements, 2026-09-23
+
+Owner approved one canvas with brush/pen tools, keyboard/mouse point editing,
+brush diameters2/6/10/16/32/64px, default remove and85% hardness, color-only
+background swatches. Autocontour supports up to4100px on each side, extracts
+existing alpha (not RGB segmentation), and runs with application/cancellation
+in a background worker. Cancelled or stale results must not change or save masks.
+
+
 ## Migration access policy, 2026-09-23
 
 The public product name is Vibix Studio. Migration from Vibix Images3.1.4 retains

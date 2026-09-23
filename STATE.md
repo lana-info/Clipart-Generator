@@ -1,5 +1,33 @@
 # Project state
 
+## Inline transparency tools, 2026-09-23
+
+Current working branch: `codex/ui-inline-transparency-tools-20260923`, based on
+verified Studio3.2.5 checkpoint85a7b06. Owner requests brush/Bezier switching on
+one canvas without the nested contour dialog, plus brush diameter preset buttons.
+Owner approved implementation after icon/preset/keyboard refinements. Implemented
+same-canvas pending contours, local alpha application, common applied-mask history,
+brush2/6/10/16/32/64px, hardness85, remove default, color-only background swatches.
+Owner then authorized release preparation and4100px per-side contours, background
+calculation/cancellation and profiling. Implemented a serialized background worker
+with mask/geometry snapshots, stale-result rejection, Esc/button cancellation,
+queued-save cancellation, and disabled editing during calculation. Local changed
+cubic bounds reduce raster work; pixel-coordinate rounding fixes ROI equivalence.
+Preview upload now uses raw RGBA and changed-region refresh, eliminating measured
+~1s PNG encode/decode UI stalls. Active editor limit4100 per side; the unused legacy
+standalone dialog retains its old limit. Complexity/node safety caps remain.
+
+Full offline suite:1921 passed,57 skipped,19 deselected,1 known red-key fur xfail
+(188.51s). Final targeted checks after preview/auto-handle refinements:83 passed.
+Qt1120x780 states (including cancellation) and installed-entrypoint smoke passed
+locally. Benchmarks:4096 simple0.086s extract/0.122s apply;4100 detailed0.127s/0.261s,
+peak process RSS584.5MiB, max Qt heartbeat gap53.5ms. Linux6-vCPU EPYC, synthetic
+fixtures, standalone editor, not full Studio or a desktop minimum-spec certification.
+Artifacts: `docs/ui/3.1/inline-transparency-tools/` (benchmark JSON and actual screens).
+Preparing authorized ordinary Windows3.2.6 build; not yet built/published.
+Published3.2.5 remains unchanged.
+
+
 ## Images3.1.4 migration and Club catalog, 2026-09-23
 
 Current desktop branch: codex/feature-studio-migration-20260923. Owner confirmed

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 from io import BytesIO
+from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor, CancelledError
+from threading import Event
+import math
+import numpy as np
 import hashlib
 import json
 import os
@@ -8,17 +13,16 @@ import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageChops, UnidentifiedImageError
-from PyQt6.QtCore import QEvent, QPoint, QPointF, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QPointF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
     QIcon,
     QImage,
-    QKeySequence,
     QPainter,
+    QPainterPath,
     QPen,
     QPixmap,
-    QShortcut,
 )
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -53,6 +57,12 @@ from background_mask import (
 from background_preview import PREVIEW_BACKGROUND_OPTIONS, composite_on_preview
 from v3_components import ButtonVariant, V3Button
 
+
+from studio_contour import BezierNode, ContourDocument, extract_contours, MAX_NODES_PER_PATH, MAX_AUTO_CONTOUR_SIDE, changed_path_roi
+
+_CONTOUR_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vibix-contour")
+
+BRUSH_DIAMETERS = (2, 6, 10, 16, 32, 64)
 
 MAX_EDITOR_IMAGE_PIXELS = 40_000_000
 
@@ -632,23 +642,192 @@ class ClipartTransparencyPreview(QWidget):
 
 
 def _pixmap_for_pil(image: Image.Image) -> QPixmap:
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    return QPixmap.fromImage(QImage.fromData(buffer.getvalue(), "PNG"))
+    rgba = image.convert("RGBA")
+    data = rgba.tobytes()
+    qimage = QImage(data, rgba.width, rgba.height, rgba.width * 4, QImage.Format.Format_RGBA8888)
+    return QPixmap.fromImage(qimage.copy())
+
+
+def _calculate_contour(kind, alpha, originals, paths, cancelled):
+    """Worker owns only immutable geometry and a mask snapshot, never Qt state."""
+    if cancelled.is_set():
+        raise CancelledError()
+    if max(alpha.shape) > MAX_AUTO_CONTOUR_SIDE:
+        raise ValueError(f"Автоконтур поддерживает до {MAX_AUTO_CONTOUR_SIDE} px по каждой стороне.")
+    if kind == "extract":
+        if not np.any(alpha == 0) or not np.any(alpha > 0):
+            raise ValueError("Автоконтур требует изображения с прозрачным фоном.")
+        result = extract_contours(alpha, tolerance=1.0, cancelled=cancelled.is_set)
+    else:
+        core = ContourDocument(alpha, list(originals))
+        for index, path in enumerate(paths):
+            if cancelled.is_set():
+                raise CancelledError()
+            if path != originals[index]:
+                core.paths = list(originals)
+                core.apply_path(index, path, changed_path_roi(originals[index], path), cancelled=cancelled.is_set)
+        diff = core.alpha != alpha
+        rows = np.flatnonzero(np.any(diff, axis=1))
+        columns = np.flatnonzero(np.any(diff, axis=0))
+        bounds = (int(columns[0]), int(rows[0]), int(columns[-1])+1, int(rows[-1])+1) if rows.size else None
+        result = core.alpha, bounds
+    if cancelled.is_set():
+        raise CancelledError()
+    return result
+
+
+class InlineContour:
+    """Pending vector edits on the existing mask; never owns a second canvas."""
+
+    def __init__(self):
+        self.original = []
+        self.paths = []
+        self.selected = None
+        self.undo_stack = []
+        self.redo_stack = []
+
+    @property
+    def dirty(self):
+        return self.paths != self.original
+
+    def checkpoint(self):
+        self.undo_stack.append((list(self.paths), self.selected))
+        del self.undo_stack[:-50]
+        self.redo_stack.clear()
+
+    def history(self, redo=False):
+        source = self.redo_stack if redo else self.undo_stack
+        target = self.undo_stack if redo else self.redo_stack
+        if not source:
+            return False
+        target.append((list(self.paths), self.selected))
+        self.paths, self.selected = source.pop()
+        return True
+
+    def hit(self, point, tolerance):
+        if self.selected:
+            pi, ni = self.selected
+            node = self.paths[pi].nodes[ni]
+            for name in ('in_handle', 'out_handle'):
+                handle = getattr(node, name)
+                if handle and handle != node.point and math.dist(point, handle) <= tolerance:
+                    return pi, ni, name
+        for pi, path in enumerate(self.paths):
+            for ni, node in enumerate(path.nodes):
+                if math.dist(point, node.point) <= tolerance:
+                    return pi, ni, 'point'
+        return None
+
+    def update_node(self, pi, ni, node):
+        path = self.paths[pi]
+        nodes = list(path.nodes)
+        nodes[ni] = node
+        self.paths[pi] = replace(path, nodes=tuple(nodes))
+
+    def move(self, hit, point):
+        pi, ni, part = hit
+        node = self.paths[pi].nodes[ni]
+        h, w = self.paths[pi].source_shape
+        clamp = lambda p: (min(w-1, max(0, p[0])), min(h-1, max(0, p[1])))
+        point = clamp(point)
+        if part == 'point':
+            dx, dy = point[0]-node.point[0], point[1]-node.point[1]
+            shift = lambda p: clamp((p[0]+dx, p[1]+dy)) if p else None
+            node = replace(node, point=point, in_handle=shift(node.in_handle), out_handle=shift(node.out_handle))
+        else:
+            changes = {part: point}
+            if node.kind == 'smooth':
+                other = 'out_handle' if part == 'in_handle' else 'in_handle'
+                changes[other] = clamp((2*node.point[0]-point[0], 2*node.point[1]-point[1]))
+            node = replace(node, **changes)
+        self.update_node(pi, ni, node)
+
+    def toggle(self):
+        if self.selected is None:
+            return
+        self.checkpoint()
+        pi, ni = self.selected
+        path = self.paths[pi]
+        node = path.nodes[ni]
+        if node.kind == 'smooth':
+            node = replace(node, kind='corner', in_handle=node.point, out_handle=node.point)
+        else:
+            prev, nxt = path.nodes[ni-1].point, path.nodes[(ni+1) % len(path.nodes)].point
+            tangent = ((nxt[0]-prev[0])/6, (nxt[1]-prev[1])/6)
+            h, w = path.source_shape
+            handle = lambda sign: (min(w-1,max(0,node.point[0]+sign*tangent[0])), min(h-1,max(0,node.point[1]+sign*tangent[1])))
+            node = replace(node, kind='smooth', in_handle=handle(-1), out_handle=handle(1))
+        self.update_node(pi, ni, node)
+
+    def delete(self):
+        if self.selected is None:
+            return
+        pi, ni = self.selected
+        path = self.paths[pi]
+        if len(path.nodes) <= 3:
+            return
+        self.checkpoint()
+        self.paths[pi] = replace(path, nodes=path.nodes[:ni]+path.nodes[ni+1:])
+        self.selected = None
+
+    def insert(self, point, tolerance):
+        # De Casteljau splitting preserves the curve, including its handles.
+        best = None
+        for pi, path in enumerate(self.paths):
+            for ni, node in enumerate(path.nodes):
+                nxt = path.nodes[(ni+1) % len(path.nodes)]
+                a, b = np.array(node.point), np.array(node.out_handle or node.point)
+                c, d = np.array(nxt.in_handle or nxt.point), np.array(nxt.point)
+                for t in np.linspace(.02, .98, 49):
+                    q = (1-t)**3*a+3*(1-t)**2*t*b+3*(1-t)*t*t*c+t**3*d
+                    distance = np.linalg.norm(q-point)
+                    if distance <= tolerance and (best is None or distance < best[0]):
+                        best = distance, pi, ni, t, a, b, c, d
+        if best is None:
+            return
+        _, pi, ni, t, a, b, c, d = best
+        ab, bc, cd = (1-t)*a+t*b, (1-t)*b+t*c, (1-t)*c+t*d
+        abc, bcd = (1-t)*ab+t*bc, (1-t)*bc+t*cd
+        q = (1-t)*abc+t*bcd
+        path = self.paths[pi]
+        if len(path.nodes) >= MAX_NODES_PER_PATH:
+            return
+        self.checkpoint()
+        nodes = list(path.nodes)
+        nodes[ni] = replace(nodes[ni], out_handle=tuple(ab))
+        j = (ni+1) % len(nodes)
+        nodes[j] = replace(nodes[j], in_handle=tuple(cd))
+        nodes.insert(ni+1, BezierNode(tuple(q), 'smooth', tuple(abc), tuple(bcd)))
+        self.paths[pi] = replace(path, nodes=tuple(nodes))
+        self.selected = pi, ni+1
 
 
 class TransparencyCanvas(QGraphicsView):
     """Large alpha-mask canvas with a brush and Space-to-pan behavior."""
 
     document_changed = pyqtSignal()
+    tool_requested = pyqtSignal(str)
+    diameter_requested = pyqtSignal(int)
+    zoom_requested = pyqtSignal(int)
+    history_requested = pyqtSignal(bool)
+    status_changed = pyqtSignal(str)
+    contour_finished = pyqtSignal(str, bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.space_pan_enabled = True
         self.document: MaskEditDocument | None = None
-        self.brush_action = "add"
-        self.brush_radius = 24
-        self.brush_hardness = 70
+        self.tool = "brush"
+        self.contour = InlineContour()
+        self._contour_drag = None
+        self._contour_job = None
+        self._contour_timer = QTimer(self)
+        self._contour_timer.setInterval(20)
+        self._contour_timer.timeout.connect(self._poll_contour)
+        self._drag_checkpoint = False
+        self.brush_action = "remove"
+        self.brush_radius = 8
+        self.brush_hardness = 85
         self._background_label = "Шахматный"
         self._zoom: int | None = None
         self._painting = False
@@ -678,7 +857,12 @@ class TransparencyCanvas(QGraphicsView):
         return self._zoom
 
     def set_document(self, document: MaskEditDocument | None) -> None:
+        self.cancel_contour()
         self.document = document
+        self.status_changed.emit("")
+        self.contour = getattr(document, "pending_contour", InlineContour())
+        if document is not None:
+            document.pending_contour = self.contour
         self._brush_scene_point = None
         self.refresh_image()
         self.set_zoom(self._zoom)
@@ -776,6 +960,23 @@ class TransparencyCanvas(QGraphicsView):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
+        if self.contour_busy:
+            event.accept()
+            return
+        if self.tool == "pen" and self.document is not None:
+            point = self._image_point(event.position().toPoint())
+            if event.button() == Qt.MouseButton.LeftButton and point:
+                hit = self.contour.hit(point, 7 / self.transform().m11())
+                self.contour.selected = hit[:2] if hit else None
+                if hit and event.modifiers() & Qt.KeyboardModifier.AltModifier:
+                    self.contour.toggle()
+                    self.document_changed.emit()
+                else:
+                    self._contour_drag = hit
+                    self._drag_checkpoint = False
+                self.viewport().update()
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self.document is not None:
             point = self._image_point(event.position().toPoint())
             if point is not None:
@@ -785,7 +986,7 @@ class TransparencyCanvas(QGraphicsView):
                 bounds = self.document.extend_stroke(
                     (point,),
                     radius=self.brush_radius,
-                    action=self.brush_action,
+                    action=self._effective_action(event.modifiers()),
                     hardness=self.brush_hardness,
                 )
                 self.refresh_region(bounds)
@@ -807,7 +1008,19 @@ class TransparencyCanvas(QGraphicsView):
             )
             event.accept()
             return
+        if self._contour_drag and event.buttons() & Qt.MouseButton.LeftButton:
+            point = self._image_point(view_point)
+            if point:
+                if not self._drag_checkpoint:
+                    self.contour.checkpoint()
+                    self._drag_checkpoint = True
+                self.contour.move(self._contour_drag, point)
+                self.viewport().update()
+                self.document_changed.emit()
+            event.accept()
+            return
         if self._painting and self.document is not None:
+            self._stroke_action = self._effective_action(event.modifiers())
             point = self._image_point(view_point)
             self._extend_active_stroke(point)
             event.accept()
@@ -829,13 +1042,14 @@ class TransparencyCanvas(QGraphicsView):
         bounds = self.document.extend_stroke(
             points,
             radius=self.brush_radius,
-            action=self.brush_action,
+            action=getattr(self, "_stroke_action", self.brush_action),
             hardness=self.brush_hardness,
         )
         self._last_image_point = point
         self.refresh_region(bounds)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        self._contour_drag = None
         if event.button() == Qt.MouseButton.LeftButton and self._panning:
             self._panning = False
             self.setCursor(
@@ -855,7 +1069,157 @@ class TransparencyCanvas(QGraphicsView):
             return
         super().mouseReleaseEvent(event)
 
+    def _effective_action(self, modifiers):
+        if modifiers & Qt.KeyboardModifier.AltModifier:
+            return "add" if self.brush_action == "remove" else "remove"
+        return self.brush_action
+
+    def mouseDoubleClickEvent(self, event):
+        if self.contour_busy:
+            event.accept()
+            return
+        if self.tool == "pen" and self.document is not None and event.button() == Qt.MouseButton.LeftButton:
+            point = self._image_point(event.position().toPoint())
+            if point:
+                self.contour.insert(point, 8 / self.transform().m11())
+                self.document_changed.emit()
+                self.viewport().update()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    @property
+    def contour_busy(self):
+        return self._contour_job is not None
+
+    def cancel_contour(self):
+        if self._contour_job is not None:
+            self._contour_job["cancelled"].set()
+            self._contour_job["future"].cancel()
+            self.status_changed.emit("Отмена…")
+
+    def _start_contour(self, kind):
+        if self.document is None or self.contour_busy or self._painting:
+            return
+        if max(self.document.mask.size) > MAX_AUTO_CONTOUR_SIDE:
+            self.status_changed.emit(f"Автоконтур поддерживает до {MAX_AUTO_CONTOUR_SIDE} px по каждой стороне.")
+            return
+        cancelled = Event()
+        paths = tuple(self.contour.paths)
+        future = _CONTOUR_EXECUTOR.submit(
+            _calculate_contour, kind, np.array(self.document.mask),
+            tuple(self.contour.original), paths, cancelled,
+        )
+        self._contour_job = dict(future=future, cancelled=cancelled,
+                                 document=self.document, kind=kind, paths=paths)
+        self.status_changed.emit("Строим контур…" if kind == "extract" else "Применяем контур…")
+        self.document_changed.emit()
+        self._contour_timer.start()
+
+    def _poll_contour(self):
+        job = self._contour_job
+        if job is None or not job["future"].done():
+            return
+        self._contour_timer.stop()
+        self._contour_job = None
+        success = False
+        try:
+            result = job["future"].result()
+            if job["cancelled"].is_set() or job["document"] is not self.document:
+                raise CancelledError()
+            if job["kind"] == "extract":
+                self.contour = InlineContour()
+                self.document.pending_contour = self.contour
+                self.contour.original = list(result)
+                self.contour.paths = list(result)
+                self.status_changed.emit("" if result else "Контур не найден.")
+            else:
+                self.document.begin_stroke()
+                alpha, bounds = result
+                self.document.mask = Image.fromarray(alpha)
+                self.document.end_stroke()
+                self.contour.original = list(job["paths"])
+                self.contour.undo_stack.clear()
+                self.contour.redo_stack.clear()
+                self.refresh_region(bounds)
+                self.status_changed.emit("")
+            success = True
+        except CancelledError:
+            self.status_changed.emit("Расчёт отменён.")
+        except Exception as error:
+            # Worker failures must never escape a Qt timer or partially publish a mask.
+            self.status_changed.emit(f"Контур не обработан: {error}")
+        self.viewport().update()
+        self.document_changed.emit()
+        self.contour_finished.emit(job["kind"], success)
+
+    def auto_contour(self):
+        self.setFocus()
+        if self.contour_busy:
+            self.cancel_contour()
+            return
+        if self.contour.dirty:
+            self.status_changed.emit("Примените текущий контур клавишей Enter перед повторным построением.")
+            return
+        self._start_contour("extract")
+
+    def apply_contour(self):
+        self.setFocus()
+        if self.contour_busy:
+            self.cancel_contour()
+            return
+        if self.contour.dirty:
+            self._start_contour("apply")
+
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        key, mods = event.key(), event.modifiers()
+        ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
+        if self.contour_busy and key == Qt.Key.Key_Escape:
+            self.cancel_contour()
+            event.accept()
+            return
+        if self.contour_busy and key not in (Qt.Key.Key_Space, Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus):
+            event.accept()
+            return
+        if key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus):
+            step = -1 if key == Qt.Key.Key_Minus else 1
+            if ctrl:
+                self.zoom_requested.emit(step)
+            elif self.tool == "brush":
+                self.diameter_requested.emit(step)
+            event.accept()
+            return
+        if not ctrl and event.text().lower() in ('b', 'и', 'p', 'з'):
+            self.tool_requested.emit('brush' if event.text().lower() in ('b', 'и') else 'pen')
+            event.accept()
+            return
+        if ctrl and key == Qt.Key.Key_Z:
+            self.history_requested.emit(bool(mods & Qt.KeyboardModifier.ShiftModifier))
+            event.accept()
+            return
+        if self.tool == "pen":
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self.apply_contour()
+                event.accept()
+                return
+            if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+                self.contour.delete()
+                self.document_changed.emit()
+                self.viewport().update()
+                event.accept()
+                return
+            offsets = {Qt.Key.Key_Left: (-1,0), Qt.Key.Key_Right: (1,0), Qt.Key.Key_Up: (0,-1), Qt.Key.Key_Down: (0,1)}
+            if key in offsets and self.contour.selected:
+                pi, ni = self.contour.selected
+                point = self.contour.paths[pi].nodes[ni].point
+                dx, dy = offsets[key]
+                step = 10 if mods & Qt.KeyboardModifier.ShiftModifier else 1
+                self.contour.checkpoint()
+                self.contour.move((pi,ni,'point'), (point[0]+dx*step, point[1]+dy*step))
+                self.document_changed.emit()
+                self.viewport().update()
+                event.accept()
+                return
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             self.set_space_pan_active(True)
             event.accept()
@@ -885,6 +1249,18 @@ class TransparencyCanvas(QGraphicsView):
             )
         self.viewport().update()
 
+    def focusOutEvent(self, event):
+        self.set_space_pan_active(False)
+        self._panning = False
+        self._contour_drag = None
+        if self._painting:
+            self._painting = False
+            self._last_image_point = None
+            if self.document is not None:
+                self.document.end_stroke()
+            self.document_changed.emit()
+        super().focusOutEvent(event)
+
     def leaveEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         self._brush_scene_point = None
         self.viewport().update()
@@ -905,6 +1281,29 @@ class TransparencyCanvas(QGraphicsView):
             painter.drawLine(29, 26, 29, 18)
             painter.drawLine(33, 28, 33, 21)
             painter.restore()
+            return
+        if self.tool == "pen":
+            pen = QPen(QColor("#24d8c5"), 1.5)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            r = 3.5 / self.transform().m11()
+            for pi, path in enumerate(self.contour.paths):
+                curve = QPainterPath(QPointF(*path.nodes[0].point))
+                for ni, node in enumerate(path.nodes):
+                    nxt = path.nodes[(ni+1) % len(path.nodes)]
+                    curve.cubicTo(QPointF(*(node.out_handle or node.point)), QPointF(*(nxt.in_handle or nxt.point)), QPointF(*nxt.point))
+                painter.drawPath(curve)
+                for ni, node in enumerate(path.nodes):
+                    selected = self.contour.selected == (pi,ni)
+                    painter.setBrush(QColor("#24d8c5") if selected else QColor("#10202e"))
+                    painter.drawEllipse(QPointF(*node.point), r, r)
+                    if selected:
+                        for handle in (node.in_handle, node.out_handle):
+                            if handle:
+                                painter.drawLine(QPointF(*node.point), QPointF(*handle))
+                                painter.drawEllipse(QPointF(*handle), r*.7, r*.7)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
             return
         if self.document is None or self._brush_scene_point is None:
             return
@@ -931,6 +1330,8 @@ class ClipartTransparencyEditorPage(QWidget):
         self._document: MaskEditDocument | None = None
         self._loaded_path: Path | None = None
         self._draft_masks: dict[Path, bytes] = {}
+        self._draft_contours = {}
+        self._save_after_contour = False
         self._focus_mode = False
 
         root = QVBoxLayout(self)
@@ -994,12 +1395,15 @@ class ClipartTransparencyEditorPage(QWidget):
 
         tools_frame = QFrame()
         tools_frame.setProperty("v3Card", True)
+        tools_frame.setStyleSheet(
+            "QPushButton {min-height: 28px; border: 1px solid #3b4b60; "
+            "border-radius: 5px; background: #263548; color: #e4edf6;} "
+            "QPushButton:checked {border-color: #28cbbb; background: #164741;} "
+            "QPushButton:disabled {color: #74869a; background: #202b39;}"
+        )
         tools_layout = QVBoxLayout(tools_frame)
         tools_layout.setContentsMargins(10, 8, 10, 8)
         tools_layout.setSpacing(6)
-        tools_title = QLabel("Инструменты")
-        tools_title.setProperty("v3Status", True)
-        tools_layout.addWidget(tools_title)
 
         tools_layout.addWidget(self._small_label("Масштаб"))
         zoom_grid = QGridLayout()
@@ -1018,6 +1422,8 @@ class ClipartTransparencyEditorPage(QWidget):
             button = QPushButton(text)
             button.setCheckable(True)
             button.setFixedHeight(30)
+            button.setStyleSheet("font-size:11px;padding:4px 1px;")
+            button.setToolTip("Масштаб изображения (Ctrl + / Ctrl −)")
             button.setAccessibleName(
                 "Вписать изображение" if key == "fit" else f"Масштаб {key}%"
             )
@@ -1029,12 +1435,29 @@ class ClipartTransparencyEditorPage(QWidget):
         self.zoom_buttons["fit"].setChecked(True)
         tools_layout.addLayout(zoom_grid)
 
-        tools_layout.addWidget(self._small_label("Кисть"))
+        tool_row = QHBoxLayout()
+        self.tool_buttons = {}
+        for key, label, shortcut in (("brush", "Кисть", "B / И"), ("pen", "Перо", "P / З")):
+            button = QPushButton()
+            button.setIcon(self._tool_icon(key))
+            button.setIconSize(QSize(24, 24))
+            button.setCheckable(True)
+            button.setChecked(key == "brush")
+            button.setAccessibleName(label)
+            button.setToolTip(f"{label} ({shortcut})")
+            button.clicked.connect(lambda checked=False, value=key: self._set_tool(value))
+            self.tool_buttons[key] = button
+            tool_row.addWidget(button)
+        tools_layout.addLayout(tool_row)
+        self.brush_controls = QWidget()
+        brush_layout = QVBoxLayout(self.brush_controls)
+        brush_layout.setContentsMargins(0, 0, 0, 0)
+        brush_layout.setSpacing(6)
         action_row = QHBoxLayout()
         self.action_group = QButtonGroup(self)
         self.action_group.setExclusive(True)
-        self.add_button = QPushButton("Добавить")
-        self.remove_button = QPushButton("Стереть")
+        self.add_button = QPushButton("Вернуть")
+        self.remove_button = QPushButton("Убрать")
         for button, value in (
             (self.add_button, "add"),
             (self.remove_button, "remove"),
@@ -1045,27 +1468,48 @@ class ClipartTransparencyEditorPage(QWidget):
             )
             self.action_group.addButton(button)
             action_row.addWidget(button)
-        self.add_button.setChecked(True)
-        tools_layout.addLayout(action_row)
-
-        self.radius_slider, self.radius_value = self._slider_row(
-            tools_layout,
-            "Радиус",
-            1,
-            200,
-            24,
-            " px",
-        )
-        self.radius_slider.valueChanged.connect(self._radius_changed)
+        self.remove_button.setChecked(True)
+        self.add_button.setToolTip("Вернуть область; Alt временно меняет действие кисти")
+        self.remove_button.setToolTip("Убрать область; Alt временно возвращает область")
+        brush_layout.addLayout(action_row)
+        brush_layout.addWidget(self._small_label("Диаметр кисти, px"))
+        diameter_row = QHBoxLayout()
+        diameter_row.setSpacing(4)
+        self.diameter_buttons = {}
+        for diameter in BRUSH_DIAMETERS:
+            button = QPushButton(str(diameter))
+            button.setCheckable(True)
+            button.setChecked(diameter == 16)
+            button.setStyleSheet("padding: 4px 1px;")
+            button.setToolTip(f"Диаметр {diameter} px (+ / −)")
+            button.clicked.connect(lambda checked=False, value=diameter: self._set_diameter(value))
+            diameter_row.addWidget(button)
+            self.diameter_buttons[diameter] = button
+        brush_layout.addLayout(diameter_row)
         self.hardness_slider, self.hardness_value = self._slider_row(
-            tools_layout,
-            "Жёсткость",
-            0,
-            100,
-            70,
-            "%",
+            brush_layout, "Жёсткость", 0, 100, 85, "%",
         )
         self.hardness_slider.valueChanged.connect(self._hardness_changed)
+        tools_layout.addWidget(self.brush_controls)
+        self.pen_controls = QWidget()
+        pen_layout = QVBoxLayout(self.pen_controls)
+        pen_layout.setContentsMargins(0, 0, 0, 0)
+        self.contour_button = QPushButton("Автоконтур")
+        self.contour_button.setToolTip("Расставить точки по существующей прозрачности")
+        self.contour_button.clicked.connect(self.canvas.auto_contour)
+        pen_layout.addWidget(self.contour_button)
+        self.apply_contour_button = QPushButton("Применить контур")
+        self.apply_contour_button.setToolTip("Применить контур (Enter)")
+        self.apply_contour_button.clicked.connect(self.canvas.apply_contour)
+        pen_layout.addWidget(self.apply_contour_button)
+        tools_layout.addWidget(self.pen_controls)
+        self.pen_controls.hide()
+        self.contour_status = QLabel()
+        self.contour_status.setWordWrap(True)
+        self.contour_status.hide()
+        tools_layout.addWidget(self.contour_status)
+        self.canvas.status_changed.connect(self._show_contour_status)
+        self.canvas.contour_finished.connect(self._contour_done)
 
         history = QHBoxLayout()
         self.undo_button = QPushButton("↶")
@@ -1102,7 +1546,16 @@ class ClipartTransparencyEditorPage(QWidget):
             button.setFixedSize(28, 28)
             button.setAccessibleName(f"Фон проверки: {label}")
             button.setToolTip(label)
-            button.setStyleSheet(f"background: {color};")
+            button.setStyleSheet(f"QPushButton {{background: {color}; border: 2px solid #526174;}} QPushButton:checked {{border: 3px solid #24d8c5;}}")
+            if label == "Шахматный":
+                tile = QPixmap(20,20)
+                tile.fill(QColor("#eef1f4"))
+                painter = QPainter(tile)
+                painter.fillRect(0,0,10,10,QColor("#c8ced4"))
+                painter.fillRect(10,10,10,10,QColor("#c8ced4"))
+                painter.end()
+                button.setIcon(QIcon(tile))
+                button.setIconSize(QSize(20,20))
             button.clicked.connect(
                 lambda checked=False, value=label: self._set_background(value)
             )
@@ -1112,14 +1565,13 @@ class ClipartTransparencyEditorPage(QWidget):
         self.background_buttons["Шахматный"].setChecked(True)
         tools_layout.addLayout(background_row)
 
-        self.contour_button = V3Button("Контур по точкам", ButtonVariant.SECONDARY)
-        self.contour_button.clicked.connect(self._open_contour_editor)
-        tools_layout.addWidget(self.contour_button)
+        tools_layout.addStretch()
         save_row = QHBoxLayout()
         self.save_button = V3Button("Сохранить PNG", ButtonVariant.PRIMARY)
         self.back_button = V3Button("К результатам", ButtonVariant.SECONDARY)
         for button in (self.save_button, self.back_button):
             button.setStyleSheet("padding-left: 8px; padding-right: 8px;")
+        self.save_button.setStyleSheet("QPushButton {background:#26cbb9;color:#062c2a;font-weight:600;padding:4px 8px;} QPushButton:disabled {background:#202b39;color:#74869a;}")
         self.save_button.clicked.connect(self._save_clicked)
         self.back_button.clicked.connect(self._back_clicked)
         save_row.addWidget(self.save_button)
@@ -1128,8 +1580,12 @@ class ClipartTransparencyEditorPage(QWidget):
         right.addWidget(tools_frame, 3)
 
         self.canvas.document_changed.connect(self._refresh_history_buttons)
-        QShortcut(QKeySequence.StandardKey.Undo, self, activated=self.undo)
-        QShortcut(QKeySequence("Ctrl+Shift+Z"), self, activated=self.redo)
+        self.canvas.tool_requested.connect(self._set_tool)
+        self.canvas.diameter_requested.connect(self._cycle_diameter)
+        self.canvas.zoom_requested.connect(self._cycle_zoom)
+        self.canvas.history_requested.connect(lambda redo: self.redo() if redo else self.undo())
+        self.undo_button.setToolTip("Отменить (Ctrl+Z)")
+        self.redo_button.setToolTip("Повторить (Ctrl+Shift+Z)")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         for widget in self.findChildren(QWidget):
             widget.installEventFilter(self)
@@ -1180,6 +1636,7 @@ class ClipartTransparencyEditorPage(QWidget):
     def _stash_current_document(self) -> None:
         if self._loaded_path is None or self._document is None:
             return
+        self._draft_contours[self._loaded_path] = self.canvas.contour
         if not self._document.is_dirty:
             self._draft_masks.pop(self._loaded_path, None)
             return
@@ -1198,6 +1655,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._paths = [Path(path) for path in paths]
         self._rough_dir = Path(rough_dir) if rough_dir is not None else None
         allowed = set(self._paths)
+        self._draft_contours = {p: c for p, c in self._draft_contours.items() if p in allowed}
         self._draft_masks = {
             path: data for path, data in self._draft_masks.items() if path in allowed
         }
@@ -1264,6 +1722,7 @@ class ClipartTransparencyEditorPage(QWidget):
                 Image.Resampling.LANCZOS,
             )
             item.setIcon(QIcon(_pixmap_for_pil(thumbnail)))
+        document.pending_contour = self._draft_contours.get(path, InlineContour())
         self.canvas.set_document(document)
         self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
         self._refresh_history_buttons()
@@ -1275,11 +1734,68 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def _set_action(self, action: str) -> None:
         self.canvas.brush_action = action
+        self.canvas.setFocus()
 
-    def _radius_changed(self, value: int) -> None:
-        self.radius_value.setText(f"{value} px")
-        self.canvas.brush_radius = value
+    @staticmethod
+    def _tool_icon(tool):
+        pixmap = QPixmap(28,28)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#e4edf6"), 1.5))
+        painter.setBrush(QColor("#e4edf6"))
+        path = QPainterPath()
+        if tool == "pen":
+            path.moveTo(4,24); path.lineTo(8,9); path.lineTo(17,3)
+            path.lineTo(25,11); path.lineTo(19,20); path.closeSubpath()
+            painter.drawPath(path)
+            painter.setPen(QPen(QColor("#152435"),1.5))
+            painter.drawLine(4,24,14,14)
+            painter.setBrush(QColor("#152435")); painter.drawEllipse(12,11,4,4)
+        else:
+            path.moveTo(11,17); path.lineTo(21,3); path.quadTo(25,1,25,6)
+            path.lineTo(16,21); path.closeSubpath(); painter.drawPath(path)
+            path = QPainterPath(); path.moveTo(10,17); path.cubicTo(3,18,9,23,3,25)
+            path.cubicTo(15,28,19,21,10,17); painter.drawPath(path)
+        painter.end()
+        return QIcon(pixmap)
+
+    def _show_contour_status(self, message):
+        self.contour_status.setText(message)
+        self.contour_status.setVisible(bool(message))
+
+    def _set_tool(self, tool):
+        if self.canvas._painting or self.canvas.contour_busy:
+            return
+        self.canvas.tool = tool
+        self.canvas.setToolTip(
+            "Точка: клик; добавить: двойной клик по линии; удалить: Delete; "
+            "плавная/угловая: Alt+клик; сдвиг: стрелки, Shift ×10; применить: Enter"
+            if tool == "pen" else "Кисть: + / −; временно вернуть/убрать: Alt; "
+            "масштаб: Ctrl + / Ctrl −; перемещение: Пробел + мышь"
+        )
+        for key, button in self.tool_buttons.items():
+            button.setChecked(key == tool)
+        self.brush_controls.setVisible(tool == "brush")
+        self.pen_controls.setVisible(tool == "pen")
         self.canvas.viewport().update()
+        self.canvas.setFocus()
+        self._refresh_history_buttons()
+
+    def _set_diameter(self, diameter):
+        self.canvas.brush_radius = diameter // 2
+        for value, button in self.diameter_buttons.items():
+            button.setChecked(value == diameter)
+        self.canvas.viewport().update()
+        self.canvas.setFocus()
+
+    def _cycle_diameter(self, step):
+        index = BRUSH_DIAMETERS.index(self.canvas.brush_radius * 2)
+        self._set_diameter(BRUSH_DIAMETERS[max(0, min(len(BRUSH_DIAMETERS)-1, index+step))])
+
+    def _cycle_zoom(self, step):
+        current = self.canvas.transform().m11() * 100
+        self._set_zoom(max(10, min(1600, round(current * (1.25 if step > 0 else .8)))))
 
     def _hardness_changed(self, value: int) -> None:
         self.hardness_value.setText(f"{value}%")
@@ -1289,30 +1805,76 @@ class ClipartTransparencyEditorPage(QWidget):
         self.canvas.set_background(label)
 
     def undo(self) -> None:
+        if self.canvas.contour_busy:
+            return
+        if self.canvas.tool == "pen" and self.canvas.contour.history(redo=False):
+            self.canvas.viewport().update()
+            self._refresh_history_buttons()
+            return
         try:
             self.document.undo()
+            if not self.canvas.contour.dirty:
+                self.canvas.contour = InlineContour()
+                self.document.pending_contour = self.canvas.contour
         except ValueError:
             return
         self.canvas.refresh_image()
+        if self.current_path is not None:
+            self._draft_contours[self.current_path] = self.canvas.contour
         self._refresh_history_buttons()
 
     def redo(self) -> None:
+        if self.canvas.contour_busy:
+            return
+        if self.canvas.tool == "pen" and self.canvas.contour.history(redo=True):
+            self.canvas.viewport().update()
+            self._refresh_history_buttons()
+            return
         try:
             self.document.redo()
+            if not self.canvas.contour.dirty:
+                self.canvas.contour = InlineContour()
+                self.document.pending_contour = self.canvas.contour
         except ValueError:
             return
         self.canvas.refresh_image()
+        if self.current_path is not None:
+            self._draft_contours[self.current_path] = self.canvas.contour
         self._refresh_history_buttons()
 
     def reset(self) -> None:
+        if self.canvas.contour_busy:
+            return
         try:
             self.document.reset()
+            self.canvas.contour = InlineContour()
+            self.document.pending_contour = self.canvas.contour
         except ValueError:
             return
         self.canvas.refresh_image()
+        if self.current_path is not None:
+            self._draft_contours[self.current_path] = self.canvas.contour
         self._refresh_history_buttons()
 
     def _refresh_history_buttons(self) -> None:
+        busy = self.canvas.contour_busy
+        self.file_list.setEnabled(not busy)
+        self.back_button.setEnabled(not busy)
+        self.reset_button.setEnabled(not busy and self.canvas.document is not None)
+        self.contour_button.setText("Автоконтур")
+        self.apply_contour_button.setText("Применить контур")
+        if busy:
+            for button in (self.undo_button, self.redo_button, self.save_button,
+                           self.contour_button, self.apply_contour_button, *self.tool_buttons.values()):
+                button.setEnabled(False)
+            self.brush_controls.setEnabled(False)
+            active = self.contour_button if self.canvas._contour_job["kind"] == "extract" else self.apply_contour_button
+            active.setText("Отменить")
+            active.setEnabled(True)
+            active.setToolTip("Отменить расчёт (Esc)")
+            return
+        self.contour_button.setToolTip("Расставить точки по существующей прозрачности")
+        self.apply_contour_button.setToolTip("Применить контур (Enter)")
         try:
             document = self.document
         except ValueError:
@@ -1320,37 +1882,30 @@ class ClipartTransparencyEditorPage(QWidget):
             self.redo_button.setEnabled(False)
             self.save_button.setEnabled(False)
             self.contour_button.setEnabled(False)
+            self.apply_contour_button.setEnabled(False)
+            self.brush_controls.setEnabled(False)
+            for button in self.tool_buttons.values():
+                button.setEnabled(False)
             return
-        self.undo_button.setEnabled(document.can_undo)
-        self.redo_button.setEnabled(document.can_redo)
+        contour = self.canvas.contour
+        self.apply_contour_button.setEnabled(contour.dirty)
+        self.undo_button.setEnabled(document.can_undo or bool(contour.undo_stack))
+        self.redo_button.setEnabled(document.can_redo or bool(contour.redo_stack))
         self.save_button.setEnabled(True)
         self.contour_button.setEnabled(True)
+        self.brush_controls.setEnabled(True)
+        for button in self.tool_buttons.values():
+            button.setEnabled(True)
 
-    def _open_contour_editor(self) -> None:
-        from studio_contour_editor import ContourEditorDialog
-        import numpy as np
-
-        path = self.current_path
-        if path is None:
-            return
-        # Pass the current in-memory alpha, not the last version on disk.
-        # Cancelling the dialog leaves this page and its undo history intact.
-        dialog = ContourEditorDialog(
-            path, self, rgba=np.array(self.document.corrected_image(), dtype=np.uint8),
-        )
-        dialog.exec()
-        saved_path = dialog.saved_path
-        if saved_path is not None:
-            paths = list(self._paths)
-            saved_path = Path(saved_path)
-            if saved_path not in paths:
-                paths.append(saved_path)
-            self.set_files(paths, selected_index=paths.index(saved_path), rough_dir=self._rough_dir)
-            self.copy_saved.emit(path, saved_path)
-            self.saved.emit(saved_path.name)
-        dialog.deleteLater()
+    def _contour_done(self, kind, success):
+        save = self._save_after_contour
+        self._save_after_contour = False
+        if save and success and kind == "apply":
+            self._save_clicked()
 
     def save_current(self) -> tuple[Path, Path]:
+        if self.canvas.contour_busy or self.canvas.contour.dirty:
+            raise ValueError("Дождитесь применения контура перед сохранением")
         output_path = self.current_path
         if output_path is None:
             raise ValueError("Нет изображения для сохранения")
@@ -1362,6 +1917,14 @@ class ClipartTransparencyEditorPage(QWidget):
         return output_path, mask_path
 
     def _save_clicked(self) -> None:
+        if self.canvas.contour_busy:
+            return
+        if self.canvas.contour.dirty:
+            self._save_after_contour = True
+            self.canvas.apply_contour()
+            if not self.canvas.contour_busy:
+                self._save_after_contour = False
+            return
         try:
             self.save_current()
         except (OSError, ValueError) as error:
@@ -1373,9 +1936,12 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def _has_unsaved_changes(self) -> bool:
         current_dirty = self._document is not None and self._document.is_dirty
-        return current_dirty or bool(self._draft_masks)
+        return current_dirty or bool(self._draft_masks) or self.canvas.contour.dirty or any(c.dirty for c in self._draft_contours.values())
 
     def _back_clicked(self) -> None:
+        if self.canvas.contour_busy:
+            self.canvas.cancel_contour()
+            return
         if self._has_unsaved_changes():
             answer = QMessageBox.warning(
                 self,
@@ -1388,9 +1954,20 @@ class ClipartTransparencyEditorPage(QWidget):
             if answer != QMessageBox.StandardButton.Discard:
                 return
             self._draft_masks.clear()
+            self._draft_contours.clear()
             self._document = None
             self._loaded_path = None
         self.back_requested.emit()
+
+    def hideEvent(self, event):
+        self._save_after_contour = False
+        self.canvas.cancel_contour()
+        super().hideEvent(event)
+
+    def closeEvent(self, event):
+        self._save_after_contour = False
+        self.canvas.cancel_contour()
+        super().closeEvent(event)
 
     def toggle_focus_mode(self) -> None:
         self._focus_mode = not self._focus_mode

@@ -1,5 +1,18 @@
 # TASKS
 
+## Inline transparency tools, 2026-09-23
+
+- [x] Inspect modal contour flow and prepare full-context brush/Bezier mockups.
+- [x] Obtain visual approval, including subsequent icon/preset/keyboard refinements.
+- [x] Integrate Bezier with existing editor, shared applied-mask undo/save and preserved zoom.
+- [x] Verify combined brush/Bezier edits, saved alpha/RGB and actual UI.
+- [x] Complete full offline checks and targeted final regression checks.
+- [x] Support4100px per side; background extraction/application and cancellation.
+- [x] Prove local ROI/full raster equivalence and benchmark2048/4096/4100 with UI heartbeat/RSS.
+- [ ] Build authorized ordinary Windows3.2.6 and verify installer/provenance/native smoke.
+- Publication of3.2.6 has not occurred.
+
+
 ## Complete Images3.1.4 migration, 2026-09-23
 
 - [x] Unify server module catalogs and deploy missing Automatic Clipart option.

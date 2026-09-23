@@ -8,6 +8,7 @@ needed by those layers.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from concurrent.futures import CancelledError
 from math import isfinite
 from typing import Any, Literal, Sequence
 
@@ -16,6 +17,7 @@ import numpy as np
 
 
 MAX_IMAGE_PIXELS = 32_000_000
+MAX_AUTO_CONTOUR_SIDE = 4100
 MAX_PATHS = 256
 MAX_NODES_PER_PATH = 4_096
 MAX_FEATHER_PX = 2.0
@@ -136,7 +138,36 @@ def _validate_roi(roi: Sequence[int], shape: tuple[int, int]) -> ROI:
     return left, top, right, bottom
 
 
-def extract_contours(alpha: np.ndarray, *, tolerance: float = 1.0) -> list[BezierPath]:
+def _check_cancelled(cancelled):
+    if cancelled is not None and cancelled():
+        raise CancelledError()
+
+
+def changed_path_roi(previous: BezierPath, replacement: BezierPath) -> ROI:
+    """Conservative bounds of changed cubic segments, in original pixels.
+
+    A cubic stays within its control-point hull. Unchanged segments cancel in
+    the old/new coverage difference. Topology changes fall back to both whole
+    paths. Padding covers integer rounding in fillPoly.
+    """
+    def segments(path):
+        return [(node.point, _auto_handles(path.nodes, i)[1],
+                 _auto_handles(path.nodes, (i+1) % len(path.nodes))[0],
+                 path.nodes[(i+1) % len(path.nodes)].point)
+                for i, node in enumerate(path.nodes)]
+    old, new = segments(previous), segments(replacement)
+    changed = [segment for a,b in zip(old,new) if a != b for segment in (a,b)] if len(old) == len(new) else old+new
+    if not changed:
+        return (0,0,1,1)
+    points = np.asarray(changed, dtype=float).reshape(-1,2)
+    height, width = previous.source_shape
+    return (max(0,int(np.floor(points[:,0].min()))-2),
+            max(0,int(np.floor(points[:,1].min()))-2),
+            min(width,int(np.ceil(points[:,0].max()))+3),
+            min(height,int(np.ceil(points[:,1].max()))+3))
+
+
+def extract_contours(alpha: np.ndarray, *, tolerance: float = 1.0, cancelled=None) -> list[BezierPath]:
     """Extract exteriors and holes without simplifying more than tolerance pixels.
 
     ``CHAIN_APPROX_NONE`` retains the original alpha boundary first.  OpenCV's
@@ -146,13 +177,15 @@ def extract_contours(alpha: np.ndarray, *, tolerance: float = 1.0) -> list[Bezie
     alpha = _validate_alpha(alpha)
     if not isfinite(float(tolerance)) or not 0.0 <= float(tolerance) <= 8.0:
         raise ValueError("tolerance must be finite and between 0 and 8 pixels")
-    binary = np.where(alpha > 0, 255, 0).astype(np.uint8)
+    _check_cancelled(cancelled)
+    binary = cv2.compare(alpha, 0, cv2.CMP_GT)
     contours, hierarchy = cv2.findContours(binary, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
     if len(contours) > MAX_PATHS:
         raise ValueError("mask has too many contours to edit safely")
     paths: list[BezierPath] = []
     hierarchy_rows = hierarchy[0] if hierarchy is not None else []
     for index, contour in enumerate(contours):
+        _check_cancelled(cancelled)
         simplified = cv2.approxPolyDP(contour, float(tolerance), True) if tolerance else contour
         points = simplified.reshape(-1, 2)
         if len(points) < 3:
@@ -205,7 +238,9 @@ def rasterize_path(path: BezierPath, roi: Sequence[int], *, feather: float = 0.0
     left, top, right, bottom = _validate_roi(roi, path.source_shape)
     if not isfinite(float(feather)) or not 0.0 <= float(feather) <= MAX_FEATHER_PX:
         raise ValueError(f"feather must be finite and between 0 and {MAX_FEATHER_PX} pixels")
-    points = sample_path(path)
+    # Round in image coordinates: bankers rounding after an odd ROI offset
+    # would otherwise flip half-pixel ties and change edge pixels.
+    points = np.rint(sample_path(path)).astype(np.int32)
     points[:, 0] -= left
     points[:, 1] -= top
     coverage = np.zeros((bottom - top, right - left), dtype=np.uint8)
@@ -267,7 +302,7 @@ class ContourDocument:
         return {"source_shape": list(self.alpha.shape), "paths": [path.to_dict() for path in self.paths],
                 "extraction_tolerance": self.extraction_tolerance}
 
-    def apply_path(self, path_index: int, replacement: BezierPath, roi: Sequence[int], *, feather: float = 0.0) -> np.ndarray:
+    def apply_path(self, path_index: int, replacement: BezierPath, roi: Sequence[int], *, feather: float = 0.0, cancelled=None) -> np.ndarray:
         """Replace one contour locally and return a copy of the new alpha.
 
         The old and new coverage are composited only in ``roi``; the path does
@@ -278,6 +313,7 @@ class ContourDocument:
         """
         if not isinstance(path_index, int) or not 0 <= path_index < len(self.paths):
             raise IndexError("path_index is out of range")
+        _check_cancelled(cancelled)
         previous = self.paths[path_index]
         if replacement.source_shape != self.alpha.shape or replacement.fill_value != previous.fill_value:
             raise ValueError("replacement must match image shape and contour role")
@@ -295,7 +331,7 @@ class ContourDocument:
         left, top, right, bottom = bounds
         candidate = self.alpha.copy()
         region = candidate[top:bottom, left:right].astype(np.float32)
-        protected_opaque, protected_holes = self._other_path_protection(path_index, bounds, region)
+        protected_opaque, protected_holes = self._other_path_protection(path_index, bounds, region, cancelled=cancelled)
         # A nonzero pixel not covered by the selected old path is an unrepresented
         # raster residual (for example, a one-pixel hair).  Preserve it when a
         # contour expands; ordinary transparent background remains fillable.
@@ -320,18 +356,27 @@ class ContourDocument:
         # Other paths can become topologically stale after any edit.  Rebuild the
         # proposal from the candidate before publishing it, rather than silently
         # retaining paths whose fill role no longer matches the alpha.
-        candidate_paths = extract_contours(candidate, tolerance=self.extraction_tolerance)
+        _check_cancelled(cancelled)
+        candidate_paths = extract_contours(candidate, tolerance=self.extraction_tolerance, cancelled=cancelled)
+        _check_cancelled(cancelled)
         self.alpha = candidate
         self.paths = candidate_paths
         return self.alpha.copy()
 
     def _other_path_protection(self, selected_index: int, roi: ROI,
-                               region: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+                               region: np.ndarray, *, cancelled=None) -> tuple[np.ndarray, np.ndarray]:
         """Return only neighbouring editable geometry that must not be overwritten."""
         opaque = np.zeros(region.shape, dtype=bool)
         holes = np.zeros(region.shape, dtype=bool)
         for index, path in enumerate(self.paths):
+            _check_cancelled(cancelled)
             if index == selected_index:
+                continue
+            controls = np.asarray([point for i, node in enumerate(path.nodes)
+                                   for point in (node.point, *_auto_handles(path.nodes, i))])
+            left, top, right, bottom = roi
+            if (controls[:,0].max() < left-1 or controls[:,0].min() >= right+1
+                    or controls[:,1].max() < top-1 or controls[:,1].min() >= bottom+1):
                 continue
             covered = rasterize_path(path, roi) > 0
             if path.fill_value == 255:
