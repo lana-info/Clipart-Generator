@@ -17,9 +17,13 @@
   states; document the backend migration and ordered rollout requirements.
 - [ ] Decide ordinary Generation chroma/online-removal behaviour with the owner;
   existing capabilities remain available until that product decision.
-- [ ] Authorized release/build and installed Windows acceptance, compatible backend
-  deployment with migration013, then production module publication. Implementation
-  approval does not authorize these operations; none were performed in this task.
+- [x] Owner authorized commit/push, backend deployment and Studio build. Working
+  and test services upgraded with backups and verified health/data preservation.
+  Test3.2.4 build and native installed checks passed; compatible test modules published.
+- [x] Ordinary Studio3.2.4 artifact verified (run35890152199): Windows checks,
+  installer hash/version/provenance. Final Linux CI35891569726 passes.
+- [ ] Owner manual installed UI/image acceptance and separate production module
+  publication decision. No customer module releases or announcements published.
 
 
 ## Edge Color Artifacts Reported by Owner, 2026-09-22

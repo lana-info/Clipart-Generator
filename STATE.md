@@ -1,5 +1,53 @@
 # Project state
 
+## Authorized Server Deployment and Studio3.2.4 Builds, 2026-09-23
+
+Owner explicitly approved commit/push, working-server update and a new Studio
+build. Desktop source `93d0d3f` and backend `cc7e23f` are committed and pushed on
+the independent-processing/studio-components-news feature branches. No merge.
+
+Working admin https://services.etsyneuroclub.com/licenses/admin is deployed with
+news and shared-component rights, image `clipart-license-service:studio-news-cc7e23f`.
+Pending migrations012/013 applied after private mode0600 backup. Health, public
+assets, unchanged configuration/business-data fingerprints and public signed key
+passed. Full deployment/rollback evidence is in the backend's
+`docs/verification/studio-news-2026-09-23.md`; preserve its final compose override.
+
+Isolated test service was also upgraded to frozen backend source-cc7e23f with
+migration013, its own backup and unchanged test keys. Published ONLY there:
+auto-clipart/clipart/processing1.4.0 and image-processing1.0.0, requiring Studio3.2.4.
+Public HTTPS verified signatures, install/activation, sharedenginev9 acquisition,
+news feed and no duplicate updates. Studio3.2.3 still receives compatible older
+packages. No production module releases or news items were published by this task.
+
+Studio Test3.2.4 build35885380289 passed native security, packaged startup, Windows
+installer, installed application and release-contract checks. Downloaded artifact
+10763280834 (`test-windows-3.2.4`), provenance commit93d0d3f and SHA256 verified:
+`f9fe29291546b355befadae86169d7f4585774ff3fb75a8d11e4d201c03b5db3`.
+Local installer: sibling `artifacts/windows-acceptance-3.2.4-35885380289/`.
+Native home screenshot inspected; no extra component control. Existing runner
+size limits remain, manual owner UI/image quality acceptance is still separate.
+
+Ordinary Studio3.2.4 build35890152199 passed all Windows installer/native checks.
+Artifact10764852546 (`windows-3.2.4`) downloaded and verified against version3.2.4,
+source93d0d3f and checksum/provenance. Installer SHA256:
+`bfe217e7d2d6279c9614068fd8432184d099a0fdd104a5449c8c34958e4e8ab0`.
+Local installer: sibling `artifacts/windows-production-3.2.4-35890152199/`.
+Ordinary Studio uses working-admin news and a working license; Studio Test keeps
+its separate test data and license. No cross-environment data copy. Native Windows
+screenshots included in each artifact; manual owner acceptance remains separate.
+No customer installer auto-update or production module releases were published.
+
+
+Original GitHub Linux CI35883956308 stopped at collection because the runner
+lacked libEGL.so.1. Commitc60fe1a adds existing Qt system prerequisites libegl1
+and libopengl0 to CI setup only. Application source/build payload remains93d0d3f.
+Replacement CI35890718506 passed all tests and startup, then exposed a second
+pre-existing CI setup defect: shallow checkout lacked HEAD^ for the required diff
+check. Commit5a806fb sets fetch-depth2; final CI35891569726 passed tests, startup, artifact and diff checks.
+Only CI configuration changed after application source93d0d3f; no rebuild of the
+same application payload is needed for these CI corrections.
+
 ## Independent Components and Studio News Implemented, 2026-09-23
 
 Owner approved the news home/editor mockups ("Да, реализовать так") and rejected
@@ -11,8 +59,9 @@ Desktop branch: `codex/feature-independent-processing-20260923`, based on the
 reviewed/pushed chroma checkpoint `c27b2f4` (not yet integrated into development).
 Backend: sibling `studio-components-service-worktree`, branch
 `codex/feature-studio-components-news-20260923`, based on `b32e0da`.
-Both implementations are local source changes, not published installers/service.
-No production migration, signed production artifact, deployment or release dispatch.
+At this implementation checkpoint both were local source changes. Subsequent
+authorized deployment/build evidence is recorded above; this section describes
+the verified design rather than the latest delivery state.
 
 Implemented boundary:
 - Signed `image-processing` package owns chroma_key, chroma_rim and profile identity.
@@ -48,7 +97,7 @@ Approved vs actual UI evidence: `docs/ui/3.1/independent-components-news/`.
 Chrome used mocked transport; real authentication/CSRF/feed were checked by HTTP
 and HTTPS integration tests. Linux offscreen UI is not installed Windows testing.
 
-Next delivery requires an explicitly authorized rollout: deploy compatible backend
+Original next step (now authorized and progressed above): deploy compatible backend
 and migration013, then build/install a Studio version containing this bridge. Pin
 new package minimum versions to that verified bridge release, not older Studio
 with the same historical version label. Later compatible engine updates can ship

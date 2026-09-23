@@ -18,3 +18,10 @@ Backend `docs/verification/check_studio_news_browser.py` uses actual admin/news
 source with a synthetic transport; Chrome verifies editing, publication/withdrawal,
 validation, duplicate submission, text escaping, network failure and navigation.
 Real protected HTTP and signed HTTPS routes are covered separately by integration.
+
+
+Windows installed evidence is included in GitHub build35885380289 artifact
+`test-windows-3.2.4`, directory `ui-evidence`. The native home screenshot was
+inspected: news panel present, existing module cards retained. Automated installed
+startup/local processing/profile-isolation checks passed. Runner desktop dimensions
+are constrained; manual owner acceptance at the supported target remains separate.

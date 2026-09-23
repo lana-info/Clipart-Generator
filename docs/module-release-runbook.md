@@ -99,9 +99,9 @@ No production artifacts or customer releases were published during preparation.
 
 ## Shared processing bridge and independent news (2026-09-23)
 
-This implementation has not been deployed or built into an installed release.
-Deploy the compatible service and additive migration013 before distributing the
-new Studio bridge. The older service does not derive shared-component download
+The compatible service is deployed on 2026-09-23 with migrations012/013;
+Studio Test3.2.4 has passed its Windows installer checks. Ordinary Studio3.2.4 also passed its installed Windows checks;
+verified build delivery is tracked in STATE.md. New packages require minimum Studio3.2.4. The older service does not derive shared-component download
 rights from workflow entitlements. Historical Studio3.2.1 packages do not imply
 that the installed shell supports this new API: choose a new approved bridge
 release version and set all new packages' studio-min accordingly. Do not publish
