@@ -87,6 +87,8 @@ class PlannerTests(unittest.TestCase):
         guidance = request["commercial"]
         self.assertIn("fully opaque", guidance["material_policy"])
         self.assertIn("opaque painted texture", guidance["material_policy"])
+        self.assertIn("continuous stems", guidance["detail_policy"])
+        self.assertIn("not defocus", guidance["detail_policy"])
         self.assertTrue(guidance["collection_first"])
         self.assertIn("no_filler", guidance["principles"])
         self.assertIn("hero", guidance["roles"])

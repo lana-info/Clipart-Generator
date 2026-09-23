@@ -88,6 +88,9 @@ class ObjectTests(unittest.TestCase):
         self.assertIn('все части объекта полностью непрозрачны', prompt)
         self.assertIn('акварель только как текстура непрозрачной краски', prompt)
         self.assertIn('без стекла, просвечивающих лепестков', prompt)
+        self.assertIn('каждый лепесток и лист различим', prompt)
+        self.assertIn('не лист миниатюр', prompt)
+        self.assertIn('без размытия, расфокуса', prompt)
         self.assertNotIn('pure white background', prompt)
 
     def test_commercial_guidance_preserves_english_prompt_language(self):
@@ -102,6 +105,9 @@ class ObjectTests(unittest.TestCase):
         self.assertIn('all parts of the subject fully opaque', prompt)
         self.assertIn('watercolor only as an opaque painted texture', prompt)
         self.assertIn('no glass, see-through petals', prompt)
+        self.assertIn('distinct petals and leaves', prompt)
+        self.assertIn('not a contact sheet', prompt)
+        self.assertIn('no blur, defocus', prompt)
         self.assertNotIn('Объект:', prompt)
         self.assertNotIn('без обрезания', prompt.casefold())
 

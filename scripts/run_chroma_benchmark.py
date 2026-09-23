@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from chroma_benchmark import BenchmarkManifestError, load_manifest, run_benchmark
 from chroma_key import remove_chroma_key, remove_chroma_key_automatic
+from chroma_provenance import PROFILE_VERSION
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "opaque-clipart": (
             partial(remove_chroma_key_automatic, subject_profile="opaque_clipart"),
-            "automatic-opaque-clipart-v5",
+            "automatic-" + PROFILE_VERSION,
         ),
     }[args.algorithm]
 

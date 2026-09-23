@@ -9,7 +9,7 @@ from typing import Final
 import cv2
 import numpy as np
 from PIL import Image
-from chroma_rim import reclassify_rim
+from chroma_rim import mixture_coverage, reclassify_rim, refine_edge_mixture, repair_edge_chroma, suppress_edge_key_spill
 
 
 KEY_COLORS: Final[dict[str, tuple[int, int, int]]] = {
@@ -297,7 +297,11 @@ def _remove_chroma_key_precise(
             local_protected,
         )
     del ambiguous_band
-    raw_matte[protected_interior_detail] = 1.0
+    # Enclosure alone also describes subpixel gaps between opaque fibres.
+    # The opaque profile defers this decision to the colour-checked recovery
+    # below; promoting here would erase the coverage evidence it needs.
+    if not allow_enclosed_transition_recovery:
+        raw_matte[protected_interior_detail] = 1.0
     del protected_interior_detail
     matte = raw_matte.copy()
     if allow_enclosed_transition_recovery:
@@ -307,6 +311,9 @@ def _remove_chroma_key_precise(
             raw_matte,
         )
     matte[distance_from_key >= 200.0] = 1.0
+    if allow_enclosed_transition_recovery:
+        matte = _recover_opaque_texture_matte(rgb, measured_key, matte)
+        matte, _ = _extend_opaque_color_runs(rgb, matte, measured_key)
     visible = matte > (1.0 / 255.0)
     if np.any(visible):
         recovered = (
@@ -350,10 +357,22 @@ def _remove_chroma_key_precise(
             where=denominator > 1e-6,
         )
         mixture = np.clip(mixture, 0.0, 0.95)
+        # A nearby colour is not necessarily this detail's foreground. Reject
+        # unmixing unless it actually reconstructs the observed source pixel.
+        predicted = local_foreground + mixture[:, None] * direction
+        residual = np.linalg.norm(source_spill - predicted, axis=1)
         despilled = (
             source_spill - mixture[:, None] * measured_key[None, :]
         ) / (1.0 - mixture[:, None])
-        pixels[spill, :3] = np.rint(np.clip(despilled, 0.0, 255.0)).astype(
+        # Match the staged solver's reconstruction tolerance for textured
+        # neighbours, but never turn an impossible RGB solution into a new hue
+        # by clipping its channels. One level allows source quantization.
+        supported = (residual <= 18.0) & np.all(
+            (despilled >= -1.0) & (despilled <= 256.0), axis=1,
+        )
+        corrected = source_spill.copy()
+        corrected[supported] = despilled[supported]
+        pixels[spill, :3] = np.rint(np.clip(corrected, 0.0, 255.0)).astype(
             np.uint8
         )
     pixels[..., 3] = np.minimum(
@@ -361,6 +380,191 @@ def _remove_chroma_key_precise(
         np.rint(matte * 255.0).astype(np.uint8),
     )
     return Image.fromarray(pixels, mode="RGBA")
+
+
+def _extend_opaque_color_runs(
+    rgb: np.ndarray, matte: np.ndarray, key: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extend an opaque seed through connected, fixed source chroma.
+
+    Fixed (R-G, G-B) allows achromatic shading, not cumulative hue drift. RGB is
+    never copied from a seed. The ROI accounting cap leaves excessive/noisy
+    cases unchanged; the final flood traversal may precede the cap check.
+    """
+    markers = cv2.erode((matte == 1.0).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+    dubious = _opaque_colors_explained_by_key_mix(rgb, matte, key)
+    markers &= ~dubious
+    supported = markers.copy()
+    if not np.any(markers):
+        return matte, supported
+    # Two signed byte differences pack losslessly into a float32 integer.
+    source = (rgb[..., 0]-rgb[..., 1]+255)*512
+    source += rgb[..., 1]-rgb[..., 2]+255
+    rows, cols = np.where((matte > 0.02) & ~markers & ~dubious)
+    matches = np.isin(source[rows, cols], np.unique(source[markers]), kind='sort')
+    rows, cols = rows[matches], cols[matches]
+    del matches
+    if not len(rows):
+        return matte, supported
+    matte = matte.copy()
+    visited = np.zeros((matte.shape[0]+2, matte.shape[1]+2), np.uint8)
+    visited[1:-1, 1:-1][dubious] = 1
+    budget = matte.size * _MAX_ENCLOSED_TRANSITION_ROI_WORK_MULTIPLIER
+    count = 0
+    for y, x in zip(rows, cols):
+        if visited[y+1, x+1]:
+            continue
+        _, _, _, (left, top, width, height) = cv2.floodFill(
+            source, visited, (int(x), int(y)), 0,
+            loDiff=0, upDiff=0,
+            flags=8 | cv2.FLOODFILL_FIXED_RANGE | cv2.FLOODFILL_MASK_ONLY | (2 << 8),
+        )
+        budget -= width * height
+        count += 1
+        if budget < 0 or count > 4096:
+            break
+        region = np.s_[top:top+height, left:left+width]
+        mask = visited[top+1:top+height+1, left+1:left+width+1]
+        component = mask == 2
+        if np.any(markers[region] & component):
+            trusted = component & ~dubious[region]
+            matte[region][trusted] = 1.0
+            supported[region][trusted] = True
+        mask[component] = 1
+    supported &= ~dubious
+    return matte, supported
+
+
+def _opaque_colors_explained_by_key_mix(
+    rgb: np.ndarray, matte: np.ndarray, key: np.ndarray,
+) -> np.ndarray:
+    """Veto shallow colour seeds using independent, deeper source neighbours.
+
+    A fit only removes trust: key reflection on an opaque surface can have the
+    same RGB as partial coverage, so this must not lower alpha by itself.
+    """
+    opaque = matte == 1.0
+    depth = cv2.distanceTransform(opaque.astype(np.uint8), cv2.DIST_L2, 5)
+    rows, cols = np.where((matte > 0.02) & (depth <= 12.0))
+    dubious = np.zeros(matte.shape, bool)
+    if not len(rows):
+        return dubious
+    _, labels = cv2.connectedComponents((matte > 0.0).astype(np.uint8), connectivity=8)
+    observed = rgb[rows, cols]
+    found = np.zeros(len(rows), bool)
+    for dy in range(-3, 4):
+        for dx in range(-3, 4):
+            yy = np.clip(rows+dy, 0, matte.shape[0]-1)
+            xx = np.clip(cols+dx, 0, matte.shape[1]-1)
+            direction = rgb[yy, xx]-key
+            denominator = np.sum(direction*direction, axis=1)
+            coverage = np.divide(
+                np.sum((observed-key)*direction, axis=1), denominator,
+                out=np.zeros_like(denominator), where=denominator > 1.0,
+            )
+            residual = np.linalg.norm(observed-(key+coverage[:, None]*direction), axis=1)
+            found |= (opaque[yy, xx] & (depth[yy, xx] > depth[rows, cols]+0.5)
+                      & (labels[yy, xx] == labels[rows, cols])
+                      & (denominator > _MIN_OPAQUE_REFERENCE_DISTANCE**2)
+                      & (coverage >= 0.1) & (coverage <= 0.95) & (residual <= 3.0))
+    dubious[rows, cols] = found
+    return dubious
+
+
+def _recover_opaque_texture_matte(
+    rgb: np.ndarray, key: np.ndarray, matte: np.ndarray,
+) -> np.ndarray:
+    """Recover opaque texture markers without flattening the outer AA band.
+
+    Only the opaque-subject profile calls this. Enclosed coverage dips, narrow
+    strokes bracketed by opaque samples, and flat separated colour patches are
+    foreground evidence. The actual outer band still needs a colour-mixture fit.
+    """
+    distance_squared = np.zeros(matte.shape, np.float32)
+    for channel in range(3):
+        delta = rgb[..., channel] - key[channel]
+        distance_squared += delta * delta
+    separated = distance_squared >= _MIN_OPAQUE_REFERENCE_DISTANCE ** 2
+    del distance_squared, delta
+    support = (matte > 0.02) | separated
+    _, subject_labels = cv2.connectedComponents(support.astype(np.uint8), connectivity=8)
+    depth = cv2.distanceTransform(support.astype(np.uint8), cv2.DIST_L2, 5)
+    core = (matte == 1.0) & (depth > 3.0)
+    if not np.any(core):
+        return matte
+
+    def project(reference_mask, candidates):
+        _, labels = cv2.distanceTransformWithLabels(
+            (~reference_mask).astype(np.uint8), cv2.DIST_L2, 5,
+            labelType=cv2.DIST_LABEL_PIXEL,
+        )
+        lookup = np.zeros((int(labels.max()) + 1, 3), np.float32)
+        lookup[labels[reference_mask]] = rgb[reference_mask]
+        reference = lookup[labels[candidates]]
+        component_lookup = np.zeros(len(lookup), np.int32)
+        component_lookup[labels[reference_mask]] = subject_labels[reference_mask]
+        same_component = component_lookup[labels[candidates]] == subject_labels[candidates]
+        observed = rgb[candidates]
+        direction = reference - key
+        denominator = np.sum(direction * direction, axis=1)
+        coverage = np.divide(np.sum((observed-key)*direction, axis=1), denominator,
+                             out=np.zeros_like(denominator), where=denominator > 1)
+        residual = np.linalg.norm(observed-(key+coverage[:, None]*direction), axis=1)
+        residual[~same_component] = np.inf
+        return coverage, residual
+
+    partial = support & (matte < 1.0)
+    count, components = cv2.connectedComponents(partial.astype(np.uint8), connectivity=8)
+    touches_edge = np.zeros(count, bool)
+    touches_edge[np.unique(components[depth <= 3.0])] = True
+    protected = partial & ~touches_edge[components] & separated
+    # A flat, numerically separated colour patch is a foreground marker under
+    # the opaque-subject contract. Smooth AA ramps are not such markers.
+    kernel = np.ones((3, 3), np.uint8)
+    flat = np.ones(matte.shape, bool)
+    for channel in range(3):
+        flat &= cv2.dilate(rgb[..., channel], kernel) - cv2.erode(rgb[..., channel], kernel) <= 1.0
+    protected |= partial & (depth > 3.0) & separated & flat
+    # Narrow texture strokes can connect an interior patch to the outer band.
+    # Opaque samples on opposing sides distinguish them from a one-sided rim.
+    padded = np.pad(core, 3)
+    height, width = matte.shape
+    bridged = np.zeros(matte.shape, bool)
+    for dy, dx in ((0, 3), (3, 0), (2, 2), (2, -2)):
+        bridged |= (padded[3+dy:3+dy+height, 3+dx:3+dx+width]
+                    & padded[3-dy:3-dy+height, 3-dx:3-dx+width])
+    protected |= partial & (depth > 3.0) & separated & bridged
+    if np.any(protected):
+        coverage, residual = project(core, protected)
+        explained_coverage = (coverage > 0.02) & (coverage < 0.98) & (residual <= 5.0)
+        retained = protected[protected]
+        retained[explained_coverage] = False
+        protected[protected] = retained
+    if not np.any(protected):
+        return matte
+    matte = matte.copy()
+    matte[protected] = 1.0
+    # Newly established opaque colours provide references for their own AA rim.
+    nearby = cv2.dilate(protected.astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
+    partial &= ~protected & nearby
+    coverage, residual = project(core | protected, partial)
+    solved = (residual <= 5.0) & (coverage > 0.02) & (coverage <= 1.02)
+    values = matte[partial]
+    values[solved] = np.maximum(values[solved], np.minimum(coverage[solved], 1.0))
+    matte[partial] = values
+    # A closer different-colour detail must not hide an exact opaque match.
+    rows, cols = np.where(partial & (matte < 1.0))
+    references = core | protected
+    same_colour = np.zeros(len(rows), bool)
+    for dy in range(-3, 4):
+        for dx in range(-3, 4):
+            yy = np.clip(rows + dy, 0, matte.shape[0]-1)
+            xx = np.clip(cols + dx, 0, matte.shape[1]-1)
+            same_colour |= references[yy, xx] & (
+                np.max(np.abs(rgb[rows, cols] - rgb[yy, xx]), axis=1) <= 1.0
+            ) & (subject_labels[yy, xx] == subject_labels[rows, cols])
+    matte[rows[same_colour], cols[same_colour]] = 1.0
+    return matte
 
 
 def _recover_enclosed_transition_matte(
@@ -751,9 +955,9 @@ def _refine_opaque_boundary(
 ) -> Image.Image:
     """Unmix narrow AA coverage using a nearby opaque interior reference.
 
-    Never reinterpret fully opaque colours or borrow a distant reference for
-    thin isolated details. A low RGB reconstruction residual is required; this
-    is a bounded local correction, not a general material-opacity estimator.
+    Never reinterpret fully opaque colours. Beyond the immediate rim require
+    agreement between two interior depths in the same connected subject.
+    This is a bounded local correction, not a material-opacity estimator.
     """
     pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8)
     partial = (pixels[..., 3] > 0) & (pixels[..., 3] < 255)
@@ -770,7 +974,7 @@ def _refine_opaque_boundary(
         labelType=cv2.DIST_LABEL_PIXEL,
     )
     source_pixels = np.asarray(source.convert("RGBA"), dtype=np.uint8)
-    edge = partial & (distance <= 3.0) & (source_pixels[..., 3] == 255)
+    edge = partial & (distance <= 12.0) & (source_pixels[..., 3] == 255)
     if not np.any(edge):
         return result
     foreground = np.empty((int(np.count_nonzero(edge)), 3), dtype=np.float32)
@@ -779,6 +983,33 @@ def _refine_opaque_boundary(
     for channel in range(3):
         lookup[core_labels] = pixels[..., channel][core]
         foreground[:, channel] = lookup[edge_labels]
+    _, components = cv2.connectedComponents((pixels[..., 3] > 0).astype(np.uint8))
+    component_lookup = np.zeros(len(lookup), np.int32)
+    component_lookup[core_labels] = components[core]
+    supported = component_lookup[edge_labels] == components[edge]
+    far = distance[edge] > 3.0
+    del distance, nearest, lookup, core_labels, edge_labels, component_lookup
+    if np.any(far):
+        deep = cv2.erode(core.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
+        if np.any(deep):
+            _, labels = cv2.distanceTransformWithLabels(
+                (~deep).astype(np.uint8), cv2.DIST_L2, 5,
+                labelType=cv2.DIST_LABEL_PIXEL,
+            )
+            lookup = np.zeros((int(labels.max()) + 1, 3), np.float32)
+            lookup[labels[deep]] = pixels[..., :3][deep]
+            second = lookup[labels[edge][far]]
+            component_lookup = np.zeros(len(lookup), np.int32)
+            component_lookup[labels[deep]] = components[deep]
+            supported[far] &= (
+                (component_lookup[labels[edge][far]] == components[edge][far])
+                & (np.max(np.abs(foreground[far] - second), axis=1) <= 6.0)
+            )
+            del labels, lookup, second, component_lookup
+        else:
+            supported[far] = False
+        del deep
+    del components
     observed = source_pixels[..., :3][edge].astype(np.float32)
     direction = foreground - measured_key
     denominator = np.sum(direction * direction, axis=1)
@@ -787,12 +1018,14 @@ def _refine_opaque_boundary(
         out=np.zeros_like(denominator), where=denominator > 1.0,
     )
     residual = np.linalg.norm(observed - (measured_key + alpha[:, None] * direction), axis=1)
-    reliable = (denominator > 2500.0) & (residual < 4.0) & (alpha > 0.02) & (alpha < 1.0)
+    reliable = supported & (denominator > 2500.0) & (residual < 4.0) & (alpha > 0.02) & (alpha < 1.0)
+    reliable[far] &= (denominator[far] > 96.0**2) & (residual[far] <= 3.0)
+    recovered = (observed - (1.0 - alpha[:, None]) * measured_key) / np.maximum(alpha[:, None], 0.001)
+    reliable[far] &= np.all((recovered[far] >= -1.0) & (recovered[far] <= 256.0), axis=1)
     if not np.any(reliable):
         return result
     corrected = pixels[edge].copy()
-    recovered = (observed[reliable] - (1.0 - alpha[reliable, None]) * measured_key) / alpha[reliable, None]
-    corrected[reliable, :3] = np.rint(np.clip(recovered, 0.0, 255.0)).astype(np.uint8)
+    corrected[reliable, :3] = np.rint(np.clip(recovered[reliable], 0.0, 255.0)).astype(np.uint8)
     corrected[reliable, 3] = np.rint(alpha[reliable] * 255.0).astype(np.uint8)
     pixels = pixels.copy()
     pixels[edge] = corrected
@@ -865,9 +1098,91 @@ def _supported_rim_correction(
     return supported & connected[labels]
 
 
+def _supported_key_edge(
+    rgb: np.ndarray, alpha: np.ndarray, measured_key: np.ndarray,
+) -> np.ndarray:
+    """Find a narrow key-coloured rim beside a connected non-key interior.
+
+    An enclosure is not enough to turn a solved key mixture into an opaque
+    detail. Require a nearby eroded foreground reference before retaining the
+    staged solution. Key-coloured subjects without this evidence are excluded.
+    """
+    key_channel = int(np.argmax(measured_key))
+    other_channels = [channel for channel in range(3) if channel != key_channel]
+    dominance = rgb[..., key_channel] - np.maximum(
+        rgb[..., other_channels[0]], rgb[..., other_channels[1]],
+    )
+    reference = cv2.erode(
+        ((alpha == 1.0) & (dominance <= 0.0)).astype(np.uint8),
+        np.ones((3, 3), np.uint8),
+    ).astype(bool)
+    if not np.any(reference):
+        return np.zeros(alpha.shape, bool)
+    visible = alpha > 0.0
+    # A flat, key-separated painted patch is a colour detail, even near the
+    # contour. Protect its one-pixel border as well as its flat interior.
+    kernel = np.ones((3, 3), np.uint8)
+    flat = np.ones(alpha.shape, bool)
+    for channel in range(3):
+        flat &= (
+            cv2.dilate(rgb[..., channel], kernel)
+            - cv2.erode(rgb[..., channel], kernel) <= 1.0
+        )
+    key_distance = np.linalg.norm(rgb - measured_key, axis=2)
+    flat &= visible & (dominance > 20.0) & (key_distance >= _MIN_OPAQUE_REFERENCE_DISTANCE)
+    painted_detail = cv2.dilate(flat.astype(np.uint8), kernel).astype(bool)
+    del flat
+    # An enclosed dark/blue marking may have a provisional hole in its matte.
+    # It is not evidence of the external key background (for example an eye).
+    count, background_labels = cv2.connectedComponents(
+        (~visible).astype(np.uint8), connectivity=8,
+    )
+    exterior_labels = np.unique(np.concatenate((
+        background_labels[0], background_labels[-1],
+        background_labels[:, 0], background_labels[:, -1],
+    )))
+    exterior = np.zeros(count, bool)
+    exterior[exterior_labels] = True
+    exterior[0] = False
+    background = exterior[background_labels]
+    del background_labels, exterior, exterior_labels
+    # Real enclosed gaps can also provide background evidence if their RGB
+    # matches the measured key; a dark painted mark does not satisfy this.
+    background |= (~visible) & (key_distance <= 24.0)
+    # A nearby painted blue mark is not a background mixture merely because
+    # a pale reference exists. Require a source-colour path to actual key.
+    count, key_labels = cv2.connectedComponents(
+        ((dominance > 20.0) | background).astype(np.uint8), connectivity=8,
+    )
+    connected = np.zeros(count, bool)
+    connected[np.unique(key_labels[background])] = True
+    connected[0] = False
+    key_connected = connected[key_labels]
+    del connected, key_labels
+    depth = cv2.distanceTransform((~background).astype(np.uint8), cv2.DIST_L2, 5)
+    del background
+    candidates = visible & (depth <= 8.0) & (dominance > 20.0) & ~painted_detail & key_connected
+    del depth, dominance, painted_detail, key_distance, key_connected
+    if not np.any(candidates):
+        return candidates
+    distance, nearest = cv2.distanceTransformWithLabels(
+        (~reference).astype(np.uint8), cv2.DIST_L2, 5,
+        labelType=cv2.DIST_LABEL_PIXEL,
+    )
+    candidates &= distance <= 8.0
+    del distance
+    _, components = cv2.connectedComponents(visible.astype(np.uint8), connectivity=8)
+    lookup = np.zeros(int(nearest.max()) + 1, np.int32)
+    lookup[nearest[reference]] = components[reference]
+    candidates &= lookup[nearest] == components
+    return candidates
+
+
 def _remove_chroma_key_staged(
     image: Image.Image,
     key_color: object,
+    *,
+    opaque_subject: bool = False,
 ) -> Image.Image:
     """Robust fallback for detailed subjects and compressed key backgrounds."""
     requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
@@ -979,6 +1294,52 @@ def _remove_chroma_key_staged(
     )
     has_reference = reference_weight >= 0.005
 
+    early_rim = np.zeros((height, width), dtype=bool)
+    if opaque_subject:
+        band_reference = reference[transition].copy()
+        # Build the colour prior before solving the band. The shallow average
+        # can itself contain key contamination on fine feathers.
+        reference_ratio = np.zeros((height, width), dtype=np.float32)
+        _apply_multiscale_subject_reference(
+            rgb, confident_subject, key_channel, other_channels,
+            reference, reference_ratio,
+        )
+        reference_other = np.maximum(
+            reference[..., other_channels[0]], reference[..., other_channels[1]],
+        )
+        reference_ratio = reference[..., key_channel] / np.maximum(reference_other, 1.0)
+        depth = cv2.distanceTransform(confident_subject.astype(np.uint8), cv2.DIST_L2, 5)
+        early_rim = (confident_subject & (depth <= 3.0)
+                     & (pixels[..., 3] == 255)
+                     & (dominant > reference_ratio * other + 24.0))
+        # Colour changes perpendicular to the reference/key plane indicate a
+        # different material, not background contamination.
+        observed = rgb[early_rim]
+        foreground = reference[early_rim]
+        kk = float(measured_key @ measured_key)
+        ff = np.sum(foreground * foreground, axis=1)
+        fk = foreground @ measured_key
+        cf = np.sum(observed * foreground, axis=1)
+        ck = observed @ measured_key
+        determinant = ff * kk - fk * fk
+        stable = determinant > .01 * ff * kk
+        scale = np.divide(cf * kk - ck * fk, determinant,
+                          out=np.zeros_like(cf), where=stable)
+        mixture = np.divide(ck * ff - cf * fk, determinant,
+                            out=np.zeros_like(ck), where=stable)
+        residual = np.max(np.abs(observed - scale[:, None] * foreground
+                                 - mixture[:, None] * measured_key), axis=1)
+        early_rim[early_rim] = (stable & (scale > 0.0) & (mixture > 0.0)
+                                & (residual <= 24.0))
+        # Thin leaves/stems may have a different colour from the deep core of
+        # their connected flower. Keep their original local band references.
+        reference[transition] = band_reference
+        confident_subject &= ~early_rim
+        transition |= early_rim
+        del reference_ratio, reference_other, depth, observed, foreground
+        del ff, fk, cf, ck, determinant, stable, scale, mixture, residual
+        del band_reference
+
     alpha = np.zeros((height, width), dtype=np.float32)
     alpha[confident_subject] = 1.0
     key_length = float(np.dot(measured_key, measured_key))
@@ -1039,6 +1400,13 @@ def _remove_chroma_key_staged(
                 background_amount[~stable] = 1.0 - subject_amount[~stable]
                 np.clip(subject_amount, 0.0, 1.0, out=subject_amount)
                 np.clip(background_amount, 0.0, 1.5, out=background_amount)
+                if opaque_subject:
+                    # The foreground coefficient also contains brightness.
+                    # Separate additive spill when 1-background would force
+                    # impossible RGB and clip a feather into a bright fringe.
+                    subject_amount = mixture_coverage(
+                        source_color, subject_amount, background_amount, measured_key,
+                    )
                 tile_alpha = alpha[tile]
                 tile_alpha[solved] = subject_amount
                 tile_rgb[solved] = (
@@ -1080,12 +1448,41 @@ def _remove_chroma_key_staged(
     )
     del confident_subject
 
+    if opaque_subject:
+        original_rgb = pixels[..., :3].astype(np.float32)
+        # Retain solved boundary mixtures before opaque texture recovery.
+        # Restoring their source RGB would also restore the removed key colour.
+        key_edge = _supported_key_edge(original_rgb, alpha, measured_key) | early_rim
+        key_edge_rgb = rgb[key_edge].copy()
+        key_edge_alpha = alpha[key_edge].copy()
+        recovered_alpha = _recover_opaque_texture_matte(original_rgb, measured_key, alpha)
+        recovered_alpha, opaque_runs = _extend_opaque_color_runs(original_rgb, recovered_alpha, measured_key)
+        changed = (recovered_alpha > alpha) & (recovered_alpha < 1.0)
+        rgb[changed] = (
+            original_rgb[changed] - (1-recovered_alpha[changed, None])*measured_key
+        ) / recovered_alpha[changed, None]
+        alpha = recovered_alpha
+        opaque = alpha == 1.0
+        rgb[opaque] = original_rgb[opaque]
+        alpha[key_edge] = key_edge_alpha
+        rgb[key_edge] = key_edge_rgb
+        del key_edge_rgb, key_edge_alpha
+        del original_rgb, opaque, recovered_alpha, changed
+
     soft_edge = (alpha > 0.0) & (alpha < 0.999)
     edge_ring = cv2.dilate(
         soft_edge.astype(np.uint8),
         np.ones((3, 3), dtype=np.uint8),
         iterations=max(8, min(height, width) // 128),
     ).astype(bool) & (alpha > 0.0)
+    if opaque_subject:
+        opaque_depth = cv2.distanceTransform((alpha == 1.0).astype(np.uint8), cv2.DIST_L2, 5)
+        edge_ring &= opaque_depth <= 3.0
+        edge_ring &= ~opaque_runs
+        # Preserve established interior colours. The supported key rim is the
+        # exception: its source RGB still contains background contamination.
+        edge_ring &= (alpha < 1.0) | key_edge
+        del opaque_depth
     del soft_edge
     key_luminance = float(
         0.299 * measured_key[0]
@@ -1158,7 +1555,12 @@ def _remove_chroma_key_staged(
         0.36,
         borderType=cv2.BORDER_REFLECT,
     )
-    np.minimum(alpha, smoothed_alpha, out=alpha)
+    # Smoothing must not turn established opaque fibres/petals translucent.
+    # Retain the historical matte treatment for the general-purpose profile.
+    if opaque_subject:
+        np.minimum(alpha, smoothed_alpha, out=alpha, where=alpha < 1.0)
+    else:
+        np.minimum(alpha, smoothed_alpha, out=alpha)
     del smoothed_alpha
     pixels[..., :3] = np.rint(np.clip(rgb, 0.0, 255.0)).astype(np.uint8)
     pixels[..., 3] = np.minimum(
@@ -1309,8 +1711,19 @@ def remove_chroma_key_automatic(
                 result = reclassify_rim(image, result, measured_key)
                 if stage_observer is not None:
                     stage_observer("rim_reclassification", result.copy())
+                result = refine_edge_mixture(image, result, measured_key)
+                if stage_observer is not None:
+                    stage_observer("edge_mixture", result.copy())
+                result = suppress_edge_key_spill(image, result, measured_key)
+                if stage_observer is not None:
+                    stage_observer("edge_key_spill", result.copy())
+                result = repair_edge_chroma(image, result, measured_key)
+                if stage_observer is not None:
+                    stage_observer("edge_chroma_repair", result.copy())
             return result
-    result = _remove_chroma_key_staged(image, key_color)
+    result = _remove_chroma_key_staged(
+        image, key_color, opaque_subject=(subject_profile == "opaque_clipart"),
+    )
     if stage_observer is not None:
         stage_observer("staged_result", result.copy())
     result = _neutralize_opaque_key_spill(image, result, key_color)
@@ -1333,6 +1746,15 @@ def remove_chroma_key_automatic(
         result = reclassify_rim(image, result, measured_key)
         if stage_observer is not None:
             stage_observer("rim_reclassification", result.copy())
+        result = refine_edge_mixture(image, result, measured_key)
+        if stage_observer is not None:
+            stage_observer("edge_mixture", result.copy())
+        result = suppress_edge_key_spill(image, result, measured_key)
+        if stage_observer is not None:
+            stage_observer("edge_key_spill", result.copy())
+        result = repair_edge_chroma(image, result, measured_key)
+        if stage_observer is not None:
+            stage_observer("edge_chroma_repair", result.copy())
     return result
 
 

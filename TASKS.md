@@ -1,5 +1,168 @@
 # TASKS
 
+## Edge Color Artifacts Reported by Owner, 2026-09-22
+
+- [x] Owner visually accepted the v9 two-duckling PNG and explicitly authorized
+  commit/push on 2026-09-23. Acceptance is limited to this sample; broader quality
+  and the known memory/red-key issues remain open.
+- [x] Establish delivery scope: v9 Local Chroma Key is shared by Automatic
+  Clipart, Generation and Processing; new planning/compiled-prompt guidance is
+  used by Automatic Clipart. Pinterest and existing saved prompts are unchanged.
+  Both implementations are Core shell dependencies, absent from workflow ZIP
+  inventories; delivery requires an explicitly authorized Studio build/update.
+
+- [ ] Implement owner's selected Clipbrook-equivalent quality target. Exact
+  default reference and three ablations are in owner-clipbrook-comparison-20260922.
+  Owner confirmed Vibix must remain closed. No AGPL source integration or
+  relicensing is authorized; implement mathematical operations independently.
+  Current edge-mixture and key-spill changes remain under visual review; residual
+  colour and the newly reported bright fringe block overall acceptance.
+
+- [x] Diagnose and reduce remaining blue specks and pink/red edge contamination
+  on the v8 owner image. Add local chroma repair and recovery of wrongly opaque
+  mixtures; preserve existing partial/zero alpha and genuine material hues.
+  Receipts v9; 24 new regression cases. Current artifacts and single white
+  before/after sheet: `artifacts/owner-edge-spots-20260922/` beside the worktree.
+- [x] Verify final v9: 1885 passed, 57 skipped, 18 deselected, one existing
+  expected red-fur failure. Syntax, tracked-artifact guard, isolated offscreen
+  startup and diff checks pass. Review PNG hashes match the tested sources.
+- [x] Obtain owner visual acceptance of v9 for the supplied two-duckling image.
+  Four weak diagnostic key-coloured samples
+  and some fine edge residue remain; do not claim a fully clean edge.
+  Six fur/four botanical mean errors improve or hold on white/black;
+  no newly altered true opaque pixels. Check the saved PNG, not test count alone.
+
+- [x] Fix out-of-gamut mixture recovery turning feather edges white/yellow.
+  Handle additive key spill without globally capping real highlights. Fifteen
+  regressions added; 66 targeted checks pass. Receipts advance to v8. Review
+  sibling `artifacts/owner-edge-brightness-20260922/`; Before is the previous v7
+  result. Source/previous/corrected crops include the central and right edges.
+- [x] Verify v8: full isolated run 1861 passed, 57 skipped, 18 deselected,
+  one existing red-fur expected failure. Syntax, sensitive tracked-artifact
+  guard, isolated offscreen startup and diff whitespace checks pass.
+- [ ] Review the brightness correction visually. Known-truth textured-fur white
+  error slightly worsens (blue 18.927 -> 19.408; green 6.476 -> 6.693), with small
+  black-background improvements; opaque texture and botanical checks hold.
+  Do not claim universal improvement or full Clipbrook parity from this fix.
+
+- [x] Separate foreground brightness from coverage in the opaque staged path;
+  reconsider contaminated rim pixels before solving and preserve material-local
+  references for thin stems. Add source-consistency and painted-detail guards.
+  Six direct regressions on three keys reproduce the old alpha255 defect and
+  recover RGB with alpha200 versus truth204. Final edge file: 35 cases pass.
+- [x] Earlier v7 full isolated verification: 1846 passed, 57 skipped, 18 deselected,
+  one existing expected red-fur failure; syntax, tracked-artifact guard,
+  isolated offscreen startup smoke and diff whitespace checks passed.
+- [x] Obtain owner visual acceptance of
+  `artifacts/owner-edge-spots-20260922/ducklings-transparent.png`; the compact
+  comparison shows the preceding v8 result and the current correction.
+
+- [ ] Broader quality validation after the earlier rejected candidates and the
+  now-approved v9 duckling sample. Acceptance on further inputs requires clean
+  white/black composites, intact feather detail, original subject colours and
+  preserved small gaps, not merely fewer blue pixels or passing unit tests.
+- [x] Compare joint alpha/foreground reconstruction and existing BEN2 on the
+  owner's actual source. Both rejected: the former damages genuine texture in
+  six-case known-truth testing; BEN2 leaves halos and softens feathers. Keep
+  both as diagnostic artifacts only; neither is integrated as a replacement.
+
+- [x] Retain supported staged key-mixture solutions before opaque source-RGB
+  restoration. On the real ducklings input, high-blue fragments fall 200 -> 30;
+  deep opaque RGBA and existing transparent areas are unchanged. Ten regression
+  cases protect source mixtures, painted blue marks and disconnected details.
+  Affected suite: 247 passed, 1 environment skip, 1 existing expected failure.
+- [ ] Finish remaining key-coloured and fine coloured edge fragments on the owner's actual two-duckling
+  raw image (`artifacts/owner-ducklings-source-20260922` beside the worktree).
+  Latest result leaves 30 visible blue-dominant pixels (alpha >=128,
+  B-max(R,G)>35), versus 200 at initial diagnosis. The legacy profile leaves
+  zero but is not a safe wholesale replacement for opaque fur. At least 125
+  partial pixels are promoted to opaque by texture recovery, including measured
+  key mixtures; some blue fragments are classified opaque even before recovery.
+  Preserve genuine pale fibres and the small transparent gap between heads.
+- [ ] Address real staged-input peak memory at 2048px: 488.25 MiB with this fix,
+  487.398 MiB with its guard disabled; canonical fixture performance alone does
+  not establish the same memory bound on detailed real inputs.
+- [ ] Obtain the matching final transparent PNG and any saved processing/upscale
+  stages for the same `13.png`; current output is a new local source-code run,
+  not the owner's installed-app result.
+- [x] Stop staged edge correction from recolouring established opaque
+  botanical pixels in the opaque-clipart profile. Off-blue known-truth cases
+  at 256/512px now have zero changed opaque RGB pixels (previously 218/987).
+  The strict botanical checks pass; 120 related tests pass, one existing red-fur
+  expected failure remains. No real owner PNG validation or release yet.
+- [ ] Resolve the partial-edge tradeoff after opaque botanical RGB preservation:
+  off-blue white composite mean improves, but black mean worsens at both sizes.
+  Inspect actual raw and final PNGs before calling the cutout acceptable.
+- [x] Record owner's old flower screenshot and handoff in STATE.md (2026-09-22).
+  Screenshot is fully opaque with baked black background, not original alpha.
+- [ ] Investigate reported muddy small flowers, coloured leaf/stem fringes and
+  interior bands using raw/final PNGs and stage snapshots. Stage responsible is
+  unknown; separate generation, removal, colour correction and upscale. Protect
+  opaque interior colour/texture; no broad-band recolouring or global blur/erosion.
+- [x] Add botanical fixtures at two sizes and blue/off-blue backgrounds. Fix
+  staged final smoothing turning established opaque petals/stems translucent;
+  672/2150 alpha deviations become zero, with genuine gaps preserved.
+- [x] Remove staged botanical opaque colour drift up to 13/255. Exact RGB,
+  opacity and holes now pass at both tested sizes and both blue keys; partial
+  edge quality remains a separate open item above.
+- [x] Add small-detail quality guidance to automatic planning and compiled RU/EN
+  prompts: readable petals/leaves, continuous stems, no miniature contact sheet,
+  no defocus/fused parts; preserve explicit counts and opaque painted styles.
+- [ ] Validate real generated small flowers/branches separately from background
+  removal and upscale. Actual owner model/resolution/raw PNG are unknown. Code
+  defaults to 1K, but this does not establish the owner's chosen settings. No
+  provider model/resolution/cost changes or paid quality trials authorized here.
+- [x] Extend partial-boundary recovery only within 12px and with same-component
+  references agreeing at two erosion depths, tight fit and in-gamut RGB. Tests
+  reject disconnected subjects and conflicting shallow/deep colours. Seven-case
+  white/black mean errors improve, opaque damage counts unchanged; not perfection.
+- [x] Compare unchanged pinned Clipbrook Core against current Vibix on seven
+  identical fur inputs, with known truth and white/black composites. Record
+  provenance and raw PNGs in artifacts/clipbrook-vs-vibix-20260922 beside worktree.
+- [x] Fix early unguarded enclosure promotion of subpixel gaps in opaque profile.
+  Two regressions cover flat/textured blue fur; six golden outputs unchanged.
+- [ ] Resolve remaining dominance-based boundary coverage bias using trustworthy
+  foreground references. A wider radius alone is not a verified solution. The
+  subpixel-gap fix is limited: textured-blue white mean error 29.743 -> 29.406,
+  black 17.008 -> 16.626; the visible blue fringe is NOT fully fixed.
+- [x] Test flat/textured furry known-truth objects on three key colours, capture
+  stages and white/black composites. Offline evidence: `artifacts/chroma-fur-20260922`.
+- [x] Recover opaque interiors without flattening the whole alpha mask; exact
+  RGB/full opacity checks cover six furry scenes and nine yellow/blue variants.
+  Protect real holes and source alpha. Both precise/staged paths covered.
+- [x] Independent Astra review; protect fractional openings from overfill.
+  Connected fixed-chroma continuation preserves shade without hue drift and
+  passes flat red fur; seeds/candidates explained by key mixture are excluded.
+- [ ] Finish outermost warm fur pixels on red key and blue-boundary quality.
+  Red damaged pixels fell 7162 -> 201 -> 70, remaining within 2px; blue RGB outliers
+  fell 187 -> 61 -> 9, remaining within 1px. One strict expected-failure test in
+  `tests/test_chroma_fur_probe.py` remains open. New fibre AA metrics also need
+  improvement; the source change is not yet an edge-quality release candidate.
+  Do not confuse this with the separately fixed v6 colour-projection defect.
+  No fixed five-pixel boundary applies to the owner's reported issue.
+
+- [x] Reproduce one colour-compensation failure independently: yellow opaque
+  edge details become green during precise opaque-spill projection. Reject
+  unsupported/out-of-gamut colour unmixing without changing alpha or blurring.
+  Twelve regression cases pass; all six existing goldens retain their metrics.
+  Evidence: `artifacts/chroma-color-correction-20260922` beside the worktree.
+- [ ] Include the verified source correction (profile v6) in a separately
+  authorized future Studio build. The delivered 3.2.3 installer is unchanged.
+
+- [ ] Investigate reported black/dark-blue bands a few pixels from the object
+  boundary and isolated red/blue/green pixels along an otherwise yellow edge.
+  Owner reports these colors were absent from the generated source. New Windows
+  images did not arrive in this task; exact build, processing settings and affected
+  stage are not verified. Do not label this a confirmed despill or upscale cause.
+- [ ] When files are available, compare the original, background-removal output,
+  color-cleanup output and upscaled final PNG at identical edge locations. Inspect
+  RGB and alpha separately and composite on white/black backgrounds. Preserve
+  working files and identify the first stage introducing the artifact before
+  changing the algorithm; do not hide it by globally blurring or eroding edges.
+- [ ] Add a regression from the reproducible case: no introduced colored speckles
+  or dark bands, with genuine yellow detail and the object contour preserved.
+  Edge-quality acceptance remains open independently of passing automated tests.
+
 ## Acceptance Correction Delivery, 2026-09-21
 
 - [x] Implement first source pass for the owner's acceptance corrections below.

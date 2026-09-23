@@ -14,6 +14,16 @@ _PLANNING = {
         "depict it as a solid opaque illustration. Background and real gaps "
         "between parts are removed later; preserve clean, anti-aliased boundaries."
     ),
+    "detail_policy": (
+        "Plan one readable asset per image, not a contact sheet of miniature assets. "
+        "A small decorative accent describes its use, not a tiny subject on the canvas. "
+        "Keep the complete asset large in frame with safe margins. Preserve explicitly "
+        "requested counts; otherwise prefer fewer clearly formed flowers and leaves "
+        "over dense micro-detail: distinct petals, coherent "
+        "flower centres, continuous stems and intentional branch junctions. Do not "
+        "invent fused, melted or floating parts. Gentle or watercolor styling means "
+        "colour and painted texture, not defocus, blurred boundaries or translucent petals."
+    ),
     "principles": [
         "commercial_purpose",
         "no_filler",
@@ -52,12 +62,21 @@ _PROMPT_GUIDANCE = {
             "единый стиль, палитра и уровень детализации всей коллекции; "
             "объект полностью видим; достаточные поля со всех сторон; читаемый силуэт; "
             "все части объекта полностью непрозрачны; акварель только как текстура "
-            "непрозрачной краски; это правило важнее описания материала"
+            "непрозрачной краски; это правило важнее описания материала; "
+            "один готовый элемент крупно в кадре с сохранением полей, не лист миниатюр; "
+            "мелкий декор не означает маленькое изображение на холсте; "
+            "каждый лепесток и лист различим, центры цветов оформлены, стебли непрерывны, "
+            "соединения ветвей естественны; сохранять заданное количество элементов, "
+            "иначе предпочитать меньше ясно прорисованных деталей вместо скопления "
+            "микродеталей; мягкость стиля относится к цвету и фактуре, "
+            "не к резкости контура"
         ),
         "common_restrictions": (
             "без обрезания",
             "без случайных лишних объектов",
             "без случайно дублированных элементов",
+            "без размытия, расфокуса, размазанных или сросшихся лепестков и листьев, "
+            "бесформенных цветов и оборванных стеблей",
             "без стекла, просвечивающих лепестков, полупрозрачных материалов, "
             "тюля, вуалей, дыма, тумана и свечения; фон не просвечивает сквозь объект",
         ),
@@ -81,12 +100,19 @@ _PROMPT_GUIDANCE = {
             "consistent style, palette and detail level across the collection; "
             "subject fully visible; generous margins on all sides; readable silhouette; "
             "all parts of the subject fully opaque; watercolor only as an opaque "
-            "painted texture; this rule overrides material descriptions"
+            "painted texture; this rule overrides material descriptions; "
+            "one finished asset large in frame with safe margins, not a contact sheet; "
+            "small decorative use does not mean a tiny image on the canvas; "
+            "distinct petals and leaves, coherent flower centres, continuous stems "
+            "and natural branch junctions; preserve requested counts, otherwise prefer "
+            "fewer clearly formed details over crowded micro-detail; softness describes "
+            "colour and texture, not edge focus"
         ),
         "common_restrictions": (
             "no cropping",
             "no accidental extra objects",
             "no accidental duplicated elements",
+            "no blur, defocus, smeared or fused petals and leaves, malformed flowers or broken stems",
             "no glass, see-through petals, translucent or semi-transparent materials, "
             "tulle, veils, smoke, mist or glow; background never shows through the subject",
         ),

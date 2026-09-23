@@ -1,5 +1,14 @@
 # Vibix Images
 
+## Closed Product Boundary, 2026-09-22
+
+Owner explicitly requires Vibix and its applications to remain closed-source.
+No relicensing is authorized. Clipbrook output is the selected visual quality
+reference for chroma removal; its AGPL source is not an authorized proprietary
+runtime dependency or source translation. Implement improvements independently
+and verify colour, coverage and small-detail preservation against real inputs
+and known-truth fixtures. Passing tests alone does not establish visual parity.
+
 ## Optional Export Cleanup, 2026-09-20
 
 Set export offers independent, default-off deletion of intermediate working PNGs
@@ -10,6 +19,14 @@ changed copies and unfinished/excluded items are retained. Choices reset after
 each export. Cleanup failure must not report a successful export as failed.
 
 ## Opaque Clipart Material Policy, 2026-09-20
+
+Owner detail-quality requirement, 2026-09-22: generated flowers, leaves and small
+branches must remain readable and coherently formed, not smeared, fused or
+translucent. Plan one appropriately framed asset per image; decorative use must
+not shrink it to a miniature on the canvas. Preserve explicit element counts and
+the selected style; soft styling describes colour/texture, not defocused edges.
+Prompt compliance is not evidence of model output quality. Validate raw outputs
+separately from removal/upscale; do not silently change paid model or resolution.
 
 Automatic Clipart produces fully opaque illustrated subjects and details.
 Collection planning and compiled prompts exclude glass, translucent petals,
