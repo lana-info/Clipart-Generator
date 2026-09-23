@@ -7,10 +7,11 @@
 - [x] Write exact Russian release/module/bundle/news checklist in service repo.
 - [x] Separate Studio display branding from legacy persistent storage identity.
 - [x] Add real Bezier edit/save/undo/redo verification to installed-app smoke.
-- [ ] Verify Windows3.2.5 installation over original published3.1.4.
+- [x] Verify Windows3.2.5 installation over original published3.1.4 and publish
+  hash-verified ordinary installer. Fix server compatibility for old updater.
 - [ ] Arrange and verify off-host publisher-key backup with owner.
 - [x] Prepare verified production packages and upload five unpublished admin drafts.
-- [ ] Complete authorized release delivery after Windows check and key backup.
+- [ ] Publish five prepared module drafts after owner confirms off-host key backup.
 
 
 ## Independent Components and Home News, 2026-09-23
@@ -35,8 +36,8 @@
   Test3.2.4 build and native installed checks passed; compatible test modules published.
 - [x] Ordinary Studio3.2.4 artifact verified (run35890152199): Windows checks,
   installer hash/version/provenance. Final Linux CI35891569726 passes.
-- [ ] Owner manual installed UI/image acceptance and separate production module
-  publication decision. No customer module releases or announcements published.
+- [ ] Owner manual installed UI/image acceptance. Ordinary3.2.5 is now published;
+  production module drafts await off-host key backup. No announcements published.
 
 
 ## Edge Color Artifacts Reported by Owner, 2026-09-22

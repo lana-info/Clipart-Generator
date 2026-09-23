@@ -19,8 +19,18 @@ Local contour smoke passed. Full suite:1906 passed,57 skipped,19 deselected,
 1 known red-key fur xfail. Restored3.1.4 verified-certificate fallback and safe
 transport diagnostics after discovering the Studio branch lacked that fix; new
 regression preserves permanent rejection on fallback.28 focused license tests
-passed (1 integration test deselected). Native Windows build35897241463 running from754cfba; it includes original3.1.4
-upgrade fixture. Linux CI35897199090 passed the same checkpoint.
+passed (1 integration test deselected). Windows3.2.5 build35899489246 passed from17095eb (application payload754cfba,
+follow-up only bounds download and updates docs). Previous35897241463 was cancelled
+on slow PowerShell fixture download. curl retrieved the same pinned original3.1.4
+in seconds. Native upgrade verified registration/path and five synthetic user-file
+hashes; installed curve edit/save/undo/redo and local inference passed. Artifact
+10769240994 downloaded and version/provenance/SHA verified:
+246e1a3fca90b5131e3cf6e488f9230cd6dc45c267aa08daa541519da77537c2.
+Working shell release8549296d-0d0c-2507-ae92-39598483ed92 is PUBLISHED, after private
+pre-studio325-release-20260923.dump backup and stored-file hash verification.
+Installer is in sibling artifacts/windows-production-3.2.5-35899489246/.
+This does not claim real customer license activation or real project migration.
+Linux CI35897199090 and35899409031 passed.
 Legacy3.1.4 updater omitted channel; server c875bd2 now defaults only missing shell
 channel to stable. Deployed as studio-legacy-c875bd2 after213 PostgreSQL tests,
 backup and unchanged-data checks. Original updater sourcecdabb45 accepts the
@@ -28,8 +38,9 @@ current signed manifest and excludes module ZIPs in an isolated protocol fixture
 Five official Windows packages1.4.0 prepared for Studio>=3.2.5,<3.3.0 and uploaded
 to working admin as draft only. Artifacts and IDs: sibling
 artifacts/official-modules-1.4.0-studio325-20260923/production-draft-events.jsonl.
-Database backup pre-studio325-drafts-20260923.dump precedes upload. Publication
-pending native upgrade checks and secure off-host publisher-key backup. Owner
+Database backup pre-studio325-drafts-20260923.dump precedes upload. All five actual ZIPs also activated in an isolated runtime; three consumers
+used packagedv9 successfully. Module publication pending secure off-host
+publisher-key backup (Windows upgrade checks are complete). Owner
 requested backup advice; recommended encrypted local+USB copies with separate
 password storage. Instructions and disposable-fixture verification recorded in
 docs/module-release-runbook.md. No actual off-host backup confirmed.

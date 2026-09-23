@@ -219,3 +219,20 @@ acceptance steps and were not executed by these source checks.
 
 Команды шифрования и сравнения проверены на одноразовом тестовом Ed25519-ключе.
 Это проверка процедуры, а не подтверждение наличия копии рабочего ключа у владельца.
+
+
+## Verified ordinary Studio3.2.5, 2026-09-23
+
+Windows build35899489246, artifact10769240994, source17095eb passed original3.1.4
+upgrade, installed Bezier edit/save and local inference checks. Ordinary installer
+is published on the working server; SHA256:
+`246e1a3fca90b5131e3cf6e488f9230cd6dc45c267aa08daa541519da77537c2`.
+Native data checks use five synthetic files; real customer activation/projects
+were not exercised. No user credentials were used.
+
+Five official packages1.4.0 (all four workflows plus image-processing) require
+Studio>=3.2.5,<3.3.0 on Windows x64. Signature/install/runtime activation verified;
+all three processing consumers acquired packagedv9 and passed an image fixture.
+These five rows are DRAFTS in working admin, pending off-host publisher-key backup.
+The ordinary installer already includes the current built-in implementation.
+No publisher-key backup on the owner's computer/USB has yet been confirmed.
