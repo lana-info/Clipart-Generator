@@ -283,11 +283,10 @@ class ModeSelectionScreen(QWidget):
         self.saved_project_buttons: list[V3Button] = []
         self.saved_projects_card.hide()
         layout.insertWidget(1, self.saved_projects_card)
-        self.news_label = QLabel("Новости Studio: обновления ещё не проверены")
-        self.news_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.news_label.setWordWrap(True)
-        self.news_label.setMaximumHeight(88)
-        layout.insertWidget(2, self.news_label)
+        from studio_news_ui import StudioNewsPanel
+        self.news_panel = StudioNewsPanel()
+        self.news_label = self.news_panel.body
+        layout.insertWidget(2, self.news_panel)
 
         self.cancel_button = V3Button(
             "Вернуться",
@@ -494,6 +493,11 @@ class V3ApplicationView(QWidget):
         self.mode_selection.project_requested.connect(self.continue_saved_project)
         self.mode_selection.all_projects_requested.connect(self._show_all_projects)
         self.stack.addWidget(self.mode_selection)
+        from studio_news import StudioNewsClient
+        from studio_news_ui import StudioNewsController
+        news_client = getattr(module_delivery, 'news', None)
+        self._news_controller = (StudioNewsController(news_client, self.mode_selection.news_panel, self)
+                                 if isinstance(news_client, StudioNewsClient) else None)
 
         if recent_project is None and self._draft_path is not None:
             recent_project = self._load_recent_project()
@@ -524,7 +528,6 @@ class V3ApplicationView(QWidget):
                 busy_module=lambda module: self.shell is not None and self.shell.workflow_controller(module) is not None,
             )
             self._module_updates_dialog.finished.connect(self.refresh_license_status)
-            self._module_updates_dialog.news_changed.connect(self.mode_selection.news_label.setText)
         self._module_updates_dialog.open()
 
     def _runtime_settings(self) -> Mapping[str, Any]:
@@ -1054,7 +1057,25 @@ class V3ApplicationView(QWidget):
         if shell is not self.shell:
             raise ValueError("Откройте проект заново перед запуском")
         factory = self._worker_factory or DEFAULT_LEGACY_RUNTIME_ADAPTER.create_worker
-        return factory(**kwargs)
+        from studio_processing_api import PROCESSING_CONSUMERS
+        consumer = getattr(shell, "module_id", shell.state.mode.value)
+        settings = kwargs.get("settings", {})
+        lease = None
+        if (self._module_delivery is not None and consumer in PROCESSING_CONSUMERS
+                and settings.get("remove_bg")
+                and settings.get("remove_bg_provider") == "local_chroma_key"):
+            lease = self._module_delivery.acquire_processing_engine(consumer)
+            kwargs["processing_engine"] = lease.engine
+        try:
+            worker = factory(**kwargs)
+            if lease is not None:
+                worker.finished.connect(lease.close)
+                worker.destroyed.connect(lease.close)
+            return worker
+        except Exception:
+            if lease is not None:
+                lease.close()
+            raise
 
     def _create_prepared_project_worker(
         self, shell: AppShell, **kwargs: Any
@@ -1228,6 +1249,8 @@ class V3ApplicationView(QWidget):
         if self._module_updates_dialog is not None and self._module_updates_dialog.busy:
             event.ignore()
             return
+        if self._news_controller is not None:
+            self._news_controller.shutdown()
         self._diagnostic_event(
             "application_exit",
             "Приложение закрыто штатно.",

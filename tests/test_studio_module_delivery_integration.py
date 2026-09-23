@@ -167,6 +167,18 @@ def test_https_release_to_real_home_controller_and_independent_update(delivery, 
         assert controller is not None
         assert controller.__class__.__module__.startswith("_studio_module_")
         if module == "auto-clipart":
+            import sys
+            from studio_clipart_recipe import ClipartRecipe
+            from studio_clipart_objects import fill_recipe
+            assert controller.brief.planning.__class__.__module__.startswith('_studio_module_')
+            planning_ui = sys.modules[controller.brief.planning.__class__.__module__]
+            assert planning_ui.planning_request.__module__.startswith('_studio_module_')
+            recipe = ClipartRecipe(theme='Package-local prompt rules')
+            recipe.objects = fill_recipe([], recipe.counts)
+            # Changing the shell's guidance cannot override package-owned rules.
+            from unittest.mock import patch
+            with patch('studio_commercial_prompt_guidance.commercial_planning_hints', side_effect=AssertionError('shell guidance used')):
+                assert planning_ui.planning_request(recipe)['commercial']['detail_policy']
             controller.brief.project_name.setText("Preserved project")
         else:
             view.project_state.common.project_name = "Preserved project"
@@ -226,6 +238,36 @@ def test_newer_incompatible_release_does_not_hide_compatible_version(delivery):
     publish("pinterest")
     publish("pinterest", "2.0.0", studio_min="4.0.0", studio_max_exclusive="5.0.0")
     assert bridge.check("pinterest").version == "1.0.0"
+
+
+def test_shared_engine_only_update_and_signed_news_over_real_https(delivery):
+    from studio_module_updates import WorkflowUpdate
+    bridge, publish, _gate, service, _record = delivery
+    publish('image-processing')
+    offer = bridge.check('processing')
+    assert isinstance(offer, WorkflowUpdate) and offer.workflow is None
+    bridge.install(offer)
+    bridge.activate_update(offer)
+    assert bridge.store.state('processing')['active'] is None
+    lease = bridge.acquire_processing_engine('processing')
+    assert lease.engine.remove_background.__module__.startswith('_studio_module_')
+    publish('image-processing', '1.1.0')
+    update = bridge.check('clipart')
+    bridge.install(update)
+    with pytest.raises(ModuleApiError):
+        bridge.activate_update(update)
+    assert bridge.store.state('image-processing')['active'] == '1.0.0'
+    lease.close()
+    bridge.activate_update(update)
+    assert bridge.store.state('image-processing')['active'] == '1.1.0'
+    assert bridge.check('processing') is None
+    draft = service.news.save('Independent announcement', 'No module release is required.')
+    assert bridge.news.fetch() == []
+    published = service.news.set_status(draft['id'], 'published', draft['revision'])
+    assert bridge.news.fetch()[0]['title'] == 'Independent announcement'
+    assert bridge.news.cached()[0]['body'] == 'No module release is required.'
+    service.news.set_status(draft['id'], 'withdrawn', published['revision'])
+    assert bridge.news.fetch() == [] and bridge.news.cached() == []
 
 
 def test_revoked_installed_module_preserves_open_project(delivery, app, tmp_path, monkeypatch):

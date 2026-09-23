@@ -24,7 +24,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from studio_module_delivery import OFFICIAL_PUBLISHER_KEYS
-from studio_module_packaging import OFFICIAL_WORKFLOW_FILES, prepare_official_workflow_release
+from studio_module_packaging import OFFICIAL_WORKFLOW_FILES, OFFICIAL_COMPONENT_FILES, prepare_official_workflow_release
 from studio_modules import MAX_PACKAGE_BYTES, ModuleStore
 
 SOURCE_ROOT = Path(__file__).resolve().parent
@@ -72,7 +72,7 @@ def prepare_release_set(*, output: Path, key_path: Path, key_id: str, version: s
     key = load_signing_key(key_path, key_id, keys)
     # Validate and build everything before creating any release output.
     artifacts = []
-    for module_id in sorted(OFFICIAL_WORKFLOW_FILES):
+    for module_id in sorted({**OFFICIAL_WORKFLOW_FILES, **OFFICIAL_COMPONENT_FILES}):
         content = prepare_official_workflow_release(
             source_root=source_root, module_id=module_id, version=version,
             studio_min=studio_min, studio_max_exclusive=studio_max_exclusive,
@@ -154,7 +154,7 @@ class AdminDraftUploader:
             store = ModuleStore(root / "inspection", studio_version=studio_version,
                                 platform=platform, trusted_keys=keys)
             manifest = store.inspect_package(snapshot)
-        if manifest["module_id"] not in OFFICIAL_WORKFLOW_FILES:
+        if manifest["module_id"] not in {**OFFICIAL_WORKFLOW_FILES, **OFFICIAL_COMPONENT_FILES}:
             raise ValueError("Unknown official module")
         payload = {name: manifest[name] for name in (
             "module_id", "version", "studio_min", "studio_max_exclusive")}

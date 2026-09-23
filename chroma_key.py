@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 from PIL import Image
 from chroma_rim import mixture_coverage, reclassify_rim, refine_edge_mixture, repair_edge_chroma, suppress_edge_key_spill
+from studio_processing_api import ChromaKeyAmbiguousError, ChromaKeySubjectColorError
 
 
 KEY_COLORS: Final[dict[str, tuple[int, int, int]]] = {
@@ -61,14 +62,6 @@ MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
         "glitter particles or background-colour glow."
     ),
 }
-
-
-class ChromaKeyAmbiguousError(ValueError):
-    """Raised when the image border is not a safe match for the selected key."""
-
-
-class ChromaKeySubjectColorError(ChromaKeyAmbiguousError):
-    """Raised when removing the key would erase an enclosed subject detail."""
 
 
 def parse_key_color(value: object) -> tuple[int, int, int]:

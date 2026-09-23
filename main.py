@@ -1002,8 +1002,12 @@ class WorkerThread(QThread):
     progress_value = pyqtSignal(int)
     diagnostic = pyqtSignal(object)
 
-    def __init__(self, mode, work_dir, settings, selected_files=None, generated_prompts=None, parent=None, *, project_id=None):
+    def __init__(self, mode, work_dir, settings, selected_files=None, generated_prompts=None, parent=None, *, project_id=None, processing_engine=None):
         super().__init__(parent)
+        from studio_processing_api import ProcessingEngine
+        if processing_engine is not None and not isinstance(processing_engine, ProcessingEngine):
+            raise ValueError("Invalid processing engine")
+        self._processing_engine = processing_engine
         if project_id is not None:
             if not isinstance(project_id, str) or str(uuid.UUID(project_id)) != project_id:
                 raise ValueError("Некорректный идентификатор проекта")
@@ -2492,6 +2496,15 @@ class WorkerThread(QThread):
     def _uses_local_chroma_key_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_chroma_key"
 
+    def _chroma_engine(self):
+        if getattr(self, "_processing_engine", None) is None:
+            from chroma_profile import PROFILE_VERSION
+            from studio_processing_api import ProcessingEngine
+            self._processing_engine = ProcessingEngine(
+                PROFILE_VERSION, remove_chroma_key_automatic, measure_chroma_background,
+            )
+        return self._processing_engine
+
     def _uses_photoroom_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "photoroom"
 
@@ -2837,17 +2850,18 @@ class WorkerThread(QThread):
                         validate_local_image_input(current_path)
                         try:
                             with Image.open(current_path) as source_image:
-                                result = remove_chroma_key_automatic(
+                                engine = self._chroma_engine()
+                                result = engine.remove(
                                     source_image,
                                     selected_chroma_key_color,
-                                    subject_profile="opaque_clipart",
                                 )
                                 self._save_image_object_as_png(result, nobg_path)
                                 try:
                                     self._item_context.chroma_receipt = {
                                         "source_sha256": image_digest(current_path),
                                         "requested_background": "#%02X%02X%02X" % KEY_COLORS[selected_chroma_key_color],
-                                        "observed_background": "#%02X%02X%02X" % measure_chroma_background(source_image),
+                                        "observed_background": "#%02X%02X%02X" % engine.measure_background(source_image),
+                                        "profile": engine.profile,
                                     }
                                 except (OSError, ValueError):
                                     self.progress.emit("  Не удалось подготовить сведения об обработке Chroma Key")
@@ -4136,6 +4150,7 @@ class WorkerThread(QThread):
                         requested_background=chroma_receipt["requested_background"],
                         observed_background=chroma_receipt["observed_background"],
                         expected_result_sha256=published_digest,
+                        profile=chroma_receipt.get("profile", self._chroma_engine().profile),
                     )
                 except (OSError, ValueError):
                     self.progress.emit("  PNG сохранён; сведения об обработке Chroma Key записать не удалось")

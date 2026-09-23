@@ -8,6 +8,16 @@ from __future__ import annotations
 from typing import Protocol
 
 from license_client import LicenseAuthorization, LicenseError
+from studio_processing_api import PROCESSING_COMPONENT_ID, PROCESSING_CONSUMERS
+
+
+def allows_package(authorization: LicenseAuthorization, module_id: str) -> bool:
+    """The shared dependency grants no workflow right of its own."""
+    if not isinstance(authorization, LicenseAuthorization):
+        return False
+    if module_id == PROCESSING_COMPONENT_ID:
+        return any(authorization.allows_module(consumer) for consumer in PROCESSING_CONSUMERS)
+    return authorization.allows_module(module_id)
 
 
 class AuthorizationGate(Protocol):
@@ -38,4 +48,4 @@ class ModuleAccessPolicy:
             return False
         if action == "download" and authorization.is_offline_grace:
             return False
-        return authorization.allows_module(module_id)
+        return allows_package(authorization, module_id)

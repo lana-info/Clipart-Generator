@@ -13,7 +13,7 @@ import sys
 import threading
 import uuid
 from concurrent.futures import Future
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -229,6 +229,32 @@ class ModuleRuntimeHost:
         self._allowed(module_id, "load")
         self._ensure_idle(module_id)
         return _module_info(self._load_verified(module_id))
+
+    def activate_many(self, versions: Mapping[str, str]) -> None:
+        """Activate a workflow and its shared dependency as one owner-thread unit.
+
+        No jobs/pages may own any changed package. State pointers and loaded
+        registrations recover together if any signature/API/registration fails.
+        """
+        if not isinstance(versions, Mapping) or not 1 <= len(versions) <= 2:
+            raise ModuleRuntimeError("Invalid activation group")
+        for module_id in versions:
+            self._allowed(module_id, "activate")
+            self._ensure_idle(module_id)
+        previously_loaded = set(versions) & self._loaded.keys()
+        try:
+            with ExitStack() as stack:
+                for module_id, version in versions.items():
+                    stack.enter_context(self.store.activation_transaction(module_id, version))
+                for module_id in versions:
+                    self._load_verified(module_id)
+        except Exception:
+            # ExitStack has already restored every on-disk activation pointer.
+            for module_id in versions:
+                self.unload(module_id)
+            for module_id in previously_loaded:
+                self._load_verified(module_id)
+            raise
 
     def unload(self, module_id: str) -> None:
         self._assert_owner_thread()

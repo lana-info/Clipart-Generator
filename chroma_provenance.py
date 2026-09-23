@@ -13,11 +13,11 @@ import re
 import tempfile
 
 from processing_contract import publish_atomic
+from chroma_profile import PROFILE_VERSION
+from studio_processing_api import valid_processing_profile
 
 MAX_RECEIPT_BYTES = 8192
 MAX_IMAGE_BYTES = 256 * 1024 * 1024
-PROFILE_VERSION = "opaque-clipart-v9"
-_READABLE_PROFILES = ("opaque-clipart-v1", "opaque-clipart-v2", "opaque-clipart-v3", "opaque-clipart-v4", "opaque-clipart-v5", "opaque-clipart-v6", "opaque-clipart-v7", "opaque-clipart-v8", PROFILE_VERSION)
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _COLOR = re.compile(r"#[0-9A-F]{6}\Z")
 _KEYS = {"schema_version", "profile", "status", "quality_status", "source_sha256",
@@ -46,7 +46,7 @@ def _validate(payload: object) -> dict:
         raise ValueError("Invalid chroma receipt fields")
     if type(payload["schema_version"]) is not int or payload["schema_version"] != 1:
         raise ValueError("Unsupported chroma receipt version")
-    if payload["profile"] not in _READABLE_PROFILES or payload["status"] != "processed":
+    if not valid_processing_profile(payload["profile"]) or payload["status"] != "processed":
         raise ValueError("Unsupported chroma processing profile or status")
     if payload["quality_status"] != "not_evaluated":
         raise ValueError("Receipt is not a quality certificate")
@@ -60,13 +60,14 @@ def _validate(payload: object) -> dict:
 
 def write_receipt(result_path: str | Path, *, source_sha256: str,
                   requested_background: str, observed_background: str,
-                  expected_result_sha256: str | None = None) -> Path:
+                  expected_result_sha256: str | None = None,
+                  profile: str = PROFILE_VERSION) -> Path:
     target = receipt_path(result_path)
     result_digest = image_digest(result_path)
     if expected_result_sha256 is not None and result_digest != expected_result_sha256:
         raise ValueError("Export changed before its receipt was saved")
     payload = _validate({
-        "schema_version": 1, "profile": PROFILE_VERSION, "status": "processed",
+        "schema_version": 1, "profile": profile, "status": "processed",
         "quality_status": "not_evaluated", "source_sha256": source_sha256,
         "result_sha256": result_digest,
         "requested_removal_background": requested_background,

@@ -24,11 +24,23 @@ from studio_modules import (
 
 
 OFFICIAL_WORKFLOW_FILES = {
-    "auto-clipart": ("studio_auto_clipart_flow.py", "v3_clipart_flow.py"),
-    "clipart": ("v3_clipart_flow.py",),
+    "auto-clipart": (
+        "studio_auto_clipart_flow.py", "v3_clipart_flow.py",
+        "studio_clipart_builder_ui.py", "studio_planning_ui.py", "studio_text_client.py",
+        "studio_clipart_planner.py", "studio_clipart_objects.py",
+        "studio_commercial_prompt_guidance.py", "studio_holiday_profiles.py",
+        "studio_style_profiles.py", "clipart_prompt_generator.py", "clipart_prompt_schema.py",
+    ),
+    "clipart": ("v3_clipart_flow.py", "clipart_prompt_generator.py", "clipart_prompt_schema.py"),
     "processing": ("v3_processing_flow.py",),
     "pinterest": ("v3_pinterest_flow.py", "pinterest_pin_composer.py",
                   "pinterest_pin_templates.py", "pinterest_prompt_schema.py"),
+}
+
+OFFICIAL_COMPONENT_FILES = {
+    "image-processing": (
+        "studio_processing_engine.py", "chroma_key.py", "chroma_rim.py", "chroma_profile.py",
+    ),
 }
 
 
@@ -39,7 +51,7 @@ def prepare_official_workflow_release(*, source_root: Path, module_id: str, **me
     shared Core APIs retain their existing imports and compatibility range.
     """
     try:
-        inventory = OFFICIAL_WORKFLOW_FILES[module_id]
+        inventory = {**OFFICIAL_WORKFLOW_FILES, **OFFICIAL_COMPONENT_FILES}[module_id]
     except KeyError as exc:
         raise ModulePackageError("Unknown official workflow") from exc
     owned = {Path(name).stem for name in inventory}
@@ -55,6 +67,27 @@ def prepare_official_workflow_release(*, source_root: Path, module_id: str, **me
             elif isinstance(node, ast.Import) and any(alias.name in owned for alias in node.names):
                 raise ModulePackageError("Workflow-owned imports must use from syntax")
         files[name] = ast.unparse(tree).encode("utf-8")
+    if module_id in OFFICIAL_COMPONENT_FILES:
+        files["entry.py"] = (
+            "from studio_module_api import ModuleRegistration, CommandDeclaration\n"
+            "from studio_processing_api import PROCESSING_CAPABILITY\n"
+            "from studio_processing_api import ProcessingEngine\n"
+            "_engine = None\n"
+            "def bind(context):\n"
+            "    global _engine\n"
+            "    context.capabilities.require(PROCESSING_CAPABILITY)\n"
+            "    from .studio_processing_engine import create_engine\n"
+            "    _engine = create_engine()\n"
+            "    if not isinstance(_engine, ProcessingEngine):\n"
+            "        raise ValueError('Unsupported processing engine')\n"
+            "def engine():\n"
+            "    return _engine\n"
+            "def register(context):\n"
+            "    return ModuleRegistration(context.module_id, context.version,\n"
+            "        commands=(CommandDeclaration('engine', engine),),\n"
+            "        capabilities=(PROCESSING_CAPABILITY,))\n"
+        ).encode("utf-8")
+        return prepare_module_release(module_id=module_id, entrypoint="entry.py", files=files, **metadata)
     flow = Path(inventory[0]).stem
     installer = {"clipart": "install_clipart_flow", "processing": "install_processing_flow",
                  "pinterest": "install_pinterest_flow", "auto-clipart": "install_auto_clipart_flow"}[module_id]
@@ -62,6 +95,12 @@ def prepare_official_workflow_release(*, source_root: Path, module_id: str, **me
     files["entry.py"] = (
         "from studio_module_api import ModuleRegistration, CommandDeclaration\n"
         "def install(host, *, locale):\n"
+        "    from importlib import import_module\n"
+        # Controllers outlive this callback. Preload owned helpers while the
+        # runtime suppresses bytecode, so later UI/worker lazy imports cannot
+        # add __pycache__ files to an immutable, signed package inventory.
+        f"    for name in {tuple(Path(name).stem for name in inventory)!r}:\n"
+        "        import_module('.' + name, __package__)\n"
         f"    from .{flow} import {installer}\n"
         f"    return {installer}({arguments})\n"
         "def register(context):\n"
@@ -151,7 +190,7 @@ def main(argv=None) -> int:
     from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
     parser = argparse.ArgumentParser(description="Prepare a signed official Studio workflow package")
-    parser.add_argument("--module", choices=sorted(OFFICIAL_WORKFLOW_FILES), required=True)
+    parser.add_argument("--module", choices=sorted({**OFFICIAL_WORKFLOW_FILES, **OFFICIAL_COMPONENT_FILES}), required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--studio-min", required=True)
     parser.add_argument("--studio-max-exclusive", required=True)

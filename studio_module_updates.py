@@ -15,6 +15,35 @@ class ModuleRelease(UpdateRelease):
     studio_max_exclusive: str = ""
 
 
+@dataclass(frozen=True)
+class WorkflowUpdate:
+    """One user-facing update action, optionally including the shared engine."""
+    module_id: str
+    workflow: ModuleRelease | None
+    processing: ModuleRelease
+
+    def __post_init__(self):
+        from studio_processing_api import PROCESSING_CONSUMERS, PROCESSING_COMPONENT_ID
+        if (self.module_id not in PROCESSING_CONSUMERS
+                or not isinstance(self.processing, ModuleRelease)
+                or self.processing.module_id != PROCESSING_COMPONENT_ID
+                or (self.workflow is not None and (not isinstance(self.workflow, ModuleRelease)
+                    or self.workflow.module_id != self.module_id))):
+            raise ValueError('Invalid workflow update identity')
+
+    @property
+    def version(self):
+        return self.workflow.version if self.workflow else self.processing.version
+
+
+def update_identity(release):
+    if isinstance(release, WorkflowUpdate):
+        return (release.module_id, update_identity(release.workflow) if release.workflow else None,
+                update_identity(release.processing))
+    return tuple(getattr(release, name) for name in
+                 ('module_id', 'version', 'sha256', 'size', 'studio_min', 'studio_max_exclusive'))
+
+
 class ModuleUpdateClient(UpdateClient):
     """Module and shell versions are independent, including on Windows."""
 

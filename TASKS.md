@@ -1,5 +1,27 @@
 # TASKS
 
+## Independent Components and Home News, 2026-09-23
+
+- [x] Implement approved shared processing boundary: signed package, stable API,
+  engine injection, real profile receipts, consumer-derived rights, job leases,
+  atomic activation/rollback. Retain existing workflow Update buttons, no extra row.
+- [x] Move actual planning/prompt dependency chain into workflow inventories and
+  verify installed packages use their own rules without mutating signed files.
+- [x] Verify real HTTPS delivery, tamper/compatibility rejection, active-job pinning,
+  rollback and the three processing consumers. Backend PostgreSQL suite: 210 pass;
+  HTTPS integration: 17 pass. Final offline suite result is recorded in STATE.md.
+- [x] Obtain approval for independent news home/admin mockups and implement draft,
+  publish, withdraw, protected signed feed, latest-news rendering and offline cache.
+  Preserve approved/actual evidence in `docs/ui/3.1/independent-components-news/`.
+- [x] Verify browser editor scenarios and offscreen home populated/empty/offline
+  states; document the backend migration and ordered rollout requirements.
+- [ ] Decide ordinary Generation chroma/online-removal behaviour with the owner;
+  existing capabilities remain available until that product decision.
+- [ ] Authorized release/build and installed Windows acceptance, compatible backend
+  deployment with migration013, then production module publication. Implementation
+  approval does not authorize these operations; none were performed in this task.
+
+
 ## Edge Color Artifacts Reported by Owner, 2026-09-22
 
 - [x] Owner visually accepted the v9 two-duckling PNG and explicitly authorized

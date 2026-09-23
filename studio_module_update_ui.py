@@ -3,6 +3,7 @@ from PyQt6.QtCore import QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QDialog, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QVBoxLayout
 
 from v3_components import V3Button, ButtonVariant
+from studio_module_updates import WorkflowUpdate, update_identity
 
 
 MODULE_TITLES = {
@@ -30,10 +31,10 @@ class ModuleUpdateWorker(QThread):
                 # Download grants expire. Refresh once on explicit user action,
                 # but never substitute a different version for the selected one.
                 fresh = self.delivery.check(self.release.module_id)
-                identity = ("version", "sha256", "size", "studio_min", "studio_max_exclusive")
-                if fresh is None or any(getattr(fresh, name) != getattr(self.release, name) for name in identity):
+                if fresh is None or update_identity(fresh) != update_identity(self.release):
                     raise ValueError("Selected release changed")
-                if fresh.version in self.delivery.store.installed_versions(fresh.module_id):
+                if (not isinstance(fresh, WorkflowUpdate)
+                        and fresh.version in self.delivery.store.installed_versions(fresh.module_id)):
                     # A previous attempt may have staged successfully but failed
                     # activation. Runtime will reverify the installed signature.
                     self.phase.emit("verifying")
@@ -212,7 +213,8 @@ class ModuleUpdatesDialog(QDialog):
                         available.setText("Ошибка проверки")
                 self.status.setText("Не удалось проверить или скачать обновление. Текущая версия сохранена.")
             elif worker.release is None:
-                news = [f"{MODULE_TITLES[module]} {release.version}: {release.notes}"[:500]
+                news = [f"{MODULE_TITLES[module]}: доступно обновление" if isinstance(release, WorkflowUpdate)
+                        else f"{MODULE_TITLES[module]} {release.version}: {release.notes}"[:500]
                         for module, (state, release) in (worker.result or {}).items()
                         if state == "ready" and release is not None]
                 self.news_changed.emit("Новости Studio\n" + "\n".join(news[:3]) if news else
@@ -221,7 +223,8 @@ class ModuleUpdatesDialog(QDialog):
                 for module, (state, release) in (worker.result or {}).items():
                     installed, available, button = self.rows[module]
                     available.setText({"denied": "Нет доступа", "error": "Ошибка проверки"}.get(
-                        state, release.version if release else "Нет обновлений"))
+                        state, ("Доступно обновление" if isinstance(release, WorkflowUpdate) and release.workflow is None
+                                else release.version) if release else "Нет обновлений"))
                     button.setText("Нет обновлений" if state == "ready" else "Недоступно")
                     if release is not None:
                         self.releases[module] = release
@@ -232,7 +235,16 @@ class ModuleUpdatesDialog(QDialog):
                 if self.busy_module(module):
                     self.status.setText("Пакет проверен. Завершите работу и перезапустите Studio перед обновлением модуля.")
                 else:
-                    self.delivery.activate(module, worker.release.version)
+                    if isinstance(worker.release, WorkflowUpdate):
+                        self.delivery.activate_update(worker.release)
+                        # The shared update may satisfy offers in other rows too.
+                        # Require a fresh check rather than presenting stale actions.
+                        self.releases.clear()
+                        for name, (_installed, available, _button) in self.rows.items():
+                            if name != module:
+                                available.setText("Проверьте обновления")
+                    else:
+                        self.delivery.activate(module, worker.release.version)
                     self.releases.pop(module, None)
                     self.rows[module][2].setText("Установлено")
                     self.status.setText(f"{MODULE_TITLES[module]}: обновление установлено.")

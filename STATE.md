@@ -1,5 +1,60 @@
 # Project state
 
+## Independent Components and Studio News Implemented, 2026-09-23
+
+Owner approved the news home/editor mockups ("Да, реализовать так") and rejected
+an additional processing-component row in Updates. The existing four workflow
+rows remain: updating a consumer installs its available workflow and/or shared
+engine update through the existing button. No new working module or extra control.
+
+Desktop branch: `codex/feature-independent-processing-20260923`, based on the
+reviewed/pushed chroma checkpoint `c27b2f4` (not yet integrated into development).
+Backend: sibling `studio-components-service-worktree`, branch
+`codex/feature-studio-components-news-20260923`, based on `b32e0da`.
+Both implementations are local source changes, not published installers/service.
+No production migration, signed production artifact, deployment or release dispatch.
+
+Implemented boundary:
+- Signed `image-processing` package owns chroma_key, chroma_rim and profile identity.
+  Stable shell API supplies the selected engine to WorkerThread. Built-in v9 is
+  used until a package is selected; corrupt selected packages fail closed.
+- Atomic workflow/engine activation restores previous pointers/runtime on error;
+  running jobs pin their engine. Component rights derive from a live consumer
+  grant and do not grant another workflow. Receipts record the actual profile.
+- Automatic Clipart owns its planning UI, text client, planner, object compiler,
+  prompt schema/generator and commercial/style/holiday guidance dependencies.
+  Generation owns its prompt generator/schema. The shell still owns shared state,
+  credentials, dispatch and export services; not every Core dependency is migrated.
+- Preload inventory-owned helpers inside the runtime's no-bytecode callback:
+  otherwise later lazy UI imports create __pycache__ and invalidate signed files.
+- Ordinary Generation's chroma/online-removal choice is still undecided. Its
+  existing behaviour and saved prompts are preserved; no new paid model claims.
+- Protected admin news supports drafts, publication and withdrawal, plain text
+  (title100/body600), optimistic revision checks, audit and CSRF protection.
+  PostgreSQL migration013 is additive; SQLite/memory are test adapters.
+- Licensed signed news feed is independent of update entitlement and releases.
+  Home displays the latest published announcement; refresh at startup/every10min;
+  bounded content-only cache survives offline, successful empty feed clears it.
+
+Verification: backend full suite with disposable PostgreSQL16: 210 passed;
+real local HTTPS desktop/service integration: 17 passed, including engine-only
+updates and package-local prompt rules. Chrome fixture passed empty, validation,
+duplicate prevention, plain-text injection, publication/withdrawal, network-error
+and navigation cases. Final desktop offline suite: 1905 passed, 57 skipped,
+19 deselected, one existing expected red-key fur failure. Changed Python syntax,
+isolated application startup, tracked sensitive-artifact guard and diff checks
+passed. Temporary PostgreSQL test container was stopped and removed.
+Approved vs actual UI evidence: `docs/ui/3.1/independent-components-news/`.
+Chrome used mocked transport; real authentication/CSRF/feed were checked by HTTP
+and HTTPS integration tests. Linux offscreen UI is not installed Windows testing.
+
+Next delivery requires an explicitly authorized rollout: deploy compatible backend
+and migration013, then build/install a Studio version containing this bridge. Pin
+new package minimum versions to that verified bridge release, not older Studio
+with the same historical version label. Later compatible engine updates can ship
+alone. Final packaging/installed Windows acceptance and production rollout remain.
+
+
 ## Owner Approval and Commit Scope, 2026-09-23
 
 Owner visually approved the v9 ducklings result ("выглядит круто!!!!") and then

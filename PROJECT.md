@@ -1,5 +1,24 @@
 # Vibix Images
 
+## Approved Independent Components Target, 2026-09-23
+
+Owner approved separating workflow planning/prompt rules from the Studio shell
+and delivering one shared, independently updateable image-processing component.
+Studio retains installation, application settings, credential access and job
+orchestration. Workflow packages own their planning/prompt behaviour; the shared
+processing component must not become a separate user workflow or three forked
+algorithm copies. Verified loading and compatibility checks must precede use.
+The source now implements this boundary; delivery requires the compatible Studio
+bridge and service rollout described in docs/module-release-runbook.md. Component
+updates use existing workflow update buttons, never an additional user-facing row.
+Standalone admin-authored home news is independent of application/module releases.
+
+Chroma preparation/removal is required for Automatic Clipart and remains available
+for imported images in Processing. Whether ordinary Generation should retain
+chroma or offer only online removal is still undecided; do not remove existing
+capabilities or impose opaque-clipart prompt restrictions on general generation.
+
+
 ## Closed Product Boundary, 2026-09-22
 
 Owner explicitly requires Vibix and its applications to remain closed-source.
