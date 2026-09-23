@@ -160,3 +160,62 @@ package-local prompt execution, and Chrome/offscreen news scenarios. See STATE.m
 for counts and `docs/ui/3.1/independent-components-news/` for approved/actual views.
 Installed Windows, final signed production artifacts and deployment are separate
 acceptance steps and were not executed by these source checks.
+
+
+## Резервная копия ключа: действия владельца
+
+Рекомендуемое хранение: зашифрованный файл на личном компьютере и его вторая
+копия на отдельной флешке. Пароль хранить в менеджере паролей, отдельно от файла.
+Обычная копия на том же сервере не защищает от потери сервера. Приватный ключ и
+пароль не отправлять в чат, GitHub, новости или публичные ссылки.
+
+1. Открыть собственный SSH-терминал сервера. Создать уникальный длинный пароль
+   в менеджере паролей. Следующая команда спросит его дважды скрытым вводом.
+   Рабочий ключ не изменяется; создаётся только зашифрованная копия:
+
+   ```bash
+   umask 077
+   set -o noclobber
+   openssl pkcs8 -topk8 -v2 aes-256-cbc -iter 600000 \
+     -in /root/.local/share/vibix-studio-signing/publisher-v1.pem \
+     > /root/.local/share/vibix-studio-signing/publisher-v1-backup-20260923.encrypted.pem
+   ```
+
+   Если файл уже существует, остановиться и проверить его; не перезаписывать.
+   Не добавлять пароль в аргументы команды. Формат и скрытый запрос пароля:
+   [официальная документация OpenSSL](https://docs.openssl.org/3.0/man1/openssl-pkcs8/).
+
+2. Проверить расшифровку без вывода приватного ключа. Первая команда запросит
+   пароль резервной копии. Обе команды выводят только SHA-256 публичного ключа;
+   строки должны совпадать с публичным отпечатком `publisher-v1`:
+   `0688e67e256e3f2365339fb498a734e92150bc1523b26e8e5faf2de3f59ed583`.
+   При любой ошибке OpenSSL проверка не пройдена:
+
+   ```bash
+   set -o pipefail
+   openssl pkey -in /root/.local/share/vibix-studio-signing/publisher-v1-backup-20260923.encrypted.pem -pubout -outform DER | sha256sum
+   openssl pkey -in /root/.local/share/vibix-studio-signing/publisher-v1.pem -pubout -outform DER | sha256sum
+   sha256sum /root/.local/share/vibix-studio-signing/publisher-v1-backup-20260923.encrypted.pem
+   ```
+
+3. В своём SFTP-клиенте скачать **только** файл
+   `publisher-v1-backup-20260923.encrypted.pem` на компьютер. Подключение то же,
+   которым владелец пользуется для SSH. Если подключения ещё нет, сначала
+   настроить его; не публиковать файл через сайт ради скачивания.
+
+4. В PowerShell на компьютере проверить скачанный файл (подставить его путь):
+
+   ```powershell
+   Get-FileHash -Algorithm SHA256 -LiteralPath 'C:\путь\publisher-v1-backup-20260923.encrypted.pem'
+   ```
+
+   SHA-256 должен совпасть с последней серверной командой. Скопировать файл на
+   флешку и проверить её копию той же командой. Не хранить пароль рядом с копиями.
+
+5. Записать в менеджере паролей: «Vibix publisher-v1», пароль, расположение обеих
+   копий, дату и публичный отпечаток. Сообщить исполнителю только факт успешного
+   сохранения и проверки, без пароля и содержимого ключа. До этого внешний backup
+   остаётся неподтверждённым и публикация модулей не завершена.
+
+Команды шифрования и сравнения проверены на одноразовом тестовом Ed25519-ключе.
+Это проверка процедуры, а не подтверждение наличия копии рабочего ключа у владельца.

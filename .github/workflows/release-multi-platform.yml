@@ -163,6 +163,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed" }
 
       - name: Fetch original 3.1.4 upgrade fixture
+        timeout-minutes: 8
         if: ${{ !inputs.acceptance_build && inputs.legacy_installer_url != '' }}
         shell: powershell
         env:
@@ -171,7 +172,9 @@ jobs:
           $uri = [Uri]$env:LEGACY_INSTALLER_URL
           if ($uri.Scheme -ne 'https' -or $uri.Host -notin @('drive.google.com','drive.usercontent.google.com')) { throw "Unexpected legacy installer origin" }
           $path = Join-Path $env:RUNNER_TEMP "VibixImages-Setup-3.1.4.exe"
-          Invoke-WebRequest -Uri $uri.AbsoluteUri -OutFile $path
+          $ProgressPreference = 'SilentlyContinue'
+          curl.exe --fail --location --proto '=https' --proto-redir '=https' --max-time 180 --retry 1 --output $path $uri.AbsoluteUri
+          if ($LASTEXITCODE -ne 0) { throw "Legacy installer download failed" }
           if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne '4AEFD1D4833CBCF59A730CC646598DE4EFC52BE0AACF881CA58C25953DA0E30B') { throw "Legacy installer hash mismatch" }
           "PREVIOUS_INSTALLER_PATH=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 

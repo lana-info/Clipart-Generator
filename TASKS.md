@@ -9,7 +9,8 @@
 - [x] Add real Bezier edit/save/undo/redo verification to installed-app smoke.
 - [ ] Verify Windows3.2.5 installation over original published3.1.4.
 - [ ] Arrange and verify off-host publisher-key backup with owner.
-- [ ] Prepare verified production packages and complete authorized release delivery.
+- [x] Prepare verified production packages and upload five unpublished admin drafts.
+- [ ] Complete authorized release delivery after Windows check and key backup.
 
 
 ## Independent Components and Home News, 2026-09-23
