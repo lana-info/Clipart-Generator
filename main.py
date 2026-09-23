@@ -84,7 +84,7 @@ from runtime_settings import normalize_kie_concurrency, normalize_provider_concu
 from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
-from app_identity import APP_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
+from app_identity import APP_NAME, APP_STORAGE_NAME, APP_UPDATE_USER_AGENT, APP_USER_AGENT
 from v3_localization import app_locale_from_settings
 from release_contract import resolve_release_version
 from security_redaction import redact_absolute_paths, redact_text
@@ -402,7 +402,7 @@ def bundled_brand_icon_path():
 
 def configure_application_identity(app):
     """Apply the visible Windows identity before creating application windows."""
-    app.setApplicationName(APP_NAME)
+    app.setApplicationName(APP_STORAGE_NAME)
     app.setApplicationDisplayName(APP_NAME)
     app.setOrganizationName("Vibix")
     icon_path = bundled_brand_icon_path()
@@ -679,7 +679,7 @@ def get_user_data_dir():
         base_dir = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
     else:
         base_dir = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    user_data_dir = os.path.join(base_dir, APP_NAME)
+    user_data_dir = os.path.join(base_dir, APP_STORAGE_NAME)
     os.makedirs(user_data_dir, exist_ok=True)
     return user_data_dir
 
@@ -10202,7 +10202,7 @@ def run_packaged_entrypoint_check(
     )
     default_path = default_work_directory()
     pictures_default_is_safe = (
-        default_path.name == APP_NAME
+        default_path.name == APP_STORAGE_NAME
         and os.path.abspath(str(default_path)) != os.path.abspath(os.getcwd())
     )
     packaged_view.close()
@@ -10226,6 +10226,8 @@ def run_packaged_entrypoint_check(
     smoke_window.deleteLater()
     from studio_auto_clipart_smoke import check_automatic_clipart
     automatic_clipart_is_available = check_automatic_clipart(evidence_dir)
+    from studio_contour_smoke import check_contour_editing
+    contour_editing_works = check_contour_editing(evidence_dir)
     return 0 if (
         len(MODE_CARD_SPECS) == 3
         and V3ApplicationView
@@ -10239,6 +10241,7 @@ def run_packaged_entrypoint_check(
         and update_channel_is_connected
         and startup_is_blocked
         and automatic_clipart_is_available
+        and contour_editing_works
         and (expected_app_version is None or APP_VERSION == expected_app_version)
     ) else 1
 

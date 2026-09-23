@@ -1,5 +1,13 @@
 # Vibix Images
 
+## Migration access policy, 2026-09-23
+
+The public product name is Vibix Studio. Migration from Vibix Images3.1.4 retains
+installer identity, existing storage, settings and license state. Club members
+receive all workflows through their bundle; other customers retain individually
+assigned rights. Upgrading the application does not itself grant extra modules.
+
+
 ## Approved Independent Components Target, 2026-09-23
 
 Owner approved separating workflow planning/prompt rules from the Studio shell

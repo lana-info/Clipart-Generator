@@ -1,5 +1,29 @@
 # Project state
 
+## Images3.1.4 migration and Club catalog, 2026-09-23
+
+Current desktop branch: codex/feature-studio-migration-20260923. Owner confirmed
+legacy version3.1.4 and rights: Club gets all workflows, others retain individual
+assignments. Working service catalog fix691e5a8 deployed with backup; one shared
+catalog drives bundles and individual grants. Club/VIP gained auto-clipart for
+33 active assignments; terms, individual grants and denies remained unchanged.
+Backend checklist: docs/ЧЕКЛИСТ_ВЫПУСКА_STUDIO.md.
+
+Studio display branding now separates from persistent Vibix Images storage and
+installer identity. Original published3.1.4 EXE downloaded and SHA256 verified.
+Windows3.2.5 workflow will install that original then upgrade without /DIR,
+checking registration/path and five synthetic user-file hashes. This does not
+prove real customer credential activation. Native smoke additionally edits a
+Bezier handle, checks undo/redo and saved alpha/RGB/source preservation.
+Local contour smoke passed. Full suite:1906 passed,57 skipped,19 deselected,
+1 known red-key fur xfail. Restored3.1.4 verified-certificate fallback and safe
+transport diagnostics after discovering the Studio branch lacked that fix; new
+regression preserves permanent rejection on fallback.28 focused license tests
+passed (1 integration test deselected). Native Windows build pending.
+Production module publication pending native upgrade checks and secure off-host
+publisher-key backup. Owner requested arranging that backup; location pending.
+
+
 ## Authorized Server Deployment and Studio3.2.4 Builds, 2026-09-23
 
 Owner explicitly approved commit/push, working-server update and a new Studio

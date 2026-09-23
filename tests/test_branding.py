@@ -13,7 +13,8 @@ class BrandingTests(unittest.TestCase):
         import main
         from v3_mode_selection import default_work_directory
 
-        self.assertEqual(main.APP_NAME, "Vibix Images")
+        self.assertEqual(main.APP_NAME, "Vibix Studio")
+        self.assertEqual(main.APP_STORAGE_NAME, "Vibix Images")
         self.assertEqual(default_work_directory().name, "Vibix Images")
 
     def test_icon_source_has_approved_geometry(self):
@@ -38,7 +39,7 @@ class BrandingTests(unittest.TestCase):
         self.assertIn('--name "Vibix Images"', build)
         self.assertIn('--icon "assets/vibix-images.ico"', build)
         self.assertIn('--add-data "assets/vibix-images.ico;assets"', build)
-        self.assertIn('#define AppName "Vibix Images"', installer)
+        self.assertIn('#define AppName "Vibix Studio"', installer)
         self.assertIn('#define AppExeName "Vibix Images.exe"', installer)
         self.assertIn('SetupIconFile=assets\\vibix-images.ico', installer)
         self.assertIn('Создать клипарт', installer)

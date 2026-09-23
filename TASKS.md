@@ -1,5 +1,17 @@
 # TASKS
 
+## Complete Images3.1.4 migration, 2026-09-23
+
+- [x] Unify server module catalogs and deploy missing Automatic Clipart option.
+- [x] Apply owner-approved Club/VIP all-workflows rule, preserve individual rights.
+- [x] Write exact Russian release/module/bundle/news checklist in service repo.
+- [x] Separate Studio display branding from legacy persistent storage identity.
+- [x] Add real Bezier edit/save/undo/redo verification to installed-app smoke.
+- [ ] Verify Windows3.2.5 installation over original published3.1.4.
+- [ ] Arrange and verify off-host publisher-key backup with owner.
+- [ ] Prepare verified production packages and complete authorized release delivery.
+
+
 ## Independent Components and Home News, 2026-09-23
 
 - [x] Implement approved shared processing boundary: signed package, stable API,

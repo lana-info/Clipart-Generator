@@ -40,7 +40,7 @@ def test_acceptance_profile_is_public_only_and_not_production_trust():
 
 def test_production_ignores_runtime_environment_overrides():
     result = subprocess.run([sys.executable, "-c", "import runtime_profile as p; assert not p.IS_ACCEPTANCE; "
-                             "assert p.APP_NAME == 'Vibix Images'; assert p.MODULE_PUBLISHER_KEYS is None; "
+                             "assert p.APP_NAME == 'Vibix Studio'; assert p.APP_STORAGE_NAME == 'Vibix Images'; assert p.MODULE_PUBLISHER_KEYS is None; "
                              "assert p.LICENSE_SERVICE_BASE_URL == p.PRODUCTION_SERVICE"],
         cwd=ROOT, env={**os.environ, "VIBIX_ACCEPTANCE": "1", "LICENSE_SERVICE_BASE_URL": "https://evil.invalid"},
         capture_output=True, text=True)

@@ -14,6 +14,10 @@ on:
         description: "Isolated Studio test build (separate installation, storage and server)"
         type: boolean
         default: false
+      legacy_installer_url:
+        description: "Optional verified 3.1.4 installer URL for production upgrade test"
+        required: false
+        default: ""
 
 jobs:
   build-windows:
@@ -158,6 +162,19 @@ jobs:
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" @defines ".\installer.iss"
           if ($LASTEXITCODE -ne 0) { throw "Installer compilation failed" }
 
+      - name: Fetch original 3.1.4 upgrade fixture
+        if: ${{ !inputs.acceptance_build && inputs.legacy_installer_url != '' }}
+        shell: powershell
+        env:
+          LEGACY_INSTALLER_URL: ${{ inputs.legacy_installer_url }}
+        run: |
+          $uri = [Uri]$env:LEGACY_INSTALLER_URL
+          if ($uri.Scheme -ne 'https' -or $uri.Host -notin @('drive.google.com','drive.usercontent.google.com')) { throw "Unexpected legacy installer origin" }
+          $path = Join-Path $env:RUNNER_TEMP "VibixImages-Setup-3.1.4.exe"
+          Invoke-WebRequest -Uri $uri.AbsoluteUri -OutFile $path
+          if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne '4AEFD1D4833CBCF59A730CC646598DE4EFC52BE0AACF881CA58C25953DA0E30B') { throw "Legacy installer hash mismatch" }
+          "PREVIOUS_INSTALLER_PATH=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Verify installed Windows application
         shell: powershell
         run: |
@@ -166,7 +183,8 @@ jobs:
             -InstallerPath ".\release\$env:INSTALLER_BASENAME.exe" `
             -ExpectedAppVersion "${{ steps.version.outputs.app_version }}" `
             -EvidenceDir $evidenceDir `
-            -ExpectedProfile $env:BUILD_PROFILE
+            -ExpectedProfile $env:BUILD_PROFILE `
+            -PreviousInstallerPath "$env:PREVIOUS_INSTALLER_PATH"
 
       - name: Calculate setup hash
         shell: powershell

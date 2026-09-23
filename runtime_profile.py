@@ -44,7 +44,9 @@ IS_ACCEPTANCE = PROFILE is not None
 if IS_ACCEPTANCE:
     validate_acceptance_profile(PROFILE)
 
-APP_NAME = "Vibix Studio Test" if IS_ACCEPTANCE else "Vibix Images"
+APP_NAME = "Vibix Studio Test" if IS_ACCEPTANCE else "Vibix Studio"
+# Persistent identity must survive the public rename from Images to Studio.
+APP_STORAGE_NAME = "Vibix Studio Test" if IS_ACCEPTANCE else "Vibix Images"
 LICENSE_SERVICE_BASE_URL = PROFILE["service_url"] if IS_ACCEPTANCE else PRODUCTION_SERVICE
 LICENSE_PUBLIC_KEYS = PROFILE["license_keys"] if IS_ACCEPTANCE else PRODUCTION_LICENSE_KEYS
 MODULE_PUBLISHER_KEYS = ({name: base64.b64decode(value, validate=True)

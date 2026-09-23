@@ -52,7 +52,7 @@ from v3_lazy_loading import InitializationProgressOverlay, InitializationStage
 from v3_license import LicenseDialog, OnlineLicenseGate
 from license_client import LicenseError
 from v3_wizard import AppShell, MODE_TITLES, STEP_TITLES
-from app_identity import APP_NAME
+from app_identity import APP_NAME, APP_STORAGE_NAME
 from config_schema import load_preferences, resolve_output_directory, save_preferences_atomic
 
 
@@ -102,7 +102,7 @@ def default_work_directory() -> Path:
         ).strip()
     if not pictures:
         pictures = str(Path.home() / "Pictures")
-    return Path(pictures).expanduser() / APP_NAME
+    return Path(pictures).expanduser() / APP_STORAGE_NAME
 
 
 class SelectionIntent(str, Enum):

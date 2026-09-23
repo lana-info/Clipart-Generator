@@ -1,8 +1,10 @@
 #ifdef AcceptanceBuild
   #define AppName "Vibix Studio Test"
+  #define AppStorageName "Vibix Studio Test"
   #define AppId "{{617F3BD6-AB32-4544-AC32-FF055B7F5F8C}"
 #else
-  #define AppName "Vibix Images"
+  #define AppName "Vibix Studio"
+  #define AppStorageName "Vibix Images"
   #define AppId "{{B8D6B3F4-4E5F-4B6E-9D13-9A8E3B2F3C7A}"
 #endif
 #ifndef AppVersion
@@ -16,7 +18,7 @@ AppId={#AppId}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName={autopf}\{#AppName}
+DefaultDirName={autopf}\{#AppStorageName}
 DefaultGroupName={#AppName}
 SetupIconFile=assets\vibix-images.ico
 UninstallDisplayIcon={app}\{#AppExeName}
@@ -74,6 +76,12 @@ Source: "build-prerequisites\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: dontco
 ; PyInstaller native libraries must be replaced as one coherent set on upgrade.
 Type: filesandordirs; Name: "{app}\_internal"
 Type: filesandordirs; Name: "{app}\realesrgan-ncnn-vulkan-20211212-windows"
+
+#ifndef AcceptanceBuild
+; Remove only our old shortcuts; application and user-data identities are retained.
+Type: files; Name: "{group}\Vibix Images.lnk"
+Type: files; Name: "{autodesktop}\Vibix Images.lnk"
+#endif
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

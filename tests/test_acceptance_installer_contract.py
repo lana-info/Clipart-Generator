@@ -17,6 +17,9 @@ def _active_installer_source(*, acceptance_build: bool) -> str:
         if directive == "#ifdef AcceptanceBuild":
             branches.append((active, acceptance_build))
             active = active and acceptance_build
+        elif directive == "#ifndef AcceptanceBuild":
+            branches.append((active, not acceptance_build))
+            active = active and not acceptance_build
         elif directive.startswith(("#ifdef ", "#ifndef ")):
             branches.append((active, None))
         elif directive == "#else":
@@ -46,7 +49,8 @@ class AcceptanceInstallerContractTests(unittest.TestCase):
     def test_production_profile_keeps_existing_identity_and_output_name(self):
         source = _active_installer_source(acceptance_build=False)
 
-        self.assertEqual(_define(source, "AppName"), "Vibix Images")
+        self.assertEqual(_define(source, "AppName"), "Vibix Studio")
+        self.assertEqual(_define(source, "AppStorageName"), "Vibix Images")
         self.assertEqual(
             _define(source, "AppId"),
             "{{B8D6B3F4-4E5F-4B6E-9D13-9A8E3B2F3C7A}",
@@ -54,13 +58,15 @@ class AcceptanceInstallerContractTests(unittest.TestCase):
         self.assertIn("AppId={#AppId}", source)
         self.assertIn("AppName={#AppName}", source)
         self.assertIn("OutputBaseFilename=VibixImages-Setup-{#AppVersion}", source)
-        self.assertIn("DefaultDirName={autopf}\\{#AppName}", source)
+        self.assertIn("DefaultDirName={autopf}\\{#AppStorageName}", source)
         self.assertIn("DefaultGroupName={#AppName}", source)
 
     def test_acceptance_profile_has_a_fully_separate_installer_identity(self):
         source = _active_installer_source(acceptance_build=True)
 
         self.assertEqual(_define(source, "AppName"), "Vibix Studio Test")
+        self.assertEqual(_define(source, "AppStorageName"), "Vibix Studio Test")
+        self.assertNotIn('Name: "{autodesktop}\\Vibix Images.lnk"', source)
         acceptance_app_id = _define(source, "AppId")
         self.assertRegex(
             acceptance_app_id,
@@ -74,7 +80,7 @@ class AcceptanceInstallerContractTests(unittest.TestCase):
         self.assertIn(
             "OutputBaseFilename=VibixImages-Test-Setup-{#AppVersion}", source
         )
-        self.assertIn("DefaultDirName={autopf}\\{#AppName}", source)
+        self.assertIn("DefaultDirName={autopf}\\{#AppStorageName}", source)
         self.assertIn("DefaultGroupName={#AppName}", source)
         self.assertIn(
             'Source: "dist\\Vibix Images\\*"; DestDir: "{app}"',

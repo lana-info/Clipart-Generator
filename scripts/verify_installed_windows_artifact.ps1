@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$EvidenceDir,
     [ValidateSet("production", "acceptance")]
-    [string]$ExpectedProfile = "production"
+    [string]$ExpectedProfile = "production",
+    [string]$PreviousInstallerPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -55,16 +56,40 @@ if ($ExpectedProfile -eq "acceptance") {
     }
 }
 
+$setupArguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$installRoot")
+$upgradeManifest = Join-Path $temporaryRoot "studio-314-preservation.json"
+$uninstallKey = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{B8D6B3F4-4E5F-4B6E-9D13-9A8E3B2F3C7A}_is1"
+if ($PreviousInstallerPath) {
+    if ($ExpectedProfile -ne "production") { throw "Legacy upgrade requires production profile" }
+    Invoke-BoundedProcess -FilePath $PreviousInstallerPath -Arguments $setupArguments -TimeoutSeconds 600 -Description "Original Vibix Images 3.1.4 installation"
+    $oldRegistration = Get-ItemProperty -LiteralPath $uninstallKey
+    if ($oldRegistration.DisplayVersion -ne "3.1.4") { throw "Unexpected legacy version" }
+    python scripts/verify_legacy_user_paths.py seed $upgradeManifest
+    if ($LASTEXITCODE -ne 0) { throw "Legacy user fixture setup failed" }
+    # Test the real previous-install detection, not an explicitly supplied path.
+    $setupArguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
+}
+
 New-Item -ItemType Directory -Force -Path $internalRoot | Out-Null
 [System.IO.File]::WriteAllText($markerPath, "stale", [System.Text.UTF8Encoding]::new($false))
 
 Invoke-BoundedProcess `
     -FilePath $InstallerPath `
-    -Arguments "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$installRoot" `
+    -Arguments $setupArguments `
     -TimeoutSeconds 600 `
     -Description "Installed-artifact setup"
 if (Test-Path -LiteralPath $markerPath) {
     throw "Installer left stale native runtime files in place"
+}
+
+if ($PreviousInstallerPath) {
+    $registration = Get-ItemProperty -LiteralPath $uninstallKey
+    if ($registration.DisplayVersion -ne $ExpectedAppVersion -or $registration.DisplayName -notlike "Vibix Studio*") {
+        throw "Upgrade did not replace the original registered product"
+    }
+    if ($registration.InstallLocation.TrimEnd('\') -ne $installRoot.TrimEnd('\')) { throw "Upgrade changed install directory" }
+    python scripts/verify_legacy_user_paths.py verify $upgradeManifest
+    if ($LASTEXITCODE -ne 0) { throw "Legacy user data preservation failed" }
 }
 
 $installedExe = Join-Path $installRoot "Vibix Images.exe"
@@ -83,7 +108,9 @@ Invoke-BoundedProcess `
 foreach ($evidenceName in @(
     "mode-selection.png",
     "clipart-prompts.png",
-    "clipart-prompt-review.png"
+    "clipart-prompt-review.png",
+    "contour-editor.png",
+    "contour-edited-alpha.png"
 )) {
     $evidencePath = Join-Path $EvidenceDir $evidenceName
     if (-not (Test-Path -LiteralPath $evidencePath)) {

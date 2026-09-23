@@ -291,3 +291,32 @@ def test_failed_open_keeps_current_edits_available(tmp_path):
     assert not missing.undo_button.isEnabled() and not missing.redo_button.isEnabled()
     dialog.close()
     missing.close()
+
+
+def test_bezier_handle_edit_is_saved_as_alpha_without_changing_rgb_or_source(tmp_path, monkeypatch):
+    source = tmp_path / "source.png"
+    original = make_png(source)
+    source_bytes = source.read_bytes()
+    dialog = ContourEditorDialog(source)
+    dialog.show()
+    app().processEvents()
+    canvas = dialog.canvas
+    canvas.auto_contour()
+    app().processEvents()
+    before = canvas.alpha.copy()
+    point = canvas._to_screen(canvas.nodes[0].point)
+    target = QPointF(point.x() + 18, point.y() + 14).toPoint()
+    QTest.mousePress(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.AltModifier, point.toPoint())
+    QTest.mouseMove(canvas, target)
+    QTest.mouseRelease(canvas, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.AltModifier, target)
+    edited = canvas.alpha.copy()
+    assert not np.array_equal(edited, before)
+    output = tmp_path / "curved.png"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args: (str(output), "PNG"))
+    dialog.save_button.click()
+    with Image.open(output) as image:
+        saved = np.asarray(image.convert("RGBA"))
+    assert np.array_equal(saved[..., 3], edited)
+    assert np.array_equal(saved[..., :3], original[..., :3])
+    assert source.read_bytes() == source_bytes
+    dialog.close()
