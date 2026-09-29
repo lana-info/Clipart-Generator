@@ -12,6 +12,9 @@ with fixes; PC-12 retains Windows/macOS and live-provider verification. See modu
 and UI gallery for evidence. Owner now authorized GitHub publication and a Windows
 test build. Separate commercial sale and server-side grants are deferred to the next phase;
 no paid provider call or merge is authorized by this publication scope.
+Published commit e1808ba and PR #1 (develop/3.2). Windows run 36646295854 and hosted
+Desktop CI are blocked before job startup by the GitHub Actions budget; no installer
+exists yet. Resume after budget availability or on an authorized Windows build machine.
 
 ## Preparation gate before new implementation
 

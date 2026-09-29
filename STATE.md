@@ -1,6 +1,6 @@
 # Project state
 
-## Prompt Composer test release preparation, 2026-09-29
+## Prompt Composer published; Windows build budget-blocked, 2026-09-29
 
 Worktree `prompt-composer-prd-worktree`, branch `codex/feature-prompt-composer-prd-20260929`,
 base `2d1f00c`, synchronized with origin/develop/3.2. Owner approved the native UI,
@@ -31,9 +31,19 @@ a regression test covers differing USER_DATA_DIR. Azure default now matches sour
 3.2.0. The transient Pinterest worker 2s timeout passed alone and on the final full run;
 its test was not weakened. Source fixtures were restored through sparse checkout only.
 
-Remaining verification: Windows build/installer run, native human acceptance, macOS,
-real paid provider quality. No paid request was made. Build and GitHub publication are
-next actions; no merge/stable release/sales deployment. TrendWatcher was read only.
+Published implementation commit `e1808ba1cbb1f3f52971a8db5cfbd7a1933d92a7`.
+[PR #1](https://github.com/lana-info/Clipart-Generator/pull/1) targets develop/3.2; not merged.
+[Windows run 36646295854](https://github.com/lana-info/Clipart-Generator/actions/runs/36646295854)
+was dispatched on that exact commit. GitHub refused to start the runner:
+“The job was not started because an Actions budget is preventing further use.”
+Job steps are empty; no installer artifact exists. Push/PR Desktop CI had the same
+external budget blocker. Local verification above passed; hosted CI did not run.
+Next action requires owner-side Actions budget availability or an available Windows
+build machine. Do not change paid limits or retry unchanged jobs automatically.
+After the budget is available, rerun failed Windows job 36646295854 and Desktop CI,
+inspect installer verification and link the resulting windows-3.2.0 artifact.
+Native human acceptance, macOS and real paid provider quality remain unverified.
+No paid API call, merge, stable release or sales deployment. TrendWatcher was read only.
 Other worktrees remain untouched. Copy works; generator handoff remains unavailable.
 
 The earlier documentation stop below is historical and superseded by implementation.

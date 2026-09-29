@@ -314,8 +314,11 @@ PC-H01…H03, отсутствие выполненных implementation-зад�
   Последний полный прогон модуля: 63 passed и 2 subtests.
 - [x] 16 нативных снимков обновлены; горизонтального переполнения нет.
 - [x] Packaged smoke проверяет наличие модуля, 21 шаблон, 7 вариантов, SQLite reopen.
-- [ ] Commit/push и PR в develop/3.2.
-- [ ] Workflow Windows на ветке модуля, проверка установщика и ссылка на артефакт.
+- [x] Commit `e1808ba`, push и [PR №1](https://github.com/lana-info/Clipart-Generator/pull/1) в develop/3.2.
+- [ ] Windows-установщик: [workflow запущен](https://github.com/lana-info/Clipart-Generator/actions/runs/36646295854),
+  но runner заблокирован бюджетом GitHub Actions до первого шага. Артефакта нет.
+  Требуется доступный бюджет Actions либо Windows-машина; лимиты не менялись.
+  Hosted Desktop CI заблокирован по той же причине; локальные проверки выше успешны.
 
 Этот блок заменяет прежний статус «8 failed» выше. Один промежуточный timeout
 существующего Pinterest-worker прошёл отдельно и в финальном полном прогоне;

@@ -158,3 +158,7 @@ AI-состояния показаны на явно подставленных 
 243 subtests passed**. Последний прогон модуля: 63 passed и 2 subtests.
 Восемь старых отказов исправлены через единый путь хранилища ключей и синхронизацию
 версии Azure. Windows/macOS-приёмка и качество реальных AI-ответов пока не проверены.
+
+Код опубликован: [PR №1](https://github.com/lana-info/Clipart-Generator/pull/1).
+[Windows workflow](https://github.com/lana-info/Clipart-Generator/actions/runs/36646295854)
+заблокирован бюджетом GitHub Actions до первого шага; установщик пока не создан.
