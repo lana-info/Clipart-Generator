@@ -1,5 +1,10 @@
 # TASKS
 
+- [x] Clarify new chroma prompts: preserve object textures, exclude paper substrate
+  and white bridges/fringe; foliage gaps use the selected background colour.
+- [ ] Verify one regenerated teddy/pine image after updating prompts; paid launch
+  requires agreed provider/model/cost. This refinement is not in installer3.2.7.
+
 - [x] Address independent P1 review: block close/project switch during embedded
   ZIP export; recover saved generated PNGs without repeating generation, retain
   source paths and completed-stage provenance across retries and reopening.

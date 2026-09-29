@@ -93,6 +93,19 @@ def compile_objects(recipe, generator):
             raise ValueError('Сократите объединённое описание объекта до 4000 символов')
         # Use the existing language/chroma pipeline, preserving its validation.
         entry = generate_clipart_prompt_series(PromptGeneratorData(**fields))[0]
+        if entry.chroma_key_color:
+            from v3_project_state import MAX_TEXT_LENGTH
+            hex_color = {"blue": "#0000FF", "green": "#00FF00", "red": "#FF0000"}[entry.chroma_key_color]
+            entry.prompt += (
+                " Preserve the requested fur, knit and painted textures within the subject only, "
+                "without adding any new materials. No paper or canvas substrate behind the subject, "
+                "no white or cream paper fringe along its outline, and no paper filling enclosed openings. "
+                "For foliage already present, keep individual needles and leaves distinct; "
+                f"their open gaps show the same solid {hex_color} background as outside the subject, "
+                "never white painted bridges."
+            )
+            if len(entry.prompt) > MAX_TEXT_LENGTH:
+                raise ValueError('Сократите описание объекта: итоговый промпт слишком длинный')
         entry.result_kind = 'clipart'
         entry.object_id = item['id']
         prompts.append(entry)

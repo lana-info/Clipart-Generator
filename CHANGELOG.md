@@ -1,5 +1,11 @@
 ﻿# CHANGELOG
 
+## Studio 3.2.8 candidate, 2026-09-29
+
+- Automatic Clipart: preserve object textures while explicitly excluding paper
+  fringe and requiring the chosen key colour inside foliage gaps.
+- Ordinary generation and its parallel development branch are unchanged.
+
 ## Studio 3.2.7 candidate, 2026-09-29
 
 - Add style and palette previews, explicit reference roles and optional reference step.

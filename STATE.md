@@ -1,5 +1,30 @@
 # Project state
 
+## Paper-free generation prompt clarification, 2026-09-29
+
+Owner chose regeneration of the two bears instead of repairing their old paper
+backgrounds. Scoped refinement to Automatic Clipart compile_objects only: retain requested object
+textures, forbid paper/canvas substrate and white/cream paper fringe, require
+existing foliage gaps to show the exact selected key colour (no white bridges).
+No blanket removal of fur/knit/watercolor, no new material controls, no forced
+blue for all subjects, no change to segmentation or compact prompt presentation.
+Offline assembled teddy+knit+green pine+red berry example selects blue and
+contains new clauses. Initial97 tests+25 subtests passed with one architecture
+failure caused by a new direct import. Removed that dependency without changing
+the allowlist. Final59 tests+9 subtests passed for object compiler, automatic
+workflow, module packaging and architecture. Shared chroma source unchanged;
+ordinary generator regression excludes the new automatic-only clauses.
+Sensitive artifact check and git diff --check passed.
+Example: /root/projects/Clipart Generator/artifacts/paper-free-prompt-20260929/teddy-pine-prompt.txt
+Owner now authorized installer3.2.8, commit/push and build of this refinement,
+without integrating the parallel generation branch. Ordinary generation and
+shared chroma prompt rules remain unchanged. Installed3.2.7
+and already-saved prompts do not acquire the new wording automatically. Fresh
+prompt assembly from updated source required; image-quality benefit unverified.
+Owner accepted retaining existing chroma edges after offline sharpness probes;
+local white-gap threshold experiment rejected because it damaged highlights and
+bear pixels. Neither experiment was integrated into production processing.
+
 ## Windows 3.2.7 verified candidate, 2026-09-29
 
 Ordinary production-profile Windows build36612613865 PASSED from

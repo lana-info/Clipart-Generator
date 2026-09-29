@@ -75,6 +75,26 @@ class ObjectTests(unittest.TestCase):
         self.assertEqual(editor.items[0], original)
         editor.close()
 
+    def test_paper_free_rules_are_scoped_to_automatic_clipart_with_chroma(self):
+        from clipart_prompt_generator import generate_clipart_prompt_series
+        from chroma_key import parse_key_color
+        recipe = ClipartRecipe(theme='Christmas teddy bear')
+        recipe.select(1)
+        recipe.objects = fill_recipe([], recipe.counts)
+        recipe.objects[0].update(name='Brown teddy bear', extras='Green pine needles and red berries',
+                                 details='Cream knitted stocking')
+        data = PromptGeneratorData(style='watercolor', chroma_key_enabled=True)
+        entry = compile_objects(recipe, data)[0]
+        color = '#%02X%02X%02X' % parse_key_color(entry.chroma_key_color)
+        self.assertIn('no paper filling enclosed openings', entry.prompt)
+        self.assertIn(f'open gaps show the same solid {color} background', entry.prompt)
+        self.assertIn('without adding any new materials', entry.prompt)
+        self.assertIn('knitted stocking', entry.prompt)
+        ordinary = PromptGeneratorData(style='watercolor', subjects=['Teddy'], chroma_key_enabled=True)
+        self.assertNotIn('no paper filling enclosed openings', generate_clipart_prompt_series(ordinary)[0].prompt)
+        data.chroma_key_enabled = False
+        self.assertNotIn('no paper filling enclosed openings', compile_objects(recipe, data)[0].prompt)
+
     def test_compile_adds_commercial_cutout_quality_without_background_method(self):
         recipe = ClipartRecipe(theme='Мишки')
         recipe.select(1)
