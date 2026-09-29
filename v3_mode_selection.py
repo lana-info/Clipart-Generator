@@ -406,6 +406,8 @@ class V3ApplicationView(QWidget):
         self._v3_runtime_settings: dict[str, Any] = {}
         self._worker_factory = worker_factory
         self._license_gate = license_gate
+        self._composer_runtime = None
+        self._composer_page_handle = None
         self._diagnostic_journal = diagnostic_journal
         self._update_client = update_client
         self._legacy_project = legacy_project
@@ -468,6 +470,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.diagnostics_requested.connect(self._show_diagnostics)
         self.mode_selection.project_requested.connect(self.continue_saved_project)
         self.mode_selection.all_projects_requested.connect(self._show_all_projects)
+        self.mode_selection.module_action_requested.connect(self._open_composer)
         self.stack.addWidget(self.mode_selection)
 
         if recent_project is None and self._draft_path is not None:
@@ -578,6 +581,72 @@ class V3ApplicationView(QWidget):
             status = self._license_gate.status_text
             verification = self._license_gate.verification_text
         self.mode_selection.set_license_status(status, verification)
+        self.mode_selection.set_module_catalog(
+            (*BUILTIN_CATALOG, CatalogEntry("prompt-composer", "Конструктор промптов",
+             "Семь вариантов для изображений и коротких Reels", "generation", released=True)),
+            {"prompt-composer": ModuleAvailability(installed=True, entitled=self._composer_allowed(), open_supported=True)},
+        )
+
+    def _composer_allowed(self) -> bool:
+        from license_client import LicenseAuthorization
+        authorization = getattr(self._license_gate, "current_authorization", None)
+        return isinstance(authorization, LicenseAuthorization) and authorization.allows_module("prompt-composer")
+
+    def _composer_authorize_request(self):
+        authorize_module_run(self._license_gate, "prompt-composer")
+        return True
+
+    def _composer_settings(self):
+        from v3_api_settings import load_credentials
+        settings = load_credentials()
+        settings.update(self._runtime_settings())
+        return settings
+
+    def _open_composer(self, module_id: str, action: str) -> None:
+        if module_id != "prompt-composer" or action != "open":
+            return
+        try:
+            if self._license_gate is None:
+                raise ValueError("Активируйте лицензию модуля")
+            authorize_module_run(self._license_gate, module_id)
+            if self._composer_page_handle is not None:
+                self._set_application_screen(self._composer_page_handle.value, module_id, "module_open")
+                return
+            from studio_module_api import ModuleRegistration, PageDeclaration
+            from studio_module_runtime import ModuleRuntimeHost
+            from studio_modules import ModuleStore
+            from studio_prompt_composer_host import PromptComposerHost
+            from prompt_composer.ui import PromptComposerPage
+            root = (self._draft_path.parent if self._draft_path else
+                    Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)))
+            if self._composer_runtime is None:
+                registration = ModuleRegistration(module_id, "1.0.0", pages=(PageDeclaration("main", PromptComposerPage),))
+                store = ModuleStore(root / "modules", studio_version="3.2.0", platform=sys.platform, trusted_keys={})
+                self._composer_runtime = ModuleRuntimeHost(store, lambda mid, _action: mid == module_id and self._composer_allowed(), bundled=(registration,))
+                self._composer_runtime.activate(module_id)
+            host = PromptComposerHost(root / "prompt_composer", settings_provider=self._composer_settings,
+                                      authorize=self._composer_allowed, runtime=self._composer_runtime,
+                                      authorize_request=self._composer_authorize_request)
+            handle = self._composer_runtime.create_page(module_id, "main", host)
+            self._composer_page_handle = handle
+            page = handle.value
+            page.back_requested.connect(self._close_composer)
+            page.settings_requested.connect(self._show_api_settings)
+            self.stack.addWidget(page)
+            self._set_application_screen(page, module_id, "module_open")
+        except Exception:
+            QMessageBox.warning(self, "Конструктор промптов", "Не удалось открыть модуль. Проверьте доступ в лицензии и папку пользовательских данных.")
+
+    def _close_composer(self) -> None:
+        handle = self._composer_page_handle
+        if handle is None:
+            return
+        self._composer_page_handle = None
+        handle.value.host.close()
+        self.stack.removeWidget(handle.value)
+        handle.close()
+        handle.value.deleteLater()
+        self.show_new_project(trigger="module_closed")
 
     @property
     def project_state(self) -> ProjectState | None:
@@ -1053,6 +1122,11 @@ class V3ApplicationView(QWidget):
 
 
     def closeEvent(self, event) -> None:
+        if self._composer_page_handle is not None:
+            if not self._composer_page_handle.value.confirm_close():
+                event.ignore()
+                return
+            self._close_composer()
         self._diagnostic_event(
             "application_exit",
             "Приложение закрыто штатно.",

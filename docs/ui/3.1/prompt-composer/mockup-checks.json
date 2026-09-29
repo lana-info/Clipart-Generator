@@ -1,0 +1,253 @@
+{
+  "viewport": "1120x780",
+  "states": [
+    {
+      "state": "templates",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "subject",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "person",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "advanced",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "details",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "scene",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "reels",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "results",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "library",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "empty",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "saved",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "edit",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "profile",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "custom",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "confirm",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "unknown",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "noai",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "loading",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "error",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "aipreview",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "partial",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "insufficient",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "conflict",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "stale",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "handoff",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "save",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "unsaved",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "delete",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    },
+    {
+      "state": "catalog",
+      "dimensions": {
+        "body": 1120,
+        "width": 1120,
+        "height": 780
+      }
+    }
+  ],
+  "interaction_checks": [
+    "library search",
+    "type filter",
+    "favorites",
+    "seven variants",
+    "variant detail",
+    "RU toggle",
+    "lock toggle",
+    "replace confirmation",
+    "partial AI result",
+    "accept AI",
+    "Reels direct open"
+  ],
+  "page_errors": [],
+  "narrow_width": 390,
+  "kind": "HTML mockup only; no application/runtime/API checks"
+}

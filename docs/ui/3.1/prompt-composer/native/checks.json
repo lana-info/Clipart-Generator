@@ -1,0 +1,98 @@
+[
+  {
+    "state": "templates",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "subject-product",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "details",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "scene-image",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "results-en",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "results-ru",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "manual",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "library",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "scene-reels",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "results-reels",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "ai-partial-fixture",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "ai-stale-fixture",
+    "width": 1120,
+    "height": 780,
+    "horizontal_scroll": 0
+  },
+  {
+    "state": "ai-price-fixture",
+    "width": 400,
+    "height": 134,
+    "horizontal_scroll": null
+  },
+  {
+    "state": "ai-unknown-price",
+    "width": 341,
+    "height": 120,
+    "horizontal_scroll": null
+  },
+  {
+    "state": "save-dialog",
+    "width": 458,
+    "height": 165,
+    "horizontal_scroll": null
+  },
+  {
+    "state": "reference-error",
+    "width": 400,
+    "height": 106,
+    "horizontal_scroll": null
+  }
+]

@@ -24,6 +24,20 @@ class V3ProviderSettingsTests(unittest.TestCase):
             patch.object(main.QTimer, "singleShot"),
         )
 
+    def test_protected_store_uses_the_same_directory_as_provider_settings(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="provider-store-root-") as temp_dir:
+            root = Path(temp_dir)
+            config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch = self.isolated_paths(root)
+            with config_patch, env_patch, prompts_patch, license_patch, migration_patch, timer_patch, patch.object(main, "USER_DATA_DIR", str(root / "unrelated")):
+                window = main.MainWindow()
+                self.assertEqual(window.credential_store.fal.path, root / "fal_api_key.bin")
+                self.assertEqual(Path(window.credential_store.env.path).parent, window.credential_store.fal.path.parent)
+                self.assertEqual(window.credential_store_error, "")
+                window.settings_save_timer.stop()
+                window.api_key_mask_timer.stop()
+                window.deleteLater()
+                self.app.processEvents()
+
     def test_main_window_migrates_secret_keys_into_user_data_env(self) -> None:
         with tempfile.TemporaryDirectory(prefix="clipart-provider-settings-") as temp_dir:
             temp_path = Path(temp_dir)

@@ -1,5 +1,18 @@
 # TASKS
 
+## Prompt Composer planning checkpoint, 2026-09-29
+
+Module-specific requirements and ordered tasks are in
+[PRD_PROMPT_COMPOSER.ru.md](PRD_PROMPT_COMPOSER.ru.md) and
+[TASKS_PROMPT_COMPOSER.ru.md](TASKS_PROMPT_COMPOSER.ru.md).
+The owner approved implementation and UI on 2026-09-29. PC-01…PC-11 and H01…H03
+are implemented in the dedicated branch. Native Qt, storage, offline engine, optional AI
+and real catalog navigation are connected. Focused tests and independent reviews passed
+with fixes; PC-12 retains Windows/macOS and live-provider verification. See module tasks
+and UI gallery for evidence. Owner now authorized GitHub publication and a Windows
+test build. Separate commercial sale and server-side grants are deferred to the next phase;
+no paid provider call or merge is authorized by this publication scope.
+
 ## Preparation gate before new implementation
 
 - [x] Reproduce and fix review P2s: contour copy to current result/export,

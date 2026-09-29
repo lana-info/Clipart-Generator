@@ -6474,7 +6474,7 @@ class MainWindow(QMainWindow):
         self.secret_settings = {key: "" for key in SECRET_CONFIG_KEYS}
         self.credential_store = ProviderCredentialStore(
             ENV_FILE,
-            os.path.join(USER_DATA_DIR, "fal_api_key.bin"),
+            os.path.join(os.path.dirname(ENV_FILE), "fal_api_key.bin"),
         )
         self.credential_store_error = ""
         self.is_updating_prompts_table = False
@@ -9761,7 +9761,7 @@ def create_v3_application_window():
     config["local_realesrgan_dir"] = bundled_local_realesrgan_dir()
     secrets = ProviderCredentialStore(
         ENV_FILE,
-        os.path.join(USER_DATA_DIR, "fal_api_key.bin"),
+        os.path.join(os.path.dirname(ENV_FILE), "fal_api_key.bin"),
     ).load()
 
     app_data = QStandardPaths.writableLocation(
@@ -9944,12 +9944,27 @@ def run_packaged_entrypoint_check(
     *,
     evidence_dir=None,
 ) -> int:
+    from prompt_composer import apply_template, catalogue, generate_variants
+    from prompt_composer.ui import PromptComposerPage
+    from studio_prompt_composer_storage import PromptLibrary
     from v3_license import LicenseDialog, OnlineLicenseGate
     from v3_mode_selection import (
         MODE_CARD_SPECS,
         V3ApplicationView,
         default_work_directory,
     )
+
+    # Verify the bundled module offline without granting commercial access.
+    with tempfile.TemporaryDirectory(prefix="vibix-composer-smoke-") as temporary:
+        variants = generate_variants(apply_template("reels_cup_turn"))["variants"]
+        library = PromptLibrary(Path(temporary) / "library")
+        saved = library.save(variants[0]["draft"], {"name": "Packaged smoke"})
+        composer_is_bundled = (
+            len(catalogue()["templates"]) == 21
+            and len(variants) == 7
+            and issubclass(PromptComposerPage, QWidget)
+            and PromptLibrary(library.root).load(saved["id"])["payload"] == saved["payload"]
+        )
 
     class SmokeClient:
         @staticmethod
@@ -10128,6 +10143,7 @@ def run_packaged_entrypoint_check(
         and pictures_default_is_safe
         and update_channel_is_connected
         and startup_is_blocked
+        and composer_is_bundled
         and (expected_app_version is None or APP_VERSION == expected_app_version)
     ) else 1
 

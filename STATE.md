@@ -1,6 +1,61 @@
 # Project state
 
-Updated: 2026-09-12
+## Prompt Composer test release preparation, 2026-09-29
+
+Worktree `prompt-composer-prd-worktree`, branch `codex/feature-prompt-composer-prd-20260929`,
+base `2d1f00c`, synchronized with origin/develop/3.2. Owner approved the native UI,
+commit/push, GitHub publication and a test Windows build. Separate sale is confirmed;
+payment and server-side grant issuance are explicitly deferred to the next phase.
+
+Implemented 21 bilingual templates, seven local variants, single-scene short Reels,
+locks/exclusions, SQLite prompt/profile library with revision checks and local managed
+references. Optional AI is text-only with one-use quotes, explicit paid confirmation,
+no retry, cancellation and stale-result guards. The catalog uses a narrow Core host,
+bundled ModuleRuntimeHost registration and the signed `prompt-composer` entitlement.
+No Studio license automatically gains access; commercial grants remain unimplemented.
+
+Evidence: [PRD](PRD_PROMPT_COMPOSER.ru.md), [tasks](TASKS_PROMPT_COMPOSER.ru.md),
+[approved prototype and 16 native screens](docs/ui/3.1/prompt-composer/README.md).
+Full offline pytest: 1670 passed, 57 skipped, 2 deselected, 243 subtests (118.48s).
+Latest complete module run: 63 tests plus 2 subtests passed. Packaged entrypoint/UI: 41 passed
+plus 2 subtests. Native captures regenerated: 16 screens, no horizontal overflow.
+The installer smoke now verifies bundled catalog/generation/SQLite persistence offline.
+
+Three bounded release-review passes found and resolved lost unselected manual edits,
+AI submission after cancellation during consent, stale rename revision and incomplete
+structured Reels checks. Free-form AI text remains a human-reviewed proposal per PC-R09;
+both RU/EN scene markers warn, while forbidden structured fields are rejected.
+Seven baseline settings failures shared one root cause: the protected credential store
+used a different root from ENV_FILE. Both MainWindow and V3 now use the same root;
+a regression test covers differing USER_DATA_DIR. Azure default now matches source
+3.2.0. The transient Pinterest worker 2s timeout passed alone and on the final full run;
+its test was not weakened. Source fixtures were restored through sparse checkout only.
+
+Remaining verification: Windows build/installer run, native human acceptance, macOS,
+real paid provider quality. No paid request was made. Build and GitHub publication are
+next actions; no merge/stable release/sales deployment. TrendWatcher was read only.
+Other worktrees remain untouched. Copy works; generator handoff remains unavailable.
+
+The earlier documentation stop below is historical and superseded by implementation.
+
+## Prompt Composer documentation checkpoint, 2026-09-29
+
+Worktree: `/root/projects/Clipart Generator/prompt-composer-prd-worktree`.
+Branch: `codex/feature-prompt-composer-prd-20260929`, based on local `develop/3.2`
+at `2d1f00c`. Sparse checkout contains root Markdown files for this documentation task.
+At this earlier checkpoint, implementation, paid calls, builds, commits and pushes were not authorized.
+Requirements and tasks: [PRD](PRD_PROMPT_COMPOSER.ru.md),
+[task list](TASKS_PROMPT_COMPOSER.ru.md). Independent review completed: 8 findings
+resolved, follow-up found no remaining P1/P2; one editorial consistency fix applied.
+Local links, requirement/task coverage and diff/whitespace checks passed.
+Only documentation changed; no runtime tests or live API calls were performed.
+Work stopped as requested, with local uncommitted changes in five Markdown files.
+With a new continuation instruction, start
+with PC-01 (current host/source verification), then PC-02 (owner-approved mockups).
+Existing release/worktree changes were not included; checkpoints below describe
+the inherited baseline, not completion of the new module.
+
+Inherited baseline last updated: 2026-09-12
 
 ## Current handoff: portable PNG result intent implemented, 2026-09-12
 

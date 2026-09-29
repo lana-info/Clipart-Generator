@@ -1,5 +1,22 @@
 # Vibix Images
 
+## Prompt Composer module scope, 2026-09-29
+
+Owner approved the brief for a separate Prompt Composer module: image prompts and
+single-scene short Reels, seven variants, optional explicit AI, Russian UI with
+English prompts and Russian versions, and a reusable local saved-prompt library.
+Requirements: [PRD_PROMPT_COMPOSER.ru.md](PRD_PROMPT_COMPOSER.ru.md).
+Plan: [TASKS_PROMPT_COMPOSER.ru.md](TASKS_PROMPT_COMPOSER.ru.md).
+Owner subsequently authorized implementation in the dedicated module branch on 2026-09-29.
+UI mockup approved on 2026-09-29. Owner chose a separately sold module and authorized
+GitHub publication plus a test Windows build; sales and server-side grants are the next phase.
+
+The local implementation uses a narrow bundled-module host, SQLite revisioned library,
+managed local AssetStore references and optional text-only jobs. Text model routes/parser
+are shared contracts; existing callers retain compatibility. The module entitlement is
+`prompt-composer`; no Studio-wide entitlement is inferred. Pricing, payment and commercial
+grant issuance remain outside the test release.
+
 ## Portable PNG result-intent checkpoint, 2026-09-12
 
 Generated PNGs now receive a hash-bound `.generation.json` schema-v2 sidecar that carries `result_kind`, stage (`raw`/`final`), optional chroma provenance and prompt SHA-256 without storing prompt text, credentials or local paths. The pending record is created before paid submission for every generated result; raw and final records are bound to actual PNG bytes. `stage` describes background-readiness rather than folder location: surface outputs are final, while Clipart is final only when the published PNG contains a meaningful transparent area (at least 4 near-transparent pixels and at least 0.1% of the canvas); isolated alpha noise does not qualify, and an opaque chroma Clipart remains raw so later removal can use its recorded color. Final records never return a chroma color for re-keying, and `stage=final` prevents automatic background removal from running again on a finished PNG. Re-imported PNGs can restore confirmed result intent; an explicit conflicting intent fails closed. Transparency edits rebind the record to new bytes and Contour copies inherit validated v2 lineage. Legacy schema v1 remains readable for chroma only and never invents a result kind. `ClipartRunRequest.worker_kwargs()` and `WorkerThread` normalization now preserve `chroma_key_color`, `result_kind` and `object_id` end-to-end. A final sidecar write failure after a paid image is already published is reported as a local warning rather than converting the paid generation into a retryable failure. Affected verification after independent review fixes: 257 passed, 1 skipped, 11 subtests; full isolated pytest: 1494 passed, 57 skipped, 2 deselected, 239 subtests in 64.86s. Independent review findings were verified and fixed: final schema-v2 PNGs cannot enter the legacy KIE remover path; raw-sidecar bind/cleanup failures after a paid generation no longer make the current run retryable; Transparency Editor commits PNG/mask/provenance in one recoverable transaction; and Contour Save As publishes PNG+sidecar recoverably. A second independent review of `0001da1..e73675a` found concurrency gaps in recovery/capture plus a stale-file lock. These are now closed by one OS advisory per-destination lock held across recovery, capture and commit; the lock is released automatically by the OS on process death, while a stale lock file alone never blocks later work. Planned raw/final pending/completed sidecar paths remain preflighted before the paid provider POST.

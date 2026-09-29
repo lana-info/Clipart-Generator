@@ -184,13 +184,22 @@ class ModuleRuntimeHost:
 
     def __init__(self, store: ModuleStore, authorize: Callable[[str, str], bool] | None = None,
                  *, services: Mapping[str, Any] | None = None,
-                 capability_broker: CapabilityBroker | None = None):
+                 capability_broker: CapabilityBroker | None = None,
+                 bundled: Iterable[ModuleRegistration] = ()):
         if not isinstance(store, ModuleStore):
             raise TypeError("store must be a ModuleStore")
         if authorize is not None and not callable(authorize):
             raise TypeError("authorize must be callable")
         if capability_broker is not None and not isinstance(capability_broker, CapabilityBroker):
             raise TypeError("capability_broker must be a CapabilityBroker")
+        # Only the trusted application may supply in-process bundled code. Packages
+        # on disk never enter this registry and cannot replace these identities.
+        registrations = tuple(bundled)
+        if any(not isinstance(item, ModuleRegistration) or item.capabilities for item in registrations):
+            raise TypeError("Bundled registrations must be host-bound ModuleRegistration values")
+        if len({item.module_id for item in registrations}) != len(registrations):
+            raise ValueError("Duplicate bundled module")
+        self._bundled = MappingProxyType({item.module_id: item for item in registrations})
         self.store = store
         self._authorize_callback = authorize
         self._services = MappingProxyType(dict(services or {}))
@@ -220,6 +229,12 @@ class ModuleRuntimeHost:
         """Authorize activation, optionally change the store pointer, then load."""
         self._allowed(module_id, "activate")
         self._ensure_idle(module_id)
+        if module_id in self._bundled:
+            registration = self._bundled[module_id]
+            if version is not None and version != registration.version:
+                raise ModuleRuntimeError("Bundled module version cannot be replaced by a package")
+            self._loaded[module_id] = _LoadedModule(registration, Path(__file__).parent, "_bundled_" + module_id)
+            return _module_info(registration)
         if version is not None:
             with self.store.activation_transaction(module_id, version, busy=False):
                 return _module_info(self._load_verified(module_id))
@@ -228,6 +243,10 @@ class ModuleRuntimeHost:
     def load_active(self, module_id: str) -> ModuleInfo:
         self._allowed(module_id, "load")
         self._ensure_idle(module_id)
+        if module_id in self._bundled:
+            registration = self._bundled[module_id]
+            self._loaded[module_id] = _LoadedModule(registration, Path(__file__).parent, "_bundled_" + module_id)
+            return _module_info(registration)
         return _module_info(self._load_verified(module_id))
 
     def unload(self, module_id: str) -> None:
@@ -363,6 +382,10 @@ class ModuleRuntimeHost:
         loaded = self._loaded.get(module_id)
         if loaded is None:
             raise ModuleRuntimeError("Module is not loaded")
+        if module_id in self._bundled:
+            if loaded.registration is not self._bundled[module_id]:
+                raise ModuleRuntimeError("Bundled module identity changed")
+            return loaded
         root, manifest = self._verified_identity(module_id)
         if root != loaded.root or manifest["version"] != loaded.registration.version:
             self._loaded.pop(module_id, None)

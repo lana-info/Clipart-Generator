@@ -66,7 +66,6 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),
     ('studio_set_export', 'studio_delivery'),
-    ('studio_text_client', 'studio_text_errors'),
     ('v3_clipart_flow', 'chroma_key'),
     ('v3_clipart_flow', 'chroma_key_selection'),
     ('v3_clipart_flow', 'fal_model_catalog'),
@@ -134,6 +133,8 @@ def _layer_for(module_name: str) -> str | None:
         "v3_flow_runtime", "v3_flow_ui", "v3_image_worker_settings",
         "provider_upscale_contract", "provider_error_messages", "security_redaction",
         "v3_components",
+        # Reviewed shared text contracts: independent of Clipart UI/planning.
+        "studio_text_routes", "studio_text_response", "studio_text_errors",
     }:
         return "shared_api"
     if parts[0] == "studio_builtin_workflows":
