@@ -20,7 +20,9 @@
 - [x] Confirm Gemini KIE numeric pricing and documented OpenAI-compatible route.
 - [ ] Replace dated KIE estimates with maintained tariff retrieval before
   expiry on 2026-10-29; never silently extend unverified prices.
-- [ ] Native Windows acceptance and owner-authorized live API compatibility checks.
+- [x] Windows3.2.7 build36612613865 and native installed smoke passed; installer
+  checksum/source verified. CI36612608520 passed. No update publication.
+- [ ] Owner manual real-image acceptance and separately authorized live API checks.
 - [x] Owner chose to remove the texture control entirely; ignore legacy material
   values in new editor snapshots and prompts, preserving style and object details.
 - [x] Owner approved manual pen with double-click closure; implement and verify

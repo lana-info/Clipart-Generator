@@ -1,5 +1,22 @@
 # Project state
 
+## Windows 3.2.7 verified candidate, 2026-09-29
+
+Ordinary production-profile Windows build36612613865 PASSED from
+0bdaee6e8173f8519c50e502fb620347271f443d (application payload92e53fd).
+Desktop CI36612608520 passed. Native Windows security, packaged startup,
+installed startup/local processing/contour smoke and release contract passed.
+Downloaded artifact windows-3.2.7 id11054058538; VERSION/provenance/source verified.
+Installer SHA256:74A92B5AD815544050A35C4D5DAA224157E6ABAF6C59B93D19ED77B4DA20926B
+Local installer/evidence: /tmp/vibix-studio-3.2.7-verified/
+Inspected installed contour-editor screenshot; no private user images included.
+Run: https://github.com/lana-info/Clipart-Generator/actions/runs/36612613865
+Artifact: https://github.com/lana-info/Clipart-Generator/actions/runs/36612613865/artifacts/11054058538
+GitHub artifact retention is3 days. No release/tag/update publication or module
+publication. Legacy3.1.4 upgrade not repeated (optional installer was not supplied).
+Owner manual real-image/paid-provider acceptance remains open, as do automatic
+KIE tariff refresh before2026-10-29 and the known red-key fur quality limitation.
+
 ## Windows verifier argument fix, 2026-09-29
 
 Source92e53fd pushed; Desktop CI36611242274 passed. Windows run36611260269
