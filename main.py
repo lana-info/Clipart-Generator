@@ -513,7 +513,7 @@ def normalize_visible_mark_cleanup_mode(mode):
 
 def normalize_local_rembg_edge_quality(quality):
     quality_value = str(quality or "normal").strip().lower()
-    if quality_value not in {"soft", "normal", "sharp"}:
+    if quality_value not in {"soft", "normal", "sharp", "cutout"}:
         quality_value = "normal"
     return quality_value
 
@@ -1187,6 +1187,7 @@ class WorkerThread(QThread):
             settings.get("local_realesrgan_after_scale", self.local_realesrgan_scale)
         )
         self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
+        self.auto_clipart_sharp_fallback = bool(settings.get("auto_clipart_sharp_fallback", False))
         self.skip_remover_for_alpha = bool(settings.get("skip_remover_for_alpha", True))
         self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
         self.local_rembg_model = settings.get("local_rembg_model", "birefnet-general")
@@ -1195,6 +1196,8 @@ class WorkerThread(QThread):
         )
         self.local_rembg_session = None
         self.local_rembg_remove = None
+        self.auto_clipart_rembg_session = None
+        self.auto_clipart_rembg_remove = None
         self.local_ben2_refine_foreground = bool(settings.get("local_ben2_refine_foreground", False))
         self.local_ben2_alpha_threshold = normalize_ben2_alpha_threshold(
             settings.get("local_ben2_alpha_threshold", 24)
@@ -2867,43 +2870,50 @@ class WorkerThread(QThread):
                                     self.progress.emit("  Не удалось подготовить сведения об обработке Chroma Key")
                         except ChromaKeyAmbiguousError as error:
                             safe_error = self._safe_error_text(error)
-                            self._item_context.manual_transparency_required = True
-                            self.progress.emit(
-                                "  Local Chroma Key не применён: "
-                                f"{safe_error}. Откройте результат для ручной "
-                                "коррекции прозрачности."
-                            )
-                            self._emit_item_progress(
-                                idx,
-                                int(
-                                    getattr(
-                                        self._diagnostic_context,
-                                        "item_total",
-                                        1,
+                            fallback_succeeded = False
+                            if self.auto_clipart_sharp_fallback:
+                                try:
+                                    self.progress.emit(
+                                        "  Генератор создал неоднородный фон; "
+                                        "определяем объект автоматически..."
                                     )
-                                    or 1
-                                ),
-                                "background_removal",
-                                "stage_skipped",
-                                message=(
-                                    "Local Chroma Key не применён; требуется "
-                                    "ручная коррекция прозрачности."
-                                ),
-                            )
-                            self._emit_diagnostic(
-                                "stage_finished",
-                                provider=remove_provider,
-                                model=remove_model,
-                                outcome="skipped",
-                                status="manual_transparency_required",
-                                error_message=safe_error,
-                                elapsed_ms=round(
-                                    (time.monotonic() - remove_started) * 1000
-                                ),
-                                **inspect_diagnostic_image(current_path),
-                            )
-                            return current_path
-                    self.progress.emit(f"  Локальный Chroma Key без фона: {nobg_path}")
+                                    self._run_auto_clipart_sharp_fallback(current_path, nobg_path)
+                                except Exception as fallback_error:
+                                    self.progress.emit(
+                                        "  Автоматическое выделение не удалось: "
+                                        f"{self._safe_error_text(fallback_error)}"
+                                    )
+                                else:
+                                    fallback_succeeded = True
+                                    remove_provider = "local_rembg"
+                                    remove_model = "u2net-sharp"
+                                    self.progress.emit("  Фон удалён автоматически с чётким контуром.")
+                            if not fallback_succeeded:
+                                self._item_context.manual_transparency_required = True
+                                self.progress.emit(
+                                    "  Local Chroma Key не применён: "
+                                    f"{safe_error}. Откройте результат для ручной "
+                                    "коррекции прозрачности."
+                                )
+                                self._emit_item_progress(
+                                    idx,
+                                    int(getattr(self._diagnostic_context, "item_total", 1) or 1),
+                                    "background_removal",
+                                    "stage_skipped",
+                                    message="Local Chroma Key не применён; требуется ручная коррекция прозрачности.",
+                                )
+                                self._emit_diagnostic(
+                                    "stage_finished",
+                                    provider=remove_provider,
+                                    model=remove_model,
+                                    outcome="skipped",
+                                    status="manual_transparency_required",
+                                    error_message=safe_error,
+                                    elapsed_ms=round((time.monotonic() - remove_started) * 1000),
+                                    **inspect_diagnostic_image(current_path),
+                                )
+                                return current_path
+                    self.progress.emit(f"  Локальное удаление фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
                     local_result = True
@@ -3043,6 +3053,14 @@ class WorkerThread(QThread):
                 )
             if preserve_alpha and extrema[0] == 255:
                 self._item_context.manual_transparency_required = True
+                self.progress.emit("  Этап обработки: alpha_validation; status=failed")
+                self._emit_item_progress(
+                    idx,
+                    int(getattr(self._diagnostic_context, "item_total", 1) or 1),
+                    "alpha_validation",
+                    "stage_failed",
+                    message="Апскейлер потерял прозрачность; требуется коррекция.",
+                )
                 self.progress.emit(
                     "  Апскейлер потерял прозрачность. Изображение сохранится "
                     "для ручной коррекции; перед экспортом набора требуется удалить фон."
@@ -3943,14 +3961,44 @@ class WorkerThread(QThread):
             result_data = remove(src.read(), session=session)
         with Image.open(BytesIO(result_data)) as img:
             result = self._apply_local_rembg_edge_quality(img.convert("RGBA"))
+            self._ensure_running()
             self._save_image_object_as_png(result, output_path)
         return output_path
+
+    def _run_auto_clipart_sharp_fallback(self, input_path, output_path):
+        """Cut out a subject when the image model ignores the requested key color."""
+        validate_local_image_input(input_path)
+        if self.auto_clipart_rembg_session is None:
+            new_session, self.auto_clipart_rembg_remove = import_rembg_tools()
+            self.progress.emit("  Подготовка локальной модели выделения объекта (U2Net)...")
+            self.auto_clipart_rembg_session = new_session("u2net")
+        with open(input_path, "rb") as source:
+            result_data = self.auto_clipart_rembg_remove(source.read(), session=self.auto_clipart_rembg_session)
+        with Image.open(BytesIO(result_data)) as image:
+            result = self._sharp_cutout_mask(image)
+            self._ensure_running()
+            self._save_image_object_as_png(result, output_path)
+        return output_path
+
+    @staticmethod
+    def _sharp_cutout_mask(image):
+        """Shared hard mask used by batch processing and automatic fallback."""
+        result = image.convert("RGBA")
+        # Remove the soft paper fringe without blurring retained RGB pixels.
+        alpha = result.getchannel("A").point(lambda value: 255 if value >= 192 else 0)
+        alpha = alpha.filter(ImageFilter.MinFilter(size=9))
+        if alpha.getextrema() != (0, 255):
+            raise ValueError("Не удалось надёжно выделить объект")
+        result.putalpha(alpha)
+        return result
 
     def _apply_local_rembg_edge_quality(self, image):
         rgba = image.convert("RGBA")
         quality = normalize_local_rembg_edge_quality(self.local_rembg_edge_quality)
         if quality == "normal":
             return rgba
+        if quality == "cutout":
+            return self._sharp_cutout_mask(rgba)
 
         red, green, blue, alpha = rgba.split()
         if quality == "soft":

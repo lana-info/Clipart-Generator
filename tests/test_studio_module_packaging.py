@@ -8,7 +8,9 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, PrivateFormat, NoEncryption
 
-from studio_module_packaging import prepare_module_release, main
+from studio_module_packaging import (
+    AUTO_CLIPART_STYLE_PREVIEWS, OFFICIAL_WORKFLOW_FILES, prepare_module_release, main,
+)
 from studio_modules import ModuleStore, ModulePackageError
 
 
@@ -81,6 +83,17 @@ class ModulePackagingTests(unittest.TestCase):
         for overrides in cases:
             with self.subTest(overrides=overrides), self.assertRaises(ModulePackageError):
                 prepare_module_release(**{**self.args, **overrides})
+
+    def test_auto_clipart_preview_inventory_matches_style_library(self):
+        from studio_style_profiles import all_style_profiles
+        root = Path(__file__).resolve().parents[1]
+        self.assertEqual(set(AUTO_CLIPART_STYLE_PREVIEWS),
+                         {profile.key for profile in all_style_profiles()})
+        self.assertTrue(all((root / 'assets' / 'style_previews' / f'{key}.jpg').is_file()
+                            for key in AUTO_CLIPART_STYLE_PREVIEWS))
+        self.assertTrue({'studio_clipart_recipe.py', 'studio_clipart_references.py',
+                         'studio_reference_editor.py', 'studio_palette_library.py'}
+                        <= set(OFFICIAL_WORKFLOW_FILES['auto-clipart']))
 
 
 if __name__ == "__main__":

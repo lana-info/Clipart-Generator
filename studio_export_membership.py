@@ -51,7 +51,7 @@ def validate_export_membership(value):
         if (not isinstance(item, dict) or set(item) != {'version', 'asset_id', 'memberships'}
                 or type(item['version']) is not int or item['version'] != 2
                 or not _valid_id(item['asset_id']) or not isinstance(item['memberships'], list)
-                or not 1 <= len(item['memberships']) <= 100):
+                or len(item['memberships']) > 100):
             raise ValueError('Неверное распределение PNG по наборам')
         seen = set()
         for link in item['memberships']:

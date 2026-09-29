@@ -915,7 +915,7 @@ class V3RunQueueTests(unittest.TestCase):
             self.assertEqual(persisted["outcome"], "skipped")
             self.assertEqual(persisted["status"], "already_alpha")
 
-    def test_manual_chroma_skip_keeps_ready_result_actionable(self):
+    def test_manual_chroma_skip_preserves_file_without_claiming_success(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-manual-chroma-") as temp:
             root = Path(temp)
             output = root / "output" / "flowers_ready.png"
@@ -950,9 +950,43 @@ class V3RunQueueTests(unittest.TestCase):
             )
 
             item = session.items[0]
-            self.assertIs(item.status, RunItemStatus.SUCCEEDED)
+            self.assertIs(item.status, RunItemStatus.FAILED)
             self.assertEqual(item.output_path, str(output.resolve()))
-            self.assertIn("исправьте прозрачность", item.short_message)
+            self.assertIn("не готов к экспорту", item.short_message)
+            self.assertIn(output.resolve(), transparency_candidate_paths(session))
+
+    def test_incomplete_processing_survives_both_save_protocols_and_editor(self):
+        for stage, status in (("background_removal", "stage_skipped"),
+                              ("upscale_after", "stage_failed")):
+            for indexed_save in (False, True):
+                with self.subTest(stage=stage, indexed_save=indexed_save), tempfile.TemporaryDirectory() as temp:
+                    root = Path(temp)
+                    session = RunQueueSession(generation_request(root, count=1), ProjectMode.CLIPART)
+                    output = session.output_dir / "image_ready.png"
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    Image.new("RGB", (20, 20), "white").save(output)
+                    session.handle_progress("[1/1] Генерация")
+                    session.handle_item_progress(dict(item_index=1, total_items=1,
+                                                      stage=stage, status=status))
+                    if indexed_save:
+                        session.handle_item_progress(dict(item_index=1, total_items=1,
+                            stage="export", status="succeeded", output_path=str(output)))
+                    else:
+                        session.handle_progress(f"Итог сохранён: {output}")
+                    session.handle_finished()
+                    self.assertIs(session.items[0].status, RunItemStatus.FAILED)
+                    page = RunResultsPage(ProjectState(mode=ProjectMode.CLIPART))
+                    page.set_session(session)
+                    self.assertEqual(page._export_paths(), [])
+                    self.assertIn(output.resolve(), transparency_candidate_paths(session))
+                    edited = root / "corrected.png"
+                    Image.new("RGBA", (20, 20), (20, 30, 40, 128)).save(edited)
+                    page.use_edited_output(output, edited)
+                    self.assertEqual(session.items[0].output_path, str(edited.resolve()))
+                    self.assertIs(session.items[0].status, RunItemStatus.FAILED)
+                    self.assertEqual(page._export_paths(), [])
+                    self.assertIn(edited.resolve(), transparency_candidate_paths(session))
+                    page.close()
 
     def test_indexed_chroma_skip_is_attributed_to_the_correct_parallel_item(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-chroma-batch-") as temp:
@@ -1949,3 +1983,133 @@ def test_run_results_requests_interior_opening_qc_for_wreath_role_only(tmp_path,
         'hero.png': False, 'wreath.png': True, 'frame.png': True, 'border.png': False,
     }
     page.close()
+
+
+def test_corrected_generated_image_finishes_locally_without_generation_or_upscale(tmp_path):
+    import main
+    app = QApplication.instance() or QApplication([])
+    request = generation_request(tmp_path, count=1)
+    request.settings.update(upscale=False, remove_bg=True, remove_bg_provider='local_chroma_key',
+                            upscale_after=True, upscale_after_provider='kie',
+                            unsharp_enabled=False, edge_shrink_enabled=False,
+                            trim_enabled=False, export_300_dpi=False)
+    session = RunQueueSession(request, ProjectMode.CLIPART)
+    output = session.output_dir / 'image_ready.png'
+    output.parent.mkdir(parents=True, exist_ok=True)
+    Image.new('RGB', (64, 64), 'white').save(output)
+    session.handle_diagnostic(dict(event='stage_finished', item_index=1, item_total=1,
+                                  stage='upscale_after', outcome='succeeded'))
+    session.handle_item_progress(dict(item_index=1, total_items=1,
+                                      stage='alpha_validation', status='stage_failed'))
+    session.handle_item_progress(dict(item_index=1, total_items=1, stage='export',
+                                      status='succeeded', output_path=str(output)))
+    session.handle_finished()
+    page = RunResultsPage(ProjectState(mode=ProjectMode.CLIPART))
+    page.set_session(session)
+    edited = tmp_path / 'corrected.png'
+    image = Image.new('RGBA', (64, 64))
+    from PIL import ImageDraw
+    ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 60, 30, 255))
+    image.save(edited)
+    before = edited.read_bytes()
+    page.use_edited_output(output, edited)
+    retry = session.prepare_retry()
+    assert retry.mode == 'mode2_process'
+    assert retry.selected_files == [str(edited.resolve())]
+    assert not retry.generated_prompts and not retry.settings['upscale_after']
+    assert session.items[0].editor_output_path == str(edited.resolve())
+    worker = main.WorkerThread(retry.mode, retry.work_dir, retry.settings,
+                               selected_files=retry.selected_files)
+    worker.progress.connect(session.handle_progress)
+    messages = []
+    worker.progress.connect(messages.append)
+    worker.item_progress.connect(session.handle_item_progress)
+    worker.diagnostic.connect(session.handle_diagnostic)
+    with patch.object(worker, '_run_upscale_pass', side_effect=AssertionError('No upscale')), \
+         patch.object(worker, '_run_local_rembg', side_effect=AssertionError('Existing alpha')):
+        worker._mode2_process_files(emit_final=False)
+    session.handle_finished()
+    assert session.items[0].status is RunItemStatus.SUCCEEDED, messages
+    assert session.items[0].editor_output_path == ""
+    assert len(page._export_paths()) == 1
+    assert edited.read_bytes() == before
+    with Image.open(session.items[0].output_path) as saved:
+        assert saved.convert('RGBA').tobytes() == image.tobytes()
+    page.close()
+
+
+def test_missing_saved_image_never_becomes_paid_generation_retry(tmp_path):
+    session = RunQueueSession(generation_request(tmp_path, count=1), ProjectMode.CLIPART)
+    session.items[0].status = RunItemStatus.FAILED
+    session.items[0].output_path = str(session.output_dir / 'missing_ready.png')
+    session.handle_finished()
+    assert session.preview_retry() is None
+    assert session.prepare_retry() is None
+
+
+def test_recovery_groups_pending_stages_and_does_not_repeat_generation_failures(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    request = generation_request(tmp_path, count=3)
+    request.settings.update(upscale=False, upscale_after=True, upscale_after_provider='kie')
+    session = RunQueueSession(request, ProjectMode.CLIPART)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    for index in (0, 1):
+        path = session.output_dir / f'{index}_ready.png'
+        Image.new('RGB', (64, 64), 'white').save(path)
+        session.items[index].output_path = str(path)
+    for item in session.items:
+        item.status = RunItemStatus.FAILED
+    session.items[0].stage_statuses = {'background_removal': 'skipped'}
+    session.items[1].stage_statuses = {'upscale_after': 'complete', 'alpha_validation': 'failed'}
+    session.handle_finished()
+    retry = session.prepare_retry()
+    assert session.active_order == [0]
+    assert retry.settings['upscale_after'] is True
+    assert not retry.generated_prompts
+    assert session.items[1].status is RunItemStatus.FAILED
+    assert session.items[2].status is RunItemStatus.FAILED
+    session.handle_item_progress(dict(item_index=1, total_items=1, stage='export',
+        status='succeeded', output_path=session.items[0].output_path))
+    session.handle_finished()
+    retry = session.prepare_retry()
+    assert session.active_order == [1]
+    assert retry.settings['upscale_after'] is False
+    assert not retry.generated_prompts
+
+
+def test_recovery_failure_does_not_claim_intermediate_work_in_old_output(tmp_path):
+    session = RunQueueSession(generation_request(tmp_path, count=1), ProjectMode.CLIPART)
+    session.request.settings.update(upscale=False, upscale_after=True)
+    saved = session.output_dir / 'old_ready.png'
+    saved.parent.mkdir(parents=True, exist_ok=True)
+    Image.new('RGB', (64, 64), 'white').save(saved)
+    item = session.items[0]
+    item.status = RunItemStatus.FAILED
+    item.output_path = str(saved)
+    item.stage_statuses = {'background_removal': 'skipped'}
+    session.handle_finished()
+    session.prepare_retry()
+    session.handle_diagnostic(dict(event='stage_finished', item_index=1, item_total=1,
+                                  stage='upscale_after', outcome='succeeded'))
+    session.handle_item_progress(dict(item_index=1, total_items=1, stage='export', status='failed'))
+    session.handle_finished()
+    assert item.output_path == str(saved)
+    assert item.saved_stages() == {'background_removal': 'skipped'}
+    assert session.preview_retry().settings['upscale_after'] is True
+
+
+def test_raw_generated_source_does_not_inherit_intermediate_upscale(tmp_path):
+    session = RunQueueSession(generation_request(tmp_path, count=1), ProjectMode.CLIPART)
+    session.request.settings.update(upscale=False, upscale_after=True)
+    raw = session.transient_dir / 'raw.png'
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    Image.new('RGB', (64, 64), 'white').save(raw)
+    item = session.items[0]
+    item.status = RunItemStatus.FAILED
+    item.source_path = str(raw)
+    item.stage_statuses = {'upscale_after': 'complete'}
+    session.handle_finished()
+    request = session.prepare_retry()
+    assert request.settings['upscale_after'] is True
+    assert request.selected_files == [str(raw.resolve())]
+    assert not request.generated_prompts

@@ -74,14 +74,19 @@ def test_legacy_custom_visual_values_survive_dropdown_migration():
     app = QApplication.instance() or QApplication([])
     data = ProjectState().clipart
     from studio_clipart_recipe import ClipartRecipe
-    recipe = ClipartRecipe()
-    custom = dict(line='Custom fine ink', material='Satin opaque', detail='Large expressive eyes')
-    recipe.visual.update(custom)
+    recipe = ClipartRecipe(theme="Лесные животные")
+    custom = dict(line='Custom fine ink', detail='Large expressive eyes')
+    recipe.visual.update(custom, material='Satin opaque')
     data.recipe = recipe.to_dict()
     dialog = ClipartBuilderDialog(data)
     for name, value in custom.items():
         assert dialog.visual_fields[name].currentText() == value
         assert not dialog.visual_fields[name].isEditable()
+    assert 'material' not in dialog.visual_fields
+    dialog._apply()
+    assert data.recipe['visual']['material'] == ''
+    for name, value in custom.items():
+        assert data.recipe['visual'][name] == value
     dialog.close()
 
 

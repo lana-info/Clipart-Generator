@@ -26,6 +26,13 @@ def parse_text_response(data, provider):
             if choice['finish_reason'] != 'stop' or message.get('refusal') or message.get('tool_calls'):
                 raise ValueError
             text = message['content']
+        elif provider == 'kie' and 'content' in data:
+            if data.get('stop_reason') != 'end_turn':
+                raise ValueError
+            parts = data['content']
+            if not isinstance(parts, list) or any(part.get('type') not in ('text', 'thinking') for part in parts):
+                raise ValueError
+            text = ''.join(part['text'] for part in parts if part.get('type') == 'text')
         elif provider == 'kie':
             candidate = data['candidates'][0]
             if candidate['finishReason'] != 'STOP':
@@ -154,6 +161,10 @@ Callers must recheck the returned request against the live draft before apply.
                             for item in prepared)
     body = dict(messages=[dict(role='system', content=instructions),
                           dict(role='user', content=user_content)], stream=False)
+    if provider == 'kie' and model == 'claude-sonnet-4-6':
+        body = dict(model=model,
+                    messages=[dict(role='user', content=instructions + '\nBRIEF:\n' + user_content)],
+                    max_tokens=16000, stream=False)
     if provider == 'openrouter':
         fields = ('id', *TEXT_FIELDS)
         body.update(model=model, max_tokens=16000,

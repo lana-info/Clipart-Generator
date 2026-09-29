@@ -410,7 +410,8 @@ class ProcessingPipelineEditor(QScrollArea):
             advanced_form,
             "local_rembg_edge_quality",
             "Качество края rembg",
-            (("Мягкое", "soft"), ("Обычное", "normal"), ("Резкое", "sharp")),
+            (("Мягкое", "soft"), ("Обычное", "normal"), ("Резкое", "sharp"),
+             ("Чёткий контур без размытия", "cutout")),
             operations,
         )
         self._add_bool(

@@ -6,6 +6,22 @@ import requests
 from studio_text_errors import TextGenerationError
 
 
+def fetch_kie_text_model_info(model):
+    """Dated public KIE quote, never substitute OpenRouter prices.
+
+    Source: https://kie.ai/ru, verified 2026-09-29, USD per million tokens.
+    Expire this quote instead of silently retaining an unmaintained tariff.
+    This is an estimate, not a provider-enforced monetary limit.
+    """
+    from datetime import date
+    prices = {'claude-sonnet-4-6': (.850, 4.275),
+              'gemini-3-8-flash-openai': (.225, 1.125)}
+    if model not in prices or date.today() > date(2026, 10, 29):
+        raise TextGenerationError('Тариф KIE требует обновления. Генерация не запущена.')
+    prompt, completion = prices[model]
+    return dict(prompt=prompt, completion=completion, request=0, input_modalities=('text',))
+
+
 def fetch_text_model_info(model, api_key):
     try:
         with requests.get('https://openrouter.ai/api/v1/models',

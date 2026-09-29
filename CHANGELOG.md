@@ -1,5 +1,16 @@
 ﻿# CHANGELOG
 
+## Studio 3.2.7 candidate, 2026-09-29
+
+- Add style and palette previews, explicit reference roles and optional reference step.
+- Add text provider/model selection and concise model-specific cost confirmation.
+- Improve manual transparency contours, keyboard actions and native maximize.
+- Edit named export sets inline, preview their images and name ZIPs from set titles.
+- Add batch local sharp cutout and saved-result handoff to Processing.
+- Keep incomplete processing out of ready results; resume saved PNGs without
+  repeating generation and block project switching during ZIP export.
+- Windows build candidate only; no update publication or live paid API validation.
+
 ## Studio 3.2 work in progress, 2026-09-10
 
 - Saved contour copies become the current result for set export, preserving

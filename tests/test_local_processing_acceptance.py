@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import types
 import unittest
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,6 +61,74 @@ def create_quadrant_rgba(path, size=(32, 28)):
 
 
 class LocalProcessingAcceptanceTests(unittest.TestCase):
+    def test_auto_clipart_fallback_makes_binary_inset_mask(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source.png"
+            output = root / "cutout.png"
+            Image.new("RGB", (32, 32), "white").save(source)
+            segmented = Image.new("RGBA", (32, 32), (170, 90, 40, 0))
+            ImageDraw.Draw(segmented).rectangle((4, 4, 27, 27), fill=(170, 90, 40, 255))
+            buffer = BytesIO()
+            segmented.save(buffer, format="PNG")
+            remove = lambda *_args, **_kwargs: buffer.getvalue()
+            worker = self.make_worker(root, auto_clipart_sharp_fallback=True)
+            with patch.object(main, "import_rembg_tools", return_value=(lambda name: name, remove)):
+                worker._run_auto_clipart_sharp_fallback(str(source), str(output))
+            with Image.open(output) as image:
+                alpha = image.getchannel("A")
+                self.assertEqual(
+                    {index for index, count in enumerate(alpha.histogram()) if count},
+                    {0, 255},
+                )
+                self.assertEqual(alpha.getpixel((4, 16)), 0)
+                self.assertEqual(alpha.getpixel((16, 16)), 255)
+
+    def test_auto_clipart_uses_fallback_when_key_background_is_ambiguous(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            source = root / "source.png"
+            output = root / "source_ready.png"
+            Image.new("RGB", (40, 40), "white").save(source)
+            worker = self.make_worker(root, remove_bg=True,
+                                      remove_bg_provider="local_chroma_key",
+                                      auto_clipart_sharp_fallback=True)
+
+            def cutout(_source, target):
+                image = Image.new("RGBA", (40, 40), (0, 0, 0, 0))
+                ImageDraw.Draw(image).rectangle((8, 8, 31, 31), fill=(100, 50, 20, 255))
+                image.save(target)
+
+            with patch.object(main, "remove_chroma_key_automatic",
+                              side_effect=main.ChromaKeyAmbiguousError("ambiguous key")), \
+                 patch.object(worker, "_run_auto_clipart_sharp_fallback", side_effect=cutout):
+                worker._process_file_entry(1, 1, str(source), str(raw), str(output))
+            with Image.open(output) as image:
+                self.assertEqual(image.getchannel("A").getextrema(), (0, 255))
+            self.assertFalse(worker._item_context.manual_transparency_required)
+
+    def test_auto_clipart_keeps_manual_status_if_fallback_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "rough"
+            raw.mkdir()
+            source = root / "source.png"
+            output = root / "source_ready.png"
+            Image.new("RGB", (40, 40), "white").save(source)
+            worker = self.make_worker(root, remove_bg=True,
+                                      remove_bg_provider="local_chroma_key",
+                                      auto_clipart_sharp_fallback=True)
+            with patch.object(main, "remove_chroma_key_automatic",
+                              side_effect=main.ChromaKeyAmbiguousError("ambiguous key")), \
+                 patch.object(worker, "_run_auto_clipart_sharp_fallback",
+                              side_effect=RuntimeError("model unavailable")):
+                worker._process_file_entry(1, 1, str(source), str(raw), str(output))
+            self.assertTrue(worker._item_context.manual_transparency_required)
+            with Image.open(output) as image:
+                self.assertEqual(image.convert("RGBA").getchannel("A").getextrema(), (255, 255))
+
     def test_generation_records_key_before_api_and_reprocessing_uses_it(self):
         from chroma_generation_record import load_generation_color, record_path
 

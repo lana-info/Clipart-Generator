@@ -59,6 +59,7 @@ Write-Host "==> Build app with PyInstaller"
     --add-data "assets/studio-generation-cover.png;assets" `
     --add-data "assets/studio-patterns-cover.png;assets" `
     --add-data "assets/studio-mockups-cover.png;assets" `
+    --add-data "assets/style_previews;assets/style_previews" `
     --add-data "assets/vibix-images.svg;assets" `
     --add-data "studio_builtin_workflows;studio_builtin_workflows" `
     --add-data "release/VERSION.txt;release" `

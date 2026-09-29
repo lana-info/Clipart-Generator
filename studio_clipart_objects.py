@@ -97,3 +97,37 @@ def compile_objects(recipe, generator):
         entry.object_id = item['id']
         prompts.append(entry)
     return prompts
+
+
+def attach_reference_guidance(prompts, references):
+    """Attach selected images with explicit scope, preserving compiled prompt content."""
+    from v3_project_state import MAX_TEXT_LENGTH, PromptEntry
+    from studio_clipart_references import validate_references
+    references = validate_references(references)
+    paths = [item['path'] for item in references]
+    role_names = {
+        'technique': 'illustration style', 'palette': 'colors', 'mood': 'mood',
+        'subject': 'subject', 'character': 'character', 'pose': 'pose',
+        'composition': 'composition',
+    }
+    guidance = []
+    for index, item in enumerate(references, 1):
+        chosen = [role_names[role] for role in item['roles']]
+        scope = ', '.join(chosen) if chosen else 'subject only'
+        detail = f' User notes: {item["notes"]}' if item['notes'].strip() else ''
+        guidance.append(
+            f'Reference image {index}: use only for {scope}. '
+            'Keep the selected collection style and palette unless this image is explicitly '
+            'the source of that attribute. Do not copy unrelated details or the background.' + detail
+        )
+    instruction = '\n' + '\n'.join(guidance) if guidance else ''
+    result = []
+    for entry in prompts:
+        prompt = entry.prompt + instruction
+        if len(prompt) > MAX_TEXT_LENGTH:
+            raise ValueError('Описание референсов слишком длинное для промпта')
+        result.append(PromptEntry(
+            prompt=prompt, references=paths, chroma_key_color=entry.chroma_key_color,
+            result_kind=entry.result_kind, object_id=entry.object_id,
+        ))
+    return result

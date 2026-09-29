@@ -4,8 +4,8 @@ from zipfile import ZipFile
 
 import pytest
 from PIL import Image
-from PyQt6.QtCore import QEventLoop, QTimer, Qt
-from PyQt6.QtWidgets import QApplication, QFileDialog
+from PyQt6.QtCore import QEvent, QEventLoop, QTimer, Qt
+from PyQt6.QtWidgets import QApplication, QFileDialog, QInputDialog, QLabel, QMessageBox
 
 from studio_set_export import export_clipart_sets, ExportCancelled
 from studio_set_export_ui import SetExportDialog
@@ -41,6 +41,84 @@ def test_manual_matrix_changes_membership_without_confirmation_checkbox(images):
     groups = dialog.groups()
     assert [group['title'] for group in groups] == ['Полный']
     assert len(groups[0]['images']) == 3
+    dialog.reject()
+
+
+def test_create_rename_delete_and_recreate_sets_without_touching_png(images, monkeypatch):
+    dialog = SetExportDialog(images)
+    saved = []
+    dialog.membership_saved.connect(saved.append)
+    dialog._show_create_page()
+    dialog.new_set_name.setText('Зимние персонажи')
+    dialog.new_set_images.item(1).setCheckState(Qt.CheckState.Checked)
+    dialog._create_set()
+    assert [group['title'] for group in dialog.groups()] == ['Набор 1', 'Зимние персонажи']
+    set_id = next(link['set_id'] for link in dialog.saved_membership[str(images[0])]['memberships']
+                  if link['title'] == 'Зимние персонажи')
+    dialog._show_manual_editor(set_id)
+    monkeypatch.setattr(QInputDialog, 'getText', lambda *args, **kwargs: ('Зимний набор', True))
+    dialog._rename_current_set()
+    assert [group['title'] for group in dialog.groups()] == ['Набор 1', 'Зимний набор']
+    assert any(link['set_id'] == set_id and link['title'] == 'Зимний набор'
+               for link in dialog.saved_membership[str(images[0])]['memberships'])
+    monkeypatch.setattr(QMessageBox, 'question',
+                        lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    dialog._delete_set(set_id)
+    assert [group['title'] for group in dialog.groups()] == ['Набор 1']
+    first_id = dialog._set_catalog()[0][0]
+    dialog._delete_set(first_id)
+    with pytest.raises(ValueError):
+        dialog.groups()
+    assert all(item['memberships'] == [] for item in dialog.saved_membership.values())
+    assert all(path.is_file() for path in images)
+    reopened = SetExportDialog(images, membership=saved[-1])
+    assert reopened._set_catalog() == []
+    reopened._show_create_page()
+    reopened.new_set_name.setText('Новый набор')
+    reopened._create_set()
+    assert reopened.groups()[0]['title'] == 'Новый набор'
+    dialog.reject()
+    reopened.reject()
+
+
+def test_summary_filename_hover_shows_preview(images):
+    dialog = SetExportDialog(images)
+    dialog.show()
+    QApplication.processEvents()
+    name = next(label for label in dialog.findChildren(QLabel)
+                if label.property('previewPath') == str(images[0]))
+    QApplication.sendEvent(name, QEvent(QEvent.Type.Enter))
+    assert dialog.preview_popup.isVisible()
+    QApplication.sendEvent(name, QEvent(QEvent.Type.Leave))
+    assert not dialog.preview_popup.isVisible()
+    dialog.reject()
+
+
+def test_empty_set_stays_editable_and_blocks_export(images):
+    dialog = SetExportDialog(images)
+    dialog._show_manual_editor()
+    for row in range(dialog.table.rowCount()):
+        dialog.table.item(row, 1).setCheckState(Qt.CheckState.Unchecked)
+    dialog._save_membership()
+    assert dialog.summary_sets_value.text() == '1'
+    assert not dialog.export_button.isEnabled()
+    dialog._show_manual_editor()
+    dialog.table.item(0, 1).setCheckState(Qt.CheckState.Checked)
+    dialog._save_membership()
+    assert dialog.export_button.isEnabled()
+    dialog.reject()
+
+
+def test_renamed_set_title_is_used_for_zip_filename(images, tmp_path, monkeypatch):
+    dialog = SetExportDialog(images)
+    set_id = dialog._set_catalog()[0][0]
+    dialog._show_manual_editor(set_id)
+    monkeypatch.setattr(QInputDialog, 'getText',
+                        lambda *args, **kwargs: ('Зимние персонажи', True))
+    dialog._rename_current_set()
+    archives = export_clipart_sets(dialog.groups(), tmp_path)
+    assert len(archives) == 1
+    assert archives[0].name == '001_зимние-персонажи.zip'
     dialog.reject()
 
 
@@ -279,7 +357,7 @@ def test_approved_export_summary_is_primary_and_plain_language(images):
     assert dialog.summary_page.isVisible() or not dialog.isVisible()
     assert dialog.summary_unique_value.text() == '3'
     assert dialog.summary_sets_value.text() == '6'
-    assert dialog.export_button.text() == 'Создать наборы'
+    assert dialog.export_button.text() == 'Создать ZIP-наборы'
     assert dialog.edit_sets_button.text() == 'Изменить состав наборов'
     assert 'PDF Letter' not in dialog.delivery_note.text()
     assert 'manifest' not in dialog.delivery_note.text().lower()

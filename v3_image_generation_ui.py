@@ -91,6 +91,7 @@ class ImageGenerationSettingsPage(ScrollableStepPage):
         form.addRow("Вариантов на промпт", self.variants_spin)
         container = QWidget()
         container.setLayout(form)
+        self.primary_controls_container = container
         self.add_widget(container)
 
         if self.show_ratio_preview:

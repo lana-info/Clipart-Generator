@@ -214,24 +214,38 @@ class ClipartRunResultsExtension:
             ))
             seen.add(resolved)
         return reports
+    def create_export_view(
+        self, parent: Any, state: Any, paths: Sequence[Path], *,
+        review_issues: Sequence[dict[str, Any]], quality_reports: Sequence[Any],
+        on_membership_saved, on_fix_requested,
+        workspace: Path | None = None, embedded: bool = False,
+    ) -> Any | None:
+        if not self.collections_enabled:
+            return None
+        view = SetExportDialog(
+            paths, parent,
+            membership=_clipart_data(state).export_membership,
+            review_issues=review_issues, quality_reports=quality_reports,
+            workspace=workspace, embedded=embedded,
+        )
+        view.membership_saved.connect(on_membership_saved)
+        view.fix_requested.connect(on_fix_requested)
+        return view
+
     def open_export_dialog(
         self, parent: Any, state: Any, paths: Sequence[Path], *,
         review_issues: Sequence[dict[str, Any]], quality_reports: Sequence[Any],
         on_membership_saved, on_fix_requested,
     ) -> None:
-        if not self.collections_enabled:
-            return
-        dialog = SetExportDialog(
-            paths,
-            parent,
-            membership=_clipart_data(state).export_membership,
-            review_issues=review_issues,
+        dialog = self.create_export_view(
+            parent, state, paths, review_issues=review_issues,
             quality_reports=quality_reports,
+            on_membership_saved=on_membership_saved,
+            on_fix_requested=on_fix_requested,
             workspace=getattr(getattr(parent, 'session', None), 'workspace_root', None),
         )
-        dialog.membership_saved.connect(on_membership_saved)
-        dialog.fix_requested.connect(on_fix_requested)
-        dialog.exec()
+        if dialog is not None:
+            dialog.exec()
 
     def save_membership(self, state: Any, membership: Any) -> None:
         if not self.collections_enabled:

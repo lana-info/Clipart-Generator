@@ -17,15 +17,24 @@ class AutoClipartStateExtension:
             for row in rows:
                 if (not isinstance(row, dict)
                         or not {"status", "output_path", "attempts"} <= set(row)
-                        or set(row) - {"status", "output_path", "attempts", "editor_output_path"}):
+                        or set(row) - {"status", "output_path", "attempts", "editor_output_path", "stage_statuses", "source_path"}):
                     raise ValueError("Неверная запись результата")
                 if not isinstance(row["status"], str) or row["status"] not in {"pending", "running", "succeeded", "failed", "cancelled"}:
                     raise ValueError("Неверный статус результата")
                 if not isinstance(row["output_path"], str) or len(row["output_path"]) > 4000:
                     raise ValueError("Неверный путь результата")
+                source = row.get("source_path", "")
+                if not isinstance(source, str) or len(source) > 4000:
+                    raise ValueError("Неверный путь исходного результата")
                 edited = row.get("editor_output_path", "")
                 if not isinstance(edited, str) or (edited and edited != row["output_path"]):
                     raise ValueError("Неверный путь отредактированного результата")
+                stages = row.get("stage_statuses", {})
+                if (not isinstance(stages, dict) or len(stages) > 32
+                        or any(not isinstance(key, str) or len(key) > 80
+                               or value not in ("running", "complete", "failed", "skipped", "cancelled")
+                               for key, value in stages.items())):
+                    raise ValueError("Неверные этапы обработки")
                 if type(row["attempts"]) is not int or not 0 <= row["attempts"] <= 10000:
                     raise ValueError("Неверное число попыток")
         return state

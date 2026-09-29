@@ -26,16 +26,25 @@ from studio_modules import (
 OFFICIAL_WORKFLOW_FILES = {
     "auto-clipart": (
         "studio_auto_clipart_flow.py", "v3_clipart_flow.py",
+        "studio_clipart_recipe.py", "studio_clipart_references.py", "studio_reference_editor.py",
         "studio_clipart_builder_ui.py", "studio_planning_ui.py", "studio_text_client.py",
         "studio_clipart_planner.py", "studio_clipart_objects.py",
         "studio_commercial_prompt_guidance.py", "studio_holiday_profiles.py",
-        "studio_style_profiles.py", "clipart_prompt_generator.py", "clipart_prompt_schema.py",
+        "studio_style_profiles.py", "studio_palette_library.py",
+        "clipart_prompt_generator.py", "clipart_prompt_schema.py",
     ),
     "clipart": ("v3_clipart_flow.py", "clipart_prompt_generator.py", "clipart_prompt_schema.py"),
     "processing": ("v3_processing_flow.py",),
     "pinterest": ("v3_pinterest_flow.py", "pinterest_pin_composer.py",
                   "pinterest_pin_templates.py", "pinterest_prompt_schema.py"),
 }
+
+AUTO_CLIPART_STYLE_PREVIEWS = (
+    "watercolor", "gouache", "hand-drawn", "doodle", "pencil", "minimal-line-art",
+    "flat-vector", "sticker", "pixel-art", "kawaii", "chibi", "storybook",
+    "pastel-nursery", "whimsical", "scandinavian-folk", "vintage-illustration",
+    "cottagecore", "retro", "gothic-dark",
+)
 
 OFFICIAL_COMPONENT_FILES = {
     "image-processing": (
@@ -67,6 +76,13 @@ def prepare_official_workflow_release(*, source_root: Path, module_id: str, **me
             elif isinstance(node, ast.Import) and any(alias.name in owned for alias in node.names):
                 raise ModulePackageError("Workflow-owned imports must use from syntax")
         files[name] = ast.unparse(tree).encode("utf-8")
+    if module_id == "auto-clipart":
+        for key in AUTO_CLIPART_STYLE_PREVIEWS:
+            name = f"assets/style_previews/{key}.jpg"
+            source = Path(source_root) / name
+            if source.is_symlink() or not source.is_file() or source.stat().st_size > MAX_PACKAGE_BYTES:
+                raise ModulePackageError("Invalid style preview source")
+            files[name] = source.read_bytes()
     if module_id in OFFICIAL_COMPONENT_FILES:
         files["entry.py"] = (
             "from studio_module_api import ModuleRegistration, CommandDeclaration\n"

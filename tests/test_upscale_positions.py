@@ -75,7 +75,9 @@ class UpscalePositionTests(unittest.TestCase):
                         upscale_factor=4,
                     ))
                     messages = []
+                    events = []
                     worker.progress.connect(messages.append)
+                    worker.item_progress.connect(events.append)
                     with patch.object(worker, "_run_upscale_pass", return_value=(str(output), None, True)) as upscale:
                         if defect in {"valid", "opaque", "wrong_size"}:
                             result = worker._run_processing_pipeline(str(source), None, folder, 1, "file")
@@ -83,6 +85,7 @@ class UpscalePositionTests(unittest.TestCase):
                             self.assertEqual(worker._item_context.manual_transparency_required, defect == "opaque")
                             if defect == "opaque":
                                 self.assertTrue(any("потерял прозрачность" in text for text in messages))
+                                self.assertTrue(any(event["status"] == "stage_failed" and event["stage"] == "alpha_validation" for event in events))
                                 saved = root / "final.png"
                                 worker._save_final_output(result, str(source), str(saved), folder, 1, "file")
                                 report = inspect_alpha_png(saved)

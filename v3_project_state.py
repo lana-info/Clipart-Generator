@@ -624,7 +624,7 @@ class ImageOperationData:
         ) or "birefnet-general"
         edge_quality = _text(self.local_rembg_edge_quality, limit=20).lower()
         self.local_rembg_edge_quality = (
-            edge_quality if edge_quality in {"soft", "normal", "sharp"} else "normal"
+            edge_quality if edge_quality in {"soft", "normal", "sharp", "cutout"} else "normal"
         )
         self.local_ben2_alpha_threshold = _bounded_int(
             self.local_ben2_alpha_threshold,

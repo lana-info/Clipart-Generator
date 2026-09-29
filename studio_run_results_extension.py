@@ -25,6 +25,14 @@ class RunResultsExtension(Protocol):
         requested_paths: Sequence[Path] | None = None,
     ) -> list[Any]: ...
 
+    def create_export_view(
+        self, parent: Any, state: Any, paths: Sequence[Path], *,
+        review_issues: Sequence[dict[str, Any]], quality_reports: Sequence[Any],
+        on_membership_saved: Callable[[Any], None],
+        on_fix_requested: Callable[[str], None],
+        workspace: Path | None = None, embedded: bool = False,
+    ) -> Any | None: ...
+
     def open_export_dialog(
         self, parent: Any, state: Any, paths: Sequence[Path], *,
         review_issues: Sequence[dict[str, Any]], quality_reports: Sequence[Any],

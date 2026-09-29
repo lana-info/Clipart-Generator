@@ -3,7 +3,7 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QEventLoop, QTimer
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
@@ -38,13 +38,13 @@ def queued(panel):
 
 def test_provider_filter_and_save_selection(builder):
     panel = builder.planning
-    assert panel.model.count() == 3
+    assert panel.model.count() == 10  # Nine routes and a disabled group heading.
     panel.provider.setCurrentIndex(0)
-    assert panel.model.count() == 1
+    assert panel.model.count() == 2
     jobs = queued(panel)
     panel.start(False)
     assert not jobs
-    assert 'тариф' in panel.status.text()
+    assert 'ключ kie' in panel.status.text().lower()
     panel.provider.setCurrentIndex(1)
     panel.model.setCurrentIndex(panel.model.findData('openai/gpt-5-mini'))
     builder._apply()
@@ -54,17 +54,25 @@ def test_provider_filter_and_save_selection(builder):
 
 def test_declined_quote_never_generates(builder, monkeypatch):
     jobs = queued(builder.planning)
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.No)
+    displayed = []
+    def decline(*args):
+        displayed.append(args[1])
+        return False
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', decline)
     builder.planning.start(False)
     jobs[0][1]({'prompt': .25, 'completion': 2, 'request': 0}, None)
     assert len(jobs) == 1
     assert builder.planning.pending is None
+    assert 'Ориентировочная стоимость запроса: $' in displayed[0]
+    assert 'Тариф за 1 млн' not in displayed[0]
+    assert 'OpenRouter · GPT-5 mini' in displayed[0]
+    assert 'Запросов: 1.' in displayed[0]
 
 
 def test_cancel_quote_discards_and_does_not_prompt(builder, monkeypatch):
     jobs = queued(builder.planning)
     question = MagicMock()
-    monkeypatch.setattr(QMessageBox, 'question', question)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', question)
     builder.planning.start(False)
     builder.planning.cancel()
     jobs[0][1]({'prompt': .25, 'completion': 2, 'request': 0}, None)
@@ -74,7 +82,7 @@ def test_cancel_quote_discards_and_does_not_prompt(builder, monkeypatch):
 def test_edit_during_quote_prevents_paid_request(builder, monkeypatch):
     jobs = queued(builder.planning)
     question = MagicMock()
-    monkeypatch.setattr(QMessageBox, 'question', question)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', question)
     builder.planning.start(False)
     builder.theme.setText('Другая тема')
     jobs[0][1]({'prompt': .25, 'completion': 2, 'request': 0}, None)
@@ -84,7 +92,7 @@ def test_edit_during_quote_prevents_paid_request(builder, monkeypatch):
 
 
 def test_mocked_handoff_and_stale_result(builder, monkeypatch):
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: True)
     for stale in (False, True):
         jobs = queued(builder.planning)
         before = copy.deepcopy(builder.object_editor.items)
@@ -149,7 +157,7 @@ def test_reference_image_capability_preflight_blocks_text_only_model(builder, mo
     builder.reference_editor.send_image_radio.setChecked(True)
     jobs = queued(builder.planning)
     question = MagicMock()
-    monkeypatch.setattr(QMessageBox, 'question', question)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', question)
     builder.planning.start(False)
     assert len(jobs) == 1
     assert builder.reference_editor.selected_ai_image_paths() == (str(ref.resolve()),)
@@ -168,7 +176,7 @@ def test_reference_image_quote_names_files_and_is_one_shot(builder, monkeypatch,
     builder.reference_editor.send_image_radio.setChecked(True)
     jobs = queued(builder.planning)
     prompts = []
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: prompts.append(args[2]) or QMessageBox.StandardButton.No)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: prompts.append(args[1]) or False)
     builder.planning.start(False)
     self_info = dict(prompt=.25, completion=2., request=0., input_modalities=('text','image'))
     assert builder.reference_editor.selected_ai_image_paths() == (str(ref.resolve()),)
@@ -186,7 +194,7 @@ def test_reference_image_consent_clears_only_after_positive_confirmation(builder
     builder.reference_editor.add_reference(ref)
     builder.reference_editor.send_image_radio.setChecked(True)
     jobs = queued(builder.planning)
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: True)
     builder.planning.start(False)
     assert builder.reference_editor.selected_ai_image_paths() == (str(ref.resolve()),)
     jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text','image')), None)
@@ -202,7 +210,7 @@ def test_reference_image_change_after_confirmation_stops_before_network(builder,
     builder.reference_editor.add_reference(ref)
     builder.reference_editor.send_image_radio.setChecked(True)
     jobs = queued(builder.planning)
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: True)
     post = MagicMock(side_effect=AssertionError('network must not run for changed reference'))
     monkeypatch.setattr('studio_text_client.requests.post', post)
     builder.planning.start(False)
@@ -276,8 +284,8 @@ def test_large_planning_is_split_into_bounded_paid_batches(builder, monkeypatch)
     jobs = queued(builder.planning)
     quote_texts = []
     monkeypatch.setattr(
-        QMessageBox, 'question',
-        lambda *args: quote_texts.append(args[2]) or QMessageBox.StandardButton.Yes,
+        'studio_planning_ui.confirm_paid_quote',
+        lambda *args: quote_texts.append(args[1]) or True,
     )
     calls = []
     def fake_generate(recipe, *, palette='', replace_ids=None, **kwargs):
@@ -290,8 +298,9 @@ def test_large_planning_is_split_into_bounded_paid_batches(builder, monkeypatch)
     jobs[0][1](dict(prompt=.25, completion=2., request=0., input_modalities=('text',)), None)
 
     assert quote_texts
-    assert '161' in quote_texts[0]
-    assert '3' in quote_texts[0]
+    assert quote_texts[0].startswith('Ориентировочная стоимость подбора: $')
+    assert 'Запросов: 3.' in quote_texts[0]
+    assert 'OpenRouter · GPT-5 mini' in quote_texts[0]
     assert len(jobs) == 2
     for index in range(3):
         result = jobs[index + 1][0]()
@@ -305,7 +314,7 @@ def test_large_planning_is_split_into_bounded_paid_batches(builder, monkeypatch)
 def test_authorization_is_rechecked_before_each_paid_batch(builder, monkeypatch):
     _make_large_collection(builder, 81)
     jobs = queued(builder.planning)
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: True)
     generate = MagicMock(side_effect=lambda recipe, *, palette='', replace_ids=None, **kwargs:
                          _fake_batch_result(recipe, palette, replace_ids))
     monkeypatch.setattr('studio_planning_ui.generate_plan', generate)
@@ -327,7 +336,7 @@ def test_authorization_is_rechecked_before_each_paid_batch(builder, monkeypatch)
 def test_large_planning_failure_keeps_editor_atomic(builder, monkeypatch):
     _make_large_collection(builder, 81)
     jobs = queued(builder.planning)
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: True)
     monkeypatch.setattr(
         'studio_planning_ui.generate_plan',
         lambda recipe, *, palette='', replace_ids=None, **kwargs:
@@ -351,7 +360,7 @@ def test_large_planning_failure_keeps_editor_atomic(builder, monkeypatch):
 def test_large_planning_next_batch_sees_previous_batch_suggestions(builder, monkeypatch):
     _make_large_collection(builder, 81)
     jobs = queued(builder.planning)
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: True)
     seen_existing_names = []
 
     def fake_generate(recipe, *, palette='', replace_ids=None, **kwargs):
@@ -368,3 +377,85 @@ def test_large_planning_next_batch_sees_previous_batch_suggestions(builder, monk
 
     assert all(not name for name in seen_existing_names[0])
     assert all(name.startswith('Идея ') for name in seen_existing_names[1])
+
+
+def test_automatic_mode_keeps_saved_provider_and_model(builder):
+    panel = builder.planning
+    panel.provider.setCurrentIndex(panel.provider.findData('kie'))
+    panel.model.setCurrentIndex(panel.model.findData('claude-sonnet-4-6'))
+    panel.configure_automatic()
+    assert panel.selection() == {'provider': 'kie', 'model': 'claude-sonnet-4-6'}
+    assert panel.tabs.tabText(1) == 'Модель текста'
+    assert not panel.provider.isHidden()
+    assert not panel.model.isHidden()
+
+
+def test_model_changes_never_launch_and_group_cannot_be_selected(builder):
+    panel = builder.planning
+    jobs = queued(panel)
+    for model in ('deepseek/deepseek-v4.1-flash', 'openai/gpt-6-sol', 'x-ai/grok-4.7'):
+        panel.model.setCurrentIndex(panel.model.findData(model))
+        assert panel.selection()['model'] == model
+        assert 'Понимает изображения' in panel.model_note.text()
+    assert jobs == []
+    group = panel.model.findText('Другие модели')
+    assert not panel.model.model().item(group).isEnabled()
+
+
+@pytest.mark.parametrize('model,label', [
+    ('claude-sonnet-4-6', 'Claude Sonnet 4.6'),
+    ('gemini-3-8-flash-openai', 'Gemini 3.8 Flash'),
+])
+def test_kie_quote_uses_kie_key_and_no_openrouter_price_cap(builder, monkeypatch, model, label):
+    panel = builder.planning
+    monkeypatch.setattr('v3_api_settings.load_credentials', lambda: {'kie_api_key': 'kie-only'})
+    panel.provider.setCurrentIndex(panel.provider.findData('kie'))
+    panel.model.setCurrentIndex(panel.model.findData(model))
+    jobs = queued(panel)
+    quotes = []
+    monkeypatch.setattr('studio_planning_ui.confirm_paid_quote', lambda *args: quotes.append(args[1]) or True)
+    monkeypatch.setattr('studio_planning_ui.fetch_kie_text_model_info', lambda model:
+                        dict(prompt=.85, completion=4.275, request=0, input_modalities=('text',)))
+    generate = MagicMock()
+    monkeypatch.setattr('studio_planning_ui.generate_plan', generate)
+    panel.start(False)
+    tariff = jobs[0][0]()
+    jobs[0][1](tariff, None)
+    jobs[1][0]()
+    assert f'KIE · {label}' in quotes[0]
+    assert generate.call_args.kwargs['model'] == model
+    assert 'Запросов: 1.' in quotes[0]
+    assert generate.call_args.kwargs['api_key'] == 'kie-only'
+    assert generate.call_args.kwargs['provider'] == 'kie'
+    assert generate.call_args.kwargs['max_price'] is None
+    panel.cancel()
+
+
+def test_kie_references_are_blocked_before_quote(builder):
+    panel = builder.planning
+    panel.provider.setCurrentIndex(panel.provider.findData('kie'))
+    panel.model.setCurrentIndex(panel.model.findData('claude-sonnet-4-6'))
+    panel.reference_images = lambda: ('/tmp/unused-reference.png',)
+    jobs = queued(panel)
+    panel.start(False)
+    assert jobs == []
+    assert 'только текстовые признаки' in panel.status.text()
+
+
+def test_kie_tariff_expires_and_never_uses_other_model_price(monkeypatch):
+    from datetime import date
+    from studio_text_pricing import fetch_kie_text_model_info
+    class BeforeExpiry(date):
+        @classmethod
+        def today(cls): return cls(2026, 9, 29)
+    monkeypatch.setattr('datetime.date', BeforeExpiry)
+    assert fetch_kie_text_model_info('claude-sonnet-4-6')['completion'] == 4.275
+    assert fetch_kie_text_model_info('gemini-3-8-flash-openai')['completion'] == 1.125
+    with pytest.raises(TextGenerationError):
+        fetch_kie_text_model_info('unknown')
+    class AfterExpiry(date):
+        @classmethod
+        def today(cls): return cls(2026, 10, 30)
+    monkeypatch.setattr('datetime.date', AfterExpiry)
+    with pytest.raises(TextGenerationError):
+        fetch_kie_text_model_info('claude-sonnet-4-6')

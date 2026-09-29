@@ -1234,6 +1234,7 @@ class ProcessingFlowController(QObject):
         page = ClipartTransparencyEditorPage()
         page.back_requested.connect(self._close_transparency_editor)
         page.focus_mode_changed.connect(self.shell.set_canvas_focus_mode)
+        page.copy_saved.connect(self.run_queue.page.use_edited_output)
         return page
 
     def _open_transparency_editor(self, item_index: int) -> None:

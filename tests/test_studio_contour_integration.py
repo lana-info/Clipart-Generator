@@ -202,3 +202,88 @@ class ContourIntegrationTests(unittest.TestCase):
         QApplication.sendEvent(self.canvas, QFocusEvent(QEvent.Type.FocusOut))
         self.assertFalse(self.canvas._space_pressed)
         self.assertFalse(self.canvas._panning)
+
+    def manual_rectangle(self):
+        self.page.tool_buttons['pen'].click()
+        for point in ((75,50), (98,50), (98,80)):
+            QTest.mouseClick(self.canvas.viewport(), Qt.MouseButton.LeftButton,
+                             pos=self.canvas.mapFromScene(QPointF(*point)))
+        QTest.mouseDClick(self.canvas.viewport(), Qt.MouseButton.LeftButton,
+                         pos=self.canvas.mapFromScene(QPointF(75,80)))
+        self.assertFalse(self.canvas.contour.points)
+        self.assertEqual(len(self.canvas.contour.paths[0].nodes), 4)
+
+    def test_manual_double_click_remove_and_mask_undo_redo(self):
+        before = np.array(self.page.document.mask)
+        source_bytes = self.source.read_bytes()
+        self.manual_rectangle()
+        np.testing.assert_array_equal(np.array(self.page.document.mask), before)
+        self.assertEqual(self.page.apply_contour_button.text(), 'Удалить внутри')
+        self.page.apply_contour_button.click()
+        self.wait_contour()
+        after = np.array(self.page.document.mask)
+        self.assertEqual(after[65,85], 0)
+        self.assertEqual(after[80,35], before[80,35])
+        self.assertEqual(set(np.unique(after)), {0,255})
+        self.assertEqual(self.source.read_bytes(), source_bytes)
+        QTest.keyClick(self.canvas, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        np.testing.assert_array_equal(np.array(self.page.document.mask), before)
+        QTest.keyClick(self.canvas, Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier)
+        np.testing.assert_array_equal(np.array(self.page.document.mask), after)
+
+    def test_manual_keep_preserves_inside_and_existing_transparency(self):
+        before = np.array(self.page.document.mask)
+        self.manual_rectangle()
+        self.page.keep_contour_button.click()
+        self.wait_contour()
+        after = np.array(self.page.document.mask)
+        self.assertEqual(after[65,85], before[65,85])
+        self.assertEqual(after[80,35], 0)
+        self.assertFalse(np.any(after > before))
+
+    def test_manual_point_history_close_history_and_zoom_shortcuts(self):
+        self.page.tool_buttons['pen'].click()
+        for point in ((75,50), (98,50), (98,80)):
+            QTest.mouseClick(self.canvas.viewport(), Qt.MouseButton.LeftButton,
+                             pos=self.canvas.mapFromScene(QPointF(*point)))
+        QTest.keyClick(self.canvas, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(len(self.canvas.contour.points), 2)
+        QTest.keyClick(self.canvas, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+        self.assertEqual(len(self.canvas.contour.points), 3)
+        point = self.canvas.mapFromScene(QPointF(98,80))
+        QTest.mouseDClick(self.canvas.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        self.assertEqual(len(self.canvas.contour.paths[0].nodes), 3)
+        QTest.keyClick(self.canvas, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        self.assertEqual(len(self.canvas.contour.points), 3)
+        scale = self.canvas.transform().m11()
+        QTest.keyClick(self.canvas, Qt.Key.Key_Plus, Qt.KeyboardModifier.ControlModifier)
+        self.assertGreater(self.canvas.transform().m11(), scale)
+        larger = self.canvas.transform().m11()
+        QTest.keyClick(self.page, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
+        self.assertLess(self.canvas.transform().m11(), larger)
+
+    def test_manual_save_does_not_choose_destructive_action(self):
+        self.manual_rectangle()
+        before = np.array(self.page.document.mask)
+        self.page._save_clicked()
+        self.assertFalse(self.canvas.contour_busy)
+        np.testing.assert_array_equal(np.array(self.page.document.mask), before)
+        self.assertIn('Сначала выберите', self.page.contour_status.text())
+        QTest.keyClick(self.canvas, Qt.Key.Key_Escape)
+        self.assertFalse(self.canvas.contour.dirty)
+        self.page.undo()
+        self.assertTrue(self.canvas.contour.dirty)
+
+    def test_manual_contour_starts_on_opaque_image_and_rejects_open_apply(self):
+        image = Image.new('RGBA', (128,128), (30,60,90,255))
+        image.save(self.source)
+        self.page.set_files([self.source])
+        self.page.tool_buttons['pen'].click()
+        for point in ((10,10), (90,10)):
+            QTest.mouseClick(self.canvas.viewport(), Qt.MouseButton.LeftButton,
+                             pos=self.canvas.mapFromScene(QPointF(*point)))
+        self.canvas.apply_contour()
+        self.assertFalse(self.canvas.contour_busy)
+        self.assertEqual(self.page.document.mask.getextrema(), (255,255))
+        QTest.keyClick(self.canvas, Qt.Key.Key_Backspace)
+        self.assertEqual(len(self.canvas.contour.points), 1)

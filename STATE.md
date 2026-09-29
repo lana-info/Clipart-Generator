@@ -1,5 +1,180 @@
 # Project state
 
+## Windows 3.2.7 preparation authorized, 2026-09-29
+
+Owner explicitly requested proceeding with commit/build after the follow-up report.
+Prebuild isolated full suite:1971 passed,269 subtests,57 skipped,19 deselected,
+1 known red-key fur xfail in278.17s. No new failure. Sensitive artifact scans
+and git diff --check passed. Build profile: ordinary production installer,
+version3.2.7 override, Windows only; no release/update publication or paid API.
+Source commit and build run are recorded in the subsequent handoff entry.
+
+## Results handoff and Gemini KIE tariff, 2026-09-29
+
+Owner approved follow-ups. Existing results action row now contains
+«Обработать выбранное» for ordinary generation and Automatic Clipart.
+Core validates the current selected saved image, rejects busy/stale/missing
+inputs, saves the original project, then opens a separate Processing project.
+Overwrite is disabled; processing is never started by the handoff. Module
+opening failure retains the source shell/project id. No cross-module imports.
+Actual1120x780 screenshots: docs/ui/3.2/batch-local-cutout/actual-results-handoff.png
+and actual-handoff-files.png (safe dummy content).
+
+KIE official pricing https://kie.ai/ru now lists Gemini3.8Flash at USD0.225 input
+and1.125 output per million tokens. Its route is documented at
+https://docs.kie.ai/42969115e0. Added dated quote, removed unavailable label.
+KIE quotes remain bounded to2026-10-29; live maintained tariff retrieval is still
+pending. No live paid compatibility test or claim of automatic tariff updates.
+165 focused tests and37 subtests passed. Final handoff/automatic/architecture
+verification:45 passed, including busy/module-open/missing-file assertions.
+Final planning UI verification:25 passed, including both KIE model selections.
+Old Gemini-unavailable expectation was updated to the required API-key check.
+Git diff --check clean. Actual automatic-shell handoff capture also passed.
+No commit/push/build. Windows build needs separate explicit command under AGENTS;
+release checklist is in docs/ui/3.2/batch-local-cutout/README.md.
+
+## Independent P1 recovery/export fixes, 2026-09-29
+
+Owner authorized fixes from independent review. Automatic controller busy state
+now includes embedded export worker; export busy_changed refreshes the shell.
+Close/project switch/navigation/retry are blocked until worker completion.
+Read-only recheck confirmed the ZIP guard with a real running fixture worker.
+
+Generated-item retries prioritize existing output/editor copy or generated raw
+pixels via mode2_process, with no generated_prompts. They never silently fall
+back to paid generation when a recorded PNG is missing. Different remaining-stage
+plans are retried in separate groups. Already performed upscale/unsharp/edge work
+is skipped only when embodied by the selected saved output. Raw sources rerun
+necessary processing. Existing usable alpha is preserved; otherwise local U2Net
+cutout is used. Pending external upscale is disclosed in explicit confirmation.
+Failed items become ready only after this processing/publication succeeds.
+
+Worker diagnostics retain successful-stage provenance despite indexed progress;
+alpha loss after upscale is a separate alpha_validation failure. Drafts now
+persist optional bounded source_path and stage_statuses. Retained recovery inputs
+keep their own stage snapshot so intermediate work followed by a failed save does
+not masquerade as completed work in the old PNG. Snapshot is cleared only upon
+new publication. This also protects reopening interrupted recovery attempts.
+No unconditional promotion of edited FAILED items; no new automatic paid calls.
+Verification:166 targeted tests and36 subtests passed (queue, automatic flow,
+upscale, export UI, batch processing, dependency architecture, packaging).
+Independent reviewer rechecked both P1 fixes and then the raw-source/reopening
+edge cases; three final regressions passed, no remaining findings in this scope.
+Log: /tmp/clipart-recovery-fixes-tests.log. git diff --check clean. No native
+Windows run, paid API request, build, commit or push performed.
+
+## Export boundary and integrated offline verification, 2026-09-29
+
+Removed the direct studio_auto_clipart_flow -> studio_set_export_ui import.
+RunResultsExtension now exposes create_export_view; ClipartRunResultsExtension
+owns creation/wiring for embedded and modal exports. Automatic flow requests the
+view through its existing result extension. No dependency allowlist changes,
+UI redesign, new dependency or dynamic-import bypass. Membership, quality-fix
+callbacks, workspace cleanup ownership and panel reuse remain covered.
+Focused architecture/automatic-flow/export/packaging:78 passed,9 subtests.
+Complete isolated offline run:1960 passed,269 subtests,57 skipped,19 deselected,
+1 known red-key fur xfail,1 failure in an outdated texture-field acceptance test.
+That test was updated to the owner's explicit removal decision: legacy line and
+detail survive save; legacy material is absent from controls and cleared on save.
+Its entire file then passed separately (7 tests). Production source was unchanged
+after the complete run; the full suite was not redundantly rerun for that test fix.
+Complete-run log: /tmp/clipart-ux-offline-tests.log. git diff --check clean.
+Local tests cover prompts/references, run result status, editor saves, set creation,
+renaming, membership, ZIP contents and project reopening. Actual paid HTTP and
+installed Windows remain unverified. No commit, push, build or paid API call.
+
+## Batch local cutout in Processing, 2026-09-29
+
+Implemented owner-authorized local batch cutout using the existing Files/Goal/
+Processing/Results/Transparency pages. New sharp_cutout recipe selects U2Net
+and persisted cutout edge mode without implicit upscale or trim. Shared mask
+helper preserves the previously accepted automatic fallback behavior. Processing
+editor saved copies now replace the result entry. Original files are preserved;
+invalid masks fail only their file. Already usable alpha is preserved, inference
+cancellation checked before publication. No new dependencies or paid calls.
+195 targeted tests +33 subtests passed; two further regression tests for editor
+copy handoff and cancellation passed. Both supplied PNGs passed real local batch
+processing in13.43s, retained1536x1536 and binary alpha, source hashes unchanged.
+Fine details/holes can retain paper; manual correction remains needed there.
+Evidence: docs/ui/3.2/batch-local-cutout/README.md (safe actual Qt screenshots).
+Additional dependency suite found an earlier export-workspace import absent from
+its architecture baseline: studio_auto_clipart_flow -> studio_set_export_ui.
+Resolved in the following export-boundary follow-up; baseline tests unchanged.
+No native Windows acceptance/build, commit or push. Direct generation-results
+shortcut to Processing is still pending; generated files can be loaded with the
+existing file picker now.
+
+## Independent review fixes, 2026-09-29
+
+Confirmed and fixed both incoming findings in the existing uncommitted worktree.
+Queue publication now rejects failed or skipped selected stages in both indexed
+and legacy output-save protocols. Upscale alpha loss emits a nonterminal failed
+stage so the file can still be saved for correction without reporting success.
+Failed outputs and explicitly saved editor copies remain available for manual
+correction, but editing alone does not certify uncompleted processing or admit
+those files to export. Reopening an automatic project preserves failure and
+explains that a saved file is not ready. Historical already-succeeded records
+are not retroactively reclassified by this change.
+Paid text confirmation now includes provider, selected model and request count
+alongside the short estimated total, retaining per-run reference-image consent.
+Verification: 196 passed, 29 subtests passed, 1 skipped across queue, upscale,
+planning, automatic workflow, export UI and local processing tests; a further
+persist/reopen regression passed separately. The skip is the expected Windows
+Real-ESRGAN directory absence, not a new alpha-validation failure. No Windows
+build, native acceptance, paid API requests, commits or pushes performed.
+
+## Compact automatic-set prompts, final owner decision, 2026-09-29
+
+Root cause of invisible background instructions: PromptReviewPage and its modal
+editor deliberately called _user_prompt_text/_split_user_prompt, hiding the
+chroma suffix (and subsequent reference guidance) while retaining it in storage.
+Owner subsequently chose to retain the original compact display; the opt-in
+full-text changes have been reverted. Background/reference suffix and key metadata
+remain stored and survive table/dialog edits without duplication. No colour badge
+is added. This explains invisible instructions, not the exact HTTP request of
+the historical installed run; supplied receipts lack that request text.
+Reference images remain the default source for character likeness during image
+generation. A one-time text analysis replacing references is deferred until a
+quality/cost comparison; no extra paid analysis or new automatic calls were added.
+
+## Manual pen contour, 2026-09-29
+
+Owner approved click-to-create contours, double-click closure, local element
+removal, undo/redo and keyboard zoom. Implemented on the existing transparency
+canvas in this uncommitted worktree. Open points and closure have vector history;
+applying Remove inside or Keep inside uses the background worker and common mask
+history. Manual selection works on opaque images, preserves RGB and existing
+inside alpha, and does not feather boundaries. Save refuses to choose a manual
+destructive operation implicitly. Esc discards pending outline with undo support.
+Ctrl+Z, Ctrl+Shift+Z/Ctrl+Y, Ctrl +/- work; the page also handles shortcuts when
+focus has left the canvas. Existing automatic contour editing remains available.
+74 focused contour/session/editor tests passed, including real Qt click/double
+click/key interactions. Actual 1120x780 editor captures show all tools reachable:
+docs/ui/3.2/manual-pen-contour/. Native Windows and full release build not run.
+
+## Text model picker, 2026-09-29
+
+In `codex/ui-studio-style-reference-ux`, owner approved provider/model dropdowns
+with five main OpenRouter models and additional choices. Implemented in the
+Ideas/Model text tabs; saved provider survives automatic mode, selection alone
+never starts a paid request. Explicit per-run reference image consent defaults
+off, only active references are included. Final prompts still use local rules.
+KIE Claude text adapter and native response parsing are connected with a dated
+public estimate, expiring 2026-10-29. Gemini KIE remains unavailable until its
+numeric tariff is confirmed. KIE image input is not connected. OpenRouter still
+checks live tariffs/modalities and enforces its approved tariff ceiling.
+69 targeted tests +13 subtests passed; 11 further packaging/recipe/expiry tests
++9 subtests passed; the new reference-consent scenario passed separately.
+Real 1120x780 offscreen Studio captures fit and preserve navigation. No native
+Windows verification, build or paid requests. See docs/ui/3.2/text-model-picker/.
+Owner subsequently chose to remove the texture control entirely. The legacy
+material field is ignored when opening the editor and cleared in new snapshots
+and on save; it no longer contributes to generated prompts. Illustration style
+and object descriptions remain available. Fourteen focused tests passed.
+The click-to-create pen contour was subsequently approved and implemented above.
+Batch local cutout in Processing and handoff from generated results
+remain requested follow-up work, not implemented by the model-picker change.
+
 ## Inline transparency tools, 2026-09-23
 
 Current working branch: `codex/ui-inline-transparency-tools-20260923`, based on
@@ -3812,3 +3987,53 @@ and packaging remain pending; no paid Fal.ai request or publication ran.
 - Secrets, credentials, `.env` files, and user data in Git.
 - Force push, destructive cleanup, automatic rebase, or deletion of uncertain branches/worktrees.
 - Production workers, paid API operations, deployment, release/build publication, or account actions.
+
+## Auto Clipart style/reference UX, 2026-09-28
+
+Branch `codex/ui-studio-style-reference-ux` is an isolated local worktree from
+`bee9aa6`; it is uncommitted and unpublished. Approved UI changes are implemented:
+19 generated style examples, extra palette combination previews, explicit
+reference style/palette sources and active/skip control, concise estimated planning
+cost, and clear navigation after idea preparation. Selected collection style/palette
+remain stored when a reference is chosen. Disabled references are excluded from
+planning notes and image generation. The automatic text planner does not receive
+image bytes; active images are sent to the generation model only after its existing
+confirmation. Automatic model selection now hides inactive controls, removes the stale cost tab, and shows the effective model and current estimate at launch. Focused offline tests: 101 passed; real Qt 1120×780 screenshots were
+compared to approved mockups. No native Windows build or live paid request was run.
+Visual and behavioral evidence: `docs/ui/3.2/style-reference-ux/README.md`.
+
+The two user-supplied Qwen examples exposed a separate background-removal
+failure: both generated PNGs are opaque and have textured ivory paper despite
+the requested blue key color. Auto Clipart now tries a local U2Net cutout if
+the chroma-key detector rejects the background. Its alpha is binary and inset
+to avoid a soft paper fringe. The samples were processed locally without a
+paid request; the source images and model weights remain outside the repo.
+If the local model cannot run or cannot isolate a subject, the existing manual
+transparency-required state remains. Fine internal holes and very thin details
+may still need review. The transparency editor now requests the native
+maximize button next to the close button. Its revised mockup was approved;
+offscreen Qt verified maximized/restored states with tools visible. The native
+Windows title bar itself remains to be checked on Windows.
+
+## Auto Clipart export workspace, 2026-09-29
+
+Follow-up verification: the previously skipped real Real-ESRGAN acceptance test
+`test_local_realesrgan_2x_and_4x_preserve_alpha_and_layout` passed (31.524s)
+using the official Real-ESRGAN v0.2.5.0 Ubuntu archive, real bundled models,
+and Mesa lavapipe 25.2.8 extracted to /tmp without system installation.
+The test harness changed only the runtime path and executable basename for Linux;
+the application worker and assertions ran unchanged. Both 2x/4x output sizes,
+RGBA alpha bounds and quadrant layout passed. This is synthetic Linux CPU Vulkan
+acceptance, not native Windows/GPU performance or real-illustration quality approval.
+Runtime: /tmp/clipart-realesrgan-full; runner: /tmp/run_clipart_realesrgan_acceptance.py.
+These temporary files are not packaged or stored in Git. The texture control
+was subsequently removed at owner request (see Text model picker follow-up above).
+
+The owner approved replacing the duplicate step-8 read-only tree with the
+editable set export view. Step 8 now shows ready PNGs and set counts, thumbnails
+and hover previews, set creation and deletion, membership checkboxes, and the
+final ZIP action in one place. Set names can be changed; ZIP names derive from
+them, for example `001_зимние-персонажи.zip`. Deleting the last set preserves
+the asset records with zero memberships so auto-seeding does not silently bring
+that set back. Source PNGs are untouched. Local Qt captures and tests are in
+`docs/ui/3.2/export-workspace/`; native Windows acceptance remains pending.

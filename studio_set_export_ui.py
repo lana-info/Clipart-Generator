@@ -2,12 +2,14 @@
 from collections import OrderedDict
 from pathlib import Path
 from threading import Event
+from uuid import uuid4
 
-from PyQt6.QtCore import QEvent, QPoint, QThread, Qt, pyqtSignal
-from PyQt6.QtGui import QCursor, QPixmap
+from PyQt6.QtCore import QEvent, QPoint, QSize, QThread, Qt, pyqtSignal
+from PyQt6.QtGui import QCursor, QIcon, QImageReader, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout,
-    QHeaderView, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QScrollArea, QStackedWidget,
+    QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -56,12 +58,26 @@ class ExportWorker(QThread):
 
 
 class SetExportDialog(QDialog):
+    busy_changed = pyqtSignal()
     membership_saved = pyqtSignal(object)
     fix_requested = pyqtSignal(str)
 
+    @staticmethod
+    def _scaled_pixmap(path, bound):
+        reader = QImageReader(str(path))
+        reader.setAutoTransform(True)
+        size = reader.size()
+        if not size.isValid() or size.width() * size.height() > 100_000_000:
+            return QPixmap()
+        reader.setScaledSize(size.scaled(
+            QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio,
+        ))
+        return QPixmap.fromImage(reader.read())
+
     def __init__(self, paths, parent=None, *, membership=None, review_issues=None, quality_reports=None,
-                 workspace=None):
+                 workspace=None, embedded=False):
         super().__init__(parent)
+        self.embedded = embedded
         self.workspace = workspace
         from studio_export_membership import validate_export_membership
 
@@ -88,6 +104,7 @@ class SetExportDialog(QDialog):
         self.worker = None
         self.exported = []
         self._set_columns = []
+        self._editing_set_id = None
 
         self.setWindowTitle('Clipart · Экспорт наборов')
         self.resize(1040, 720)
@@ -99,10 +116,15 @@ class SetExportDialog(QDialog):
         self.summary_page = self._build_summary_page()
         self.quality_page = self._build_quality_page()
         self.manual_page = self._build_manual_page()
+        self.create_page = self._build_create_page()
         self.stack.addWidget(self.summary_page)
         self.stack.addWidget(self.quality_page)
         self.stack.addWidget(self.manual_page)
+        self.stack.addWidget(self.create_page)
         self.stack.setCurrentWidget(self.summary_page)
+        if embedded:
+            self.edit_sets_button.hide()
+            self.setWindowFlags(Qt.WindowType.Widget)
 
         self.delete_intermediates = QCheckBox('Удалить промежуточные файлы после экспорта')
         self.delete_originals = QCheckBox('Удалить сгенерированные исходники после экспорта')
@@ -111,6 +133,7 @@ class SetExportDialog(QDialog):
             root.addWidget(checkbox)
 
         self.status = QLabel('')
+        self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
         root.addWidget(self.status)
@@ -163,7 +186,7 @@ class SetExportDialog(QDialog):
         layout.addLayout(metrics)
 
         heading = QHBoxLayout()
-        section_title = QLabel('Предложенные наборы')
+        section_title = QLabel('Ваши наборы')
         section_title.setProperty('v3Title', True)
         heading.addWidget(section_title)
         heading.addStretch(1)
@@ -173,6 +196,11 @@ class SetExportDialog(QDialog):
         self.edit_sets_button.setProperty('variant', 'secondary')
         self.edit_sets_button.clicked.connect(self._show_manual_editor)
         heading.addWidget(self.edit_sets_button)
+        self.new_set_button = QPushButton('+ Новый набор')
+        self.new_set_button.setProperty('v3Button', True)
+        self.new_set_button.setProperty('variant', 'primary')
+        self.new_set_button.clicked.connect(self._show_create_page)
+        heading.addWidget(self.new_set_button)
         layout.addLayout(heading)
 
         self.cards_scroll = QScrollArea()
@@ -183,6 +211,7 @@ class SetExportDialog(QDialog):
         self.cards_host = QWidget()
         self.cards_layout = QGridLayout(self.cards_host)
         self.cards_layout.setContentsMargins(0, 0, 0, 0)
+        self.cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.cards_scroll.setWidget(self.cards_host)
         layout.addWidget(self.cards_scroll, 1)
 
@@ -215,7 +244,7 @@ class SetExportDialog(QDialog):
 
         self.delivery_note = QLabel(
             'Для каждого набора будет создан отдельный ZIP-архив. '
-            'Внутри: PNG и лист с превью.'
+            'Имя архива берётся из названия набора. Внутри: PNG и лист с превью.'
         )
         self.delivery_note.setProperty('v3Description', True)
         self.delivery_note.setWordWrap(True)
@@ -223,7 +252,7 @@ class SetExportDialog(QDialog):
 
         actions = QHBoxLayout()
         actions.addStretch(1)
-        self.export_button = QPushButton('Создать наборы')
+        self.export_button = QPushButton('Создать ZIP-наборы')
         self.export_button.setProperty('v3Button', True)
         self.export_button.setProperty('variant', 'primary')
         self.export_button.clicked.connect(self._export)
@@ -251,7 +280,7 @@ class SetExportDialog(QDialog):
 
         body = QHBoxLayout()
         self.quality_list = QListWidget()
-        self.quality_list.setMinimumWidth(360)
+        self.quality_list.setMinimumWidth(300 if self.embedded else 360)
         self.quality_list.currentRowChanged.connect(self._quality_selected)
         body.addWidget(self.quality_list, 2)
         detail = QFrame()
@@ -290,7 +319,7 @@ class SetExportDialog(QDialog):
         self.quality_back_button.clicked.connect(self._show_summary)
         footer.addWidget(self.quality_back_button)
         footer.addStretch(1)
-        self.quality_export_button = QPushButton('Создать наборы')
+        self.quality_export_button = QPushButton('Создать ZIP-наборы')
         self.quality_export_button.setProperty('v3Button', True)
         self.quality_export_button.setProperty('variant', 'primary')
         self.quality_export_button.clicked.connect(self._export)
@@ -317,7 +346,8 @@ class SetExportDialog(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.verticalHeader().setDefaultSectionSize(60)
+        self.table.setIconSize(QSize(44, 44))
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.itemEntered.connect(
             lambda item: self._show_preview(item, QCursor.pos())
@@ -332,13 +362,59 @@ class SetExportDialog(QDialog):
         self.return_button.setProperty('variant', 'secondary')
         self.return_button.setMinimumWidth(max(130, self.return_button.sizeHint().width() + 20))
         self.return_button.clicked.connect(self._show_summary)
+        self.rename_set_button = QPushButton('Переименовать')
+        self.rename_set_button.setProperty('v3Button', True)
+        self.rename_set_button.setProperty('variant', 'secondary')
+        self.rename_set_button.clicked.connect(self._rename_current_set)
+        self.delete_set_button = QPushButton('Удалить набор')
+        self.delete_set_button.setProperty('v3Button', True)
+        self.delete_set_button.setProperty('variant', 'secondary')
+        self.delete_set_button.clicked.connect(self._delete_current_set)
         self.save_membership = QPushButton('Сохранить состав')
         self.save_membership.setProperty('v3Button', True)
         self.save_membership.setProperty('variant', 'primary')
         self.save_membership.clicked.connect(self._save_membership)
         actions.addWidget(self.return_button)
+        actions.addWidget(self.rename_set_button)
+        actions.addWidget(self.delete_set_button)
         actions.addStretch(1)
         actions.addWidget(self.save_membership)
+        layout.addLayout(actions)
+        return page
+
+    def _build_create_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        title = QLabel('Новый набор')
+        title.setProperty('v3Title', True)
+        layout.addWidget(title)
+        note = QLabel('Назовите набор и выберите готовые PNG. Генерация заново не запускается.')
+        note.setProperty('v3Description', True)
+        layout.addWidget(note)
+        self.new_set_name = QLineEdit()
+        self.new_set_name.setMaxLength(200)
+        self.new_set_name.setPlaceholderText('Например: Зимние персонажи')
+        layout.addWidget(QLabel('Название набора'))
+        layout.addWidget(self.new_set_name)
+        layout.addWidget(QLabel('Добавить изображения'))
+        self.new_set_images = QListWidget()
+        self.new_set_images.setMouseTracking(True)
+        self.new_set_images.setIconSize(QSize(44, 44))
+        self.new_set_images.itemEntered.connect(
+            lambda item: self._show_preview_path(item.data(Qt.ItemDataRole.UserRole), QCursor.pos())
+        )
+        self.new_set_images.viewport().installEventFilter(self)
+        layout.addWidget(self.new_set_images, 1)
+        actions = QHBoxLayout()
+        self.cancel_new_set_button = QPushButton('К наборам')
+        self.cancel_new_set_button.clicked.connect(self._show_summary)
+        self.create_set_button = QPushButton('Создать набор')
+        self.create_set_button.setProperty('v3Button', True)
+        self.create_set_button.setProperty('variant', 'primary')
+        self.create_set_button.clicked.connect(self._create_set)
+        actions.addWidget(self.cancel_new_set_button)
+        actions.addStretch(1)
+        actions.addWidget(self.create_set_button)
         layout.addLayout(actions)
         return page
 
@@ -377,6 +453,9 @@ class SetExportDialog(QDialog):
                 )
             for row, path in enumerate(self.paths):
                 name = QTableWidgetItem(path.name)
+                pixmap = self._scaled_pixmap(path, 44)
+                if not pixmap.isNull():
+                    name.setIcon(QIcon(pixmap))
                 name.setData(Qt.ItemDataRole.UserRole, str(path))
                 name.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
                 self.table.setItem(row, 0, name)
@@ -427,12 +506,7 @@ class SetExportDialog(QDialog):
         except ValueError as exc:
             self.status.setText(str(exc))
             return
-        self.membership_saved.emit(value)
-        self.saved_membership = value
-        self._resolve_review_issues(value)
-        self.status.setText('Состав наборов сохранён. Экспорт не запускался.')
-        self._refresh_summary()
-        self._show_summary()
+        self._persist_membership(value, 'Состав наборов сохранён. Экспорт не запускался.')
 
 
     def _resolve_review_issues(self, membership):
@@ -535,7 +609,8 @@ class SetExportDialog(QDialog):
         report = self.quality_reports.get(path)
         if not path or report is None or report.status == 'ok' or not self._path_is_active(path):
             return
-        self.done(QDialog.DialogCode.Rejected)
+        if not self.embedded:
+            self.done(QDialog.DialogCode.Rejected)
         self.fix_requested.emit(path)
 
     def _exclude_quality_selected(self):
@@ -603,37 +678,74 @@ class SetExportDialog(QDialog):
         return 'Готовые изображения этого набора'
 
     def _refresh_summary(self):
+        catalog = self._set_catalog()
         try:
             groups = self.groups()
         except ValueError:
             groups = []
         self.summary_unique_value.setText(str(len(self.paths)))
-        self.summary_sets_value.setText(str(len(groups)))
+        self.summary_sets_value.setText(str(len(catalog)))
         while self.cards_layout.count():
             item = self.cards_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-        for index, group in enumerate(groups):
+        for index, (set_id, set_title) in enumerate(catalog):
+            images = [path for path in self.paths if any(
+                link['set_id'] == set_id and link['included']
+                for link in self.saved_membership[str(path)]['memberships']
+            )]
             card = QFrame()
             card.setProperty('v3Card', True)
-            card.setMinimumHeight(105)
-            card.setMaximumHeight(118)
+            card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
             layout = QVBoxLayout(card)
             heading = QHBoxLayout()
-            title = QLabel(group['title'])
+            title = QLabel(set_title)
+            title.setTextFormat(Qt.TextFormat.PlainText)
             title.setStyleSheet('font-size:16px; font-weight:700;')
-            count = QLabel(f"{len(group['images'])} PNG")
+            count = QLabel(f"{len(images)} PNG")
             count.setProperty('v3Selection', True)
             heading.addWidget(title)
             heading.addStretch(1)
             heading.addWidget(count)
+            edit = QPushButton('Изменить')
+            edit.setProperty('v3Button', True)
+            edit.setProperty('variant', 'secondary')
+            edit.clicked.connect(lambda _checked=False, selected=set_id: self._show_manual_editor(selected))
+            remove = QPushButton('Удалить')
+            remove.setProperty('v3Button', True)
+            remove.setProperty('variant', 'secondary')
+            remove.clicked.connect(lambda _checked=False, selected=set_id: self._delete_set(selected))
+            heading.addWidget(edit)
+            heading.addWidget(remove)
             layout.addLayout(heading)
-            description = QLabel(self._set_description(group['title']))
-            description.setProperty('v3Description', True)
-            description.setWordWrap(True)
-            layout.addWidget(description)
-            self.cards_layout.addWidget(card, index // 3, index % 3)
+            for path in images[:3]:
+                row = QFrame()
+                row.setProperty('v3Card', True)
+                row.setFixedHeight(60)
+                row_layout = QHBoxLayout(row)
+                thumbnail = QLabel()
+                pixmap = self._scaled_pixmap(path, 44)
+                if not pixmap.isNull():
+                    thumbnail.setPixmap(pixmap)
+                thumbnail.setFixedSize(44, 44)
+                name = QLabel(path.name)
+                name.setTextFormat(Qt.TextFormat.PlainText)
+                name.setProperty('previewPath', str(path))
+                name.setMouseTracking(True)
+                name.installEventFilter(self)
+                row_layout.addWidget(thumbnail)
+                row_layout.addWidget(name, 1)
+                layout.addWidget(row)
+            if len(images) > 3:
+                layout.addWidget(QLabel(f"И ещё {len(images) - 3} PNG…"))
+            if not images:
+                layout.addWidget(QLabel('Набор пуст. Добавьте PNG или удалите набор.'))
+            self.cards_layout.addWidget(card, index, 0)
+        if not catalog:
+            self.cards_layout.addWidget(QLabel(
+                'Наборов пока нет. Нажмите «+ Новый набор» и выберите PNG.'
+            ), 0, 0)
         issue_count = len(self.review_issues)
         self.issue_panel.setVisible(issue_count > 0)
         if issue_count:
@@ -668,14 +780,129 @@ class SetExportDialog(QDialog):
             self.quality_page_summary_label.setText(
                 'Автопроверка PNG: Проблем, блокирующих экспорт, нет.'
             )
-        export_enabled = bool(groups) and not issue_count and not block_count and self.worker is None
+        export_enabled = bool(groups) and len(groups) == len(catalog) \
+            and not issue_count and not block_count and self.worker is None
         self.export_button.setEnabled(export_enabled)
         self.quality_export_button.setEnabled(export_enabled)
 
-    def _show_manual_editor(self):
+    def _show_manual_editor(self, set_id=None):
+        if not isinstance(set_id, str):
+            set_id = None
+        catalog = self._set_catalog()
+        self._editing_set_id = set_id or (catalog[0][0] if len(catalog) == 1 else None)
         self._rebuild_manual_table()
+        self.rename_set_button.setEnabled(self._editing_set_id is not None)
+        self.delete_set_button.setEnabled(self._editing_set_id is not None)
         self.stack.setCurrentWidget(self.manual_page)
         self.status.clear()
+
+    def _show_create_page(self):
+        if self.worker is not None:
+            return
+        self.new_set_name.clear()
+        self.new_set_images.clear()
+        for index, path in enumerate(self.paths):
+            item = QListWidgetItem(path.name)
+            item.setData(Qt.ItemDataRole.UserRole, str(path))
+            pixmap = self._scaled_pixmap(path, 44)
+            if not pixmap.isNull():
+                item.setIcon(QIcon(pixmap))
+            item.setSizeHint(QSize(0, 60))
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if index == 0 else Qt.CheckState.Unchecked)
+            self.new_set_images.addItem(item)
+        self.stack.setCurrentWidget(self.create_page)
+        self.status.clear()
+
+    def _persist_membership(self, value, message, *, show_summary=True):
+        from studio_export_membership import validate_export_membership
+        value = validate_export_membership(value)
+        self.saved_membership = value
+        self.membership_saved.emit(value)
+        self._resolve_review_issues(value)
+        self.status.setText(message)
+        self._refresh_summary()
+        self._refresh_quality_page()
+        if show_summary:
+            self.stack.setCurrentWidget(self.summary_page)
+
+    def _create_set(self):
+        title = self.new_set_name.text().strip()
+        if not title:
+            self.status.setText('Введите название набора.')
+            return
+        if any(existing.casefold() == title.casefold() for _, existing in self._set_catalog()):
+            self.status.setText('Набор с таким названием уже существует.')
+            return
+        selected = {
+            self.new_set_images.item(row).data(Qt.ItemDataRole.UserRole)
+            for row in range(self.new_set_images.count())
+            if self.new_set_images.item(row).checkState() == Qt.CheckState.Checked
+        }
+        if not selected:
+            self.status.setText('Выберите хотя бы один PNG для нового набора.')
+            return
+        value = self._membership() if self.stack.currentWidget() is self.manual_page else self.saved_membership
+        value = {key: dict(item, memberships=[dict(link) for link in item['memberships']])
+                 for key, item in value.items()}
+        set_id = str(uuid4())
+        for path in self.paths:
+            value[str(path)]['memberships'].append({
+                'set_id': set_id, 'title': title, 'included': str(path) in selected,
+            })
+        try:
+            self._persist_membership(value, f'Набор «{title}» создан. Экспорт не запускался.')
+        except ValueError as error:
+            self.status.setText(str(error))
+
+    def _rename_current_set(self):
+        set_id = self._editing_set_id
+        if not set_id or self.worker is not None:
+            return
+        catalog = dict(self._set_catalog())
+        previous = catalog.get(set_id)
+        if previous is None:
+            return
+        title, accepted = QInputDialog.getText(self, 'Переименовать набор',
+            'Новое название:', text=previous)
+        if not accepted:
+            return
+        title = title.strip()
+        if not title or len(title) > 200 or any(
+            other_id != set_id and other_title.casefold() == title.casefold()
+            for other_id, other_title in catalog.items()
+        ):
+            self.status.setText('Укажите другое название набора (до 200 символов).')
+            return
+        value = self._membership()
+        for item in value.values():
+            for link in item['memberships']:
+                if link['set_id'] == set_id:
+                    link['title'] = title
+        self._persist_membership(value, f'Набор переименован в «{title}».')
+
+    def _delete_current_set(self):
+        self._delete_set(self._editing_set_id)
+
+    def _delete_set(self, set_id):
+        if not set_id or self.worker is not None:
+            return
+        title = dict(self._set_catalog()).get(set_id)
+        if title is None:
+            return
+        answer = QMessageBox.question(
+            self, 'Удалить набор',
+            f'Удалить набор «{title}»? PNG останутся в проекте.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        value = self._membership() if self.stack.currentWidget() is self.manual_page else self.saved_membership
+        value = {key: dict(item, memberships=[dict(link) for link in item['memberships']
+                if link['set_id'] != set_id]) for key, item in value.items()}
+        self._editing_set_id = None
+        self._persist_membership(value, f'Набор «{title}» удалён. PNG остались в проекте.')
 
     def _show_summary(self):
         self._hide_preview()
@@ -686,18 +913,17 @@ class SetExportDialog(QDialog):
         if item is None or item.column() != 0:
             self._hide_preview()
             return
-        path = Path(str(item.data(Qt.ItemDataRole.UserRole) or ''))
+        self._show_preview_path(item.data(Qt.ItemDataRole.UserRole), global_pos)
+
+    def _show_preview_path(self, raw_path, global_pos=None):
+        path = Path(str(raw_path or ''))
         if not path.is_file():
             self._hide_preview()
             return
-        pixmap = QPixmap(str(path))
+        pixmap = self._scaled_pixmap(path, 220)
         if pixmap.isNull():
             self._hide_preview()
             return
-        pixmap = pixmap.scaled(
-            220, 220, Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
         self.preview_popup.setPixmap(pixmap)
         point = global_pos if isinstance(global_pos, QPoint) else QCursor.pos()
         position = point + QPoint(18, 18)
@@ -715,8 +941,14 @@ class SetExportDialog(QDialog):
         self.preview_popup.hide()
 
     def eventFilter(self, watched, event):
-        if watched is self.table.viewport() and event.type() == QEvent.Type.Leave:
+        if watched in (self.table.viewport(), self.new_set_images.viewport()) \
+                and event.type() == QEvent.Type.Leave:
             self._hide_preview()
+        if isinstance(watched, QLabel) and watched.property('previewPath'):
+            if event.type() == QEvent.Type.Enter:
+                self._show_preview_path(watched.property('previewPath'), QCursor.pos())
+            elif event.type() == QEvent.Type.Leave:
+                self._hide_preview()
         return super().eventFilter(watched, event)
 
     def _export(self):
@@ -745,14 +977,19 @@ class SetExportDialog(QDialog):
         self.export_button.setEnabled(False)
         self.quality_export_button.setEnabled(False)
         self.edit_sets_button.setEnabled(False)
+        self.new_set_button.setEnabled(False)
         self.save_membership.setEnabled(False)
         self.return_button.setEnabled(False)
+        self.rename_set_button.setEnabled(False)
+        self.delete_set_button.setEnabled(False)
+        self.create_set_button.setEnabled(False)
         self.quality_back_button.setEnabled(False)
         self.quality_fix_button.setEnabled(False)
         self.quality_exclude_button.setEnabled(False)
         self.status.setText(
             f'Создаю наборы: {len(groups)}. Не закрывайте приложение до завершения.'
         )
+        self.busy_changed.emit()
         self.worker.start()
 
     def _finished(self):
@@ -774,11 +1011,16 @@ class SetExportDialog(QDialog):
         self.delete_intermediates.setEnabled(self.workspace is not None)
         self.delete_originals.setEnabled(self.workspace is not None)
         self.edit_sets_button.setEnabled(True)
+        self.new_set_button.setEnabled(True)
         self.save_membership.setEnabled(True)
         self.return_button.setEnabled(True)
+        self.rename_set_button.setEnabled(self._editing_set_id is not None)
+        self.delete_set_button.setEnabled(self._editing_set_id is not None)
+        self.create_set_button.setEnabled(True)
         self.quality_back_button.setEnabled(True)
         self._refresh_summary()
         self._refresh_quality_page()
+        self.busy_changed.emit()
 
     def reject(self):
         if self.worker is not None:

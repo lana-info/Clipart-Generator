@@ -1,5 +1,14 @@
 # Vibix Images
 
+## Manual contour requirement, 2026-09-29
+
+The transparency pen must create an outline directly by clicks, including on
+opaque images. Double click closes it; closure alone must not edit pixels.
+Explicit Remove inside / Keep inside actions preserve existing alpha elsewhere
+without feathering. Point edits and applied masks support undo/redo; keyboard
+zoom remains available. Material/texture is no longer a collection-wide UI field;
+individual objects may describe their own materials.
+
 ## Transparency editor requirements, 2026-09-23
 
 Owner approved one canvas with brush/pen tools, keyboard/mouse point editing,

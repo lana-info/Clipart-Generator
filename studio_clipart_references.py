@@ -17,8 +17,11 @@ def validate_references(value):
     if not isinstance(value, list) or len(value) > 20:
         raise ValueError("Можно добавить до 20 референсов")
     for item in value:
-        if not isinstance(item, dict) or set(item) != {"path", "roles", "notes"}:
+        if (not isinstance(item, dict) or
+                set(item) not in ({"path", "roles", "notes"}, {"path", "roles", "notes", "enabled"})):
             raise ValueError("Повреждённый референс")
+        if 'enabled' in item and type(item['enabled']) is not bool:
+            raise ValueError("Неверная настройка использования референса")
         if not isinstance(item['path'], str) or not 1 <= len(item['path']) <= 4000:
             raise ValueError("Неверный путь референса")
         roles = item['roles']
@@ -28,6 +31,20 @@ def validate_references(value):
         if not isinstance(item['notes'], str) or len(item['notes']) > 4000:
             raise ValueError("Описание референса превышает 4000 символов")
     return deepcopy(value)
+
+
+def active_references(value):
+    """Old projects keep their existing enabled behavior until changed in the UI."""
+    return [item for item in validate_references(value) if item.get('enabled', True)]
+
+
+def reference_source(value, role):
+    if role not in ('technique', 'palette'):
+        raise ValueError('Неизвестный источник оформления')
+    selected = [item for item in active_references(value) if role in item['roles']]
+    if len(selected) > 1:
+        raise ValueError('Выберите только один референс для стиля и один для палитры')
+    return selected[0] if selected else None
 
 
 MAX_LOCAL_REFERENCE_BYTES = 25 * 1024 * 1024

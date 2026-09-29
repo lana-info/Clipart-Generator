@@ -49,6 +49,17 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
         description="Локальная резкость без сетевой передачи.",
         operations=_operations(unsharp=True),
     ),
+    "sharp_cutout": ProcessingRecipe(
+        key="sharp_cutout",
+        title="Удалить фон с чёткими краями",
+        description="Локально, без апскейла и обрезки.",
+        operations=_operations(
+            remove_background=True,
+            remove_background_provider="local_rembg",
+            local_rembg_model="u2net",
+            local_rembg_edge_quality="cutout",
+        ),
+    ),
     "prepare_clipart": ProcessingRecipe(
         key="prepare_clipart",
         title="Подготовить клипарт",

@@ -130,6 +130,12 @@ class RunItem:
     payload: Any = field(default=None, repr=False)
     # Explicit editor save, distinct from a worker-supplied external path.
     editor_output_path: str = field(default="", repr=False)
+    # Stages embodied by the retained input while a recovery attempt is active.
+    recovery_input_stages: dict[str, str] | None = field(default=None, repr=False)
+
+    def saved_stages(self) -> dict[str, str]:
+        return dict(self.recovery_input_stages if self.recovery_input_stages is not None
+                    else self.stage_statuses)
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -591,6 +597,15 @@ class RunQueueSession(QObject):
                 local_index = 0
             active_item = self._active_item(local_index)
             if active_item is not None:
+                # Keep completed processing stages even when indexed progress
+                # suppresses the legacy text stream (parallel generation).
+                stage = str(safe.get("stage") or "")
+                outcome = str(safe.get("outcome") or "")
+                if safe_name == "stage_finished" and stage:
+                    if outcome == "succeeded" or (outcome == "skipped" and safe.get("status") == "already_alpha"):
+                        active_item.stage_statuses[stage] = "complete"
+                    elif outcome == "failed":
+                        active_item.stage_statuses[stage] = "failed"
                 requested_index = active_item.index
             else:
                 requested_index = (
@@ -677,10 +692,6 @@ class RunQueueSession(QObject):
 
     @staticmethod
     def _successful_item_message(item: RunItem) -> str:
-        if item.stage_statuses.get("background_removal") == "skipped":
-            return (
-                "Результат сохранён; проверьте и исправьте прозрачность вручную."
-            )
         return "Результат сохранён."
     def _active_item(self, local_index: int) -> RunItem | None:
         if local_index < 1 or local_index > len(self.active_order):
@@ -756,15 +767,15 @@ class RunQueueSession(QObject):
                         item=item.index,
                         kind="generated",
                     )
-        elif status == "stage_skipped":
+        elif status in {"stage_skipped", "stage_failed"}:
             item.status = RunItemStatus.RUNNING
             if stage:
-                item.stage_statuses[stage] = "skipped"
+                item.stage_statuses[stage] = "failed" if status == "stage_failed" else "skipped"
             self._event(
                 "stage_updated",
                 item=item.index,
                 stage=stage,
-                status="skipped",
+                status=item.stage_statuses.get(stage, "skipped"),
             )
         elif status == "succeeded":
             trusted = _trusted_worker_path(event.output_path, self.output_dir)
@@ -779,20 +790,23 @@ class RunQueueSession(QObject):
                 )
             else:
                 item.output_path = trusted
+                item.recovery_input_stages = None
+                if item.editor_output_path != trusted:
+                    item.editor_output_path = ""
                 self._close_running_stages(item, "complete")
                 item.stage_statuses[stage or "export"] = "complete"
                 failed_stage = next(
                     (
                         name
                         for name, stage_status in item.stage_statuses.items()
-                        if stage_status == "failed"
+                        if stage_status in {"failed", "skipped"}
                     ),
                     "",
                 )
                 if failed_stage:
                     item.status = RunItemStatus.FAILED
                     item.short_message = (
-                        "Файл создан, но один из выбранных этапов завершился ошибкой."
+                        "Файл сохранён для коррекции. Обработка не завершена; файл не готов к экспорту."
                     )
                     self._event(
                         "item_failed",
@@ -947,6 +961,9 @@ class RunQueueSession(QObject):
             trusted = _trusted_worker_path(raw, self.output_dir)
             if trusted:
                 item.output_path = trusted
+                item.recovery_input_stages = None
+                if item.editor_output_path != trusted:
+                    item.editor_output_path = ""
                 try:
                     output_bytes = Path(trusted).stat().st_size
                 except OSError:
@@ -955,7 +972,7 @@ class RunQueueSession(QObject):
                     (
                         stage
                         for stage, status in item.stage_statuses.items()
-                        if status == "failed"
+                        if status in {"failed", "skipped"}
                     ),
                     "",
                 )
@@ -964,7 +981,7 @@ class RunQueueSession(QObject):
                     item.stage_statuses["export"] = "complete"
                     item.status = RunItemStatus.FAILED
                     item.short_message = (
-                        "Файл создан, но один из выбранных этапов завершился ошибкой."
+                        "Файл сохранён для коррекции. Обработка не завершена; файл не готов к экспорту."
                     )
                     self._event(
                         "item_failed",
@@ -1181,10 +1198,52 @@ class RunQueueSession(QObject):
         )
         self.changed.emit()
 
+    def _recovery_retry(self):
+        """Process saved pixels first; keep generation retries separate."""
+        if (getattr(self.request, "queue_items", None)
+                or not getattr(self.request, "generated_prompts", None)):
+            return None
+        candidates = []
+        for index in self.failed_indices:
+            item = self.items[index]
+            path = item.output_path or item.source_path
+            if not path:
+                continue
+            candidate = Path(path)
+            trusted = (path == item.editor_output_path or
+                       _is_within(candidate, self.output_dir) or
+                       _is_within(candidate, self.transient_dir))
+            if not trusted or candidate.is_symlink() or not candidate.is_file():
+                continue
+            settings = dict(self.request.settings)
+            saved_stages = item.saved_stages() if item.output_path else {}
+            for stage, flag in (("upscale_before", "upscale"), ("upscale_after", "upscale_after"),
+                                ("unsharp", "unsharp_enabled"), ("edge_cleanup", "edge_shrink_enabled")):
+                if saved_stages.get(stage) == "complete":
+                    settings[flag] = False
+            settings["skip_remover_for_alpha"] = True
+            settings["overwrite_existing"] = False
+            # Always validate/preserve alpha or finish local background removal.
+            # This also provides a local publication pass after a manual fix.
+            settings["remove_bg"] = True
+            settings["remove_bg_provider"] = "local_rembg"
+            settings["local_rembg_model"] = "u2net"
+            settings["local_rembg_edge_quality"] = "cutout"
+            if not candidates or settings == candidates[0][2]:
+                candidates.append((index, str(candidate.resolve()), settings))
+        if not candidates:
+            return None
+        request = replace(self.request, mode="mode2_process", generated_prompts=[],
+                          selected_files=[row[1] for row in candidates], settings=candidates[0][2])
+        return [row[0] for row in candidates], request
+
     def preview_retry(self) -> Any | None:
         failed = self.failed_indices
         if self.running or not failed:
             return None
+        recovery = self._recovery_retry()
+        if recovery is not None:
+            return recovery[1]
         queue_items = tuple(getattr(self.request, "queue_items", ()) or ())
         generated = list(getattr(self.request, "generated_prompts", []) or [])
         if queue_items:
@@ -1196,6 +1255,10 @@ class RunQueueSession(QObject):
                 ),
             )
         elif generated:
+            failed = [index for index in failed
+                      if not (self.items[index].output_path or self.items[index].source_path)]
+            if not failed:
+                return None  # A missing saved PNG must never trigger paid regeneration.
             retry_request = replace(
                 self.request,
                 generated_prompts=[
@@ -1229,17 +1292,26 @@ class RunQueueSession(QObject):
         retry_request = self.preview_retry()
         if retry_request is None:
             return None
-        failed = self.failed_indices
+        recovery = self._recovery_retry()
+        failed = recovery[0] if recovery is not None else self.failed_indices
+        if recovery is None and getattr(self.request, "generated_prompts", None):
+            failed = [index for index in failed
+                      if not (self.items[index].output_path or self.items[index].source_path)]
         self.active_order = list(failed)
         for index in failed:
             item = self.items[index]
             item.status = RunItemStatus.PENDING
             item.short_message = "Ожидает повторного запуска."
-            item.output_path = ""
-            item.editor_output_path = ""
-            item.stage_statuses.clear()
-            if isinstance(item.payload, dict):
-                item.source_path = ""
+            if recovery is None:
+                item.output_path = ""
+                item.editor_output_path = ""
+                item.stage_statuses.clear()
+                if isinstance(item.payload, dict):
+                    item.source_path = ""
+            else:
+                item.recovery_input_stages = item.saved_stages() if item.output_path else {}
+                item.stage_statuses = {key: value for key, value in item.recovery_input_stages.items()
+                                       if value == "complete"}
             item.attempts += 1
         self.current_index = None
         self._item_progress.clear()
@@ -1494,7 +1566,7 @@ def transparency_candidate_paths(session: RunQueueSession) -> list[Path]:
         candidates.append(candidate)
 
     for item in session.items:
-        if item.status is RunItemStatus.SUCCEEDED and item.output_path:
+        if item.status in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED} and item.output_path:
             add(item.output_path, editor_copy=item.output_path == item.editor_output_path)
     try:
         ready_outputs = sorted(
@@ -1525,6 +1597,7 @@ class RunResultsPage(QWidget):
     finish_requested = pyqtSignal()
     transparency_requested = pyqtSignal(int)
     membership_changed = pyqtSignal()
+    processing_requested = pyqtSignal(object)
 
     def __init__(
         self,
@@ -1647,6 +1720,11 @@ class RunResultsPage(QWidget):
             ButtonVariant.SECONDARY,
         )
         self.process_more_button.clicked.connect(self.process_more_requested.emit)
+        self.send_to_processing_button = V3Button(
+            "Обработать выбранное", ButtonVariant.SECONDARY,
+        )
+        self.send_to_processing_button.hide()
+        self.send_to_processing_button.clicked.connect(self._send_to_processing)
         self.finish_button = V3Button(
             "Завершить и на главную",
             ButtonVariant.SECONDARY,
@@ -1689,6 +1767,7 @@ class RunResultsPage(QWidget):
             self.immediate_stop_button,
             self.retry_button,
             self.process_more_button,
+            self.send_to_processing_button,
         ):
             workflow_layout.addWidget(button)
         self.finish_button.hide()
@@ -1827,14 +1906,16 @@ class RunResultsPage(QWidget):
         return paths
 
     def use_edited_output(self, source, destination):
-        """Adopt an explicitly saved copy only for a current successful result."""
+        """Adopt an editor copy without turning incomplete processing into success."""
         source, destination = Path(source), Path(destination)
-        if (source.resolve() not in self._export_paths() or destination.is_symlink()
+        if (self.session is None or self.session.running
+                or source.resolve() not in (self._export_paths() + transparency_candidate_paths(self.session))
+                or destination.is_symlink()
                 or not destination.is_file() or destination.suffix.lower() != '.png'):
             return
         destination = destination.resolve()
         for item in self.session.items:
-            if (item.status is RunItemStatus.SUCCEEDED and item.output_path
+            if (item.status in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED} and item.output_path
                     and Path(item.output_path).resolve() == source.resolve()):
                 if self.results_extension is not None:
                     self.results_extension.on_edited_output(
@@ -1983,7 +2064,7 @@ class RunResultsPage(QWidget):
         item = self._selected_item(item_index)
         if (
             item is None
-            or item.status is not RunItemStatus.SUCCEEDED
+            or item.status not in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED}
             or not item.output_path
         ):
             return
@@ -2000,7 +2081,28 @@ class RunResultsPage(QWidget):
             return
         self.transparency_requested.emit(row)
 
+    def processing_selection(self) -> list[str]:
+        if self.session is None or self.session.running:
+            return []
+        item = self._selected_item(self.queue.currentRow())
+        if item is None:
+            return []
+        if item.status not in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED}:
+            return []
+        path = item.output_path
+        if not path or Path(path).is_symlink():
+            return []
+        root = Path(path).parent if path == item.editor_output_path else self.session.output_dir
+        trusted = _trusted_worker_path(path, root)
+        return [trusted] if trusted else []
+
+    def _send_to_processing(self) -> None:
+        paths = self.processing_selection()
+        if paths:
+            self.processing_requested.emit(paths)
+
     def _selection_changed(self, row: int) -> None:
+        self.send_to_processing_button.setEnabled(bool(self.processing_selection()))
         item = self._selected_item(row)
         if item is None:
             self.preview_popup.hide()
@@ -2097,7 +2199,7 @@ class RunResultsPage(QWidget):
             self._hide_item_preview()
             return
         self._preview_item_index = item_index
-        path = item.output_path if item.status is RunItemStatus.SUCCEEDED else item.source_path
+        path = item.output_path or item.source_path
         pixmap = BeforeAfterViewer._pixmap(path)
         self.preview_popup.clear()
         if pixmap is None:
@@ -2533,6 +2635,9 @@ class RunQueueSupport:
     def retry_failed(self) -> Any | None:
         if self.session is None:
             return None
+        busy = getattr(self.controller, "is_busy", None)
+        if callable(busy) and busy():
+            return None
         worker = getattr(self.controller, "worker", None)
         if worker is not None and bool(worker.isRunning()):
             return None
@@ -2541,7 +2646,12 @@ class RunQueueSupport:
         confirm = getattr(self.controller, "confirm_retry_request", None)
         if callable(confirm):
             preview = self.session.preview_retry()
-            if preview is None or not confirm(preview):
+            if preview is None:
+                self.page.summary_label.setText(
+                    "Сохранённый PNG недоступен. Верните файл в прежнюю папку; повторная генерация не запущена."
+                )
+                return None
+            if not confirm(preview):
                 return None
             if self.session.preview_retry() != preview:
                 return None

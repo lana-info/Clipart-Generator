@@ -1,5 +1,9 @@
 """Editable brief, visual direction and recipe, using the existing draft store."""
+from pathlib import Path
+import sys
+
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox, QDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QStackedWidget,
@@ -12,11 +16,45 @@ from v3_components import apply_v3_theme
 ROLE_LABELS = ("Главные объекты", "Композиции", "Венки", "Бордюры и рамки", "Мелкий декор")
 from studio_palette_library import all_palette_presets, palette_categories, recommended_palette_presets
 from studio_style_profiles import (
-    all_style_profiles, all_style_modifiers, featured_style_profiles, style_categories,
-    recommended_style_profiles, get_style_profile, style_modifier_keys, style_prompt_text,
+    all_style_profiles, all_style_modifiers, style_categories,
+    get_style_profile, style_modifier_keys, style_prompt_text,
 )
 
 PALETTES = tuple((preset.title, ' '.join(preset.colors)) for preset in all_palette_presets())
+
+
+def style_preview_path(key):
+    local = Path(__file__).resolve().parent / 'assets' / 'style_previews' / f'{key}.jpg'
+    if local.is_file():
+        return local
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+    return root / 'assets' / 'style_previews' / f'{key}.jpg'
+
+
+class PalettePreview(QWidget):
+    """A small, repeatable motif shows the five colors together beyond swatches."""
+    def __init__(self, colors, parent=None):
+        super().__init__(parent)
+        self.colors = tuple(QColor(color) for color in colors)
+        self.setFixedSize(104, 48)
+        self.setAccessibleName('Пример сочетания цветов: ' + ', '.join(colors))
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self.colors[4])
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 5, 5)
+        painter.setBrush(self.colors[1])
+        painter.drawEllipse(20, 25, 25, 12)
+        painter.setBrush(self.colors[2])
+        painter.drawEllipse(59, 27, 25, 11)
+        painter.setBrush(self.colors[0])
+        for x, y in ((38, 7), (51, 7), (32, 18), (57, 18), (43, 27)):
+            painter.drawEllipse(x, y, 17, 15)
+        painter.setBrush(self.colors[3])
+        painter.drawEllipse(46, 17, 15, 15)
+        painter.end()
 
 
 def combo(values):
@@ -34,6 +72,8 @@ class ClipartBuilderDialog(QDialog):
             raise TypeError("ClipartBuilderDialog requires ClipartModeData")
         super().__init__(parent)
         self.data = data
+        self._reference_palette_cache = {}
+        self._card_columns = 3
         self.recipe = (ClipartRecipe.from_dict(data.recipe)
                        if data.recipe is not None else ClipartRecipe())
         self.setWindowTitle("Clipart · Настройка набора")
@@ -114,13 +154,14 @@ class ClipartBuilderDialog(QDialog):
         self.technique.setCurrentText(generator.style)
         self.mood = combo(["", "Уютное", "Весёлое", "Сказочное", "Нежное", "Спокойное", "Праздничное"])
         self.line = combo(["", "Без художественной обводки", "Тонкая обводка", "Рисованная неровная линия"])
-        self.material = combo(["", "Бумага", "Дерево", "Керамика", "Ткань", "Вышивка", "Вязаная фактура"])
         self.detail = combo(["", "Минималистично", "Умеренная детализация", "Много мелких деталей"])
-        self.visual_fields = dict(zip(("technique", "mood", "line", "material", "detail"),
-                                      (self.technique, self.mood, self.line, self.material, self.detail)))
+        self.visual_fields = dict(zip(("technique", "mood", "line", "detail"),
+                                      (self.technique, self.mood, self.line, self.detail)))
         for key, value in self.recipe.visual.items():
+            if key == 'material':
+                continue
             self.visual_fields[key].setCurrentText(value)
-        for field in (self.line, self.material, self.detail):
+        for field in (self.line, self.detail):
             saved_value = field.currentText()
             if saved_value and field.findText(saved_value) < 0:
                 field.addItem(saved_value)
@@ -129,18 +170,6 @@ class ClipartBuilderDialog(QDialog):
             field.setPlaceholderText("Не выбрано")
             if not field.currentText():
                 field.setCurrentIndex(-1)
-
-        style_title = QLabel("Рекомендуемые базовые стили")
-        style_title.setStyleSheet("font-size:16px;font-weight:600")
-        layout.addWidget(style_title)
-        style_hint = QLabel("Базовый стиль применяется ко всей коллекции; характер можно дополнить ниже.")
-        style_hint.setWordWrap(True)
-        style_hint.setProperty('v3Small', True)
-        layout.addWidget(style_hint)
-        recommended_style_group = QFrame()
-        recommended_style_group.setProperty('v3Card', True)
-        self.recommended_style_grid = QGridLayout(recommended_style_group)
-        layout.addWidget(recommended_style_group)
 
         style_library_group = QGroupBox("Библиотека базовых стилей")
         style_library_layout = QVBoxLayout(style_library_group)
@@ -166,16 +195,20 @@ class ClipartBuilderDialog(QDialog):
         layout.addWidget(modifier_group)
 
         custom_style = QHBoxLayout()
-        custom_style.addWidget(QLabel("Базовый стиль / своя формулировка"))
-        self.technique.setAccessibleName("Базовый стиль / своя формулировка")
+        custom_style.addWidget(QLabel("Свой стиль"))
+        self.technique.setAccessibleName("Свой стиль")
+        self.technique.lineEdit().setPlaceholderText("Например: линогравюра с зернистой фактурой")
         custom_style.addWidget(self.technique, 1)
         layout.addLayout(custom_style)
+        custom_style_hint = QLabel("Если готовый стиль не подходит, опишите технику своими словами.")
+        custom_style_hint.setProperty('v3Small', True)
+        custom_style_hint.setWordWrap(True)
+        layout.addWidget(custom_style_hint)
         self.mood.hide()
 
         extra = QGroupBox("Дополнительные параметры")
         extra_form = QFormLayout(extra)
         for label, field in (("Художественная линия", self.line),
-                             ("Материал / фактура", self.material),
                              ("Детализация", self.detail)):
             field.setAccessibleName(label)
             extra_form.addRow(label, field)
@@ -189,6 +222,10 @@ class ClipartBuilderDialog(QDialog):
         recommended_title = QLabel("Рекомендуем палитру для вашей темы")
         recommended_title.setStyleSheet("font-size:16px;font-weight:600")
         layout.addWidget(recommended_title)
+        palette_hint = QLabel("Подбор по словам в теме и поводе. Измените их на шаге 1, чтобы увидеть другие варианты.")
+        palette_hint.setWordWrap(True)
+        palette_hint.setProperty('v3Small', True)
+        layout.addWidget(palette_hint)
         recommended_group = QFrame()
         recommended_group.setProperty('v3Card', True)
         self.recommended_palette_grid = QGridLayout(recommended_group)
@@ -213,7 +250,6 @@ class ClipartBuilderDialog(QDialog):
         custom.addWidget(self.palette_reference_button)
         layout.addLayout(custom)
 
-        self.recommended_style_cards = []
         self.style_cards = []
         self.technique.currentTextChanged.connect(self._refresh_style_card_checks)
         self.recommended_palette_cards = []
@@ -222,14 +258,11 @@ class ClipartBuilderDialog(QDialog):
         reset_palette = QPushButton("Сбросить палитру")
         reset_palette.clicked.connect(self.palette.clear)
         custom.addWidget(reset_palette)
-        self.theme.textChanged.connect(self._refresh_style_recommendations)
-        self.context.currentTextChanged.connect(self._refresh_style_recommendations)
         self.theme.textChanged.connect(self._refresh_palette_recommendations)
         self.context.currentTextChanged.connect(self._refresh_palette_recommendations)
         self._restore_style_modifier_buttons()
         for button in self.style_modifier_buttons.values():
             button.setEnabled(button.isChecked() or sum(b.isChecked() for b in self.style_modifier_buttons.values()) < 2)
-        self._refresh_style_recommendations()
         self._refresh_style_library()
         self._refresh_palette_recommendations()
         self._refresh_palette_library()
@@ -239,27 +272,36 @@ class ClipartBuilderDialog(QDialog):
         card = QFrame()
         card.setProperty('v3Card', True)
         card_layout = QVBoxLayout(card)
-        button = QPushButton(profile.title)
+        button = QPushButton()
         button.setCheckable(True)
+        button.setAccessibleName(profile.title)
+        button.setToolTip(profile.title)
+        button.setFixedHeight(92)
+        content = QHBoxLayout(button)
+        content.setContentsMargins(5, 5, 5, 5)
+        preview = QLabel()
+        preview.setFixedSize(80, 80)
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        pixmap = QPixmap(str(style_preview_path(profile.key)))
+        if not pixmap.isNull():
+            preview.setPixmap(pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio,
+                                            Qt.TransformationMode.SmoothTransformation))
+        content.addWidget(preview)
+        title = QLabel(profile.title)
+        title.setWordWrap(True)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        content.addWidget(title, 1)
         button.clicked.connect(lambda checked=False, key=profile.key: self._select_style_profile(key))
         card_layout.addWidget(button)
         detail = QLabel(" · ".join(profile.best_for[:3]))
         detail.setWordWrap(True)
         detail.setProperty('v3Small', True)
         card_layout.addWidget(detail)
-        grid.addWidget(card, index // 3, index % 3)
+        grid.addWidget(card, index // self._card_columns, index % self._card_columns)
         target.append(dict(key=profile.key, title=profile.title, category=profile.category,
-                           best_for=list(profile.best_for), button=button, widget=card))
-
-    def _refresh_style_recommendations(self, *_):
-        if not hasattr(self, 'recommended_style_grid'):
-            return
-        self._clear_layout(self.recommended_style_grid)
-        self.recommended_style_cards = []
-        for index, profile in enumerate(recommended_style_profiles(
-                self.theme.text().strip(), self.context.currentText().strip())):
-            self._style_card(profile, self.recommended_style_grid, index, self.recommended_style_cards)
-        self._refresh_style_card_checks()
+                           best_for=list(profile.best_for), button=button, preview=preview, widget=card))
 
     def _refresh_style_library(self, *_):
         if not hasattr(self, 'style_library_grid'):
@@ -276,8 +318,24 @@ class ClipartBuilderDialog(QDialog):
     def _refresh_style_card_checks(self):
         profile = get_style_profile(self.technique.currentText()) if hasattr(self, 'technique') else None
         selected = profile.key if profile is not None else None
-        for card in getattr(self, 'recommended_style_cards', []) + getattr(self, 'style_cards', []):
+        for card in getattr(self, 'style_cards', []):
             card['button'].setChecked(card['key'] == selected)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        columns = 2 if self.width() < 950 else 3
+        if columns == self._card_columns:
+            return
+        self._card_columns = columns
+        for cards, grid in (
+                (getattr(self, 'style_cards', []), getattr(self, 'style_library_grid', None)),
+                (getattr(self, 'recommended_palette_cards', []), getattr(self, 'recommended_palette_grid', None)),
+                (getattr(self, 'palette_cards', []), getattr(self, 'palette_library_grid', None))):
+            if grid is None:
+                continue
+            for index, card in enumerate(cards):
+                grid.removeWidget(card['widget'])
+                grid.addWidget(card['widget'], index // columns, index % columns)
 
     def _select_style_profile(self, key):
         profile = get_style_profile(key)
@@ -365,7 +423,12 @@ class ClipartBuilderDialog(QDialog):
             swatch.setStyleSheet(f'background:{color};border-radius:4px')
             swatches.addWidget(swatch, 1)
         card_layout.addLayout(swatches)
-        grid.addWidget(card, index // 3, index % 3)
+        example = QHBoxLayout()
+        example.addWidget(QLabel("Пример сочетания"))
+        example.addStretch()
+        example.addWidget(PalettePreview(preset.colors))
+        card_layout.addLayout(example)
+        grid.addWidget(card, index // self._card_columns, index % self._card_columns)
         target.append(dict(key=preset.key, title=preset.title, category=preset.category,
                            character=preset.character, colors=list(preset.colors), widget=card, button=button))
         button.setChecked(self.palette.text().strip().casefold() == ' '.join(preset.colors).casefold())
@@ -399,9 +462,54 @@ class ClipartBuilderDialog(QDialog):
     def _references(self):
         from studio_reference_editor import ReferenceEditor
         layout = self._page()
-        self.reference_editor = ReferenceEditor(self.recipe.references)
+        self.reference_editor = ReferenceEditor(
+            self.recipe.references,
+            selected_style=lambda: self.technique.currentText(),
+            selected_palette=self._selected_palette_name,
+        )
         self.reference_editor.palette_selected.connect(self.palette.setText)
+        self.technique.currentTextChanged.connect(self.reference_editor.refresh_source_labels)
+        self.palette.textChanged.connect(self.reference_editor.refresh_source_labels)
         layout.addWidget(self.reference_editor)
+
+    def _selected_palette_name(self):
+        value = self.palette.text().strip().casefold()
+        if not value:
+            return ''
+        for preset in all_palette_presets():
+            if value == ' '.join(preset.colors).casefold():
+                return preset.title
+        return 'Своя палитра'
+
+    def _effective_visual(self, references):
+        from studio_clipart_references import active_references, reference_source
+        active = active_references(references)
+        if len(active) > 5:
+            raise ValueError('Для генерации можно выбрать не более 5 референсов')
+        style_source = reference_source(references, 'technique')
+        palette_source = reference_source(references, 'palette')
+        if style_source:
+            number = active.index(style_source) + 1
+            style = f'Use the illustration technique and visual style of reference image {number}.'
+        else:
+            base = style_prompt_text(self.technique.currentText(), self.mood.currentText())
+            style = '; '.join(part for part in
+                              (base, self.line.currentText().strip(),
+                               self._visual_values()['material'], self.detail.currentText().strip())
+                              if part)
+        palette = (' '.join(self._reference_palette(palette_source['path'])) if palette_source
+                   else self.palette.text().strip())
+        return style, palette
+
+    def _reference_palette(self, path):
+        from studio_clipart_references import extract_palette
+        source = Path(path)
+        stat = source.stat()
+        key = (str(source), stat.st_mtime_ns, stat.st_size)
+        if key not in self._reference_palette_cache:
+            self._reference_palette_cache.clear()
+            self._reference_palette_cache[key] = extract_palette(path)
+        return self._reference_palette_cache[key]
 
     def _structure(self):
         layout = self._page()
@@ -453,6 +561,11 @@ class ClipartBuilderDialog(QDialog):
         self.make_prompts = QCheckBox('Добавить промпты этих объектов к существующему списку при сохранении')
         layout.addWidget(self.make_prompts)
 
+    def _visual_values(self):
+        values = {key: widget.currentText().strip() for key, widget in self.visual_fields.items()}
+        values['material'] = ''  # Legacy project field; no longer a collection-wide choice.
+        return values
+
     def _planning_snapshot(self):
         from copy import deepcopy
         if len(style_modifier_keys(self.mood.currentText())) > 2:
@@ -463,7 +576,7 @@ class ClipartBuilderDialog(QDialog):
             raise ValueError('Укажите основную тему набора')
         recipe.context = self.context.currentText().strip()
         recipe.motifs = [s.strip() for s in self.motifs.text().split(',') if s.strip()]
-        recipe.visual = {key: widget.currentText().strip() for key, widget in self.visual_fields.items()}
+        recipe.visual = self._visual_values()
         recipe.references = self.reference_editor.value()
         recipe.objects = self.object_editor.value()
         recipe.edit_counts({role: sum(item['role'] == role for item in recipe.objects) for role in ROLES})
@@ -472,7 +585,8 @@ class ClipartBuilderDialog(QDialog):
             recipe.bundle_plan = propose_bundle_plan(recipe.objects, existing=recipe.bundle_plan)
         recipe.assistant = self.planning.selection()
         recipe.validate()
-        return recipe, self.palette.text().strip()
+        _, palette = self._effective_visual(recipe.references)
+        return recipe, palette
 
     def _suggest(self):
         self.recipe.select(self.total.value(), self.presets.currentData())
@@ -527,8 +641,7 @@ class ClipartBuilderDialog(QDialog):
             self.recipe.context = self.context.currentText().strip()
             self.recipe.motifs = [s.strip() for s in self.motifs.text().split(",") if s.strip()]
             self.recipe.edit_counts({key: spin.value() for key, spin in self.counts.items()})
-            self.recipe.visual = {key: widget.currentText().strip()
-                                  for key, widget in self.visual_fields.items()}
+            self.recipe.visual = self._visual_values()
             self.recipe.references = self.reference_editor.value()
             self.recipe.assistant = self.planning.selection()
             self.recipe.objects = self.object_editor.value()
@@ -538,26 +651,29 @@ class ClipartBuilderDialog(QDialog):
                 self.recipe.bundle_plan = propose_bundle_plan(
                     self.recipe.objects, existing=self.recipe.bundle_plan)
             value = self.recipe.to_dict()
-        except ValueError as error:
+        except (ValueError, OSError) as error:
             self.error.setText(str(error))
             return
-        base_style = style_prompt_text(self.technique.currentText(), self.mood.currentText())
-        style = "; ".join(part for part in
-                          (base_style, self.line.currentText().strip(),
-                           self.material.currentText().strip(), self.detail.currentText().strip())
-                          if part)
+        try:
+            style, palette = self._effective_visual(self.recipe.references)
+        except (ValueError, OSError) as error:
+            self.error.setText(str(error))
+            return
         if len(style) > 4000:
             self.error.setText("Сократите описание стиля до 4000 символов")
             return
         from v3_project_state import PromptGeneratorData, MAX_PROMPT_ENTRIES
         generator = PromptGeneratorData.from_dict(self.data.prompt_generator.to_dict())
         generator.style = style
-        generator.palette = self.palette.text().strip()
+        generator.palette = palette
         prompts = []
         if self.make_prompts.isChecked():
             from studio_clipart_objects import compile_objects
             try:
                 prompts = compile_objects(self.recipe, generator)
+                from studio_clipart_references import active_references
+                from studio_clipart_objects import attach_reference_guidance
+                prompts = attach_reference_guidance(prompts, active_references(self.recipe.references))
                 if len(self.data.prompts) + len(prompts) > MAX_PROMPT_ENTRIES:
                     raise ValueError('Общий список промптов превышает допустимый размер')
             except ValueError as error:
@@ -565,6 +681,6 @@ class ClipartBuilderDialog(QDialog):
                 return
         self.data.recipe = value
         self.data.prompt_generator.style = style
-        self.data.prompt_generator.palette = self.palette.text().strip()
+        self.data.prompt_generator.palette = palette
         self.data.prompts.extend(prompts)
         self.accept()

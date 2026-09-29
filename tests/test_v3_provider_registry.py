@@ -121,6 +121,7 @@ class ProviderRegistryTests(unittest.TestCase):
                 ("BiRefNet — портрет (~928 МБ при первом запуске)", "birefnet-portrait"),
                 ("IS-Net — аниме (~168 МБ при первом запуске)", "isnet-anime"),
                 ("IS-Net — общий (~170 МБ при первом запуске)", "isnet-general-use"),
+                ("U2Net — объекты (модель скачивается при первом запуске)", "u2net"),
             ),
         )
 

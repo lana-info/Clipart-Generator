@@ -80,7 +80,7 @@ class ReferenceTests(unittest.TestCase):
             editor.send_image_radio.setChecked(True)
             self.assertEqual(editor.selected_ai_image_paths(), (str(path.resolve()),))
             saved = editor.value()
-            self.assertEqual(set(saved[0]), {'path', 'roles', 'notes'})
+            self.assertEqual(set(saved[0]), {'path', 'roles', 'notes', 'enabled'})
             self.assertNotIn('send', str(saved).casefold())
             self.assertEqual(editor.consume_ai_image_paths(), (str(path.resolve()),))
             self.assertEqual(editor.selected_ai_image_paths(), ())
@@ -165,3 +165,44 @@ class ReferenceTests(unittest.TestCase):
                 self.assertTrue(editor.palette.isEnabled())
                 self.assertIn('PNG', editor.reference_info.text())
                 editor.close()
+
+    def test_reference_sources_and_disabled_reference_preserve_selected_direction(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'solid-red.png'
+            Image.new('RGB', (30, 30), 'red').save(path)
+            dialog = ClipartBuilderDialog(ProjectState().clipart)
+            dialog._select_style_profile('watercolor')
+            dialog.palette.setText('#112233 #445566')
+            editor = dialog.reference_editor
+            editor.add_reference(path)
+            self.assertEqual(editor.value()[0]['roles'], ['subject'])
+            self.assertTrue(editor.roles['subject'].isChecked())
+            style, palette = dialog._effective_visual(editor.value())
+            self.assertIn('watercolor', style)
+            self.assertEqual(palette, '#112233 #445566')
+            editor.style_from_reference.setChecked(True)
+            editor.palette_from_reference.setChecked(True)
+            style, palette = dialog._effective_visual(editor.value())
+            self.assertIn('reference image 1', style)
+            self.assertEqual(palette, '#FF0000')
+            self.assertEqual(dialog.technique.currentText(), 'Акварель')
+            self.assertEqual(dialog.palette.text(), '#112233 #445566')
+            editor.use_for_generation.setChecked(False)
+            style, palette = dialog._effective_visual(editor.value())
+            self.assertIn('watercolor', style)
+            self.assertEqual(palette, '#112233 #445566')
+            self.assertEqual(editor.active_generation_paths(), ())
+            dialog.close()
+
+    def test_generation_prompt_scopes_reference_to_selected_attributes(self):
+        from studio_clipart_objects import attach_reference_guidance
+        from v3_project_state import PromptEntry
+        path = '/private/reference.png'
+        result = attach_reference_guidance(
+            [PromptEntry(prompt='Watercolor fox', result_kind='clipart')],
+            [dict(path=path, roles=['pose'], notes='Сидит боком', enabled=True)],
+        )
+        self.assertEqual(result[0].references, [path])
+        self.assertIn('use only for pose', result[0].prompt)
+        self.assertIn('Keep the selected collection style and palette', result[0].prompt)
+        self.assertIn('Сидит боком', result[0].prompt)

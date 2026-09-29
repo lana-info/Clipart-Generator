@@ -1210,7 +1210,39 @@ class V3ApplicationView(QWidget):
         else:
             controller = registration.install(host, locale=locale)
         shell.register_workflow_controller(module_id, controller)
+        if mode is ProjectMode.CLIPART:
+            page = getattr(getattr(controller, "run_queue", None), "page", None)
+            if page is not None and hasattr(page, "processing_requested"):
+                page.send_to_processing_button.show()
+                page.processing_requested.connect(
+                    lambda paths, source=shell: self._open_results_in_processing(source, paths)
+                )
         return controller
+
+    def _open_results_in_processing(self, source, paths) -> bool:
+        if source is not self.shell or source.active_run_controller() is not None:
+            return False
+        controller = source.workflow_controller(
+            getattr(source, "module_id", source.state.mode.value)
+        )
+        if callable(getattr(controller, "is_busy", None)) and controller.is_busy():
+            return False
+        page = getattr(getattr(controller, "run_queue", None), "page", None)
+        if page is None or list(paths) != page.processing_selection() or not paths:
+            return False
+        if not self._save_draft():
+            return False
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        self._apply_preferences(state, ProjectMode.PROCESSING)
+        state.processing.selected_files = list(paths)
+        state.processing.overwrite_existing = False
+        previous_id = self._active_project_id
+        self._active_project_id = None
+        if not self._replace_shell(state):
+            self._active_project_id = previous_id
+            return False
+        self.new_project_started.emit(ProjectMode.PROCESSING.value)
+        return True
 
     def _show_initialization_stage(
         self,

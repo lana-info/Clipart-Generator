@@ -39,6 +39,56 @@ class V3ModeSelectionTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_results_handoff_preserves_source_and_never_starts_worker(self):
+        from PIL import Image
+        from tests.test_v3_run_queue import generation_request
+        from v3_run_queue import RunQueueSession, RunItemStatus
+        with tempfile.TemporaryDirectory() as temp:
+            worker = Mock()
+            view = V3ApplicationView(worker_factory=worker)
+            view._handle_mode_selected(ProjectMode.CLIPART.value)
+            source = view.shell
+            controller = source.workflow_controller(ProjectMode.CLIPART.value)
+            page = controller.run_queue.page
+            session = RunQueueSession(generation_request(temp, 1), ProjectMode.CLIPART)
+            session.output_dir.mkdir(parents=True, exist_ok=True)
+            image = session.output_dir / 'example.png'
+            Image.new('RGB', (20, 20), 'white').save(image)
+            original = image.read_bytes()
+            session.items[0].output_path = str(image)
+            session.items[0].status = RunItemStatus.FAILED
+            session.running = False
+            page.set_session(session)
+            page.queue.setCurrentRow(0)
+            self.assertEqual(page.processing_selection(), [str(image)])
+            with patch.object(view, '_save_draft', return_value=False):
+                self.assertFalse(view._open_results_in_processing(source, [str(image)]))
+            self.assertIs(view.shell, source)
+            session.running = True
+            self.assertFalse(page.processing_selection())
+            self.assertFalse(view._open_results_in_processing(source, [str(image)]))
+            session.running = False
+            with patch.object(controller, 'is_busy', return_value=True, create=True):
+                self.assertFalse(view._open_results_in_processing(source, [str(image)]))
+            with patch.object(view, '_replace_shell', return_value=False):
+                view._active_project_id = 'original-project'
+                self.assertFalse(view._open_results_in_processing(source, [str(image)]))
+                self.assertEqual(view._active_project_id, 'original-project')
+            view._active_project_id = None
+            image.unlink()
+            self.assertFalse(page.processing_selection())
+            image.write_bytes(original)
+            page.refresh_from_state()
+            page.send_to_processing_button.click()
+            self.assertIsNot(view.shell, source)
+            self.assertIs(view.shell.state.mode, ProjectMode.PROCESSING)
+            self.assertEqual(view.shell.state.processing.selected_files, [str(image)])
+            self.assertFalse(view.shell.state.processing.overwrite_existing)
+            self.assertEqual(image.read_bytes(), original)
+            worker.assert_not_called()
+            self.assertFalse(view._open_results_in_processing(source, [str(image)]))
+            view.close()
+
     def tearDown(self):
         self.app.processEvents()
 

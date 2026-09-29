@@ -9,14 +9,14 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
-    QPushButton, QSizePolicy, QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QPushButton, QSizePolicy, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
-from studio_clipart_objects import compile_objects, fill_recipe
+from studio_clipart_objects import attach_reference_guidance, compile_objects, fill_recipe
 from studio_clipart_recipe import ClipartRecipe, ROLES
 from studio_bundle_planner import propose_bundle_plan
-from studio_style_profiles import style_modifier_keys, style_prompt_text
+from studio_style_profiles import style_modifier_keys
 from studio_workflow_host import workflow_host_for
 from v3_clipart_flow import (
     ClipartFlowController, ClipartGenerationPage, ClipartPromptReviewPage,
@@ -32,6 +32,32 @@ from v3_provider_registry import (
 
 BRIEF_STEPS = (StepId.PROJECT, StepId.PROMPTS, StepId.PROMPT_REVIEW,
                StepId.GENERATION, StepId.PROCESSING_OPTIONS)
+
+
+class AutoClipartGenerationPage(ClipartGenerationPage):
+    """Show only model controls that affect the current collection prompts."""
+    show_primary_scope = True
+
+    def __init__(self, state, changed):
+        super().__init__(state, changed)
+        self.primary_model_label = self.primary_controls_container.layout().labelForField(self.model_combo)
+        self.reference_model_label = self.reference_controls_container.layout().labelForField(self.reference_model_combo)
+        self.refresh_from_state()
+
+    def refresh_from_state(self):
+        super().refresh_from_state()
+        text_count = sum(not entry.references for entry in self.data.prompts)
+        reference_count = len(self.data.prompts) - text_count
+        primary_form = self.primary_controls_container.layout()
+        for control in (self.model_combo, self.ratio_combo, self.resolution_combo):
+            control.setVisible(text_count > 0)
+            primary_form.labelForField(control).setVisible(text_count > 0)
+        self.primary_scope_label.setVisible(text_count > 0)
+        self.model_capability_label.setVisible(text_count > 0)
+        if self.show_ratio_preview:
+            self.ratio_preview.setVisible(text_count > 0)
+        self.primary_model_label.setText(f"Модель без референсов ({text_count})")
+        self.reference_model_label.setText(f"Модель с референсами ({reference_count})")
 
 
 class CollectionBrief(ClipartBuilderDialog):
@@ -50,16 +76,31 @@ class CollectionBrief(ClipartBuilderDialog):
         self.planning.configure_automatic()
         self.reference_editor.set_compact_mode()
         self.palette_reference_button.hide()
-        self.planning.reference_images = lambda: ()
-        self.planning.clear_reference_images = lambda: None
+        self.planning.send_references.show()
+        self.planning.reference_images = lambda: tuple(
+            ref['path'] for ref in self.reference_editor.value() if ref.get('enabled', True)
+        ) if self.planning.send_references.isChecked() else ()
+        self.planning.clear_reference_images = lambda: self.planning.send_references.setChecked(False)
         self.object_editor.hide()
-        edit_ideas = QPushButton("Изменить одну идею")
+        edit_ideas = QPushButton("Посмотреть и изменить идеи")
         edit_ideas.setCheckable(True)
         edit_ideas.toggled.connect(self.object_editor.setVisible)
         edit_ideas.toggled.connect(self.planning.one_button.setVisible)
+        edit_ideas.toggled.connect(lambda shown: edit_ideas.setText(
+            "Скрыть идеи" if shown else "Посмотреть и изменить идеи"))
+        def show_idea_controls(index):
+            edit_ideas.setVisible(index == 0)
+            self.object_editor.setVisible(index == 0 and edit_ideas.isChecked())
+        self.planning.tabs.currentChanged.connect(show_idea_controls)
         self.pages.widget(4).widget().layout().addWidget(edit_ideas)
         self.pages.widget(4).widget().layout().addStretch(1)
         self.planning.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        skip_references = QPushButton("Пропустить референсы")
+        skip_references.clicked.connect(self._skip_references)
+        reference_layout = self.pages.widget(2).widget().layout()
+        reference_layout.insertWidget(0, QLabel("Референсы необязательны. Выбранные стиль и палитра сохраняются."))
+        reference_layout.insertWidget(1, skip_references)
+        self.skip_references_button = skip_references
         form = QFormLayout()
         self.project_name = QLineEdit(state.common.project_name)
         self.project_name.setMaxLength(200)
@@ -83,6 +124,10 @@ class CollectionBrief(ClipartBuilderDialog):
     def _go_to_references(self):
         self.navigate_to(StepId.PROMPT_REVIEW)
 
+    def _skip_references(self):
+        self.reference_editor.disable_all()
+        self.navigate_to(StepId.GENERATION)
+
     def refresh_from_state(self):
         if self.workflow_state.current_step in BRIEF_STEPS:
             self.pages.setCurrentIndex(BRIEF_STEPS.index(self.workflow_state.current_step))
@@ -94,7 +139,7 @@ class CollectionBrief(ClipartBuilderDialog):
         recipe.theme = self.theme.text().strip()
         recipe.context = self.context.currentText().strip()
         recipe.motifs = [value.strip() for value in self.motifs.text().split(",") if value.strip()]
-        recipe.visual = {key: widget.currentText().strip() for key, widget in self.visual_fields.items()}
+        recipe.visual = self._visual_values()
         recipe.references = self.reference_editor.value()
         recipe.objects = self.object_editor.value()
         recipe.assistant = self.planning.selection()
@@ -106,12 +151,7 @@ class CollectionBrief(ClipartBuilderDialog):
             recipe.bundle_plan = propose_bundle_plan(recipe.objects, existing=recipe.bundle_plan)
         recipe.validate()
         generator = PromptGeneratorData.from_dict(self.data.prompt_generator.to_dict())
-        generator.style = "; ".join(filter(None, (
-            style_prompt_text(self.technique.currentText(), self.mood.currentText()),
-            self.line.currentText().strip(), self.material.currentText().strip(),
-            self.detail.currentText().strip(),
-        )))
-        generator.palette = self.palette.text().strip()
+        generator.style, generator.palette = self._effective_visual(recipe.references)
         generator.chroma_key_enabled = True
         if len(generator.style) > 4000:
             raise ValueError("Описание стиля слишком длинное: сократите его до 4000 символов")
@@ -142,11 +182,12 @@ class AutoClipartFlowController(ClipartFlowController):
         self.launch_page = QTabWidget()
         self.prompt_page = ClipartPromptReviewPage(self.shell.state, self.shell.mark_dirty)
         self.prompt_page.progress_label.hide()
-        self.generation_page = ClipartGenerationPage(self.shell.state, self.shell.mark_dirty)
+        self.generation_page = AutoClipartGenerationPage(self.shell.state, self.shell.mark_dirty)
         self._review_page = ClipartReviewRunPage(self.shell.state, fal_cost_refresh=self._refresh_fal_cost)
         self.launch_page.addTab(self.prompt_page, "Промпты")
         self.launch_page.addTab(self.generation_page, "Модель")
-        self.launch_page.addTab(self._review_page, "Проверка и стоимость")
+        self._review_page.setParent(self.launch_page)
+        self._review_page.hide()
         self._install_upscale_controls()
         self.launch_page.refresh_from_state = self._refresh_launch
         self.pages.register_instance(StepId.REVIEW_RUN, self.launch_page)
@@ -156,13 +197,10 @@ class AutoClipartFlowController(ClipartFlowController):
         self.run_queue.page.refresh_from_state()
         self.export_page = QWidget()
         layout = QVBoxLayout(self.export_page)
-        self.export_summary = QLabel()
-        self.export_summary.setWordWrap(True)
-        layout.addWidget(self.export_summary)
-        self.export_sets = QTreeWidget()
-        self.export_sets.setHeaderLabels(["Набор / изображение", "PNG"])
-        self.export_sets.setColumnWidth(0, 540)
-        layout.addWidget(self.export_sets, 1)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.export_panel = None
+        self.export_empty = QLabel('Нет готовых PNG. Вернитесь к проверке результатов.')
+        layout.addWidget(self.export_empty)
         self.export_page.refresh_from_state = self._refresh_export
         self.pages.register_instance(StepId.TRANSPARENCY, self.export_page)
         self.save_timer = QTimer(self.brief)
@@ -181,7 +219,8 @@ class AutoClipartFlowController(ClipartFlowController):
 
     def is_busy(self):
         session = self.run_queue.session
-        return bool((session and session.running) or self.brief.planning.pending is not None)
+        return bool((session and session.running) or self.brief.planning.pending is not None
+                    or (self.export_panel is not None and self.export_panel.worker is not None))
 
     def _autosave(self):
         if not self.shell.state.is_active or self.is_busy():
@@ -234,7 +273,7 @@ class AutoClipartFlowController(ClipartFlowController):
     def _restore_prompt_references(self):
         # Older compiled plans kept attachments in the recipe only. The recipe
         # owns reference participation; manual prompt text remains untouched.
-        references = [ref['path'] for ref in self.brief.reference_editor.value()]
+        references = list(self.brief.reference_editor.active_generation_paths())
         object_ids = {item['id'] for item in self.brief.object_editor.items}
         for prompt in self.shell.state.data.prompts:
             if prompt.object_id in object_ids:
@@ -331,23 +370,39 @@ class AutoClipartFlowController(ClipartFlowController):
         page = self.run_queue.page
         paths = page._export_paths()
         page._seed_bundle_membership()
-        self.export_sets.clear()
-        groups = {}
         membership = self.shell.state.data.export_membership
-        for path in paths:
-            for link in membership.get(str(path.resolve()), {}).get("memberships", []):
-                if link["included"]:
-                    group = groups.setdefault(link["set_id"], {"title": link["title"], "paths": []})
-                    group["paths"].append(path)
-        for group in groups.values():
-            row = QTreeWidgetItem([group["title"], str(len(group["paths"]))])
-            self.export_sets.addTopLevelItem(row)
-            for path in group["paths"]:
-                row.addChild(QTreeWidgetItem([path.name, "1"]))
-        self.export_summary.setText(
-            f"Готовых изображений: {len(paths)}\nPNG, обзорный лист, PDF Letter и ZIP для каждого набора."
-            if paths else "Нет готовых изображений для экспорта. Вернитесь к проверке результатов."
+        existing = self.export_panel
+        if existing is not None and existing.worker is not None:
+            return
+        if existing is not None and existing.paths == list(paths) \
+                and existing.saved_membership == membership:
+            return
+        if existing is not None:
+            existing.hide()
+            self.export_page.layout().removeWidget(existing)
+            existing.deleteLater()
+            self.export_panel = None
+        self.export_empty.setVisible(not bool(paths))
+        if not paths:
+            return
+        extension = page.results_extension
+        if extension is None:
+            return
+        session = self.run_queue.session
+        panel = extension.create_export_view(
+            self.export_page, self.shell.state, paths,
+            review_issues=page._bundle_export_issues(),
+            quality_reports=page._alpha_qc_reports(paths),
+            workspace=session.workspace_root if session is not None else None,
+            embedded=True,
+            on_membership_saved=page._save_export_membership,
+            on_fix_requested=page._request_quality_fix,
         )
+        if panel is None:
+            return
+        self.export_page.layout().addWidget(panel, 1)
+        self.export_panel = panel
+        panel.busy_changed.connect(self.shell.refresh)
 
     def navigate(self, direction):
         if self.is_busy():
@@ -385,9 +440,10 @@ class AutoClipartFlowController(ClipartFlowController):
                 if not recipe.objects or any(not item['name'].strip() for item in recipe.objects):
                     self.brief.planning.start(False)
                     return
-                prompts = compile_objects(recipe, generator)
-                for prompt in prompts:
-                    prompt.references = [ref['path'] for ref in recipe.references]
+                prompts = attach_reference_guidance(
+                    compile_objects(recipe, generator),
+                    self.brief.reference_editor.active_references(),
+                )
                 # Re-entering launch without editing the brief preserves manual prompt edits.
                 fingerprint = hashlib.sha256(json.dumps(
                     [recipe.to_dict(), generator.to_dict()], sort_keys=True,
@@ -415,7 +471,12 @@ class AutoClipartFlowController(ClipartFlowController):
                 prepared = build_clipart_run_request(self.shell.state)
                 references = {path for entry in prepared.generated_prompts for path in entry['references']}
                 snapshots = self.brief.reference_editor.generation_reference_snapshot(references)
-                message = f"Создать изображения для {len(self.shell.state.data.prompts)} объектов?\n{cost.summary}"
+                models = sorted({prepared.settings.get(
+                    'reference_generation_model' if entry['references'] else 'text_generation_model', ''
+                ) for entry in prepared.generated_prompts})
+                model_label = 'Модель' if len(models) == 1 else 'Модели'
+                message = (f"Создать изображения для {len(self.shell.state.data.prompts)} объектов?\n"
+                           f"{model_label}: {', '.join(models)}\n{cost.summary}")
                 if references:
                     message += '\nРеференсы будут переданы модели ' + self.shell.state.data.generation.reference_model
                     message += ':\n' + '\n'.join(Path(path).name for path in sorted(references))
@@ -429,8 +490,8 @@ class AutoClipartFlowController(ClipartFlowController):
                         self._reference_consent = None
                 return
             if index == 7:
-                self.run_queue.page._export_sets()
-                self._refresh_export()
+                if self.export_panel is not None:
+                    self.export_panel._export()
                 self.shell.mark_dirty()
                 return
             self._select_step(route[index + 1])
@@ -449,6 +510,11 @@ class AutoClipartFlowController(ClipartFlowController):
             return
         dialog = QDialog(self.run_queue.page)
         dialog.setWindowTitle("Проверка PNG")
+        dialog.setWindowFlags(
+            dialog.windowFlags()
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+        )
         dialog.resize(1080, 720)
         layout = QVBoxLayout(dialog)
         editor = ClipartTransparencyEditorPage()
@@ -475,7 +541,9 @@ class AutoClipartFlowController(ClipartFlowController):
             raise ValueError('Настройки изменились. Подтвердите запуск заново')
         references = {path for entry in request.generated_prompts for path in entry['references']}
         if not references:
-            return super().create_worker_for_request(request)
+            run = deepcopy(request)
+            run.settings['auto_clipart_sharp_fallback'] = True
+            return super().create_worker_for_request(run)
         if consent is None:
             raise ValueError('Подтвердите запуск с выбранными референсами заново')
         directory = TemporaryDirectory(prefix='vibix-reference-')
@@ -490,6 +558,7 @@ class AutoClipartFlowController(ClipartFlowController):
                 target.write_bytes(data)
                 copies[path] = str(target)
             run = deepcopy(request)
+            run.settings['auto_clipart_sharp_fallback'] = True
             for entry in run.generated_prompts:
                 entry['references'] = [copies[path] for path in entry['references']]
             worker = super().create_worker_for_request(run)
@@ -503,6 +572,20 @@ class AutoClipartFlowController(ClipartFlowController):
     def confirm_retry_request(self, request):
         self._reference_consent = None
         approved = deepcopy(request)
+        if approved.mode == "mode2_process" and approved.selected_files:
+            settings = approved.settings
+            paid = any(settings.get(flag) and settings.get(provider, "kie") in {"kie", "fal", "photoroom"}
+                       for flag, provider in (("upscale", "upscale_provider"),
+                                              ("upscale_after", "upscale_after_provider"),
+                                              ("remove_bg", "remove_bg_provider")))
+            message = f"Продолжить обработку сохранённых PNG: {len(approved.selected_files)}?\n"
+            message += "Повторной генерации изображений не будет.\n"
+            message += ("Оставшиеся внешние этапы могут потребовать оплаты; стоимость не рассчитана."
+                        if paid else "Обработка выполняется локально.")
+            return (QMessageBox.question(self.run_queue.page, 'Продолжить обработку', message,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
+                    and request == approved)
         references = {path for entry in approved.generated_prompts for path in entry['references']}
         try:
             snapshots = self.brief.reference_editor.generation_reference_snapshot(references)
@@ -557,7 +640,8 @@ class AutoClipartFlowController(ClipartFlowController):
             return
         self.shell.state.data.automatic["run"] = [
             {"status": item.status.value, "output_path": item.output_path or "", "attempts": item.attempts,
-             "editor_output_path": item.editor_output_path or ""}
+             "editor_output_path": item.editor_output_path or "",
+             "stage_statuses": item.saved_stages(), "source_path": item.source_path or ""}
             for item in session.items
         ]
         self.shell.state_changed.emit()
@@ -576,9 +660,15 @@ class AutoClipartFlowController(ClipartFlowController):
             item.status = status if status is RunItemStatus.SUCCEEDED else RunItemStatus.FAILED
             item.output_path = row["output_path"] or None
             item.editor_output_path = row.get("editor_output_path", "")
+            item.source_path = row.get("source_path", "")
             item.attempts = row["attempts"]
+            item.stage_statuses = dict(row.get("stage_statuses", {}))
             if item.status is RunItemStatus.FAILED:
-                item.short_message = "Запуск был прерван. Повтор может потребовать оплаты."
+                item.short_message = (
+                    "Файл сохранён для коррекции. Обработка не завершена; файл не готов к экспорту."
+                    if item.output_path or item.source_path else
+                    "Запуск был прерван. Повтор может потребовать оплаты."
+                )
         session.handle_finished()
         self.run_queue.session = session
         self.run_queue.page.set_session(session)

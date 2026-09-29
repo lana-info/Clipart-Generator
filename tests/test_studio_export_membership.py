@@ -14,6 +14,11 @@ CLIPART_EXTENSIONS = (ClipartProjectStateExtension(),)
 
 
 class MembershipTests(unittest.TestCase):
+    def test_deleted_last_set_keeps_asset_record_without_memberships(self):
+        value = validate_export_membership({'one.png': {'title': 'Mini', 'included': True}})
+        value['one.png']['memberships'].clear()
+        self.assertEqual(validate_export_membership(value), value)
+
     def test_draft_migration_backs_up_exact_original_once(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'draft.json'

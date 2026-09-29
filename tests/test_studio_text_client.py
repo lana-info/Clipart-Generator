@@ -31,8 +31,8 @@ class TextClientTests(unittest.TestCase):
         return response
 
     def test_catalog_has_only_approved_routes(self):
-        self.assertEqual(len(text_models_for('kie')), 1)
-        self.assertEqual(len(text_models_for('openrouter')), 3)
+        self.assertEqual(len(text_models_for('kie')), 2)
+        self.assertEqual(len(text_models_for('openrouter')), 9)
         self.assertTrue(resolve_text_model('openrouter', 'deepseek/deepseek-v4-flash-vision-exp').experimental)
         for provider, model in [('kie', 'openai/gpt-5-mini'), ('openrouter', 'openai/gpt-5.4-mini')]:
             with self.assertRaises(ValueError):
@@ -208,3 +208,23 @@ class TextClientTests(unittest.TestCase):
             ):
                 with self.subTest(extra=extra), self.assertRaises(TextGenerationError):
                     generate_plan(self.recipe, **self.args, **extra)
+
+
+def test_kie_claude_native_body_and_reply():
+    case = TextClientTests()
+    case.setUp()
+    with patch('studio_text_client.requests.post') as post:
+        case.mock_response(post, dict(stop_reason='end_turn', content=[
+            dict(type='thinking', thinking='private'),
+            dict(type='text', text=json.dumps(dict(items=case.rows)))]))
+        result = generate_plan(case.recipe, **(case.args | dict(provider='kie', model='claude-sonnet-4-6')))
+        body = post.call_args.kwargs['json']
+        assert post.call_args.args[0] == 'https://api.kie.ai/claude/v1/messages'
+        assert body['model'] == 'claude-sonnet-4-6'
+        assert body['max_tokens'] == 16000
+        assert body['messages'][0]['role'] == 'user'
+        assert 'provider' not in body
+        assert len(result['items']) == case.recipe.total
+    for reason in ('max_tokens', 'tool_use', 'refusal'):
+        with unittest.TestCase().assertRaises(TextGenerationError):
+            parse_text_response(dict(stop_reason=reason, content=[dict(type='text', text='{}')]), 'kie')

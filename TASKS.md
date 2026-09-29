@@ -1,5 +1,41 @@
 # TASKS
 
+- [x] Address independent P1 review: block close/project switch during embedded
+  ZIP export; recover saved generated PNGs without repeating generation, retain
+  source paths and completed-stage provenance across retries and reopening.
+
+- [x] Fix independent review findings: incomplete background removal/upscale
+  must not become ready on PNG save; preserve correction access and failed
+  status across reopening. Include provider/model/request count in paid quote.
+
+- [x] Per final owner decision, retain compact prompts without colour badges;
+  verify hidden background/reference instructions survive edits without duplication.
+
+## Text model picker and requested follow-ups, 2026-09-29
+
+- [x] Add Ideas/Model text tabs with provider/model dropdowns and additional models.
+- [x] Preserve saved automatic-mode selection; no generation on model selection.
+- [x] Explicit per-run active-reference image consent and capability checks.
+- [x] Connect KIE Claude text requests, native response parsing and dated estimate.
+- [x] Confirm Gemini KIE numeric pricing and documented OpenAI-compatible route.
+- [ ] Replace dated KIE estimates with maintained tariff retrieval before
+  expiry on 2026-10-29; never silently extend unverified prices.
+- [ ] Native Windows acceptance and owner-authorized live API compatibility checks.
+- [x] Owner chose to remove the texture control entirely; ignore legacy material
+  values in new editor snapshots and prompts, preserving style and object details.
+- [x] Owner approved manual pen with double-click closure; implement and verify
+  remove/keep inside, point/mask undo, redo and keyboard zoom (74 tests passed).
+- [x] Processing-module batch local cutout via U2Net, shared hard-mask helper,
+  source preservation, failure/cancel guards and saved editor-copy handoff.
+- [x] Direct shortcut from generated results to Processing: selected saved PNG,
+  preserve original project, no automatic processing or overwrite.
+- [x] Remove direct automatic-flow dependency on export UI: create embedded and
+  modal views through RunResultsExtension; architecture baseline passes unchanged.
+- [x] Run integrated isolated offline suite; align legacy texture acceptance
+  with owner decision and verify persistence without reintroducing the field.
+
+Evidence: docs/ui/3.2/text-model-picker/README.md. No build or paid call performed.
+
 ## Inline transparency tools, 2026-09-23
 
 - [x] Inspect modal contour flow and prepare full-context brush/Bezier mockups.
@@ -2802,3 +2838,36 @@ Status: Implemented and offline verified; live quality and packaging pending
   automatic launch screen at 1120x780 and test model selection after reopen.
 - [ ] Check actual upscaled PNG quality with the selected provider and prepare
   updated packaging when separately authorized.
+
+## Auto Clipart style/reference UX, 2026-09-28
+
+- [x] Owner approved style/palette/object mockups and explicit reference source/skip states.
+- [x] Implement style samples, combined palette previews, reference source controls,
+  skip action, concise planning quote and next-step guidance.
+- [x] Remove the stale launch cost tab; show only applicable model controls and quote the effective model and current estimate before generation.
+- [x] Run focused offline tests and compare actual 1120×780 Qt screens with mockups.
+- [x] Add a native maximize/restore button to the transparency editor window;
+  keep its tools visible in the maximized state.
+- [x] When the image model ignores the requested key color, try an automatic
+  local U2Net cutout with a binary, inset alpha edge; verify on the two supplied
+  PNGs and retain manual status if the fallback fails.
+- [ ] Run native Windows acceptance for packaged style assets and the full workflow
+  before release. No build or paid provider call was authorized in this task.
+
+Evidence and remaining limitations: `docs/ui/3.2/style-reference-ux/README.md`.
+
+## Auto Clipart export workspace, 2026-09-29
+
+- [x] Run the formerly skipped real Real-ESRGAN 2x/4x acceptance locally using
+  the official Ubuntu models and temporary software Vulkan; alpha/layout passed.
+
+- [x] Owner approved a single step-8 export page with hover previews, set
+  editing, creation and deletion.
+- [x] Embed the existing quality/export flow into step 8 and remove the
+  duplicate read-only tree; preserve project membership across reopening.
+- [x] Allow the last set to be deleted without deleting PNG files or silently
+  recreating it from the automatic plan.
+- [x] Name and rename sets; derive each ZIP filename from the set title.
+- [ ] Verify the full page and final ZIP workflow on native Windows before release.
+
+Evidence: `docs/ui/3.2/export-workspace/README.md`.

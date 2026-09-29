@@ -68,14 +68,11 @@ class BuilderTests(unittest.TestCase):
         )
         dialog.close()
 
-    def test_style_library_recommends_teddy_christmas_and_filters_categories(self):
+    def test_style_library_has_previews_and_filters_categories(self):
         state = ProjectState()
         dialog = ClipartBuilderDialog(state.clipart)
-        dialog.theme.setText('Teddy Bear')
-        dialog.context.setCurrentText('Christmas')
-        dialog._refresh_style_recommendations()
-        self.assertEqual(dialog.recommended_style_cards[0]['key'], 'watercolor')
-        self.assertIn('scandinavian-folk', [card['key'] for card in dialog.recommended_style_cards])
+        self.assertFalse(hasattr(dialog, 'recommended_style_grid'))
+        self.assertTrue(all(not card['preview'].pixmap().isNull() for card in dialog.style_cards))
         dialog.style_category.setCurrentText('Персонажи')
         dialog._refresh_style_library()
         self.assertTrue(dialog.style_cards)
@@ -131,6 +128,9 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(dialog.recommended_palette_cards[0]['key'], 'holiday-christmas')
         self.assertTrue(dialog.palette_cards)
         self.assertTrue(all(len(card['colors']) == 5 for card in dialog.palette_cards))
+        from studio_clipart_builder_ui import PalettePreview
+        self.assertTrue(all(card['widget'].findChild(PalettePreview) is not None
+                            for card in dialog.palette_cards + dialog.recommended_palette_cards))
         self.assertEqual(dialog.palette_reference_button.text(), 'Взять из референса')
         dialog.close()
 
@@ -177,3 +177,20 @@ class BuilderTests(unittest.TestCase):
         dialog._apply()
         self.assertIsNone(state.clipart.recipe)
         dialog.close()
+
+
+def test_texture_control_is_removed_and_legacy_texture_does_not_reach_prompts():
+    app = QApplication.instance() or QApplication([])
+    from studio_clipart_recipe import ClipartRecipe
+    state = ProjectState()
+    state.clipart.recipe = ClipartRecipe(theme='Мишки', visual={'technique': 'Акварель', 'material': 'Бумага'}).to_dict()
+    dialog = ClipartBuilderDialog(state.clipart)
+    assert 'material' not in dialog.visual_fields
+    assert not hasattr(dialog, 'material')
+    assert dialog._visual_values()['material'] == ''
+    assert dialog.technique.currentText() == 'Акварель'
+    dialog._apply()
+    assert state.clipart.recipe['visual']['material'] == ''
+    assert 'Без дополнительной фактуры' not in state.clipart.prompt_generator.style
+    dialog.close()
+    app.processEvents()

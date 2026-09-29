@@ -153,6 +153,55 @@ def test_removed_reference_after_legacy_reopen_cannot_be_sent(workspace):
     factory.assert_not_called()
 
 
+def test_skip_references_keeps_files_but_excludes_them_from_generation(workspace):
+    view, controller, factory, _, reference = workspace
+    controller._select_step(StepId.PROMPT_REVIEW)
+    assert not controller.brief.reference_editor.style_from_reference.isHidden()
+    assert not controller.brief.reference_editor.palette_from_reference.isHidden()
+    controller.brief.skip_references_button.click()
+    assert view.project_state.current_step is StepId.GENERATION
+    assert reference.exists()
+    assert controller.brief.reference_editor.active_generation_paths() == ()
+    controller.navigate(1)
+    controller.navigate(1)
+    assert view.project_state.current_step is StepId.REVIEW_RUN
+    request = build_clipart_run_request(controller.shell.state)
+    assert all(not item['references'] for item in request.generated_prompts)
+    factory.assert_not_called()
+
+
+def test_launch_uses_selected_reference_model_and_current_quote(workspace, monkeypatch):
+    from v3_clipart_flow import estimate_clipart_cost
+
+    view, controller, factory, _, _ = workspace
+    assert controller.launch_page.count() == 2
+    assert [controller.launch_page.tabText(index) for index in range(2)] == ["Промпты", "Модель"]
+    controller.generation_page.refresh_from_state()
+    assert controller.generation_page.model_combo.isHidden()
+    assert not controller.generation_page.variants_spin.isHidden()
+    assert not controller.generation_page.reference_controls_container.isHidden()
+    assert '2' in controller.generation_page.reference_model_label.text()
+
+    models = controller.generation_page.reference_model_combo
+    models.setCurrentIndex(models.findData('gpt-image-2'))
+    gpt_cost = estimate_clipart_cost(controller.shell.state)
+    models.setCurrentIndex(models.findData('nano-banana-2'))
+    banana_cost = estimate_clipart_cost(controller.shell.state)
+    assert banana_cost.generation_usd != gpt_cost.generation_usd
+
+    quote = []
+    def decline(*args):
+        quote.append(args[2])
+        return QMessageBox.StandardButton.No
+    monkeypatch.setattr(QMessageBox, 'question', decline)
+    controller.navigate(1)
+    assert view.project_state.current_step is StepId.REVIEW_RUN
+    assert len(quote) == 1
+    assert 'nano-banana-2' in quote[0]
+    assert banana_cost.summary in quote[0]
+    factory.assert_not_called()
+
+
 def failed_session(controller, tmp_path):
     session = controller.run_queue.start_new(build_clipart_run_request(controller.shell.state))
     session.items[0].status = RunItemStatus.SUCCEEDED

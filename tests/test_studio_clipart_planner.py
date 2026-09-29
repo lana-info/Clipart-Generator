@@ -103,3 +103,15 @@ class PlannerTests(unittest.TestCase):
         request = planning_request(self.recipe)
         self.assertEqual(request['reference_observations'], [dict(roles=['mood'], notes='Радостное')])
         self.assertNotIn('/private', str(request))
+
+    def test_reference_style_replaces_planning_style_only_while_enabled(self):
+        self.recipe.visual = {'technique': 'Акварель'}
+        self.recipe.references = [dict(path='/private/style.png', roles=['technique'],
+                                       notes='Тонкие линии', enabled=True)]
+        request = planning_request(self.recipe)
+        self.assertIsNone(request['style'])
+        self.assertEqual(request['brief']['visual']['technique'], '')
+        self.recipe.references[0]['enabled'] = False
+        request = planning_request(self.recipe)
+        self.assertEqual(request['style']['key'], 'watercolor')
+        self.assertEqual(request['reference_observations'], [])

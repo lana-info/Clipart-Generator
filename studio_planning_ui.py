@@ -5,11 +5,11 @@ import copy
 import json
 
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QLabel, QMessageBox
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QPushButton, QLabel, QMessageBox, QTabWidget, QCheckBox
 
-from studio_text_models import text_models_for
+from studio_text_models import text_models_for, resolve_text_model
 from studio_text_client import generate_plan, TextGenerationError
-from studio_text_pricing import fetch_text_model_info
+from studio_text_pricing import fetch_text_model_info, fetch_kie_text_model_info
 from studio_clipart_planner import planning_request, apply_suggestions
 
 
@@ -33,8 +33,26 @@ class PlanningWorker(QRunnable):
         self.signals.completed.emit(value, error)
 
 
+def confirm_paid_quote(parent, text):
+    dialog = QMessageBox(parent)
+    dialog.setWindowTitle('Платный подбор')
+    dialog.setIcon(QMessageBox.Icon.Question)
+    dialog.setText(text)
+    launch = dialog.addButton('Запустить', QMessageBox.ButtonRole.AcceptRole)
+    cancel = dialog.addButton('Отмена', QMessageBox.ButtonRole.RejectRole)
+    dialog.setDefaultButton(cancel)
+    dialog.exec()
+    return dialog.clickedButton() is launch
+
+
 class PlanningPanel(QWidget):
     busy_changed = pyqtSignal()
+
+    @staticmethod
+    def automatic_ready_text(count):
+        return (f'Готово: подготовлено {count} идей. Нажмите «Далее», чтобы перейти к промптам. '
+                'Чтобы проверить или поправить идеи, откройте их список.')
+
     def __init__(self, snapshot, editor, selection=None, parent=None, reference_images=None, clear_reference_images=None):
         super().__init__(parent)
         self.snapshot, self.editor = snapshot, editor
@@ -44,14 +62,41 @@ class PlanningPanel(QWidget):
         self.pending = None
         self.worker = None
         root = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        self.ideas_page = QWidget()
+        self.model_page = QWidget()
+        ideas_layout = QVBoxLayout(self.ideas_page)
+        model_layout = QVBoxLayout(self.model_page)
+        self.tabs.addTab(self.ideas_page, 'Идеи')
+        self.tabs.addTab(self.model_page, 'Модель текста')
+        root.addWidget(self.tabs)
+        model_layout.addWidget(QLabel('Модель для идей и описаний объектов'))
         row = QHBoxLayout()
         self.provider = QComboBox()
         for title, key in [('KIE', 'kie'), ('OpenRouter', 'openrouter')]:
             self.provider.addItem(title, key)
         self.model = QComboBox()
+        self.model.setMinimumContentsLength(22)
+        self.model.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.provider.setAccessibleName('Текстовый сервис')
+        self.model.setAccessibleName('Текстовая модель')
         row.addWidget(self.provider)
         row.addWidget(self.model, 1)
-        root.addLayout(row)
+        row.insertWidget(0, QLabel('Сервис'))
+        row.insertWidget(2, QLabel('Модель'))
+        model_layout.addLayout(row)
+        self.model_note = QLabel()
+        self.model_note.setWordWrap(True)
+        model_layout.addWidget(self.model_note)
+        note = QLabel('Стиль, палитра и требования к фону сохраняются.\n'
+                      'Стоимость появится перед запуском. Смена модели не запускает генерацию.')
+        note.setWordWrap(True)
+        model_layout.addWidget(note)
+        self.send_references = QCheckBox('Передать активные референсы модели для этого подбора')
+        self.send_references.hide()
+        self.send_references.toggled.connect(self._model_changed)
+        model_layout.addWidget(self.send_references)
+        self.model.currentIndexChanged.connect(self._model_changed)
         self.provider.currentIndexChanged.connect(self._models)
         self._models()
         self.provider.setCurrentIndex(1)
@@ -65,20 +110,21 @@ class PlanningPanel(QWidget):
         self.cancel_button.setEnabled(False)
         for button in (self.all_button, self.one_button, self.cancel_button):
             actions.addWidget(button)
-        root.addLayout(actions)
+        self.selected_model_label = QLabel()
+        self.selected_model_label.setWordWrap(True)
+        ideas_layout.addWidget(self.selected_model_label)
+        ideas_layout.addLayout(actions)
         self.status = QLabel('Подбор запускается только после подтверждения. По умолчанию изображения референсов не отправляются; передача возможна только по явному выбору пользователя.')
         self.status.setWordWrap(True)
-        root.addWidget(self.status)
+        ideas_layout.addWidget(self.status)
+        self._model_changed()
+        self.tabs.currentChanged.connect(lambda _index: self._model_changed())
         self.all_button.clicked.connect(lambda: self.start(False))
         self.one_button.clicked.connect(lambda: self.start(True))
         self.cancel_button.clicked.connect(self.cancel)
 
     def configure_automatic(self):
         self.automatic = True
-        if self.provider.currentData() != 'openrouter':
-            self.provider.setCurrentIndex(self.provider.findData('openrouter'))
-        self.provider.hide()
-        self.model.hide()
         self.all_button.setText('Подготовить набор')
         self.all_button.setStyleSheet('background:#20c9b7;color:#071d1a;min-height:36px;font-weight:600')
         self.one_button.setText('Перегенерировать эту идею')
@@ -87,19 +133,42 @@ class PlanningPanel(QWidget):
         self.cancel_button.hide()
         ready = sum(bool(item.get('name', '').strip()) for item in self.editor.items)
         total = len(self.editor.items)
-        self.status.setText(f'Подготовлено {ready} из {total}. Можно перейти к промптам.'
+        self.status.setText(self.automatic_ready_text(ready)
                             if total and ready == total else 'Набор ещё не подготовлен')
 
     def _models(self):
         self.model.clear()
+        additional_shown = False
         for route in text_models_for(self.provider.currentData()):
+            if route.additional and not additional_shown:
+                self.model.addItem('Другие модели', None)
+                self.model.model().item(self.model.count() - 1).setEnabled(False)
+                additional_shown = True
             self.model.addItem(route.label + (' · Experimental' if route.experimental else ''), route.model)
+
+    def _model_changed(self, *_args):
+        if not self.model.currentData():
+            return
+        route = resolve_text_model(self.provider.currentData(), self.model.currentData())
+        capability = 'Понимает изображения' if route.accepts_images else 'Только текст в этом подключении'
+        self.model_note.setText(capability + ('. ' + route.description if route.description else ''))
+        if self.provider.currentData() == 'kie':
+            self.model_note.setText(self.model_note.text() + '\nТариф Claude сверён 29.09.2026; итоговая сумма может отличаться.')
+        if hasattr(self, 'send_references'):
+            for index in range(self.model.count()):
+                model = self.model.itemData(index)
+                if model:
+                    candidate = resolve_text_model(self.provider.currentData(), model)
+                    self.model.model().item(index).setEnabled(
+                        not self.send_references.isChecked() or candidate.accepts_images)
+        if hasattr(self, 'selected_model_label'):
+            self.selected_model_label.setText(f'{self.provider.currentText()} · {route.label}')
 
     def selection(self):
         return dict(provider=self.provider.currentData(), model=self.model.currentData())
 
     def _busy(self, busy):
-        for widget in (self.provider, self.model, self.all_button, self.one_button):
+        for widget in (self.provider, self.model, self.all_button, self.one_button, self.send_references):
             widget.setEnabled(not busy)
         self.cancel_button.setEnabled(busy)
         if getattr(self, 'automatic', False):
@@ -122,9 +191,6 @@ class PlanningPanel(QWidget):
         if self.pending is not None:
             return
         selection = self.selection()
-        if selection['provider'] == 'kie':
-            self.status.setText('KIE выбран. Платный подбор пока недоступен: тариф и ограничение расходов ещё не подтверждены.')
-            return
         try:
             recipe, palette = self.snapshot()
             ids = None
@@ -141,6 +207,8 @@ class PlanningPanel(QWidget):
                    for batch_request in batch_requests):
                 raise ValueError('Сократите описание набора перед подбором')
             image_paths = tuple(str(Path(path).resolve()) for path in self.reference_images())
+            if image_paths and not resolve_text_model(**selection).accepts_images:
+                raise ValueError('Этому подключению доступны только текстовые признаки. Выберите модель OpenRouter для передачи изображений.')
             if len(image_paths) > 4:
                 raise ValueError('Для одного AI-подбора можно передать до 4 изображений-референсов')
             reference_hashes = {}
@@ -157,16 +225,16 @@ class PlanningPanel(QWidget):
                     raise ValueError('Общий размер изображений-референсов превышает 20 МБ')
             reference_snapshot = copy.deepcopy(recipe.references) if image_paths else None
             from v3_api_settings import load_credentials
-            key = load_credentials().get('openrouter_api_key', '').strip()
+            key = load_credentials().get(selection['provider'] + '_api_key', '').strip()
             if not key:
-                raise ValueError('Добавьте ключ OpenRouter в настройках API')
+                raise ValueError(f"Добавьте ключ {self.provider.currentText()} в настройках API")
         except ValueError as exc:
             self.status.setText(str(exc))
             return
         token = Event()
         self.pending = token
         self._busy(True)
-        self.status.setText('Проверяю текущий тариф. Генерация ещё не запущена.')
+        self.status.setText('Рассчитываю ориентировочную стоимость. Генерация ещё не запущена.')
 
         def current_matches_request():
             current, current_palette = self.snapshot()
@@ -209,23 +277,21 @@ class PlanningPanel(QWidget):
                        if len(batches) > 1 else '')
                     + 'Стоимость изображений может увеличить итог.\n'
                 )
+            cost_subject = 'запроса' if len(batches) == 1 else 'подбора'
+            route = resolve_text_model(**selection)
+            provider_label = 'KIE' if selection['provider'] == 'kie' else 'OpenRouter'
             text = (
-                f"{self.model.currentText()} · OpenRouter\n"
-                f"Идей: {len(request['targets'])}\n"
-                f"Запросов: {len(batches)} (не более 80 идей в каждом)\n"
-                f"Тариф за 1 млн токенов: вход ${tariff['prompt']:g}, выход ${tariff['completion']:g}.\n"
-                f"Ориентир с резервом на все ответы: ${estimate:.4f}. Это оценка, не денежный лимит; комиссия не включена.\n"
-                + image_note
-                + 'Запросы выполняются последовательно без автоповторов. Уже отправленный запрос может быть оплачен даже при ошибке. Запустить?'
-            )
-            decision = QMessageBox.question(
-                self, 'Платный подбор', text,
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
+                f'Ориентировочная стоимость {cost_subject}: ${estimate:.4f}.\n'
+                f'{provider_label} · {route.label}\n'
+                f'Запросов: {len(batches)}.\n\n'
             )
             if image_paths:
+                text += image_note + '\n'
+            text += 'Запустить подбор?'
+            decision = confirm_paid_quote(self, text)
+            if image_paths:
                 self.clear_reference_images()
-            if decision != QMessageBox.StandardButton.Yes:
+            if not decision:
                 self.cancel()
                 return
             if token.is_set():
@@ -250,7 +316,8 @@ class PlanningPanel(QWidget):
                         )
                         self.editor.items = items
                         self.editor.refresh()
-                        self._finish(f'Подготовлено {len(items)} идей. Можно перейти к промптам.')
+                        self._finish(self.automatic_ready_text(len(items)) if getattr(self, 'automatic', False)
+                                     else f'Подготовлено {len(items)} идей. Можно перейти к промптам.')
                     except ValueError as exc:
                         self._finish(f'{exc} Набор не изменён.')
                     return
@@ -272,7 +339,8 @@ class PlanningPanel(QWidget):
                     return generate_plan(
                         batch_recipe, palette=palette, replace_ids=batch, **selection,
                         api_key=key, approved=True,
-                        max_price={name: tariff[name] for name in ('prompt', 'completion', 'request')},
+                        max_price=({name: tariff[name] for name in ('prompt', 'completion', 'request')}
+                                   if selection['provider'] == 'openrouter' else None),
                         reference_images=image_paths,
                         reference_images_approved=bool(image_paths),
                         reference_image_hashes=reference_hashes,
@@ -311,7 +379,9 @@ class PlanningPanel(QWidget):
 
             run_batch(0)
 
-        self._run(lambda: fetch_text_model_info(selection['model'], key), quoted)
+        self._run(lambda: (fetch_text_model_info(selection['model'], key)
+                          if selection['provider'] == 'openrouter'
+                          else fetch_kie_text_model_info(selection['model'])), quoted)
 
     def _finish(self, text):
         self.pending = None
