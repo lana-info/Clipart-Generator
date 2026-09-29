@@ -182,12 +182,16 @@ jobs:
         shell: powershell
         run: |
           $evidenceDir = Join-Path $env:GITHUB_WORKSPACE "release\ui-evidence"
-          powershell -ExecutionPolicy Bypass -File .\scripts\verify_installed_windows_artifact.ps1 `
-            -InstallerPath ".\release\$env:INSTALLER_BASENAME.exe" `
-            -ExpectedAppVersion "${{ steps.version.outputs.app_version }}" `
-            -EvidenceDir $evidenceDir `
-            -ExpectedProfile $env:BUILD_PROFILE `
-            -PreviousInstallerPath "$env:PREVIOUS_INSTALLER_PATH"
+          $verifyArguments = @{
+            InstallerPath = ".\release\$env:INSTALLER_BASENAME.exe"
+            ExpectedAppVersion = "${{ steps.version.outputs.app_version }}"
+            EvidenceDir = $evidenceDir
+            ExpectedProfile = $env:BUILD_PROFILE
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:PREVIOUS_INSTALLER_PATH)) {
+            $verifyArguments.PreviousInstallerPath = $env:PREVIOUS_INSTALLER_PATH
+          }
+          & .\scripts\verify_installed_windows_artifact.ps1 @verifyArguments
 
       - name: Calculate setup hash
         shell: powershell

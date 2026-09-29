@@ -1,4 +1,7 @@
 import unittest
+import os
+import json
+import textwrap
 import shutil
 import subprocess
 import tempfile
@@ -39,6 +42,39 @@ class WindowsInstallerContractTests(unittest.TestCase):
             self.assertTrue((internal_dir / "onnxruntime.dll").exists())
             self.assertFalse((nested_dir / "MSVCP140.dll").exists())
             self.assertTrue(hashed_runtime.exists())
+
+    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is not available")
+    def test_installed_verification_binds_optional_previous_installer(self):
+        workflow = Path(".github/workflows/release-multi-platform.yml").read_text()
+        step = workflow.split("- name: Verify installed Windows application", 1)[1]
+        body = textwrap.dedent(step.split("run: |", 1)[1].split("- name: Calculate setup hash", 1)[0])
+        body = body.replace("${{ steps.version.outputs.app_version }}", "3.2.7")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "scripts").mkdir()
+            (root / "scripts" / "verify_installed_windows_artifact.ps1").write_text(
+                'param([string]$InstallerPath,[string]$ExpectedAppVersion,'
+                '[string]$EvidenceDir,[string]$ExpectedProfile,[string]$PreviousInstallerPath)'
+                '\n$PSBoundParameters | ConvertTo-Json -Compress'
+            )
+            script = root / "invoke.ps1"
+            script.write_text("$ErrorActionPreference = 'Stop'\n" + body)
+            for previous in ("", str(root / "old installer.exe")):
+                with self.subTest(previous=bool(previous)):
+                    result = subprocess.run(
+                        [shutil.which("pwsh"), "-NoProfile", "-File", str(script)],
+                        cwd=root, env=dict(os.environ, GITHUB_WORKSPACE=temp,
+                            INSTALLER_BASENAME="VibixImages-Setup-3.2.7",
+                            BUILD_PROFILE="production", PREVIOUS_INSTALLER_PATH=previous),
+                        check=True, capture_output=True, text=True,
+                    )
+                    values = json.loads(result.stdout)
+                    self.assertEqual(values["ExpectedAppVersion"], "3.2.7")
+                    self.assertEqual(values["ExpectedProfile"], "production")
+                    if previous:
+                        self.assertEqual(values["PreviousInstallerPath"], previous)
+                    else:
+                        self.assertNotIn("PreviousInstallerPath", values)
 
     def test_upgrade_removes_stale_native_runtime_before_copy(self):
         installer = Path("installer.iss").read_text(encoding="utf-8")

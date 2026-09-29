@@ -1,5 +1,16 @@
 # Project state
 
+## Windows verifier argument fix, 2026-09-29
+
+Source92e53fd pushed; Desktop CI36611242274 passed. Windows run36611260269
+built the app and installer but could not start installed verification: empty
+PreviousInstallerPath was lost by the nested native PowerShell invocation.
+Use direct script invocation with named splatting; include the optional path
+only when nonblank. Actual PowerShell regression tests bind both absent and
+space-containing paths. Installer/acceptance/release checks:27 passed,6 subtests.
+No application source changed. New Windows3.2.7 run required; failed artifact
+was not published. Paid API and legacy upgrade acceptance remain unverified.
+
 ## Windows 3.2.7 preparation authorized, 2026-09-29
 
 Owner explicitly requested proceeding with commit/build after the follow-up report.
