@@ -180,6 +180,7 @@ class ProcessingPipelineEditor(QScrollArea):
         title: str,
         description: str,
         include_cleanup: bool,
+        show_background_controls: bool = False,
         require_operation: bool = True,
         allowed_operations: Sequence[str] | None = None,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
@@ -208,6 +209,7 @@ class ProcessingPipelineEditor(QScrollArea):
         self.state_owner = state_owner
         self.changed = changed
         self.include_cleanup = include_cleanup
+        self.show_background_controls = show_background_controls
         self.require_operation = require_operation
         self.allowed_operations = (
             None if allowed_operations is None else frozenset(allowed_operations)
@@ -368,7 +370,8 @@ class ProcessingPipelineEditor(QScrollArea):
             advanced_form,
             "chroma_key_color",
             "Chroma Key цвет",
-            CHROMA_KEY_COLOR_OPTIONS,
+            (("Авто", "auto"),) + CHROMA_KEY_COLOR_OPTIONS
+            if self.show_background_controls else CHROMA_KEY_COLOR_OPTIONS,
             operations,
         )
         self._add_combo(
@@ -662,6 +665,12 @@ class ProcessingPipelineEditor(QScrollArea):
         index = control.findData(getattr(operations, name))
         control.setCurrentIndex(index if index >= 0 else 0)
         control.setAccessibleName(label)
+        if self.show_background_controls:
+            control.setMinimumContentsLength(12)
+            control.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            control.setMaximumWidth(360 if "model" in name else 240)
+            control.setToolTip(control.currentText())
+            control.currentTextChanged.connect(control.setToolTip)
         form.addRow(label, control)
         self.operation_widgets[name] = control
 
@@ -869,8 +878,9 @@ class ProcessingPipelineEditor(QScrollArea):
         }
         for name, visible in visibility.items():
             self._set_control_visible(name, visible)
-        for name in self._BACKGROUND_INTERNAL_CONTROLS:
-            self._set_control_visible(name, False)
+        if not self.show_background_controls:
+            for name in self._BACKGROUND_INTERNAL_CONTROLS:
+                self._set_control_visible(name, False)
         self._refresh_stage_visibility()
 
     def _refresh_stage_visibility(self) -> None:
@@ -963,7 +973,8 @@ class ProcessingPipelineEditor(QScrollArea):
             self._set_control_visible(
                 control_name,
                 operation_name in self.allowed_operations
-                and control_name not in self._BACKGROUND_INTERNAL_CONTROLS
+                and (self.show_background_controls
+                     or control_name not in self._BACKGROUND_INTERNAL_CONTROLS)
                 and (provider_visible is None or not provider_visible.isHidden()),
             )
         cleanup_visible = "metadata_cleanup" in self.allowed_operations

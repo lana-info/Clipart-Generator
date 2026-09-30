@@ -15,12 +15,60 @@ from v3_processing_editor import (
 )
 from v3_pinterest_flow import PinterestProcessingPage, _pinterest_project_adapter
 from v3_project_state import ProjectMode, ProjectState
+from v3_processing_flow import ProcessingPipelinePage
 
 
 class ProcessingEditorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.app = QApplication.instance() or QApplication([])
+
+    def test_processing_restores_method_choice_and_provider_specific_controls(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        apply_processing_recipe(state, "sharp_cutout")
+        editor = ProcessingPipelinePage(state, lambda: None)
+        widgets = editor.operation_widgets
+        provider = widgets["remove_background_provider"]
+        self.assertFalse(provider.isHidden())
+        self.assertEqual(provider.currentData(), "local_rembg")
+        self.assertFalse(widgets["local_rembg_model"].isHidden())
+
+        self.assertEqual(widgets["local_rembg_model"].currentData(), "u2net")
+        for method, visible_control in (
+            ("local_chroma_key", "chroma_key_color"),
+            ("local_ben2", "local_ben2_alpha_threshold"),
+            ("fal", "fal_remove_bg_model"),
+            ("kie", "kie_remove_bg_model"),
+            ("local_rembg", "local_rembg_model"),
+        ):
+            with self.subTest(method=method):
+                index = provider.findData(method)
+                self.assertGreaterEqual(index, 0)
+                provider.setCurrentIndex(index)
+                self.assertEqual(state.processing.operations.remove_background_provider, method)
+                self.assertFalse(widgets[visible_control].isHidden())
+                self.assertEqual(widgets["chroma_key_color"].isHidden(), method != "local_chroma_key")
+                self.assertEqual(widgets["local_rembg_model"].isHidden(), method != "local_rembg")
+        widgets["remove_background"].setChecked(False)
+        self.assertTrue(provider.isHidden())
+        self.assertTrue(widgets["local_rembg_model"].isHidden())
+        widgets["remove_background"].setChecked(True)
+        self.assertFalse(provider.isHidden())
+        self.assertFalse(widgets["local_rembg_model"].isHidden())
+
+    def test_processing_auto_color_survives_project_roundtrip(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        self.assertEqual(state.processing.operations.chroma_key_color, "auto")
+        state.processing.operations.remove_background = True
+        state.processing.operations.remove_background_provider = "local_chroma_key"
+        restored = ProjectState.from_dict(state.to_dict())
+        editor = ProcessingPipelinePage(restored, lambda: None)
+        color = editor.operation_widgets["chroma_key_color"]
+        self.assertEqual(color.currentData(), "auto")
+        self.assertLessEqual(color.maximumWidth(), 240)
+        color.setCurrentIndex(color.findData("green"))
+        restored = ProjectState.from_dict(restored.to_dict())
+        self.assertEqual(restored.processing.operations.chroma_key_color, "green")
 
     def test_recipe_model_applies_shared_presets(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)

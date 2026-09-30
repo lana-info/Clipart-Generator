@@ -645,7 +645,7 @@ class ImageOperationData:
             maximum=3,
         )
         self.chroma_key_color = _text(self.chroma_key_color, limit=20).lower()
-        if self.chroma_key_color not in KEY_COLORS:
+        if self.chroma_key_color not in (*KEY_COLORS, "auto"):
             self.chroma_key_color = "blue"
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         self.chroma_key_tolerance = _bounded_int(
@@ -1304,7 +1304,9 @@ class ProcessingModeData:
     recipe: str = "custom"
     overwrite_existing: bool = False
     deep_watermark_consent: bool = False
-    operations: ImageOperationData = field(default_factory=ImageOperationData)
+    operations: ImageOperationData = field(
+        default_factory=lambda: ImageOperationData(chroma_key_color="auto")
+    )
     verification_records: list[VerificationRecordData] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -1338,7 +1340,9 @@ class ProcessingModeData:
             recipe=data.get("recipe", "custom"),
             overwrite_existing=bool(data.get("overwrite_existing", False)),
             deep_watermark_consent=bool(data.get("deep_watermark_consent", False)),
-            operations=ImageOperationData.from_dict(data.get("operations", {})),
+            operations=ImageOperationData.from_dict(
+                data.get("operations", {"chroma_key_color": "auto"})
+            ),
             verification_records=_verification_records(
                 data.get("verification_records", [])
             ),

@@ -417,8 +417,13 @@ class V3ProcessingFlowTests(unittest.TestCase):
             operations.upscale_before = False
             operations.unsharp = False
             operations.remove_background = True
-            operations.remove_background_provider = "local_chroma_key"
-            operations.chroma_key_color = "red"
+            page = ProcessingPipelinePage(state, lambda: None)
+            provider = page.operation_widgets["remove_background_provider"]
+            self.assertFalse(provider.isHidden())
+            provider.setCurrentIndex(provider.findData("local_chroma_key"))
+            color = page.operation_widgets["chroma_key_color"]
+            self.assertFalse(color.isHidden())
+            color.setCurrentIndex(color.findData("red"))
             operations.chroma_key_tolerance = 255
             operations.chroma_key_softness = 255
             request = build_processing_run_request(
@@ -429,6 +434,14 @@ class V3ProcessingFlowTests(unittest.TestCase):
             )
 
             self.assertEqual(request.settings["chroma_key_color"], "red")
+            self.assertEqual(request.settings["remove_bg_provider"], "local_chroma_key")
+            color.setCurrentIndex(color.findData("auto"))
+            auto_request = build_processing_run_request(
+                state, {}, allow_full_image_changes=True,
+                external_transfer_consent=False,
+            )
+            self.assertEqual(auto_request.settings["chroma_key_color"], "auto")
+            self.assertEqual(_test_image_gateway({}).preflight(auto_request), ())
             self.assertNotIn("chroma_key_custom_color", request.settings)
             self.assertNotIn("chroma_key_tolerance", request.settings)
             self.assertNotIn("chroma_key_softness", request.settings)

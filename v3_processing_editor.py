@@ -39,6 +39,7 @@ def _operations(**overrides: Any) -> ImageOperationData:
         "remove_embedded_c2pa",
     ):
         values[name] = False
+    values["chroma_key_color"] = "auto"
     values.update(overrides)
     return ImageOperationData(**values)
 

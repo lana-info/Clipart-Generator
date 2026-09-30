@@ -1,5 +1,10 @@
 # TASKS
 
+- [x] Restore existing background provider/model and chroma-colour controls in Processing per owner request.
+- [x] Add per-file Auto RGB chroma detection with metadata priority and uncertainty refusal; compact Processing dropdowns.
+- [ ] Native Windows and installed-build acceptance of restored Processing choices.
+- [ ] Separate white-background algorithm remains unimplemented; do not add white to the RGB chroma contract without design and image-quality verification.
+
 - [x] Clarify new chroma prompts: preserve object textures, exclude paper substrate
   and white bridges/fringe; foliage gaps use the selected background colour.
 - [ ] Verify one regenerated teddy/pine image after updating prompts; paid launch

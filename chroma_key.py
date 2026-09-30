@@ -1580,6 +1580,35 @@ def _measured_border_key(image: Image.Image) -> np.ndarray:
     return np.median(border, axis=0).astype(np.float32)
 
 
+def detect_chroma_key_color(image: Image.Image) -> str:
+    """Select a supported saturated key only when the border agrees.
+
+    Neutral/white and mixed backgrounds require explicit review, not an
+    arbitrary dominant-channel guess. This does not classify subject pixels.
+    """
+    if not isinstance(image, Image.Image) or not all(image.size):
+        raise ValueError("A nonempty image is required to detect the background")
+    width, height = image.size
+    frame = max(1, min(4, min(width, height) // 2))
+    border = np.concatenate([
+        np.asarray(image.crop(box).convert("RGB"), dtype=np.int16).reshape(-1, 3)
+        for box in ((0, 0, width, frame), (0, height - frame, width, height),
+                    (0, 0, frame, height), (width - frame, 0, width, height))
+    ])
+    median = np.median(border, axis=0)
+    channel = int(np.argmax(median))
+    others = [value for value in range(3) if value != channel]
+    dominant = border[:, channel]
+    agrees = (dominant >= 150) & (dominant - border[:, others].max(axis=1) >= 80)
+    if float(np.mean(agrees)) < 0.90:
+        raise ChromaKeyAmbiguousError(
+            "Не удалось уверенно определить цвет фона. "
+            "Авто поддерживает однородный синий, зелёный или красный фон; "
+            "белый и сложный фон требуют другого метода."
+        )
+    return ("red", "green", "blue")[channel]
+
+
 def measure_chroma_background(image: Image.Image) -> tuple[int, int, int]:
     """Report the rounded median border RGB used for removal, not generation."""
     if not isinstance(image, Image.Image) or not all(image.size):
@@ -1793,6 +1822,8 @@ __all__ = [
     "KEY_COLORS",
     "MATERIAL_PROMPT_CLAUSES",
     "chroma_key_prompt_block",
+    "detect_chroma_key_color",
+    "measure_chroma_background",
     "parse_key_color",
     "remove_chroma_key",
     "remove_chroma_key_automatic",

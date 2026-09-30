@@ -995,6 +995,7 @@ class _SharedProcessingPipelinePage(ProcessingPipelineEditor):
             description="Операции выполняются сверху вниз; рецепт можно полностью изменить.",
             include_cleanup=True,
             allowed_operations=workflow_for_mode(ProjectMode.PROCESSING).processing_operations,
+            show_background_controls=True,
             tokens=tokens,
         )
         self.project_state = state

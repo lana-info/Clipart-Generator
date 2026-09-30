@@ -1,5 +1,41 @@
 # Project state
 
+## Processing method selection restored, 2026-09-29
+
+Owner requested visible method selection, compact menus and per-file automatic
+chroma colour in Processing. Worktree branch codex/fix-processing-method-choice-20260930
+uses delivered 3.2.8 source 6568fae; unrelated source-worktree edits are preserved.
+Diagnosis and correction history: [docs/ERRORS.md](docs/ERRORS.md#processing-background-choice-2026-09-29).
+No commit, push or build performed.
+
+| Requirement and source | Verification | Implementation | Verified result |
+| --- | --- | --- | --- |
+| Owner: choose local/cloud neural methods and chroma in Processing | Actual ProcessingPipelinePage switching, UI-to-run-request test | Opt-in visibility for existing controls only in Processing | Implemented and verified: focused Qt/flow/state tests passed |
+| Keep provider-specific settings and operation on/off behavior | Switch rembg/BEN2/Fal/KIE/chroma; toggle removal | Existing registry/visibility rules reused | Implemented and verified: focused Qt/flow/state tests passed |
+| Preserve other workflows and existing hidden defaults | Shared-editor regression tests | Default show_background_controls=False | Implemented and verified: focused Qt/flow/state tests passed |
+| Owner asks whether white can replace chroma | Inspect supported algorithm/colour contract | White is not implemented as a chroma colour; existing neural methods remain available | Current keyer supports blue/green/red; no white-background quality claim |
+
+| Per-file Auto for imported PNGs, owner request | Real mixed-colour worker batch, metadata priority, uncertain-background refusal, UI-to-request, persistence | Implemented: Auto for new Processing defaults and recipes; existing explicit colours retained | Implemented and verified: 165 tests + 38 subtests passed; 1 unrelated Windows Real-ESRGAN skip |
+| Compact dropdowns, owner request | Actual Qt 1120x780 capture | Implemented: 240px fields, 360px models with full-text tooltip | Linux offscreen visually inspected |
+
+Focused verification: 165 tests + 38 subtests passed, 1 skipped because the
+Windows Real-ESRGAN executable is absent. Includes Qt/worker/state/provider
+registry, module packaging and dependency architecture. Full isolated pytest:
+1978 passed, 57 skipped, 19 deselected, 1 expected failure and 276 subtests.
+Seven legacy UI settings-persistence tests fail on both this worktree and the
+unmodified delivered 3.2.8 worktree because the temporary `config.json` is not
+created; they are unrelated to Processing changes. `git diff --check` passed.
+Other workflows retain their hidden controls. Native Windows execution was not
+performed.
+
+Actual 1120x780 Linux offscreen Qt captures for six methods:
+`docs/ui/3.2/processing-method-choice/`. Existing horizontal scrolling layout
+retained. Native Windows verification and packaged delivery not performed.
+No changes to pixel reconstruction; Auto selects a colour before removal. Restoring selection does not certify neural cutout
+quality. Earlier source-only chroma probes retained >99.9% non-blue pixels on
+three owner sources, not a full edge-quality acceptance.
+
+
 ## Paper-free generation prompt clarification, 2026-09-29
 
 Owner chose regeneration of the two bears instead of repairing their old paper

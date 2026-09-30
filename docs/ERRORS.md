@@ -22,3 +22,37 @@
 
 Все три дефекта воспроизведены до изменения реализации. Проверки и статус
 нового независимого ревью находятся в STATE.md.
+
+## processing-background-choice, 2026-09-29
+
+Симптом: Windows 3.2.8, вкладка Обработка, результаты трёх PNG теряли рамку,
+голову гуся и ботву. Диагностика подтвердила local_rembg/u2net и только этапы
+background_removal/export; все три ошибочных результата отмечены succeeded.
+Причина отсутствия выбора: общий редактор принудительно скрывал существующие
+provider/model/colour controls. Качество сегментации U2Net не исправляется
+возвратом выбора; это отдельное ограничение. Автоподбор генерационного цвета
+и загрузка его provenance уже существовали, автоопределения произвольного
+импортированного PNG в Processing не было.
+
+Исправление: включаем существующие controls только для Processing. Добавлен
+режим auto с определением насыщенного RGB-фона по четырём краям (90% согласия,
+основной канал >=150 и превосходство >=80). При неоднозначности сохраняется
+исходник и требуется ручная проверка, без нейросетевого fallback. Подтверждённая
+запись цвета генерации приоритетна. Default auto только для новых Processing
+настроек/рецептов; старые явные цвета сохраняются. Выпадающие поля ограничены
+240/360px, текущее название полностью доступно в tooltip.
+
+Проверки: синтетическая смешанная RGB-партия через настоящий worker, сохранение
+исходников, приоритет metadata, отказ для белого/серого/тёмного/смешанного фона,
+UI-to-request/preflight, project roundtrip, условная видимость и Qt-снимки.
+На 72.png, 50_goose_in_garden_arch.png и 42.png определён blue. Это проверка
+детектора, а не новая визуальная приёмка полного удаления. Итог прогона в STATE.md.
+Белый алгоритм не реализован; Windows-сборка/платные вызовы не запускались.
+
+## Test-environment persistence regression observed, 2026-09-29
+
+The full isolated suite reports seven UI settings-persistence failures because
+the patched temporary path has no `config.json`. The representative cleanup UI
+test fails identically in the unmodified delivered 3.2.8 worktree, so this is
+not attributed to the Processing method-choice change. No unrelated persistence
+code was changed here.
