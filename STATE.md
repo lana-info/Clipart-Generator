@@ -10,10 +10,36 @@ No bundle or license rights changes are requested.
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Временно открыть GitHub, собрать и вернуть приватность; явное подтверждение владельца | GitHub API visibility + run conclusion | Запущен helper с finally возвратом PRIVATE и пределом90min | Run36661594300/sourcec758c47: frozen smoke и сборка установщика прошли; installed smoke exit1. PRIVATE восстановлен helper и подтверждён отдельно |
-| Studio и каждый модуль разместить на лицензионном сервере; новый запрос | Подписи, SHA256, server rows, installed Windows smoke | Шесть модульных пакетов1.5.0 загружены через штатный artifact storage как draft | Все6 хешей/размеров совпали. Studio installer не прошёл installed smoke. Публикация ожидает успешной проверки |
-| Сохранить лицензии и настройки сервера | Scope операций только release create/attach/publish | Код/deployment/bundles/grants не меняются | Резервная копия pre-studio329-publication-20260930.dump проверена pg_restore --list |
+| Временно открыть GitHub, собрать и вернуть приватность; явное подтверждение владельца | GitHub API visibility + run conclusion | Запущен helper с finally возвратом PRIVATE и пределом90min | Реализовано и проверено: run36663221787/source1a2f311 SUCCESS, PRIVATE восстановлен и отдельно подтверждён GitHub API |
+| Studio и каждый модуль разместить на лицензионном сервере; новый запрос | Подписи, SHA256, server rows, installed Windows smoke | Studio3.2.9 + пять модулей1.5.0 + shared image-processing1.5.0 опубликованы в stable/windows-x64 | Реализовано и проверено: все7 server rows published и discoverable; SHA256/размеры файлов совпали; installed Windows smoke SUCCESS |
+| Сохранить лицензии и настройки сервера | Scope операций только release create/attach/publish | Код/deployment/bundles/grants не менялись | Backup проверен pg_restore --list; после публикации /health200, download без токена403 |
 
+Final publication evidence, 2026-09-30 UTC:
+- Successful Windows run: https://github.com/lana-info/Clipart-Generator/actions/runs/36663221787
+  source1a2f311808926c0cb8ef753e6d04a0d510874eb7; production profile.
+- Native source, frozen entrypoint, installed catalog/contour, local rembg/BEN2
+  inference, Windows DPAPI/update security and release contract passed.
+- Installed report: docs/ui/3.1/studio-shell-modules/windows-installed-3.2.9-report.json;
+  all13 checks true, frozen=true,1120×780. Actual screenshot reviewed:
+  docs/ui/3.1/studio-shell-modules/windows-installed-3.2.9.png.
+- Installer SHA256:19ee7fe981e1eded4c661035f6bb4a2b95cd9dad3d1ae84a4792f60e3b08945d;
+  242893057bytes; downloaded checksum and build provenance match.
+- Studio server release84f4b839-f51f-137b-4513-62778b327c50 published last,
+  after all six signed module packages. Module compatibility>=3.2.9,<3.3.0.
+- Local installer/provenance/receipt: /root/projects/Clipart Generator/artifacts/studio-shell-windows-3.2.9-36663221787
+  Published receipts: /root/projects/Clipart Generator/artifacts/studio-shell-modules-1.5.0-20260929/server-published-receipts.json.
+- Targeted tests after diagnostic/fixed smoke viewport:39passed+2subtests.
+  Full source suite2046passed+273subtests and18HTTPS integration tests passed
+  before these smoke-only changes; not unnecessarily rerun in full.
+- Limits: installed Windows download/open of every module using a real customer
+  license was NOT exercised. This path has source HTTPS integration coverage;
+  Windows evidence establishes installation/Core and local engines, not that full
+  customer scenario. Upgrade from3.1.4 fixture was skipped in this workflow.
+  Paid AI was not invoked. Composer grants remain unassigned, as intended for
+  separate access. Same-version corrupt-package repair remains a known limit.
+- GitHub is PRIVATE, PR#2 remains draft/unmerged; no stable branch/tag mutation.
+
+Earlier attempts (preserved failure history):
 Temporary build helper: /tmp/studio_public_build.py; live status:
 /tmp/studio-public-build-status.json. It restores PRIVATE on completion/error;
 confirm independently before ending. Initial gh repo edit flag was unsupported
@@ -43,7 +69,7 @@ processing94e61723-2841-2565-28b8-9830088e9cba;
 prompt-composer4e449aeb-8ac2-b002-cff3-93f7360e1818.
 
 
-## Studio shell source candidate, 2026-09-29
+## Studio shell source candidate, 2026-09-29 (historical pre-publication snapshot)
 
 Branch `codex/feature-studio-shell-modules-20260929`, base 6568fae (Windows3.2.8).
 Candidate source version3.2.9; implementation commit512e6a1.

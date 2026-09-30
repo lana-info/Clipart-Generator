@@ -1,0 +1,22 @@
+{
+  "checks": {
+    "clean_catalog": true,
+    "rights_are_exact": true,
+    "artwork_is_rendered": true,
+    "evidence_is_saved": true,
+    "license_input_is_safe": true,
+    "controls_are_present": true,
+    "controls_are_connected": true,
+    "pictures_default_is_safe": true,
+    "update_channel_is_connected": true,
+    "startup_is_blocked": true,
+    "contour_editing_works": true,
+    "core_only": true,
+    "version_matches": true
+  },
+  "catalog_size": [
+    1120,
+    780
+  ],
+  "frozen": true
+}

@@ -11,29 +11,30 @@
 - [x] Decouple shell startup/project metadata from bundled workflow discovery.
 - [x] Port Composer without reverting 3.2.8 text models or shared-service changes.
 - [x] Package Composer as signed independently loaded code; no bundled fallback.
-- [ ] Shell packaging excludes module-owned implementations, preserving needed
-  shared services and immutable project schemas; verify actual package loading.
+- [x] Frozen shell excludes module-owned implementations; Core startup and local
+  engines verified in Windows run36663221787. Actual module opening below remains separate.
 - [x] Source integration tests: denied/unknown/offline, download/cancel/error, reopen,
   independent update, invalid signature and revoked rights;18 HTTPS tests passed.
 - [x] Independent review findings: serialize license activation/check persistence;
   clear rejected access and discard stale account results; regression tests.
 - [x] Independent review and fixes, full source suite2046tests+273subtests,
   Qt1120×780 comparison; limitations documented.
-- [ ] Installed native Windows UI/download comparison (build blocked).
+- [ ] Installed native Windows module download/open acceptance; source HTTPS passed.
 - [x] Prepare signed Windows module1.5.0 candidate ZIPs (Studio>=3.2.9,<3.3.0),
-  inspect signatures/compatibility; no production publication.
+  inspect signatures/compatibility; uploaded as draft after owner authorization.
 - [x] Commit/push implementation512e6a1 and draftPR#2 on top of3.2.8 source;
-  no merge. GitHubCI blocked by Actions budget, localfullsuite passed.
-- [ ] Windows shell build and installed download/open acceptance; latest GitHub
-  Actions attempt for prior Composer was budget-blocked. No billing change.
+  no merge. Full local suite passed; temporary public CI now owner-authorized.
+- [x] Windows shell build and installed smoke: run36663221787 SUCCESS,
+  source1a2f311. No billing change.
   Owner subsequently authorized release artifact publication; license grants
   and deployment/code changes remain outside scope.
 
-Server audit: Composer has no catalog entry, assignment or release yet. Preparing
-customer grants remain unassigned. Owner now authorized publishing release rows.
+Server audit: Composer has no customer assignments; its release draft is uploaded.
+Customer grants remain unchanged. Owner authorized publishing release rows.
 - [x] Upload six module1.5.0 drafts, verify hashes and create private DB backup.
-- [ ] Complete run36661594300, restore and confirm private GitHub visibility.
-- [ ] Verify installer, upload Studio3.2.9 and publish all seven release rows.
+- [x] Complete corrected run36663221787, restore and confirm PRIVATE GitHub visibility.
+- [x] Verify installer, upload Studio3.2.9 and publish all seven release rows.
+  Hashes match, release discovery confirmed; /health200, unauthorized download403.
 
 - [x] Clarify new chroma prompts: preserve object textures, exclude paper substrate
   and white bridges/fringe; foliage gaps use the selected background colour.
