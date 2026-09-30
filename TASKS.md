@@ -1,5 +1,37 @@
 # TASKS
 
+
+## Продолжение: кандидат Studio3.2.11 / modules1.5.2
+
+- [x] Подтвердить residual paidhistory eviction и закрыть implicit paid resubmit; provider-success checkpoint, repeated retry/reopen regressions, independent review PASS.
+- [x] Согласовать source version/Azure default3.2.11; подготовить6official signed1.5.2 modules minimumCore3.2.11, package/runtime/Qt checks PASS.
+- [x] Final full source2145tests+278subtests PASS, sensitive tracked scan и независимое ревью PASS.
+- [ ] Approved commit/push feature branch.
+- [ ] Временно PUBLIC → Windows production build exactcommit → PRIVATE, independently verify restoration.
+- [ ] Получить installer/provenance/hash и проверить installed Core receipts.
+- [ ] Actual licensed module download/open in installed Windows; источник и package smoke не заменяют этот сценарий.
+- Новые серверные релизы не публиковать без отдельного поручения.
+
+## Исправления полного ревью, 2026-09-30
+
+- [x] R1/P1: явный отказ лицензии прекращает автономный доступ.
+- [x] R2/P1: повтор части очереди продолжает принятую provider-задачу.
+- [x] R3/P1: оплаченный raw остаётся доступен после ошибки обработки.
+- [x] R4/P1: ошибка сохранения не приводит к потере проекта при выходе.
+- [x] R5/P2: самостоятельный рецепт300DPI публикует PNG.
+- [x] R6/P2: миграция сохраняет выбранную модель и runtime.
+- [x] R7/P2: редактор обновляет QC/доступность экспорта.
+- [x] R8/P2: историческая версия не блокирует совместимое обновление.
+- [x] R9/P2: clock-skew policy едина для подписи и доступа.
+- [x] R10/P2: непрозрачный мех на красном фоне сохраняет RGB/alpha.
+- [x] R11/P2: Composer выдаёт новые варианты после сохранения/смены locks.
+- [x] R12/P3: одноимённые профили выбираются отдельно.
+- [x] R13/P3: редактор сохраняет lineage для безопасной cleanup.
+- [x] Локальная HTTPS-доставка:18 tests PASS с тестовыми лицензиями/ключами.
+- [x] Независимое повторное ревью финального diff: подтверждённых замечаний не осталось.
+- [x] Итоговый полный безопасный прогон:2132 tests+278subtests PASS,57skip/20deselected; сборка не выполнялась.
+- Сборка, новые ZIP/релизы и публикация не разрешены этим поручением.
+
 - [x] Integrate processing fix with delivered Studio3.2.9 in isolated3.2.10 branch; preserve both histories and push548b2a6.
 - [x] Prepare all six official signed module1.5.1 candidates; verify each signature/install/runtime and >=3.2.10 compatibility.
 - [x] Complete Windows3.2.10 build and restore PRIVATE: run36723401830 SUCCESS, independent GitHub API verification PRIVATE; version/source/SHA256 verified.

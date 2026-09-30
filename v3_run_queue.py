@@ -132,6 +132,14 @@ class RunItem:
     editor_output_path: str = field(default="", repr=False)
     # Stages embodied by the retained input while a recovery attempt is active.
     recovery_input_stages: dict[str, str] | None = field(default=None, repr=False)
+    paid_completed_stages: tuple[str, ...] = field(default=(), repr=False)
+
+    def paid_history_stages(self) -> tuple[str, ...]:
+        stages = {"upscale_before", "upscale_after", "background_removal"}
+        return tuple(sorted(set(self.paid_completed_stages) | {
+            name for name, status in self.stage_statuses.items()
+            if name in stages and status == "complete"
+        }))
 
     def saved_stages(self) -> dict[str, str]:
         return dict(self.recovery_input_stages if self.recovery_input_stages is not None
@@ -601,6 +609,13 @@ class RunQueueSession(QObject):
                 # suppresses the legacy text stream (parallel generation).
                 stage = str(safe.get("stage") or "")
                 outcome = str(safe.get("outcome") or "")
+                if safe_name == "provider_task_succeeded" and stage in {
+                    "upscale_before", "upscale_after", "background_removal"
+                }:
+                    paid = tuple(sorted(set(active_item.paid_completed_stages) | {stage}))
+                    if paid != active_item.paid_completed_stages:
+                        active_item.paid_completed_stages = paid
+                        self.changed.emit()
                 if safe_name == "stage_finished" and stage:
                     if outcome == "succeeded" or (outcome == "skipped" and safe.get("status") == "already_alpha"):
                         active_item.stage_statuses[stage] = "complete"
@@ -1223,19 +1238,24 @@ class RunQueueSession(QObject):
                     settings[flag] = False
             settings["skip_remover_for_alpha"] = True
             settings["overwrite_existing"] = False
-            # Always validate/preserve alpha or finish local background removal.
-            # This also provides a local publication pass after a manual fix.
-            settings["remove_bg"] = True
-            settings["remove_bg_provider"] = "local_rembg"
-            settings["local_rembg_model"] = "u2net"
-            settings["local_rembg_edge_quality"] = "cutout"
+            settings["publish_recovered_source"] = True
+            settings["recovery_completed_stages"] = list(item.paid_history_stages())
+            # Keep the requested remover and its model. Raw generation metadata
+            # restores the per-item key colour; existing alpha is preserved by
+            # skip_remover_for_alpha during a manual-fix publication pass.
             if not candidates or settings == candidates[0][2]:
                 candidates.append((index, str(candidate.resolve()), settings))
         if not candidates:
             return None
+        settings = candidates[0][2]
+        settings["task_item_indices"] = self._retry_task_indices([row[0] for row in candidates])
         request = replace(self.request, mode="mode2_process", generated_prompts=[],
-                          selected_files=[row[1] for row in candidates], settings=candidates[0][2])
+                          selected_files=[row[1] for row in candidates], settings=settings)
         return [row[0] for row in candidates], request
+
+    def _retry_task_indices(self, indices):
+        original = self.request.settings.get("task_item_indices")
+        return [original[index] if original is not None else index + 1 for index in indices]
 
     def preview_retry(self) -> Any | None:
         failed = self.failed_indices
@@ -1286,6 +1306,10 @@ class RunQueueSession(QObject):
                 ],
                 generated_prompts=[],
             )
+        if not queue_items:
+            settings = dict(retry_request.settings)
+            settings["task_item_indices"] = self._retry_task_indices(failed)
+            retry_request = replace(retry_request, settings=settings)
         return retry_request
 
     def prepare_retry(self) -> Any | None:
@@ -1309,6 +1333,7 @@ class RunQueueSession(QObject):
                 if isinstance(item.payload, dict):
                     item.source_path = ""
             else:
+                item.paid_completed_stages = item.paid_history_stages()
                 item.recovery_input_stages = item.saved_stages() if item.output_path else {}
                 item.stage_statuses = {key: value for key, value in item.recovery_input_stages.items()
                                        if value == "complete"}

@@ -2051,6 +2051,7 @@ class ClipartTransparencyEditorPage(QWidget):
         mask_path = rough_dir / f"{output_path.stem}_alpha-mask.png"
         self.document.save(output_path, mask_path)
         self._draft_masks.pop(output_path, None)
+        self.copy_saved.emit(output_path, output_path)
         self.saved.emit(output_path.name)
         return output_path, mask_path
 

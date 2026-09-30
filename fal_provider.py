@@ -278,6 +278,14 @@ class FalTaskJournal:
                 if record.status not in _TERMINAL_TASK_STATUSES
             )
 
+    def completed(self) -> tuple[FalTaskRecord, ...]:
+        """Verified journal metadata for re-fetching paid results during recovery."""
+        with self._lock, _journal_process_lock(self.path):
+            return tuple(
+                record for record in self._read().values()
+                if record.status in {"completed", "completed_after_cancel"}
+            )
+
 
 _MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$")
 _REQUEST_RE = re.compile(r"^[A-Za-z0-9_-]{1,256}$")

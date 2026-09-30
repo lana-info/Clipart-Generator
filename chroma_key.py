@@ -378,11 +378,12 @@ def _remove_chroma_key_precise(
 def _extend_opaque_color_runs(
     rgb: np.ndarray, matte: np.ndarray, key: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Extend an opaque seed through connected, fixed source chroma.
+    """Recover fixed source chroma supported by opaque subject markers.
 
     Fixed (R-G, G-B) allows achromatic shading, not cumulative hue drift. RGB is
-    never copied from a seed. The ROI accounting cap leaves excessive/noisy
-    cases unchanged; the final flood traversal may precede the cap check.
+    never copied from a seed. Exact-colour runs are followed first, then a
+    recurring pigment may reuse a marker in the same visible subject. The ROI
+    accounting cap bounds the run pass; its final traversal may precede the cap.
     """
     markers = cv2.erode((matte == 1.0).astype(np.uint8), np.ones((7, 7), np.uint8)).astype(bool)
     dubious = _opaque_colors_explained_by_key_mix(rgb, matte, key)
@@ -425,7 +426,71 @@ def _extend_opaque_color_runs(
             supported[region][trusted] = True
         mask[component] = 1
     supported &= ~dubious
+    # A recurring pigment can be interrupted by another real subject colour
+    # or by AA samples along a thin fibre. Exact-colour flood connectivity is
+    # therefore stronger than the opaque-subject evidence requires. Reuse only
+    # chroma actually present in an original eroded marker of the same visible
+    # subject; never borrow from a disconnected object or infer a new colour.
+    # The independent deeper-neighbour mixture veto still excludes fractional
+    # openings even when their observed colour also occurs as an opaque pigment.
+    del visited
+    rows, cols = np.where((matte > 0.02) & (matte < 1.0) & ~dubious)
+    if len(rows):
+        _, subjects = cv2.connectedComponents(
+            (matte > 0.02).astype(np.uint8), connectivity=8,
+        )
+        # The two signed byte differences occupy fewer than 2**18 values.
+        # Pack only marker/candidate samples, not a full int64 image.
+        palette = subjects[markers].astype(np.int64) * (1 << 18)
+        palette += source[markers].astype(np.int64)
+        palette = np.unique(palette)
+        candidates = subjects[rows, cols].astype(np.int64) * (1 << 18)
+        candidates += source[rows, cols].astype(np.int64)
+        recurring = np.isin(candidates, palette, kind='sort')
+        # A distant subpixel fibre can have the same observed chroma as a real
+        # opaque pigment elsewhere. Reject that ambiguity against the original
+        # subject palette too, beyond the local deeper-neighbour veto's reach.
+        unambiguous = _unambiguous_recurring_chroma(
+            palette, np.unique(candidates[recurring]), key,
+            work_limit=matte.size * _MAX_ENCLOSED_TRANSITION_ROI_WORK_MULTIPLIER,
+        )
+        recurring &= np.isin(candidates, unambiguous, kind='sort')
+        matte[rows[recurring], cols[recurring]] = 1.0
+        supported[rows[recurring], cols[recurring]] = True
     return matte, supported
+
+
+def _unambiguous_recurring_chroma(
+    palette: np.ndarray, candidates: np.ndarray, key: np.ndarray, *, work_limit: int,
+) -> np.ndarray:
+    """Reject recurring pigments also explained by another pigment plus key.
+
+    Work is bounded independently of palette complexity. Unexamined candidates
+    keep their existing matte; this optional recovery never invents evidence.
+    Chroma projection also allows achromatic shading, conservatively rejecting
+    more possible mixtures than an RGB-only fit against one brightness sample.
+    """
+    key_chroma = np.array([key[0]-key[1], key[1]-key[2]], np.float32)
+    accepted = []
+    for candidate in candidates:
+        work_limit -= len(palette)
+        if work_limit < 0:
+            break
+        codes = palette[palette // (1 << 18) == candidate // (1 << 18)] % (1 << 18)
+        direction = np.column_stack((codes // 512 - 255, codes % 512 - 255))
+        direction = direction.astype(np.float32) - key_chroma
+        code = candidate % (1 << 18)
+        observed = np.array([code // 512 - 255, code % 512 - 255], np.float32) - key_chroma
+        denominator = np.sum(direction * direction, axis=1)
+        coverage = np.divide(
+            direction @ observed, denominator,
+            out=np.zeros_like(denominator), where=denominator > 1.0,
+        )
+        residual = np.linalg.norm(observed - coverage[:, None] * direction, axis=1)
+        if not np.any((denominator > 1.0) & (coverage > .02)
+                      & (coverage < .98) & (residual <= 3.0)):
+            accepted.append(candidate)
+    return np.asarray(accepted, dtype=np.int64)
 
 
 def _opaque_colors_explained_by_key_mix(

@@ -1,5 +1,80 @@
 # Project state
 
+
+## Studio3.2.11 и модули1.5.2, продолжение по поручению владельца
+
+Владелец разрешил завершить оставшиеся вопросы, commit и Windows-сборку:
+временно сделать репозиторий PUBLIC, выполнить сборку, вернуть PRIVATE.
+Публикация новых релизов на лицензионном сервере не поручена.
+Ветка codex/fix-studio-review-20260930; исходная интеграционная копия сохранена.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Повтор не списывает деньги после вытеснения paid history; residual полного ревью | KIE/Fal completed→download failure→history eviction→retry twice, reopen | Durable paid-stage marker от provider success до download; recovery failclosed при отсутствии task |24 worker regressions PASS; independent31 tests PASS, standalone repro1POST |
+| Коммит исправлений и кандидат Studio3.2.11; владелец | Version contract, full tests, independent diff review, sensitive tracked scan | Core version/Azure default3.2.11 | Итоговый full2145tests+278subtests PASS,57skip/20deselected; повторное ревью latest31tests PASS; sensitive tracked scan PASS |
+| Подписанные совместимые модули1.5.2 | Все6 official pinned signature/install/runtime, Core3.2.10 rejection, actual Qt UI/engine | Комплект всех6 требует Core>=3.2.11,<3.3.0 | Все6 PASS;5workflow UI show/local Composer variants и chroma alpha0/255 PASS; temporary signed license/fake transport |
+| Windows-сборка с возвратом PRIVATE; владелец | Exact pushed commit, workflow completion, provenance/version/hash, independent visibility check | Подготовлен отдельный helper с finally PRIVATE restore и headSha check | Сборка ещё не запущена, repo PRIVATE подтверждён |
+| Установленный Windows Core | CI native security/entrypoint/installed smoke receipts | Штатный production workflow без изменения installer identity | Ожидается сборка; licensed module download с реальной лицензией отдельно недоступен |
+
+Модули: artifacts/official-modules-1.5.2-studio3211-20260930 в основном проекте;
+evidence /tmp/studio3211-modules-verification.json и /tmp/studio3211-modules-smoke.log.
+Source fix paidhistory: маркер не означает локальный этап complete; сохраняется
+до завершения скачивания, повтор после утраты истории блокируется без нового POST.
+Старые проекты без нового optional field читаются; invalid/duplicate shapes denied.
+При недоступном диске сохранение отозванного license cache по-прежнему не может
+гарантировать межпроцессный отказ; same-client latch остаётся failclosed.
+
+## Исправления независимого полного ревью, 2026-09-30
+
+Поручение владельца: исправить подтверждённые дефекты, добавить регрессионную
+защиту и независимое повторное ревью; сборку и публикацию не выполнять.
+База6ddedb1, ветка `codex/fix-studio-review-20260930`, worktree
+`review-fixes-worktree`. Исходная интеграционная копия и чужой `:memory:.ses`
+сохранены. Причины/попытки: [docs/ERRORS.md](docs/ERRORS.md#studio-full-review-fixes-20260930).
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| R1/P1: явный отказ лицензии прекращает автономный доступ; независимое ревью | Подписанный cache: validate403 → outage → restart | Очистка cache после validate403; memory latch до записи; только сохранённая online auth снимает блокировку | Подписанные denial → outage/restart, write failure и повторная online activation:15 regressions PASS |
+| R2/P1: повтор части очереди продолжает принятую provider-задачу; независимое ревью | Два настоящих worker; fake transport; pending второго объекта → retry | Provider operation key сохраняет исходный индекс; content SHA256 alias для URL/upload/dataURI; completed processing переиспользуется только recovery | Real KIE/Fal workers: subset3→2→1 и accepted paid chain upscale→remover, ровно1/2 POST, пустой pending;11 regressions PASS |
+| R3/P1: оплаченный raw остаётся доступен после ошибки обработки; независимое ревью | Worker generation success → processing failure → recovery/reopen | Raw PNG/sidecar незавершённых items сохраняются; recovery оставляет provider/model, допускает публикацию без обработки и переносит проверенный v2 intent; paid chain не resubmit | Actual download → failure → real chroma pipeline/reopen; generation-only publication, sidecar warning: PASS |
+| R4/P1: ошибка сохранения не приводит к потере проекта при выходе; независимое ревью | Signed workflow: autosave failure → close/new/load | Общий save-before-leave для всех workflow; busy/save failure блокируют замену/закрытие | 22 signed-workflow UI regressions PASS, включая close/new/load и active workers |
+| R5/P2: самостоятельный рецепт300DPI публикует PNG; независимое ревью | UI recipe → worker → PNG DPI/pixels | Worker допускает отдельный300DPI рецепт | Actual recipe UI → worker → PNG: DPI≈300, RGBA и исходник неизменны: PASS |
+| R6/P2: миграция сохраняет выбранную модель и runtime; независимое ревью | Legacy config → signed workflow → saved preferences | Generation/runtime переносятся из legacy и сохраняются в per-mode preferences | Startup migration + next project saved preferences через actual signed workflow: PASS |
+| R7/P2: редактор обновляет QC/доступность экспорта; независимое ревью | Opaque block → editor save → ok; inverse direction | Export panel повторно проверяет file identity/version и QC после сохранения | Actual modal editor: block → ok → block, доступность export меняется: PASS |
+| R8/P2: историческая версия не блокирует совместимое обновление; независимое ревью | Old incompatible + new compatible package inventory/update/uninstall | Inventory старых версий не требует текущей Core compatibility; signature/hash/schema остаются обязательными | Signed old/new install/update/uninstall/rollback, tamper и invalid range: PASS |
+| R9/P2: clock-skew policy едина для подписи и доступа; независимое ревью | Signed +120s issued_at, expiry/grant boundaries | Verified authorization carries единый clock-skew policy online/offline | Signed+120/+300s разрешены; +301s, grants/expiry/naive-time отклонены: PASS |
+| R10/P2: непрозрачный мех на красном фоне сохраняет RGB/alpha; независимое ревью | Known-truth textured-fur fixture; другие цвета/детали/отверстия | Recurring pigment восстанавливается из eroded marker того же subject; bounded competing-key-mixture veto | Known-truth red70→0 outliers;290 chroma tests+46subtests; другие fixture outputs побайтно неизменны;2048 peak427.15MiB |
+| R11/P2: Composer выдаёт новые варианты после сохранения/смены locks; независимое ревью | Real Host/SQLite: save → More7; locks → generation | Save selected card сохраняет рабочую последовательность; изменение locks/mode/profile сбрасывает cursor | Real Qt/SQLite: сохранение variants0/3/6 → точный next batch, locks/manual edits/randomize: PASS |
+| R12/P3: одноимённые профили выбираются отдельно; независимое ревью | Real Qt dialog selects second same-name profile | Диалог различает одинаковые labels нумерацией | Real QInputDialog выбирает второй одноимённый профиль: PASS |
+| R13/P3: редактор сохраняет lineage для безопасной cleanup; независимое ревью | Tracked rough → in-place edit → verified ZIP + opt-in cleanup | In-place editor emits успешное изменение результата для обновления lineage | Actual editor → selected ZIP bytes match → verified opt-in cleanup only generated rough: PASS |
+
+Профильные интеграционные проверки PASS:91 tests+9subtests для лицензий/очереди;
+143 tests+9subtests для очереди/reopen/fur;29 tests+28subtests для recovery provenance.
+Локальный HTTPS18 tests PASS31.60s: temporary service, dummy keys/licenses.
+Первый полный offline прогон:2124 PASS+278subtests,1 fixtureFAIL. Причина
+и исправление fixture в docs/ERRORS.md. Итоговый полный offline прогон PASS:
+2132 tests+278subtests,57 skipped,20 network/paid deselected,273.10s.
+Лог: /tmp/review-fixes-full-final-pytest.log; QT offscreen, Python3.12.3,
+LOCALAPPDATA/XDG test data в /tmp, pytest cache/bytecode выключены.
+Пропуски: native Windows DPAPI/file-sharing, local Real-ESRGAN runtime и
+согласованно отложенный six-slot Pinterest; активный prompt-only MVP проверен.
+Независимое повторное ревью финального diff завершено: незакрытых
+подтверждённых замечаний нет. Latest independent78 tests+10subtests PASS;
+KIE chain2 POST/pending empty, Fal batch alias800chars PASS.
+Root affected149 tests+21subtests PASS; AST19 changed Python files и diffcheck PASS.
+Сборка и пользовательский сценарий установленной Windows-программы не выполнялись.
+
+При физической ошибке записи отозванного cache текущий LicenseClient блокируется
+в памяти. После restart со старым cache межпроцессная инвалидизация не гарантируется
+при недоступном storage. Незавершённый raw остаётся в .run для восстановления;
+автоматическая уборка старого raw после успешного recovery не добавлена.
+Журнал ограничивает completed history1000записями. Recovery после вытеснения
+истории очень длинной очереди отдельно не проверен; не гарантируется вечная
+дедупликация paid stages. При ошибке получения сохранённого provider result
+состояние остаётся ошибкой без автоматического нового paid submit.
+Windows с реальной лицензией, live paid API и визуальная приёмка пользовательских
+изображений остаются отдельными недоступными проверками.
+
 ## Processing integration candidate 3.2.10, 2026-09-30
 
 Owner asked to continue after the verified fix/review/push handoff, authorizing

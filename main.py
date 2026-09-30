@@ -1018,6 +1018,17 @@ class WorkerThread(QThread):
         self.settings = settings
         self.selected_files = selected_files or []
         self.generated_prompts = generated_prompts or []
+        # Retry progress is local to the subset; provider tasks retain their
+        # original item identity so an accepted request is never resubmitted.
+        task_indices = settings.get("task_item_indices")
+        self._task_item_indices = ()
+        if task_indices is not None:
+            count = len(self.generated_prompts or self.selected_files)
+            if (not isinstance(task_indices, (list, tuple)) or len(task_indices) != count
+                    or any(type(index) is not int or not 1 <= index <= 10000 for index in task_indices)
+                    or len(set(task_indices)) != count):
+                raise ValueError("Некорректные идентификаторы заданий")
+            self._task_item_indices = tuple(task_indices)
         self.is_running = True
         self.stop_after_current_requested = False
         self._paid_submission_open = True
@@ -1946,6 +1957,8 @@ class WorkerThread(QThread):
             or self.remove_bg
             or self.trim_enabled
             or self.edge_shrink_enabled
+            or self.export_300_dpi
+            or self.settings.get("publish_recovered_source") is True
             or self._metadata_cleanup_requested()
         ):
             raise ValueError(
@@ -2087,6 +2100,10 @@ class WorkerThread(QThread):
             raise FileNotFoundError(f"Файл не найден: {file_path}")
 
         source_path = file_path
+        generation_intent = None
+        if self.settings.get("publish_recovered_source") is True:
+            from chroma_generation_record import capture_generation_record
+            generation_intent = capture_generation_record(source_path)
         self._emit_diagnostic(
             "item_input_inspected",
             operation_type="processing",
@@ -2131,6 +2148,18 @@ class WorkerThread(QThread):
             idx,
             "file",
         )
+        if generation_intent is not None:
+            from chroma_generation_record import bind_generation_record
+            from result_background_policy import keeps_background
+            try:
+                generation_stage = self._generation_record_stage(
+                    out_path, preserve_surface=keeps_background(generation_intent["result_kind"])
+                )
+                bind_generation_record(out_path, generation_intent, stage=generation_stage)
+            except (OSError, ValueError):
+                self.progress.emit(
+                    "  PNG сохранён; назначение результата рядом с файлом записать не удалось"
+                )
         self._emit_file_progress(idx, total, 100)
         self.progress.emit(f"  Итог сохранён: {out_path}")
         self._emit_diagnostic(
@@ -2370,11 +2399,12 @@ class WorkerThread(QThread):
             ("pretrim", "pre-trim"),
         )
         generated_name = re.compile(
-            rf"^gen_\d{{3}}_{re.escape(self.run_stamp)}\.png$",
+            rf"^gen_\d{{3,}}_{re.escape(self.run_stamp)}\.png$",
             re.IGNORECASE,
         )
         counters = {}
         owned = {}
+        retain_generated_sources = False
         item_name = re.compile(
             rf"^(gen|file)(?:_[a-z0-9_]+)?_(\d{{3,}})_{re.escape(self.run_stamp)}\.png$",
             re.IGNORECASE,
@@ -2402,6 +2432,10 @@ class WorkerThread(QThread):
             match = item_name.fullmatch(source.name)
             if match:
                 owner = self._completed_working_outputs.get((match[1], int(match[2])))
+                if stage == "generated" and not owner:
+                    # Failed/cancelled items still refer to this raw PNG and
+                    # its hash-bound sidecar. Rough copies are not queue inputs.
+                    retain_generated_sources = True
                 if owner:
                     try:
                         record = owned.setdefault((match[1], int(match[2])),
@@ -2420,7 +2454,8 @@ class WorkerThread(QThread):
         transient = Path(self.workspace_root) / ".run"
         try:
             owned_run = Path(str(self._run_raw_dir or "")).resolve()
-            if Path(raw_dir).resolve() == owned_run and owned_run.is_dir():
+            if (not retain_generated_sources
+                    and Path(raw_dir).resolve() == owned_run and owned_run.is_dir()):
                 shutil.rmtree(owned_run)
                 if transient.is_dir():
                     transient.rmdir()
@@ -2562,6 +2597,8 @@ class WorkerThread(QThread):
 
     def _ensure_kie_url(self, current_url, current_path):
         if current_url:
+            if current_path and os.path.isfile(current_path):
+                self._remember_paid_image_input(current_url, current_path)
             return current_url
         uploaded_url = self._kie_upload_file(current_path)
         self.progress.emit("  Загружено в KIE")
@@ -2590,6 +2627,8 @@ class WorkerThread(QThread):
         from result_background_policy import keeps_background
         from chroma_generation_record import load_generation_result_metadata
 
+        if source_path and source_url:
+            self._remember_paid_image_input(source_url, source_path)
         source_is_final = False
         if source_path and not ignore_generation_record:
             recorded_metadata = load_generation_result_metadata(source_path)
@@ -3317,8 +3356,17 @@ class WorkerThread(QThread):
 
     def _fal_source_url(self, current_path, current_url):
         if current_url and str(current_url).startswith("https://"):
+            if current_path and os.path.isfile(current_path):
+                self._remember_paid_image_input(str(current_url), current_path)
             return str(current_url)
-        return fal_image_data_uri(current_path)
+        data_uri = fal_image_data_uri(current_path)
+        # Hash the serialized input, avoiding a second file read if an editor
+        # replaces the source between encoding and fingerprint registration.
+        import base64
+        digest = hashlib.sha256(base64.b64decode(data_uri.partition(",")[2], validate=True)).hexdigest()
+        with self._shared_state_lock:
+            self._kie_uploaded_content_ids[self._paid_image_alias_key(data_uri)] = digest
+        return data_uri
 
     def _fal_remove_bg_parameters(self):
         if self.fal_remove_bg_model == "fal-ai/birefnet/v2":
@@ -3587,15 +3635,37 @@ class WorkerThread(QThread):
             item_index = int(getattr(self._diagnostic_context, "item_index", 0) or 0)
         except (TypeError, ValueError, OverflowError):
             item_index = 0
+        if item_index > 0 and self._task_item_indices:
+            item_index = self._task_item_indices[item_index - 1]
         return f"{operation}:{item_index}" if item_index > 0 else operation
+
+    @staticmethod
+    def _paid_image_alias_key(image_url):
+        if image_url.startswith("data:image/"):
+            # Retain only a compact alias, never all encoded batch images.
+            return "data-uri-sha256:" + hashlib.sha256(image_url.encode("utf-8")).hexdigest()
+        return image_url
+
+    def _remember_paid_image_input(self, image_url, image_path):
+        # A downloaded generation URL, its reupload URL and a Fal data URI
+        # identify the same known local bytes. Keep the existing canonical
+        # fingerprint field so previously hashed KIE uploads still match.
+        digest = hashlib.sha256()
+        with open(image_path, "rb") as stream:
+            for chunk in iter(lambda: stream.read(65536), b""):
+                digest.update(chunk)
+        with self._shared_state_lock:
+            self._kie_uploaded_content_ids[self._paid_image_alias_key(str(image_url))] = digest.hexdigest()
 
     def _paid_task_fingerprint(self, input_payload):
         with self._shared_state_lock:
             uploaded_content_ids = dict(self._kie_uploaded_content_ids)
 
         def stable_value(value):
-            if isinstance(value, str) and value in uploaded_content_ids:
-                return {"kie_upload_sha256": uploaded_content_ids[value]}
+            if isinstance(value, str):
+                alias = self._paid_image_alias_key(value)
+                if alias in uploaded_content_ids:
+                    return {"kie_upload_sha256": uploaded_content_ids[alias]}
             if isinstance(value, dict):
                 return {key: stable_value(item) for key, item in value.items()}
             if isinstance(value, (list, tuple)):
@@ -3624,7 +3694,16 @@ class WorkerThread(QThread):
         with self._shared_state_lock:
             try:
                 pending = journal.pending()
+                if (self.settings.get("publish_recovered_source") is True
+                        and not base_operation.startswith("generation")):
+                    # Re-fetch completed processing results rather than pay for
+                    # an earlier stage again while restoring a raw source.
+                    pending += journal.completed()
             except (OSError, ValueError, FalProviderError):
+                if (self.settings.get("publish_recovered_source") is True
+                        and getattr(self._diagnostic_context, "stage", "")
+                        in self.settings.get("recovery_completed_stages", ())):
+                    raise ValueError("История оплаченного этапа недоступна; повторная отправка остановлена") from None
                 return None
             exact = [
                 task
@@ -3644,6 +3723,10 @@ class WorkerThread(QThread):
             ]
             candidates = exact or legacy
             if not candidates:
+                if (self.settings.get("publish_recovered_source") is True
+                        and getattr(self._diagnostic_context, "stage", "")
+                        in self.settings.get("recovery_completed_stages", ())):
+                    raise ValueError("Задача оплаченного этапа отсутствует в журнале; повторная отправка остановлена")
                 return None
             task = candidates[0]
             claimed_ids.add(task.request_id)
@@ -3820,6 +3903,7 @@ class WorkerThread(QThread):
         pipeline_url = self._kie_run_model_task(model_name, image_url, extra_input=upscale_input)
         upscaled_path = os.path.join(raw_dir, f"{prefix}_{step_name}_{idx:03d}_{self.run_stamp}.png")
         self._download_file(pipeline_url, upscaled_path)
+        self._remember_paid_image_input(pipeline_url, upscaled_path)
         self.progress.emit(f"  Промежуточный апскейл: {upscaled_path}")
         return pipeline_url
 

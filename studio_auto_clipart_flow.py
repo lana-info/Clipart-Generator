@@ -374,8 +374,20 @@ class AutoClipartFlowController(ClipartFlowController):
         existing = self.export_panel
         if existing is not None and existing.worker is not None:
             return
+        # An editor publishes new PNG bytes at the same path. Reusing the panel
+        # must not also reuse a QC decision about the previous file.
+        file_versions = []
+        for path in paths:
+            try:
+                stat = Path(path).stat()
+                file_versions.append((stat.st_ino, stat.st_size, stat.st_mtime_ns))
+            except OSError:
+                file_versions.append(None)
+        review_issues = page._bundle_export_issues()
         if existing is not None and existing.paths == list(paths) \
-                and existing.saved_membership == membership:
+                and existing.saved_membership == membership \
+                and getattr(existing, '_file_versions', None) == file_versions \
+                and getattr(existing, '_review_issues', None) == review_issues:
             return
         if existing is not None:
             existing.hide()
@@ -391,7 +403,7 @@ class AutoClipartFlowController(ClipartFlowController):
         session = self.run_queue.session
         panel = extension.create_export_view(
             self.export_page, self.shell.state, paths,
-            review_issues=page._bundle_export_issues(),
+            review_issues=review_issues,
             quality_reports=page._alpha_qc_reports(paths),
             workspace=session.workspace_root if session is not None else None,
             embedded=True,
@@ -400,6 +412,8 @@ class AutoClipartFlowController(ClipartFlowController):
         )
         if panel is None:
             return
+        panel._file_versions = file_versions
+        panel._review_issues = review_issues
         self.export_page.layout().addWidget(panel, 1)
         self.export_panel = panel
         panel.busy_changed.connect(self.shell.refresh)
@@ -641,6 +655,7 @@ class AutoClipartFlowController(ClipartFlowController):
         self.shell.state.data.automatic["run"] = [
             {"status": item.status.value, "output_path": item.output_path or "", "attempts": item.attempts,
              "editor_output_path": item.editor_output_path or "",
+             "paid_completed_stages": list(item.paid_history_stages()),
              "stage_statuses": item.saved_stages(), "source_path": item.source_path or ""}
             for item in session.items
         ]
@@ -663,6 +678,7 @@ class AutoClipartFlowController(ClipartFlowController):
             item.source_path = row.get("source_path", "")
             item.attempts = row["attempts"]
             item.stage_statuses = dict(row.get("stage_statuses", {}))
+            item.paid_completed_stages = tuple(row.get("paid_completed_stages", ()))
             if item.status is RunItemStatus.FAILED:
                 item.short_message = (
                     "Файл сохранён для коррекции. Обработка не завершена; файл не готов к экспорту."

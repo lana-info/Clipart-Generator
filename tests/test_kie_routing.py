@@ -907,20 +907,21 @@ class KieRoutingTests(unittest.TestCase):
             worker,
         )
         worker._download_file = types.MethodType(
-            lambda worker_self, url, output_path: None,
+            lambda worker_self, url, output_path: create_rgb_source(output_path),
             worker,
         )
 
         factor = worker._resolve_upscale_factor(worker.kie_upscale_model)
-        worker._upscale_pipeline_step(
-            "https://example.invalid/source.png",
-            ".",
-            1,
-            "probe",
-            "upscaled",
-            factor,
-            model_name=worker.kie_upscale_model,
-        )
+        with tempfile.TemporaryDirectory(prefix="topaz-routing-") as raw_dir:
+            worker._upscale_pipeline_step(
+                "https://example.invalid/source.png",
+                raw_dir,
+                1,
+                "probe",
+                "upscaled",
+                factor,
+                model_name=worker.kie_upscale_model,
+            )
 
         self.assertEqual(worker.kie_upscale_model, "topaz/image-upscale")
         self.assertEqual(factor, 4)

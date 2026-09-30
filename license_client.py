@@ -144,11 +144,13 @@ class LicenseAuthorization:
     last_verified_at: datetime | None = None
     grace_expires_at: datetime | None = None
     module_entitlements: tuple[ModuleEntitlement, ...] = ()
+    clock_skew_seconds: int = LicenseUpdatePolicy().clock_skew_seconds
 
     def allows_module(self, module_id: str, *, now: datetime | None = None) -> bool:
         """Never infer module rights from the product/license ID or local install."""
         current = now or datetime.now(timezone.utc)
-        if current.tzinfo is None or current < self.issued_at:
+        if (current.tzinfo is None
+                or current + timedelta(seconds=self.clock_skew_seconds) < self.issued_at):
             return False
         deadline = self.grace_expires_at if self.is_offline_grace else self.expires_at
         if deadline is None or current >= deadline:
@@ -354,6 +356,7 @@ class LicenseClient:
         self._state = LicenseStateStore(state_path)
         # Background discovery and license replacement share this client.
         self._authorization_lock = threading.RLock()
+        self._offline_authorization_rejected = False
 
     def has_activation(self) -> bool:
         return bool(self._state.load().get("license_id"))
@@ -388,9 +391,24 @@ class LicenseClient:
 
     def validate(self) -> LicenseAuthorization:
         with self._authorization_lock:
-            envelope, device_key, nonce = self.authenticated_request(
-                "/api/v1/licenses/validate"
-            )
+            try:
+                envelope, device_key, nonce = self.authenticated_request(
+                    "/api/v1/licenses/validate"
+                )
+            except LicenseError as exc:
+                if exc.code == "license_rejected":
+                    # A denied license must not be revived by a later outage,
+                    # including after restart. Keep its identity for revalidation.
+                    # Block this client even if persisting the rejection fails.
+                    self._offline_authorization_rejected = True
+                    state = self._state.load()
+                    raw_private = state.get("device_private_key")
+                    license_id = state.get("license_id")
+                    if isinstance(raw_private, bytes) and isinstance(license_id, str):
+                        self._state.save_activation(
+                            Ed25519PrivateKey.from_private_bytes(raw_private), license_id,
+                        )
+                raise
             authorization = self._verify_authorization(envelope, device_key, nonce)
             state = self._state.load()
             raw_private = state.get("device_private_key")
@@ -432,6 +450,7 @@ class LicenseClient:
             authorization.license_id,
             record,
         )
+        self._offline_authorization_rejected = False
 
     def authorize_offline_grace(
         self,
@@ -439,6 +458,8 @@ class LicenseClient:
         now: datetime | None = None,
     ) -> LicenseAuthorization:
         with self._authorization_lock:
+            if self._offline_authorization_rejected:
+                raise LicenseError("Лицензия отклонена сервером", code="license_rejected")
             current = now or datetime.now(timezone.utc)
             if current.tzinfo is None:
                 raise LicenseError("Некорректное системное время")
@@ -528,6 +549,7 @@ class LicenseClient:
                 last_verified_at=last_verified_at,
                 grace_expires_at=grace_expires_at,
                 module_entitlements=authorization.module_entitlements,
+                clock_skew_seconds=authorization.clock_skew_seconds,
             )
 
 
@@ -755,6 +777,7 @@ class LicenseClient:
             device_key=expected_device_key,
             issued_at=issued_at,
             expires_at=expires_at,
+            clock_skew_seconds=self.lifecycle_policy.clock_skew_seconds,
             module_entitlements=(
                 _parse_module_entitlements(payload["module_entitlements"])
                 if "module_entitlements" in payload else ()

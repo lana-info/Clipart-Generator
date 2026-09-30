@@ -171,6 +171,8 @@ class PromptComposerPage(QWidget):
             if key in ("mode", "subject_type") and not self._guard_manual_rebuild():
                 return
             self.draft[key] = value
+            if key in ("mode", "subject_type", "locks"):
+                self.draft["selection_seed"] = 0
             self._set_dirty()
 
     def _set_mode(self, mode):
@@ -548,7 +550,6 @@ class PromptComposerPage(QWidget):
                 option = alternatives[seed % len(alternatives)]
                 self._set_field(key, option.get("ru", ""), option.get("en", ""))
                 seed += 1
-        self._set_property("selection_seed", seed)
         self._render()
 
     def _render_scene(self, outer):
@@ -782,6 +783,7 @@ class PromptComposerPage(QWidget):
 
     def save_current(self):
         draft = self._selected_draft()
+        working_draft = deepcopy(self.draft)
         dialog = QDialog(self)
         dialog.setWindowTitle("Сохранить промпт")
         layout = QVBoxLayout(dialog)
@@ -835,6 +837,10 @@ class PromptComposerPage(QWidget):
         self.draft = deepcopy(record.get("payload", draft))
         if self._step == 4 and not self._proposal and self._active_variant():
             self._variants[self._variant_index]["draft"] = deepcopy(self.draft)
+            # The saved card is resolved; More 7 must continue the original
+            # choice order and cursor rather than restart from that card.
+            self.draft = working_draft
+            self.draft["name"] = draft["name"]
             self._variant_edits.pop(self._variant_index, None)
         self._dirty = bool(self._variant_edits)
         self.status.setText("Промпт сохранён.")
@@ -1025,6 +1031,8 @@ class PromptComposerPage(QWidget):
             self._show_message("Профилей пока нет.")
             return False
         labels = [p.get("name", p["id"]) for p in profiles]
+        if len(set(labels)) != len(labels):
+            labels = [f"{index + 1}. {label}" for index, label in enumerate(labels)]
         label, accepted = QInputDialog.getItem(self, "Выбрать профиль", "Профиль", labels, 0, False)
         if not accepted:
             return False
@@ -1049,6 +1057,7 @@ class PromptComposerPage(QWidget):
         if snapshot.get("subject_type"):
             self.draft["subject_type"] = snapshot["subject_type"]
         self.draft["references"] = deepcopy(snapshot.get("references", []))
+        self.draft["selection_seed"] = 0
         self._set_dirty()
         self._render()
         return True

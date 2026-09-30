@@ -141,7 +141,7 @@ class ModuleStore:
             raise ModulePackageError("Module path must not be a symlink")
         return path
 
-    def _verify(self, archive: zipfile.ZipFile) -> tuple[dict, bytes]:
+    def _verify(self, archive: zipfile.ZipFile, *, require_studio_compatibility: bool = True) -> tuple[dict, bytes]:
         entries = archive.infolist()
         if not entries or len(entries) > MAX_FILES:
             raise ModulePackageError("Package file count exceeds limit")
@@ -176,7 +176,11 @@ class ModuleStore:
             _version(manifest["version"])
             if manifest["module_api"] != 1 or type(manifest["module_api"]) is not int:
                 raise ModulePackageError("Unsupported module API")
-            if not (_version(manifest["studio_min"]) <= self.version < _version(manifest["studio_max_exclusive"])):
+            studio_min = _version(manifest["studio_min"])
+            studio_max = _version(manifest["studio_max_exclusive"])
+            if studio_min >= studio_max:
+                raise ModulePackageError("Invalid Studio version range")
+            if require_studio_compatibility and not (studio_min <= self.version < studio_max):
                 raise ModulePackageError("Incompatible Studio version")
             if not isinstance(manifest["platforms"], list) or self.platform not in manifest["platforms"]:
                 raise ModulePackageError("Unsupported platform")
@@ -255,7 +259,7 @@ class ModuleStore:
         return manifest
 
     def installed_versions(self, module_id: str) -> tuple[str, ...]:
-        """Return verified installed versions without changing activation state."""
+        """Verify installed history even when a Core upgrade made it incompatible."""
         parent = self._module_dir(module_id)
         if not parent.exists():
             return ()
@@ -277,7 +281,7 @@ class ModuleStore:
                 _version(entry.name)
             except ModulePackageError as exc:
                 raise ModulePackageError("Unexpected installed module version") from exc
-            self._verified_version(module_id, entry.name)
+            self._verified_version(module_id, entry.name, require_studio_compatibility=False)
             versions.append(entry.name)
         return tuple(sorted(versions, key=_version))
 
@@ -308,12 +312,12 @@ class ModuleStore:
         except (ValueError, TypeError) as exc:
             raise ModulePackageError("Invalid activation state") from exc
 
-    def _verified_version(self, module_id: str, version: str) -> Path:
+    def _verified_version(self, module_id: str, version: str, *, require_studio_compatibility: bool = True) -> Path:
         _version(version)
         path = self._module_dir(module_id) / version
         if path.is_symlink() or not path.is_dir():
             raise ModulePackageError("Version is not installed")
-        manifest, _ = self._verify(_InstalledPackage(path))
+        manifest, _ = self._verify(_InstalledPackage(path), require_studio_compatibility=require_studio_compatibility)
         if manifest["module_id"] != module_id or manifest["version"] != version:
             raise ModulePackageError("Installed package identity mismatch")
         return path

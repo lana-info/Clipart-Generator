@@ -164,6 +164,14 @@ class V3OutputPathsTests(unittest.TestCase):
             Image.new("RGB", (4, 4), "red").save(
                 first_run / f"gen_001_{first.run_stamp}.png"
             )
+            # A completed item may discard its own transient raw; an unfinished
+            # generated item must keep it available for queue recovery.
+            completed = output / "completed.png"
+            Image.new("RGB", (4, 4), "red").save(completed)
+            from chroma_provenance import image_digest
+            first._completed_working_outputs[("gen", 1)] = {
+                "path": str(completed), "sha256": image_digest(completed),
+            }
             second_marker = second_run / f"gen_001_{second.run_stamp}.png"
             Image.new("RGB", (4, 4), "blue").save(second_marker)
 

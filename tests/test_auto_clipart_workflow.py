@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 from PIL import Image, ImageDraw
@@ -541,21 +542,33 @@ def test_saved_recovery_preserves_upscale_completion_and_uses_no_prompt(workspac
     assert retry.generated_prompts == []
     assert retry.settings['upscale_after'] is False
     assert restored.items[0].stage_statuses['alpha_validation'] == 'failed'
+    assert restored.items[0].paid_completed_stages == ('upscale_after',)
     worker.assert_not_called()
 
 
-def test_failed_generated_source_remains_local_after_reopening(workspace):
+def test_failed_generated_source_remains_local_after_reopening(workspace, monkeypatch):
     view, controller, _, worker = workspace
     prepare_launch(controller)
-    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
-    raw = session.transient_dir / 'original.png'
-    raw.parent.mkdir(parents=True, exist_ok=True)
-    Image.new('RGB', (64, 64), 'white').save(raw)
+    from main import WorkerThread
+    controller.shell.state.data.operations.upscale_after = False
+    request = build_clipart_run_request(controller.shell.state)
+    request.settings['kie_api_key'] = 'fixture-only'
+    session = RunQueueSession(request, controller.shell.state.mode)
+    actual = WorkerThread(**request.worker_kwargs())
+    monkeypatch.setattr(actual, '_kie_generate_image', lambda *args: 'https://fixture.invalid/raw.png')
+    monkeypatch.setattr(actual, '_download_file', lambda url, path: Image.new('RGB', (64, 64), 'blue').save(path))
+    def fail_processing(*args, **kwargs):
+        raise RuntimeError('Local processing failure after generation')
+    monkeypatch.setattr(actual, '_run_processing_pipeline', fail_processing)
+    actual.item_progress.connect(session.handle_item_progress, Qt.ConnectionType.DirectConnection)
+    actual.diagnostic.connect(session.handle_diagnostic, Qt.ConnectionType.DirectConnection)
+    actual.completed.connect(lambda message: session.handle_finished(), Qt.ConnectionType.DirectConnection)
+    actual.error.connect(session.handle_fatal_error, Qt.ConnectionType.DirectConnection)
+    actual.run()
     item = session.items[0]
-    item.status = RunItemStatus.FAILED
-    item.source_path = str(raw)
-    item.stage_statuses = {'background_removal': 'failed'}
-    session.handle_finished()
+    assert item.status is RunItemStatus.FAILED
+    raw = Path(item.source_path)
+    assert raw.is_file()
     controller.run_queue.session = session
     controller._save_run()
     controller.save_timer.stop()
@@ -564,6 +577,7 @@ def test_failed_generated_source_remains_local_after_reopening(workspace):
     resumed.save_timer.stop()
     restored = resumed.run_queue.session
     assert restored.items[0].source_path == str(raw)
+    assert raw.is_file()
     retry = restored.preview_retry()
     assert retry.mode == 'mode2_process'
     assert retry.selected_files == [str(raw.resolve())]

@@ -1,4 +1,4 @@
-"""Opaque interiors and the still unresolved outermost red-key fur pixels."""
+"""Known-truth opaque fur and safeguards for fractional openings."""
 import numpy as np
 import cv2
 import pytest
@@ -60,10 +60,7 @@ def test_probe_distinguishes_rgb_damage_from_alpha_damage():
 
 @pytest.mark.parametrize('textured,key', [
     (False, 'blue'), (True, 'blue'), (False, 'green'), (True, 'green'),
-    (False, 'red'),
-    pytest.param(True, 'red', marks=pytest.mark.xfail(
-        strict=True, reason='Open defect: outermost warm fur pixels on red key still need refinement',
-    )),
+    (False, 'red'), (True, 'red'),
 ])
 def test_fur_opaque_details_preserve_color_and_opacity(textured, key):
     truth = fixture(textured)
@@ -180,3 +177,52 @@ def test_provisional_opaque_pixel_is_not_its_own_color_evidence():
     assert dubious[12, 10]
     assert not dubious[12, 13]
     np.testing.assert_array_equal(matte, before)
+
+
+def test_recurring_opaque_pigment_survives_other_colours_but_not_a_background_gap():
+    from chroma_key import _extend_opaque_color_runs
+    key = np.array([255, 0, 0], np.float32)
+    rgb = np.broadcast_to(key, (64, 64, 3)).copy()
+    matte = np.zeros((64, 64), np.float32)
+    rgb[10:50, 10:50] = (100, 170, 60)
+    matte[10:50, 10:50] = 1
+    rgb[14:26, 14:26] = (180, 145, 35)
+    # The same warm pigment returns at a thin boundary after a different hue.
+    rgb[40:42, 45:56] = (180, 145, 35)
+    matte[40:42, 45:56] = .86
+    # Identical observed RGB alone cannot establish a disconnected detail.
+    rgb[55:57, 55:57] = (180, 145, 35)
+    matte[55:57, 55:57] = .86
+    before_rgb, before_matte = rgb.copy(), matte.copy()
+    actual, _ = _extend_opaque_color_runs(rgb, matte, key)
+    assert np.all(actual[40:42, 45:56] == 1)
+    assert np.all(actual[55:57, 55:57] == .86)
+    np.testing.assert_array_equal(rgb, before_rgb)
+    np.testing.assert_array_equal(matte, before_matte)
+
+
+@pytest.mark.parametrize('kind', ['rim', 'slit', 'long_fibre'])
+@pytest.mark.parametrize('coverage', [.05, .6, .96])
+def test_repeated_palette_colour_cannot_fill_a_supported_key_mixture(kind, coverage):
+    from chroma_key import _extend_opaque_color_runs
+    key = np.array([0, 0, 255], np.float32)
+    foreground = np.array([240, 200, 40], np.float32)
+    mixed = np.rint(coverage * foreground + (1-coverage) * key)
+    rgb = np.broadcast_to(key, (64, 64, 3)).copy()
+    matte = np.zeros((64, 64), np.float32)
+    rgb[10:50, 10:50] = foreground
+    matte[10:50, 10:50] = 1
+    # This legitimate opaque pigment exactly matches the rim/slit's source RGB.
+    rgb[15:27, 15:27] = mixed
+    region = {
+        'rim': np.s_[30:45, 49:50],
+        'slit': np.s_[30:45, 35:37],
+        'long_fibre': np.s_[40:41, 49:62],
+    }[kind]
+    rgb[region] = mixed
+    matte[region] = coverage
+    before_rgb, before_matte = rgb.copy(), matte.copy()
+    actual, _ = _extend_opaque_color_runs(rgb, matte, key)
+    np.testing.assert_array_equal(actual[region], before_matte[region])
+    np.testing.assert_array_equal(rgb, before_rgb)
+    np.testing.assert_array_equal(matte, before_matte)

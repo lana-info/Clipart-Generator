@@ -17,7 +17,7 @@ class AutoClipartStateExtension:
             for row in rows:
                 if (not isinstance(row, dict)
                         or not {"status", "output_path", "attempts"} <= set(row)
-                        or set(row) - {"status", "output_path", "attempts", "editor_output_path", "stage_statuses", "source_path"}):
+                        or set(row) - {"status", "output_path", "attempts", "editor_output_path", "stage_statuses", "source_path", "paid_completed_stages"}):
                     raise ValueError("Неверная запись результата")
                 if not isinstance(row["status"], str) or row["status"] not in {"pending", "running", "succeeded", "failed", "cancelled"}:
                     raise ValueError("Неверный статус результата")
@@ -30,6 +30,12 @@ class AutoClipartStateExtension:
                 if not isinstance(edited, str) or (edited and edited != row["output_path"]):
                     raise ValueError("Неверный путь отредактированного результата")
                 stages = row.get("stage_statuses", {})
+                paid = row.get("paid_completed_stages", [])
+                if (not isinstance(paid, list) or len(paid) > 3
+                        or any(not isinstance(stage, str) or stage not in {
+                            "upscale_before", "upscale_after", "background_removal"
+                        } for stage in paid) or len(set(paid)) != len(paid)):
+                    raise ValueError("Неверная история оплаченных этапов")
                 if (not isinstance(stages, dict) or len(stages) > 32
                         or any(not isinstance(key, str) or len(key) > 80
                                or value not in ("running", "complete", "failed", "skipped", "cancelled")

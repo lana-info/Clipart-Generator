@@ -704,7 +704,7 @@ class V3ApplicationView(QWidget):
         if module_id != "auto-clipart":
             self._handle_mode_selected(module_id)
             return
-        if not self._save_automatic_before_leaving():
+        if not self._save_before_leaving():
             return
         if self.shell is not None and self.shell.active_run_controller() is not None:
             return
@@ -735,7 +735,7 @@ class V3ApplicationView(QWidget):
     def _open_composer(self):
         if self.shell is not None and self.shell.active_run_controller() is not None:
             return
-        if not self._save_automatic_before_leaving():
+        if not self._save_before_leaving():
             return
         host = None
         try:
@@ -812,7 +812,7 @@ class V3ApplicationView(QWidget):
         )
 
     def show_new_project(self, *, trigger: str = "new_project_requested") -> None:
-        if not self._save_automatic_before_leaving():
+        if not self._save_before_leaving():
             return
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self.mode_selection.reset_selection()
@@ -823,7 +823,7 @@ class V3ApplicationView(QWidget):
         self._set_application_screen(self.mode_selection, "mode_selection", trigger)
 
     def show_mode_switcher(self) -> None:
-        if not self._save_automatic_before_leaving():
+        if not self._save_before_leaving():
             return
         if self.shell is None:
             self.show_new_project()
@@ -862,7 +862,7 @@ class V3ApplicationView(QWidget):
         return True
 
     def _handle_mode_selected(self, mode_value: str) -> None:
-        if not self._save_automatic_before_leaving():
+        if not self._save_before_leaving():
             return
         mode = ProjectMode(mode_value)
         self._diagnostic_event(
@@ -915,7 +915,7 @@ class V3ApplicationView(QWidget):
     def continue_last_project(self) -> bool:
         if self._recent_saved_project_id is not None:
             return self.continue_saved_project(self._recent_saved_project_id)
-        if self._recent_project is None:
+        if self._recent_project is None or not self._save_before_leaving():
             return False
         state = ProjectState.from_dict(self._recent_project.to_dict())
         if not self._replace_shell(state):
@@ -941,7 +941,7 @@ class V3ApplicationView(QWidget):
             self.mode_selection.recent_project_card.hide()
 
     def continue_saved_project(self, project_id: str) -> bool:
-        if not self._save_automatic_before_leaving():
+        if not self._save_before_leaving():
             return False
         if self._project_store is None:
             return False
@@ -1009,6 +1009,20 @@ class V3ApplicationView(QWidget):
         if not isinstance(data, dict):
             data = {}
         use_legacy = not data and self._legacy_project is not None
+        runtime = data.get("runtime")
+        if isinstance(runtime, dict):
+            state.runtime = state.runtime.from_dict(runtime)
+        elif self._legacy_project is not None:
+            state.runtime = state.runtime.from_dict(self._legacy_project.runtime.to_dict())
+        if mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}:
+            mode_data = getattr(state, mode.value)
+            generation = data.get("generation")
+            if not isinstance(generation, dict) and self._legacy_project is not None:
+                generation = getattr(self._legacy_project, mode.value).generation.to_dict()
+            if isinstance(generation, dict):
+                mode_data.generation = mode_data.generation.from_dict(
+                    generation, default_ratio=mode_data.generation.ratio
+                )
         if use_legacy:
             if mode is ProjectMode.PROCESSING:
                 state.processing.operations = state.processing.operations.from_dict(
@@ -1071,8 +1085,11 @@ class V3ApplicationView(QWidget):
             payload = {"output_dir": state.output_dir_for_mode(state.mode), "operations": state.clipart.operations.to_dict()}
         else:
             # Pinterest Pins has its own generation/pin schema and no legacy
-            # processing operations. Keep only the shared folder preference.
+            # processing operations. Preserve its generation settings separately.
             payload = {"output_dir": state.output_dir_for_mode(state.mode)}
+        payload["runtime"] = state.runtime.to_dict()
+        if state.mode in {ProjectMode.CLIPART, ProjectMode.PINTEREST}:
+            payload["generation"] = getattr(state, state.mode.value).generation.to_dict()
         self._preferences[state.mode.value] = payload
         try:
             save_preferences_atomic(path, self._preferences)
@@ -1080,12 +1097,15 @@ class V3ApplicationView(QWidget):
             return False
         return True
 
-    def _save_automatic_before_leaving(self) -> bool:
-        if self.shell is None or getattr(self.shell, "module_id", None) != "auto-clipart":
+    def _save_before_leaving(self) -> bool:
+        """Keep the current workflow alive until it is idle and safely saved."""
+        if self.shell is None:
             return True
-        controller = self.shell.workflow_controller("auto-clipart")
-        if controller is not None and controller.is_busy():
-            self.shell.set_save_error("Дождитесь завершения текущего задания или остановите его.")
+        module_id = getattr(self.shell, "module_id", self.shell.state.mode.value)
+        controller = self.shell.workflow_controller(module_id)
+        if (self.shell.active_run_controller() is not None
+                or (callable(getattr(controller, "is_busy", None)) and controller.is_busy())):
+            self.shell.set_save_error("Сначала остановите текущее задание или дождитесь его завершения.")
             return False
         return self._save_draft()
 
@@ -1383,14 +1403,9 @@ class V3ApplicationView(QWidget):
                 event.ignore()
                 return
             self._close_composer()
-        if self.shell is not None and getattr(self.shell, "module_id", None) == "auto-clipart":
-            controller = self.shell.workflow_controller("auto-clipart")
-            if controller is not None and controller.is_busy():
-                event.ignore()
-                return
-            if not self._save_draft():
-                event.ignore()
-                return
+        if not self._save_before_leaving():
+            event.ignore()
+            return
         if self._module_updates_dialog is not None and self._module_updates_dialog.busy:
             event.ignore()
             return
