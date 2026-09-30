@@ -736,7 +736,7 @@ class ProcessingRecipePage(_ScrollableStepPage):
     ) -> None:
         super().__init__(
             "Цель обработки",
-            "Рецепт только заполняет настройки; их можно изменить на следующем шаге.",
+            "",
             tokens=tokens,
         )
         self.state = state
@@ -745,7 +745,7 @@ class ProcessingRecipePage(_ScrollableStepPage):
         group = QGroupBox("Рецепты")
         layout = QVBoxLayout(group)
         for recipe, spec in PROCESSING_RECIPES.items():
-            button = QRadioButton(f"{spec.title} — {spec.description}")
+            button = QRadioButton(spec.title)
             button.toggled.connect(
                 lambda checked, value=recipe: self._select(value, checked)
             )

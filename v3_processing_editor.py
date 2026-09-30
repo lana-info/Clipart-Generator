@@ -46,13 +46,13 @@ def _operations(**overrides: Any) -> ImageOperationData:
 PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
     "basic_enhancement": ProcessingRecipe(
         key="basic_enhancement",
-        title="Базовое улучшение",
+        title="Повышение резкости",
         description="Локальная резкость без сетевой передачи.",
         operations=_operations(unsharp=True),
     ),
     "sharp_cutout": ProcessingRecipe(
         key="sharp_cutout",
-        title="Удалить фон с чёткими краями",
+        title="Удалить фон",
         description="Локально, без апскейла и обрезки.",
         operations=_operations(
             remove_background=True,
@@ -63,7 +63,7 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
     ),
     "prepare_clipart": ProcessingRecipe(
         key="prepare_clipart",
-        title="Подготовить клипарт",
+        title="Удалить фон, очистить край, сделать trim",
         description="Подготовка прозрачного фона, очистка края и trim.",
         operations=_operations(
             upscale_before=True,
@@ -89,13 +89,13 @@ PROCESSING_RECIPES: dict[str, ProcessingRecipe] = {
     ),
     "export_300_dpi": ProcessingRecipe(
         key="export_300_dpi",
-        title="Экспорт 300 DPI",
+        title="Экспорт для печати 300 DPI",
         description="Сохранить изображение с параметрами для печати 300 DPI.",
         operations=_operations(export_300_dpi=True),
     ),
     "custom": ProcessingRecipe(
         key="custom",
-        title="Свой рецепт",
+        title="Свои настройки",
         description="Настройки не меняются; операции выбираются вручную.",
         operations=None,
     ),
