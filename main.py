@@ -54,6 +54,7 @@ from chroma_key import (
     ChromaKeyAmbiguousError,
     remove_chroma_key_automatic,
     measure_chroma_background,
+    detect_chroma_key_color,
 )
 from chroma_provenance import image_digest, write_receipt
 from license_client import LicenseClient, LicenseError
@@ -1169,7 +1170,7 @@ class WorkerThread(QThread):
         self.chroma_key_color = str(
             settings.get("chroma_key_color", "blue") or "blue"
         ).strip().lower()
-        if self.chroma_key_color not in KEY_COLORS:
+        if self.chroma_key_color not in (*KEY_COLORS, "auto"):
             self.chroma_key_color = "blue"
         self.upscale_factor = normalize_topaz_upscale_factor(
             settings.get("upscale_factor", 4)
@@ -2854,6 +2855,8 @@ class WorkerThread(QThread):
                         try:
                             with Image.open(current_path) as source_image:
                                 engine = self._chroma_engine()
+                                if selected_chroma_key_color == "auto":
+                                    selected_chroma_key_color = detect_chroma_key_color(source_image)
                                 result = engine.remove(
                                     source_image,
                                     selected_chroma_key_color,
@@ -2871,7 +2874,7 @@ class WorkerThread(QThread):
                         except ChromaKeyAmbiguousError as error:
                             safe_error = self._safe_error_text(error)
                             fallback_succeeded = False
-                            if self.auto_clipart_sharp_fallback:
+                            if self.auto_clipart_sharp_fallback and self.chroma_key_color != "auto":
                                 try:
                                     self.progress.emit(
                                         "  Генератор создал неоднородный фон; "

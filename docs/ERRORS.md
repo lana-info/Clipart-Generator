@@ -1,5 +1,19 @@
 # Ошибки проекта
 
+## processing-3.2.10-integration, 2026-09-30
+
+First integration suite: 2059 passed, one failure in release contract after
+VERSION.txt advanced to 3.2.10 while Azure appVersion default stayed 3.2.9.
+Cause verified in both files and test assertion; align Azure default to 3.2.10
+and recheck release tests. Existing assertions are unchanged.
+
+Signed-module smoke harness initially omitted the image-processing capability
+broker and used command install instead of declared install_workflow. Inspected
+runtime/module entry contracts, corrected harness only, then verified official
+signed Processing/image-processing 1.5.1: install, activation, loaded Auto UI and
+engine removal PASS. Both reject Core3.2.9 due to minimum3.2.10. No application
+fix needed for these diagnostic mistakes.
+
 ## Подготовительное ревью Studio 3.2, 2026-09-10
 
 1. Сохранённая контурная копия оставалась только в редакторе, тогда как ZIP
@@ -22,3 +36,64 @@
 
 Все три дефекта воспроизведены до изменения реализации. Проверки и статус
 нового независимого ревью находятся в STATE.md.
+
+## processing-background-choice, 2026-09-29
+
+Симптом: Windows 3.2.8, вкладка Обработка, результаты трёх PNG теряли рамку,
+голову гуся и ботву. Диагностика подтвердила local_rembg/u2net и только этапы
+background_removal/export; все три ошибочных результата отмечены succeeded.
+Причина отсутствия выбора: общий редактор принудительно скрывал существующие
+provider/model/colour controls. Качество сегментации U2Net не исправляется
+возвратом выбора; это отдельное ограничение. Автоподбор генерационного цвета
+и загрузка его provenance уже существовали, автоопределения произвольного
+импортированного PNG в Processing не было.
+
+Исправление: включаем существующие controls только для Processing. Добавлен
+режим auto с определением насыщенного RGB-фона по четырём краям (90% согласия,
+основной канал >=150 и превосходство >=80). При неоднозначности сохраняется
+исходник и требуется ручная проверка, без нейросетевого fallback. Подтверждённая
+запись цвета генерации приоритетна. Default auto только для новых Processing
+настроек/рецептов; старые явные цвета сохраняются. Выпадающие поля ограничены
+240/360px, текущее название полностью доступно в tooltip.
+
+Проверки: синтетическая смешанная RGB-партия через настоящий worker, сохранение
+исходников, приоритет metadata, отказ для белого/серого/тёмного/смешанного фона,
+UI-to-request/preflight, project roundtrip, условная видимость и Qt-снимки.
+На 72.png, 50_goose_in_garden_arch.png и 42.png определён blue. Это проверка
+детектора, а не новая визуальная приёмка полного удаления. Итог прогона в STATE.md.
+Белый алгоритм не реализован; Windows-сборка/платные вызовы не запускались.
+
+## Test-environment persistence regression observed, 2026-09-29
+
+Полный прогон обнаружил семь падений UI-проверок сохранения настроек.
+Ранее на исходной 3.2.8 повторно проверен только один из семи тестов, поэтому
+утверждение, что все семь проверены на исходной версии, было слишком сильным.
+Диагностика подтвердила общую причину: fixtures подменяли CONFIG_FILE/ENV_FILE,
+но оставляли USER_DATA_DIR настоящим. ProtectedFalCredentialStore при сохранении
+пустого ключа обращался к настоящему fal_api_key.bin; read-only filesystem
+возвращал EROFS и сохранение config прекращалось. Это ошибка изоляции тестов,
+а не основание отключать защиту ключей.
+
+Причина → изменение → проверка → результат: неполная изоляция пользовательских
+путей → семь fixtures одновременно подменяют CONFIG_FILE и USER_DATA_DIR
+через patch.multiple → все семь файлов тестов плюс тесты credential store →
+49 passed, 18 subtests, 1 expected Windows DPAPI skip. Assertions и production
+credential handling сохранены. Итог повторного полного прогона в STATE.md.
+
+## processing-review-followups, 2026-09-29
+
+Независимый reviewer на gpt-6.1-sol подтвердил два пропуска:
+1. При запуске автоматически создаваемый legacy config с local_realesrgan_dir
+   проходил миграцию и заменял новый Auto на blue. Processing-only default при
+   отсутствующем chroma_key_color теперь auto; явно сохранённые RGB-цвета и
+   обычный генерационный blue остаются прежними. Регрессия проверяет миграцию,
+   отсутствие мутации config и сохранение ручных цветов.
+2. refresh_from_state блокирует сигналы combobox, поэтому смена рецепта оставляла
+   tooltip предыдущей модели. Подсказка явно обновляется после refresh и после
+   выбора профиля. Регрессия проверяет оба перехода на настоящем Qt-редакторе.
+
+Проверки после исправлений: 80 passed + 33 subtests; reviewer follow-up
+9 passed + 4 subtests. Повторный полный прогон с исправленными fixtures:
+1985 passed, zero failures; финальные review-правки отдельно проверены после
+того, как текущий полный прогон уже импортировал модули. Неизвестных новых
+падений нет; известный red-fur xfail и платформенные skips сохранены.

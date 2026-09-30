@@ -16,6 +16,15 @@ Owner subsequently specified beta distribution for Studio3.2.9 and module1.5.0.
 Prompt Composer requires its own
 package and right; it is not implicitly included in Club/VIP.
 
+## Processing method selection, 2026-09-29
+
+Processing exposes the existing local neural models, cloud providers/models and
+local chroma-key colour selector. The owner can choose the method explicitly;
+background controls must not be unconditionally hidden in this workflow. This
+restoration does not change automatic-generation UX or add a white chroma colour.
+Processing offers Auto colour per imported image, respecting recorded generation
+colour first and requiring review for uncertain backgrounds without neural fallback.
+
 ## Manual contour requirement, 2026-09-29
 
 The transparency pen must create an outline directly by clicks, including on

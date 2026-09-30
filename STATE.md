@@ -1,5 +1,33 @@
 # Project state
 
+## Processing integration candidate 3.2.10, 2026-09-30
+
+Owner asked to continue after the verified fix/review/push handoff, authorizing
+integration and the next Windows build. Integrated shell/modules e5f241e and
+processing fix ab6a2a0 in isolated codex/integrate-processing-3.2.10. Existing
+task worktrees and published 3.2.9 beta rows are preserved. Documentation conflicts
+resolved by retaining both histories. Source version advanced to 3.2.10.
+
+| Requirement and source | Verification | Implementation | Result |
+| --- | --- | --- | --- |
+| Continue integration with latest delivered shell | Merge commit ancestry, code regression tests | Code merged automatically; both documentation histories retained | 2059 passed + 278 subtests, one version-default failure fixed; 46 release tests + 6 subtests then passed |
+| Make processing selection available in modular application | Official Processing package loaded against integrated Core | Processing/image-processing1.5.1 require Studio >=3.2.10 | Signed ZIP install/load/Auto UI/engine smoke PASS; both reject3.2.9 |
+| Windows installer candidate | GitHub release workflow and artifact checks | Version 3.2.10 candidate prepared; repository remains private | Build pending |
+
+Publication of a new installer/module to the license server is a separate action;
+this integration has not changed customer rights or existing beta releases.
+
+Integrated test evidence: `/tmp/processing-3.2.10-full-pytest.log`:
+2059 passed, 57 skipped, 20 deselected, 1 known red-fur xfail, 278 subtests;
+one Azure version default failure was diagnosed/fixed, followed by 46 passing
+release/installer/shell tests and6subtests. No full rerun after the YAML-only fix.
+Packages prepared with existing official publisher key, no key output:
+`artifacts/processing-3.2.10-candidate/processing-1.5.1-windows-x64.zip`,
+13220bytes, SHA256 fd81996c58c0cae3159a5a08da63f5bfc40e23c768a3c93b407d12ce61c0c8bf;
+`image-processing-1.5.1-windows-x64.zip`, 21467bytes,
+SHA256 ae36e6da46aff61cb39019a7b76e9ec6a67d3a10985cfdfc3823f65dc94816e5.
+These are local candidates, not published server updates.
+
 ## Studio3.2.9 build and server publication, owner authorized
 
 Owner explicitly requested temporary GitHub public visibility, Windows build,
@@ -141,6 +169,67 @@ further use.» Повторную сборку при этом же блокер
 и выдача прав не разрешены текущим scope; сервер должен остаться неизменным.
 Автовосстановления повреждённой версии под тем же номером пока нет; это не заявлять
 как готовую функцию. Новости/сохранённые проекты сохраняют прежние места интерфейса.
+
+
+## Processing method selection restored, 2026-09-29
+
+Owner requested visible method selection, compact menus and per-file automatic
+chroma colour in Processing. Worktree branch codex/fix-processing-method-choice-20260930
+uses delivered 3.2.8 source 6568fae; unrelated source-worktree edits are preserved.
+Diagnosis and correction history: [docs/ERRORS.md](docs/ERRORS.md#processing-background-choice-2026-09-29).
+Background choices committed as a9de4f7. Owner subsequently authorized fixes,
+independent agent review, commits and push; merge/cleanup remains preparation only.
+
+| Requirement and source | Verification | Implementation | Verified result |
+| --- | --- | --- | --- |
+| Owner: fix failing tests without weakening checks | Seven failing test files plus credential-store checks, full pytest | Isolate USER_DATA_DIR with CONFIG_FILE in test fixtures | 49 passed, 18 subtests; full run 1985 passed, zero failures |
+| Owner: prepare future branch integration | git merge-tree against codex/feature-studio-shell-modules-20260929 | Read-only conflict preview | Code merges automatically; conflicts in PROJECT.md, STATE.md, TASKS.md require retaining both histories |
+| Owner: independent review and remote backup | Separate review agent, git push verification | Review complete; Auto startup migration and model tooltip findings fixed | Reviewer: 96 tests + 7 subtests, then 9 tests + 4 subtests; a9de4f7 and d415ed7 pushed to origin/codex/fix-processing-method-choice-20260930 |
+| Auto remains default through startup migration | Legacy migration plus Qt/state regression | Processing migration defaults to Auto only when colour is absent | 80 tests + 33 subtests passed after both review fixes |
+
+Full pytest after isolating all seven failing fixtures: **1985 passed, 57 skipped,
+19 deselected, 1 known expected red-fur failure, 276 subtests, zero failures**
+in 246.57s. Review corrections made during that run were verified separately by
+80 state/Qt/mode-selection tests and reviewer follow-up; do not claim that the
+full run loaded the final versions of already-imported modules.
+Log: `/tmp/processing-method-full-pytest.log`. Native Windows and real cloud
+processing remain unverified; white-background removal remains unimplemented.
+
+Integration preparation: compare against `codex/feature-studio-shell-modules-20260929`
+(contains verified 3.2.9). `git merge-tree --write-tree` confirms automatic code
+merge and conflicts only in PROJECT.md, STATE.md, TASKS.md. At actual integration
+retain the newer 3.2.9 delivery records and this task's requirements/results.
+No branch, worktree or unrelated `:memory:.ses` file removed.
+Remote verification: lana-info/Clipart-Generator is private; current authenticated
+account has ADMIN. Push created the task branch and set its upstream. Latest
+commit uses [skip ci]; no release-build workflow was dispatched.
+
+| Requirement and source | Verification | Implementation | Verified result |
+| --- | --- | --- | --- |
+| Owner: choose local/cloud neural methods and chroma in Processing | Actual ProcessingPipelinePage switching, UI-to-run-request test | Opt-in visibility for existing controls only in Processing | Implemented and verified: focused Qt/flow/state tests passed |
+| Keep provider-specific settings and operation on/off behavior | Switch rembg/BEN2/Fal/KIE/chroma; toggle removal | Existing registry/visibility rules reused | Implemented and verified: focused Qt/flow/state tests passed |
+| Preserve other workflows and existing hidden defaults | Shared-editor regression tests | Default show_background_controls=False | Implemented and verified: focused Qt/flow/state tests passed |
+| Owner asks whether white can replace chroma | Inspect supported algorithm/colour contract | White is not implemented as a chroma colour; existing neural methods remain available | Current keyer supports blue/green/red; no white-background quality claim |
+| Per-file Auto for imported PNGs, owner request | Real mixed-colour worker batch, metadata priority, uncertain-background refusal, UI-to-request, persistence | Implemented: Auto for new Processing defaults and recipes; existing explicit colours retained | Implemented and verified: 165 tests + 38 subtests passed; 1 unrelated Windows Real-ESRGAN skip |
+| Compact dropdowns, owner request | Actual Qt 1120x780 capture | Implemented: 240px fields, 360px models with full-text tooltip | Linux offscreen visually inspected |
+
+Focused verification: 165 tests + 38 subtests passed, 1 skipped because the
+Windows Real-ESRGAN executable is absent. Includes Qt/worker/state/provider
+registry, module packaging and dependency architecture. Full isolated pytest:
+1978 passed, 57 skipped, 19 deselected, 1 expected failure and 276 subtests.
+Seven legacy UI settings-persistence tests failed in that historical run; one
+also reproduced on unmodified delivered 3.2.8. They are now traced to incomplete
+test-path isolation and fixed; details in docs/ERRORS.md. `git diff --check` passed.
+Other workflows retain their hidden controls. Native Windows execution was not
+performed.
+
+Actual 1120x780 Linux offscreen Qt captures for six methods:
+`docs/ui/3.2/processing-method-choice/`. Existing horizontal scrolling layout
+retained. Native Windows verification and packaged delivery not performed.
+No changes to pixel reconstruction; Auto selects a colour before removal. Restoring selection does not certify neural cutout
+quality. Earlier source-only chroma probes retained >99.9% non-blue pixels on
+three owner sources, not a full edge-quality acceptance.
+
 
 ## Paper-free generation prompt clarification, 2026-09-29
 

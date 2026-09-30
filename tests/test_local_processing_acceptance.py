@@ -833,6 +833,47 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
 
             self.assertEqual(worker.chroma_key_color, "blue")
 
+    def test_auto_chroma_detects_each_file_in_one_worker_and_preserves_sources(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "raw"
+            raw.mkdir()
+            worker = self.make_worker(root, remove_bg=True,
+                                      remove_bg_provider="local_chroma_key",
+                                      chroma_key_color="auto")
+            for index, (color, rgb) in enumerate(main.KEY_COLORS.items(), 1):
+                source = root / f"{color}.png"
+                image = Image.new("RGB", (64, 64), rgb)
+                ImageDraw.Draw(image).rectangle((20, 20, 44, 44), fill=(235, 230, 210))
+                image.save(source)
+                before = source.read_bytes()
+                result = worker._run_processing_pipeline(str(source), None, str(raw), index, "file")
+                with Image.open(result) as output:
+                    self.assertEqual(output.getpixel((0, 0))[3], 0)
+                    self.assertEqual(output.getpixel((32, 32)), (235, 230, 210, 255))
+                self.assertEqual(source.read_bytes(), before)
+                self.assertEqual(worker.chroma_key_color, "auto")
+            # A generation record takes priority; no pixel colour guess needed.
+            with patch("chroma_generation_record.load_generation_color", return_value=color), \
+                 patch.object(main, "detect_chroma_key_color", side_effect=AssertionError("metadata ignored")):
+                worker._run_processing_pipeline(str(source), None, str(raw), 9, "recorded")
+
+    def test_auto_chroma_uncertain_background_does_not_call_neural_fallback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            raw = root / "raw"
+            raw.mkdir()
+            source = root / "white.png"
+            Image.new("RGB", (64, 64), "white").save(source)
+            worker = self.make_worker(root, remove_bg=True,
+                                      remove_bg_provider="local_chroma_key",
+                                      chroma_key_color="auto", auto_clipart_sharp_fallback=True)
+            with patch.object(worker, "_run_auto_clipart_sharp_fallback") as fallback:
+                result = worker._run_processing_pipeline(str(source), None, str(raw), 1, "file")
+            fallback.assert_not_called()
+            self.assertEqual(result, str(source))
+            self.assertTrue(worker._item_context.manual_transparency_required)
+
     def require_local_realesrgan(self):
         exe_path, error = main.validate_local_realesrgan_exe(str(REALESRGAN_DIR))
         if error:

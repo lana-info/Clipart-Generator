@@ -649,6 +649,16 @@ class ProjectSerializationTests(unittest.TestCase):
 
 
 class Version2MigrationTests(unittest.TestCase):
+    def test_missing_legacy_color_defaults_to_auto_only_for_processing(self):
+        config = {"local_realesrgan_dir": "/synthetic/model-path"}
+        state = migrate_v2_config(config)
+        self.assertEqual(state.processing.operations.chroma_key_color, "auto")
+        self.assertEqual(state.clipart.operations.chroma_key_color, "blue")
+        self.assertNotIn("chroma_key_color", config)
+        for color in ("blue", "green", "red"):
+            state = migrate_v2_config({**config, "chroma_key_color": color})
+            self.assertEqual(state.processing.operations.chroma_key_color, color)
+
     def test_generate_config_migrates_without_mutating_or_copying_secrets(self):
         legacy = {
             "run_mode": "both",

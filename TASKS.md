@@ -39,6 +39,15 @@ Customer grants remain unchanged. Owner authorized publishing release rows.
 - [x] Verify installer, upload Studio3.2.9 and publish all seven release rows.
   Hashes match, release discovery confirmed; /health200, unauthorized download403.
 
+## Processing method choices
+- [x] Restore existing background provider/model and chroma-colour controls in Processing per owner request.
+- [x] Add per-file Auto RGB chroma detection with metadata priority and uncertainty refusal; compact Processing dropdowns.
+- [x] Fix seven settings tests by isolating protected-credential user paths; full suite has zero failures.
+- [x] Independent review: fix Auto startup migration and stale model tooltips; verify both corrections.
+- [x] Prepare integration with delivered 3.2.9: automatic code merge, preserve both histories in three documentation conflicts.
+- [ ] Native Windows and installed-build acceptance of restored Processing choices.
+- [ ] Separate white-background algorithm remains unimplemented; do not add white to the RGB chroma contract without design and image-quality verification.
+
 - [x] Clarify new chroma prompts: preserve object textures, exclude paper substrate
   and white bridges/fringe; foliage gaps use the selected background colour.
 - [ ] Verify one regenerated teddy/pine image after updating prompts; paid launch
