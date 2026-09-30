@@ -6,15 +6,28 @@
 Владелец разрешил завершить оставшиеся вопросы, commit и Windows-сборку:
 временно сделать репозиторий PUBLIC, выполнить сборку, вернуть PRIVATE.
 Публикация новых релизов на лицензионном сервере не поручена.
-Ветка codex/fix-studio-review-20260930; исходная интеграционная копия сохранена.
+Ветка codex/fix-studio-review-20260930; source commit940072924bcdd387ae19fa03c90393290a83b9cd.
+Исходная интеграционная копия сохранена. Auto-review первоначально требовал отдельное разрешение на push. Владелец
+явно разрешил push9400729 и продолжение сборки; ветка отправлена в origin.
+Windows workflow36783850992 SUCCESS из точного9400729. Репозиторий возвращён
+в PRIVATE; root и независимый агент подтвердили это отдельными live GitHub запросами.
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
 | Повтор не списывает деньги после вытеснения paid history; residual полного ревью | KIE/Fal completed→download failure→history eviction→retry twice, reopen | Durable paid-stage marker от provider success до download; recovery failclosed при отсутствии task |24 worker regressions PASS; independent31 tests PASS, standalone repro1POST |
-| Коммит исправлений и кандидат Studio3.2.11; владелец | Version contract, full tests, independent diff review, sensitive tracked scan | Core version/Azure default3.2.11 | Итоговый full2145tests+278subtests PASS,57skip/20deselected; повторное ревью latest31tests PASS; sensitive tracked scan PASS |
+| Коммит исправлений и кандидат Studio3.2.11; владелец | Version contract, full tests, independent diff review, sensitive tracked scan | Core version/Azure default3.2.11; source commit9400729 | Итоговый full2145tests+278subtests PASS,57skip/20deselected; повторное ревью latest31tests PASS; sensitive tracked scan PASS |
 | Подписанные совместимые модули1.5.2 | Все6 official pinned signature/install/runtime, Core3.2.10 rejection, actual Qt UI/engine | Комплект всех6 требует Core>=3.2.11,<3.3.0 | Все6 PASS;5workflow UI show/local Composer variants и chroma alpha0/255 PASS; temporary signed license/fake transport |
-| Windows-сборка с возвратом PRIVATE; владелец | Exact pushed commit, workflow completion, provenance/version/hash, independent visibility check | Подготовлен отдельный helper с finally PRIVATE restore и headSha check | Сборка ещё не запущена, repo PRIVATE подтверждён |
-| Установленный Windows Core | CI native security/entrypoint/installed smoke receipts | Штатный production workflow без изменения installer identity | Ожидается сборка; licensed module download с реальной лицензией отдельно недоступен |
+| Windows-сборка с возвратом PRIVATE; владелец | Exact pushed commit, workflow completion, provenance/version/hash, independent visibility check | Подготовлен отдельный helper с finally PRIVATE restore и headSha check | Реализовано и проверено: run36783850992 SUCCESS, source9400729, hash/version/provenance совпали; PRIVATE подтверждён root и независимым агентом |
+| Установленный Windows Core | CI native security/entrypoint/installed smoke receipts | Штатный production workflow без изменения installer identity | Реализовано и проверено: CI Windows Server2025, frozen=true, все13 installed Core checks PASS; real licensed module download/open и upgrade3.1.4 не проверены |
+
+Полный кандидат: artifacts/studio-3.2.11-review-candidate в основном проекте.
+Установщик windows-build/VibixImages-Setup-3.2.11.exe:242894861bytes,
+SHA2562110f235d6fde0db5ff3d8cdbeca99432b30cb81d39bf29148ad0855077ac55f.
+Evidence: installer-verification.json, windows-workflow-verification.json,
+build-privacy-receipt.json, candidate-manifest.json, modules/ и windows-build/ui-evidence/.
+Скриншот каталога просмотрен;13 checks подтверждают установленный frozen Core,
+а не реальную доставку/открытие модулей с customer license. Legacy3.1.4 fixture
+в CI не предоставлен, соответствующий шаг SKIPPED. Новые релизы не опубликованы.
 
 Модули: artifacts/official-modules-1.5.2-studio3211-20260930 в основном проекте;
 evidence /tmp/studio3211-modules-verification.json и /tmp/studio3211-modules-smoke.log.
@@ -68,9 +81,10 @@ Root affected149 tests+21subtests PASS; AST19 changed Python files и diffcheck 
 в памяти. После restart со старым cache межпроцессная инвалидизация не гарантируется
 при недоступном storage. Незавершённый raw остаётся в .run для восстановления;
 автоматическая уборка старого raw после успешного recovery не добавлена.
-Журнал ограничивает completed history1000записями. Recovery после вытеснения
-истории очень длинной очереди отдельно не проверен; не гарантируется вечная
-дедупликация paid stages. При ошибке получения сохранённого provider result
+Журнал ограничивает completed history1000записями. Последующим исправлением
+paid-history-eviction-before-studio3211 закрыт повторный paid submit после вытеснения:
+проверены KIE/Fal eviction→retry twice→reopen; отсутствующий task блокирует recovery.
+См. текущий статус выше и docs/ERRORS.md#paid-history-eviction-before-studio3211. При ошибке получения сохранённого provider result
 состояние остаётся ошибкой без автоматического нового paid submit.
 Windows с реальной лицензией, live paid API и визуальная приёмка пользовательских
 изображений остаются отдельными недоступными проверками.

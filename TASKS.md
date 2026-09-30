@@ -6,10 +6,12 @@
 - [x] Подтвердить residual paidhistory eviction и закрыть implicit paid resubmit; provider-success checkpoint, repeated retry/reopen regressions, independent review PASS.
 - [x] Согласовать source version/Azure default3.2.11; подготовить6official signed1.5.2 modules minimumCore3.2.11, package/runtime/Qt checks PASS.
 - [x] Final full source2145tests+278subtests PASS, sensitive tracked scan и независимое ревью PASS.
-- [ ] Approved commit/push feature branch.
-- [ ] Временно PUBLIC → Windows production build exactcommit → PRIVATE, independently verify restoration.
-- [ ] Получить installer/provenance/hash и проверить installed Core receipts.
+- [x] Source commit9400729 создан в отдельной ветке.
+- [x] Push9400729 после отдельного явного разрешения владельца; origin feature branch, без merge.
+- [x] PUBLIC → Windows production build exact9400729 → PRIVATE: run36783850992 SUCCESS; root и независимый агент подтвердили PRIVATE.
+- [x] Installer3.2.11/source/hash/provenance совпали; installed frozen Core13checks PASS, каталог просмотрен.
 - [ ] Actual licensed module download/open in installed Windows; источник и package smoke не заменяют этот сценарий.
+- [ ] Проверить обновление старой установленной3.1.4 с сохранением пользовательских данных; legacy fixture шаг CI SKIPPED.
 - Новые серверные релизы не публиковать без отдельного поручения.
 
 ## Исправления полного ревью, 2026-09-30

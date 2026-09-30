@@ -1,6 +1,25 @@
 # Ошибки проекта
 
 
+
+## studio3211-push-approval-block
+
+Source commit9400729 создан после final2145tests+278subtests PASS, independent
+review31tests PASS и sensitive scan PASS. Push отдельной ветки отклонён
+автоматической проверкой разрешений: «отдельного явного разрешения именно на
+push нет», требуется согласие на передачу кода во внешний GitHub-репозиторий.
+Remote lana-info/Clipart-Generator совпадает с проектом, PRIVATE проверен через
+GitHub API. Обход отказа не выполняется. Владельцу задан точный вопрос о push
+этого коммита. Затем владелец явно разрешил push и продолжение сборки.
+Повторный push9400729 SUCCESS, обхода отказа не было. Helper
+PUBLIC/build/PRIVATE запущен после push; exact expected head9400729.
+Результат: run36783850992 SUCCESS; finally вернулPRIVATE. Root и независимый
+агент live GitHub проверкой подтвердилиPRIVATE. Скачанный installer3.2.11,
+source9400729, SHA256 и provenance совпали; все13 installed frozen Corechecks PASS.
+Evidence в artifacts/studio-3.2.11-review-candidate основного проекта.
+Реальный customer-license download/open и upgrade3.1.4 не проверены;
+соответствующий legacy fixture шаг SKIPPED. Серверная публикация не выполнялась.
+
 ## paid-history-eviction-before-studio3211
 
 После разрешения владельца на commit/build residual hypothesis проверена.
