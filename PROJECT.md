@@ -9,7 +9,10 @@ and compact-card image sizes. No purchase link: denied cards say «Нет дос
 License refresh is automatic, no permanent status strip or refresh-access button.
 Place «Обновления модулей» beside «Лицензия» in the top row.
 Reuse the existing license server and exact signed rights; do not change server
-code, deployments, bundles or customer grants. Prompt Composer requires its own
+code, deployments, bundles or customer grants. Owner subsequently authorized
+publication of Studio and module release artifacts, plus temporary GitHub public
+visibility solely for the Windows build with return to private afterwards.
+Prompt Composer requires its own
 package and right; it is not implicitly included in Club/VIP.
 
 ## Manual contour requirement, 2026-09-29

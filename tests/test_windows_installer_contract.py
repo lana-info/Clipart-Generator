@@ -47,7 +47,7 @@ class WindowsInstallerContractTests(unittest.TestCase):
     def test_installed_verification_binds_optional_previous_installer(self):
         workflow = Path(".github/workflows/release-multi-platform.yml").read_text()
         step = workflow.split("- name: Verify installed Windows application", 1)[1]
-        body = textwrap.dedent(step.split("run: |", 1)[1].split("- name: Calculate setup hash", 1)[0])
+        body = textwrap.dedent(step.split("run: |", 1)[1].split("\n      - name:", 1)[0])
         body = body.replace("${{ steps.version.outputs.app_version }}", "3.2.7")
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -1,5 +1,44 @@
 # Project state
 
+## Studio3.2.9 build and server publication, owner authorized
+
+Owner explicitly requested temporary GitHub public visibility, Windows build,
+return to private, and publication of Studio plus each module on the license
+server. Owner confirmed the risk of permanent source/history copying. This
+supersedes the earlier release-publication restriction, not customer grants.
+No bundle or license rights changes are requested.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Временно открыть GitHub, собрать и вернуть приватность; явное подтверждение владельца | GitHub API visibility + run conclusion | Запущен helper с finally возвратом PRIVATE и пределом90min | Run36661594300/sourcec758c47: frozen smoke и сборка установщика прошли; installed smoke exit1. PRIVATE восстановлен helper и подтверждён отдельно |
+| Studio и каждый модуль разместить на лицензионном сервере; новый запрос | Подписи, SHA256, server rows, installed Windows smoke | Шесть модульных пакетов1.5.0 загружены через штатный artifact storage как draft | Все6 хешей/размеров совпали. Studio installer не прошёл installed smoke. Публикация ожидает успешной проверки |
+| Сохранить лицензии и настройки сервера | Scope операций только release create/attach/publish | Код/deployment/bundles/grants не меняются | Резервная копия pre-studio329-publication-20260930.dump проверена pg_restore --list |
+
+Temporary build helper: /tmp/studio_public_build.py; live status:
+/tmp/studio-public-build-status.json. It restores PRIVATE on completion/error;
+confirm independently before ending. Initial gh repo edit flag was unsupported
+by the installed older CLI, before any visibility change. Switched to typed REST
+PATCH after confirming PRIVATE; no billing changes. Historical pre-public audit:
+4436 blobs scanned for credential formats, zero matches; historical licenses.db
+has zero license/activation rows. This is a bounded scan, not a guarantee.
+
+Диагностика Windows: frozen/offscreen без evidence прошёл, installed/native с evidence
+вернул exit1 без деталей. Гипотеза: native геометрия либо сохранение evidence.
+Добавлены отдельные флаги JSON, native source preflight и upload evidence при ошибке;
+условия проверки не ослаблены. Локальный контракт PowerShell сначала захватил новый
+YAML step в тело скрипта; извлечение ограничено ближайшим step вместо имени дальнего.
+
+Run: https://github.com/lana-info/Clipart-Generator/actions/runs/36661594300
+Backup: /opt/bots-stack/backups/clipart-license-service/pre-studio329-publication-20260930.dump
+Module receipts: /root/projects/Clipart Generator/artifacts/studio-shell-modules-1.5.0-20260929/server-draft-receipts.json
+Draft IDs: auto-clipart38e842da-12e2-bfd4-98e0-4616ef1a406b;
+cliparte4fe67f7-1076-b430-4d0e-9626e913558f;
+image-processing0f78a352-92c5-d5e1-5e11-8bb1f6d8ad16;
+pinterestacfe9f7d-de21-93f8-2ad0-feec4cceb4db;
+processing94e61723-2841-2565-28b8-9830088e9cba;
+prompt-composer4e449aeb-8ac2-b002-cff3-93f7360e1818.
+
+
 ## Studio shell source candidate, 2026-09-29
 
 Branch `codex/feature-studio-shell-modules-20260929`, base 6568fae (Windows3.2.8).

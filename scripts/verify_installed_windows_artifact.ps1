@@ -36,6 +36,7 @@ function Invoke-BoundedProcess {
         throw "$Description exceeded $TimeoutSeconds seconds"
     }
     if ($process.ExitCode -ne 0) {
+        Get-Content -LiteralPath (Join-Path $EvidenceDir "core-smoke-report.json") -ErrorAction SilentlyContinue
         throw "$Description failed with exit code $($process.ExitCode)"
     }
 }

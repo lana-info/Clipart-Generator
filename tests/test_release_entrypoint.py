@@ -312,6 +312,10 @@ class ReleaseEntrypointTests(unittest.TestCase):
             )
 
             self.assertEqual(result, 0)
+            import json
+            report = json.loads((evidence_dir / "core-smoke-report.json").read_text())
+            self.assertTrue(all(report["checks"].values()))
+            self.assertEqual(report["catalog_size"], [1120, 780])
             for filename in ("mode-selection.png",):
                 screenshot_path = evidence_dir / filename
                 self.assertTrue(screenshot_path.is_file(), filename)

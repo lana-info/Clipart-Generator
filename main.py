@@ -10240,21 +10240,29 @@ def run_packaged_entrypoint_check(
     smoke_window.deleteLater()
     from studio_contour_smoke import check_contour_editing
     contour_editing_works = check_contour_editing(evidence_dir)
-    return 0 if (
-        clean_catalog
-        and rights_are_exact
-        and artwork_is_rendered
-        and evidence_is_saved
-        and license_input_is_safe
-        and controls_are_present
-        and controls_are_connected
-        and pictures_default_is_safe
-        and update_channel_is_connected
-        and startup_is_blocked
-        and contour_editing_works
-        and frozen_shell_has_no_workflow_sources()
-        and (expected_app_version is None or APP_VERSION == expected_app_version)
-    ) else 1
+    checks = {
+        "clean_catalog": clean_catalog,
+        "rights_are_exact": rights_are_exact,
+        "artwork_is_rendered": artwork_is_rendered,
+        "evidence_is_saved": evidence_is_saved,
+        "license_input_is_safe": license_input_is_safe,
+        "controls_are_present": controls_are_present,
+        "controls_are_connected": controls_are_connected,
+        "pictures_default_is_safe": pictures_default_is_safe,
+        "update_channel_is_connected": update_channel_is_connected,
+        "startup_is_blocked": startup_is_blocked,
+        "contour_editing_works": contour_editing_works,
+        "core_only": frozen_shell_has_no_workflow_sources(),
+        "version_matches": expected_app_version is None or APP_VERSION == expected_app_version,
+    }
+    if evidence_dir is not None:
+        # Only synthetic smoke results and dimensions; never credentials or paths.
+        report = {"checks": checks, "catalog_size": [packaged_view.width(), packaged_view.height()],
+                  "frozen": bool(getattr(sys, "frozen", False))}
+        Path(evidence_dir).mkdir(parents=True, exist_ok=True)
+        (Path(evidence_dir) / "core-smoke-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return 0 if all(checks.values()) else 1
+
 
 
 def run_local_processing_entrypoint_check(report_path=None) -> int:

@@ -109,6 +109,16 @@ jobs:
         shell: powershell
         run: python scripts/prepare_acceptance_build.py release/acceptance-profile.json
 
+      - name: Verify native Core catalog before packaging
+        shell: powershell
+        run: |
+          $env:QT_QPA_PLATFORM = "windows"
+          python -c "from PyQt6.QtWidgets import QApplication; from main import APP_VERSION, run_packaged_entrypoint_check; app=QApplication([]); raise SystemExit(run_packaged_entrypoint_check(APP_VERSION, evidence_dir='release/ui-evidence'))"
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content -LiteralPath release/ui-evidence/core-smoke-report.json -ErrorAction SilentlyContinue
+            throw "Native source Core smoke failed"
+          }
+
       - name: Build app (PyInstaller)
         shell: powershell
         run: |
@@ -193,6 +203,17 @@ jobs:
           }
           & .\scripts\verify_installed_windows_artifact.ps1 @verifyArguments
 
+      - name: Save failed Core smoke evidence
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-smoke-failure-${{ github.run_id }}
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            release/ui-evidence/*.json
+            release/ui-evidence/*.png
+
       - name: Calculate setup hash
         shell: powershell
         run: |
@@ -228,6 +249,7 @@ jobs:
             release/VERSION.txt
             release/build-provenance.json
             release/ui-evidence/*.png
+            release/ui-evidence/*.json
 
   build-macos:
     if: ${{ false }} # Windows-only release workflow.

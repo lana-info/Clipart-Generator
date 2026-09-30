@@ -26,10 +26,14 @@
   no merge. GitHubCI blocked by Actions budget, localfullsuite passed.
 - [ ] Windows shell build and installed download/open acceptance; latest GitHub
   Actions attempt for prior Composer was budget-blocked. No billing change.
-  Deployment and license changes remain outside scope.
+  Owner subsequently authorized release artifact publication; license grants
+  and deployment/code changes remain outside scope.
 
 Server audit: Composer has no catalog entry, assignment or release yet. Preparing
-its package does not authorize issuing customer rights or publishing server rows.
+customer grants remain unassigned. Owner now authorized publishing release rows.
+- [x] Upload six module1.5.0 drafts, verify hashes and create private DB backup.
+- [ ] Complete run36661594300, restore and confirm private GitHub visibility.
+- [ ] Verify installer, upload Studio3.2.9 and publish all seven release rows.
 
 - [x] Clarify new chroma prompts: preserve object textures, exclude paper substrate
   and white bridges/fringe; foliage gaps use the selected background colour.
