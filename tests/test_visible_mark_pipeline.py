@@ -73,7 +73,7 @@ class VisibleMarkPipelineTests(unittest.TestCase):
 
     def isolated_paths(self, root):
         return (
-            patch.object(main, "CONFIG_FILE", str(root / "config.json")),
+            patch.multiple(main, CONFIG_FILE=str(root / "config.json"), USER_DATA_DIR=str(root)),
             patch.object(main, "ENV_FILE", str(root / ".env")),
             patch.object(main, "PROMPTS_STORAGE_FILE", str(root / "prompts.json")),
             patch.object(main, "LICENSE_CACHE_FILE", str(root / "license.json")),

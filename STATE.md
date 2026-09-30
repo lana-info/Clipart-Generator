@@ -6,7 +6,29 @@ Owner requested visible method selection, compact menus and per-file automatic
 chroma colour in Processing. Worktree branch codex/fix-processing-method-choice-20260930
 uses delivered 3.2.8 source 6568fae; unrelated source-worktree edits are preserved.
 Diagnosis and correction history: [docs/ERRORS.md](docs/ERRORS.md#processing-background-choice-2026-09-29).
-No commit, push or build performed.
+Background choices committed as a9de4f7. Owner subsequently authorized fixes,
+independent agent review, commits and push; merge/cleanup remains preparation only.
+
+| Requirement and source | Verification | Implementation | Verified result |
+| --- | --- | --- | --- |
+| Owner: fix failing tests without weakening checks | Seven failing test files plus credential-store checks, full pytest | Isolate USER_DATA_DIR with CONFIG_FILE in test fixtures | 49 passed, 18 subtests; full run 1985 passed, zero failures |
+| Owner: prepare future branch integration | git merge-tree against codex/feature-studio-shell-modules-20260929 | Read-only conflict preview | Code merges automatically; conflicts in PROJECT.md, STATE.md, TASKS.md require retaining both histories |
+| Owner: independent review and remote backup | Separate review agent, git push verification | Review complete; Auto startup migration and model tooltip findings fixed | Reviewer: 96 tests + 7 subtests, then 9 tests + 4 subtests; push pending |
+| Auto remains default through startup migration | Legacy migration plus Qt/state regression | Processing migration defaults to Auto only when colour is absent | 80 tests + 33 subtests passed after both review fixes |
+
+Full pytest after isolating all seven failing fixtures: **1985 passed, 57 skipped,
+19 deselected, 1 known expected red-fur failure, 276 subtests, zero failures**
+in 246.57s. Review corrections made during that run were verified separately by
+80 state/Qt/mode-selection tests and reviewer follow-up; do not claim that the
+full run loaded the final versions of already-imported modules.
+Log: `/tmp/processing-method-full-pytest.log`. Native Windows and real cloud
+processing remain unverified; white-background removal remains unimplemented.
+
+Integration preparation: compare against `codex/feature-studio-shell-modules-20260929`
+(contains verified 3.2.9). `git merge-tree --write-tree` confirms automatic code
+merge and conflicts only in PROJECT.md, STATE.md, TASKS.md. At actual integration
+retain the newer 3.2.9 delivery records and this task's requirements/results.
+No branch, worktree or unrelated `:memory:.ses` file removed.
 
 | Requirement and source | Verification | Implementation | Verified result |
 | --- | --- | --- | --- |
@@ -14,7 +36,6 @@ No commit, push or build performed.
 | Keep provider-specific settings and operation on/off behavior | Switch rembg/BEN2/Fal/KIE/chroma; toggle removal | Existing registry/visibility rules reused | Implemented and verified: focused Qt/flow/state tests passed |
 | Preserve other workflows and existing hidden defaults | Shared-editor regression tests | Default show_background_controls=False | Implemented and verified: focused Qt/flow/state tests passed |
 | Owner asks whether white can replace chroma | Inspect supported algorithm/colour contract | White is not implemented as a chroma colour; existing neural methods remain available | Current keyer supports blue/green/red; no white-background quality claim |
-
 | Per-file Auto for imported PNGs, owner request | Real mixed-colour worker batch, metadata priority, uncertain-background refusal, UI-to-request, persistence | Implemented: Auto for new Processing defaults and recipes; existing explicit colours retained | Implemented and verified: 165 tests + 38 subtests passed; 1 unrelated Windows Real-ESRGAN skip |
 | Compact dropdowns, owner request | Actual Qt 1120x780 capture | Implemented: 240px fields, 360px models with full-text tooltip | Linux offscreen visually inspected |
 
@@ -22,9 +43,9 @@ Focused verification: 165 tests + 38 subtests passed, 1 skipped because the
 Windows Real-ESRGAN executable is absent. Includes Qt/worker/state/provider
 registry, module packaging and dependency architecture. Full isolated pytest:
 1978 passed, 57 skipped, 19 deselected, 1 expected failure and 276 subtests.
-Seven legacy UI settings-persistence tests fail on both this worktree and the
-unmodified delivered 3.2.8 worktree because the temporary `config.json` is not
-created; they are unrelated to Processing changes. `git diff --check` passed.
+Seven legacy UI settings-persistence tests failed in that historical run; one
+also reproduced on unmodified delivered 3.2.8. They are now traced to incomplete
+test-path isolation and fixed; details in docs/ERRORS.md. `git diff --check` passed.
 Other workflows retain their hidden controls. Native Windows execution was not
 performed.
 

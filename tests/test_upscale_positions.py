@@ -381,7 +381,7 @@ class UpscalePositionTests(unittest.TestCase):
             config_path = temp_path / "config.json"
             config_path.write_text(json.dumps({"upscale": False}), encoding="utf-8")
             with (
-                patch.object(main, "CONFIG_FILE", str(config_path)),
+                patch.multiple(main, CONFIG_FILE=str(config_path), USER_DATA_DIR=str(config_path.parent)),
                 patch.object(main, "ENV_FILE", str(temp_path / ".env")),
                 patch.object(main, "PROMPTS_STORAGE_FILE", str(temp_path / "prompts.json")),
                 patch.object(main, "LICENSE_CACHE_FILE", str(temp_path / "license.json")),

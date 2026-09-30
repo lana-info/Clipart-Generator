@@ -2203,7 +2203,9 @@ def migrate_v2_config(
         processing=ProcessingModeData(
             selected_files=[],
             recipe="custom",
-            operations=ImageOperationData.from_v2_config(config),
+            operations=ImageOperationData.from_v2_config(
+                {"chroma_key_color": "auto", **config}
+            ),
         ),
     )
 

@@ -753,6 +753,8 @@ class ProcessingPipelineEditor(QScrollArea):
                 previous = model_combo.blockSignals(True)
                 model_combo.setCurrentIndex(model_index)
                 model_combo.blockSignals(previous)
+                if self.show_background_controls:
+                    model_combo.setToolTip(model_combo.currentText())
         current = self.state_owner.operations.to_dict()
         for name, control in self.operation_widgets.items():
             current[name] = self._value(control)
@@ -1034,6 +1036,8 @@ class ProcessingPipelineEditor(QScrollArea):
             elif isinstance(control, QLineEdit):
                 control.setText(str(getattr(operations, name)))
             control.blockSignals(False)
+            if self.show_background_controls and isinstance(control, QComboBox):
+                control.setToolTip(control.currentText())
         if self.cleanup_checkbox is not None:
             cleanup_enabled = all(
                 bool(getattr(operations, name))

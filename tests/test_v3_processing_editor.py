@@ -70,6 +70,21 @@ class ProcessingEditorTests(unittest.TestCase):
         restored = ProjectState.from_dict(restored.to_dict())
         self.assertEqual(restored.processing.operations.chroma_key_color, "green")
 
+    def test_processing_model_tooltip_follows_recipe_refresh(self) -> None:
+        state = ProjectState(mode=ProjectMode.PROCESSING)
+        state.processing.operations.remove_background = True
+        state.processing.operations.remove_background_provider = "local_rembg"
+        editor = ProcessingPipelinePage(state, lambda: None)
+        model = editor.operation_widgets["local_rembg_model"]
+        apply_processing_recipe(state, "sharp_cutout")
+        editor.refresh_from_state()
+        self.assertEqual(model.currentData(), "u2net")
+        self.assertEqual(model.toolTip(), model.currentText())
+        profile = editor.operation_widgets["local_rembg_profile"]
+        profile.setCurrentIndex(profile.findData("anime"))
+        self.assertEqual(model.currentData(), "isnet-anime")
+        self.assertEqual(model.toolTip(), model.currentText())
+
     def test_recipe_model_applies_shared_presets(self) -> None:
         state = ProjectState(mode=ProjectMode.PROCESSING)
         apply_processing_recipe(state, "prepare_clipart")

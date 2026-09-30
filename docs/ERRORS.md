@@ -51,8 +51,35 @@ UI-to-request/preflight, project roundtrip, условная видимость 
 
 ## Test-environment persistence regression observed, 2026-09-29
 
-The full isolated suite reports seven UI settings-persistence failures because
-the patched temporary path has no `config.json`. The representative cleanup UI
-test fails identically in the unmodified delivered 3.2.8 worktree, so this is
-not attributed to the Processing method-choice change. No unrelated persistence
-code was changed here.
+Полный прогон обнаружил семь падений UI-проверок сохранения настроек.
+Ранее на исходной 3.2.8 повторно проверен только один из семи тестов, поэтому
+утверждение, что все семь проверены на исходной версии, было слишком сильным.
+Диагностика подтвердила общую причину: fixtures подменяли CONFIG_FILE/ENV_FILE,
+но оставляли USER_DATA_DIR настоящим. ProtectedFalCredentialStore при сохранении
+пустого ключа обращался к настоящему fal_api_key.bin; read-only filesystem
+возвращал EROFS и сохранение config прекращалось. Это ошибка изоляции тестов,
+а не основание отключать защиту ключей.
+
+Причина → изменение → проверка → результат: неполная изоляция пользовательских
+путей → семь fixtures одновременно подменяют CONFIG_FILE и USER_DATA_DIR
+через patch.multiple → все семь файлов тестов плюс тесты credential store →
+49 passed, 18 subtests, 1 expected Windows DPAPI skip. Assertions и production
+credential handling сохранены. Итог повторного полного прогона в STATE.md.
+
+## processing-review-followups, 2026-09-29
+
+Независимый reviewer на gpt-6.1-sol подтвердил два пропуска:
+1. При запуске автоматически создаваемый legacy config с local_realesrgan_dir
+   проходил миграцию и заменял новый Auto на blue. Processing-only default при
+   отсутствующем chroma_key_color теперь auto; явно сохранённые RGB-цвета и
+   обычный генерационный blue остаются прежними. Регрессия проверяет миграцию,
+   отсутствие мутации config и сохранение ручных цветов.
+2. refresh_from_state блокирует сигналы combobox, поэтому смена рецепта оставляла
+   tooltip предыдущей модели. Подсказка явно обновляется после refresh и после
+   выбора профиля. Регрессия проверяет оба перехода на настоящем Qt-редакторе.
+
+Проверки после исправлений: 80 passed + 33 subtests; reviewer follow-up
+9 passed + 4 subtests. Повторный полный прогон с исправленными fixtures:
+1985 passed, zero failures; финальные review-правки отдельно проверены после
+того, как текущий полный прогон уже импортировал модули. Неизвестных новых
+падений нет; известный red-fur xfail и платформенные skips сохранены.
