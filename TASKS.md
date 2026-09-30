@@ -4,7 +4,8 @@
 - [x] Prepare all six official signed module1.5.1 candidates; verify each signature/install/runtime and >=3.2.10 compatibility.
 - [x] Complete Windows3.2.10 build and restore PRIVATE: run36723401830 SUCCESS, independent GitHub API verification PRIVATE; version/source/SHA256 verified.
 - [x] Installed Windows Core acceptance: all13 checks PASS. Prepare seven-entry beta kit: Studio3.2.10 + all six module1.5.1 ZIPs, hashes and runtime/UI receipts.
-- [ ] Actual licensed module download/open in installed Windows and server publication of new3.2.10/1.5.1 rows; local kit prepared, existing3.2.9 beta rows unchanged.
+- [x] Owner requested publication: Studio3.2.10 and six module1.5.1 rows published directly in beta; all7 beta discovery PASS, stable discovery absent; stored hashes/sizes verified, old releases unchanged, backup verified, health200/download-token403.
+- [ ] Actual licensed module download/open in installed Windows; installed Core and Linux package UI checks passed, real customer delivery scenario not yet tested.
 
 ## Studio shell and separately installed modules
 

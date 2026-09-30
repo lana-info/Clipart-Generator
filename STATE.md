@@ -14,11 +14,19 @@ resolved by retaining both histories. Source version advanced to 3.2.10.
 | Make processing selection available in modular application | Official Processing package loaded against integrated Core | Processing/image-processing1.5.1 require Studio >=3.2.10 | Signed ZIP install/load/Auto UI/engine smoke PASS; both reject3.2.9 |
 | Windows installer candidate; renewed owner authorization for temporary public build | GitHub release workflow, artifact checks and independent PRIVATE verification | Production-profile run36723401830 from00588a2 SUCCESS; privacy restored in finally | Implemented and verified: PRIVATE independently confirmed; version/source/SHA256 matched; 13 installed Windows checks PASS |
 | Each module supplied separately for beta placement; latest owner request | Pinned publisher signature, staging, runtime activation, Core compatibility and real Qt pages | All six module1.5.1 ZIPs prepared with minimum Studio3.2.10; seven-row beta manifest includes Studio | Implemented and verified: all six signature/install/runtime checks PASS; all reject Core3.2.9; five workflow UIs open, Processing Auto selection, Composer local variants and component chroma PASS |
+| Publish new Studio and each module as beta; explicit owner request | Stored file SHA256/size, beta/stable discovery, old-release fingerprints, service health | Studio3.2.10 and all six module1.5.1 rows created directly in beta/windows-x64 and published; dependency first, Studio last | Implemented and verified: all7 published/discoverable in beta, absent in stable; hashes/sizes match; all existing releases unchanged; /health200, invalid download token403 |
 
-The requested beta-placement kit is local and complete; new release rows have
-not been published to the license server. Existing3.2.9 beta releases remain
-unchanged. Download/open in installed Windows using an actual customer license
+The owner explicitly requested beta publication after reviewing the complete kit.
+All seven new release rows are now published on the license server in beta.
+Existing3.2.9 beta releases remain unchanged. Download/open in installed Windows using an actual customer license
 has not been tested. Linux Qt package smoke is distinct from installed Core smoke.
+
+Publication receipts: `artifacts/processing-3.2.10-candidate/server-beta-receipts.json`;
+the beta manifest now records server_publication=published_beta and all seven IDs.
+Verified PostgreSQL backup before draft creation:
+`/opt/bots-stack/backups/clipart-license-service/pre-studio3210-beta-publication-20260930.dump`.
+Only release create/attach/publish operations were performed; no license/grant,
+bundle, service deployment or channel conversion operations were performed.
 
 Complete kit: `artifacts/processing-3.2.10-candidate/README-beta.md`,
 `beta-release-manifest.json`, `SHA256SUMS.txt`, all six separate signed ZIPs,
@@ -38,7 +46,8 @@ Packages prepared with existing official publisher key, no key output:
 13220bytes, SHA256 fd81996c58c0cae3159a5a08da63f5bfc40e23c768a3c93b407d12ce61c0c8bf;
 `image-processing-1.5.1-windows-x64.zip`, 21467bytes,
 SHA256 ae36e6da46aff61cb39019a7b76e9ec6a67d3a10985cfdfc3823f65dc94816e5.
-These are local candidates, not published server updates.
+These exact packages are now published beta server updates; all six package
+metadata and receipts are included in beta-release-manifest.json.
 
 Windows build attempt run36719207715:
 https://github.com/lana-info/Clipart-Generator/actions/runs/36719207715
