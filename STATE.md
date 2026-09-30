@@ -13,7 +13,7 @@ independent agent review, commits and push; merge/cleanup remains preparation on
 | --- | --- | --- | --- |
 | Owner: fix failing tests without weakening checks | Seven failing test files plus credential-store checks, full pytest | Isolate USER_DATA_DIR with CONFIG_FILE in test fixtures | 49 passed, 18 subtests; full run 1985 passed, zero failures |
 | Owner: prepare future branch integration | git merge-tree against codex/feature-studio-shell-modules-20260929 | Read-only conflict preview | Code merges automatically; conflicts in PROJECT.md, STATE.md, TASKS.md require retaining both histories |
-| Owner: independent review and remote backup | Separate review agent, git push verification | Review complete; Auto startup migration and model tooltip findings fixed | Reviewer: 96 tests + 7 subtests, then 9 tests + 4 subtests; push pending |
+| Owner: independent review and remote backup | Separate review agent, git push verification | Review complete; Auto startup migration and model tooltip findings fixed | Reviewer: 96 tests + 7 subtests, then 9 tests + 4 subtests; a9de4f7 and d415ed7 pushed to origin/codex/fix-processing-method-choice-20260930 |
 | Auto remains default through startup migration | Legacy migration plus Qt/state regression | Processing migration defaults to Auto only when colour is absent | 80 tests + 33 subtests passed after both review fixes |
 
 Full pytest after isolating all seven failing fixtures: **1985 passed, 57 skipped,
@@ -29,6 +29,9 @@ Integration preparation: compare against `codex/feature-studio-shell-modules-202
 merge and conflicts only in PROJECT.md, STATE.md, TASKS.md. At actual integration
 retain the newer 3.2.9 delivery records and this task's requirements/results.
 No branch, worktree or unrelated `:memory:.ses` file removed.
+Remote verification: lana-info/Clipart-Generator is private; current authenticated
+account has ADMIN. Push created the task branch and set its upstream. Latest
+commit uses [skip ci]; no release-build workflow was dispatched.
 
 | Requirement and source | Verification | Implementation | Verified result |
 | --- | --- | --- | --- |
