@@ -148,7 +148,8 @@ def changed_path_roi(previous: BezierPath, replacement: BezierPath) -> ROI:
 
     A cubic stays within its control-point hull. Unchanged segments cancel in
     the old/new coverage difference. Topology changes fall back to both whole
-    paths. Padding covers integer rounding in fillPoly.
+    paths. Padding covers integer rounding and the maximum supported
+    extraction-error cleanup band (tolerance <= 8 pixels).
     """
     def segments(path):
         return [(node.point, _auto_handles(path.nodes, i)[1],
@@ -161,10 +162,11 @@ def changed_path_roi(previous: BezierPath, replacement: BezierPath) -> ROI:
         return (0,0,1,1)
     points = np.asarray(changed, dtype=float).reshape(-1,2)
     height, width = previous.source_shape
-    return (max(0,int(np.floor(points[:,0].min()))-2),
-            max(0,int(np.floor(points[:,1].min()))-2),
-            min(width,int(np.ceil(points[:,0].max()))+3),
-            min(height,int(np.ceil(points[:,1].max()))+3))
+    padding = 13  # max tolerance 8 + neighbour 1 + feather 2 + rounding 2
+    return (max(0,int(np.floor(points[:,0].min()))-padding),
+            max(0,int(np.floor(points[:,1].min()))-padding),
+            min(width,int(np.ceil(points[:,0].max()))+padding+1),
+            min(height,int(np.ceil(points[:,1].max()))+padding+1))
 
 
 def extract_contours(alpha: np.ndarray, *, tolerance: float = 1.0, cancelled=None) -> list[BezierPath]:
@@ -322,8 +324,19 @@ class ContourDocument:
         # a caller opens and reapplies an extracted thin contour unchanged.
         if replacement == previous:
             return self.alpha.copy()
-        old_coverage = rasterize_path(previous, bounds, feather=feather).astype(np.float32) / 255.0
-        new_coverage = rasterize_path(replacement, bounds, feather=feather).astype(np.float32) / 255.0
+        # OpenCV clips polygon edges at the raster bounds. Keep a context band
+        # for feathering/edge cleanup, then crop: only supplied ROI is mutated.
+        left, top, right, bottom = bounds
+        height, width = self.alpha.shape
+        padding = 13
+        work_roi = (max(0, left-padding), max(0, top-padding),
+                    min(width, right+padding), min(height, bottom+padding))
+        crop = (slice(top-work_roi[1], bottom-work_roi[1]),
+                slice(left-work_roi[0], right-work_roi[0]))
+        old_raster = rasterize_path(previous, work_roi, feather=feather)
+        new_raster = rasterize_path(replacement, work_roi, feather=feather)
+        old_coverage = old_raster[crop].astype(np.float32) / 255.0
+        new_coverage = new_raster[crop].astype(np.float32) / 255.0
         # A UI normally supplies a small edge ROI.  If neither old nor new path
         # reaches it, keep the existing editable proposal exactly as-is.
         if np.array_equal(old_coverage, new_coverage):
@@ -339,8 +352,23 @@ class ContourDocument:
         if previous.fill_value == 255:
             # Only the symmetric difference changes.  In particular, alpha in an
             # unchanged inner hole is not overwritten when its outer contour moves.
-            old_only = np.clip(old_coverage - new_coverage, 0.0, 1.0)
+            # Apply relative coverage loss: when a feathered old edge moves
+            # away completely, its original alpha must reach zero too.
+            old_only = np.divide(np.clip(old_coverage - new_coverage, 0.0, 1.0),
+                old_coverage, out=np.zeros_like(old_coverage), where=old_coverage > 0)
             new_only = np.clip(new_coverage - old_coverage, 0.0, 1.0)
+            if np.any(old_only):
+                # The simplified old polygon can miss real edge pixels. Remove
+                # those only beside a changed segment and only when they belong
+                # to this extracted exterior; unrelated raster details survive.
+                radius = int(np.ceil(self.extraction_tolerance)) + 1
+                changed_edge = cv2.dilate((old_raster > new_raster).astype(np.uint8),
+                    np.ones((2 * radius + 1, 2 * radius + 1), np.uint8))[crop] > 0
+                missed_edge = protected_residual & (new_coverage == 0) & changed_edge
+                if np.any(missed_edge):
+                    owned = self._extracted_footprint(previous, bounds, cancelled=cancelled)
+                    if owned is not None:
+                        old_only[missed_edge & owned] = 1.0
             old_only[protected_opaque] = 0.0
             new_only[protected_holes | protected_residual] = 0.0
             region = region * (1.0 - old_only)
@@ -362,6 +390,47 @@ class ContourDocument:
         self.alpha = candidate
         self.paths = candidate_paths
         return self.alpha.copy()
+
+    def _extracted_footprint(self, path: BezierPath, roi: ROI, *, cancelled=None) -> np.ndarray | None:
+        """Exact source outline, verified against geometry rather than an ID alone.
+
+        Draft batch edits can reuse original paths after a different component
+        has changed. Try the current mask and then the session snapshot. Manual
+        paths and modified curves have no authoritative raster footprint.
+        """
+        if path.contour_id is None or any(node.kind != "corner" or
+                node.in_handle is not None or node.out_handle is not None for node in path.nodes):
+            return None
+        expected = np.asarray([node.point for node in path.nodes])
+        for alpha in (self.alpha, self._source_alpha):
+            _check_cancelled(cancelled)
+            binary = cv2.compare(alpha, 0, cv2.CMP_GT)
+            contours, hierarchy = cv2.findContours(binary,
+                cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+            if hierarchy is None:
+                continue
+            candidates = list(range(len(contours)))
+            if isinstance(path.contour_id, int) and 0 <= path.contour_id < len(contours):
+                candidates.remove(path.contour_id)
+                candidates.insert(0, path.contour_id)
+            for index in candidates:
+                _check_cancelled(cancelled)
+                if hierarchy[0][index][3] >= 0:
+                    continue
+                contour = contours[index]
+                approximation = (cv2.approxPolyDP(contour, self.extraction_tolerance, True)
+                                 if self.extraction_tolerance else contour)
+                if not np.array_equal(approximation.reshape(-1, 2), expected):
+                    continue
+                left, top, right, bottom = roi
+                # A filled outer polygon also covers holes and tiny islands
+                # inside them. Membership must follow the actual 8-connected
+                # foreground, using the same connectivity as findContours.
+                seed = tuple(int(value) for value in contour[0, 0])
+                cv2.floodFill(binary, None, seed, 128, flags=8)
+                _check_cancelled(cancelled)
+                return binary[top:bottom, left:right] == 128
+        return None
 
     def _other_path_protection(self, selected_index: int, roi: ROI,
                                region: np.ndarray, *, cancelled=None) -> tuple[np.ndarray, np.ndarray]:

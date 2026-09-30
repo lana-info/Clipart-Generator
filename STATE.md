@@ -1,5 +1,23 @@
 # Project state
 
+## Пиксельные остатки после контурной правки, 2026-09-30
+
+Ветка codex/fix-contour-edge-specks-20260930 от29a9f47; включает предыдущие
+короткие подписи рецептов. Параллельный upcoming catalog worktree сохранён.
+Владелец разрешил commit/push; сборка отложена до завершения исправлений.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| После изменения контура в PNG нет остатков старого края; сообщение владельца | Исходный repro, actual Qt apply/save/reopen, hard/feather1/2 | Local owned-edge cleanup и relative alpha loss | Реализовано и проверено на тестовых изображениях:26/248/352 stray pixels→0; saved alpha/RGB PASS |
+| Не теряются другие детали, отверстия, Undo/Redo; действующие требования | Близкие отдельные пиксели, island inside hole, existing contours/session, all-node full/local | Verified connected component; halo calculation, mutation strictly ROI | Реализовано и проверено: root115tests PASS; independent37tests+180ROI probes PASS |
+| Работа на крупном изображении остаётся доступна | Actual Qt synthetic4100px | Background worker сохранён | Linux apply0.252s, maxUI tick gap87.8ms, peakRSS593.8MiB; installed Windows не проверен |
+
+Причины и история: docs/ERRORS.md#contour-edge-specks-20260930.
+Evidence: artifacts/contour-specks-verification основного проекта. Исходные PNG
+владельца не получены; их индивидуальный сценарий пока не проверен. Сборка,
+пакеты, версии и публикации в этой задаче не выполнялись.
+
+
 ## Короткие названия рецептов обработки, 2026-09-30
 
 Ветка codex/ui-processing-recipe-labels-20260930 от fa61156. Параллельные

@@ -1,5 +1,39 @@
 # Ошибки проекта
 
+## contour-edge-specks-20260930
+
+Симптом владельца: после редактирования Безье и сохранения PNG точки вдоль
+бывшего края. Исходный PNG не получен, точное совпадение со скриншотом не
+подтверждено. Подтверждён сходный программный дефект: circle128/r45, extract
+tolerance1, shrink nodes0.85 оставляет26 pixels/20 маленьких островков.
+Причина: упрощённый старый контур не покрывает все пиксели исходной границы;
+symmetric difference сохраняет их как raster residual. UI overlay в PNG не пишется.
+
+История проверок и уточнений:
+- Regression tolerance0.5/1/2 до правки:3FAIL. Первое ограниченное исправление
+  hard edge прошло66tests, independent review нашло feather1/2 остатки248/352pixels.
+- Relative coverage loss убирает feathered old alpha полностью при new coverage0.
+  Начальный ownership через залитый exterior ошибочно удалял отдельный пиксель77
+  внутри отверстия; root red подтвердил. Verified source geometry +8-connected
+  floodFill сохраняет этот пиксель и соседние детали; regression PASS.
+- Independent review нашло full/local mismatch при tolerance>=2; all-node root
+  regression после padding10 ещё нашла1pixel при tolerance8/feather1/2. Диагностика
+  показала clipping в fillPoly у границы ROI. Финально padding13 покрывает max
+  tolerance8 + neighbour1 + feather2 + rounding2; old/new raster и dilation
+  вычисляются с halo до crop, candidate меняется только внутри supplied ROI.
+
+Финальная проверка:115tests PASS, включая real inline Qt pending contour→apply→
+save→reopen PNG, RGB byte identity, Undo/Redo,9tolerance/feather circlecases,
+отдельные pixels/holes, multiple draft paths/repeated edits, all-node full/local
+15cases tolerance0.5/1/2/4/8×feather0/1/2, existing cancellation/editor/session.
+Independent review latest37tests PASS +180tightROI probes; открытых confirmed
+замечаний нет. Root повторил original repro:26/248/352 straypixels→0,1component.
+4100px actual Qt fixture:apply0.252s, maxUI gap87.8ms, peakRSS593.8MiB на Linux.
+Evidence: artifacts/contour-specks-verification в основном проекте.
+Границы: synthetic/Qt offscreen, не installed Windows и не исходные PNG владельца.
+Не включены новый инструмент лассо, global cleanup или упрощение интерфейса.
+
+
 
 
 ## studio3211-push-approval-block
