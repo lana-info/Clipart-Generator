@@ -16,9 +16,18 @@ fix needed for these diagnostic mistakes.
 
 Windows workflow36719207715 failed before any build step. GitHub annotation
 confirmed an Actions budget block; no source-code change can fix it. No installer
-artifact exists. Keep private visibility and billing unchanged until the owner
-chooses the permitted execution route. Source candidate548b2a6 is pushed and
-official signed modules1.5.1 are preserved locally.
+artifact exists from that attempt. The owner authorized temporary PUBLIC
+visibility, build and return to PRIVATE. Run36723401830 from00588a2 has now
+started, confirming the budget block is avoided by the authorized route.
+No billing change or application fix was needed. All six signed modules1.5.1
+passed installation and runtime activation against integrated Core3.2.10.
+Final run36723401830 SUCCESS; helper restored PRIVATE, independently confirmed
+with GitHub API. Installer source/version/hash verified and installed report
+contains13 successful checks. Budget blocker resolved for this build.
+Additional package UI harness initially treated auto-clipart as ProjectMode;
+the contract uses CLIPART mode with a separate workflow identifier. Corrected
+only the harness; all five workflow pages, Processing provider/Auto UI,
+Composer local variants and shared chroma smoke then PASS.
 
 ## Подготовительное ревью Studio 3.2, 2026-09-10
 

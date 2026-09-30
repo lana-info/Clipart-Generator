@@ -12,10 +12,22 @@ resolved by retaining both histories. Source version advanced to 3.2.10.
 | --- | --- | --- | --- |
 | Continue integration with latest delivered shell | Merge commit ancestry, code regression tests | Code merged automatically; both documentation histories retained | 2059 passed + 278 subtests, one version-default failure fixed; 46 release tests + 6 subtests then passed |
 | Make processing selection available in modular application | Official Processing package loaded against integrated Core | Processing/image-processing1.5.1 require Studio >=3.2.10 | Signed ZIP install/load/Auto UI/engine smoke PASS; both reject3.2.9 |
-| Windows installer candidate | GitHub release workflow and artifact checks | Integrated commit548b2a6 pushed; workflow dispatched for3.2.10 | Blocked before first step: GitHub Actions budget prevents runner use |
+| Windows installer candidate; renewed owner authorization for temporary public build | GitHub release workflow, artifact checks and independent PRIVATE verification | Production-profile run36723401830 from00588a2 SUCCESS; privacy restored in finally | Implemented and verified: PRIVATE independently confirmed; version/source/SHA256 matched; 13 installed Windows checks PASS |
+| Each module supplied separately for beta placement; latest owner request | Pinned publisher signature, staging, runtime activation, Core compatibility and real Qt pages | All six module1.5.1 ZIPs prepared with minimum Studio3.2.10; seven-row beta manifest includes Studio | Implemented and verified: all six signature/install/runtime checks PASS; all reject Core3.2.9; five workflow UIs open, Processing Auto selection, Composer local variants and component chroma PASS |
 
-Publication of a new installer/module to the license server is a separate action;
-this integration has not changed customer rights or existing beta releases.
+The requested beta-placement kit is local and complete; new release rows have
+not been published to the license server. Existing3.2.9 beta releases remain
+unchanged. Download/open in installed Windows using an actual customer license
+has not been tested. Linux Qt package smoke is distinct from installed Core smoke.
+
+Complete kit: `artifacts/processing-3.2.10-candidate/README-beta.md`,
+`beta-release-manifest.json`, `SHA256SUMS.txt`, all six separate signed ZIPs,
+`module-verification.json`, `module-smoke.log` and `windows-build/`.
+Installer `windows-build/VibixImages-Setup-3.2.10.exe`: 242900444 bytes,
+SHA256 a22959d540085e0b436c56a3567192346ed2a58868272e6e35660338d3e04c79.
+Build provenance matches source00588a2ec3d82d44e2b3e377ec04fcfb0bd47ab1;
+installed report confirms frozen=true and all13 checks=true. Screenshot inspected.
+Build URL: https://github.com/lana-info/Clipart-Generator/actions/runs/36723401830
 
 Integrated test evidence: `/tmp/processing-3.2.10-full-pytest.log`:
 2059 passed, 57 skipped, 20 deselected, 1 known red-fur xfail, 278 subtests;
@@ -32,9 +44,11 @@ Windows build attempt run36719207715:
 https://github.com/lana-info/Clipart-Generator/actions/runs/36719207715
 Source548b2a6cdc12053108d595c0d547e30d43740cc3; build-windows has zero steps.
 Check109899678660 annotation: "The job was not started because an Actions budget
-is preventing further use." No installer artifact produced. Repository is PRIVATE.
-No visibility/billing changes made. Prior temporary-public authorization was
-specific to3.2.9; renewed permission is needed before exposing this candidate.
+is preventing further use." No installer artifact produced from that attempt.
+The owner subsequently explicitly authorized temporary PUBLIC visibility for
+this3.2.10 build followed by PRIVATE restoration. Run36723401830 from00588a2
+completed SUCCESS under a helper with finally restoration. Repository is PRIVATE,
+also independently verified through GitHub API. No billing changes made.
 Integration branch: codex/integrate-processing-3.2.10; both parent branches and
 worktrees retained. Published beta3.2.9/modules1.5.0 remain available and unchanged.
 
