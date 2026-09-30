@@ -14,6 +14,12 @@ signed Processing/image-processing 1.5.1: install, activation, loaded Auto UI an
 engine removal PASS. Both reject Core3.2.9 due to minimum3.2.10. No application
 fix needed for these diagnostic mistakes.
 
+Windows workflow36719207715 failed before any build step. GitHub annotation
+confirmed an Actions budget block; no source-code change can fix it. No installer
+artifact exists. Keep private visibility and billing unchanged until the owner
+chooses the permitted execution route. Source candidate548b2a6 is pushed and
+official signed modules1.5.1 are preserved locally.
+
 ## Подготовительное ревью Studio 3.2, 2026-09-10
 
 1. Сохранённая контурная копия оставалась только в редакторе, тогда как ZIP

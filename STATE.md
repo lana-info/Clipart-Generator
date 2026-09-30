@@ -12,7 +12,7 @@ resolved by retaining both histories. Source version advanced to 3.2.10.
 | --- | --- | --- | --- |
 | Continue integration with latest delivered shell | Merge commit ancestry, code regression tests | Code merged automatically; both documentation histories retained | 2059 passed + 278 subtests, one version-default failure fixed; 46 release tests + 6 subtests then passed |
 | Make processing selection available in modular application | Official Processing package loaded against integrated Core | Processing/image-processing1.5.1 require Studio >=3.2.10 | Signed ZIP install/load/Auto UI/engine smoke PASS; both reject3.2.9 |
-| Windows installer candidate | GitHub release workflow and artifact checks | Version 3.2.10 candidate prepared; repository remains private | Build pending |
+| Windows installer candidate | GitHub release workflow and artifact checks | Integrated commit548b2a6 pushed; workflow dispatched for3.2.10 | Blocked before first step: GitHub Actions budget prevents runner use |
 
 Publication of a new installer/module to the license server is a separate action;
 this integration has not changed customer rights or existing beta releases.
@@ -27,6 +27,16 @@ Packages prepared with existing official publisher key, no key output:
 `image-processing-1.5.1-windows-x64.zip`, 21467bytes,
 SHA256 ae36e6da46aff61cb39019a7b76e9ec6a67d3a10985cfdfc3823f65dc94816e5.
 These are local candidates, not published server updates.
+
+Windows build attempt run36719207715:
+https://github.com/lana-info/Clipart-Generator/actions/runs/36719207715
+Source548b2a6cdc12053108d595c0d547e30d43740cc3; build-windows has zero steps.
+Check109899678660 annotation: "The job was not started because an Actions budget
+is preventing further use." No installer artifact produced. Repository is PRIVATE.
+No visibility/billing changes made. Prior temporary-public authorization was
+specific to3.2.9; renewed permission is needed before exposing this candidate.
+Integration branch: codex/integrate-processing-3.2.10; both parent branches and
+worktrees retained. Published beta3.2.9/modules1.5.0 remain available and unchanged.
 
 ## Studio3.2.9 build and server publication, owner authorized
 

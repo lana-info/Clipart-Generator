@@ -1,5 +1,10 @@
 # TASKS
 
+- [x] Integrate processing fix with delivered Studio3.2.9 in isolated3.2.10 branch; preserve both histories and push548b2a6.
+- [x] Prepare official signed processing/image-processing1.5.1 candidates; verify install/load and >=3.2.10 compatibility.
+- [ ] Complete Windows3.2.10 build: run36719207715 blocked by GitHub Actions budget before first step.
+- [ ] Installed Windows and new module delivery acceptance after build succeeds.
+
 ## Studio shell and separately installed modules
 
 - [x] Owner correction: move Studio3.2.9 and all six module1.5.0 packages to beta.
