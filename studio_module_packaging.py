@@ -24,6 +24,7 @@ from studio_modules import (
 
 
 OFFICIAL_WORKFLOW_FILES = {
+    "prompt-composer": (),
     "auto-clipart": (
         "studio_auto_clipart_flow.py", "v3_clipart_flow.py",
         "studio_clipart_recipe.py", "studio_clipart_references.py", "studio_reference_editor.py",
@@ -59,6 +60,10 @@ def prepare_official_workflow_release(*, source_root: Path, module_id: str, **me
     Workflow-owned helpers are imported relatively inside the verified package;
     shared Core APIs retain their existing imports and compatibility range.
     """
+    if module_id == "prompt-composer":
+        from studio_prompt_composer_package import composer_payload
+        return prepare_module_release(module_id=module_id, entrypoint="entry.py",
+                                      files=composer_payload(source_root), **metadata)
     try:
         inventory = {**OFFICIAL_WORKFLOW_FILES, **OFFICIAL_COMPONENT_FILES}[module_id]
     except KeyError as exc:

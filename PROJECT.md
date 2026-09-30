@@ -1,5 +1,17 @@
 # Vibix Images
 
+## On-demand Studio shell, owner-authorized 2026-09-29
+
+Use source 6568fae (verified Windows 3.2.8) as the integration base. Studio is the
+shell; Generation, Processing, Pinterest, Automatic Clipart and Prompt Composer
+are separately downloaded signed modules. Preserve projects, settings, artwork
+and compact-card image sizes. No purchase link: denied cards say «Нет доступа».
+License refresh is automatic, no permanent status strip or refresh-access button.
+Place «Обновления модулей» beside «Лицензия» in the top row.
+Reuse the existing license server and exact signed rights; do not change server
+code, deployments, bundles or customer grants. Prompt Composer requires its own
+package and right; it is not implicitly included in Club/VIP.
+
 ## Manual contour requirement, 2026-09-29
 
 The transparency pen must create an outline directly by clicks, including on

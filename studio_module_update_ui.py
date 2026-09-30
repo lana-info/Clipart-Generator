@@ -1,9 +1,10 @@
 """Module update dialog: serialized background transfers, owner-thread activation."""
-from PyQt6.QtCore import QThread, Qt, pyqtSignal
+from PyQt6.QtCore import QThread, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QDialog, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QVBoxLayout
 
 from v3_components import V3Button, ButtonVariant
 from studio_module_updates import WorkflowUpdate, update_identity
+from license_client import LicenseError, LicenseUnavailableError
 
 
 MODULE_TITLES = {
@@ -11,6 +12,7 @@ MODULE_TITLES = {
     "processing": "Обработка изображений",
     "pinterest": "Pinterest",
     "auto-clipart": "Автоматический Clipart",
+    "prompt-composer": "Конструктор промптов",
 }
 
 
@@ -18,12 +20,22 @@ class ModuleUpdateWorker(QThread):
     progress = pyqtSignal(int, int)
     phase = pyqtSignal(str)
 
-    def __init__(self, delivery, release=None, parent=None):
+    def __init__(self, delivery, release=None, parent=None, authorization=None):
         super().__init__(parent)
         self.delivery = delivery
         self.release = release
         self.result = None
         self.failed = False
+        self.authorization = None
+        self.cancelled = False
+        self.initial_authorization = authorization
+        self.denied = False
+
+    def cancel(self):
+        # QThread clears its interruption flag when run() exits; retain intent
+        # until the owner thread decides whether activation is still allowed.
+        self.cancelled = True
+        self.requestInterruption()
 
     def run(self):
         try:
@@ -46,6 +58,7 @@ class ModuleUpdateWorker(QThread):
                 )
                 return
             authorization = self.delivery.updates.license_client.validate()
+            self.authorization = authorization
             rows = {}
             for module in MODULE_TITLES:
                 if self.isInterruptionRequested():
@@ -55,9 +68,18 @@ class ModuleUpdateWorker(QThread):
                     continue
                 try:
                     rows[module] = ("ready", self.delivery.check(module))
+                except LicenseUnavailableError:
+                    rows[module] = ("error", None)
+                except LicenseError:
+                    raise
                 except Exception:
                     rows[module] = ("error", None)
             self.result = rows
+        except LicenseUnavailableError:
+            self.failed = True
+        except LicenseError:
+            self.failed = True
+            self.denied = True
         except Exception:
             # Neither provider details, filesystem paths nor tokens enter UI text.
             self.failed = True
@@ -65,12 +87,18 @@ class ModuleUpdateWorker(QThread):
 
 class ModuleUpdatesDialog(QDialog):
     news_changed = pyqtSignal(str)
-    def __init__(self, delivery, *, busy_module=lambda _module: False, parent=None):
+    state_changed = pyqtSignal()
+    def __init__(self, delivery, *, busy_module=lambda _module: False, authorization_provider=lambda: None, parent=None):
         super().__init__(parent)
         self.delivery = delivery
         self.busy_module = busy_module
+        self.authorization_provider = authorization_provider
         self.worker = None
         self.releases = {}
+        self.checked = {}
+        self.checked_authorization = None
+        self.denied_authorization = None
+        self._pending_download = None
         self._shutting_down = False
         self.setWindowTitle("Модули Studio")
         self.setObjectName("moduleUpdatesDialog")
@@ -130,6 +158,10 @@ class ModuleUpdatesDialog(QDialog):
         footer = QHBoxLayout()
         footer.addWidget(QLabel(f"Studio {delivery.updates.current_version}"))
         footer.addStretch()
+        self.cancel_button = V3Button("Отменить скачивание", ButtonVariant.SECONDARY)
+        self.cancel_button.clicked.connect(self.cancel_transfer)
+        self.cancel_button.hide()
+        footer.addWidget(self.cancel_button)
         self.close_button = V3Button("Закрыть", ButtonVariant.SECONDARY)
         self.close_button.clicked.connect(self.reject)
         footer.addWidget(self.close_button)
@@ -148,16 +180,18 @@ class ModuleUpdatesDialog(QDialog):
         for module, (installed, _available, _button) in self.rows.items():
             try:
                 state = self.delivery.store.state(module)
-                installed.setText(state["active"] if state["enabled"] and state["active"] else "В составе Studio")
+                installed.setText(state["active"] if state["enabled"] and state["active"] else "Не установлен")
             except Exception:
                 installed.setText("Ошибка версии")
 
     def _start(self, release=None):
         if self.busy:
             return
-        self.worker = ModuleUpdateWorker(self.delivery, release, self)
+        self.worker = ModuleUpdateWorker(self.delivery, release, self, authorization=self.authorization_provider())
         self.check_button.setEnabled(False)
         self.close_button.setEnabled(False)
+        self.cancel_button.setVisible(release is not None)
+        self.cancel_button.setEnabled(True)
         for _installed, _available, button in self.rows.values():
             button.setEnabled(False)
         self.progress.setRange(0, 0)
@@ -174,6 +208,29 @@ class ModuleUpdatesDialog(QDialog):
         self.releases.clear()
         self.status.setText("Проверяем обновления модулей…")
         self._start()
+
+    def request_module(self, module):
+        if module not in self.rows or self.busy:
+            return
+        self._pending_download = module
+        self.check()
+
+    def invalidate_access(self):
+        self.checked.clear()
+        self.releases.clear()
+        self.checked_authorization = None
+        self.denied_authorization = None
+        self._pending_download = None
+        for _installed, available, button in self.rows.values():
+            available.setText("Проверьте доступ")
+            button.setEnabled(False)
+
+    def cancel_transfer(self):
+        self._pending_download = None
+        if self.worker is not None:
+            self.worker.cancel()
+            self.cancel_button.setEnabled(False)
+            self.status.setText("Отменяем скачивание. Установленные версии сохранятся.")
 
     def download(self, module):
         if self.busy or module not in self.releases:
@@ -206,13 +263,25 @@ class ModuleUpdatesDialog(QDialog):
         try:
             if self._shutting_down:
                 return
-            if worker.failed:
+            if worker.cancelled:
+                self._pending_download = None
+                self.status.setText("Скачивание отменено. Установленные версии сохранены.")
+            elif worker.failed:
+                self.checked_authorization = None
+                self.denied_authorization = worker.initial_authorization if worker.denied else None
+                if worker.denied:
+                    self.releases.clear()
                 self.news_changed.emit("Новости Studio: не удалось проверить обновления")
+                self._pending_download = None
                 if worker.release is None:
+                    self.checked = {}
                     for _installed, available, _button in self.rows.values():
                         available.setText("Ошибка проверки")
                 self.status.setText("Не удалось проверить или скачать обновление. Текущая версия сохранена.")
             elif worker.release is None:
+                self.denied_authorization = None
+                self.checked = dict(worker.result or {})
+                self.checked_authorization = worker.authorization
                 news = [f"{MODULE_TITLES[module]}: доступно обновление" if isinstance(release, WorkflowUpdate)
                         else f"{MODULE_TITLES[module]} {release.version}: {release.notes}"[:500]
                         for module, (state, release) in (worker.result or {}).items()
@@ -254,6 +323,7 @@ class ModuleUpdatesDialog(QDialog):
             self.worker = None
             worker.deleteLater()
             self.progress.hide()
+            self.cancel_button.hide()
             self.close_button.setEnabled(True)
             self.check_button.setEnabled(bool(self.delivery.store.trusted_keys))
             self._refresh_installed()
@@ -261,7 +331,13 @@ class ModuleUpdatesDialog(QDialog):
                 button.setEnabled(module in self.releases)
                 button.set_variant(ButtonVariant.PRIMARY if module in self.releases else ButtonVariant.SECONDARY)
                 if module in self.releases:
-                    button.setText("Обновить")
+                    installed = self.delivery.store.state(module)
+                    button.setText("Обновить" if installed["enabled"] and installed["active"] else "Скачать")
+            self.state_changed.emit()
+            pending, self._pending_download = self._pending_download, None
+            if pending in self.releases:
+                QTimer.singleShot(0, lambda: self.download(pending))
+
 
     def reject(self):
         if not self.busy:
@@ -276,5 +352,5 @@ class ModuleUpdatesDialog(QDialog):
     def _shutdown(self):
         self._shutting_down = True
         if self.worker is not None:
-            self.worker.requestInterruption()
+            self.worker.cancel()
             self.worker.wait()

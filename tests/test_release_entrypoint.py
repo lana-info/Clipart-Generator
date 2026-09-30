@@ -4,7 +4,6 @@ import sys
 import tempfile
 import types
 import unittest
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -14,7 +13,7 @@ from PyQt6.QtWidgets import QApplication, QDialog, QWidget
 from PIL import Image
 
 import main
-from license_client import LicenseAuthorization, LicenseError, LicenseUnavailableError, ModuleEntitlement
+from license_client import LicenseError, LicenseUnavailableError
 from main import (
     APP_VERSION,
     create_authorized_v3_application_window,
@@ -23,8 +22,8 @@ from main import (
     run_packaged_entrypoint_check,
 )
 from v3_components import ModeCard
-from v3_mode_selection import MODE_CARD_SPECS, V3ApplicationView
-from v3_project_state import ProjectMode
+from v3_mode_selection import V3ApplicationView
+from studio_catalog_ui import BUILTIN_CATALOG
 
 
 class ReleaseEntrypointTests(unittest.TestCase):
@@ -36,42 +35,18 @@ class ReleaseEntrypointTests(unittest.TestCase):
         window = create_v3_application_window()
         self.assertIsInstance(window, V3ApplicationView)
         self.assertEqual(window.windowTitle(), f"Vibix Studio {APP_VERSION}")
-        cards = list(window.mode_selection.mode_cards.values())
-        self.assertEqual(set(window.mode_selection.mode_cards), set(MODE_CARD_SPECS))
-        self.assertEqual(len(cards), 3)
+        cards = list(window.mode_selection.module_cards.values())
+        self.assertEqual(set(window.mode_selection.module_cards), {entry.module_id for entry in BUILTIN_CATALOG})
+        self.assertEqual(len(cards), 5)
         self.assertTrue(all(isinstance(card, ModeCard) for card in cards))
         self.assertTrue(all(card.accessibleName() for card in cards))
+        self.assertIsNotNone(window._module_delivery)
+        self.assertFalse(window._legacy_source_mode)
+        self.assertIsNone(window.shell)
         gate = window._license_gate
         self.assertIsNotNone(gate)
-        now = datetime.now(timezone.utc)
-        authorization = LicenseAuthorization(
-            license_id="fixture",
-            product_id="clipart-generator",
-            device_key="device",
-            issued_at=now,
-            expires_at=now + timedelta(minutes=5),
-            module_entitlements=tuple(
-                ModuleEntitlement(mode.value, now, now + timedelta(days=1))
-                for mode in (ProjectMode.CLIPART, ProjectMode.PINTEREST, ProjectMode.PROCESSING)
-            ),
-        )
-        authorize = Mock(return_value=authorization)
-        gate.authorize_run = authorize
-        window.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
-        self.app.processEvents()
-        controllers = [window.shell.workflow_controller(ProjectMode.CLIPART.value)]
-        self.assertIsNone(window.shell.workflow_controller(ProjectMode.PINTEREST.value))
-        self.assertIsNone(window.shell.workflow_controller(ProjectMode.PROCESSING.value))
-        for mode in (ProjectMode.PINTEREST, ProjectMode.PROCESSING):
-            window.show_mode_switcher()
-            window.mode_selection.mode_cards[mode].start_button.click()
-            controllers.append(window.shell.workflow_controller(mode.value))
-        self.assertTrue(
-            all(not hasattr(controller, "authorization_provider") for controller in controllers)
-        )
-        for controller in controllers:
-            controller.shell.authorize_run()
-        self.assertEqual(authorize.call_count, len(controllers))
+        self.assertTrue(all(card.start_button.text() == "Проверить доступ" for card in cards))
+        self.assertIsNone(window.shell)
         window.close()
 
     def test_v3_runtime_includes_bundled_local_realesrgan_path(self):
@@ -131,9 +106,9 @@ class ReleaseEntrypointTests(unittest.TestCase):
             ):
                 window = create_v3_application_window()
             try:
-                window._handle_mode_selected(ProjectMode.PROCESSING.value)
-                operations = window.shell.state.processing.operations
-                self.assertEqual(window.shell.state.common.work_dir, str(legacy_work))
+                self.assertIsNone(window.shell)
+                operations = window._legacy_project.processing.operations
+                self.assertEqual(window._legacy_project.common.work_dir, str(legacy_work))
                 self.assertTrue(operations.remove_background)
                 self.assertEqual(
                     operations.remove_background_provider, "local_rembg"
@@ -327,7 +302,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertEqual(run_packaged_entrypoint_check(APP_VERSION), 0)
         self.assertEqual(run_packaged_entrypoint_check("999.0"), 1)
 
-    def test_packaged_smoke_writes_reviewable_mode_and_prompt_screenshots(self):
+    def test_packaged_smoke_writes_reviewable_core_catalog_screenshot(self):
         with tempfile.TemporaryDirectory(prefix="vibix-ui-evidence-") as temp_dir:
             evidence_dir = Path(temp_dir)
 
@@ -337,15 +312,11 @@ class ReleaseEntrypointTests(unittest.TestCase):
             )
 
             self.assertEqual(result, 0)
-            for filename in (
-                "mode-selection.png",
-                "clipart-prompts.png",
-                "clipart-prompt-review.png",
-            ):
+            for filename in ("mode-selection.png",):
                 screenshot_path = evidence_dir / filename
                 self.assertTrue(screenshot_path.is_file(), filename)
                 with Image.open(screenshot_path) as screenshot:
-                    self.assertEqual(screenshot.size, (1366, 900))
+                    self.assertEqual(screenshot.size, (1120, 780))
                     colors = screenshot.convert("RGB").getcolors(maxcolors=100_000)
                     self.assertIsNotNone(colors)
                     self.assertGreater(len(colors), 100)

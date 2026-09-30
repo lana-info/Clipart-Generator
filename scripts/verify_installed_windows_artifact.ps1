@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)]
     [string]$InstallerPath,
     [Parameter(Mandatory = $true)]
@@ -107,8 +107,6 @@ Invoke-BoundedProcess `
 
 foreach ($evidenceName in @(
     "mode-selection.png",
-    "clipart-prompts.png",
-    "clipart-prompt-review.png",
     "contour-editor.png",
     "contour-edited-alpha.png"
 )) {

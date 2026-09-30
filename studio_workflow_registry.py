@@ -130,3 +130,10 @@ __all__ = [
     "BUILTIN_WORKFLOW_VERSION", "WorkflowRegistration", "WorkflowRegistry",
     "WorkflowRegistryError", "discover_workflows",
 ]
+
+
+def core_project_state_extensions():
+    """Keep existing document schemas readable before their tools are installed."""
+    from clipart_project_state import ClipartProjectStateExtension
+    from studio_auto_clipart_state import AutoClipartStateExtension
+    return (ClipartProjectStateExtension(), AutoClipartStateExtension())

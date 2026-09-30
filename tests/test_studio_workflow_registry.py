@@ -91,10 +91,10 @@ def test_builtin_entries_author_metadata_through_public_module_api():
         assert any(isinstance(node, ast.FunctionDef) and node.name == "register" for node in tree.body)
 
 
-def test_build_collects_builtin_workflow_adapters_generically():
+def test_shell_build_excludes_builtin_workflow_adapters():
     build = (Path(__file__).resolve().parents[1] / "build.ps1").read_text(encoding="utf-8")
-    assert '--add-data "studio_builtin_workflows;studio_builtin_workflows"' in build
-    assert '--collect-submodules "studio_builtin_workflows"' in build
+    assert '--add-data "studio_builtin_workflows;studio_builtin_workflows"' not in build
+    assert '--exclude-module "studio_builtin_workflows"' in build
 
 
 def test_builtin_registry_exposes_optional_project_state_extensions_without_name_switch():

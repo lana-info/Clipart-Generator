@@ -175,3 +175,107 @@ def test_refreshed_release_cannot_silently_change_selected_bytes(app, setup):
     wait_until(app, lambda: not dialog.busy)
     delivery.install.assert_not_called()
     delivery.activate.assert_not_called()
+
+
+def test_catalog_request_checks_then_installs_only_selected_module(app, setup):
+    dialog, delivery, _ = setup
+    dialog.request_module('pinterest')
+    wait_until(app, lambda: delivery.activate.called and not dialog.busy)
+    delivery.activate.assert_called_once_with('pinterest', '1.1.0')
+    assert delivery.install.call_count == 1
+    assert dialog.checked['clipart'] == ('denied', None)
+
+
+def test_cancel_after_staging_never_activates_package(app, setup):
+    dialog, delivery, _ = setup
+    started, finish = threading.Event(), threading.Event()
+    original = delivery.install.side_effect
+
+    def staged(release, **callbacks):
+        result = original(release, **callbacks)
+        started.set()
+        finish.wait(3)
+        return result
+
+    delivery.install.side_effect = staged
+    dialog.check()
+    wait_until(app, lambda: not dialog.busy)
+    dialog.download('pinterest')
+    try:
+        wait_until(app, started.is_set)
+        dialog.cancel_button.click()
+    finally:
+        finish.set()
+    wait_until(app, lambda: not dialog.busy)
+    delivery.activate.assert_not_called()
+    assert dialog.rows['pinterest'][0].text() == 'Не установлен'
+    assert 'отменено' in dialog.status.text()
+    # A new explicit attempt may use the already verified staged bytes.
+    dialog.download('pinterest')
+    wait_until(app, lambda: not dialog.busy)
+    delivery.activate.assert_called_once_with('pinterest', '1.1.0')
+    assert delivery.install.call_count == 1
+
+
+@pytest.mark.parametrize('outage', [False, True])
+def test_discovery_denial_invalidates_composer_but_outage_keeps_cached_right(app, tmp_path, outage):
+    from datetime import datetime, timedelta, timezone
+    from license_client import LicenseAuthorization, ModuleEntitlement, LicenseError, LicenseUnavailableError
+    from v3_mode_selection import V3ApplicationView
+    now = datetime.now(timezone.utc)
+    auth = LicenseAuthorization('fixture', 'clipart-generator', 'device', now - timedelta(minutes=1),
+        now + timedelta(minutes=5), module_entitlements=(ModuleEntitlement('prompt-composer', now - timedelta(minutes=1), now + timedelta(minutes=5)),))
+    gate = SimpleNamespace(current_authorization=auth, status_text='Лицензия активна', verification_text='Проверено')
+    delivery = Mock()
+    delivery.store.trusted_keys = {'fixture': b'public'}
+    delivery.store.state.return_value = {'active': None, 'enabled': True}
+    delivery.has_active_workflow.return_value = False
+    delivery.updates.current_version = '3.2.9'
+    delivery.updates.license_client.validate.side_effect = LicenseUnavailableError('outage') if outage else LicenseError('denied', code='license_rejected')
+    view = V3ApplicationView(draft_path=tmp_path / 'draft.json', license_gate=gate, module_delivery=delivery)
+    try:
+        assert view._composer_allowed()
+        view._refresh_module_discovery()
+        wait_until(app, lambda: not view._module_updates_dialog.busy)
+        assert view._composer_allowed() is outage
+        assert (gate.current_authorization is auth) is outage
+    finally:
+        view.close()
+        view.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_late_discovery_for_previous_account_cannot_restore_old_cards(app, tmp_path):
+    from datetime import datetime, timedelta, timezone
+    from dataclasses import replace
+    from license_client import LicenseAuthorization, ModuleEntitlement
+    from v3_mode_selection import V3ApplicationView
+    now = datetime.now(timezone.utc)
+    old = LicenseAuthorization('old', 'clipart-generator', 'device', now - timedelta(minutes=1),
+        now + timedelta(minutes=5), module_entitlements=(ModuleEntitlement('prompt-composer', now - timedelta(minutes=1), now + timedelta(minutes=5)),))
+    current = replace(old, license_id='new', module_entitlements=())
+    gate = SimpleNamespace(current_authorization=current, status_text='Лицензия активна', verification_text='Проверено')
+    delivery = Mock()
+    delivery.store.trusted_keys = {'fixture': b'public'}
+    delivery.store.state.return_value = {'active': None, 'enabled': True}
+    delivery.has_active_workflow.return_value = False
+    delivery.updates.current_version = '3.2.9'
+    view = V3ApplicationView(draft_path=tmp_path / 'draft.json', license_gate=gate, module_delivery=delivery)
+    try:
+        dialog = view._ensure_module_updates_dialog()
+        dialog.checked_authorization = old
+        dialog.checked = {'prompt-composer': ('ready', object())}
+        dialog.releases = {'prompt-composer': object()}
+        dialog._pending_download = 'prompt-composer'
+        view._module_state_changed()
+        assert gate.current_authorization is current
+        assert not dialog.checked and not dialog.releases
+        assert dialog._pending_download is None
+        assert view.mode_selection.module_cards['prompt-composer'].start_button.text() == 'Нет доступа'
+        dialog.denied_authorization = old
+        view._module_state_changed()
+        assert gate.current_authorization is current
+    finally:
+        view.close()
+        view.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

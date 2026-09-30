@@ -96,7 +96,15 @@ def test_home_refreshes_rights_and_keeps_saved_project(tmp_path):
     app = QApplication.instance() or QApplication([])
     now = datetime.now(timezone.utc)
     gate = Mock(status_text='active', verification_text='checked', current_authorization=None)
-    view = V3ApplicationView(license_gate=gate, draft_path=tmp_path / 'draft.json')
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from studio_module_delivery import StudioModuleDelivery
+    from studio_module_packaging import prepare_official_workflow_release
+    from pathlib import Path
+    signing = Ed25519PrivateKey.generate()
+    delivery = StudioModuleDelivery(root=tmp_path / 'modules', studio_version='3.2.9',
+        platform='windows-x64', license_client=Mock(), license_gate=gate,
+        trusted_keys={'fixture': signing.public_key().public_bytes_raw()})
+    view = V3ApplicationView(license_gate=gate, draft_path=tmp_path / 'draft.json', module_delivery=delivery)
     try:
         card = view.mode_selection.module_cards['auto-clipart']
         assert card.start_button.text() == 'Проверить доступ'
@@ -104,6 +112,14 @@ def test_home_refreshes_rights_and_keeps_saved_project(tmp_path):
             now, now + timedelta(hours=1), module_entitlements=(
                 ModuleEntitlement('auto-clipart', now, now + timedelta(hours=1)),))
         gate.authorize_run.return_value = gate.current_authorization
+        view.refresh_license_status()
+        assert card.start_button.text() == 'Скачать'
+        package = tmp_path / 'auto.zip'
+        package.write_bytes(prepare_official_workflow_release(source_root=Path(__file__).resolve().parents[1],
+            module_id='auto-clipart', version='1.5.0', studio_min='3.2.9', studio_max_exclusive='3.3.0',
+            platforms=['windows-x64'], key_id='fixture', private_key=signing))
+        delivery.store.install(package)
+        delivery.activate('auto-clipart', '1.5.0')
         view.refresh_license_status()
         assert card.start_button.text() == 'Открыть'
         view._handle_module_action('auto-clipart', 'open')

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$AppVersion = "",
     [switch]$AcceptanceBuild
 )
@@ -57,11 +57,11 @@ Write-Host "==> Build app with PyInstaller"
     --add-data "assets/mode-pinterest.png;assets" `
     --add-data "assets/mode-processing.png;assets" `
     --add-data "assets/studio-generation-cover.png;assets" `
+    --add-data "assets/studio-prompt-composer-cover.png;assets" `
     --add-data "assets/studio-patterns-cover.png;assets" `
     --add-data "assets/studio-mockups-cover.png;assets" `
     --add-data "assets/style_previews;assets/style_previews" `
     --add-data "assets/vibix-images.svg;assets" `
-    --add-data "studio_builtin_workflows;studio_builtin_workflows" `
     --add-data "release/VERSION.txt;release" `
     --add-data "third_party/remove_ai_watermarks_gemini/assets;third_party/remove_ai_watermarks_gemini/assets" `
     --add-data "third_party/remove_ai_watermarks_gemini/LICENSE;third_party/remove_ai_watermarks_gemini" `
@@ -70,7 +70,52 @@ Write-Host "==> Build app with PyInstaller"
     --add-data "third_party/migan/LICENSE;third_party/migan" `
     --add-data "third_party/migan/NOTICE.md;third_party/migan" `
     --add-data "realesrgan-ncnn-vulkan-20211212-windows;realesrgan-ncnn-vulkan-20211212-windows" `
-    --collect-submodules "studio_builtin_workflows" `
+    --exclude-module "studio_builtin_workflows" `
+    --exclude-module "v3_clipart_flow" `
+    --exclude-module "v3_processing_flow" `
+    --exclude-module "v3_pinterest_flow" `
+    --exclude-module "studio_auto_clipart_flow" `
+    --exclude-module "prompt_composer" `
+    --hidden-import "chroma_key" `
+    --hidden-import "chroma_key_selection" `
+    --hidden-import "clipart_run_results" `
+    --hidden-import "config_schema" `
+    --hidden-import "fal_model_catalog" `
+    --hidden-import "license_client" `
+    --hidden-import "model_catalog" `
+    --hidden-import "output_naming" `
+    --hidden-import "processing_contract" `
+    --hidden-import "prompt_translation" `
+    --hidden-import "provider_error_messages" `
+    --hidden-import "security_redaction" `
+    --hidden-import "studio_bundle_planner" `
+    --hidden-import "studio_object_editor" `
+    --hidden-import "studio_prompt_composer_host" `
+    --hidden-import "studio_text_errors" `
+    --hidden-import "studio_text_models" `
+    --hidden-import "studio_text_pricing" `
+    --hidden-import "studio_workflow_host" `
+    --hidden-import "v3_api_settings" `
+    --hidden-import "v3_components" `
+    --hidden-import "v3_evidence_center" `
+    --hidden-import "v3_flow_runtime" `
+    --hidden-import "v3_flow_ui" `
+    --hidden-import "v3_image_generation_runtime" `
+    --hidden-import "v3_image_generation_ui" `
+    --hidden-import "v3_image_processing_ui" `
+    --hidden-import "v3_image_review_ui" `
+    --hidden-import "v3_image_worker_settings" `
+    --hidden-import "v3_lazy_loading" `
+    --hidden-import "v3_localization" `
+    --hidden-import "v3_processing_editor" `
+    --hidden-import "v3_project_state" `
+    --hidden-import "v3_prompt_csv_import" `
+    --hidden-import "v3_prompt_editor_ui" `
+    --hidden-import "v3_prompt_generator" `
+    --hidden-import "v3_provider_registry" `
+    --hidden-import "v3_run_queue" `
+    --hidden-import "v3_transparency_preview" `
+    --hidden-import "workflow_definitions" `
     --collect-submodules "scipy._external.array_api_compat" `
     --collect-submodules "rembg.sessions" `
     --copy-metadata "rembg" `

@@ -114,7 +114,7 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("WaitForExit", verifier)
         self.assertIn("local-processing-smoke-report", verifier)
 
-    def test_azure_publishes_installed_prompt_ui_evidence(self):
+    def test_azure_publishes_installed_core_ui_evidence(self):
         pipeline = Path("azure-pipelines.yml").read_text(encoding="utf-8")
         verifier = Path("scripts/verify_installed_windows_artifact.ps1").read_text(
             encoding="utf-8"
@@ -125,8 +125,8 @@ class WindowsInstallerContractTests(unittest.TestCase):
         self.assertIn("--ui-evidence-dir", verifier)
         for filename in (
             "mode-selection.png",
-            "clipart-prompts.png",
-            "clipart-prompt-review.png",
+            "contour-editor.png",
+            "contour-edited-alpha.png",
         ):
             self.assertIn(filename, verifier)
 
@@ -194,7 +194,8 @@ class WindowsInstallerContractTests(unittest.TestCase):
         source = Path("main.py").read_text(encoding="utf-8")
 
         self.assertIn("packaged mode artwork", workflow)
-        self.assertIn("mode_artwork_is_rendered", source)
+        self.assertIn("artwork_is_rendered", source)
+        self.assertIn("frozen_shell_has_no_workflow_sources()", source)
 
     def test_github_verifies_mode_artwork_from_the_installed_copy(self):
         workflow = Path(".github/workflows/release-multi-platform.yml").read_text(

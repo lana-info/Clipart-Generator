@@ -244,7 +244,8 @@ class V3ModeSelectionTests(unittest.TestCase):
             screen.license_verification_label.text(),
             "Проверено онлайн: 15.08.2026 10:30",
         )
-        self.assertEqual(screen.license_button.text(), "Сменить лицензию")
+        self.assertEqual(screen.license_button.text(), "Лицензия")
+        self.assertTrue(screen.license_status_label.isHidden())
         self.assertEqual(screen.api_settings_button.text(), "Настройки API")
         self.assertEqual(license_requests, [True])
         self.assertEqual(api_requests, [True])
@@ -746,7 +747,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         screen.show()
         self.app.processEvents()
 
-        cards = list(screen.mode_cards.values())
+        cards = list(screen.module_cards.values())
         self.assertEqual((screen.width(), screen.height()), (980, 700))
         self.assertTrue(screen.isVisible())
         self.assertLessEqual(
@@ -762,6 +763,9 @@ class V3ModeSelectionTests(unittest.TestCase):
         widths = [card.width() for card in cards]
         self.assertLessEqual(max(widths) - min(widths), 1)
 
+        from studio_catalog import ModuleAvailability
+        for card in cards:
+            card.set_availability(ModuleAvailability(entitled=True, download_supported=True))
         cards[0].start_button.setFocus()
         self.app.processEvents()
         self.assertTrue(cards[0].start_button.hasFocus())

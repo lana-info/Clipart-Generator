@@ -83,6 +83,7 @@ def delivery(tmp_path, monkeypatch):
     client.activate(key)
     publisher = ed25519.Ed25519PrivateKey.generate()
     gate = OnlineLicenseGate(client)
+    gate.authorize_run()  # Production opens Studio only after the startup license gate.
     bridge = StudioModuleDelivery(root=tmp_path / "client-modules", studio_version="3.2.0",
                                   platform="windows-x64", license_client=client, license_gate=gate,
                                   trusted_keys={"test-publisher": publisher.public_key().public_bytes_raw()})
@@ -272,9 +273,10 @@ def test_shared_engine_only_update_and_signed_news_over_real_https(delivery):
 
 def test_revoked_installed_module_preserves_open_project(delivery, app, tmp_path, monkeypatch):
     bridge, publish, gate, service, record = delivery
-    publish("pinterest")
-    bridge.install(bridge.check("pinterest"))
-    bridge.activate("pinterest", "1.0.0")
+    for module in ("pinterest", "processing"):
+        publish(module)
+        bridge.install(bridge.check(module))
+        bridge.activate(module, "1.0.0")
     view = V3ApplicationView(draft_path=tmp_path / "draft.json", license_gate=gate, module_delivery=bridge)
     warning = Mock()
     monkeypatch.setattr("v3_mode_selection.QMessageBox.warning", warning)
@@ -332,6 +334,56 @@ def test_real_update_dialog_downloads_and_opens_workflow(delivery, app, tmp_path
         if view._module_updates_dialog is not None:
             view._module_updates_dialog._shutdown()
             finish(view._module_updates_dialog)
+        view.close()
+        view.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_composer_download_from_existing_server_then_generate_seven_and_revoke(delivery, app, tmp_path, monkeypatch):
+    bridge, publish, gate, service, record = delivery
+    # Existing server supports this ID without changing its code or built-in bundles.
+    service.grant_module(record.license_id, 'prompt-composer', datetime.now(timezone.utc) - timedelta(seconds=1), source='purchase')
+    gate.authorize_run()
+    publish('prompt-composer')
+    view = V3ApplicationView(draft_path=tmp_path / 'draft.json', license_gate=gate, module_delivery=bridge)
+    warning = Mock()
+    monkeypatch.setattr('v3_mode_selection.QMessageBox.warning', warning)
+    view.show()
+    try:
+        cards = view.mode_selection.module_cards
+        assert len(cards) == 5
+        assert all(not bridge.has_active_workflow(module) for module in cards)
+        assert cards['prompt-composer'].start_button.text() == 'Скачать'
+        cards['prompt-composer'].start_button.click()
+        dialog = view._module_updates_dialog
+        for _ in range(1500):
+            app.processEvents()
+            if not dialog.busy and bridge.has_active_workflow('prompt-composer'):
+                break
+            QTest.qWait(10)
+        assert bridge.has_active_workflow('prompt-composer'), dialog.status.text()
+        assert all(not bridge.has_active_workflow(module) for module in cards if module != 'prompt-composer')
+        dialog.close_button.click()
+        assert cards['prompt-composer'].start_button.text() == 'Открыть'
+        cards['prompt-composer'].start_button.click()
+        warning.assert_not_called()
+        page = view._composer_page_handle.value
+        assert page.__class__.__module__.startswith('_studio_module_prompt_composer_')
+        assert page.generate_local() and len(page._variants) == 7
+        service.revoke_module(record.license_id, 'prompt-composer', 'fixture revocation')
+        gate.authorize_run()
+        with pytest.raises(ValueError, match='Нет доступа'):
+            page.host.generate(page.host._kernel.new_draft())
+        page._dirty = False
+        view._close_composer()
+        assert cards['prompt-composer'].start_button.text() == 'Нет доступа'
+        assert not cards['prompt-composer'].start_button.isEnabled()
+    finally:
+        if view._composer_page_handle:
+            view._composer_page_handle.value._dirty = False
+            view._close_composer()
+        if view._module_updates_dialog:
+            view._module_updates_dialog._shutdown()
         view.close()
         view.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)

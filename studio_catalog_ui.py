@@ -9,9 +9,11 @@ from v3_components import ModeCard, DEFAULT_TOKENS
 
 
 BUILTIN_CATALOG = (
+    CatalogEntry("clipart", "Генерация изображений", "Изображения и серии по промптам", "generation", released=True),
     CatalogEntry("auto-clipart", "Clipart", "Автоматические наборы клипартов", "clipart", released=True),
-    CatalogEntry("patterns", "Patterns", "Паттерны, повторения и плитки", "patterns"),
-    CatalogEntry("mockups", "Mockups", "Ваши иллюстрации на товарах", "mockups"),
+    CatalogEntry("processing", "Обработка изображений", "Фон, качество и прозрачность", "processing", released=True),
+    CatalogEntry("pinterest", "Pinterest", "Пины по промптам, без публикации", "pinterest", released=True),
+    CatalogEntry("prompt-composer", "Конструктор промптов", "7 вариантов: изображения и Reels", "prompt-composer", released=True),
 )
 
 
@@ -24,6 +26,7 @@ def catalog_artwork(key: str) -> Path:
         "pinterest": "mode-pinterest.png",
         "processing": "mode-processing.png",
         "generation": "studio-generation-cover.png",
+        "prompt-composer": "studio-prompt-composer-cover.png",
     }
     root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return root / "assets" / filenames.get(key, "vibix-images.svg")

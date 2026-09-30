@@ -10,6 +10,7 @@ import secrets
 import socket
 import ssl
 import tempfile
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -351,53 +352,59 @@ class LicenseClient:
         if not self._public_keys:
             raise LicenseError("Не настроен ключ подписи сервера")
         self._state = LicenseStateStore(state_path)
+        # Background discovery and license replacement share this client.
+        self._authorization_lock = threading.RLock()
 
     def has_activation(self) -> bool:
         return bool(self._state.load().get("license_id"))
 
     def activate(self, license_key: str) -> LicenseAuthorization:
-        normalized_key = (license_key or "").strip()
-        if not normalized_key or len(normalized_key) > 128:
-            raise LicenseError("Введите корректный лицензионный ключ")
-        private_key = self._state.load_or_create_private_key()
-        device_key, nonce, proof = self._device_proof(private_key)
-        envelope = self._post_json(
-            "/api/v1/licenses/activate",
-            {
-                "product_id": self.product_id,
-                "license_key": normalized_key,
-                "device_key": device_key,
-                "nonce": nonce,
-                "proof": proof,
-            },
-        )
-        authorization = self._verify_authorization(envelope, device_key, nonce)
-        self._save_online_authorization(
-            private_key,
-            authorization,
-            envelope,
-            device_key,
-            nonce,
-        )
-        return authorization
+        with self._authorization_lock:
+            normalized_key = (license_key or "").strip()
+            if not normalized_key or len(normalized_key) > 128:
+                raise LicenseError("Введите корректный лицензионный ключ")
+            private_key = self._state.load_or_create_private_key()
+            device_key, nonce, proof = self._device_proof(private_key)
+            envelope = self._post_json(
+                "/api/v1/licenses/activate",
+                {
+                    "product_id": self.product_id,
+                    "license_key": normalized_key,
+                    "device_key": device_key,
+                    "nonce": nonce,
+                    "proof": proof,
+                },
+            )
+            authorization = self._verify_authorization(envelope, device_key, nonce)
+            self._save_online_authorization(
+                private_key,
+                authorization,
+                envelope,
+                device_key,
+                nonce,
+            )
+            return authorization
+
 
     def validate(self) -> LicenseAuthorization:
-        envelope, device_key, nonce = self.authenticated_request(
-            "/api/v1/licenses/validate"
-        )
-        authorization = self._verify_authorization(envelope, device_key, nonce)
-        state = self._state.load()
-        raw_private = state.get("device_private_key")
-        if not isinstance(raw_private, bytes):
-            raise LicenseError("Состояние лицензии повреждено")
-        self._save_online_authorization(
-            Ed25519PrivateKey.from_private_bytes(raw_private),
-            authorization,
-            envelope,
-            device_key,
-            nonce,
-        )
-        return authorization
+        with self._authorization_lock:
+            envelope, device_key, nonce = self.authenticated_request(
+                "/api/v1/licenses/validate"
+            )
+            authorization = self._verify_authorization(envelope, device_key, nonce)
+            state = self._state.load()
+            raw_private = state.get("device_private_key")
+            if not isinstance(raw_private, bytes):
+                raise LicenseError("Состояние лицензии повреждено")
+            self._save_online_authorization(
+                Ed25519PrivateKey.from_private_bytes(raw_private),
+                authorization,
+                envelope,
+                device_key,
+                nonce,
+            )
+            return authorization
+
 
     def _save_online_authorization(
         self,
@@ -431,96 +438,98 @@ class LicenseClient:
         *,
         now: datetime | None = None,
     ) -> LicenseAuthorization:
-        current = now or datetime.now(timezone.utc)
-        if current.tzinfo is None:
-            raise LicenseError("Некорректное системное время")
-        current = current.astimezone(timezone.utc)
-        state = self._state.load()
-        raw_private = state.get("device_private_key")
-        license_id = state.get("license_id")
-        record = state.get("offline_authorization")
-        if (
-            not isinstance(raw_private, bytes)
-            or not isinstance(license_id, str)
-            or not isinstance(record, dict)
-        ):
-            raise LicenseError("Нет подтверждённой онлайн-проверки лицензии")
+        with self._authorization_lock:
+            current = now or datetime.now(timezone.utc)
+            if current.tzinfo is None:
+                raise LicenseError("Некорректное системное время")
+            current = current.astimezone(timezone.utc)
+            state = self._state.load()
+            raw_private = state.get("device_private_key")
+            license_id = state.get("license_id")
+            record = state.get("offline_authorization")
+            if (
+                not isinstance(raw_private, bytes)
+                or not isinstance(license_id, str)
+                or not isinstance(record, dict)
+            ):
+                raise LicenseError("Нет подтверждённой онлайн-проверки лицензии")
 
-        signed_record = dict(record)
-        signature = _b64decode(
-            signed_record.pop("device_signature", None),
-            label="подпись автономной лицензии",
-            expected_length=64,
-        )
-        private_key = Ed25519PrivateKey.from_private_bytes(raw_private)
-        try:
-            private_key.public_key().verify(signature, rfc8785.dumps(signed_record))
-        except Exception as exc:
-            raise LicenseError("Не удалось проверить подпись автономной лицензии") from exc
+            signed_record = dict(record)
+            signature = _b64decode(
+                signed_record.pop("device_signature", None),
+                label="подпись автономной лицензии",
+                expected_length=64,
+            )
+            private_key = Ed25519PrivateKey.from_private_bytes(raw_private)
+            try:
+                private_key.public_key().verify(signature, rfc8785.dumps(signed_record))
+            except Exception as exc:
+                raise LicenseError("Не удалось проверить подпись автономной лицензии") from exc
 
-        if signed_record.get("schema_version") != 1:
-            raise LicenseError("Формат автономной лицензии не поддерживается")
-        if signed_record.get("license_id") != license_id:
-            raise LicenseError("Состояние автономной лицензии повреждено")
-        if signed_record.get("product_id") != self.product_id:
-            raise LicenseError("Автономная лицензия выдана другому продукту")
-        device_key = signed_record.get("device_key")
-        nonce = signed_record.get("nonce")
-        envelope = signed_record.get("server_envelope")
-        if (
-            not isinstance(device_key, str)
-            or device_key != _b64encode(private_key.public_key().public_bytes_raw())
-            or not isinstance(nonce, str)
-            or not isinstance(envelope, dict)
-        ):
-            raise LicenseError("Состояние автономной лицензии повреждено")
+            if signed_record.get("schema_version") != 1:
+                raise LicenseError("Формат автономной лицензии не поддерживается")
+            if signed_record.get("license_id") != license_id:
+                raise LicenseError("Состояние автономной лицензии повреждено")
+            if signed_record.get("product_id") != self.product_id:
+                raise LicenseError("Автономная лицензия выдана другому продукту")
+            device_key = signed_record.get("device_key")
+            nonce = signed_record.get("nonce")
+            envelope = signed_record.get("server_envelope")
+            if (
+                not isinstance(device_key, str)
+                or device_key != _b64encode(private_key.public_key().public_bytes_raw())
+                or not isinstance(nonce, str)
+                or not isinstance(envelope, dict)
+            ):
+                raise LicenseError("Состояние автономной лицензии повреждено")
 
-        authorization = self._verify_authorization(
-            envelope,
-            device_key,
-            nonce,
-            now=current,
-            require_current=False,
-        )
-        if authorization.license_id != license_id:
-            raise LicenseError("Состояние автономной лицензии повреждено")
-        last_verified_at = _parse_datetime(
-            signed_record.get("last_verified_at"),
-            label="last_verified_at",
-        )
-        highest_seen_at = _parse_datetime(
-            signed_record.get("highest_seen_at"),
-            label="highest_seen_at",
-        )
-        if last_verified_at != authorization.issued_at:
-            raise LicenseError("Состояние автономной лицензии повреждено")
-        if current + timedelta(seconds=self.lifecycle_policy.clock_skew_seconds) < highest_seen_at:
-            raise LicenseError("Обнаружено некорректное системное время")
-        grace_expires_at = last_verified_at + timedelta(days=OFFLINE_GRACE_DAYS)
-        if current > grace_expires_at:
-            last_check = last_verified_at.astimezone().strftime("%d.%m.%Y %H:%M")
-            raise LicenseError(
-                "Срок временного автономного доступа завершён\n"
-                f"Последняя успешная проверка: {last_check}"
+            authorization = self._verify_authorization(
+                envelope,
+                device_key,
+                nonce,
+                now=current,
+                require_current=False,
+            )
+            if authorization.license_id != license_id:
+                raise LicenseError("Состояние автономной лицензии повреждено")
+            last_verified_at = _parse_datetime(
+                signed_record.get("last_verified_at"),
+                label="last_verified_at",
+            )
+            highest_seen_at = _parse_datetime(
+                signed_record.get("highest_seen_at"),
+                label="highest_seen_at",
+            )
+            if last_verified_at != authorization.issued_at:
+                raise LicenseError("Состояние автономной лицензии повреждено")
+            if current + timedelta(seconds=self.lifecycle_policy.clock_skew_seconds) < highest_seen_at:
+                raise LicenseError("Обнаружено некорректное системное время")
+            grace_expires_at = last_verified_at + timedelta(days=OFFLINE_GRACE_DAYS)
+            if current > grace_expires_at:
+                last_check = last_verified_at.astimezone().strftime("%d.%m.%Y %H:%M")
+                raise LicenseError(
+                    "Срок временного автономного доступа завершён\n"
+                    f"Последняя успешная проверка: {last_check}"
+                )
+
+            if current > highest_seen_at:
+                signed_record["highest_seen_at"] = current.isoformat()
+                signed_record["device_signature"] = _b64encode(
+                    private_key.sign(rfc8785.dumps(signed_record))
+                )
+                self._state.save_activation(private_key, license_id, signed_record)
+            return LicenseAuthorization(
+                license_id=authorization.license_id,
+                product_id=authorization.product_id,
+                device_key=authorization.device_key,
+                issued_at=authorization.issued_at,
+                expires_at=authorization.expires_at,
+                is_offline_grace=True,
+                last_verified_at=last_verified_at,
+                grace_expires_at=grace_expires_at,
+                module_entitlements=authorization.module_entitlements,
             )
 
-        if current > highest_seen_at:
-            signed_record["highest_seen_at"] = current.isoformat()
-            signed_record["device_signature"] = _b64encode(
-                private_key.sign(rfc8785.dumps(signed_record))
-            )
-            self._state.save_activation(private_key, license_id, signed_record)
-        return LicenseAuthorization(
-            license_id=authorization.license_id,
-            product_id=authorization.product_id,
-            device_key=authorization.device_key,
-            issued_at=authorization.issued_at,
-            expires_at=authorization.expires_at,
-            is_offline_grace=True,
-            last_verified_at=last_verified_at,
-            grace_expires_at=grace_expires_at,
-            module_entitlements=authorization.module_entitlements,
-        )
 
     def authenticated_request(
         self,

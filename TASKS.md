@@ -1,5 +1,34 @@
 # TASKS
 
+## Studio shell and separately installed modules
+
+- [x] Base 6568fae / Windows 3.2.8 verified from existing handoff; new isolated branch.
+- [x] Read-only production server audit: healthy beta-modules-53b42ef; Club/VIP
+  grants four existing workflows; published Windows module packages 1.4.x exist.
+- [x] Catalog mockup reviewed; apply owner refinements (no status/refresh strip,
+  updates in header, existing artwork dimensions, new composer slot-machine art).
+- [x] Unified catalog actions and first-install flow; installed packages required.
+- [x] Decouple shell startup/project metadata from bundled workflow discovery.
+- [x] Port Composer without reverting 3.2.8 text models or shared-service changes.
+- [x] Package Composer as signed independently loaded code; no bundled fallback.
+- [ ] Shell packaging excludes module-owned implementations, preserving needed
+  shared services and immutable project schemas; verify actual package loading.
+- [x] Source integration tests: denied/unknown/offline, download/cancel/error, reopen,
+  independent update, invalid signature and revoked rights;18 HTTPS tests passed.
+- [x] Independent review findings: serialize license activation/check persistence;
+  clear rejected access and discard stale account results; regression tests.
+- [x] Independent review and fixes, full source suite2046tests+273subtests,
+  Qt1120×780 comparison; limitations documented.
+- [ ] Installed native Windows UI/download comparison (build blocked).
+- [x] Prepare signed Windows module1.5.0 candidate ZIPs (Studio>=3.2.9,<3.3.0),
+  inspect signatures/compatibility; no production publication.
+- [ ] Windows shell build and installed download/open acceptance; latest GitHub
+  Actions attempt for prior Composer was budget-blocked. No billing change.
+  Deployment and license changes remain outside scope.
+
+Server audit: Composer has no catalog entry, assignment or release yet. Preparing
+its package does not authorize issuing customer rights or publishing server rows.
+
 - [x] Clarify new chroma prompts: preserve object textures, exclude paper substrate
   and white bridges/fringe; foliage gaps use the selected background colour.
 - [ ] Verify one regenerated teddy/pine image after updating prompts; paid launch

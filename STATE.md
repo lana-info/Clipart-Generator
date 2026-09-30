@@ -1,5 +1,59 @@
 # Project state
 
+## Studio shell source candidate, 2026-09-29
+
+Branch `codex/feature-studio-shell-modules-20260929`, base 6568fae (Windows3.2.8).
+Candidate source version3.2.9. Source branch/worktree and license server unchanged.
+Owner approved catalog with header License/Module updates, no permanent license
+strip, original112px artwork and new Composer slot-machine artwork. Current
+Qt screenshots: docs/ui/3.1/studio-shell-modules/actual-mixed.png and actual-*.png.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Оболочка и отдельная установка пяти модулей; запрос владельца | Подписанные пакеты через локальный HTTPS, затем открытие | Каталог и маршрутизация требуют установленного пакета, builtins исключены из Windows build | Реализовано частично:17 HTTPS сценариев прежних модулей прошли; новый Composer HTTPS сценарий прошёл. Замороженная Windows сборка ещё не проверена |
+| Точный доступ по существующей лицензии, сервер не менять | Read-only production audit; revoke/denied тесты | Права не выводятся из имени Club/VIP | Сервер beta-modules-53b42ef здоров; четыре права/пакета есть. Composer не опубликован и прав нет. Production не меняли |
+| Красивые прежние обложки и размеры; новая картинка Composer | Qt1120×780 + размер112px | Старые файлы сохранены, новый автомат идей | Реализовано и проверено offscreen: все пять картинок отображаются; короткая подпись Composer не обрезается |
+| Семь промптов, сохранения, Reels в одну сцену | Composer unit/runtime и HTTPS | Перенесён отдельный подписанный Composer + Core bridge | Реализовано и проверено: source104 tests+11subtests ранее;21 targeted+4subtests; HTTPS generate7/revoke прошёл. Платный AI не запускали |
+| Отмена не включает скачанный пакет | Отмена после staging до owner-thread activation | Сохраняется cancel intent после завершения QThread | Реализовано и проверено:40 UI/router tests+6subtests прошли |
+| Смена лицензии не возвращает прежний аккаунт, явный отказ закрывает доступ | Signed-response concurrency regression, discovery denial/outage | Client RLock сериализует activate/validate/offline persistence; typed denial и discard stale UI | Проверка обнаружила ошибку в исходном варианте; исправления внесены. 29 targeted tests+14subtests passed, включая реальную подписанную запись активации и explicit denial/outage. Stale-account UI regression прошёл в полном прогоне |
+| GitHub и тестовый Windows установщик; ранее согласовано | Review, full suite, PR, Windows CI | Подготовлены source build exclusions, shared hidden imports, Core smoke | Реализовано частично:60 boundary tests+14subtests прошли. Полная suite2046tests+273subtests прошла; PR готовится. Windows не проверен. Предыдущие Actions блокировались бюджетом |
+
+История проверок и причин:
+- Реальный HTTPS fixture сперва не стартовал без psycopg. Использованы уже
+  установленные зависимости service image в /tmp/studio-shell-service-testdeps,
+  без новых project dependencies и без изменения production.17testspassed.
+- Старый integration тест предполагал bundled Processing. Он теперь явно ставит
+  подписанные Processing/Pinterest, что соответствует новой модели.17passed.
+- Keyboard test после двух частичных правок всё ещё ожидал старый порядок трёх
+  mode aliases. Прямая Qt focus probe показала фактический порядок пяти catalog
+  cards. Проверяется этот порядок;40 UI/routertests+6subtests passed.
+- QThread сбрасывает interruption flag при выходе; добавлен устойчивый cancelled
+  latch. Отмена staged package не вызывает activate, явный retry допускается.
+- Независимый review подтвердил late validate(A) overwriting activation(B) и
+  cached Composer access после explicit denial. Исправления выполняются клиентом,
+  сервер не затрагивается. Targeted29tests+14subtests passed; HTTPS18tests passed after fixtures now use
+  the mandatory startup gate before opening Studio.
+- Агент shell_packaging завершился ошибкой лимита использования после записи
+  build/main/smoke изменений. Основной агент проверил изменения;60 boundary tests и полный прогон прошли.
+
+Полный первый прогон:2037passed,273subtests,57skipped,20deselected,1knownxfail,
+8failures. Все8 связаны с прежней bundled-моделью: тесты теперь устанавливают
+настоящие подписанные пакеты перед открытием, затем проверяют revoke/save-before-run;
+installer evidence проверяет Core каталог и shared contour.37targetedtests+2subtests
+прошли после исправлений. Финальный полный прогон:2046passed,273subtests,57skipped,20deselected,
+1knownred-keyfurxfail за184.42s.18HTTPStests прошли за28.43s.
+Sensitive artifact guards (tracked/new source) и git diff --check прошли.
+Подготовлены6 production-signed ZIPs + release-set.json:
+/root/projects/Clipart Generator/artifacts/studio-shell-modules-1.5.0-20260929
+Все подписи/платформа/совместимость проверены штатным publisher CLI. Пакеты не
+загружены на сервер. Нижняя граница3.2.9, верхняя исключая3.3.0, Windows only.
+Не выполнено: commit/push/PR, Windows build. Последний GitHub run36646295854
+подтверждает: «The job was not started because an Actions budget is preventing
+further use.» Повторную сборку при этом же блокере не запускали; бюджет не меняли. Composer publication
+и выдача прав не разрешены текущим scope; сервер должен остаться неизменным.
+Автовосстановления повреждённой версии под тем же номером пока нет; это не заявлять
+как готовую функцию. Новости/сохранённые проекты сохраняют прежние места интерфейса.
+
 ## Paper-free generation prompt clarification, 2026-09-29
 
 Owner chose regeneration of the two bears instead of repairing their old paper

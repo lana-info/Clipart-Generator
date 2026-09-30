@@ -18,33 +18,33 @@ class CatalogUiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_default_home_preserves_three_workflows_and_has_six_equal_cards(self):
+    def test_default_home_has_five_equal_module_cards_and_preserves_artwork_size(self):
         screen = ModeSelectionScreen()
         screen.resize(1120, 780)
         screen.show()
         self.app.processEvents()
-        cards = [*screen.mode_cards.values(), *screen.module_cards.values()]
-        self.assertEqual(len(cards), 6)
+        cards = list(screen.module_cards.values())
+        self.assertEqual(len(cards), 5)
         self.assertEqual({card.height() for card in cards}, {248})
         self.assertLessEqual(max(card.width() for card in cards) - min(card.width() for card in cards), 1)
-        self.assertTrue(all(card.start_button.isEnabled() for card in screen.mode_cards.values()))
-        self.assertTrue(all(card.start_button.text() == "Скоро выйдет"
-                            for key, card in screen.module_cards.items() if key != "auto-clipart"))
-        self.assertNotEqual(screen.module_cards["auto-clipart"].start_button.text(), "Скоро выйдет")
-        self.assertTrue(all(not card.start_button.isEnabled() for card in screen.module_cards.values()))
+        self.assertEqual({card.illustration.height() for card in cards}, {112})
+        self.assertTrue(all(card.start_button.text() == "Нет доступа" for card in cards))
+        self.assertTrue(all(not card.start_button.isEnabled() for card in cards))
+        self.assertTrue(screen.license_status_label.isHidden())
+        self.assertTrue(screen.license_verification_label.isHidden())
         screen.resize(980, 700)
         self.app.processEvents()
         scroll = screen.catalog_scroll
         scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
         self.app.processEvents()
-        last = screen.module_cards["mockups"].start_button
+        last = screen.module_cards["prompt-composer"].start_button
         position = last.mapTo(scroll.viewport(), last.rect().bottomRight())
         self.assertLessEqual(position.y(), scroll.viewport().height())
         screen.close()
         screen.deleteLater()
 
     def test_card_emits_only_supported_intent_and_revocation_disables_it(self):
-        entry = replace(BUILTIN_CATALOG[0], released=True)
+        entry = replace(BUILTIN_CATALOG[1], released=True)
         availability = ModuleAvailability(entitled=True, download_supported=True)
         card = StudioCatalogCard(entry, availability)
         received = []
@@ -53,7 +53,7 @@ class CatalogUiTests(unittest.TestCase):
         card.start_button.click()
         self.assertEqual(received, [("auto-clipart", "download")])
         card.set_availability(ModuleAvailability())
-        self.assertEqual(card.start_button.text(), "Купить")
+        self.assertEqual(card.start_button.text(), "Нет доступа")
         card.start_button.click()
         self.assertEqual(len(received), 1)
         card.deleteLater()
@@ -65,11 +65,11 @@ class CatalogUiTests(unittest.TestCase):
         received = []
         screen.module_action_requested.connect(lambda *args: received.append(args))
         entry = CatalogEntry("documents", "Документы", "Подготовка документов", "unknown", True)
-        screen.set_module_catalog([entry], {"documents": ModuleAvailability(purchase_supported=True)})
-        self.assertEqual(screen.mode_cards, previous)
+        screen.set_module_catalog([entry], {"documents": ModuleAvailability(entitled=True, download_supported=True)})
+        self.assertEqual(screen.mode_cards, {})
         self.assertTrue(all(card.isHidden() for card in replaced))
         screen.module_cards["documents"].start_button.click()
-        self.assertEqual(received, [("documents", "purchase")])
+        self.assertEqual(received, [("documents", "download")])
         with self.assertRaises(ValueError):
             screen.set_module_catalog([entry, entry])
         self.assertEqual(list(screen.module_cards), ["documents"])
@@ -84,7 +84,7 @@ class CatalogUiTests(unittest.TestCase):
         self.assertEqual(card.title_label.textFormat(), Qt.TextFormat.PlainText)
         self.assertEqual(card.description_label.textFormat(), Qt.TextFormat.PlainText)
         self.assertEqual(catalog_artwork(entry.artwork_key).name, "vibix-images.svg")
-        for key in ("generation", "clipart", "processing", "pinterest", "patterns", "mockups"):
+        for key in ("generation", "clipart", "processing", "pinterest", "patterns", "mockups", "prompt-composer"):
             self.assertTrue(catalog_artwork(key).is_file())
             build = (Path(__file__).resolve().parents[1] / "build.ps1").read_text(encoding="utf-8-sig")
             self.assertIn(f'assets/{catalog_artwork(key).name};assets', build)

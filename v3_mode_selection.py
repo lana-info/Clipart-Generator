@@ -44,7 +44,7 @@ from studio_projects import ProjectStore
 from studio_project_documents import ProjectDocumentService
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
 from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
-from studio_workflow_registry import WorkflowRegistry, discover_workflows
+from studio_workflow_registry import WorkflowRegistry, discover_workflows, core_project_state_extensions
 from studio_workflow_host import WorkflowHost
 from studio_module_access import authorize_module_run
 from v3_localization import app_locale_from_settings
@@ -175,11 +175,20 @@ class ModeSelectionScreen(QWidget):
         self.license_verification_label.setProperty("v3Small", True)
         self.license_verification_label.setAccessibleName("Онлайн-проверка лицензии")
         status_layout.addWidget(self.license_verification_label)
-        account_layout.addLayout(status_layout, 1)
+        self.license_status_label.setParent(self)
+        self.license_verification_label.setParent(self)
+        self.license_status_label.hide()
+        self.license_verification_label.hide()
+        brand = QLabel("VIBIX Studio")
+        brand.setStyleSheet("font-size:24px;font-weight:600;color:#22c9c6;")
+        account_layout.addWidget(brand, 1)
 
-        self.license_button = V3Button("Сменить лицензию", ButtonVariant.GHOST)
+        self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
         self.license_button.clicked.connect(self.license_requested.emit)
         account_layout.addWidget(self.license_button)
+        self.module_updates_button = V3Button("Обновления модулей", ButtonVariant.GHOST)
+        self.module_updates_button.clicked.connect(self.module_updates_requested.emit)
+        account_layout.addWidget(self.module_updates_button)
         self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         account_layout.addWidget(self.api_settings_button)
@@ -194,9 +203,6 @@ class ModeSelectionScreen(QWidget):
         catalog_heading = QHBoxLayout()
         catalog_heading.addWidget(title)
         catalog_heading.addStretch()
-        self.module_updates_button = V3Button("Обновления модулей", ButtonVariant.SECONDARY)
-        self.module_updates_button.clicked.connect(self.module_updates_requested.emit)
-        catalog_heading.addWidget(self.module_updates_button)
         layout.addLayout(catalog_heading)
 
         self.cards_container = QWidget()
@@ -207,29 +213,6 @@ class ModeSelectionScreen(QWidget):
         cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         for column in range(3):
             cards_layout.setColumnStretch(column, 1)
-        for mode in (ProjectMode.CLIPART, ProjectMode.PROCESSING, ProjectMode.PINTEREST):
-            spec = MODE_CARD_SPECS[mode]
-            card = ModeCard(
-                mode.value,
-                spec.title,
-                spec.description,
-                spec.result,
-                tokens=tokens,
-                illustration_path=(catalog_artwork("generation") if mode is ProjectMode.CLIPART
-                                   else mode_illustration_path(mode)),
-                compact=True,
-            )
-            card.description_label.setText({
-                ProjectMode.CLIPART: "Изображения и серии по промптам",
-                ProjectMode.PROCESSING: "Фон, качество и прозрачность",
-                ProjectMode.PINTEREST: "Пины по промптам, без публикации",
-            }[mode])
-            card.selected.connect(self._select_mode)
-            card.setSizePolicy(
-                QSizePolicy.Policy.Ignored,
-                QSizePolicy.Policy.Expanding,
-            )
-            self.mode_cards[mode] = card
         self.catalog_scroll = QScrollArea()
         self.catalog_scroll.setWidgetResizable(True)
         self.catalog_scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -326,12 +309,9 @@ class ModeSelectionScreen(QWidget):
             self.module_cards[entry.module_id] = card
         while self.cards_layout.count():
             self.cards_layout.takeAt(0)
-        cards = [self.mode_cards[ProjectMode.CLIPART], self.mode_cards[ProjectMode.PROCESSING]]
-        modules = list(self.module_cards.values())
-        cards.extend(modules[:2])
-        cards.append(self.mode_cards[ProjectMode.PINTEREST])
-        cards.extend(modules[2:])
-        for index, card in enumerate(cards):
+        self.mode_cards = {mode: self.module_cards[mode.value] for mode in ProjectMode
+                           if mode.value in self.module_cards}
+        for index, card in enumerate(self.module_cards.values()):
             self.cards_layout.addWidget(card, index // 3, index % 3)
 
     def set_saved_projects(self, projects: list) -> None:
@@ -429,8 +409,12 @@ class V3ApplicationView(QWidget):
         self._module_updates_dialog = None
         self._legacy_project = legacy_project
         workflow_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "studio_builtin_workflows"
-        self._workflow_registry = workflow_registry or discover_workflows(workflow_root)
-        self._project_state_extensions = self._workflow_registry.project_state_extensions()
+        self._workflow_registry = workflow_registry or (
+            discover_workflows(workflow_root) if module_delivery is None and workflow_root.is_dir()
+            else WorkflowRegistry())
+        self._project_state_extensions = core_project_state_extensions()
+        self._composer_page_handle = None
+        self._legacy_source_mode = module_delivery is None and license_gate is None and bool(self._workflow_registry.module_ids)
         self._update_controller = None
         self._initialization_overlay: InitializationProgressOverlay | None = None
         self._draft_path = Path(draft_path) if draft_path is not None else None
@@ -514,21 +498,32 @@ class V3ApplicationView(QWidget):
             )
 
     def start_update_check(self) -> bool:
+        self._refresh_module_discovery()
         if self._update_controller is None:
             return False
         return self._update_controller.start_check()
 
-    def _show_module_updates(self):
+    def _ensure_module_updates_dialog(self):
         if self._module_delivery is None:
             return
         from studio_module_update_ui import ModuleUpdatesDialog
         if self._module_updates_dialog is None:
             self._module_updates_dialog = ModuleUpdatesDialog(
                 self._module_delivery, parent=self,
-                busy_module=lambda module: self.shell is not None and self.shell.workflow_controller(module) is not None,
+                authorization_provider=lambda: getattr(self._license_gate, "current_authorization", None),
+                busy_module=lambda module: ((module == "prompt-composer" and self._composer_page_handle is not None)
+                    or (self.shell is not None and self.shell.workflow_controller(module) is not None)),
             )
             self._module_updates_dialog.finished.connect(self.refresh_license_status)
+            self._module_updates_dialog.state_changed.connect(self._module_state_changed)
+        return self._module_updates_dialog
+
+    def _show_module_updates(self):
+        if self._ensure_module_updates_dialog() is None:
+            return
         self._module_updates_dialog.open()
+        if not self._module_updates_dialog.checked and not self._module_updates_dialog.busy:
+            self._module_updates_dialog.check()
 
     def _runtime_settings(self) -> Mapping[str, Any]:
         base = dict(self._runtime_settings_provider() or {}) if self._runtime_settings_provider else {}
@@ -610,7 +605,10 @@ class V3ApplicationView(QWidget):
             "Окно лицензии закрыто.",
             outcome="accepted" if result else "cancelled",
         )
+        if self._module_updates_dialog is not None:
+            self._module_updates_dialog.invalidate_access()
         self.refresh_license_status()
+        self._refresh_module_discovery()
 
     def refresh_license_status(self) -> None:
         status = "Лицензия не активирована"
@@ -625,39 +623,86 @@ class V3ApplicationView(QWidget):
             deadline = authorization.grace_expires_at if authorization.is_offline_grace else authorization.expires_at
             if deadline is None or datetime.now(timezone.utc) >= deadline:
                 authorization = None
-        card = self.mode_selection.module_cards.get("auto-clipart")
-        if card is not None:
-            installed = "auto-clipart" in self._workflow_registry.module_ids
+        for module_id, card in self.mode_selection.module_cards.items():
+            installed = self._legacy_source_mode and module_id in self._workflow_registry.module_ids
             compatible = True
             if self._module_delivery is not None:
                 try:
-                    if self._module_delivery.has_active_workflow("auto-clipart"):
-                        installed = self._module_delivery.store.verified_active_path("auto-clipart") is not None
+                    installed = self._module_delivery.has_active_workflow(module_id)
+                    if installed:
+                        self._module_delivery.store.verified_active_path(module_id)
                 except (OSError, ValueError):
-                    compatible = False
+                    installed, compatible = False, False
+            checked = self._module_updates_dialog.checked.get(module_id) if self._module_updates_dialog else None
+            entitled = isinstance(authorization, LicenseAuthorization) and authorization.allows_module(module_id)
+            if self._legacy_source_mode and module_id in {mode.value for mode in ProjectMode}:
+                entitled = True
+            offline = isinstance(authorization, LicenseAuthorization) and authorization.is_offline_grace
             card.set_availability(ModuleAvailability(
-                installed=installed, open_supported=installed, compatible=compatible,
-                download_supported=self._module_delivery is not None,
-                update_available=bool(self._module_updates_dialog is not None
-                    and "auto-clipart" in self._module_updates_dialog.releases),
-                entitlement_known=isinstance(authorization, LicenseAuthorization),
-                entitled=isinstance(authorization, LicenseAuthorization)
-                and authorization.allows_module("auto-clipart"),
+                installed=bool(installed), open_supported=bool(installed), compatible=compatible,
+                download_supported=self._module_delivery is not None and not offline,
+                update_available=bool(self._module_updates_dialog and module_id in self._module_updates_dialog.releases),
+                entitlement_known=isinstance(authorization, LicenseAuthorization) or self._legacy_source_mode,
+                entitled=entitled,
+                release_known=bool(checked and checked[0] == "ready"),
+                release_available=bool(checked and checked[1] is not None),
             ))
 
-    def _handle_module_action(self, module_id: str, action: str) -> None:
-        if module_id == "auto-clipart" and action in {"update", "download"}:
-            self._show_module_updates()
+    def _module_state_changed(self):
+        from license_client import LicenseAuthorization
+        dialog = self._module_updates_dialog
+        checked = dialog.checked_authorization
+        current = getattr(self._license_gate, "current_authorization", None)
+        denied = dialog.denied_authorization
+        if (isinstance(denied, LicenseAuthorization) and isinstance(current, LicenseAuthorization)
+                and denied.license_id == current.license_id and current.issued_at <= denied.issued_at):
+            self._license_gate.current_authorization = None
+            self._license_gate.status_text = "Лицензия не подтверждена"
+            dialog.invalidate_access()
+        elif isinstance(checked, LicenseAuthorization):
+            if not isinstance(current, LicenseAuthorization) or checked.license_id != current.license_id:
+                dialog.invalidate_access()
+            elif checked.issued_at >= current.issued_at:
+                self._license_gate.current_authorization = checked
+        self.refresh_license_status()
+
+    def _refresh_module_discovery(self):
+        # Reuse the existing serialized worker; no automatic download or install.
+        from license_client import LicenseAuthorization
+        authorization = getattr(self._license_gate, "current_authorization", None)
+        if not isinstance(authorization, LicenseAuthorization) or authorization.is_offline_grace:
             return
-        if module_id == "auto-clipart" and action == "verify":
+        dialog = self._ensure_module_updates_dialog()
+        if dialog is not None and not dialog.busy:
+            dialog.check()
+
+    def _handle_module_action(self, module_id: str, action: str) -> None:
+        if module_id not in self.mode_selection.module_cards:
+            return
+        if action in {"update", "download"}:
+            self._show_module_updates()
+            if self._module_updates_dialog is not None:
+                if self._module_updates_dialog.busy:
+                    self._module_updates_dialog._pending_download = module_id
+                else:
+                    self._module_updates_dialog.request_module(module_id)
+            return
+        if action == "verify":
             if self._license_gate is not None:
                 try:
                     self._license_gate.authorize_run()
                 except LicenseError as exc:
                     QMessageBox.warning(self, "Доступ к модулю", str(exc))
                 self.refresh_license_status()
+                self._refresh_module_discovery()
             return
-        if module_id != "auto-clipart" or action != "open":
+        if action != "open":
+            return
+        if module_id == "prompt-composer":
+            self._open_composer()
+            return
+        if module_id != "auto-clipart":
+            self._handle_mode_selected(module_id)
             return
         if not self._save_automatic_before_leaving():
             return
@@ -671,6 +716,67 @@ class V3ApplicationView(QWidget):
             self._active_project_id = previous
             return
         self.new_project_started.emit(module_id)
+
+    def _composer_allowed(self):
+        from license_client import LicenseAuthorization
+        authorization = getattr(self._license_gate, "current_authorization", None)
+        return isinstance(authorization, LicenseAuthorization) and authorization.allows_module("prompt-composer")
+
+    def _composer_authorize_request(self):
+        authorize_module_run(self._license_gate, "prompt-composer")
+        return True
+
+    def _composer_settings(self):
+        from v3_api_settings import load_credentials
+        settings = load_credentials()
+        settings.update(self._runtime_settings())
+        return settings
+
+    def _open_composer(self):
+        if self.shell is not None and self.shell.active_run_controller() is not None:
+            return
+        if not self._save_automatic_before_leaving():
+            return
+        host = None
+        try:
+            if self._license_gate is None or self._module_delivery is None:
+                raise ValueError("Модуль ещё не установлен")
+            authorize_module_run(self._license_gate, "prompt-composer")
+            if self._composer_page_handle is not None:
+                self._set_application_screen(self._composer_page_handle.value, "prompt-composer", "module_open")
+                return
+            runtime = self._module_delivery.host
+            if runtime.registration("prompt-composer") is None:
+                runtime.load_active("prompt-composer")
+            kernel = runtime.invoke_command("prompt-composer", "kernel")
+            from studio_prompt_composer_host import PromptComposerHost
+            root = (self._draft_path.parent if self._draft_path else
+                    Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)))
+            host = PromptComposerHost(root / "prompt_composer", settings_provider=self._composer_settings,
+                authorize=self._composer_allowed, authorize_request=self._composer_authorize_request,
+                runtime=runtime, kernel=kernel)
+            handle = runtime.create_page("prompt-composer", "main", host)
+            self._composer_page_handle = handle
+            page = handle.value
+            page.back_requested.connect(self._close_composer)
+            page.settings_requested.connect(self._show_api_settings)
+            self.stack.addWidget(page)
+            self._set_application_screen(page, "prompt-composer", "module_open")
+        except Exception:
+            if host is not None and self._composer_page_handle is None:
+                host.close()
+            QMessageBox.warning(self, "Конструктор промптов", "Не удалось открыть модуль. Проверьте доступ и установленную версию.")
+
+    def _close_composer(self):
+        handle = self._composer_page_handle
+        if handle is None:
+            return
+        self._composer_page_handle = None
+        handle.value.host.close()
+        self.stack.removeWidget(handle.value)
+        handle.close()
+        handle.value.deleteLater()
+        self.show_new_project(trigger="module_closed")
 
     @property
     def project_state(self) -> ProjectState | None:
@@ -1151,7 +1257,6 @@ class V3ApplicationView(QWidget):
         existing = shell.workflow_controller(module_id)
         if existing is not None:
             return existing
-        registration = self._workflow_registry.require(module_id)
         view_ref = weakref.ref(self)
         shell_ref = weakref.ref(shell)
 
@@ -1203,12 +1308,15 @@ class V3ApplicationView(QWidget):
             image_run_gateway=image_run_gateway,
         )
         locale = app_locale_from_settings(self._preferences)
-        if self._module_delivery is not None and self._module_delivery.has_active_workflow(module_id):
+        if self._module_delivery is not None:
+            if not self._module_delivery.has_active_workflow(module_id):
+                from studio_module_api import ModuleApiError
+                raise ModuleApiError("Сначала скачайте модуль в каталоге Studio")
             controller = self._module_delivery.install_workflow(
                 module_id, host, locale=locale, owner=shell,
             )
         else:
-            controller = registration.install(host, locale=locale)
+            controller = self._workflow_registry.require(module_id).install(host, locale=locale)
         shell.register_workflow_controller(module_id, controller)
         if mode is ProjectMode.CLIPART:
             page = getattr(getattr(controller, "run_queue", None), "page", None)
@@ -1270,6 +1378,11 @@ class V3ApplicationView(QWidget):
 
 
     def closeEvent(self, event) -> None:
+        if self._composer_page_handle is not None:
+            if not self._composer_page_handle.value.confirm_close():
+                event.ignore()
+                return
+            self._close_composer()
         if self.shell is not None and getattr(self.shell, "module_id", None) == "auto-clipart":
             controller = self.shell.workflow_controller("auto-clipart")
             if controller is not None and controller.is_busy():

@@ -396,3 +396,46 @@ class LicenseClientSecurityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_background_validation_cannot_replace_a_new_activation(tmp_path):
+    """Real signed responses and disk state: replacement waits for old validation."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    signing = Ed25519PrivateKey.generate()
+    client = license_client.LicenseClient('https://license.example', str(tmp_path / 'license.json'),
+        {'license-v1': encode(signing.public_key().public_bytes_raw())}, 'clipart-generator')
+    old_id = '00000000-0000-4000-8000-000000000001'
+    new_id = '00000000-0000-4000-8000-000000000002'
+    entered, release, replacing, sent_new = (threading.Event() for _ in range(4))
+
+    def respond(req):
+        body = json.loads(req.data)
+        if req.full_url.endswith('/validate'):
+            entered.set()
+            assert release.wait(3)
+            identity = old_id
+        else:
+            identity = new_id if body['license_key'] == 'replacement-fixture' else old_id
+            if identity == new_id:
+                sent_new.set()
+        return SignedLicenseResponder(signing, mutate_payload=lambda payload: payload.update(license_id=identity))(req)
+
+    def replace_license():
+        replacing.set()
+        return client.activate('replacement-fixture')
+
+    with patch('license_client.request.build_opener', return_value=FakeOpener(responder=respond)):
+        client.activate('initial-fixture')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            validation = pool.submit(client.validate)
+            assert entered.wait(3)
+            replacement = pool.submit(replace_license)
+            try:
+                assert replacing.wait(3)
+                assert not sent_new.wait(.1), 'activation overlapped a validation that can persist old state'
+            finally:
+                release.set()
+            assert validation.result(timeout=3).license_id == old_id
+            assert replacement.result(timeout=3).license_id == new_id
+        assert client._state.load()['license_id'] == new_id

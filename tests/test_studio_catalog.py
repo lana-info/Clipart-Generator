@@ -23,7 +23,7 @@ class StudioCatalogTests(unittest.TestCase):
         availability = ModuleAvailability()
         self.assertEqual(ModuleAvailability(False, False, True, False, False, False, False), availability)
         action = card_action(self.entry(), availability)
-        self.assertEqual(CardAction("purchase", "Купить", False, "Покупка модуля сейчас недоступна."), action)
+        self.assertEqual(CardAction("denied", "Нет доступа", False, "Модуль не входит в вашу лицензию."), action)
         with self.assertRaises(FrozenInstanceError):
             action.enabled = True
 
@@ -42,7 +42,7 @@ class StudioCatalogTests(unittest.TestCase):
 
     def test_installed_entitled_offers_verified_update(self):
         self.assert_action(
-            CardAction("update", "Обновить", True, ""),
+            CardAction("open", "Открыть", True, "Доступно обновление модуля."),
             installed=True, entitled=True, open_supported=True,
             update_available=True, download_supported=True,
         )
@@ -64,10 +64,16 @@ class StudioCatalogTests(unittest.TestCase):
             entitled=True,
         )
 
-    def test_copied_installed_module_without_rights_cannot_open(self):
-        self.assert_action(CardAction("purchase", "Купить", True, ""), installed=True, purchase_supported=True)
+    def test_unpublished_entitled_module_is_distinct_from_denied(self):
         self.assert_action(
-            CardAction("purchase", "Купить", False, "Покупка модуля сейчас недоступна."),
+            CardAction("pending", "Ожидается выпуск", False, "Доступ есть; совместимый пакет ещё не опубликован."),
+            entitled=True, download_supported=True, release_known=True, release_available=False,
+        )
+
+    def test_copied_installed_module_without_rights_cannot_open(self):
+        self.assert_action(CardAction("denied", "Нет доступа", False, "Модуль не входит в вашу лицензию."), installed=True, purchase_supported=True)
+        self.assert_action(
+            CardAction("denied", "Нет доступа", False, "Модуль не входит в вашу лицензию."),
             installed=True,
         )
 

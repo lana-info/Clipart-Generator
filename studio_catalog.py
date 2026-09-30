@@ -58,11 +58,14 @@ class ModuleAvailability:
     download_supported: bool = False
     purchase_supported: bool = False
     entitlement_known: bool = True
+    release_known: bool = False
+    release_available: bool = False
 
     def __post_init__(self) -> None:
         for name in (
             "installed", "entitled", "compatible", "update_available",
             "open_supported", "download_supported", "purchase_supported", "entitlement_known",
+            "release_known", "release_available",
         ):
             _flag(getattr(self, name), name)
 
@@ -95,13 +98,15 @@ def card_action(entry: CatalogEntry, availability: ModuleAvailability) -> CardAc
         return CardAction("verify", "Проверить доступ", True, "Требуется проверка лицензии.")
 
     if availability.entitled and availability.installed:
+        if availability.open_supported:
+            return CardAction("open", "Открыть", True, "Доступно обновление модуля." if availability.update_available else "")
         if availability.update_available and availability.download_supported:
             return CardAction("update", "Обновить", True, "")
-        if availability.open_supported:
-            return CardAction("open", "Открыть", True, "")
         return CardAction("open", "Открыть", False, "Открытие модуля сейчас недоступно.")
 
     if availability.entitled:
+        if availability.release_known and not availability.release_available:
+            return CardAction("pending", "Ожидается выпуск", False, "Доступ есть; совместимый пакет ещё не опубликован.")
         return CardAction(
             "download", "Скачать", availability.download_supported,
             "" if availability.download_supported else "Скачивание модуля сейчас недоступно.",
@@ -110,6 +115,6 @@ def card_action(entry: CatalogEntry, availability: ModuleAvailability) -> CardAc
     # This deliberately includes copied or previously installed packages after
     # a right is revoked: installation alone never permits opening a module.
     return CardAction(
-        "purchase", "Купить", availability.purchase_supported,
-        "" if availability.purchase_supported else "Покупка модуля сейчас недоступна.",
+        "denied", "Нет доступа", False,
+        "Модуль не входит в вашу лицензию.",
     )

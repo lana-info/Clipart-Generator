@@ -10061,7 +10061,8 @@ def install_diagnostic_exception_hook(journal) -> None:
 
 def run_release_entrypoint_smoke(app) -> int:
     from v3_components import ModeCard
-    from v3_mode_selection import MODE_CARD_SPECS
+    from studio_catalog_ui import BUILTIN_CATALOG
+    from studio_shell_packaging import frozen_shell_has_no_workflow_sources
 
     report_path = os.path.join(
         tempfile.gettempdir(), "clipart-release-entrypoint-smoke.txt"
@@ -10073,20 +10074,23 @@ def run_release_entrypoint_smoke(app) -> int:
             report.write(f"startup_exception={type(error).__name__}: {error}\n")
         return 1
     app.processEvents()
-    cards = list(window.mode_selection.mode_cards.values())
+    cards = list(window.mode_selection.module_cards.values())
     valid = (
-        len(cards) == 3
+        len(cards) == len(BUILTIN_CATALOG) == 5
         and all(isinstance(card, ModeCard) for card in cards)
         and all(card.accessibleName() for card in cards)
-        and set(window.mode_selection.mode_cards) == set(MODE_CARD_SPECS)
+        and set(window.mode_selection.module_cards) == {entry.module_id for entry in BUILTIN_CATALOG}
+        and window._module_delivery is not None
+        and not window._legacy_source_mode
+        and frozen_shell_has_no_workflow_sources()
     )
     diagnostic = (
         f"window={type(window).__name__}\n"
         f"cards={len(cards)}\n"
         f"card_types={[type(card).__name__ for card in cards]}\n"
         f"accessible_names={[bool(card.accessibleName()) for card in cards]}\n"
-        f"mode_keys={[str(mode) for mode in window.mode_selection.mode_cards]}\n"
-        f"expected_keys={[str(mode) for mode in MODE_CARD_SPECS]}\n"
+        f"module_keys={list(window.mode_selection.module_cards)}\n"
+        f"expected_keys={[entry.module_id for entry in BUILTIN_CATALOG]}\n"
         f"valid={valid}\n"
     )
     with open(report_path, "w", encoding="utf-8") as report:
@@ -10100,12 +10104,14 @@ def run_packaged_entrypoint_check(
     *,
     evidence_dir=None,
 ) -> int:
+    """Exercise the clean Core catalogue and installed-shell security gates."""
+    from license_client import LicenseAuthorization, ModuleEntitlement
+    from studio_catalog_ui import BUILTIN_CATALOG
+    from studio_module_delivery import StudioModuleDelivery
+    from studio_shell_packaging import frozen_shell_has_no_workflow_sources
+    from update_client import current_platform_id
     from v3_license import LicenseDialog, OnlineLicenseGate
-    from v3_mode_selection import (
-        MODE_CARD_SPECS,
-        V3ApplicationView,
-        default_work_directory,
-    )
+    from v3_mode_selection import V3ApplicationView, default_work_directory
 
     class SmokeClient:
         @staticmethod
@@ -10136,160 +10142,117 @@ def run_packaged_entrypoint_check(
     )
     dialog.close()
 
-    packaged_view = V3ApplicationView(license_gate=gate)
-    evidence_is_saved = True
-    if evidence_dir is not None:
-        from v3_project_state import ProjectMode, PromptEntry, StepId
-
-        evidence_root = Path(evidence_dir)
-        try:
-            evidence_root.mkdir(parents=True, exist_ok=True)
-            packaged_view.resize(1366, 900)
-            packaged_view.show()
-            QApplication.processEvents()
-            evidence_is_saved = packaged_view.grab().save(
-                str(evidence_root / "mode-selection.png"),
-                "PNG",
-            )
-
-            packaged_view.mode_selection.mode_cards[
-                ProjectMode.CLIPART
-            ].start_button.click()
-            QApplication.processEvents()
-            packaged_view.shell.state.clipart.prompts = [
-                PromptEntry(
-                    "Watercolor baby fox, isolated on white background",
-                    ["C:/smoke/reference-fox.png"],
-                ),
-                PromptEntry("Watercolor baby bear with wildflowers"),
-                PromptEntry("Watercolor woodland rabbit, soft neutral palette"),
-            ]
-            packaged_view.shell.state.set_step(StepId.PROMPTS)
-            packaged_view.shell.refresh()
-            QApplication.processEvents()
-            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-            QApplication.processEvents()
-            prompt_review_page = (
-                packaged_view.shell.workflow_controller("clipart").pages[
-                    StepId.PROMPT_REVIEW
-                ]
-            )
-            evidence_is_saved = (
-                packaged_view.grab().save(
-                    str(evidence_root / "clipart-prompts.png"),
-                    "PNG",
-                )
-                and evidence_is_saved
-            )
-
-            packaged_view.shell.state.set_step(StepId.PROMPT_REVIEW)
-            packaged_view.shell.refresh()
-            QApplication.processEvents()
-            QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-            QApplication.processEvents()
-            review_columns_width = (
-                prompt_review_page.table.columnWidth(0)
-                + prompt_review_page.table.columnWidth(1)
-            )
-            prompt_review_is_rendered = (
-                prompt_review_page.table.rowCount() == 3
-                and review_columns_width > 0
-                and abs(
-                    prompt_review_page.table.columnWidth(0)
-                    / review_columns_width
-                    - 2 / 3
-                )
-                <= 0.04
-                and packaged_view.shell.state.clipart.prompts[0].references
-                == ["C:/smoke/reference-fox.png"]
-            )
-            evidence_is_saved = (
-                packaged_view.grab().save(
-                    str(evidence_root / "clipart-prompt-review.png"),
-                    "PNG",
-                )
-                and evidence_is_saved
-            )
-        except (OSError, RuntimeError, AttributeError):
-            evidence_is_saved = False
-            prompt_review_is_rendered = False
-    else:
-        prompt_review_is_rendered = True
-    mode_artwork_is_rendered = all(
-        card.illustration is not None
-        and hasattr(card.illustration, "pixmap")
-        and card.illustration.pixmap() is not None
-        and not card.illustration.pixmap().isNull()
-        for card in packaged_view.mode_selection.mode_cards.values()
-    )
-    controls_are_present = (
-        packaged_view.mode_selection.license_status_label.text()
-        == "Лицензия не активирована"
-        and packaged_view.mode_selection.license_verification_label.text()
-        == "Онлайн-проверка не выполнена"
-        and packaged_view.mode_selection.license_button.text()
-        == "Сменить лицензию"
-        and packaged_view.mode_selection.api_settings_button.text()
-        == "Настройки API"
-        and packaged_view.mode_selection.diagnostics_button.text()
-        == "Диагностика"
-    )
-    controls_are_connected = (
-        packaged_view.mode_selection.receivers(
-            packaged_view.mode_selection.license_requested
+    with tempfile.TemporaryDirectory(prefix="vibix-core-smoke-") as temporary:
+        delivery = StudioModuleDelivery(
+            root=Path(temporary) / "modules", studio_version=APP_VERSION,
+            platform=current_platform_id(), license_client=SmokeClient(),
+            license_gate=gate, trusted_keys=MODULE_PUBLISHER_KEYS,
         )
-        == 1
-        and packaged_view.mode_selection.receivers(
-            packaged_view.mode_selection.api_settings_requested
+        packaged_view = V3ApplicationView(license_gate=gate, module_delivery=delivery)
+        catalog_ids = {entry.module_id for entry in BUILTIN_CATALOG}
+        cards = packaged_view.mode_selection.module_cards
+        clean_catalog = (
+            len(BUILTIN_CATALOG) == len(cards) == 5
+            and set(cards) == catalog_ids
+            and packaged_view.shell is None
+            and not packaged_view._legacy_source_mode
+            and all(not delivery.has_active_workflow(module_id) for module_id in catalog_ids)
+            and all(card.start_button.text() == "Проверить доступ" for card in cards.values())
         )
-        == 1
-        and packaged_view.mode_selection.receivers(
-            packaged_view.mode_selection.diagnostics_requested
+
+        now = datetime.now(timezone.utc)
+        gate.current_authorization = LicenseAuthorization(
+            license_id="smoke", product_id="clipart-generator", device_key="smoke",
+            issued_at=now - timedelta(minutes=1), expires_at=now + timedelta(minutes=5),
+            module_entitlements=(
+                ModuleEntitlement("clipart", now - timedelta(minutes=1), now + timedelta(minutes=5)),
+                ModuleEntitlement("prompt-composer", now - timedelta(minutes=1), now + timedelta(minutes=5)),
+            ),
         )
-        == 1
-    )
+        gate.status_text = "Лицензия активна"
+        packaged_view.refresh_license_status()
+        rights_are_exact = (
+            all(cards[module_id].start_button.text() == "Скачать"
+                for module_id in ("clipart", "prompt-composer"))
+            and all(cards[module_id].start_button.text() == "Нет доступа"
+                for module_id in catalog_ids - {"clipart", "prompt-composer"})
+            and packaged_view.shell is None
+        )
+        artwork_is_rendered = all(
+            card.illustration is not None
+            and hasattr(card.illustration, "pixmap")
+            and card.illustration.pixmap() is not None
+            and not card.illustration.pixmap().isNull()
+            for card in cards.values()
+        )
+        evidence_is_saved = True
+        if evidence_dir is not None:
+            evidence_root = Path(evidence_dir)
+            try:
+                evidence_root.mkdir(parents=True, exist_ok=True)
+                packaged_view.resize(1120, 780)
+                packaged_view.show()
+                QApplication.processEvents()
+                evidence_is_saved = (
+                    packaged_view.size().width() == 1120
+                    and packaged_view.size().height() == 780
+                    and packaged_view.grab().save(str(evidence_root / "mode-selection.png"), "PNG")
+                )
+            except (OSError, RuntimeError):
+                evidence_is_saved = False
+        controls_are_present = (
+            packaged_view.mode_selection.license_status_label.text() == "Лицензия активна"
+            and packaged_view.mode_selection.license_button.text() == "Лицензия"
+            and packaged_view.mode_selection.module_updates_button.text() == "Обновления модулей"
+            and not packaged_view.mode_selection.module_updates_button.isHidden()
+            and packaged_view.mode_selection.api_settings_button.text() == "Настройки API"
+            and packaged_view.mode_selection.diagnostics_button.text() == "Диагностика"
+        )
+        controls_are_connected = (
+            packaged_view.mode_selection.receivers(packaged_view.mode_selection.license_requested) == 1
+            and packaged_view.mode_selection.receivers(packaged_view.mode_selection.module_updates_requested) == 1
+            and packaged_view.mode_selection.receivers(packaged_view.mode_selection.api_settings_requested) == 1
+            and packaged_view.mode_selection.receivers(packaged_view.mode_selection.diagnostics_requested) == 1
+        )
+        packaged_view.close()
+
     default_path = default_work_directory()
     pictures_default_is_safe = (
         default_path.name == APP_STORAGE_NAME
         and os.path.abspath(str(default_path)) != os.path.abspath(os.getcwd())
     )
-    packaged_view.close()
-
     configured_view = create_v3_application_window()
     update_channel_is_connected = (
         configured_view._update_controller is not None
         and configured_view._diagnostic_journal is not None
+        and configured_view._module_delivery is not None
     )
     configured_view.close()
 
     smoke_window = QWidget()
-    smoke_window._license_gate = gate
+    smoke_window._license_gate = OnlineLicenseGate(SmokeClient())
     startup_is_blocked = (
         create_authorized_v3_application_window(
             window_factory=lambda: smoke_window,
             dialog_factory=RejectedDialog,
-        )
-        is None
+        ) is None
     )
     smoke_window.deleteLater()
-    from studio_auto_clipart_smoke import check_automatic_clipart
-    automatic_clipart_is_available = check_automatic_clipart(evidence_dir)
     from studio_contour_smoke import check_contour_editing
     contour_editing_works = check_contour_editing(evidence_dir)
     return 0 if (
-        len(MODE_CARD_SPECS) == 3
-        and V3ApplicationView
-        and mode_artwork_is_rendered
+        clean_catalog
+        and rights_are_exact
+        and artwork_is_rendered
         and evidence_is_saved
-        and prompt_review_is_rendered
         and license_input_is_safe
         and controls_are_present
         and controls_are_connected
         and pictures_default_is_safe
         and update_channel_is_connected
         and startup_is_blocked
-        and automatic_clipart_is_available
         and contour_editing_works
+        and frozen_shell_has_no_workflow_sources()
         and (expected_app_version is None or APP_VERSION == expected_app_version)
     ) else 1
 

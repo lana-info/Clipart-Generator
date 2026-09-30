@@ -236,3 +236,34 @@ all three processing consumers acquired packagedv9 and passed an image fixture.
 These five rows are DRAFTS in working admin, pending off-host publisher-key backup.
 The ordinary installer already includes the current built-in implementation.
 No publisher-key backup on the owner's computer/USB has yet been confirmed.
+
+## On-demand shell candidate 3.2.9 (2026-09-29)
+
+The shell catalog now has five downloadable tools. `prompt-composer` is a
+separate signed payload with a Core host for credentials, storage and paid-request
+confirmation. Prepare this release set with minimum Studio **3.2.9**, maximum
+exclusive **3.3.0**, Windows only until native acceptance on another platform.
+The proposed module set version is **1.5.0**; it includes the five tools and the
+shared `image-processing` dependency. Never publish the Composer package with a
+lower minimum: older shells lack its Core bridge.
+
+Production was audited read-only at service checkpoint beta-modules-53b42ef:
+four tools have active Windows packages, and Club/VIP grants those four exact
+IDs. Composer has no published package or customer grants. The existing server
+API accepts its ID, proven using the unchanged server with an ephemeral HTTPS
+fixture. Server code, deployment, bundles and customer assignments were not
+changed. Preparing ZIPs does not publish or grant access. Catalog management of
+Composer is a separate administrative step; do not infer its right from a bundle
+name or silently add it to existing customers.
+
+Fresh installs contain the Core shell and shared services. No workflow entry
+controller or Composer payload is shipped as a fallback. Existing user projects,
+credentials and module pointers retain their storage locations. An old project
+whose module is missing stays saved until its licensed module is installed.
+Installed damaged packages fail closed; automatic replacement of a damaged
+version under the same version number is not implemented. Release a new signed
+version or perform a separately authorized support recovery.
+
+Native Windows acceptance of the shell and downloaded packages is required before
+production publication. Source tests and preparation/signature inspection alone
+are not installed Windows acceptance.
