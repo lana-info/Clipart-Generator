@@ -2,6 +2,9 @@
 
 ## Studio shell and separately installed modules
 
+- [x] Owner correction: move Studio3.2.9 and all six module1.5.0 packages to beta.
+  Verified all seven absent in stable and present in beta; no other release changes.
+
 - [x] Base 6568fae / Windows 3.2.8 verified from existing handoff; new isolated branch.
 - [x] Read-only production server audit: healthy beta-modules-53b42ef; Club/VIP
   grants four existing workflows; published Windows module packages 1.4.x exist.

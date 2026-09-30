@@ -11,8 +11,22 @@ No bundle or license rights changes are requested.
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
 | Временно открыть GitHub, собрать и вернуть приватность; явное подтверждение владельца | GitHub API visibility + run conclusion | Запущен helper с finally возвратом PRIVATE и пределом90min | Реализовано и проверено: run36663221787/source1a2f311 SUCCESS, PRIVATE восстановлен и отдельно подтверждён GitHub API |
-| Studio и каждый модуль разместить на лицензионном сервере; новый запрос | Подписи, SHA256, server rows, installed Windows smoke | Studio3.2.9 + пять модулей1.5.0 + shared image-processing1.5.0 опубликованы в stable/windows-x64 | Реализовано и проверено: все7 server rows published и discoverable; SHA256/размеры файлов совпали; installed Windows smoke SUCCESS |
+| Studio и каждый модуль разместить на лицензионном сервере; новый запрос | Подписи, SHA256, server rows, installed Windows smoke | Studio3.2.9 + пять модулей1.5.0 + shared image-processing1.5.0 опубликованы в beta/windows-x64 | Реализовано и проверено: все7 server rows published и discoverable; SHA256/размеры файлов совпали; installed Windows smoke SUCCESS |
 | Сохранить лицензии и настройки сервера | Scope операций только release create/attach/publish | Код/deployment/bundles/grants не менялись | Backup проверен pg_restore --list; после публикации /health200, download без токена403 |
+
+Owner correction: «сделай бэтой». Studio3.2.9 and all six module1.5.0
+release rows moved from stable to beta in one transaction. The service exposes
+promotion to stable but no reverse operation, so a bounded maintenance transaction
+updated only channel on the seven recorded IDs after version/hash/status checks.
+All other release fields and all unrelated releases were compared unchanged.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Перевести этот выпуск в beta; прямое указание владельца | Штатный list_published_releases отдельно для stable и beta | Канал семи существующих релизов изменён на beta; артефакты и лицензии сохранены | Реализовано и проверено: 7/7 отсутствуют в stable, 7/7 присутствуют в beta; остальные release rows неизменны |
+
+Receipt: /root/projects/Clipart Generator/artifacts/studio-shell-modules-1.5.0-20260929/server-beta-receipts.json.
+Earlier stable publication receipts are retained as history. Beta requires the
+existing beta access on the license. Already installed versions are not removed.
 
 Final publication evidence, 2026-09-30 UTC:
 - Successful Windows run: https://github.com/lana-info/Clipart-Generator/actions/runs/36663221787

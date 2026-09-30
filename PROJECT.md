@@ -12,6 +12,7 @@ Reuse the existing license server and exact signed rights; do not change server
 code, deployments, bundles or customer grants. Owner subsequently authorized
 publication of Studio and module release artifacts, plus temporary GitHub public
 visibility solely for the Windows build with return to private afterwards.
+Owner subsequently specified beta distribution for Studio3.2.9 and module1.5.0.
 Prompt Composer requires its own
 package and right; it is not implicitly included in Club/VIP.
 
