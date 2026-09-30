@@ -10190,7 +10190,9 @@ def run_packaged_entrypoint_check(
             evidence_root = Path(evidence_dir)
             try:
                 evidence_root.mkdir(parents=True, exist_ok=True)
-                packaged_view.resize(1120, 780)
+                # Native Windows may shrink the initial window to the CI desktop.
+                # Pin only this synthetic evidence window to the approved viewport.
+                packaged_view.setFixedSize(1120, 780)
                 packaged_view.show()
                 QApplication.processEvents()
                 evidence_is_saved = (

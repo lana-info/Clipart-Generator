@@ -25,7 +25,11 @@ has zero license/activation rows. This is a bounded scan, not a guarantee.
 Диагностика Windows: frozen/offscreen без evidence прошёл, installed/native с evidence
 вернул exit1 без деталей. Гипотеза: native геометрия либо сохранение evidence.
 Добавлены отдельные флаги JSON, native source preflight и upload evidence при ошибке;
-условия проверки не ослаблены. Локальный контракт PowerShell сначала захватил новый
+условия проверки не ослаблены. Run36662788349 (4779271) воспроизвёл native
+ошибку: только evidence_is_saved=false, размер1028×749 вместо1120×780; остальные12
+проверок успешны. PRIVATE восстановлен и подтверждён. Windows уменьшает начальное
+окно под виртуальный desktop. Только synthetic smoke window теперь setFixedSize
+1120×780 перед show; production sizing и точная проверка размера сохранены. Локальный контракт PowerShell сначала захватил новый
 YAML step в тело скрипта; извлечение ограничено ближайшим step вместо имени дальнего.
 
 Run: https://github.com/lana-info/Clipart-Generator/actions/runs/36661594300
