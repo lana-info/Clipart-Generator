@@ -22,6 +22,8 @@
 - [ ] Installed native Windows UI/download comparison (build blocked).
 - [x] Prepare signed Windows module1.5.0 candidate ZIPs (Studio>=3.2.9,<3.3.0),
   inspect signatures/compatibility; no production publication.
+- [x] Commit/push implementation512e6a1 and draftPR#2 on top of3.2.8 source;
+  no merge. GitHubCI blocked by Actions budget, localfullsuite passed.
 - [ ] Windows shell build and installed download/open acceptance; latest GitHub
   Actions attempt for prior Composer was budget-blocked. No billing change.
   Deployment and license changes remain outside scope.
