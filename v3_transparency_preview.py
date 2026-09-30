@@ -867,6 +867,7 @@ class TransparencyCanvas(QGraphicsView):
         self.brush_hardness = 85
         self._background_label = "Шахматный"
         self._zoom: int | None = None
+        self._zoom_wheel_delta = 0
         self._painting = False
         self._space_pressed = False
         self.space_pan_indicator_visible = False
@@ -1252,6 +1253,25 @@ class TransparencyCanvas(QGraphicsView):
         if self.contour.dirty:
             kind = ('manual-keep' if keep_inside else 'manual-remove') if self.contour.manual else 'apply'
             self._start_contour(kind)
+
+    def wheelEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._zoom_wheel_delta = 0
+            super().wheelEvent(event)
+            return
+        delta = event.angleDelta().y()
+        if delta:
+            if delta * self._zoom_wheel_delta < 0:
+                self._zoom_wheel_delta = 0
+            self._zoom_wheel_delta += delta
+            while abs(self._zoom_wheel_delta) >= 120:
+                step = 1 if self._zoom_wheel_delta > 0 else -1
+                self._zoom_wheel_delta -= step * 120
+                self.zoom_requested.emit(step)
+        elif event.pixelDelta().y():
+            self._zoom_wheel_delta = 0
+            self.zoom_requested.emit(1 if event.pixelDelta().y() > 0 else -1)
+        event.accept()
 
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         key, mods = event.key(), event.modifiers()

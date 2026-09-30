@@ -1,5 +1,12 @@
 # TASKS
 
+## Ctrl + колесико, 2026-09-30
+
+- [x] Масштабирование в inline transparency editor вверх/вниз с Ctrl; обычная прокрутка сохранена.
+- [x] Actual Qt viewport events:42tests PASS, включая brush/pen, fit/limits, fractional/pixel delta и mask preservation.
+- [ ] Включить в следующий кандидат; Windows-сборка пока отложена.
+
+
 ## Пиксели после правки Безье, 2026-09-30
 
 - [x] Воспроизвести остатки старого края; устранить причину локально с сохранением отдельных деталей.

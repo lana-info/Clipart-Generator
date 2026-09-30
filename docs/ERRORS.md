@@ -1,5 +1,20 @@
 # Ошибки проекта
 
+## ctrl-wheel-zoom-20260930
+
+Поручение: Ctrl+колесо должно приближать/отдалять в проверке прозрачности.
+Причина отсутствия: inline TransparencyCanvas не переопределял wheelEvent,
+Ctrl+колесо передавалось QGraphicsView как прокрутка; Ctrl+/− уже использовал
+zoom_requested→_cycle_zoom. Regression до правки3FAIL/1PASS подтвердил отсутствие
+zoom в brush/pen и partial detents.
+Исправление: wheelEvent с Control направляет событие в существующий общий zoom
+путь. Detents120 накапливаются, при смене направления остаток сбрасывается;
+pixelDelta поддержан, zero delta не масштабирует; без Ctrl стандартная прокрутка.
+Финальные42tests PASS через настоящие viewport QWheelEvent; маска, Undo,
+выбор zoom preset, пределы10–1600%, fit и обычная прокрутка проверены.
+Evidence:/tmp/ctrl-wheel-zoom-tests.log. Native Windows/input device не проверены.
+
+
 ## contour-edge-specks-20260930
 
 Симптом владельца: после редактирования Безье и сохранения PNG точки вдоль
