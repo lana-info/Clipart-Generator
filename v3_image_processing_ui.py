@@ -4,6 +4,9 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any
 
+import white_background
+from PyQt6.QtCore import Qt
+
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFrame, QFormLayout, QGridLayout,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QScrollArea, QSpinBox,
@@ -40,6 +43,10 @@ SYNTHID_UNAVAILABLE_TOOLTIP = (
     "обнаружения и удаления SynthID."
 )
 UPSCALE_AFTER_UI_ENABLED = True
+WHITE_BACKGROUND_UNAVAILABLE_MESSAGE = (
+    "Белый фон с чётким контуром недоступен: нужны локальная модель U2Net "
+    "и установленные rembg/onnxruntime."
+)
 METADATA_CLEANUP_FIELDS = (
     "remove_exif",
     "remove_xmp",
@@ -522,7 +529,7 @@ class ProcessingPipelineEditor(QScrollArea):
             "unsharp_amount": "Интенсивность",
             "unsharp_radius": "Радиус",
             "unsharp_threshold": "Порог",
-            "remove_background_provider": "Провайдер",
+            "remove_background_provider": "Метод",
             "kie_remove_bg_model": "Модель",
             "fal_remove_bg_model": "Модель Fal.ai",
             "fal_birefnet_model": "Вариант BiRefNet",
@@ -576,6 +583,10 @@ class ProcessingPipelineEditor(QScrollArea):
                     labels.get(name),
                 )
         advanced_group.setVisible(False)
+        self.white_background_note = QLabel()
+        self.white_background_note.setWordWrap(True)
+        self.white_background_note.setProperty("v3Subtitle", True)
+        stage_forms["remove_background"].addRow("", self.white_background_note)
         operations_group.layout().activate()
 
     def _add_stage_section(self, key: str, title: str) -> QFormLayout:
@@ -668,7 +679,9 @@ class ProcessingPipelineEditor(QScrollArea):
         if self.show_background_controls:
             control.setMinimumContentsLength(12)
             control.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-            control.setMaximumWidth(360 if "model" in name else 240)
+            control.setMaximumWidth(
+                360 if "model" in name or name == "remove_background_provider" else 240
+            )
             control.setToolTip(control.currentText())
             control.currentTextChanged.connect(control.setToolTip)
         form.addRow(label, control)
@@ -884,6 +897,32 @@ class ProcessingPipelineEditor(QScrollArea):
             for name in self._BACKGROUND_INTERNAL_CONTROLS:
                 self._set_control_visible(name, False)
         self._refresh_stage_visibility()
+        self._refresh_white_background_method()
+
+    def _refresh_white_background_method(self) -> None:
+        control = self.operation_widgets["remove_background_provider"]
+        index = control.findData("local_white_background")
+        available = white_background.white_background_available()
+        item = control.model().item(index)
+        item.setEnabled(available)
+        item.setData(
+            "Чёткий контур без мягких теней. Обработка локально."
+            if available else WHITE_BACKGROUND_UNAVAILABLE_MESSAGE,
+            Qt.ItemDataRole.ToolTipRole,
+        )
+        operations = self.state_owner.operations
+        selected = operations.remove_background_provider == "local_white_background"
+        self.white_background_note.setVisible(
+            self.show_background_controls and operations.remove_background and selected
+        )
+        self.white_background_note.setText(
+            "Чёткий контур без мягких теней. Обработка локально."
+            if available else WHITE_BACKGROUND_UNAVAILABLE_MESSAGE
+        )
+        if selected:
+            control.setToolTip(
+                control.currentText() if available else WHITE_BACKGROUND_UNAVAILABLE_MESSAGE
+            )
 
     def _refresh_stage_visibility(self) -> None:
         operations = self.state_owner.operations
@@ -1053,6 +1092,12 @@ class ProcessingPipelineEditor(QScrollArea):
 
     def validation_issues(self) -> tuple[str, ...]:
         issues: list[str] = []
+        if (
+            self.state_owner.operations.remove_background
+            and self.state_owner.operations.remove_background_provider == "local_white_background"
+            and not white_background.white_background_available()
+        ):
+            issues.append("white_background_unavailable")
         if self.require_operation and not processing_pipeline_steps(
             self.state_owner.operations,
             include_cleanup=self.include_cleanup,

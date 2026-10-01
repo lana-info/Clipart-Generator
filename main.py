@@ -1208,6 +1208,8 @@ class WorkerThread(QThread):
         )
         self.local_rembg_session = None
         self.local_rembg_remove = None
+        self.white_background_session = None
+        self.white_background_remove = None
         self.auto_clipart_rembg_session = None
         self.auto_clipart_rembg_remove = None
         self.local_ben2_refine_foreground = bool(settings.get("local_ben2_refine_foreground", False))
@@ -2535,6 +2537,9 @@ class WorkerThread(QThread):
     def _uses_local_chroma_key_remove_bg(self):
         return self.remove_bg and self.remove_bg_provider == "local_chroma_key"
 
+    def _uses_local_white_background_remove_bg(self):
+        return self.remove_bg and self.remove_bg_provider == "local_white_background"
+
     def _chroma_engine(self):
         if getattr(self, "_processing_engine", None) is None:
             from chroma_profile import PROFILE_VERSION
@@ -2552,6 +2557,7 @@ class WorkerThread(QThread):
             self._uses_local_rembg_remove_bg()
             or self._uses_local_ben2_remove_bg()
             or self._uses_local_chroma_key_remove_bg()
+            or self._uses_local_white_background_remove_bg()
         )
 
     def _uses_kie_remove_bg(self):
@@ -2825,6 +2831,8 @@ class WorkerThread(QThread):
                 if self._uses_local_ben2_remove_bg()
                 else "chroma-key"
                 if self._uses_local_chroma_key_remove_bg()
+                else "u2net-white-hard-contour"
+                if self._uses_local_white_background_remove_bg()
                 else "remove-background-v1"
                 if self._uses_photoroom_remove_bg()
                 else self.kie_remove_bg_model
@@ -2861,6 +2869,15 @@ class WorkerThread(QThread):
                     self.progress.emit(
                         "  Использована сохранённая alpha-маска; remover не вызывается"
                     )
+                    current_path = nobg_path
+                    current_url = None
+                    local_result = True
+                elif self._uses_local_white_background_remove_bg():
+                    with self._local_operation_lock:
+                        current_path = self._ensure_local_path(current_path, current_url, raw_dir, idx, prefix, "white_source")
+                        nobg_path = os.path.join(raw_dir, f"{prefix}_white_nobg_{idx:03d}_{self.run_stamp}.png")
+                        self._run_local_white_background(current_path, nobg_path)
+                    self.progress.emit(f"  Локальное удаление белого фона: {nobg_path}")
                     current_path = nobg_path
                     current_url = None
                     local_result = True
@@ -4052,6 +4069,24 @@ class WorkerThread(QThread):
             self._save_image_object_as_png(result, output_path)
         return output_path
 
+    def _run_local_white_background(self, input_path, output_path):
+        from white_background import (
+            load_cached_white_background_model, remove_white_background_with_local_model,
+        )
+        validate_local_image_input(input_path)
+        self._ensure_running()
+        if self.white_background_session is None:
+            self.progress.emit("  Подготовка установленной локальной модели U2Net...")
+            self.white_background_session, self.white_background_remove = load_cached_white_background_model()
+        self._ensure_running()
+        with Image.open(input_path) as source:
+            result = remove_white_background_with_local_model(
+                source, session=self.white_background_session, remove=self.white_background_remove,
+            )
+        self._ensure_running()
+        self._save_image_object_as_png(result, output_path)
+        return output_path
+
     def _run_auto_clipart_sharp_fallback(self, input_path, output_path):
         """Cut out a subject when the image model ignores the requested key color."""
         validate_local_image_input(input_path)
@@ -4585,7 +4620,8 @@ class WorkerThread(QThread):
             if transparency is not None and source_image.mode == "RGB":
                 save_kwargs["transparency"] = transparency
 
-            source_dpi = source_info.get("dpi")
+        if source_image is not None and self.metadata_cleanup_options.preserve_dpi:
+            source_dpi = source_image.info.get("dpi")
             if (
                 dpi_override is None
                 and not self.export_300_dpi

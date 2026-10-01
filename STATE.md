@@ -9,19 +9,26 @@
 Проверенная часть сохранена коммитом eeec47f и отправлена в origin этой ветки.
 Git-tracked sensitive scan и diff check PASS. Только test-created :memory:.ses
 остаётся вне Git; исходные пользовательские изображения не включены.
-White UI/worker pending, кандидат ещё не готов к сборке.
+Макет белого метода одобрен2026-10-01 ответом «Да устраивает».
+UI/worker подключены; исходный кандидат готов к отдельно разрешаемой сборке.
+Финальный общий safe run2419tests+278subtests PASS392.23s,57skip/21deselected.
+Повторное независимое review46tests+9subtests PASS7.56s, замечаний нет.
+Сборка, production deployment, выпуск новых official packages и native Windows
+acceptance не выполнялись; текущий source VERSION3.2.11 меняется параметром
+-AppVersion3.2.12 только при будущей сборке.
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
 | Все согласованные инструменты контура вместе с прямым входом, Ctrl+wheel и компактным каталогом | Qt editing/restore/catalog regression |46aa843 code и approved screenshots интегрированы в новую ветку |65tests PASS после первого переноса |
 | Signed upcoming cards и adaptive grid работают вместе | Feed/Qt lifecycle, publish/withdraw при1920px | Исходный согласованный coming-soon desktop code перенесён; refresh использует общую адаптивную раскладку |90target tests PASS после исправления воспроизведённого reset-to3columns при withdrawal |
 | Сохранять исходные оттенки, детали и настоящие смеси | New known-truth и13/07 по этапам, независимое ревью | Ограниченная защита неоднозначного near-white source в двух этапах; profilev10 | Реализовано и проверено:187tests PASS,27thin cases внутри нового набора; actual13/07 sourceSHA/PNG roundtrip/frame PASS. Near-white additive и слабая смесь могут остаться |
-| Отдельный белый фон с чётким контуром | Core/contracts, worker/settings, actual Qt, offline model acceptance | Core перенесён в кандидат, UI mockup показан и ожидает ответа |33core tests PASS в кандидате;47core+existing в отдельной ветке. Реальная offline CPU U2Net на двух исходниках1536×1536: sourceSHA/RGB preservation, alpha0/255, frame и PNG roundtrip PASS. UI/worker пока не подключены; идеальный край не подтверждён |
-| Закончить до сборки | Полный безопасный прогон, packaging contracts, независимый review | Сборки/версия Studio/официальные подписанные пакеты/production не менялись; algorithm profilev10 | Полный safe run2396tests+278subtests PASS,57skip/21deselected. Независимое73tests PASS. Подготовка частичная: white UI/worker и решение о регуляторах остаются; Windows licence delivery и upgrade после сборки |
+| Отдельный белый фон с чётким контуром | Core/contracts, worker/settings, actual Qt, offline model acceptance | Реализовано:local_white_background, shared registry/validation, project/settings restoration, cached-only U2Net worker; approved UI |107core/runtime/local/metadata tests+6subtests PASS,1skip;79UI/flow/provider tests+5subtests PASS, финальный disabled Next5UI PASS. Actual production worker/cache loader/PNG publication на2real1536px sources: RGB/sourceSHA/frame/alpha0,255 PASS; одна session. Идеальный край и Windows не подтверждены |
+| Закончить до сборки | Полный безопасный прогон, packaging contracts, независимый review | Сборки/версия Studio/официальные подписанные пакеты/production не менялись; algorithm profilev10 | Реализовано и проверено на исходниках: final2419tests+278subtests PASS392.23s,57skip/21deselected; independent46tests+9subtests PASS. Первый новый full2FAIL inventory исправлен, история docs/ERRORS.md#white-method-core-packaging-20261001. Ползунки отложены владельцем; Windows licence delivery и upgrade после сборки |
 
 Причина ошибки совместной раскладки: docs/ERRORS.md#candidate-upcoming-grid-20261001.
 Дополнительное независимое review:73tests PASS, новых подтверждённых
-дефектов нет; white UI остаётся незавершённым. Package-local/provenance/runtime
+дефектов нет. После белого метода и packaging исправлений новое независимое
+ревью:46tests+9subtests PASS7.56s, подтверждённых замечаний нет. Package-local/provenance/runtime
 contracts41tests+9subtests PASS. Profilev9 sidecars сохраняют свою прежнюю
 идентичность, новые результаты маркируются v10.
 
@@ -32,12 +39,22 @@ combined catalog screenshots1120/1920 сохраняют349×248 и adaptive gri
 docs/ui/3.2/coming-soon-catalog/combined. Existing1.5.2 processing/image-processing
 payloads не доставляют все новые исправления: их версии и minimumCore необходимо
 назначить при подготовке отдельно разрешённой сборки, не переиспользовать1.5.2.
-Белые actual PNG/private evidence: ../artifacts/studio-next-candidate/white-background;
-чёткая alpha проверена, светлая кайма местами остаётся. UI approval pending:
-../artifacts/white-background-method-mockup. Ползунки RGB/alpha отложены для
+Параметры будущей сборки: Studio3.2.12, новые processing и image-processing
+пакеты с новым version1.5.3 и minimumCore3.2.12; остальные unchanged1.5.2 могут
+сохраниться. Release/VERSION.txt, Azure default и published manifests сейчас
+не менялись; build.ps1 принимает явный -AppVersion и записывает версию на этапе
+сборки. Не переиспользовать уже опубликованную Studio3.2.11 или module1.5.2
+для новых байтов. Native Windows delivery/upgrade и beta rollout следуют после
+отдельно разрешённой сборки; старый комплект остаётся до приёмки нового.
+
+Белые actual PNG/private evidence: ../artifacts/studio-next-candidate/white-background
+и white-worker (production dispatch, cached loader, final publication);
+чёткая alpha проверена, светлая кайма местами остаётся. UI approval получен; approved/actual: docs/ui/3.2/white-background-method. Ползунки RGB/alpha отложены для
 обсуждения по просьбе владельца; не добавлять автоматически.
 
-Серверные upcoming изменения ранее272tests PASS, но ещё не deployed; новый
+Серверные upcoming изменения сохранены и отправлены в отдельную ветку:
+Clipart-License-Service commitdc8a5d6, codex/feature-coming-soon-catalog-20260930.
+Ранее272tests+12subtests и browser PASS; production ещё не deployed. Новый
 кандидат не должен утверждать, что серверные карточки уже доступны владельцу.
 
 ## Повторная диагностика светлой каймы, 2026-10-01

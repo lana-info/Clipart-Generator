@@ -103,6 +103,7 @@ Write-Host "==> Build app with PyInstaller"
     --hidden-import "v3_image_generation_runtime" `
     --hidden-import "v3_image_generation_ui" `
     --hidden-import "v3_image_processing_ui" `
+    --hidden-import "white_background" `
     --hidden-import "v3_image_review_ui" `
     --hidden-import "v3_image_worker_settings" `
     --hidden-import "v3_lazy_loading" `

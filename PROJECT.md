@@ -10,7 +10,9 @@ preview/cancel/apply and undo; no strength selector. Promotional signed cards
 must share the adaptive fixed-size catalog and cannot grant access or run code.
 The separate white-background hard-cutout mode preserves genuine white details
 and needs independent subject segmentation; never globally erase white pixels.
-New controls still require the project visual approval gate. Builds/publication
+Owner approved the white-method selector mockup2026-10-01. It reuses only
+already cached U2Net, never starts a download from this method, and disables
+Next for a missing model. New controls still require the project visual approval gate. Builds/publication
 remain deferred; installed Windows acceptance cannot precede the build.
 
 ## Module action and responsive-card UX, owner-approved 2026-10-01

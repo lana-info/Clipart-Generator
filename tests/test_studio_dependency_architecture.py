@@ -130,6 +130,8 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('v3_processing_flow', 'v3_transparency_preview'),
     ('v3_processing_flow', 'studio_workflow_host'),
     ('v3_processing_flow', 'workflow_definitions'),
+    # Reviewed white-cutout readiness is shared with Core UI/worker; no inference in flow.
+    ('v3_processing_flow', 'white_background'),
 })
 
 

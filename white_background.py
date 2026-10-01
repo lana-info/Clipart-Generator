@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from io import BytesIO
+import hashlib
+import importlib.util
+import os
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -18,6 +22,70 @@ from PIL import Image
 
 class WhiteBackgroundAmbiguousError(ValueError):
     """The input or foreground mask cannot support a safe cutout."""
+
+
+U2NET_MODEL_MD5 = "60024c5c889badc19c04ad937298a77b"
+
+
+def cached_u2net_model_path() -> Path | None:
+    """Find existing rembg caches without importing it or fetching anything.
+
+    Support both the legacy flat layout and the current per-model layout.
+    Existence is a UI readiness hint; integrity is checked before model loading.
+    """
+    xdg = os.environ.get("XDG_DATA_HOME")
+    legacy = Path(os.environ.get("U2NET_HOME") or str(Path(xdg or "~") / ".u2net")).expanduser()
+    root = legacy if os.environ.get("U2NET_HOME") else Path(
+        os.environ.get("REMBG_HOME") or str(Path(xdg) / "rembg" if xdg else Path("~/.rembg"))
+    ).expanduser()
+    for path in (root / "models/u2net/u2net.onnx", legacy / "u2net.onnx"):
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return path
+        except OSError:
+            continue
+    return None
+
+
+def white_background_available() -> bool:
+    """Cheap UI check; no imports of rembg/ONNX, sessions or model downloads."""
+    if cached_u2net_model_path() is None:
+        return False
+    try:
+        return all(importlib.util.find_spec(name) is not None for name in ("rembg", "onnxruntime"))
+    except (ImportError, ValueError):
+        return False
+
+
+def load_cached_white_background_model() -> tuple[object, Callable]:
+    """Load verified cached U2Net; bypass every rembg download code path."""
+    path = cached_u2net_model_path()
+    if path is None:
+        raise WhiteBackgroundAmbiguousError(
+            "Локальная модель U2Net не установлена; загрузка автоматически не выполняется"
+        )
+    try:
+        with path.open("rb") as stream:
+            checksum = hashlib.file_digest(stream, "md5").hexdigest()
+        if checksum != U2NET_MODEL_MD5:
+            raise WhiteBackgroundAmbiguousError("Локальная модель U2Net повреждена или не поддерживается")
+        from rembg import remove
+        from rembg.sessions.u2net import U2netSession
+        from onnxruntime import SessionOptions
+
+        class CachedU2netSession(U2netSession):
+            @classmethod
+            def download_models(cls, *args, **kwargs):
+                return str(path)
+
+        options = SessionOptions()
+        options.intra_op_num_threads = 1
+        options.inter_op_num_threads = 1
+        return CachedU2netSession("u2net", options, providers=["CPUExecutionProvider"]), remove
+    except WhiteBackgroundAmbiguousError:
+        raise
+    except Exception as exc:
+        raise WhiteBackgroundAmbiguousError("Не удалось загрузить установленную локальную модель U2Net") from exc
 
 
 def _source_rgba(image: Image.Image) -> Image.Image:

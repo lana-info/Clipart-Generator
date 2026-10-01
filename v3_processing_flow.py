@@ -35,8 +35,9 @@ from v3_image_worker_settings import build_image_run_settings
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, V3DesignTokens
 from v3_image_processing_ui import (
     CLEANUP_OPERATION_LABELS, ProcessingPipelineEditor, RunPlanBuilder,
-    configure_unavailable_synthid,
+    configure_unavailable_synthid, WHITE_BACKGROUND_UNAVAILABLE_MESSAGE,
 )
+import white_background
 from v3_processing_editor import (
     PROCESSING_RECIPES as _SHARED_PROCESSING_RECIPES,
     apply_processing_recipe as _shared_apply_processing_recipe,
@@ -282,6 +283,12 @@ def operation_validation_issues(
     allow_full_image_changes: bool,
 ) -> tuple[str, ...]:
     issues: list[str] = []
+    if (
+        operations.remove_background
+        and operations.remove_background_provider == "local_white_background"
+        and not white_background.white_background_available()
+    ):
+        issues.append("white_background_unavailable")
     if not processing_pipeline_steps(operations):
         issues.append("processing_operation_required")
     if (
@@ -309,6 +316,12 @@ def uses_external_processing(operations: ImageOperationData) -> bool:
 
 
 def validate_processing_providers(operations: ImageOperationData) -> None:
+    if (
+        operations.remove_background
+        and operations.remove_background_provider == "local_white_background"
+        and not white_background.white_background_available()
+    ):
+        raise ProcessingFlowError(WHITE_BACKGROUND_UNAVAILABLE_MESSAGE)
     try:
         if operations.upscale_before and not provider_supports_operation(
             operations.upscale_before_provider,

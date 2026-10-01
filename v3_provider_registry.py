@@ -106,6 +106,16 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
             "local_ben2_corner_radius",
         ),
     ),
+    "local_white_background": ProviderSpec(
+        provider_id="local_white_background",
+        label="Белый фон · чёткий контур",
+        operations=("remove_background",),
+        requires_network=False,
+        requires_cost=False,
+        preserves_alpha=True,
+        requires_api_key=False,
+        visible_controls=(),
+    ),
     "local_chroma_key": ProviderSpec(
         provider_id="local_chroma_key",
         label="Local Chroma Key",
@@ -150,6 +160,7 @@ PROVIDER_FIELD_OPTIONS: Final[dict[str, tuple[tuple[str, str], ...]]] = {
         ("Local rembg", "local_rembg"),
         ("Local BEN2", "local_ben2"),
         ("Local Chroma Key", "local_chroma_key"),
+        ("Белый фон · чёткий контур", "local_white_background"),
     ),
 }
 

@@ -1,5 +1,17 @@
 # Official Module Releases
 
+## Next reviewed candidate, 2026-10-01
+
+The source candidate is ready for a separately authorized Studio3.2.12 build.
+Use an explicit AppVersion3.2.12; source VERSION/Azure default have not been
+changed in this preparation phase. Prepare new processing and image-processing
+artifacts as version1.5.3 with minimumCore3.2.12; the processing payload now
+imports shared white-background readiness APIs from that Core. Unchanged1.5.2
+modules may stay published. Never replace existing release bytes under the same
+version. No new official packages/build/deployment/publication have been run.
+Installed Windows licensed delivery and old-version upgrade remain unverified.
+Keep Studio3.2.10/modules1.5.1 beta available until new Windows acceptance.
+
 ## Trust And Custody
 
 Studio pins `vibix-publisher-v1` in `studio_module_delivery.py`. Only the public

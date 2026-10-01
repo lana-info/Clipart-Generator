@@ -5,11 +5,11 @@
 - [x] Создать отдельную ветку кандидата, сохранить исходные worktrees.
 - [x] Совместить contour/direct-entry/zoom/module-outline/upcoming desktop;90target tests PASS.
 - [x] Закрыть воспроизведённое перекрашивание pale края:187tests PASS,actual13/07 source preservation и PNG roundtrip PASS; ограничения ambiguity сохранены.
-- [ ] Завершить белый режим: visual approval pending, затем worker/settings/restoration. Core33PASS и offline U2Net на двух настоящих исходниках PASS для RGB/alpha/roundtrip; качество всех деталей не подтверждено.
-- [ ] Решить назначение RGB/alpha регуляторов после качества, не добавлять небезопасные defaults.
-- [x] Полный безопасный regression run текущего diff:2396tests+278subtests PASS; independent73PASS. После новых source changes нужны релевантные проверки и повторное ревью.
+- [x] Завершить белый режим: visual approval получен, UI/worker/settings/restoration подключены.107target+6subtests и79UI/flow+5subtests PASS; actual production worker на2real PNG PASS для RGB/alpha/source/PNG. Качество всех деталей/Windows не подтверждено.
+- Отложено с согласия владельца: раздельные RGB/alpha регуляторы обсуждать после проверки качества. В текущий кандидат ползунки не добавлять.
+- [x] Final safe regression after white integration:2419tests+278subtests PASS392.23s,57skip/21deselected; final independent46tests+9subtests PASS7.56s. Два inventory failures исправлены точечно.
 - [x] Проверить source/package contracts:41tests+9subtests PASS. Локальный HTTPS admin→candidateQt1PASS. При будущей сборке переиздать processing/image-processing, назначив совместимость с новым Core.
-- [x] Зафиксировать и отправить проверенную часть:eeec47f, origin/codex/prepare-studio-next-20261001; development/release unchanged. White UI/worker ещё не готовы.
+- [x] Проверенный исходный кандидат сохранён в отдельной ветке codex/prepare-studio-next-20261001; development/release unchanged. Интеграция eeec47f и завершение белого режима переданы через origin; точный финальный source commit указан в Git этой ветки.
 - [ ] Сборка только по отдельному поручению. Windows delivery/upgrade после сборки, старые beta не снимать до приёмки.
 
 ## Остаточная светлая кайма, 2026-10-01
@@ -19,8 +19,8 @@
 - [x] Подготовить experimental13/07; проверить SHA и PNG roundtrip.
 - [x] Провести независимое read-only ревью: кандидат требует дополнительных проверок.
 - [x] Проверить highlight+additive и значения около1.01:18cases, риск прототипа подтверждён.
-- [ ] Обсудить компромисс перед production правкой; текущий прототип не готов для внедрения.
-- [ ] После согласования внести исправление с регрессиями для обоих этапов.
+- [x] Компромисс сохранения исходной светлой краски при ambiguity ранее согласован; опасный scale prototype отклонён, выбран узкий production guard. См. top candidate и docs/ERRORS.md#pale-material-policy-fix-20261001.
+- [x] Guard в обоих этапах интегрирован и проверен187tests; не обещает снять любую additive засветку.
 - [ ] Отдельно обсудить RGB/alpha регуляторы; не переносить небезопасные reference defaults.
 
 Текущий статус: STATE.md; история docs/ERRORS.md#pale-rim-followup-20261001.
@@ -42,13 +42,13 @@
 - [x] Показать прямой вход рядом с выбором файлов; владелец отклонил расположение.
 - [x] Показать исправленный left-menu mockup: empty/selected/editor.
 - [x] Visual approval получен; прямой вход, возврат к файлам и отдельная копия реализованы.139tests+31subtests и122tests+9subtests PASS; actual1120×780 screenshots сохранены.
-- [ ] Коммит/push разрешены; сборку/публикацию не выполнять.
+- [x] Прямой вход включён в chain кандидата eeec47f и отправлен; сборку/публикацию не выполнять.
 
 ## Ctrl + колесико, 2026-09-30
 
 - [x] Масштабирование в inline transparency editor вверх/вниз с Ctrl; обычная прокрутка сохранена.
 - [x] Actual Qt viewport events:42tests PASS, включая brush/pen, fit/limits, fractional/pixel delta и mask preservation.
-- [ ] Включить в следующий кандидат; Windows-сборка пока отложена.
+- [x] Включён в candidate chain ce09cb4→eeec47f; Windows-сборка пока отложена.
 
 
 ## Пиксели после правки Безье, 2026-09-30
@@ -57,14 +57,14 @@
 - [x] Real Qt apply/save/reopen/RGB/Undo/Redo; root115tests и independent review PASS.
 - [x] Крупное synthetic4100px изображение: apply0.252s, UI gap87.8ms.
 - [ ] Проверить исходный PNG владельца до и после правки, когда файлы доступны.
-- [ ] Интегрировать отдельную ветку в следующий кандидат; Windows-сборка отложена.
+- [x] Интегрировано в candidate chain eeec47f; Windows-сборка отложена.
 
 
 ## Названия рецептов обработки, 2026-09-30
 
 - [x] Короткие названия, без пояснений; состав операций сохранён.
 - [x] Actual Qt выбор рецептов/свои настройки и screenshot PASS; 44 tests + 5 subtests PASS.
-- [ ] Интегрировать отдельную ветку в следующий согласованный кандидат; сборка отложена владельцем.
+- [x] Интегрировано в candidate chain eeec47f; сборка отложена владельцем.
 
 
 
@@ -154,7 +154,7 @@ Customer grants remain unchanged. Owner authorized publishing release rows.
 - [x] Independent review: fix Auto startup migration and stale model tooltips; verify both corrections.
 - [x] Prepare integration with delivered 3.2.9: automatic code merge, preserve both histories in three documentation conflicts.
 - [ ] Native Windows and installed-build acceptance of restored Processing choices.
-- [ ] Separate white-background algorithm remains unimplemented; do not add white to the RGB chroma contract without design and image-quality verification.
+- [x] Separate white-background method implemented after owner mockup approval, independent cached U2Net segmentation; not part of RGB chroma contract. Source/worker/UI checked, full quality and Windows acceptance pending.
 
 - [x] Clarify new chroma prompts: preserve object textures, exclude paper substrate
   and white bridges/fringe; foliage gaps use the selected background colour.

@@ -82,6 +82,7 @@ VALIDATION_MESSAGES: dict[str, str] = {
     "processing_file_limit_exceeded": "Уменьшите пакет до 200 файлов.",
     "duplicate_output_names": "Файлы с одинаковыми именами создадут один путь результата. Переименуйте их.",
     "processing_operation_required": "Включите хотя бы одну операцию обработки.",
+    "white_background_unavailable": "Белый фон с чётким контуром недоступен: нужны локальная модель U2Net и установленные rembg/onnxruntime.",
     "deep_watermark_consent_required": "Разрешите обработку скрытых водяных знаков только для этой операции.",
     "confirmed_area_unavailable": "Ручная область метки пока недоступна в этом интерфейсе.",
     "full_image_change_consent_required": "Подтвердите операцию, меняющую всё изображение.",
@@ -604,6 +605,11 @@ class AppShell(QWidget):
             text = "Далее"
         self.next_button.setText(text)
         self.next_button.setAccessibleName(text)
+        white_unavailable = "white_background_unavailable" in self._page_validation_issues()
+        self.next_button.setEnabled(not white_unavailable)
+        self.next_button.setToolTip(
+            VALIDATION_MESSAGES["white_background_unavailable"] if white_unavailable else ""
+        )
 
     def mark_dirty(self) -> None:
         self._run_request_key = None

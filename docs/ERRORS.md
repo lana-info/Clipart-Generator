@@ -1,5 +1,60 @@
 # Ошибки проекта
 
+## white-method-core-packaging-20261001
+
+Первый full после белого метода:2417PASS+278subtests,57skip/21deselected,
+2FAIL: exact architecture baseline и shell shared-import inventory. Новая
+v3_processing_flow→white_background зависимость нужна для общей cached-model
+readiness валидации; inference только в WorkerThread, лицензированные права и
+оплата не меняются. Main и independent source review подтвердили Core boundary.
+Добавлена только эта exact pair с review comment; wildcard/расширение слоёв нет.
+В build.ps1 добавлен explicit --hidden-import white_background, workflow
+implementations по-прежнему исключены. Это правка конфигурации источника,
+не запуск сборки. Архитектура/packaging/component/whiteflow36tests PASS7.66s. Независимое
+повторное read-only ревью и46tests+9subtests PASS7.56s, замечаний нет.
+Новый processing package требует Core3.2.12 и не должен переиспользовать1.5.2.
+Release version/workflow dispatch/published manifests не менялись.
+Финальный общий прогон после исправлений:2419PASS+278subtests,57skip/21deselected,
+392.23s, /tmp/studio-next-final-white-full-green.log. Нерешённых подтверждённых
+замечаний этой интеграции нет; native Windows/installed modules не проверены.
+
+## white-background-runtime-integration-20261001
+
+Владелец одобрил mockup «Да устраивает». Registry+shared UI используют новый
+local_white_background, current/new rembg cache layouts, cached-only CPU U2Net
+loader с MD5 verification. Subclass download_models возвращает найденный файл,
+не вызывает pooch; UI проверяет наличие без runtime imports. Worker local
+dispatch не попадает в KIE pipeline; одна session переиспользуется. Cancel после
+inference предотвращает сохранение; failed item не блокирует следующий.
+
+Actual Qt сравнение выявило несоответствие approved disabled Next: в первом
+варианте кнопка была enabled и только click показывал error. Footer теперь
+отключает Next при white_background_unavailable; restored selection сохраняется.
+Регрессия проверяет disabled click, direct go_next protection и re-enable после
+выбора chroma. Новые source/registry fixtures учитывают default upscale_before
+и реальный progress contract complete, не succeeded (succeeded относится к
+diagnostic event). Первые fixture ошибки не доказательство production дефекта.
+
+107core/runtime/local/metadata tests+6subtests PASS,1skip;79UI/flow/provider
+tests+5subtests PASS; отдельный5UI PASS после footer correction. Offline actual
+production WorkerThread._process_file_entry, verified cached loader и final PNG
+publication: teddy14.531s,knit/pine9.1s; sourceSHAunchanged, exactRGB, framealpha0,
+alpha только0/255, обе1536×1536. Одна session. pooch.retrieve запрещён; источник
+и local caches неизменны. Private evidence: artifacts/studio-next-candidate/
+white-worker. Ideal alpha/все белые детали/Windows пока не подтверждены.
+
+## white-pipeline-dpi-preservation-20261001
+
+Новый реальный worker export fixture выявил исходный240DPI→missing при обычном
+PNG сохранении. Причина: _get_png_save_kwargs передавал DPI только внутри
+_metadata_cleanup_requested(), даже когда preserve_dpi=True. Первая правка
+preserve_colour_metadata только в white intermediate save не решила конечный
+export: final stage повторно вызывал общий PNG writer и терял DPI. Новые данные
+локализовали общую причину; optional writer parameter удалён. Source DPI теперь
+передаётся независимо от cleanup при preserve_dpi, explicit300 override остаётся
+приоритетным. Exact runtime output240DPI+ICC/RGB/source unchanged, explicit300
+и preserve_dpi=False регрессии PASS. Existing metadata/local tests PASS.
+
 ## white-background-offline-20261001
 
 Проверены не только supplied mask contracts, но и настоящий offline rembg/U2Net
