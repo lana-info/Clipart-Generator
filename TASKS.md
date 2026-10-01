@@ -9,7 +9,7 @@
 - [ ] Решить назначение RGB/alpha регуляторов после качества, не добавлять небезопасные defaults.
 - [x] Полный безопасный regression run текущего diff:2396tests+278subtests PASS; independent73PASS. После новых source changes нужны релевантные проверки и повторное ревью.
 - [x] Проверить source/package contracts:41tests+9subtests PASS. Локальный HTTPS admin→candidateQt1PASS. При будущей сборке переиздать processing/image-processing, назначив совместимость с новым Core.
-- [ ] Зафиксировать и отправить проверенный кандидат; не менять текущую development/release branch.
+- [x] Зафиксировать и отправить проверенную часть:eeec47f, origin/codex/prepare-studio-next-20261001; development/release unchanged. White UI/worker ещё не готовы.
 - [ ] Сборка только по отдельному поручению. Windows delivery/upgrade после сборки, старые beta не снимать до приёмки.
 
 ## Остаточная светлая кайма, 2026-10-01
