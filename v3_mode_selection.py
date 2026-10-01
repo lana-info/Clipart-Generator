@@ -10,7 +10,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QEventLoop, QStandardPaths, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QEventLoop, QStandardPaths, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -210,15 +210,14 @@ class ModeSelectionScreen(QWidget):
         self.cards_layout = cards_layout
         cards_layout.setContentsMargins(0, 0, 0, 0)
         cards_layout.setSpacing(tokens.space_3)
-        cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        for column in range(3):
-            cards_layout.setColumnStretch(column, 1)
+        cards_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         self.catalog_scroll = QScrollArea()
         self.catalog_scroll.setWidgetResizable(True)
         self.catalog_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.catalog_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.catalog_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.catalog_scroll.setWidget(self.cards_container)
+        self.catalog_scroll.viewport().installEventFilter(self)
         layout.addWidget(self.catalog_scroll, 1)
         self.set_module_catalog(BUILTIN_CATALOG)
 
@@ -311,8 +310,41 @@ class ModeSelectionScreen(QWidget):
             self.cards_layout.takeAt(0)
         self.mode_cards = {mode: self.module_cards[mode.value] for mode in ProjectMode
                            if mode.value in self.module_cards}
-        for index, card in enumerate(self.module_cards.values()):
-            self.cards_layout.addWidget(card, index // 3, index % 3)
+        self._layout_module_cards()
+        self.refresh_module_update_indicator()
+
+    def _layout_module_cards(self) -> None:
+        cards = tuple(self.module_cards.values())
+        if not cards:
+            return
+        maximum = self.catalog_scroll.maximumViewportSize()
+        available = max(1, maximum.width())
+        width = min(349, available)
+        spacing = self.cards_layout.spacing()
+        columns = min(len(cards), max(1, (available + spacing) // (width + spacing)))
+        rows = (len(cards) + columns - 1) // columns
+        required_height = rows * cards[0].height() + (rows - 1) * spacing
+        if required_height > maximum.height():
+            available = max(1, available - self.catalog_scroll.verticalScrollBar().sizeHint().width())
+            width = min(349, available)
+            columns = min(len(cards), max(1, (available + spacing) // (width + spacing)))
+        while self.cards_layout.count():
+            self.cards_layout.takeAt(0)
+        for index, card in enumerate(cards):
+            card.setFixedWidth(width)
+            self.cards_layout.addWidget(card, index // columns, index % columns)
+
+    def eventFilter(self, watched, event) -> bool:
+        if (hasattr(self, "catalog_scroll") and watched is self.catalog_scroll.viewport()
+                and event.type() == QEvent.Type.Resize):
+            self._layout_module_cards()
+        return super().eventFilter(watched, event)
+
+    def refresh_module_update_indicator(self) -> None:
+        from studio_catalog_ui import style_module_action
+        attention = any(card_action(card.entry, card.availability).action == "update"
+                        for card in self.module_cards.values())
+        style_module_action(self.module_updates_button, attention, tokens=self.tokens)
 
     def set_saved_projects(self, projects: list) -> None:
         while self.saved_projects_layout.count():
@@ -647,6 +679,7 @@ class V3ApplicationView(QWidget):
                 release_known=bool(checked and checked[0] == "ready"),
                 release_available=bool(checked and checked[1] is not None),
             ))
+        self.mode_selection.refresh_module_update_indicator()
 
     def _module_state_changed(self):
         from license_client import LicenseAuthorization

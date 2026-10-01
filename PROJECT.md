@@ -1,5 +1,16 @@
 # Vibix Images
 
+## Module action and responsive-card UX, owner-approved 2026-10-01
+
+Use one primary action per module card without a dropdown: dark outlined Open;
+turquoise outlined Download or Update when actionable. Highlighting itself must
+not start downloads. Existing trusted entitlement/package checks remain required.
+Keep card size349×248 and illustration height112px across normal/maximized windows;
+center the grid and adapt columns to width. Owner approved the1920×1080 mockup.
+Global transparency sliders remain deferred for discussion after offline quality
+checks; diagnostic reference variants are not a production algorithm change.
+
+
 ## Direct transparency editing, owner request2026-10-01
 
 Processing must allow opening selected existing PNGs directly in the transparency

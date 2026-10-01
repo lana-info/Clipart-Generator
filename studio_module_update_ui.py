@@ -329,7 +329,8 @@ class ModuleUpdatesDialog(QDialog):
             self._refresh_installed()
             for module, (_installed, _available, button) in self.rows.items():
                 button.setEnabled(module in self.releases)
-                button.set_variant(ButtonVariant.PRIMARY if module in self.releases else ButtonVariant.SECONDARY)
+                from studio_catalog_ui import style_module_action
+                style_module_action(button, module in self.releases and button.isEnabled())
                 if module in self.releases:
                     installed = self.delivery.store.state(module)
                     button.setText("Обновить" if installed["enabled"] and installed["active"] else "Скачать")

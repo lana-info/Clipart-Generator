@@ -5,7 +5,22 @@ import sys
 from PyQt6.QtCore import Qt, pyqtSignal
 
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
-from v3_components import ModeCard, DEFAULT_TOKENS
+from v3_components import ModeCard, DEFAULT_TOKENS, ButtonVariant
+
+
+def style_module_action(button, attention: bool, *, tokens=DEFAULT_TOKENS) -> None:
+    """Keep ordinary actions dark; outline only actionable delivery intent."""
+    button.set_variant(ButtonVariant.SECONDARY)
+    button.setProperty("moduleActionRequired", attention)
+    button.setStyleSheet(
+        f"QPushButton {{color:{tokens.accent};background:{tokens.surface};"
+        f"border:1px solid {tokens.accent};}}"
+        f"QPushButton:hover {{background:{tokens.accent_soft};}}"
+        f"QPushButton:focus {{border:{tokens.focus_width}px solid {tokens.focus};}}"
+        f"QPushButton:disabled {{color:{tokens.disabled};background:{tokens.disabled_soft};"
+        f"border:1px solid {tokens.border};}}"
+        if attention else ""
+    )
 
 
 BUILTIN_CATALOG = (
@@ -41,6 +56,7 @@ class StudioCatalogCard(ModeCard):
                          tokens=tokens, illustration_path=catalog_artwork(entry.artwork_key),
                          compact=True)
         self.entry = entry
+        self.tokens = tokens
         self.availability = availability
         self.title_label.setTextFormat(Qt.TextFormat.PlainText)
         self.description_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -52,6 +68,9 @@ class StudioCatalogCard(ModeCard):
         action = card_action(self.entry, availability)
         self.start_button.setText(action.label)
         self.start_button.setEnabled(action.enabled)
+        style_module_action(self.start_button,
+                            action.enabled and action.action in {"download", "update"},
+                            tokens=self.tokens)
         self.start_button.setToolTip(action.reason)
         self.start_button.setAccessibleName(f"{action.label}: {self.entry.title}")
         self.setAccessibleDescription(f"{self.entry.description}. {action.reason}")

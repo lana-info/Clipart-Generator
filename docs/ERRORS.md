@@ -1,5 +1,49 @@
 # Ошибки проекта
 
+## transparency-controls-diagnostics-20261001
+
+По annotation2 проверены standalone Clipbrook параметры без изменения Studio:
+11изображений × (currentPython +12referenceconfigs)=143offline выполнения,
+не143теста качества.7knowntruthsynthetics:furRGBkeys,botanical256/512,smooth,
+smallislands. Bearpreviouscutout толькоrecompositeproxy;13/07/14realunknowntruth.
+Оригиналы иsourceSHA неизменны. Evidence/main report находятся в
+artifacts/transparency-controls-check/controls-agent основного проекта.
+
+Reference minIsland800 удаляет742/3600opaque botanicalpixels (20.6%),100→405,
+0→0. Main независимо пересчитал эти значения и smooth/furblue current/reference
+loss/RGBdamage. mix0/.5/1 повреждает0/13/19knownopaque lavenderpixels;radius24→546.
+alphaFloor0 при island0 всё ещё теряет1714/6112partialfurpixels. Частичная средняя
+ошибка может улучшиться одновременно с потерей деталей, поэтому meanнедостаточно.
+На real13/07/14 нельзя объявить изменения маски доказанным улучшением/ухудшением
+без исходной идеальной alpha. Медвежонок на настоящем chromaframe не проверен.
+
+Решение для обсуждения: отделить восстановлениеRGB от alpha/detailloss; не
+переноситьminIsland800илиreferenceдиапазоны в Studioкакбезопасныеползунки.
+Новыхprodправок/зависимостей не было. Данные пользователя не добавлены вGit.
+
+## module-outline-grid-20261001
+
+Исходная сетка растягивала карточки по ширине при фиксированных3колонках.
+Владелец одобрил fixed349×248/112pxartwork+adaptivecentered columns. На первом
+варианте resize1120→980→1120 независимое ревью обнаружило history dependence:
+две колонки требуют scrollbar, scrollbar сужаетviewport1072→1062, расчёт
+сохраняет две колонки даже после возврата1120. Исходный regression проверял
+лишь неизменную ширину и не ловил число колонок.
+Root fix: maximumViewportSize без текущей полосы, прогноз высоты строк и
+reserve scrollbar width только если он понадобится. Усилен regression возврата:
+item3 position1,0 и scrollbar hidden.8targetQttests PASS.
+
+Кнопки: существующий card_action отдавал Open при updatehint. По уточнению
+владельца actionable Update теперь приоритетен, offline/not-download-supported
+оставляет Open. Нетdropdown/автоскачивания. Единичныйclick intent, denied/unknown
+и disabled covered. Trusted fresh authorization/package checks не изменены.
+105broader tests+10subtests PASS; независимые fresh-check probes изменённыйSHA,
+denied иoffline не вызвалиinstall. После geometryfix8targetQt PASS.
+Повторное независимое ревью после fix:1120→980→1120,12cardsresize и
+12→0→5replacement PASS, подтверждённых нерешённых замечаний нет.
+Windowsinstalled и realserver не проверены; сборки/публикации не проводились.
+
+
 ## direct-transparency-entry-20261001
 
 Новый прямой вход не должен зависеть от живой очереди или изменять входной PNG.

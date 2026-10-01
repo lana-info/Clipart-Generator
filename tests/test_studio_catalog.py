@@ -42,7 +42,7 @@ class StudioCatalogTests(unittest.TestCase):
 
     def test_installed_entitled_offers_verified_update(self):
         self.assert_action(
-            CardAction("open", "Открыть", True, "Доступно обновление модуля."),
+            CardAction("update", "Обновить", True, ""),
             installed=True, entitled=True, open_supported=True,
             update_available=True, download_supported=True,
         )

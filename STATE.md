@@ -1,12 +1,43 @@
 # Project state
 
+## Кнопки модулей и размер карточек, 2026-10-01
+
+Ветка codex/ui-module-outline-actions-20261001 от84ac192. Владелец одобрил
+бирюзовый контур и затем уточнил одну кнопку без выпадающего меню; approved
+wide1920×1080 mockup сохраняет исходный размер карточек и центрирует grid.
+Сборка/публикация не выполнялись. Все прочие worktrees сохранены.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Одна Update безdropdown; тёмная Open, бирюзовый outline Download/Update; annotation1 | Actual Qt constructor/click/state changes; disabled/offline hints | Primary action Update only when actionable, no menu; shared outline in card/header/update dialog | Реализовано и проверено: единичный intent, отсутствие constructor-download, update→open, denied/offline PASS |
+| Не растягивать карточки на полном экране; annotation1+approvedmockup | Qt1120→1920→980→1120, geometry/artwork, bottom control accessibility |349×248 cards,112px illustration; centered grid3/5/2 columns with scroll height accounted | Реализовано и проверено:8target tests PASS; actual1120/1920/980 screenshots match approved layout |
+| Не ослаблять доступ/подпись при update | Existing UI/runtime/host/licensing tests, independent fresh-check mocks | Старый trusted download/install pipeline сохранён |105tests+10subtests PASS до финальной scrollbar правки; после неё8targetQt PASS. Реальный Windows/сервер не проверены |
+| Проверить регуляторы края на цветах/пухе/животных; annotation2 | Offline reference matrix on synthetic known-truth and originals13/07/14 | Только исследование; production algorithms и sliders не изменены | Проверено143offline выполнения на11изображениях:7synthetic known-truth, bear-cutout proxy,13/07/14. Это не143PASS quality. Main пересчитал loss/RGB метрики3cases; оригиналы SHA неизменны. Исходный chroma медвежонок недоступен. |
+
+Повторное независимое ревью финального diff: подтверждённых нерешённых ошибок
+нет;1120→980→1120 и12→0→5catalog PASS. Root cause scrollbar см.
+docs/ERRORS.md#module-outline-grid-20261001. Artifacts: docs/ui/3.2/module-outline-actions.
+
+
+### Выводы диагностики прозрачности
+
+Производственные алгоритмы не менялись. В standalone Clipbrook minIsland800
+удаляет742/3600opaque pixels botanical256;100удаляет405,0не удаляет. Расширение
+цветокоррекции до24px повреждает546known-truth light-lavender pixels против19
+при12px. Снижение alphaFloor не возвращает детали, потерянные выше pipeline.
+На настоящих13/07/14 неизвестны идеальнаяalpha/cleanRGB: сравнения показывают
+разницу вариантов, а не доказанную правильность. Future регуляторы цвета/alpha
+нельзя объединять, а minIsland нельзя выдавать за универсальное сглаживание.
+Evidence: artifacts/transparency-controls-check/controls-agent/{README.md,metrics.json}
+основного проекта; пользовательские PNG не добавлены вGit.
+
 ## Прямой вход в редактор прозрачности, 2026-10-01
 
 Ветка codex/feature-direct-transparency-20261001 от60b19dd. Владелец одобрил
 макет левого меню. Сборка/публикация отложены; алгоритмы края/цвета и новые
 ползунки по последнему поручению не менялись. Новый макет кнопок модулей с
 бирюзовым контуром находится в artifacts/module-outline-actions-mockup основного
-проекта, ожидает визуального согласования. Маджента для выделенных узлов одобрена.
+проекта, одобрен без стрелки; adaptive grid одобрена отдельно. Маджента для выделенных узлов одобрена.
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |

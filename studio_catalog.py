@@ -98,10 +98,10 @@ def card_action(entry: CatalogEntry, availability: ModuleAvailability) -> CardAc
         return CardAction("verify", "Проверить доступ", True, "Требуется проверка лицензии.")
 
     if availability.entitled and availability.installed:
-        if availability.open_supported:
-            return CardAction("open", "Открыть", True, "Доступно обновление модуля." if availability.update_available else "")
         if availability.update_available and availability.download_supported:
             return CardAction("update", "Обновить", True, "")
+        if availability.open_supported:
+            return CardAction("open", "Открыть", True, "Доступно обновление модуля." if availability.update_available else "")
         return CardAction("open", "Открыть", False, "Открытие модуля сейчас недоступно.")
 
     if availability.entitled:
