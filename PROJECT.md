@@ -1,5 +1,13 @@
 # Vibix Images
 
+## Direct transparency editing, owner request2026-10-01
+
+Processing must allow opening selected existing PNGs directly in the transparency
+editor without running the generation/processing queue. Return to the input
+selection and save edits as a separate copy, preserving source files and module
+access checks. Owner rejected a button beside file selection; the revised
+left-navigation mockup awaits visual approval. Not yet implemented.
+
 ## On-demand Studio shell, owner-authorized 2026-09-29
 
 Use source 6568fae (verified Windows 3.2.8) as the integration base. Studio is the

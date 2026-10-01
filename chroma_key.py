@@ -766,6 +766,104 @@ def _blurred_subject_reference(
     return reference, weight
 
 
+def _prefer_local_subject_reference(
+    rgb: np.ndarray, subject_mask: np.ndarray, reference: np.ndarray, key: np.ndarray,
+) -> None:
+    """Prefer a nearby interior sample over an average of different materials.
+
+    A deep Gaussian reference can blend a white petal with its yellow centre.
+    Use source RGB from a two-pixel interior of the same connected subject,
+    within twelve pixels only. Where that evidence is absent, retain the
+    existing reference. Check the sample against actual deeper neighbours,
+    allowing brightness changes, rather than against another mixed average.
+    Only a three-pixel contour band can receive a different reference.
+    This function changes neither source RGB nor coverage.
+    """
+    core = cv2.erode(subject_mask.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
+    if not np.any(core):
+        return
+    depth = cv2.distanceTransform(subject_mask.astype(np.uint8), cv2.DIST_L2, 5)
+    distance, labels = cv2.distanceTransformWithLabels(
+        (~core).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL,
+    )
+    _, components = cv2.connectedComponents(subject_mask.astype(np.uint8), connectivity=8)
+    lookup = np.zeros(int(labels.max()) + 1, np.int32)
+    lookup[labels[core]] = components[core]
+    nearby = (distance <= 12.0) & (depth <= 3.0) & (lookup[labels] == components) & subject_mask
+    if not np.any(nearby):
+        return
+    # Transition samples retain their existing shallow colour references.
+    rows, cols = np.where(core)
+    lookup[labels[core]] = rows
+    sample_y = lookup[labels[nearby]].copy()
+    lookup[labels[core]] = cols
+    sample_x = lookup[labels[nearby]].copy()
+    local = rgb[sample_y, sample_x]
+    contaminated = np.zeros(len(local), bool)
+    kk = float(key @ key)
+    ck = local @ key
+    def reject_mixture(neighbour, deeper):
+        ff = np.sum(neighbour * neighbour, axis=1)
+        fk = neighbour @ key
+        cf = np.sum(local * neighbour, axis=1)
+        determinant = ff * kk - fk * fk
+        stable = determinant > 0.01 * ff * kk
+        scale = np.divide(cf * kk - ck * fk, determinant,
+                          out=np.zeros_like(cf), where=stable)
+        mixture = np.divide(ck * ff - cf * fk, determinant,
+                            out=np.zeros_like(ck), where=stable)
+        residual = np.max(np.abs(local - (scale[:, None] * neighbour
+                                         + mixture[:, None] * key)), axis=1)
+        # Allow quantisation and mild texture, but not a different material's
+        # non-key hue. A fixed large tolerance admits white petals as yellow
+        # pigment plus blue; a fixed tiny tolerance misses textured key spill.
+        tolerance = np.minimum(12.0, 1.0 + 0.04 * scale * np.max(neighbour, axis=1))
+        recovered = (local - mixture[:, None] * key) / np.maximum(1.0 - mixture[:, None], 0.01)
+        # An out-of-gamut coverage fit could also mean additive light spill,
+        # but is indistinguishable here from genuine bright paint. Preserve
+        # the local colour rather than subtracting key on that assumption.
+        in_gamut = np.all((recovered >= -2.0) & (recovered <= 257.0), axis=1)
+        return (deeper & stable & (scale > 0.0) & (mixture > 0.03)
+                & (mixture < 1.0) & (residual <= tolerance) & in_gamut)
+
+    for dy in range(-3, 4):
+        for dx in range(-3, 4):
+            yy = np.clip(sample_y + dy, 0, rgb.shape[0] - 1)
+            xx = np.clip(sample_x + dx, 0, rgb.shape[1] - 1)
+            deeper = (subject_mask[yy, xx]
+                      & (depth[yy, xx] > depth[sample_y, sample_x] + 0.5)
+                      & (components[yy, xx] == components[sample_y, sample_x]))
+            contaminated |= reject_mixture(rgb[yy, xx], deeper)
+    # A wider contaminated rim can hide the clean subject beyond the local
+    # window. Check actual deeper source samples too, never a colour average.
+    maximum_depth = np.zeros(int(components.max()) + 1, np.float32)
+    np.maximum.at(maximum_depth, components.ravel(), depth.ravel())
+    for minimum_depth in (6.0, 12.0, 24.0, 32.0, None):
+        deeper_core = subject_mask & (
+            depth >= maximum_depth[components] - 0.5
+            if minimum_depth is None else depth > minimum_depth
+        )
+        if not np.any(deeper_core):
+            continue
+        distances, nearest = cv2.distanceTransformWithLabels(
+            (~deeper_core).astype(np.uint8), cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL,
+        )
+        nearest_ids = nearest[sample_y, sample_x]
+        ys, xs = np.where(deeper_core)
+        positions = np.zeros(int(nearest.max()) + 1, np.int32)
+        positions[nearest[deeper_core]] = ys
+        yy = positions[nearest_ids].copy()
+        positions[nearest[deeper_core]] = xs
+        xx = positions[nearest_ids]
+        deeper = ((distances[sample_y, sample_x] <= 32.0)
+                  & (depth[yy, xx] > depth[sample_y, sample_x] + 0.5)
+                  & (components[yy, xx] == components[sample_y, sample_x]))
+        contaminated |= reject_mixture(rgb[yy, xx], deeper)
+    values = reference[nearby]
+    values[~contaminated] = local[~contaminated]
+    reference[nearby] = values
+
+
 def _fill_far_subject_reference(
     rgb: np.ndarray,
     subject_mask: np.ndarray,
@@ -1362,6 +1460,7 @@ def _remove_chroma_key_staged(
             rgb, confident_subject, key_channel, other_channels,
             reference, reference_ratio,
         )
+        _prefer_local_subject_reference(rgb, confident_subject, reference, measured_key)
         reference_other = np.maximum(
             reference[..., other_channels[0]], reference[..., other_channels[1]],
         )
@@ -1504,6 +1603,14 @@ def _remove_chroma_key_staged(
         reference,
         edge_reference_ratio,
     )
+    if opaque_subject:
+        _prefer_local_subject_reference(rgb, confident_subject, reference, measured_key)
+        reference_other = np.maximum(
+            reference[..., other_channels[0]], reference[..., other_channels[1]],
+        )
+        edge_reference_ratio = np.clip(
+            reference[..., key_channel] / np.maximum(reference_other, 1.0), 0.05, 1.2,
+        )
     del confident_subject
 
     if opaque_subject:

@@ -1,5 +1,72 @@
 # Ошибки проекта
 
+## edge-material-reference-20261001
+
+Поручение: сравнить реальные13.png/07.png, убрать паразитный цвет края и не
+заходить глубоко в объект. Источники в attachments не изменяются и не
+добавляются в Git. Paid/network processing/build/publication не выполнялись.
+
+Подтверждение: opaque_clipart staged_result уже делает белый лепесток жёлтым.
+На13.png source pixel(359,148)=(249,246,233,255), baseline=(250,246,137,255).
+Deep Gaussian prior включает жёлтую сердцевину: spatial/connected component
+сами по себе не доказывают принадлежность той же детали. Synthetic textured
+narrow petal baseline106 RGB changes,3RGB-key regressions FAIL.
+
+История диагностики/проверок:
+1. Nearest5x5-eroded source prior within12px samecomponent → petal RGB restored,
+   144tests+20subtests PASS → independent review обнаружило ошибочную opaque
+   alpha на3px смесиcoverage.8/.85 (636pixels): oldalpha204/217 →255.
+2. Veto pure convex source mixture vs deep average →9tests PASS → затенённая
+   смесь brightness.9 не распознаётся: source(177,160,160) ошибочно alpha255;
+   baseline(217,189,140,204). Added6 shading failures.
+3. Plane model scale*FG+mix*key vs averaged deep → shading passes,3petal tests
+   FAIL. Средняя опора загрязнена смешением разных материалов; не доказательство.
+4. Veto against actual deeper source neighbours±3, band ограничен3px →15tests
+   PASS → independent width6 probe и mild hue variation обнаружили повторную
+   регрессию: чистый образец скрыт за окном/порог3 слишком строг для текстуры.
+5. Добавлены фактические nearest deeper cores13/25within32px samecomponent,
+   brightness/key plane fit с relative bounded residual (min12,1+.04*signal).
+   42tests PASS, включаяwidth3/6/8, shading/hue иred/green/blue. Итоговые
+   общие проверки, реальные samples и independent review продолжаются.
+
+
+6. Independent wide13/14 probes → fixed-depth25core сам загрязнён. Добавлены
+   raw source depth6/12/24/32 + adaptive maximum depth каждого component,
+   distance ограничен32px.60HEAD comparisons обычной смеси теперь без alpha
+   regressions, но actual13pixel снова жёлтый: guard отвергает белую опору.
+7. Actualhelper trace: deep(230,203,138), nearestsource(248,240,228) признан
+   смесью, хотя восстановленныйRGB для coverage выходит выше255. Добавлен
+   физический gamut guard [-2,257] с quantisation allowance. Actual13pixel
+   source(249,246,233,255) →fixedexactsource; baseline(250,246,137,255).
+   Synthetic bright narrow rectangle failspre_gamut inall3keys →fixedPASS.
+
+Итог:347distinct tests+46subtests PASS (230existingpixeltests +57newtests
++60diagnostics/provenance/benchmark/report tests). Independent157tests и
+60HEAD comparisons PASS для ordinary mixture widths3–14/shading/hue.
+Real13/07 RGBA1254px actual PNG save/reopen exact, frame transparent, source
+SHA unchanged; originals/customer pixels не входят в Git.
+
+Подтверждённый компромисс: source outer3px RGB(244,219,203), core(240,210,155),
+key(20,45,240) может быть настоящей светлой краской или additive key light. HEAD
+снимает добавочную примесь, новая защита оставляет RGB неизменным. Владелец
+согласовал сохранение исходного оттенка при неоднозначности (annotation3),
+поэтому этот случай сохранён и защищён тестом painted-edge, а не объявлен
+универсально очищенным. Яркая additive кайма может остаться; без данных о
+реальном foreground оба происхождения из одногоRGB различить нельзя.
+Полное качество всех фрагментов/installed Windows не подтверждено.
+
+Один общий запуск tests/test_chroma*.py завершился exit143 без итогового
+summary; не засчитывается как PASS. Отдельный целевой предыдущий запуск
+239tests+28subtests PASS. Финальные проверки относятся к последней правке.
+Evidence основного проекта: artifacts/user-edge-colors/baseline и/final,
+comparison.png,verification.json; логи /tmp/edge-color-source-final-tests.log.
+
+UI: прямой вход сейчас привязан к queue results. Первый mockup рядом с
+«Выбрать файлы» отклонён владельцем; revised left-menu mockup показан, approval
+ожидается. Source UI не изменён. Прямой вход должен возвращаться к input files,
+не выставлять промежуточным шагам статус пройденных и сохранять copy.
+
+
 ## ctrl-wheel-zoom-20260930
 
 Поручение: Ctrl+колесо должно приближать/отдалять в проверке прозрачности.

@@ -1,5 +1,16 @@
 # TASKS
 
+## Цвет края и прямой вход в прозрачность, 2026-10-01
+
+- [x] Воспроизвести жёлтый край лепестка на13.png, выделить staged chroma prior как причину.
+- [x] Добавить локальный prior и57регрессий (petal/RGB keys, mixed rim width/shading/hue).
+- [x] Общие проверки:347distinct tests+46subtests PASS; independent157tests+60baseline comparisons PASS. Обычные смеси сохранены, неоднозначная additive-примесь может остаться.
+- [x] Финальные transparent13/07 PNG и comparison подготовлены; actual save/reopen/frame/source preservation PASS. Все ореолы иWindows не подтверждены.
+- [x] Показать прямой вход рядом с выбором файлов; владелец отклонил расположение.
+- [x] Показать исправленный left-menu mockup: empty/selected/editor.
+- [ ] Получить visual approval, затем реализовать прямой вход, возврат к файлам и сохранение отдельной копией; Qt/session/licensing regressions иactual screenshots.
+- [ ] Коммит/push разрешены; сборку/публикацию не выполнять.
+
 ## Ctrl + колесико, 2026-09-30
 
 - [x] Масштабирование в inline transparency editor вверх/вниз с Ctrl; обычная прокрутка сохранена.
