@@ -1308,6 +1308,8 @@ class ProcessingModeData:
         default_factory=lambda: ImageOperationData(chroma_key_color="auto")
     )
     verification_records: list[VerificationRecordData] = field(default_factory=list)
+    transparency_direct: bool = False
+    transparency_edits: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.selected_files = _string_list(
@@ -1316,6 +1318,12 @@ class ProcessingModeData:
         )
         self.recipe = _text(self.recipe, limit=100) or "custom"
         self.verification_records = _verification_records(self.verification_records)
+        self.transparency_direct = bool(self.transparency_direct)
+        self.transparency_edits = {
+            str(source): str(destination)
+            for source, destination in dict(self.transparency_edits).items()
+            if isinstance(source, str) and isinstance(destination, str)
+        }
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1323,6 +1331,8 @@ class ProcessingModeData:
             "recipe": self.recipe,
             "overwrite_existing": self.overwrite_existing,
             "deep_watermark_consent": self.deep_watermark_consent,
+            "transparency_direct": self.transparency_direct,
+            "transparency_edits": dict(self.transparency_edits),
             "operations": self.operations.to_dict(),
             "verification_records": [
                 record.to_dict() for record in self.verification_records
@@ -1340,6 +1350,8 @@ class ProcessingModeData:
             recipe=data.get("recipe", "custom"),
             overwrite_existing=bool(data.get("overwrite_existing", False)),
             deep_watermark_consent=bool(data.get("deep_watermark_consent", False)),
+            transparency_direct=bool(data.get("transparency_direct", False)),
+            transparency_edits=data.get("transparency_edits", {}),
             operations=ImageOperationData.from_dict(
                 data.get("operations", {"chroma_key_color": "auto"})
             ),
@@ -1841,6 +1853,8 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
             "deep_watermark_consent",
             "operations",
             "verification_records",
+            "transparency_direct",
+            "transparency_edits",
         ),
         "processing",
     )
@@ -1855,6 +1869,14 @@ def _validate_project_draft_shape(value: Mapping[str, Any]) -> None:
         raise ProjectStateError("Project draft field processing.recipe must be a string")
     if not isinstance(processing.get("deep_watermark_consent", False), bool):
         raise ProjectStateError("Project draft field processing.deep_watermark_consent must be boolean")
+    if not isinstance(processing.get("transparency_direct", False), bool):
+        raise ProjectStateError("Project draft field processing.transparency_direct must be boolean")
+    edits = processing.get("transparency_edits", {})
+    if (not isinstance(edits, dict) or len(edits) > MAX_SELECTED_FILES
+            or any(not isinstance(k, str) or not isinstance(v, str)
+                   or not k or not v or len(k) > 4096 or len(v) > 4096
+                   for k, v in edits.items())):
+        raise ProjectStateError("Project draft field processing.transparency_edits must be a bounded path map")
     _validate_verification_records(processing)
     _validate_scalar_fields(
         _draft_object(processing, "operations"),
@@ -2094,6 +2116,11 @@ class ProjectState:
         steps = dict(raw_steps) if isinstance(raw_steps, Mapping) else {}
         for mode in (ProjectMode.CLIPART, ProjectMode.PROCESSING):
             if steps.get(mode.value) == StepId.TRANSPARENCY.value:
+                if (mode is ProjectMode.PROCESSING
+                        and value.get("processing", {}).get("transparency_direct", False)):
+                    # Direct editing is backed by persisted input/copy paths,
+                    # rather than the transient processing queue.
+                    continue
                 # The editor depends on the live run queue, which is intentionally
                 # not persisted in project drafts. Reopen the durable results page.
                 steps[mode.value] = StepId.RESULTS.value

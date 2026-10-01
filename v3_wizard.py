@@ -538,12 +538,15 @@ class AppShell(QWidget):
         self.step_labels.clear()
 
         current_index = self.state.route.index(self.state.current_step)
+        direct_editor = (self.state.mode is ProjectMode.PROCESSING
+                         and self.state.current_step is StepId.TRANSPARENCY
+                         and self.state.processing.transparency_direct)
         for index, step in enumerate(self.state.route):
             key = (self.state.mode, step)
             if key == self._invalid_key:
                 marker = "✕"
                 status = "Ошибка"
-            elif index < current_index:
+            elif index < current_index and not direct_editor:
                 marker = "✓"
                 status = "Пройден"
             elif index == current_index:
@@ -553,6 +556,17 @@ class AppShell(QWidget):
                 marker = "○"
                 status = "Далее"
 
+            if self.state.mode is ProjectMode.PROCESSING and step is StepId.TRANSPARENCY:
+                controller = self.workflow_controller("processing")
+                available = getattr(controller, "transparency_entry_available", None)
+                label = V3Button("Проверка\nпрозрачности", ButtonVariant.SECONDARY)
+                label.setObjectName("directTransparencyButton")
+                label.setEnabled(callable(available) and available())
+                label.clicked.connect(self._open_processing_transparency)
+                label.setAccessibleName(f"Проверка прозрачности: {status}")
+                self.steps_layout.addWidget(label)
+                self.step_labels.append(label)
+                continue
             label = QLabel(f"{marker} {index + 1}. {STEP_TITLES[step]}")
             label.setWordWrap(True)
             if status in {"Текущий", "Пройден"}:
@@ -567,6 +581,12 @@ class AppShell(QWidget):
             label.show()
             self.step_labels.append(label)
         self.steps_layout.addStretch()
+
+    def _open_processing_transparency(self) -> None:
+        controller = self.workflow_controller("processing")
+        opener = getattr(controller, "open_transparency_entry", None)
+        if self.state.mode is ProjectMode.PROCESSING and callable(opener):
+            opener()
 
     def _refresh_footer(self) -> None:
         index = self.state.route.index(self.state.current_step)

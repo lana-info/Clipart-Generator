@@ -9,6 +9,7 @@ import numpy as np
 import hashlib
 import json
 import os
+import errno
 import tempfile
 from pathlib import Path
 
@@ -206,7 +207,7 @@ class MaskEditDocument:
         region.putalpha(self.mask.crop(bounds))
         return region
 
-    def save(self, output_path: str | Path, mask_path: str | Path) -> None:
+    def save(self, output_path: str | Path, mask_path: str | Path, *, copy_source: Path | None = None) -> None:
         destination = Path(output_path)
         mask_destination = Path(mask_path)
         if destination.suffix.casefold() != ".png":
@@ -219,9 +220,17 @@ class MaskEditDocument:
         )
         with generation_transaction_lock(destination):
             self._recover_pair_unlocked(destination, mask_destination)
-            generation_record = (
-                capture_generation_record(destination) if destination.exists() else None
-            )
+            try:
+                generation_record = (
+                    capture_generation_record(copy_source or destination)
+                    if (copy_source or destination).exists() else None
+                )
+            except OSError as error:
+                # A valid imported filename may leave no filesystem room for
+                # optional provenance sidecars. Other I/O errors still surface.
+                if copy_source is None or error.errno != errno.ENAMETOOLONG:
+                    raise
+                generation_record = None
             output_temporary = self._stage_png(
                 self.corrected_image(),
                 destination,
@@ -1445,6 +1454,8 @@ class ClipartTransparencyEditorPage(QWidget):
         super().__init__(parent)
         self._paths: list[Path] = []
         self._rough_dir: Path | None = None
+        self._save_dir: Path | None = None
+        self._saved_copies: dict[Path, Path] = {}
         self._document: MaskEditDocument | None = None
         self._loaded_path: Path | None = None
         self._draft_masks: dict[Path, bytes] = {}
@@ -1785,10 +1796,32 @@ class ClipartTransparencyEditorPage(QWidget):
         *,
         selected_index: int = 0,
         rough_dir: str | Path | None = None,
+        save_dir: str | Path | None = None,
+        saved_copies: dict[str, str] | None = None,
     ) -> None:
         self._stash_current_document()
         self._paths = [Path(path) for path in paths]
         self._rough_dir = Path(rough_dir) if rough_dir is not None else None
+        self._save_dir = Path(save_dir) if save_dir is not None else None
+        self.back_button.setText("К файлам" if self._save_dir is not None else "К результатам")
+        self._saved_copies = {}
+        invalid_copy = False
+        if self._save_dir is not None:
+            for source, destination in (saved_copies or {}).items():
+                copy = Path(destination)
+                if (Path(source) in self._paths and copy.suffix.lower() == ".png"
+                        and not copy.is_symlink() and copy.is_file()
+                        and copy.parent.resolve() == self._save_dir.resolve()):
+                    try:
+                        with Image.open(copy) as image:
+                            _validate_editor_image_size(image.size)
+                            if image.format != "PNG":
+                                raise ValueError("Expected PNG copy")
+                            image.verify()
+                    except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+                        invalid_copy = True
+                        continue
+                    self._saved_copies[Path(source)] = copy
         allowed = set(self._paths)
         self._draft_contours = {p: c for p, c in self._draft_contours.items() if p in allowed}
         self._draft_masks = {
@@ -1808,6 +1841,8 @@ class ClipartTransparencyEditorPage(QWidget):
         else:
             self.canvas.set_document(None)
         self._refresh_history_buttons()
+        if invalid_copy:
+            self._show_contour_status("Сохранённая копия не читается. Открыт исходный PNG; копия сохранена на диске.")
 
     def refresh_from_state(self) -> None:
         """Keep the shared page-controller refresh contract."""
@@ -1822,13 +1857,27 @@ class ClipartTransparencyEditorPage(QWidget):
             self._refresh_history_buttons()
             return
         path = self._paths[row]
+        copy_failed = False
         try:
             rough_dir = self._rough_dir or path.parent.parent / "rough"
             mask_path = rough_dir / f"{path.stem}_alpha-mask.png"
-            MaskEditDocument.recover_pair(path, mask_path)
-            with Image.open(path) as image:
-                _validate_editor_image_size(image.size)
-                document = MaskEditDocument(image.copy())
+            if self._save_dir is None:
+                MaskEditDocument.recover_pair(path, mask_path)
+            def load_document(candidate: Path) -> MaskEditDocument:
+                with Image.open(candidate) as image:
+                    _validate_editor_image_size(image.size)
+                    return MaskEditDocument(image.copy())
+
+            copy = self._saved_copies.get(path)
+            if copy is not None:
+                try:
+                    document = load_document(copy)
+                except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+                    self._saved_copies.pop(path, None)
+                    document = load_document(path)
+                    copy_failed = True
+            else:
+                document = load_document(path)
             draft = self._draft_masks.get(path)
             if draft is not None:
                 with Image.open(BytesIO(draft)) as mask:
@@ -1842,7 +1891,7 @@ class ClipartTransparencyEditorPage(QWidget):
             )
             self._refresh_history_buttons()
             return
-        except (OSError, ValueError, UnidentifiedImageError):
+        except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
             self.canvas.set_document(None)
             self._refresh_history_buttons()
             return
@@ -1859,6 +1908,8 @@ class ClipartTransparencyEditorPage(QWidget):
             item.setIcon(QIcon(_pixmap_for_pil(thumbnail)))
         document.pending_contour = self._draft_contours.get(path, InlineContour())
         self.canvas.set_document(document)
+        if copy_failed:
+            self._show_contour_status("Сохранённая копия не читается. Открыт исходный PNG; копия сохранена на диске.")
         self.canvas.setFocus(Qt.FocusReason.OtherFocusReason)
         self._refresh_history_buttons()
 
@@ -2067,6 +2118,14 @@ class ClipartTransparencyEditorPage(QWidget):
         output_path = self.current_path
         if output_path is None:
             raise ValueError("Нет изображения для сохранения")
+        source_path = output_path
+        if self._save_dir is not None:
+            output_path, mask_path = self._save_new_copy(source_path)
+            self._saved_copies[source_path] = output_path
+            self._draft_masks.pop(source_path, None)
+            self.copy_saved.emit(source_path, output_path)
+            self.saved.emit(output_path.name)
+            return output_path, mask_path
         rough_dir = self._rough_dir or output_path.parent.parent / "rough"
         mask_path = rough_dir / f"{output_path.stem}_alpha-mask.png"
         self.document.save(output_path, mask_path)
@@ -2074,6 +2133,46 @@ class ClipartTransparencyEditorPage(QWidget):
         self.copy_saved.emit(output_path, output_path)
         self.saved.emit(output_path.name)
         return output_path, mask_path
+
+    def _save_new_copy(self, source_path: Path) -> tuple[Path, Path]:
+        from output_naming import _truncate_filename_stem
+        from chroma_generation_record import record_path
+
+        self._save_dir.mkdir(parents=True, exist_ok=True)
+        rough = self._rough_dir or self._save_dir.parent / "rough"
+        rough.mkdir(parents=True, exist_ok=True)
+        for index in range(1, 10_001):
+            suffix = "_edited.png" if index == 1 else f"_edited_{index}.png"
+            # Leave room for alpha-mask names, generation sidecars and their
+            # transaction backups on both Windows and UTF-8 filesystems.
+            stem = _truncate_filename_stem(source_path.stem, 180, 180)
+            destination = self._save_dir / f"{stem}{suffix}"
+            mask = rough / f"{destination.stem}_alpha-mask.png"
+            marker, backups = MaskEditDocument._pair_transaction_paths(destination, mask)
+            if any(p.exists() or p.is_symlink() for p in (destination, mask, marker, *backups, record_path(destination))):
+                continue
+            reserved = []
+            try:
+                for path in (destination, mask):
+                    with path.open("xb"):
+                        pass
+                    reserved.append(path)
+            except FileExistsError:
+                for path in reserved:
+                    path.unlink(missing_ok=True)
+                continue
+            except OSError:
+                for path in reserved:
+                    path.unlink(missing_ok=True)
+                raise
+            try:
+                self.document.save(destination, mask, copy_source=source_path)
+            except Exception:
+                for path in reserved:
+                    path.unlink(missing_ok=True)
+                raise
+            return destination, mask
+        raise ValueError("Не удалось выбрать свободное имя для копии PNG")
 
     def _save_clicked(self) -> None:
         if self.canvas.contour_busy:
@@ -2108,7 +2207,8 @@ class ClipartTransparencyEditorPage(QWidget):
             answer = QMessageBox.warning(
                 self,
                 "Есть несохранённые изменения",
-                "Вернуться к результатам и отменить изменения маски?",
+                ("Вернуться к файлам и отменить изменения маски?" if self._save_dir is not None
+                 else "Вернуться к результатам и отменить изменения маски?"),
                 QMessageBox.StandardButton.Discard
                 | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel,

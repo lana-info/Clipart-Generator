@@ -1,5 +1,43 @@
 # Ошибки проекта
 
+## direct-transparency-entry-20261001
+
+Новый прямой вход не должен зависеть от живой очереди или изменять входной PNG.
+Исходные6Qt regressions FAIL до реализации. Восстановление direct editor сначала
+FAIL: ProjectState.from_dict переводил любой transparency вRESULTS, поскольку
+старый редактор зависел от неперсистентной очереди. Исправление: сохранять этот
+шаг для processing.transparency_direct; legacy queue editor всё ещё RESULTS.
+
+Независимое ревью обнаружило:
+1. Длинный допустимый stem230: errno36 на transaction backup/optional generation
+   sidecar. Первый filename-only budget недостаточен; reserved output stem теперь
+   ограничен180 UTF8bytes/UTF16units с запасом на mask/backup. Повторная проверка
+   выявила слишком длинный optional source provenance path; только ENAMETOOLONG
+   при чтении optional source record допускает отсутствие записи, прочие ошибки
+   сохраняются. ASCII/кириллица save/reopen regression PASS, источник неизменен.
+2. Clear/remove/restart не очищали input→copy map; повторный импорт заменённого
+   исходника открывал старую копию. Очищаем map при явном снятии выбора, тесты
+   всех3путей FAIL-сценария→PASS.
+3. Повреждённая persisted copy блокировала валидный исходник. Проверяем PNG
+   verify/40Мп при восстановлении map; при повреждении открываем исходник и
+   показываем статус. Повреждённый файл не удаляется. Дополнительные repro
+   выявили CRC-valid повреждённый IDAT и oversized IHDR: verify недостаточно.
+   Добавлен fallback при фактическом decode и DecompressionBombError; huge-header
+   не требует аллокации. Canvas.set_document очищал уведомление, поэтому статус
+   выводится после него. CRC/IDAT, header, видимый статус regressions PASS.
+
+Сохранение копии использует существующую pair transaction для PNG/маски/lineage,
+резервирует имена exclusive create и не восстанавливает транзакции входных файлов.
+Проверены disk-failure cleanup, одинаковые имена, старые копии, project roundtrip,
+старый queue route, источник SHA, active queue gate.139tests+31subtests PASS,
+дополнительные host/project/license/queue/runtime122tests+9subtests PASS.
+Повторное независимое ревью финального diff: нерешённых подтверждённых
+ошибок не осталось, header/IDAT fallback+видимое уведомление PASS.
+Actual/approved mockups1120×780: docs/ui/3.2/direct-transparency.
+Не проверены installed Windows, kill процесса посреди save и межпроцессные гонки.
+Новые transparency algorithms/ползунки не изменены, сборка не запускалась.
+
+
 ## edge-material-reference-20261001
 
 Поручение: сравнить реальные13.png/07.png, убрать паразитный цвет края и не

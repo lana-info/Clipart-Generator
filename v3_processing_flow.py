@@ -55,7 +55,7 @@ from v3_project_state import (
     StepId,
     route_for_mode,
 )
-from v3_transparency_preview import ClipartTransparencyEditorPage
+from v3_transparency_preview import ClipartTransparencyEditorPage, MAX_EDITOR_IMAGE_PIXELS
 from studio_workflow_host import WorkflowHost, workflow_host_for
 from v3_lazy_loading import LazyPageRegistry
 from workflow_definitions import workflow_for_mode
@@ -594,6 +594,7 @@ class ProcessingFilesPage(_ScrollableStepPage):
         if not _processing_data(self.state).selected_files:
             return
         _processing_data(self.state).selected_files.clear()
+        _processing_data(self.state).transparency_edits.clear()
         _processing_data(self.state).verification_records.clear()
         self.file_infos.clear()
         self.error_label.clear()
@@ -613,6 +614,10 @@ class ProcessingFilesPage(_ScrollableStepPage):
             for record in _processing_data(self.state).verification_records
             if os.path.normcase(os.path.abspath(record.file_path)) != target
         ]
+        _processing_data(self.state).transparency_edits = {
+            source: copy for source, copy in _processing_data(self.state).transparency_edits.items()
+            if os.path.normcase(os.path.abspath(source)) != target
+        }
         if len(_processing_data(self.state).selected_files) != before:
             self.changed()
         self.refresh_from_state()
@@ -1226,6 +1231,7 @@ class ProcessingFlowController(QObject):
 
     def start_processing_again(self) -> None:
         _processing_data(self.shell.state).selected_files.clear()
+        _processing_data(self.shell.state).transparency_edits.clear()
         _processing_data(self.shell.state).verification_records.clear()
         self.shell.state.set_step(StepId.FILES)
         self.files_page.refresh_from_state()
@@ -1235,8 +1241,66 @@ class ProcessingFlowController(QObject):
         page = ClipartTransparencyEditorPage()
         page.back_requested.connect(self._close_transparency_editor)
         page.focus_mode_changed.connect(self.shell.set_canvas_focus_mode)
-        page.copy_saved.connect(self.run_queue.page.use_edited_output)
+        page.copy_saved.connect(self._transparency_copy_saved)
+        if (self.shell.state.current_step is StepId.TRANSPARENCY
+                and _processing_data(self.shell.state).transparency_direct):
+            self._configure_direct_transparency(page)
         return page
+
+    def _selected_png_paths(self) -> list[Path]:
+        paths = []
+        for raw in _processing_data(self.shell.state).selected_files:
+            if Path(raw).suffix.lower() != ".png":
+                continue
+            try:
+                info = inspect_local_image(raw)
+            except ProcessingFlowError:
+                continue
+            if info.width * info.height > MAX_EDITOR_IMAGE_PIXELS:
+                continue
+            paths.append(Path(info.path))
+        return paths
+
+    def transparency_entry_available(self) -> bool:
+        session = self.run_queue.session
+        if (session is not None and session.running) or self.shell.another_run_is_active(self):
+            return False
+        if self.shell.state.current_step is StepId.RESULTS and session is not None:
+            from v3_run_queue import transparency_candidate_paths
+            return bool(transparency_candidate_paths(session))
+        return bool(self._selected_png_paths())
+
+    def _configure_direct_transparency(self, page: ClipartTransparencyEditorPage) -> None:
+        paths = self._selected_png_paths()
+        output = self.shell.state.output_dir_for_mode(ProjectMode.PROCESSING)
+        root = workspace_layout(output or self.shell.state.common.work_dir)
+        page.set_files(paths, rough_dir=root.rough, save_dir=root.output,
+                       saved_copies=_processing_data(self.shell.state).transparency_edits)
+
+    def open_transparency_entry(self) -> None:
+        if not self.transparency_entry_available() or self.shell.state.current_step is StepId.TRANSPARENCY:
+            return
+        if self.shell.state.current_step is StepId.RESULTS and self.run_queue.session is not None:
+            self._open_transparency_editor(0)
+            return
+        _processing_data(self.shell.state).transparency_direct = True
+        page = self.pages[StepId.TRANSPARENCY]
+        self._configure_direct_transparency(page)
+        self.shell.state.set_step(StepId.TRANSPARENCY)
+        self.shell.mark_dirty()
+        self.shell.step_changed.emit(ProjectMode.PROCESSING.value, StepId.TRANSPARENCY.value)
+
+    def _transparency_copy_saved(self, source, destination) -> None:
+        data = _processing_data(self.shell.state)
+        if data.transparency_direct:
+            selected = {str(path) for path in self._selected_png_paths()}
+            data.transparency_edits = {
+                key: value for key, value in data.transparency_edits.items() if key in selected
+            }
+            data.transparency_edits[str(source)] = str(destination)
+            self.shell.mark_dirty()
+        else:
+            self.run_queue.page.use_edited_output(source, destination)
 
     def _open_transparency_editor(self, item_index: int) -> None:
         session = self.run_queue.session
@@ -1267,6 +1331,7 @@ class ProcessingFlowController(QObject):
             selected_index=selected,
             rough_dir=workspace_layout(session.output_dir).rough,
         )
+        _processing_data(self.shell.state).transparency_direct = False
         self.shell.state.set_step(StepId.TRANSPARENCY)
         self.shell.mark_dirty()
         self.shell.step_changed.emit(
@@ -1279,11 +1344,14 @@ class ProcessingFlowController(QObject):
         if isinstance(page, ClipartTransparencyEditorPage):
             page.leave_focus_mode()
         self.shell.set_canvas_focus_mode(False)
-        self.shell.state.set_step(StepId.RESULTS)
+        data = _processing_data(self.shell.state)
+        return_step = StepId.FILES if data.transparency_direct else StepId.RESULTS
+        data.transparency_direct = False
+        self.shell.state.set_step(return_step)
         self.shell.mark_dirty()
         self.shell.step_changed.emit(
             ProjectMode.PROCESSING.value,
-            StepId.RESULTS.value,
+            return_step.value,
         )
 
     def _install_pages(self) -> None:
@@ -1448,4 +1516,5 @@ def install_processing_flow(host: WorkflowHost) -> ProcessingFlowController:
         return existing
     controller = ProcessingFlowController(host)
     host.register_workflow_controller("processing", controller)
+    host.refresh()
     return controller

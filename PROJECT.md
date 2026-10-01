@@ -6,7 +6,9 @@ Processing must allow opening selected existing PNGs directly in the transparenc
 editor without running the generation/processing queue. Return to the input
 selection and save edits as a separate copy, preserving source files and module
 access checks. Owner rejected a button beside file selection; the revised
-left-navigation mockup awaits visual approval. Not yet implemented.
+left-navigation mockup is approved. Direct editing is implemented in the dedicated
+feature branch; installed Windows acceptance remains pending. Global transparency
+sliders and further edge/color algorithm changes are paused for owner discussion.
 
 ## On-demand Studio shell, owner-authorized 2026-09-29
 

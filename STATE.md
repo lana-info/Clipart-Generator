@@ -1,5 +1,27 @@
 # Project state
 
+## Прямой вход в редактор прозрачности, 2026-10-01
+
+Ветка codex/feature-direct-transparency-20261001 от60b19dd. Владелец одобрил
+макет левого меню. Сборка/публикация отложены; алгоритмы края/цвета и новые
+ползунки по последнему поручению не менялись. Новый макет кнопок модулей с
+бирюзовым контуром находится в artifacts/module-outline-actions-mockup основного
+проекта, ожидает визуального согласования. Маджента для выделенных узлов одобрена.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Прямой вход для выбранных PNG из левого меню; одобренный макет | Actual Qt click, отсутствие worker/session, пустой/удалённый input, busy gate | Кнопка «Проверка прозрачности», доступная для PNG до40Мп | Реализовано и проверено: Qt regressions PASS, actual1120×780 empty/selected/editor соответствует approved layout |
+| Исходники и предыдущие копии сохраняются; PROJECT | SHA исходника, повторное сохранение, одинаковые/длинные имена, ошибка записи | Отдельные output/*_edited*.png и rough alpha-mask, exclusive name reservation; существующий queue-save сохранён | Реализовано и проверено: исходники неизменны, копии не перезаписываются, fail cleanup PASS |
+| Возврат к файлам и восстановление проекта | State roundtrip, реальные editor load, remove/clear/reimport, повреждённая копия | Persisted input→copy map, direct route; «К файлам»; исходник доступен при повреждении копии | Реализовано и проверено: targeted139tests+31subtests PASS; дополнительный host/project/licensing/queue/runtime122tests+9subtests PASS |
+| Не менять очистку края до обсуждения; последнее поручение | Git diff | Изменены только вход/сохранение/состояние редактора | Выполнено; качество удаления фона этим изменением не исправлялось |
+
+Повторное независимое read-only ревью завершено: нерешённых подтверждённых
+ошибок не осталось; repro длинных имён/повторного импорта/corrupt copy PASS. См. docs/ERRORS.md#direct-transparency-entry-20261001.
+Визуальные доказательства: docs/ui/3.2/direct-transparency/{approved,actual}.
+Проверки Linux Qt offscreen не подтверждают установленный Windows сценарий,
+аварийное завершение процесса или межпроцессные гонки. Новый комплект не собран.
+
+
 ## Защита цвета края и прямой вход в прозрачность, 2026-10-01
 
 Ветка codex/fix-edge-color-source-20261001 от11d60b6. Другая работа и
@@ -15,7 +37,7 @@
 | Не перекрашивать светлый лепесток цветом сердцевины; исходники/annotations2/3 | Реальный chroma pipeline по этапам, RGB конкретного пикселя и синтетический textured petal в RGB key permutations | Локальная исходная опора вместо усреднения разных деталей, только в3px band; veto загрязнённых образцов по реальным более глубоким пикселям | Реализовано и проверено: source pixel359,148 восстановлен точно;347distinct tests+46subtests PASS, independent157tests+60baseline comparisons PASS. Все оттенки/ореолы не подтверждены |
 | Сохранять частичное покрытие/оттенок пуха и смесь с фоном; annotation3 | Known-truth3/6/8px bands, brightness/hue changes; red/green/blue; existing fur/botanical tests | Проверка реальных соседей/глубины6/12/24/32 и component maximum,32px bound; физически возможный RGB fit, неоднозначная краска сохраняется | Реализовано и проверено:57 новых tests PASS, widths3–14/shading/hue, independent60HEAD comparisons без alpha regressions. Яркая additive-примесь в неоднозначном случае может сохраниться |
 | Подготовить прозрачные PNG для просмотра; annotation1 | Сохранение/открытие RGBA, размеры, прозрачный внешний frame и SHA источников | Тестовые13/07 PNG и сравнение на белом/чёрном фоне в artifacts/user-edge-colors/final основного проекта | Реализовано и проверено:1254×1254RGBA, PNG roundtrip exact, framealpha0, источники SHA неизменны. Installed Windows не проверен |
-| Прямой вход после выбора PNG, без processing run; annotation1 и уточнение положения кнопки | Actual Qt выбор/возврат/Undo/отдельная копия, restore/лицензированный Processing | Только revised left-menu mockup1120×780 | Первый макет отклонён по расположению; второй показан, visual approval ожидается. Source UI не изменён |
+| Прямой вход после выбора PNG, без processing run; annotation1 и уточнение положения кнопки | Actual Qt выбор/возврат/Undo/отдельная копия, restore/лицензированный Processing | Только revised left-menu mockup1120×780 | Макет левого меню одобрен и реализован в отдельной ветке; текущие проверки и ограничения см. раздел выше |
 
 Причина/попытки: docs/ERRORS.md#edge-material-reference-20261001.
 Макет: artifacts/direct-transparency-left-mockup основного проекта.
