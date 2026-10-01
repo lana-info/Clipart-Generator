@@ -1,5 +1,60 @@
 # Ошибки проекта
 
+## pale-rim-followup-20261001
+
+Диагностика13d30af без production правок. Original13/07 неизменны и не
+добавлены в Git. Изменения алгоритма и регуляторов сначала обсуждаем.
+
+Подтверждение: opaque светлая полоса1–2px рядом с бежевым материалом
+перекрашивается при удалении blue/red/green key.27synthetic cases
+(3colours×3widths×3keys): baseline повреждает18cases, width3passes.
+Source(241,241,226,255)→staged(241,241,139,255). Малая fit ошибка с соседним
+материалом не доказывает его принадлежность той же детали.
+Наreal13:402,126 source(241,241,226,255)→final(241,240,130,255);
+376,129 source(245,245,241,255)→final(245,245,203,255).
+Early fit первого scale1.3603/background.2043 даёт recovered
+(302.894,302.380,219.066), второго scale1.2560/background.1483 даёт
+(287.673,287.324,238.910). Out-of-gamut возможен и при настоящей additive засветке.
+
+История offline экспериментов, функции подменяются только в памяти:
+1. Gamut guard early_rim → staged thin-paint27/27 и57local-material tests PASS.
+   Real376,129 сохранён;402,126 желтеет на следующем refine_edge_mixture.
+2. Opaque gamut guard также в refine_edge_mixture → контрольные real pixels
+   сохранены,142tests PASS/6FAIL. Отклонён: ломает genuine additive spill.
+3. Новые данные: прежние additive controls имеют foreground coefficient<=1,
+   светлые материалы >1. Узкий guard сохраняет opaque pixel при невозможном
+   convex восстановлении и scale>1.01, оставляет старую обработку при меньшем
+   scale; early_rim также требует background<1.148tests PASS, отдельно полный
+   automatic pipeline27/27known-truth PASS. Real402,126/376,129/359,148 сохраняют
+   sourceRGB на всех наблюдаемых этапах. Production не изменён.
+
+Независимое read-only ревью: scale включает brightness и coverage относительно
+заимствованной опоры, поэтому1.01 эвристика. Reference(180,150,50),
+observed(234,195,129), key(0,0,255) могут быть bright+additive смесью сscale≈1.3.
+Новый guard способен оставить такую засветку. Нужны совместные bright-additive
+и near-threshold tests, отдельные stage regressions. Это подтверждённый риск
+кандидата, не новая подтверждённая ошибка production.148tests не покрывают его.
+Reviewer не запускал тесты; primary проверил отдельные27full-pipeline cases.
+
+Primary дополнительно проверил18known-truth additive-only cases:
+brightness .99/1/1.009/1.011/1.02/1.3 ×3RGB-key permutations,
+key(20,45,240), reference(180,150,50), source=brightness*reference+.25*key.
+Baseline15/18 и narrow18/18 имеют RGBerror>3. Приbrightness1.3 baseline
+refine_edge_mixture даётclean(234,195,65,255), narrow сохраняет загрязнённый
+source(239,206,125,255): подтверждена регрессия кандидата. При меньшей
+яркости оба путают additive с convex mixture; это неоднозначность модели,
+не доказательство применимости к real13. Порог1.01 не считается решением.
+Следующая правка не предлагается наугад: нужен критерий материала/локальной
+опоры и контроль bright-additive одновременно со светлой краской.
+Evidence: threshold-additive-probe.json. Production неизменён.
+
+Experimental13/07:1254×1254RGBA,PNG roundtrip exact,SHA источников неизменны.
+Идеальная alpha/cleanRGB реальных изображений неизвестны. Это не Windows
+приёмка и не подтверждение всех оттенков. Evidence основного проекта:
+artifacts/edge-controls-followup-20260930/{narrow-experiment-tests.log,
+narrow-known-truth.json,narrow-provenance.json}, воспроизводимые offline scripts.
+Нет платных запросов, model downloads, сборок или изменений сервера.
+
 ## transparency-controls-diagnostics-20261001
 
 По annotation2 проверены standalone Clipbrook параметры без изменения Studio:
