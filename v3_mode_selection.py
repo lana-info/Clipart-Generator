@@ -346,6 +346,35 @@ class ModeSelectionScreen(QWidget):
                         for card in self.module_cards.values())
         style_module_action(self.module_updates_button, attention, tokens=self.tokens)
 
+    def set_upcoming_cards(self, items) -> None:
+        """Replace only promotional cards, preserving live workflow availability."""
+        from studio_upcoming import validate_upcoming
+        items = validate_upcoming(items)
+        replacements = {}
+        try:
+            for item in items:
+                entry = CatalogEntry('upcoming-' + item['id'], item['title'],
+                                     item['description'], 'upcoming', released=False)
+                existing = self.module_cards.get(entry.module_id)
+                if existing is not None and existing.entry.released:
+                    raise ValueError('Promotional identity conflicts with released module')
+                card = StudioCatalogCard(entry, ModuleAvailability(), tokens=self.tokens,
+                                         preview_png=item['preview_png'])
+                card.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+                replacements[entry.module_id] = card
+        except Exception:
+            for card in replacements.values():
+                card.deleteLater()
+            raise
+        for module_id, card in list(self.module_cards.items()):
+            if module_id.startswith('upcoming-') and not card.entry.released:
+                self.cards_layout.removeWidget(card)
+                card.hide()
+                card.deleteLater()
+                del self.module_cards[module_id]
+        self.module_cards.update(replacements)
+        self._layout_module_cards()
+
     def set_saved_projects(self, projects: list) -> None:
         while self.saved_projects_layout.count():
             item = self.saved_projects_layout.takeAt(0)
@@ -514,6 +543,12 @@ class V3ApplicationView(QWidget):
         news_client = getattr(module_delivery, 'news', None)
         self._news_controller = (StudioNewsController(news_client, self.mode_selection.news_panel, self)
                                  if isinstance(news_client, StudioNewsClient) else None)
+        from studio_upcoming import StudioUpcomingClient
+        from studio_upcoming_ui import StudioUpcomingController
+        upcoming_client = getattr(module_delivery, 'upcoming', None)
+        self._upcoming_controller = (
+            StudioUpcomingController(upcoming_client, self.mode_selection, self)
+            if isinstance(upcoming_client, StudioUpcomingClient) else None)
 
         if recent_project is None and self._draft_path is not None:
             recent_project = self._load_recent_project()
@@ -656,6 +691,8 @@ class V3ApplicationView(QWidget):
             if deadline is None or datetime.now(timezone.utc) >= deadline:
                 authorization = None
         for module_id, card in self.mode_selection.module_cards.items():
+            if not card.entry.released:
+                continue
             installed = self._legacy_source_mode and module_id in self._workflow_registry.module_ids
             compatible = True
             if self._module_delivery is not None:
@@ -1444,6 +1481,8 @@ class V3ApplicationView(QWidget):
             return
         if self._news_controller is not None:
             self._news_controller.shutdown()
+        if self._upcoming_controller is not None:
+            self._upcoming_controller.shutdown()
         self._diagnostic_event(
             "application_exit",
             "Приложение закрыто штатно.",

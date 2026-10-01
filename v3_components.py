@@ -590,6 +590,7 @@ class ModeCard(QFrame):
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
         illustration_path: str | Path | None = None,
+        illustration_image: QPixmap | None = None,
         compact: bool = False,
     ) -> None:
         super().__init__(parent)
@@ -611,9 +612,11 @@ class ModeCard(QFrame):
         layout.setSpacing(tokens.space_3)
 
         self.illustration = None
-        if illustration_path:
-            resolved_path = Path(illustration_path)
-            if resolved_path.suffix.lower() == ".svg":
+        if illustration_path or illustration_image is not None:
+            resolved_path = Path(illustration_path) if illustration_path else None
+            if illustration_image is not None:
+                illustration = _AspectRatioPixmapLabel(illustration_image, self)
+            elif resolved_path.suffix.lower() == ".svg":
                 illustration = QSvgWidget(str(resolved_path), self)
                 illustration.renderer().setAspectRatioMode(
                     Qt.AspectRatioMode.KeepAspectRatio

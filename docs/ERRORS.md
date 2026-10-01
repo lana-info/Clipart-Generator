@@ -1,5 +1,179 @@
 # Ошибки проекта
 
+## white-background-offline-20261001
+
+Проверены не только supplied mask contracts, но и настоящий offline rembg/U2Net
+на двух исходных white-paper RGB PNG1536×1536 (teddy, knit/pine). Модель уже
+скачана в /tmp/clipart-u2net/models/u2net/u2net.onnx; MD5 совпадает с rembg
+60024c5c889badc19c04ad937298a77b. download_models возвращает этот файл, pooch
+retrieve заменён запретом загрузки; зависимости и production не менялись.
+Результаты:4.938s/5.084s, RGB каждого пикселя exactsource, alpha только0/255,
+frame transparent, sourceSHAunchanged и saved PNG reopen exact PASS. Actual
+opaque Qt previews показывают сохранение основных деталей, но местами светлый
+ободок; ideal semantic alpha не известна. Это не подтверждение идеального края,
+не Windows-приёмка и не запуск UI/worker. Core33tests PASS, visual approval
+нового provider pending. Private evidence в artifacts/studio-next-candidate/
+white-background основного проекта, пользовательские PNG не добавлены в Git.
+
+## candidate-local-https-environment-20261001
+
+Combined admin→signedfeed→Qt test сначала не стартовал: desktop venv не имеет
+psycopg, затем restricted sandbox запрещал localhost socket. Никаких исходных
+правок или новых зависимостей: добавлен путь уже имеющегося temporary server
+venv для psycopg; разрешён isolated localhost fixture run. Финально1PASS2.24s,
+/tmp/studio-next-real-upcoming-https.log. Это environment setup failures, не
+дефекты production; тест не ослаблен. Fixture не использует настоящие ключи,
+лицензии, business data или рабочий server.
+
+## local-contour-steps-20260930
+
+Владелец заменил три силы обработки на небольшие фиксированные повторяемые
+шаги; отдельные кнопки отключаются при пределе и пересчитываются после изменения
+выделения/правки/Undo. Updated UI mockup без силы показан в
+artifacts/local-contour-steps-mockup основного проекта. Владелец ответил
+«Да, реализовать», 2026-10-01; UI в работе, геометрия проверяется отдельно.
+
+Первая геометрическая версия: Simplify<=0.5px, global simple-path guard.
+Known synthetic tests прошли, но main проверка настоящего auto-contour утёнка
+показала оба действия no-op. Current real14/current.png (private evidence в
+artifacts/transparency-controls-check/controls-agent), actual extractiontol1:
+9paths,950nodes вглавномpath,73selected footnodes. Проблемы разделены:
+1. Минимальная удаляемая nonsharp-девиация0.85px, уже больше начального шага:
+   исходный auto-contour сам приближает границу с допуском1px. Такой preset
+   также не упрощал141node/26selected контур одобренного mockup.
+2. Global_simple отвергал9контактов исходного pixel-trace, часть вдалеке от
+   выделения. Это не доказывает небезопасность любого локального изменения.
+
+Новые данные обосновывают подбор preset по существующему auto-tolerance и
+защиту геометрии исходных контактов до/после вместо полного запрета любой
+самокасающейся исходной границы. Новые контакты/пересечения запрещены; отверстия,
+кончики, границы выделения, untouched handles остаются защищены.
+Фиксированный шаг Simplify1.25px выбран по реальным контурам: лапка73→65,
+mockup26→24; Smooth двигает anchor не более0.35px за нажатие и достигает
+безопасного предела. Геометрический root-прогон24local+42existing=66tests PASS.
+Независимое ревью выявило P3: почти прямой explicit handle мог превысить
+1.25px на0.0002923px, хотя anchor укладывался в допуск. Исправлено проверкой
+расстояний всех control points обеих исходных cubics до нового segment;
+convex hull даёт консервативную границу всей кривой. Exact fixture включён
+в регрессионные тесты. Независимая проверка выявила P2: расстояние до
+бесконечной прямой допускало срез выступа2.119px за endpoint нового сегмента.
+Исправлено отдельной clamped-projection distance_to_segment, добавлен точный
+fixture. Повторный root-прогон66tests PASS; независимая перепроверка41tests PASS
+и оба отдельных reproductions PASS. Нерешённых геометрических замечаний нет.
+
+UI независимое ревью и root-repro выявили P2: при нескольких выбранных
+контурах overlapping support второй path записывал исходные alpha поверх
+первой правки. Synthetic100×100, две отдельные детали с зазором3px:
+A-only меняет3pixels y41,x44..46; совместное применение сохраняет0 из3;
+перестановка paths меняет итог в6pixels. Причина: assignment полного support,
+а не только фактически изменённых candidate pixels. Передано на исправление
+с регрессией сохранения обеих правок и независимости от порядка. Результат
+повторной проверки: worker-regression сохранения обеих правок/порядка PASS;
+root и независимая финальная перепроверка ещё ожидаются.
+
+UI независимое ревью и root через настоящий QTest mouseClick выявили P2:
+после local preview кисть удаляет pixel35,20 (mask=0, rendered=0), но
+переключение До→После показывает старую preview-alpha255. Cache/async guard
+учитывал только paths, а не исходную mask revision. Передано на исправление
+с проверкой brush/Undo/Redo, актуального preview и совпадения Apply с After.
+Исправлено mask_revision guards, invalidation/recompute после кисти/Undo/Redo;
+Qt-regression PASS.
+
+Inherited hole-edit P2: выбранное отверстие меняло vectors, но не alpha.
+Parent exterior считался защищённой отдельной деталью; после исключения
+ancestor выяснился второй блокер: весь материал вне old-hole ошибочно
+считался residual. Hole expansion теперь удаляет материал окружения,
+contraction сохраняет alpha вложенных островков (root fixture77→255 до
+исправления,77→77 после). Ancestors исключаются из other-path protection;
+child/neighbour paths защищаются. Root тесты expansion/contraction и
+несколько уровней outer/hole/island/hole, Qt preview/Apply/Undo прошли.
+
+Финальное независимое ревью выявило stale proposal после кисти: raw77 pixel
+alpha[43,45] в cleared3×3 gap не имел BezierPath и удалялся77→0 при
+hole expansion. Новые данные требуют component ownership, а не только
+список путей. Теперь ближайший enclosing exterior определяет окружающий
+материал через8-connected flood fill по current alpha; отдельные компоненты
+защищены даже без контурных точек. Exact fixture и positive connected-material
+сценарии проверены root; независимая финальная перепроверка60tests PASS:
+raw77→77, connected material77→0, ordinary hole expansion3pixels.
+Открытых подтверждённых замечаний нет.
+
+Полный safe pytest после всех исправлений:2219PASS+278subtests,57skip,
+20network/paid deselected; один FAIL в старом cancellation/timer test:
+QTest.qWait(40) не привёл к timer tick (ticks пуст). Целевой166-test run
+раньше проходил этот сценарий, отдельный повтор после full тоже PASS0.77s.
+Производственная причина пока не подтверждена; возможна зависимость от
+нагрузки/очереди событий. Тест и его40ms проверка не ослаблены, source для
+этого failure не менялся. Повтор полного прогона без параллельных проверок
+завершён:2220tests+278subtests PASS,57skip,20deselected,241.59s.
+Первый full остаётся записанным FAIL; transient причина не подтверждена.
+
+ROI allocation bounds не дают разрешения менять все пиксели прямоугольника:
+раздельные выделения/длинные дуги могут окружать невыделенную шерсть. UI должен
+ограничить фактическое применение support изменённых сегментов, сохраняя
+невыделенный raw alpha, даже когда он отличается от приближённого старого пути.
+
+
+
+## pale-material-policy-fix-20261001
+
+После отклонённых gamut/scale guards источник ошибки пересмотрен: локальная
+опора принадлежит связанному, но другому материалу. Дополнительный поиск
+реальных deeper samples и brightness-only fit исправляет real13, но оставляет
+6thin cases без чистой глубокой опоры и увеличивает148tests10.77→31.26s.
+Same-depth/tangent материал также не доказывает происхождение RGB: настоящая
+засветка может дать идентичную полосу. Такой поиск в production не перенесён.
+
+Владелец ранее разрешил сохранять исходный оттенок при неоднозначности и
+2026-10-01 поручил закончить исправления до сборки. Минимальная policy:
+opaque candidate, невозможный convex recoveredRGB вне[-2,257], обе nonkey
+компоненты>=230,RGBspread<=24,keychannel не доминирует → не применять
+сомнительное вычитание key. Один helper применяется к early_rim и
+refine_edge_mixture; новые scale ограничения и source-reference search не нужны.
+Реальные control13pixels402126/376129/359148 теперь sourceexact на8этапах.
+Image13/07:1254pxRGBA,transparent frame,PNG roundtrip exact,SHAoriginal unchanged.
+
+Исправление подтверждено187tests:148existing +39new. Newthin known-truth27cases,
+bright-coloured additive3keys,ordinary pale coverage.8/.85,ambiguous flatpaint.
+Релевантный baseline с выключенным helper воспроизводит18thin failures.
+Первый новый stage-observer test ошибочно предполагал обязательный staged
+route:27KeyErrors вместо доказательства RGBdefect. Исправлен harness: отдельно
+реальный staged solver и automatic solver, новая защита не менялась.
+
+Дополнительный known-truth weak.95 mixture FAIL одинаково baseline/fixed:
+(238236233,255) вместоclean249246233/alpha242. Оно неотличимо от opaque painted
+flatband; existingflat-protection и opaque background threshold сохраняютsource.
+Это не объявлено correctedalpha. Отдельная paint-ambiguity regression защищает
+согласованный prior сохранения source; обычные.8/.85 mixtures проверены как
+реальные partial. Яркая nearwhite additive также может остаться. Полное
+различение этих происхождений по одному изображению не подтверждено.
+
+Algorithm identity повышена v9→v10; receipt read не перемаркирует v9.
+Первый contract run40PASS/1FAIL+9subtests из-за фиксированного expectedv9;
+обновлён exactexpectedv10 и добавленv9 в backward-readable cases.
+После этого41tests+9subtests PASS. Ошибочный ранний fullrun прерван (exit130),
+не засчитан как PASS; финальный fullrun начат после исправления contract.
+Independentreview73tests PASS в другом установленномQt venv, source не менялся.
+Future release нуждается в новом image-processing payload: опубликованный
+1.5.2 содержит старый алгоритм; обновление только Studio не гарантирует этот fix.
+Processing workflow с direct-entry также требует нового payload и корректного
+minimumCore. Официальные пакеты/версии не строились и не публиковались.
+Evidence: /tmp/studio-next-pale-final.log, /tmp/studio-next-component-contracts-final.log,
+artifacts/studio-next-candidate/edge-colours/verification.json основного проекта.
+
+## candidate-upcoming-grid-20261001
+
+Совмещение ранее проверенных upcoming карточек и fixed-size adaptive grid
+в новой ветке обнаружило regression: после withdrawal новых карточек сетка
+возвращалась к фиксированным3колонкам даже на1920px. Причина: старый
+set_upcoming_cards вручную раскладывал index//3, не используя новый общий
+_layout_module_cards. Actual Qt regression воспроизвёл position(1,1)
+вместо(0,4); после перенаправления на общий layout90target tests PASS.
+Поведение опубликованного сервера/лицензий не затронуто; будущие карточки
+не получают action signals и не меняют права существующих модулей.
+Evidence: /tmp/studio-next-catalog-integration.log; regression
+ tests/test_studio_upcoming_ui.py::test_promotional_refresh_keeps_wide_grid_and_compact_cards.
+
 ## pale-rim-followup-20261001
 
 Диагностика13d30af без production правок. Original13/07 неизменны и не

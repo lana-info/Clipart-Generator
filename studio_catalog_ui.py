@@ -2,7 +2,8 @@
 from pathlib import Path
 import sys
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QByteArray, QBuffer, QIODevice
+from PyQt6.QtGui import QImageReader, QPixmap
 
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
 from v3_components import ModeCard, DEFAULT_TOKENS, ButtonVariant
@@ -51,9 +52,25 @@ class StudioCatalogCard(ModeCard):
     action_requested = pyqtSignal(str, str)
 
     def __init__(self, entry: CatalogEntry, availability: ModuleAvailability,
-                 *, tokens=DEFAULT_TOKENS):
+                 *, tokens=DEFAULT_TOKENS, preview_png=None):
+        illustration = None
+        if preview_png is not None:
+            from studio_upcoming import preview_bytes
+            raw = preview_bytes(preview_png)
+            buffer = QBuffer()
+            buffer.setData(QByteArray(raw))
+            buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+            reader = QImageReader(buffer, b'png')
+            size = reader.size()
+            if not (1 <= size.width() <= 512 and 1 <= size.height() <= 512):
+                raise ValueError('Invalid preview dimensions')
+            image = reader.read()
+            if image.isNull():
+                raise ValueError('Invalid preview image')
+            illustration = QPixmap.fromImage(image)
         super().__init__(entry.module_id, entry.title, entry.description, "",
-                         tokens=tokens, illustration_path=catalog_artwork(entry.artwork_key),
+                         tokens=tokens, illustration_path=None if illustration is not None else catalog_artwork(entry.artwork_key),
+                         illustration_image=illustration,
                          compact=True)
         self.entry = entry
         self.tokens = tokens

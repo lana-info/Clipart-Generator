@@ -1,5 +1,17 @@
 # TASKS
 
+## До следующей сборки, поручение2026-10-01
+
+- [x] Создать отдельную ветку кандидата, сохранить исходные worktrees.
+- [x] Совместить contour/direct-entry/zoom/module-outline/upcoming desktop;90target tests PASS.
+- [x] Закрыть воспроизведённое перекрашивание pale края:187tests PASS,actual13/07 source preservation и PNG roundtrip PASS; ограничения ambiguity сохранены.
+- [ ] Завершить белый режим: visual approval pending, затем worker/settings/restoration. Core33PASS и offline U2Net на двух настоящих исходниках PASS для RGB/alpha/roundtrip; качество всех деталей не подтверждено.
+- [ ] Решить назначение RGB/alpha регуляторов после качества, не добавлять небезопасные defaults.
+- [x] Полный безопасный regression run текущего diff:2396tests+278subtests PASS; independent73PASS. После новых source changes нужны релевантные проверки и повторное ревью.
+- [x] Проверить source/package contracts:41tests+9subtests PASS. Локальный HTTPS admin→candidateQt1PASS. При будущей сборке переиздать processing/image-processing, назначив совместимость с новым Core.
+- [ ] Зафиксировать и отправить проверенный кандидат; не менять текущую development/release branch.
+- [ ] Сборка только по отдельному поручению. Windows delivery/upgrade после сборки, старые beta не снимать до приёмки.
+
 ## Остаточная светлая кайма, 2026-10-01
 
 - [x] Воспроизвести пожелтение тонкой детали на baseline13d30af.

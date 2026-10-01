@@ -376,8 +376,11 @@ class ContourDocument:
         else:
             old_only = np.clip(old_coverage - new_coverage, 0.0, 1.0)
             new_only = np.clip(new_coverage - old_coverage, 0.0, 1.0)
-            old_only[protected_holes | protected_residual] = 0.0
-            new_only[protected_opaque | protected_residual] = 0.0
+            old_only[protected_opaque | protected_holes | protected_residual] = 0.0
+            # Opaque material outside the old hole is what expansion removes;
+            # it is not an unrepresented residual of an exterior contour.
+            # Separate islands retain explicit other-path protection.
+            new_only[protected_opaque] = 0.0
             region = np.maximum(region, old_only * 255.0)
             region = region * (1.0 - new_only)
         candidate[top:bottom, left:right] = np.rint(np.clip(region, 0, 255)).astype(np.uint8)
@@ -437,6 +440,8 @@ class ContourDocument:
         """Return only neighbouring editable geometry that must not be overwritten."""
         opaque = np.zeros(region.shape, dtype=bool)
         holes = np.zeros(region.shape, dtype=bool)
+        selected_outline = sample_path(self.paths[selected_index])
+        material_parents = []
         for index, path in enumerate(self.paths):
             _check_cancelled(cancelled)
             if index == selected_index:
@@ -447,11 +452,35 @@ class ContourDocument:
             if (controls[:,0].max() < left-1 or controls[:,0].min() >= right+1
                     or controls[:,1].max() < top-1 or controls[:,1].min() >= bottom+1):
                 continue
+            # Enclosing ancestors are the material around this editable edge,
+            # not separate details. Protecting their whole filled polygon would
+            # prevent a hole from expanding, or a nested island from expanding.
+            # Descendants and neighbouring paths still retain their protection.
+            outline = sample_path(path).astype(np.float32)
+            distances = [cv2.pointPolygonTest(outline, tuple(map(float, point)), False)
+                         for point in selected_outline]
+            if distances and min(distances) >= 0 and max(distances) > 0:
+                if self.paths[selected_index].fill_value == 0 and path.fill_value == 255:
+                    material_parents.append((abs(cv2.contourArea(outline)), outline))
+                continue
             covered = rasterize_path(path, roi) > 0
             if path.fill_value == 255:
                 opaque |= covered & (region > 0)
             else:
                 holes |= covered & (region == 0)
+        if material_parents:
+            # A stale proposal can miss single-pixel islands created by a brush.
+            # Only components touching the nearest enclosing exterior belong
+            # to the material around this hole; detached raw details survive.
+            outline = min(material_parents, key=lambda item: item[0])[1]
+            binary = cv2.compare(self.alpha, 0, cv2.CMP_GT)
+            height, width = binary.shape
+            for x, y in np.rint(outline).astype(np.int32):
+                _check_cancelled(cancelled)
+                if 0 <= x < width and 0 <= y < height and binary[y, x] == 255:
+                    cv2.floodFill(binary, None, (int(x), int(y)), 128, flags=8)
+            left, top, right, bottom = roi
+            opaque |= (region > 0) & (binary[top:bottom, left:right] != 128)
         return opaque, holes
 
     def apply_to_rgba(self, rgba: np.ndarray) -> np.ndarray:

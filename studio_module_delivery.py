@@ -39,6 +39,8 @@ class StudioModuleDelivery:
                                          platform_id=platform, download_directory=Path(root) / "downloads")
         from studio_news import StudioNewsClient
         self.news = StudioNewsClient(self.updates, Path(root) / "studio-news.json")
+        from studio_upcoming import StudioUpcomingClient
+        self.upcoming = StudioUpcomingClient(self.updates, Path(root) / "studio-upcoming.json")
 
     def check(self, module_id):
         if module_id not in DELIVERABLE_IDS or not self.store.trusted_keys:

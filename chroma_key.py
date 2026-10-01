@@ -9,7 +9,7 @@ from typing import Final
 import cv2
 import numpy as np
 from PIL import Image
-from chroma_rim import mixture_coverage, reclassify_rim, refine_edge_mixture, repair_edge_chroma, suppress_edge_key_spill
+from chroma_rim import ambiguous_pale_material, mixture_coverage, reclassify_rim, refine_edge_mixture, repair_edge_chroma, suppress_edge_key_spill
 from studio_processing_api import ChromaKeyAmbiguousError, ChromaKeySubjectColorError
 
 
@@ -1487,7 +1487,8 @@ def _remove_chroma_key_staged(
         residual = np.max(np.abs(observed - scale[:, None] * foreground
                                  - mixture[:, None] * measured_key), axis=1)
         early_rim[early_rim] = (stable & (scale > 0.0) & (mixture > 0.0)
-                                & (residual <= 24.0))
+                                & (residual <= 24.0)
+                                & ~ambiguous_pale_material(observed, mixture, measured_key))
         # Thin leaves/stems may have a different colour from the deep core of
         # their connected flower. Keep their original local band references.
         reference[transition] = band_reference

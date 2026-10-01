@@ -1,5 +1,41 @@
 # Project state
 
+## Подготовка следующего кандидата, 2026-10-01
+
+Поручение владельца: продолжать до готовности к сборке, сборку не запускать.
+Ветка `codex/prepare-studio-next-20261001` от `ce09cb4`; исходные ветки,
+незакоммиченные документы и пользовательские данные сохранены. Интеграция
+в новую ветку не меняет development/release branches и production server.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Все согласованные инструменты контура вместе с прямым входом, Ctrl+wheel и компактным каталогом | Qt editing/restore/catalog regression |46aa843 code и approved screenshots интегрированы в новую ветку |65tests PASS после первого переноса |
+| Signed upcoming cards и adaptive grid работают вместе | Feed/Qt lifecycle, publish/withdraw при1920px | Исходный согласованный coming-soon desktop code перенесён; refresh использует общую адаптивную раскладку |90target tests PASS после исправления воспроизведённого reset-to3columns при withdrawal |
+| Сохранять исходные оттенки, детали и настоящие смеси | New known-truth и13/07 по этапам, независимое ревью | Ограниченная защита неоднозначного near-white source в двух этапах; profilev10 | Реализовано и проверено:187tests PASS,27thin cases внутри нового набора; actual13/07 sourceSHA/PNG roundtrip/frame PASS. Near-white additive и слабая смесь могут остаться |
+| Отдельный белый фон с чётким контуром | Core/contracts, worker/settings, actual Qt, offline model acceptance | Core перенесён в кандидат, UI mockup показан и ожидает ответа |33core tests PASS в кандидате;47core+existing в отдельной ветке. Реальная offline CPU U2Net на двух исходниках1536×1536: sourceSHA/RGB preservation, alpha0/255, frame и PNG roundtrip PASS. UI/worker пока не подключены; идеальный край не подтверждён |
+| Закончить до сборки | Полный безопасный прогон, packaging contracts, независимый review | Сборки/версия Studio/официальные подписанные пакеты/production не менялись; algorithm profilev10 | Полный safe run2396tests+278subtests PASS,57skip/21deselected. Независимое73tests PASS. Подготовка частичная: white UI/worker и решение о регуляторах остаются; Windows licence delivery и upgrade после сборки |
+
+Причина ошибки совместной раскладки: docs/ERRORS.md#candidate-upcoming-grid-20261001.
+Дополнительное независимое review:73tests PASS, новых подтверждённых
+дефектов нет; white UI остаётся незавершённым. Package-local/provenance/runtime
+contracts41tests+9subtests PASS. Profilev9 sidecars сохраняют свою прежнюю
+идентичность, новые результаты маркируются v10.
+
+Дополнительная проверка общего кандидата: actual localhost HTTPS admin →
+signed feed → Qt, публикация/подмена/withdrawal:1test PASS2.24s. Сервер использует
+только временные фиктивные лицензии и ключи; production не затронут. Actual
+combined catalog screenshots1120/1920 сохраняют349×248 и adaptive grid:
+docs/ui/3.2/coming-soon-catalog/combined. Existing1.5.2 processing/image-processing
+payloads не доставляют все новые исправления: их версии и minimumCore необходимо
+назначить при подготовке отдельно разрешённой сборки, не переиспользовать1.5.2.
+Белые actual PNG/private evidence: ../artifacts/studio-next-candidate/white-background;
+чёткая alpha проверена, светлая кайма местами остаётся. UI approval pending:
+../artifacts/white-background-method-mockup. Ползунки RGB/alpha отложены для
+обсуждения по просьбе владельца; не добавлять автоматически.
+
+Серверные upcoming изменения ранее272tests PASS, но ещё не deployed; новый
+кандидат не должен утверждать, что серверные карточки уже доступны владельцу.
+
 ## Повторная диагностика светлой каймы, 2026-10-01
 
 Ветка `codex/research-edge-controls-20260930` от `13d30af`. По поручению

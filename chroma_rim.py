@@ -8,6 +8,28 @@ import numpy as np
 from PIL import Image
 
 
+def ambiguous_pale_material(observed, background, key):
+    """Preserve near-white paint when the borrowed colour prior is ambiguous.
+
+    An impossible coverage fit does not prove additive spill. A nearly neutral
+    pale sample with no key dominance can equally be a different painted
+    material. Preserve that source colour rather than borrowing a neighbour's
+    hue. The 230/24 bounds describe this conservative policy, not segmentation
+    confidence. Identical near-white additive light may remain unchanged.
+    """
+    key = np.asarray(key, dtype=np.float32)
+    key_channel = int(np.argmax(key))
+    non_key = [channel for channel in range(3) if channel != key_channel]
+    recovered = (observed - background[:, None] * key) / np.maximum(
+        1.0 - background[:, None], 0.01,
+    )
+    impossible = np.any((recovered < -2.0) | (recovered > 257.0), axis=1)
+    pale = ((np.min(observed[:, non_key], axis=1) >= 230.0)
+            & (np.ptp(observed, axis=1) <= 24.0)
+            & (observed[:, key_channel] <= np.max(observed[:, non_key], axis=1)))
+    return impossible & pale
+
+
 def mixture_coverage(observed, foreground_scale, background, key):
     """Separate additive key spill from coverage when a pure mix is impossible.
 
@@ -338,6 +360,7 @@ def refine_edge_mixture(source: Image.Image, provisional: Image.Image, key: np.n
                     & (np.abs(reference_difference) > 2.0)
                     & (observed_difference * reference_difference < 0.0))
     reliable &= ~hue_conflict
+    reliable &= ~(opaque[candidate] & ambiguous_pale_material(observed, background, key))
     reliable &= ~opaque[candidate] | (background > 0.10)
     prior = pixels[candidate].astype(np.float32)
     prior_alpha = prior[:, 3:4] / 255.0

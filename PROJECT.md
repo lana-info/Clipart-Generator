@@ -1,5 +1,18 @@
 # Vibix Images
 
+## Next-candidate preparation, owner-authorized2026-10-01
+
+Prepare the agreed changes together in an isolated candidate branch and finish
+safe source verification before any Windows build. Preserve source worktrees,
+production data and existing beta releases. Local contour selection supports
+lasso/Shift, magenta selection, independent Simplify/Smooth repeated small steps,
+preview/cancel/apply and undo; no strength selector. Promotional signed cards
+must share the adaptive fixed-size catalog and cannot grant access or run code.
+The separate white-background hard-cutout mode preserves genuine white details
+and needs independent subject segmentation; never globally erase white pixels.
+New controls still require the project visual approval gate. Builds/publication
+remain deferred; installed Windows acceptance cannot precede the build.
+
 ## Module action and responsive-card UX, owner-approved 2026-10-01
 
 Use one primary action per module card without a dropdown: dark outlined Open;
