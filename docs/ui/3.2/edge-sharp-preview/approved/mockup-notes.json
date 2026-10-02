@@ -1,0 +1,13 @@
+{
+  "target": "1120x780; Qt offscreen on Linux; visual mockup only",
+  "states": [
+    "current",
+    "ready",
+    "preview-after",
+    "preview-before",
+    "empty",
+    "limit"
+  ],
+  "behaviour": "One deliberate alpha x2 preview step; colours unchanged; cancel/apply and Undo. Existing automatic processing unchanged. New button unavailable for empty or unchanged/binary mask. Repeat only after Apply with one undo per application. Thin drawn geometry may be lost; preview mandatory.",
+  "source_ui_untouched": true
+}

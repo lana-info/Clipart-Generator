@@ -4,7 +4,13 @@
 
 Continue implementation without another task approval. Preserve source colours,
 fine details and original resolution, including the owner's5016×5016 PNG.
-Keep existing simple contour controls; no new sliders or UI group. Bound proposal
+Keep existing simple contour controls. On2026-10-02 the owner additionally approved
+one optional «Сделать край чётче» action below zoom, with Before/After preview,
+Cancel/Apply and a single undo step per application. It changes only alpha and
+does not run automatically, recolour the image or add a strength control.
+Contrast×2 can remove very thin geometry; mandatory preview is a deliberate
+editing choice, not a guarantee of automatic preservation. Colour-rim correction
+remains unresolved. No new colour controls are approved. Bound proposal
 geometry and background jobs, preserve raw alpha outside local edits and keep
 cancel/Undo/Redo/separate-copy save. The opaque-clipart ambiguity policy prefers
 source paint over unsupported neighbouring-material fits. A supplied already
