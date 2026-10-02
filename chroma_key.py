@@ -1178,11 +1178,38 @@ def _refine_opaque_boundary(
     reliable[far] &= (denominator[far] > 96.0**2) & (residual[far] <= 3.0)
     recovered = (observed - (1.0 - alpha[:, None]) * measured_key) / np.maximum(alpha[:, None], 0.001)
     reliable[far] &= np.all((recovered[far] >= -1.0) & (recovered[far] <= 256.0), axis=1)
+    # A solved shaded edge must not be projected onto the brighter core again.
+    # Source consistency alone can also accept a wrong, key-tinted foreground;
+    # require the existing RGB to share the reference's chromaticity as well.
+    # Allow the small alpha drift from staged cleanup, then refit coverage from
+    # the existing paint instead of changing its brightness or hue.
+    current_rgb = pixels[edge, :3].astype(np.float32)
+    current_direction = current_rgb - measured_key
+    current_denominator = np.sum(current_direction * current_direction, axis=1)
+    current_coverage = np.divide(
+        np.sum((observed - measured_key) * current_direction, axis=1), current_denominator,
+        out=np.zeros_like(current_denominator), where=current_denominator > 1.0,
+    )
+    current_error = np.max(np.abs(
+        observed - (measured_key + current_coverage[:, None] * current_direction)
+    ), axis=1)
+    brightness = np.sum(current_rgb * foreground, axis=1) / np.maximum(
+        np.sum(foreground * foreground, axis=1), 1.0,
+    )
+    shade_error = np.max(np.abs(current_rgb - brightness[:, None] * foreground), axis=1)
+    explained_shade = (
+        reliable & (current_denominator > 2500.0)
+        & (current_coverage > 0.02) & (current_coverage < 1.0)
+        & (current_error <= 2.0) & (shade_error <= 2.0)
+        & (np.abs(current_coverage - pixels[edge, 3] / 255.0) <= 0.03)
+    )
     if not np.any(reliable):
         return result
     corrected = pixels[edge].copy()
     corrected[reliable, :3] = np.rint(np.clip(recovered[reliable], 0.0, 255.0)).astype(np.uint8)
     corrected[reliable, 3] = np.rint(alpha[reliable] * 255.0).astype(np.uint8)
+    corrected[explained_shade, :3] = pixels[edge, :3][explained_shade]
+    corrected[explained_shade, 3] = np.rint(current_coverage[explained_shade] * 255.0).astype(np.uint8)
     pixels = pixels.copy()
     pixels[edge] = corrected
     return Image.fromarray(pixels, mode="RGBA")

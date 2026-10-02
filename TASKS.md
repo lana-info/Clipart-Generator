@@ -1,4 +1,16 @@
 # TASKS
+## Поздняя цветная кайма, 2026-10-02
+
+- [x] Подтвердить late-boundary shade defect точным эталоном и отдельным provisional input.
+- [x] Отбросить whole-RGBA freeze, который ухудшает existing AA/golden mask.
+- [x] Source fit + shade agreement: actual guard реализован;229 tests PASS, independent96+96 controls/3negatives и production review PASS.
+- [x] Реальные рисунки,2cached NN192→768,final trim/300DPI roundtrip,sourceSHA/body preservation PASS; длинная кайма остаётся.
+- [x] Независимое ревью P1/P2 нет; полный safe suite2563 tests +284 subtests PASS,57skip/21deselect.
+- [x] Staged sensitive scan/diff-check PASS; проверенная правка подготовлена для task commit/push.
+- [ ] Не считать оставшуюся кайму исправленной по одним synthetic tests.
+
+Требования/результаты в `STATE.md`, история в `docs/ERRORS.md#late-boundary-colour-20261002`.
+
 ## Автоматический клипарт: trim и300DPI, 2026-10-02
 
 - [x] Переименовать раздел по просьбе владельца.

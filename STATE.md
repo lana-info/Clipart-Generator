@@ -1,5 +1,27 @@
 # Project state
 
+## Поздняя цветная кайма: защита затенённой краски, 2026-10-02
+
+Владелец поручил продолжить устранение каймы без новой настройки силы,
+платных операций и сборки. Ветка `codex/fix-clipart-colour-fringe-20261002`,
+база `db1f0f5`; прежние результаты trim/DPI сохранены.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Не превращать нейтральную/затенённую краску в жёлтый кант | Известные source/foreground/coverage,3 цвета key, stage trace | Защита source-consistent shaded RGB с отдельным уточнением alpha; legacy не меняется | Реализовано и проверено: baseline18/39 новых тестов FAIL; после исправления229 связанных тестов PASS. Известная затенённая краска сохраняется |
+| Сохранять покрытие/тонкие детали и настоящую обводку | Known-mask AA/openings, direct negatives, реальные PNG | Source fit + согласованность оттенка с reference, original reliable mask сохранена | Реализовано и проверено: exact palette96 + sourcealpha96 controls PASS; 3 negative controls PASS. Независимое production review: P1/P2 нет; тонкий другой материал и3 кончика сохранены, root повтор PASS |
+| Проверить реальный край после NN и сохранения | Утка/лепестки, dark/white, sourceSHA, PNG roundtrip | Production соответствует прошедшему prototype; сохраняются source/core/visible details | Production меняет20/34 native pixels; source unchanged, body глубже3px RGBA exact, visible→zero нет. Два настоящих cached NN192→768 PASS24,24с/29,53с; PNG final trim/300DPI RGBA roundtrip PASS. Просмотр dark/white: заметного общего исчезновения остаточной полосы нет; вся кайма не устранена |
+
+Общий safe suite:2563 tests +284 subtests PASS за374.75с,57 skipped,
+21 network/paid deselected,1 прежнее Pillow warning. Независимое ревью source
+и новых тестов: P1/P2 нет. Staged sensitive scan и diff-check PASS.
+Source/outputs/private проверки сохранены в
+`../artifacts/late-boundary-confirmation-20261002/` и `late-shade-neural-20261002/`.
+
+История и данные: `docs/ERRORS.md#late-boundary-colour-20261002`.
+Сборки, публикации и изменения установленной программы нет.
+
+
 ## Автоматический клипарт: trim и300DPI, 2026-10-02
 
 Ветка `codex/fix-auto-clipart-trim-dpi-20261002`, база `c45847f` текущего

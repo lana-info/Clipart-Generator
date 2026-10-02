@@ -1,5 +1,66 @@
 # Ошибки проекта
 
+## late-boundary-colour-20261002
+
+Новая диагностика после repeated-despill guard: `_refine_opaque_boundary`
+повторно проецирует источник на более яркую соседнюю краску без brightness.
+Точный контроль K=(0,0,255),core=(220,220,220),F=(210,210,210),a=.2,
+source=(42,42,246): staged=(210,210,210,46),late=(219,219,208,49),final
+тот же. Прямой exact provisional=(210,210,210,51) тоже портится; причина
+не зависит от первого матта или неизвестного фона. Golden контроль
+F190/171/95,a=.2 →196/176/90; смена key-канала воспроизводит ошибку.
+
+Гипотеза → существующий RGB уже объясняет source с другим покрытием после
+alpha remap → scratch guard free coverage/source-residual≤2 и близкий fit.
+Первый вариант сохранял RGBA целиком:48 exact controls/48 legacy controls
+PASS, но187/190 scoped checks PASS,3 FAIL (red/green AA98 вместо102±2,
+golden opening mean14.2985 вместо<12). Не внедрён: freezing alpha блокирует
+полезное уточнение покрытия. Новые данные обосновывают раздельную проверку
+RGB и покрытия, не ослабление прежних тестов. Production пока не изменён.
+
+Второй scratch: сохранить RGB и refit alpha →98/99 PASS, openings всё ещё
+FAIL14.2985. Новая трасса openings:805/805 partial provisional RGB самосогласованы,
+но ошибочного оттенка, например F146/100/146 при reference239/158/72.
+Отклонение от scalar reference48–96 уровней. Source consistency сама по себе
+не доказывает правильный foreground. Следующее изменение обосновано этими
+данными: guard только для RGB, отличающегося от reference scalar яркостью
+(max residual≤2), source residual≤2 и fitted coverage в пределах.03 от prior.
+Это сохраняет уже найденное затенение, одновременно refit alpha; прежняя
+reliable/component/distance/sourcealpha защита остаётся, остальные пиксели
+проходят исходную correction. Нет нового цвета из соседнего материала.
+
+Production guard:39 новых direct/public/negative regressions; baseline18 FAIL,
+21 PASS. После правки229 связанных tests PASS20.38с. Independent96 exact
+palette +96 sourcealpha controls PASS; 3negative controls остаются исправляемыми.
+Фактический diff-review: P1/P2 нет;3 greenleaf controls byte exact,3 shadedcusp
+база портит11 pixels, production сохраняет; endpoint alpha безопасны. Root
+повторил proof script. Обычный Python без cv2 не импортировал модуль при
+переносе prototype; файловая правка тогда не выполнялась. Перенос выполнен
+проектным venv, фактическая production regression GREEN подтверждена.
+
+Actual production neural проверен отдельно: full native output совпал с
+прошедшим prototype; final изменения duck20/flower34pixels. Ни одного
+visible→zero; RGBA opaque body глубже3px exact. Настоящие existing cached
+Clipart NN192→768 на двух фрагментах:24.24с/29.53с, alpha сохраняется backend,
+реальный final writer trim+300DPI и PNG crop-RGBA roundtrip PASS, sourceSHA
+unchanged. Root просмотрел dark/white: затенённая краска защищена, но общего
+исчезновения длинных dark/colour lines не видно. Не считать20/34 изменений
+доказательством идеального foreground или исправления всей каймы. Это
+доказанный малый late-stage bugfix; неизвестный первый matte/внешняя source
+обводка остаются нерешёнными. Full5016 NN/native Windows не проверены.
+Данные ../artifacts/late-shade-neural-20261002/verification.json/boards.
+
+Финальный общий safe suite на actual production source:2563 tests +284
+subtests PASS за374.75с;57 skipped,21 network/paid deselected,1 прежнее Pillow
+warning. Ничего не устанавливалось, модель не скачивалась. Проектные версии,
+production/server/licenses и опубликованные пакеты не менялись.
+
+Root native scratch whole-RGBA guard: duck376/flower399 blocked late edits,
+373/396 final pixels changed; sourceSHA unchanged. Это числовая диагностика,
+не доказательство качества каждого изменения. Private evidence:
+../artifacts/late-boundary-colour-20261002/; /tmp/audit_remaining_matte.py/json.
+
+
 ## auto-clipart-trim-dpi-20261002
 
 Подтверждение: supplied utochka_v_prazdnichnom_01_ready.png5016² не содержит
