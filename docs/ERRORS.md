@@ -758,3 +758,33 @@ credential handling сохранены. Итог повторного полно
 1985 passed, zero failures; финальные review-правки отдельно проверены после
 того, как текущий полный прогон уже импортировал модули. Неизвестных новых
 падений нет; известный red-fur xfail и платформенные skips сохранены.
+
+## edge-separate-comparison-20261002
+
+Новая offline диагностика a3f0b70 по согласию владельца «Давай» на сравнения,
+без новой правки алгоритмов/интерфейса. Existing pale guard выключался только
+в памяти в обоих импортирующих модулях и восстанавливался в finally. На13
+402,126 RGB241,240,130→241,241,226sourceexact;376,129 RGB245,245,203→245,245,241.
+Визуальное сравнение цветов использует одинаковую current alpha, намеренно
+отделяя цвет от покрытия. Исходные solver alpha различаются14pixels, поэтому
+эта фигура не заменяет полное сравнение результатов. Source foreground unknown.
+
+Гипотеза: торчащие остатки можно убрать маленькими компонентами или alpha-only
+opening. Изменение: только offline variants (≤2pixels/component, opening3×3),
+RGB не меняется, не внедрено. Проверка:4real chroma PNG (включая saved14_ready),
+2actual white-worker outputs,2syntheticsknowntruth,1genuine detached control.
+Результат: components≤2 не существуют в4real и2white outputs; tiny rule ничего
+не очищает. При knowntruth detached control удаляет2настоящие детали.
+Opening удаляет338/233/385/393visiblepixels у13/07/14/14_ready,1289настоящих
+furpixels (60opaque),602botanical (131opaque); заметно ослабляет усики бабочки.
+В white outputs6/12pixels исчезают, но truth нет: не объявлять это улучшением.
+Это риск предложенного эксперимента, а не новая внедрённая regression Studio.
+
+Все4исходника провереныSHA до/после. Диагностические PNG сохранены/прочитаны
+exact. Figure inspections обнаружили ошибку самой иллюстрации: первый crop
+мишки попадал на фон, исправлен crop после обзора реального1536pxoutput;
+zoom-detail label исправлен300→600% в соответствии с actual nearest scale6.
+Эти изменения не затрагивали алгоритмы и повторную inference. Main просмотрел
+итоговые изображения; ideal masks real/semantic edge colours неизвестны.
+Evidence: ../artifacts/edge-comparison-20261002, /tmp/edge-comparison-20261002.log.
+Исходники пользователя/приватные PNG не включать вGit; сервер/сборка неизменны.
