@@ -1147,6 +1147,7 @@ class WorkerThread(QThread):
         self.remove_bg = settings.get("remove_bg", True)
         self.trim_enabled = bool(settings.get("trim_enabled", False))
         self.trim_mode = str(settings.get("trim_mode", "alpha") or "alpha")
+        self.trim_padding_percent = 1 if settings.get("trim_padding_percent") == 1 else 0
         self.export_300_dpi = bool(settings.get("export_300_dpi", False))
         self.kie_upscale_model = normalize_kie_upscale_model(
             settings.get("kie_upscale_model", KIE_TOPAZ_MODEL_ID)
@@ -4342,6 +4343,9 @@ class WorkerThread(QThread):
                 self._save_image_as_png(source_path, stage_path)
 
             self._ensure_running()
+            if trim_enabled and self.trim_padding_percent:
+                self._add_final_trim_padding(stage_path)
+            self._ensure_running()
             if self.export_300_dpi:
                 self._verify_png_dpi(stage_path, dpi=300)
             self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
@@ -4679,6 +4683,21 @@ class WorkerThread(QThread):
         elif self.export_300_dpi:
             save_kwargs["dpi"] = (300, 300)
         return save_kwargs
+
+    def _add_final_trim_padding(self, file_path):
+        """Add a one-percent transparent border only to the final trimmed PNG."""
+        with Image.open(file_path) as image:
+            rgba = image.convert("RGBA")
+            if not rgba.getchannel("A").getbbox():
+                return
+            padding = max(1, math.ceil(max(rgba.size) / 100))
+            padded = Image.new("RGBA", (rgba.width + 2 * padding, rgba.height + 2 * padding))
+            # No paste mask: alpha and RGB, including partial pixels, stay exact.
+            padded.paste(rgba, (padding, padding))
+            padded.info.update(image.info)
+        self._ensure_running()
+        self._save_image_object_as_png(padded, file_path)
+        self.progress.emit(f"  Прозрачное поле после Trim: {padding} px с каждой стороны (1%)")
 
     def _trim_image_file(self, source_path, output_path, stage_label, trim_mode=None):
         with Image.open(source_path) as img:

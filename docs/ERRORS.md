@@ -1,5 +1,41 @@
 # Ошибки проекта
 
+## final-trim-padding-20261002
+
+Владелец уточнил: речь о transparent canvas padding после trim, а не мягкости
+alpha края. Проверены official Photoshop Trim/Canvas Size, ImageMagick border,
+Adobe Stock PNG best practices: обязательной нормы1–2% не найдено; standard
+trim обрезает до видимой области, padding задаётся отдельно. Владелец одобрил
+нашу policy1% длинной стороны trimmed object на каждой стороне. Источники:
+https://helpx.adobe.com/ca/photoshop/using/adjusting-crop-rotation-canvas.html
+https://usage.imagemagick.org/crop/#border
+https://helpx.adobe.com/in/stock/contributor/submit-your-content/submit-pngs/png-best-practices.html
+
+Реализация: внутренний persisted trim_padding_percent0default/1automatic;
+правило включается до restore/retry, default0 не добавляется в worker plan,
+чтобы не менять старые non-automatic request fingerprints. Padding выполняется
+после final trim на unpublished staging PNG; pattern/manual transparency/
+trim-disabled исключены тем же trim gate. ceil(longside/100),minimum1px,
+Image.newRGBA и paste без mask сохраняют RGBAexact; source закрыт до записи.
+Metadata через общий PNG writer,300DPI verify и atomic publication после padding.
+Pre-upscale crop не содержит padding. Старые completedoutputs не переписываются.
+
+Focused8 checks PASS: large/portrait/fractional/small dimensions, partialalpha,
+repeat no accumulation, pattern/manual/disabled trim, state roundtrip. Actual
+supplied5016²: trimmed2308×4722, padding48eachside, output2404×4818,DPI299.9994,
+inner croppedRGBA exact/sourceSHA unchanged. Private verification:
+../artifacts/final-trim-padding-20261002/verification.json. State/queue/export/
+metadata suite:110 tests +43 subtests и125 tests +40 subtests PASS.
+Добавлены regression cancel/write failure с сохранением предыдущего output
+и source; финальные30 tests +21 subtests PASS. Независимое ревью новых P1/P2
+не нашло. Главный агент прочитал diff и повторил7 независимых QA-сценариев
+из `/tmp/audit_final_padding.py`: default request compatibility, upscale order,
+metadata/ICC/XMP cleanup+receipt final digest, blank alpha, atomic cancel/write
+failure, actual Qt old restore/saved-source retry PASS. Staged sensitive scan
+и diff-check PASS. Windows/настоящий новый neural upscale не проверялись.
+Кайма/сборка не затрагиваются.
+
+
 ## late-boundary-colour-20261002
 
 Новая диагностика после repeated-despill guard: `_refine_opaque_boundary`

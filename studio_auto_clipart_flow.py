@@ -230,6 +230,7 @@ class AutoClipartFlowController(ClipartFlowController):
         operations = self.shell.state.data.operations
         operations.trim = True
         operations.trim_mode = "alpha"
+        operations.trim_padding_percent = 1
         operations.export_300_dpi = True
 
     def _install_pages(self):

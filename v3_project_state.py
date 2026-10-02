@@ -545,6 +545,7 @@ class ImageOperationData:
     edge_shrink_pixels: int = 1
     trim: bool = False
     trim_mode: str = "alpha"
+    trim_padding_percent: int = 0
     export_300_dpi: bool = False
     remove_exif: bool = False
     remove_xmp: bool = False
@@ -678,6 +679,9 @@ class ImageOperationData:
             minimum=1,
             maximum=3,
         )
+        self.trim_padding_percent = _bounded_int(
+            self.trim_padding_percent, default=0, minimum=0, maximum=1
+        )
         trim_mode = _text(self.trim_mode, limit=20).lower()
         self.trim_mode = trim_mode if trim_mode in {"alpha", "white", "black"} else "alpha"
 
@@ -787,6 +791,7 @@ class ImageOperationData:
             edge_shrink_pixels=config.get("edge_shrink_pixels", 1),
             trim=_boolean(config.get("trim_enabled"), default=False),
             trim_mode=config.get("trim_mode", "alpha"),
+            trim_padding_percent=config.get("trim_padding_percent", 0),
             export_300_dpi=_boolean(config.get("export_300_dpi"), default=False),
             remove_exif=remove_all
             or _boolean(config.get("cleanup_remove_exif"), default=False),

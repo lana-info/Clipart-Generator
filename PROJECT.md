@@ -25,7 +25,11 @@ separately authorized and are not part of this correction.
 The section is named «Автоматический клипарт». Automatic collection runs and
 restored/retried runs use transparent trim and300DPI final PNG metadata.
 Remove fully transparent working margins before post-background upscale;
-retain final trim after upscale/edge processing. Preserve source files and RGB,
+retain final trim after upscale/edge processing. Owner-approved2026-10-02:
+after final trim, add a fully transparent border of1% of the trimmed object's
+long side to every side, rounded up to a whole pixel (minimum1px). The border
+is final canvas space, never softened object alpha or input to upscale.
+Preserve source files and RGB,
 explicit alpha-defined white paint, pattern/background canvas, and existing
 custom processing choices outside the automatic workflow. Existing finished
 files are not rewritten on reopening a project. DPI is print metadata, not a

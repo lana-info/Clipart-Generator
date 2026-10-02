@@ -1,4 +1,14 @@
 # TASKS
+## Прозрачное поле после финального trim, 2026-10-02
+
+- [x] Реализовать одобренный1% от длинной стороны после final trim для automatic.
+- [x] Защитить от добавления перед upscale и накопления при repeat.
+- [x] Actual supplied PNG,inner RGBA/source exact,transparent border/300DPI PASS.
+- [x] State/queue/export/metadata regressions PASS; независимое ревью без новых P1/P2.
+- [x] Staged sensitive scan/diff-check PASS; проверенная правка подготовлена для task commit/push. Сборку не запускать.
+
+Требования и результаты: `STATE.md`, история `docs/ERRORS.md#final-trim-padding-20261002`.
+
 ## Поздняя цветная кайма, 2026-10-02
 
 - [x] Подтвердить late-boundary shade defect точным эталоном и отдельным provisional input.

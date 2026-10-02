@@ -206,6 +206,25 @@ class UpscalePositionTests(unittest.TestCase):
                                                      folder, 1, "file", result_kind=kind)
                 mocked.assert_called_once()
 
+    def test_final_padding_is_not_sent_to_upscaler(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            worker, order, result = self.run_local_pipeline(
+                root, upscale=False, upscale_after=True, trim_enabled=True,
+                export_300_dpi=True, trim_padding_percent=1,
+            )
+            self.assertEqual(order, ["remove_bg", "upscaled_after"])
+            with Image.open(result) as image:
+                # 8x6 -> tight6x4 ->2x12x8; padding has not been added yet.
+                self.assertEqual(image.size, (12, 8))
+            output = root / "ready.png"
+            worker._save_final_output(str(result), str(result), str(output),
+                                      str(root / "raw"), 1, "file")
+            with Image.open(output) as image:
+                self.assertEqual(image.size, (14, 10))
+                self.assertEqual(image.getchannel("A").getbbox(), (1, 1, 13, 9))
+                self.assertAlmostEqual(image.info["dpi"][0], 300, places=2)
+
     def test_before_after_and_both_run_in_selected_order(self):
         cases = (
             ("before", {"upscale": True, "upscale_after": False}, ["upscaled_before", "remove_bg"], (16, 12)),

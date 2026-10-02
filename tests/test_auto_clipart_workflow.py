@@ -97,6 +97,7 @@ def test_automatic_clipart_deliverable_settings_and_title(workspace):
     request = build_clipart_run_request(controller.shell.state)
     assert request.settings["trim_enabled"] is True
     assert request.settings["trim_mode"] == "alpha"
+    assert request.settings["trim_padding_percent"] == 1
     assert request.settings["export_300_dpi"] is True
     assert _view.shell.mode_label.text() == "Автоматический клипарт"
 
@@ -115,6 +116,7 @@ def test_old_automatic_run_restores_delivery_flags(workspace):
     settings = controller.run_queue.session.request.settings
     assert settings["trim_enabled"] is True
     assert settings["trim_mode"] == "alpha"
+    assert settings["trim_padding_percent"] == 1
     assert settings["export_300_dpi"] is True
 
 

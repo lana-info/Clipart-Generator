@@ -1,5 +1,30 @@
 # Project state
 
+## Прозрачное поле после финального trim, 2026-10-02
+
+Владелец одобрил предложенный отступ1% от длинной стороны объекта с каждой
+стороны; это выбор продукта, не внешний стандарт. Ветка
+`codex/feature-final-trim-padding-20261002`, база `f2d3337` текущего кандидата.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Небольшой прозрачный отступ после trim; одобрение владельца | Actual final writer и размер2000×3000→2060×3060 | Automatic policy1%, целые pixels вверх, minimum1px, без нового control | Реализовано и проверено: synthetic dimensions/RGBA/border tests PASS; actual duck2308×4722 +48px →2404×4818 |
+| Не апскейлить пустой отступ и не накапливать рамку | Production processing pipeline/fake upscaler и повторное сохранение | Padding только после final trim; pretrim/upscale unchanged | Реализовано и проверено: source8×6→trim6×4→upscale12×8→final14×10; repeat final dimensions unchanged |
+| Сохранить цвета, alpha, source и300DPI | Побайтный interior crop, zero border alpha, DPI/sourceSHA | Exact RGBA paste без mask, metadata через общий writer, staged publish | Реализовано и проверено: actual5016 source unchanged, cropped inner RGBA exact, DPI299.9994; 8 focused tests PASS |
+| Continue/retry и отдельные сценарии | Project state roundtrip/old draft/retry; pattern/manual/skipped trim | Внутреннее persisted field0default/1automatic, default omitted from worker plan | Реализовано и проверено: roundtrip/restore/retry PASS; disabled trim/pattern/manual controls PASS. Старые готовые PNG не переписываются |
+
+Проверки:110 tests +43 subtests PASS; integration125 tests +40 subtests PASS;
+финальные30 tests +21 subtests PASS. Независимое ревью: новых P1/P2 нет.
+Главный агент повторил7 независимых сценариев: настройки/порядок upscale,
+metadata/receipt, пустая alpha, отмена/ошибка записи, restore/retry PASS.
+Staged sensitive scan и diff-check PASS. Windows и настоящий новый neural
+сценарий не проверялись; upscale проверялся безопасной заменой.
+
+Доказательства: `../artifacts/final-trim-padding-20261002/verification.json`.
+Причины/проверки: `docs/ERRORS.md#final-trim-padding-20261002`.
+Цветная кайма не меняется этой задачей; сборка и публикация не выполнялись.
+
+
 ## Поздняя цветная кайма: защита затенённой краски, 2026-10-02
 
 Владелец поручил продолжить устранение каймы без новой настройки силы,

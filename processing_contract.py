@@ -60,6 +60,8 @@ def pipeline_steps(operations: Any) -> tuple[str, ...]:
         steps.append("Очистка края alpha")
     if operations.trim:
         steps.append("Trim")
+        if getattr(operations, "trim_padding_percent", 0):
+            steps.append("Прозрачное поле 1%")
     if any(getattr(operations, name, False) for name in (
         "remove_exif", "remove_xmp", "remove_iptc", "remove_comments_text",
         "remove_embedded_thumbnail", "remove_generator_fields", "remove_embedded_c2pa",

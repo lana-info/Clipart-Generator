@@ -82,6 +82,9 @@ def build_image_run_settings(
         "cleanup_preserve_icc": operations.preserve_icc,
         "cleanup_preserve_dpi": operations.preserve_dpi,
     })
+    # Omit the default to preserve older non-automatic request fingerprints.
+    if operations.trim_padding_percent:
+        settings["trim_padding_percent"] = operations.trim_padding_percent
     return settings
 
 
