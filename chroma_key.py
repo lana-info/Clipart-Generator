@@ -1662,6 +1662,21 @@ def _remove_chroma_key_staged(
             x1 = min(x0 + tile_size, width)
             tile = np.s_[y0:y1, x0:x1]
             tile_edge = edge_ring[tile]
+            if opaque_subject and np.any(tile_edge):
+                coverage = alpha[tile][tile_edge]
+                foreground = rgb[tile][tile_edge]
+                reconstructed = (coverage[:, None] * foreground
+                                 + (1.0 - coverage[:, None]) * measured_key)
+                # The matte already unmixed these ordinary coverage samples.
+                # A darker painted edge can fit the brighter core/key plane
+                # again, but that is not evidence of another layer of spill.
+                explained = (
+                    (coverage > 0.0) & (coverage < 1.0)
+                    & np.all((foreground >= 0.0) & (foreground <= 255.0), axis=1)
+                    & (np.max(np.abs(reconstructed - pixels[tile][tile_edge, :3]), axis=1) <= 2.0)
+                )
+                tile_edge = tile_edge.copy()
+                tile_edge[tile_edge] = ~explained
             if not np.any(tile_edge):
                 continue
             reference_ratio = edge_reference_ratio[tile]

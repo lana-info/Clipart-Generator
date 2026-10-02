@@ -1,5 +1,18 @@
 # TASKS
 
+## Повторное перекрашивание уже восстановленного края, 2026-10-02
+
+- [x] Независимо подтвердить shade→false-key projection на точном однотонном фоне, без догадки о неизвестном цвете.
+- [x] Зафиксировать regression RED: 12/12 ordinary controls FAIL на 91bec9d.
+- [x] Реализовать узкую source-coherence защиту partial RGB только в opaque_clipart, без новых UI/моделей/рефакторинга.
+- [x] Проверить staged/automatic, три цвета key, настоящее additive spill: 180 связанных tests PASS, включая 24 новых.
+- [x] Actual production native cutout совпал с диагностическим guard; local NN192→768 на цветке/уточке, sourceSHA и PNG roundtrip PASS. Повторное пожелтение слабее, остаточная кайма не решена. Body RGBA глубже3px неизменен, visible→zero нет; последующие refinements меняют некоторые alpha.
+- [x] Независимое ревью фактического diff: P1/P2 нет; 9 sparse-mask + 3 large1042×1040 + 3 legacy byte-equivalence controls PASS.
+- [x] Первый общий прогон обнаружил один flaky concurrency subtest; зафиксирован controlled RED/GREEN, исправлена только синхронизация теста/helper, без ослабления equality. docs/ERRORS.md#parallel-capacity-timing-20261002.
+- [x] Финальный safe pytest: 2520 tests + 281 subtests PASS за438,65с, 57 skipped/21 network-paid deselected; independent source/test review и staged sensitive scan/diff-check PASS. Проверенный набор подготовлен в текущей task branch для передачи через Git.
+- [ ] Остаточная кайма, точность первого матта и полный5016/Windows: отдельные незавершённые проверки; docs/ERRORS.md#repeated-staged-despill-20261002.
+- [ ] Сборку и публикацию не выполнять без отдельного поручения.
+
 ## Чёткость с предпросмотром и остаточный цвет, 2026-10-02
 
 - [x] Одобрен новый макет «Сделать край чётче»: один шаг, До/После, Отмена/Применить, без силы.

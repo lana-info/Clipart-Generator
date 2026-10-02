@@ -1,5 +1,27 @@
 # Project state
 
+## Защита от повторного перекрашивания края, 2026-10-02
+
+Продолжение владельца: самостоятельно исправлять качество края, сборку не
+запускать. Ветка `codex/fix-opaque-clipart-upscale-edge-20261002`, база `91bec9d`.
+Новый интерфейс и рефакторинг не требуются. Исправляется конкретная повторная
+RGB-коррекция уже объяснённого исходного композита в профиле opaque_clipart.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Не добавлять жёлтые/красные/светлые оттенки, просьба владельца | Known-truth shaded paint на blue/red/green через staged и публичный automatic | Пропуск повторного despill для partial in-gamut RGB, уже объясняющего source | Реализовано и проверено: все 12 обычных контролей FAIL до правки, после неё 180 связанных тестов PASS, включая 24 новых. Цвет точного эталона сохраняется |
+| Продолжать удалять настоящую засветку и сохранять детали | Additive-key controls, существующие mixture/pale/local-reference/staged tests | Настоящая дополнительная key-примесь остаётся eligible; legacy не меняется | 180 tests PASS; independent scratch: 15 обычных и 6 additive controls, искусственная RGB-ошибка, 156 прежних tests PASS. Маска непосредственно этим блоком не меняется; последующие RGB-зависимые refinements могут изменить alpha |
+| Проверить реальные цветок/утку после увеличения | Полный native cutout, два настоящих local NN192→768, PNG/source roundtrip, dark/white | Узкая защита реализована и проверена в production cutout и локальном NN | Production output совпал с диагностическим guard. NN: 37,56с/39,54с на Linux software Vulkan; sourceSHA и PNG roundtrip PASS. Дополнительное пожелтение слабее, остаточная кайма видна. Native alpha изменилась на1034/1088 pixels из-за следующих refinements; ни одного visible→zero, RGBA глубже3px и число visible components неизменны. Полный5016 neural и native Windows недоступны |
+| Проверенный код до сборки | Общий safe pytest, независимое ревью production diff, sensitive scan | Реализовано и проверено на уровне исходного кода: 15 строк защиты и отдельная регрессия; исправлена синхронизация существующего concurrency test | Независимое ревью обоих diff: P1/P2 нет; 9 sparse-mask, 3 large1042×1040 через границы512, 3 legacy byte-equivalence и negative concurrency controls PASS. После test-only исправления startup skew PASS, модуль31 tests + 7 subtests PASS. Финальный общий suite: 2520 tests + 281 subtests PASS за438,65с, 57 skipped/21 network-paid deselected, одно прежнее Pillow deprecation warning. Staged sensitive scan/diff-check PASS. Сборки/публикации нет |
+
+Причина, контрпример и пределы: `docs/ERRORS.md#repeated-staged-despill-20261002`.
+Отдельный test-only сбой: `docs/ERRORS.md#parallel-capacity-timing-20261002`.
+Private evidence: `../artifacts/staged-edge-signal-20261002/`,
+`repeat-despill-guard-20261002/`, `repeated-despill-neural-20261002/`,
+`repeated-despill-confirmation-20261002/` со скриптами/known-truth reports.
+Автоматическое качество всей обрезки пока не подтверждено. Предыдущие
+отвергнутые способы восстановления неизвестного цвета остаются отвергнутыми.
+
 ## Одобренная доводка чёткости и диагностика цвета, 2026-10-02
 
 Ветка `codex/fix-opaque-clipart-upscale-edge-20261002`, исходная база `7677ded`.
@@ -20,7 +42,7 @@
 `edge-colour-and-sharp-preview-20261002/` в том же artifacts. История причины
 цветной кромки и отвергнутых попыток: `docs/ERRORS.md#edge-colour-background-ambiguity-20261002`;
 реализация безопасного явного применения: `#edge-sharp-preview-20261002`.
-Владелец спросил о ползунке; он пока не согласован. Продолжаем одобренную кнопку;
+Владелец спросил о ползунке; он пока не согласован. Одобренная кнопка реализована;
 возможный один ползунок в preview обсуждается отдельно, без лишних кнопок.
 Качество всей автоматической обрезки остаётся незавершённым. Чёткость alpha
 и точное сохранение RGB не доказывают устранение цветной каймы.

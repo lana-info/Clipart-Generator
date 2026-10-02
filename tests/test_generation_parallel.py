@@ -60,8 +60,10 @@ def install_fake_kie_network(
 ):
     tasks = {}
     tasks_lock = threading.Lock()
+    started_count = 0
 
     def fake_request(worker_self, req, timeout=None):
+        nonlocal started_count
         item_index = worker_self._diagnostic_context.item_index
         if "file-stream-upload" in req.full_url:
             return b'{"success":true,"data":{"downloadUrl":"https://example.invalid/input.png"}}'
@@ -75,8 +77,10 @@ def install_fake_kie_network(
                     wave_release = release_waves[0 if task_count <= 3 else 1]
                 tasks[task_id] = (item_index, wave_release)
             activity.start("kie", item_index, payload["model"])
-            if started is not None and task_count >= started_target:
-                started.set()
+            with tasks_lock:
+                started_count += 1
+                if started is not None and started_count >= started_target:
+                    started.set()
             return main.json.dumps(
                 {"code": 200, "data": {"taskId": task_id}}
             ).encode("utf-8")
@@ -860,10 +864,25 @@ class ParallelGenerationTests(unittest.TestCase):
                     ],
                 )
                 activity = ProviderActivity()
-                install_fake_kie_network(worker, activity)
+                release = threading.Event()
+                started = threading.Event()
+                install_fake_kie_network(
+                    worker, activity, release=release,
+                    started=started, started_target=limit,
+                )
                 install_fake_file_io(worker)
 
-                worker._mode1_generate(process_generated=False, emit_final=False)
+                # Hold requests until the configured capacity is reached.
+                # A short sleep cannot prove overlap under a slow scheduler.
+                with ThreadPoolExecutor(max_workers=1) as runner:
+                    future = runner.submit(
+                        worker._mode1_generate, process_generated=False, emit_final=False,
+                    )
+                    try:
+                        self.assertTrue(started.wait(timeout=1), "configured KIE capacity was not reached")
+                    finally:
+                        release.set()
+                        future.result(timeout=5)
 
                 self.assertEqual(activity.maximum["kie"], limit)
 

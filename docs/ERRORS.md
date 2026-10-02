@@ -1,5 +1,95 @@
 # Ошибки проекта
 
+## parallel-capacity-timing-20261002
+
+Общий safe suite после RGB-защиты: 2520 tests PASS, 280 subtests PASS,
+1 subtest FAIL (maximum KIE2 вместо3), 57 skipped/21 deselected, 426,29с.
+Production генератор не менялся. Тест считал, что mock recordInfo задержки
+40мс гарантируют overlap всех трёх потоков, что неверно при медленном startup.
+Тот же FAIL воспроизведён без нейросети: delay .2с в ProviderActivity.start
+для каждого третьего item; один test FAIL за1,642с.
+
+Попытка1: удержать fake запросы release-событием до started_target=limit,
+запустить worker в executor и release в finally с future.result для ошибок →
+обычный модуль31 tests + 7 subtests PASS за7,91с, но тот же skew FAIL за1,331с.
+Новые данные: task_count резервируется до activity.start; третий созданный
+запрос может задержаться, а другой с task_count≥3 сигналит started при
+только двух реальных операциях. При прежнем коротком mock это скрыто.
+
+Попытка2: отдельный started_count после завершения activity.start под
+существующим tasks_lock; task_count сохранён для task IDs/waves. Доказательство
+того же skew: PASS за1,948с. Peak equality maximum==limit не ослаблялась,
+генератор/реальный сетевой код не менялись. При недостижении мощности release
+в finally освобождает fake tasks, исключения worker передаются через future.
+Полный модуль после final helper correction: 31 tests + 7 subtests PASS
+за8,12с. Независимый event-gated контроль подтвердил actual2→startedFalse,
+actual3→startedTrue; подмена capacity2 при настройке3 всё ещё обнаруживается,
+внешний RuntimeError передаётся в тест, release установлен и active0 после
+обоих negative controls, real opener не вызывался. P1/P2 нет. Финальный safe
+suite: 2520 tests + 281 subtests PASS за438,65с, 57 skipped/21 network-paid
+deselected, одно прежнее Pillow deprecation warning. Staged sensitive scan
+и diff-check PASS.
+Private logs/scripts: ../artifacts/repeated-despill-confirmation-20261002/.
+
+## repeated-staged-despill-20261002
+
+Новые данные после отвергнутых способов угадывать foreground/background:
+независимый агент и главный агент подтвердили повреждение даже на точно
+однотонном фоне. Это отдельный программный дефект, не неоднозначность B.
+В staged opaque сначала C=sF+bK решается с отдельной яркостью foreground,
+затем поздняя projection снова ищет (1-m)reference+mK, без масштаба яркости.
+Немного более тёмный нарисованный край ошибочно принимается за новую примесь.
+
+Точный контроль: K=(0,0,255), core=(240,240,240), F=(225,225,225), a=.6,
+C=(135,135,237). Первый solve даёт правильные RGB225/225/225 и alpha.6;
+повторная projection с m=.06043, residual15.922≤18 меняет RGB на
+239.471/239.471/223.071. Даже excess=0 не спасает от второй projection.
+Красная/зелёная перестановки воспроизводят оттенок. В automatic часть таких
+пикселей потом восстанавливается, но F210/210/210 становится219/219/208,
+а F190/190/95 становится196/196/90. Прежние brightness .7/1 тесты не
+попадали в ошибку слабого shade около .95.
+
+Главный агент проследил full native исходники владельца: texture→despill
+меняет ≥2 уровня RGB на632/305 visible pixels выбранных ROI уточки/цветка,
+медиана изменения19.06/23.70. На цветке виден дополнительный жёлтый кант.
+Изменённые пиксели сами по себе не доказывают, что каждый был ошибочен.
+
+Причина → уже восстановленная partial смесь повторно деконтаминируется →
+изменение: в opaque_subject пропускать повторный RGB-блок, если 0<a<1,
+RGB в [0,255] и max|aF+(1-a)K-C|≤2. Это проверка отсутствия доказательств
+второго spill, не доказательство идеального первого матта. При настоящем
+additive spill/необъяснённом source или out-of-gamut RGB correction остаётся.
+Рассчитывается только выбранная полоса каждого512px tile; edge_ring не
+меняется через view. Legacy алгоритм не тронут. Новая alpha-операция не
+добавлялась, но последующие RGB-зависимые refinements могут изменить alpha.
+
+Проверка: 12 meaningful ordinary regressions FAIL до правки; после неё
+180 related tests PASS за22.09с, включая24 новых ordinary/additive tests
+через staged и public automatic на трёх key-цветах. Независимый scratch
+guard: 15 ordinary + 6 additive cases, искусственный inconsistent RGB
+и156 прежних tests PASS. Исходники владельца не менялись.
+
+Ограничения: старый alpha remap .6→.586108 (153→149) и неизвестный true
+foreground остаются; эта правка не заявляет полное удаление цветной каймы,
+не подменяет край цветом соседнего материала и не меняет нейромодель.
+Actual production full native cutout совпал с диагностическим guard. Два
+настоящих cached Clipart NN192→768: 37,56с/39,54с на Linux software Vulkan,
+sourceSHA и PNG roundtrip PASS. На dark/white boards дополнительное пожелтение
+слабее, но тёмная/цветная кайма остаётся. Native alpha меняется на1034/1088
+pixels после следующих refinements; RGBA глубже3px и число visible components
+не меняются, visible→zero нет. У цветка3 прежних opaque pixels стали partial,
+максимальная alpha loss108; неизвестный истинный matte этих рисунков не
+позволяет объявить каждую alpha правильной.
+Независимое ревью actual sparse15-line guard: P1/P2 нет; 9 mask controls,
+3 known-truth1042×1040 с отверстиями через512px tiles и3 byte-exact legacy
+controls PASS. Основной агент проверил скрипт/JSON, индексацию и actual boards.
+Финальный общий safe suite: 2520 tests + 281 subtests PASS за438,65с,
+57 skipped/21 network-paid deselected, одно прежнее Pillow getdata warning.
+Installed Windows/full5016 не проверены; сборка и публикация не выполнялись.
+Private scripts/reports: ../artifacts/staged-edge-signal-20261002/,
+repeat-despill-guard-20261002/, repeated-despill-neural-20261002/,
+repeated-despill-confirmation-20261002/ (включая baseline91bec9d source).
+
 ## edge-sharp-preview-20261002
 
 Владелец предпочёл обычный контраст alpha×2 защищённым вариантам со второй
