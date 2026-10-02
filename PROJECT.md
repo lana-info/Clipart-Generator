@@ -20,6 +20,17 @@ ringing stage. Keep visible RGB exact when preparing temporary RGB-only upscale
 input; use non-ringing alpha interpolation and preserve binary masks. Builds remain
 separately authorized and are not part of this correction.
 
+## Automatic Clipart deliverables, owner-requested2026-10-02
+
+The section is named «Автоматический клипарт». Automatic collection runs and
+restored/retried runs use transparent trim and300DPI final PNG metadata.
+Remove fully transparent working margins before post-background upscale;
+retain final trim after upscale/edge processing. Preserve source files and RGB,
+explicit alpha-defined white paint, pattern/background canvas, and existing
+custom processing choices outside the automatic workflow. Existing finished
+files are not rewritten on reopening a project. DPI is print metadata, not a
+request to resample pixels or trigger a paid operation.
+
 ## Automatic Clipart count correction and recoverable export
 
 A changed requested count must update active objects and submitted jobs exactly.

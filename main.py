@@ -3063,6 +3063,25 @@ class WorkerThread(QThread):
             current_path = self._ensure_local_path(
                 current_path, current_url, raw_dir, idx, prefix, "before_final_upscale"
             )
+            # Crop only transparent working margins before enlarging them. The
+            # final trim still runs after alpha/edge processing. Never crop
+            # opaque pattern/background results or apply white/black heuristics.
+            if self.trim_enabled and not preserve_surface:
+                with Image.open(current_path) as source:
+                    alpha = source.convert("RGBA").getchannel("A")
+                    bbox = alpha.getbbox()
+                    needs_crop = bbox and bbox != (0, 0, source.width, source.height)
+                    if needs_crop:
+                        pretrim_path = os.path.join(
+                            raw_dir, f"{prefix}_pretrim_upscale_{idx:03d}_{self.run_stamp}.png"
+                        )
+                        self._save_image_object_as_png(source.crop(bbox), pretrim_path)
+                if needs_crop:
+                    current_path = pretrim_path
+                    current_url = None  # The remote URL still points to the uncropped image.
+                    local_result = True
+                    self.progress.emit("  Trim перед апскейлом: пустые прозрачные поля удалены")
+                    self._ensure_running()
             with Image.open(current_path) as source:
                 source_size = source.size
                 source_alpha = source.convert("RGBA").getchannel("A")
@@ -4706,7 +4725,9 @@ class WorkerThread(QThread):
         # Если картинка полностью непрозрачная, многие модели всё равно
         # дорисовывают белые поля без прозрачности. В таком случае делаем
         # запасной поиск по почти белому фону, чтобы Trim работал предсказуемо.
-        if self._is_fully_opaque(alpha):
+        # An explicit alpha channel defines the subject, even when a tight
+        # crop makes it fully opaque. White paint is not a background margin.
+        if "A" not in image.getbands() and self._is_fully_opaque(alpha):
             fallback_bbox = self._detect_white_trim_bbox(image)
             if fallback_bbox:
                 return fallback_bbox

@@ -22,7 +22,7 @@ class AutoClipartShell(AppShell):
 
     def refresh(self):
         super().refresh()
-        self.mode_label.setText("Автоматический Clipart")
+        self.mode_label.setText("Автоматический клипарт")
         self.mode_label.setAccessibleName(self.mode_label.text())
 
     def _refresh_stepper(self):

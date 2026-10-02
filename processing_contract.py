@@ -52,6 +52,8 @@ def pipeline_steps(operations: Any) -> tuple[str, ...]:
         steps.append("Unsharp Mask")
     if operations.remove_background:
         steps.append("Удаление фона")
+    if operations.upscale_after and operations.trim:
+        steps.append("Trim перед апскейлом")
     if operations.upscale_after:
         steps.append("Апскейл после удаления фона")
     if operations.edge_shrink:

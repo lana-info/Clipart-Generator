@@ -149,6 +149,63 @@ class UpscalePositionTests(unittest.TestCase):
         )
         return worker, order, Path(result_path)
 
+    def test_trim_before_upscale_and_final_png_300_dpi(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            worker, order, result = self.run_local_pipeline(
+                root, upscale=False, upscale_after=True,
+                trim_enabled=True, export_300_dpi=True,
+            )
+            self.assertEqual(order, ["remove_bg", "upscaled_after"])
+            # Fixture removes a one-pixel frame from 8x6 before the 2x pass.
+            with Image.open(result) as image:
+                self.assertEqual(image.size, (12, 8))
+            # Simulate an upscaler returning new transparent working margins.
+            with Image.open(result) as image:
+                padded = Image.new("RGBA", (16, 12))
+                padded.paste(image, (2, 2))
+                padded.save(result)
+            original = (root / "source.png").read_bytes()
+            final = root / "ready.png"
+            worker._save_final_output(str(result), str(result), str(final),
+                                      str(root / "raw"), 1, "file")
+            with Image.open(final) as image:
+                self.assertEqual(image.size, (12, 8))
+                self.assertEqual(image.getchannel("A").getbbox(), (0, 0, 12, 8))
+                self.assertAlmostEqual(image.info["dpi"][0], 300, places=2)
+                self.assertAlmostEqual(image.info["dpi"][1], 300, places=2)
+            self.assertEqual((root / "source.png").read_bytes(), original)
+
+    def test_pretrim_invalidates_url_preserves_faint_details_and_pattern_canvas(self):
+        for kind, thin, expected in (("clipart", False, (4, 4)),
+                                     ("clipart", True, (7, 4)),
+                                     ("pattern", False, (12, 10))):
+            with self.subTest(kind=kind, thin=thin), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                source = root / "source.png"
+                image = Image.new("RGBA", (12, 10))
+                ImageDraw.Draw(image).rectangle((4, 3, 7, 6), fill=(100, 60, 20, 255))
+                if thin:
+                    image.putpixel((1, 3), (100, 60, 20, 1))
+                image.save(source)
+                worker = main.WorkerThread("mode2_process", folder, processing_settings(
+                    upscale=False, remove_bg=False, upscale_after=True, trim_enabled=True))
+                def upscale(**kwargs):
+                    with Image.open(kwargs["current_path"]) as cropped:
+                        self.assertEqual(cropped.size, expected)
+                        self.assertEqual(kwargs["current_url"],
+                            None if kind == "clipart" else "https://example.invalid/source.png")
+                        if thin:
+                            self.assertEqual(cropped.getpixel((0, 0))[3], 1)
+                        output = root / "upscaled.png"
+                        cropped.resize((cropped.width * 2, cropped.height * 2),
+                                       Image.Resampling.NEAREST).save(output)
+                    return str(output), None, True
+                with patch.object(worker, "_run_upscale_pass", side_effect=upscale) as mocked:
+                    worker._run_processing_pipeline(str(source), "https://example.invalid/source.png",
+                                                     folder, 1, "file", result_kind=kind)
+                mocked.assert_called_once()
+
     def test_before_after_and_both_run_in_selected_order(self):
         cases = (
             ("before", {"upscale": True, "upscale_after": False}, ["upscaled_before", "remove_bg"], (16, 12)),

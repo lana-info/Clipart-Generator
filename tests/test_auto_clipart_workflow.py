@@ -86,6 +86,38 @@ def prepare_launch(controller):
     assert controller.shell.state.current_step is StepId.REVIEW_RUN
 
 
+def test_automatic_clipart_deliverable_settings_and_title(workspace):
+    _view, controller, _gate, _worker = workspace
+    # Old draft flags must not disable the automatic deliverable requirements.
+    operations = controller.shell.state.data.operations
+    operations.trim = False
+    operations.trim_mode = "white"
+    operations.export_300_dpi = False
+    prepare_launch(controller)
+    request = build_clipart_run_request(controller.shell.state)
+    assert request.settings["trim_enabled"] is True
+    assert request.settings["trim_mode"] == "alpha"
+    assert request.settings["export_300_dpi"] is True
+    assert _view.shell.mode_label.text() == "Автоматический клипарт"
+
+
+def test_old_automatic_run_restores_delivery_flags(workspace):
+    _view, controller, _gate, _worker = workspace
+    prepare_launch(controller)
+    controller.run_queue.session = RunQueueSession(
+        build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    controller._save_run()
+    operations = controller.shell.state.data.operations
+    operations.trim = False
+    operations.trim_mode = "white"
+    operations.export_300_dpi = False
+    controller._restore_run()
+    settings = controller.run_queue.session.request.settings
+    assert settings["trim_enabled"] is True
+    assert settings["trim_mode"] == "alpha"
+    assert settings["export_300_dpi"] is True
+
+
 def test_eight_steps_prepare_prompts_without_paid_work(workspace):
     view, controller, gate, worker = workspace
     assert len(view.shell.step_labels) == 8
@@ -329,7 +361,7 @@ def test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance(wor
     if change != 'manual_keep_hero':
         resumed.brief.total.setValue(1)
     if change == 'settings':
-        resumed.shell.state.data.operations.trim = not resumed.shell.state.data.operations.trim
+        resumed.shell.state.data.operations.unsharp = not resumed.shell.state.data.operations.unsharp
     if change == 'missing_png':
         output.unlink()
     for _ in range(4):

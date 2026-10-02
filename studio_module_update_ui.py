@@ -11,7 +11,7 @@ MODULE_TITLES = {
     "clipart": "Генерация изображений",
     "processing": "Обработка изображений",
     "pinterest": "Pinterest",
-    "auto-clipart": "Автоматический Clipart",
+    "auto-clipart": "Автоматический клипарт",
     "prompt-composer": "Конструктор промптов",
 }
 

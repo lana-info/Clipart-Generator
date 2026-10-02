@@ -120,7 +120,7 @@ class CollectionBrief(ClipartBuilderDialog):
         folder_row.addWidget(self.directory, 1)
         folder_row.addWidget(choose)
         form.addRow("Рабочая папка", folder_row)
-        self.project_name.setPlaceholderText("Клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M"))
+        self.project_name.setPlaceholderText("Автоматический клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M"))
         self.pages.widget(0).widget().layout().insertLayout(0, form)
         self._applied_counts = dict(self.recipe.counts)
         # Total changes must affect the actual slots, including an existing plan.
@@ -226,7 +226,14 @@ class AutoClipartFlowController(ClipartFlowController):
     module_id = "auto-clipart"
     collections_enabled = True
 
+    def _ensure_delivery_operations(self):
+        operations = self.shell.state.data.operations
+        operations.trim = True
+        operations.trim_mode = "alpha"
+        operations.export_300_dpi = True
+
     def _install_pages(self):
+        self._ensure_delivery_operations()
         self._flushing = False
         self.brief = CollectionBrief(self.shell.state, self.shell.mark_dirty, self._select_step)
         self.brief.planning.authorize = self.shell.authorize_run
@@ -310,7 +317,7 @@ class AutoClipartFlowController(ClipartFlowController):
             self.shell.state.data.prompt_generator = generator
             name = self.brief.project_name.text().strip()
             if not name:
-                name = "Клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M")
+                name = "Автоматический клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M")
                 self.brief.project_name.setText(name)
             self.shell.state.common.project_name = name
             self.shell.state.common.work_dir = self.brief.directory.text().strip()
@@ -542,6 +549,7 @@ class AutoClipartFlowController(ClipartFlowController):
                 operations.upscale_after = True
                 operations.remove_background = True
                 operations.remove_background_provider = "local_chroma_key"
+                self._ensure_delivery_operations()
                 if previous_session is not None:
                     if self._reuse_completed_run(previous_session):
                         self._select_step(StepId.RESULTS)
@@ -713,6 +721,7 @@ class AutoClipartFlowController(ClipartFlowController):
         data.operations.upscale_after = True
         data.operations.remove_background = True
         data.operations.remove_background_provider = "local_chroma_key"
+        self._ensure_delivery_operations()
         if self.run_queue.session is not None and not self.run_queue.session.running:
             self._archive_run()
         request = super().start()
@@ -810,6 +819,7 @@ class AutoClipartFlowController(ClipartFlowController):
         self.shell.refresh()
 
     def _restore_run(self):
+        self._ensure_delivery_operations()
         saved = self.shell.state.data.automatic.get("run")
         if not saved:
             return

@@ -28,7 +28,7 @@ class ProcessingContractTests(unittest.TestCase):
         )
         self.assertEqual(pipeline_steps(operations), (
             "Апскейл до удаления фона", "Unsharp Mask", "Удаление фона",
-            "Апскейл после удаления фона", "Очистка края alpha", "Trim",
+            "Trim перед апскейлом", "Апскейл после удаления фона", "Очистка края alpha", "Trim",
             "Очистка данных файла", "Экспорт 300 DPI", "Экспорт нового PNG",
         ))
 

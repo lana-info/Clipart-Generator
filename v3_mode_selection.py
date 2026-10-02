@@ -382,7 +382,7 @@ class ModeSelectionScreen(QWidget):
             item.widget().deleteLater()
         self.saved_project_buttons = []
         for project in projects[:3]:
-            title = {"auto-clipart": "Автоматический Clipart", "clipart": "Генерация изображений",
+            title = {"auto-clipart": "Автоматический клипарт", "clipart": "Генерация изображений",
                      "processing": "Обработка изображений", "pinterest": "Pinterest"}.get(project.module_id, project.module_id)
             button = V3Button(f"{project.name}\n{title} · {project.updated_at[:16].replace('T', ' ')}", ButtonVariant.SECONDARY)
             button.setMinimumHeight(64)

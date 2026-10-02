@@ -1,5 +1,23 @@
 # Project state
 
+## Автоматический клипарт: trim и300DPI, 2026-10-02
+
+Ветка `codex/fix-auto-clipart-trim-dpi-20261002`, база `c45847f` текущего
+кандидата3.2. Пользователь поручил переименование и исправление конечных PNG.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Название «Автоматический клипарт», просьба владельца | Реальный Qt shell и request | Название раздела/обновлений и новых проектов; профиль модели «Клипарт» сохранён | Реализовано и проверено: Qt title/request regression PASS |
+| Поля обрезаны, конечный PNG300DPI | Реальный final writer, roundtrip и исходный SHA | Обязательные trim alpha и300DPI в автоматическом сценарии, включая восстановление | Реализовано и проверено: supplied5016² →2308×4722, DPI299.9994 (PNG quantization); cropped RGBA exact, source unchanged. Старые завершённые файлы автоматически не переписываются |
+| Не увеличивать пустые поля после удаления фона | Фактический pipeline с безопасным fake upscaler, remote URL/alpha1/pattern | Предварительный trim полностью прозрачных полей, финальный trim после upscale | Реализовано и проверено: размер8×6→6×4 перед2x, новые поля после upscale убраны; URL сброшен; alpha1 сохранён до upscale; pattern canvas не обрезан |
+| Сохранить белую краску и корректные retries старых проектов | Explicit RGBA white + reopen/preview_retry | Alpha trim не использует white fallback для explicit alpha; нормализация перед restore | Реализовано и проверено: independent7 checks PASS; новых P1/P2 нет. RGB fallback и explicit white trim сохранены |
+| Без сборки и платных операций | Целевые safe tests и sensitive scan | Сборки/публикации/платных запросов нет | Релевантный safe suite:203 tests +63 subtests PASS,1 skip Windows binary,1 прежнее Pillow warning; дополнительный финальный run11 tests +21 subtests PASS. Staged sensitive scan/diff-check PASS. Windows и настоящий новый полный neural pipeline не проверены |
+
+Причина и проверка: `docs/ERRORS.md#auto-clipart-trim-dpi-20261002`.
+Private evidence: `../artifacts/auto-clipart-trim-dpi-20261002/verification.json`.
+Остаточная цветная кайма остаётся отдельной нерешённой задачей.
+
+
 ## Защита от повторного перекрашивания края, 2026-10-02
 
 Продолжение владельца: самостоятельно исправлять качество края, сборку не

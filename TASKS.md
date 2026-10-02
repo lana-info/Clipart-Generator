@@ -1,4 +1,18 @@
 # TASKS
+## Автоматический клипарт: trim и300DPI, 2026-10-02
+
+- [x] Переименовать раздел по просьбе владельца.
+- [x] Включить alpha trim и300DPI для automatic, включая restore/retry.
+- [x] Обрезать прозрачные поля перед post-background upscale, сохранить final trim.
+- [x] Защитить белую краску explicit RGBA, pattern canvas, alpha1 и crop URL.
+- [x] Проверить supplied PNG реальным final writer и независимым ревью.
+- [x] Релевантный safe suite:203 tests +63 subtests PASS; дополнительный11 tests +21 subtests PASS.
+- [x] Staged sensitive scan и diff-check PASS.
+- [ ] Windows/полный neural сценарий: недоступен до отдельного разрешения на сборку.
+
+Требования и фактические результаты: `STATE.md`, запись
+`docs/ERRORS.md#auto-clipart-trim-dpi-20261002`. Сборка и публикация не запускались.
+
 
 ## Повторное перекрашивание уже восстановленного края, 2026-10-02
 

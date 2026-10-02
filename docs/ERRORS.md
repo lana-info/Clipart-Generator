@@ -1,5 +1,38 @@
 # Ошибки проекта
 
+## auto-clipart-trim-dpi-20261002
+
+Подтверждение: supplied utochka_v_prazdnichnom_01_ready.png5016² не содержит
+DPI, alpha bbox(1387,88,3713,4829). Automatic controller принудительно включал
+remove/upscale, но оставлял trim/export_300_dpi=False из default/state. Общий
+worker обрезал только после upscale. Исправление: automatic delivery flags при
+install/navigate/start/restore, crop nonzero-alpha bbox до upscale_after,
+сброс старого remote URL после crop, final trim остаётся.
+
+Проверка выявила связанный дефект: плотный RGBA crop с белой краской стал
+fully opaque; alpha final trim включал почти-white fallback и срезал краску.
+Fallback теперь только для исходного формата без explicit A; explicit white
+trim остаётся доступен. Регрессия включает белую краску, новые transparent
+поля после upscale,300DPI/source unchanged, alpha1 и pattern canvas.
+Независимое ревью выявило старый restore/retry flags bypass; нормализация
+restore закрыла его, реальный reopen+preview_retry independent PASS.
+Первый прогон:62 tests PASS,3 FAIL (2 новые неверные fixture assertions и
+существующий settings-change test менял теперь обязательный trim). Исправлены
+проверки: white defect устранён в production; shell через actual view; settings
+provenance проверяется по свободному unsharp, не по обязательному trim.
+
+Actual final writer suppliedPNG:2308×4722, DPI299.9994, cropped RGBA exact,
+sourceSHA unchanged. Отличие bbox от alpha.getbbox связано с существующим
+final threshold12; перед upscale используется любой nonzero alpha.
+Независимое повторное ревью:7 safe scratch PASS, новых P1/P2 нет.
+Private evidence: ../artifacts/auto-clipart-trim-dpi-20261002/.
+Остаточная RGB кайма не исправлена этой задачей. Старые готовые файлы не
+перезаписываются при reopen. Платные/model-download/Windows/build проверки
+не выполнялись. Релевантный safe suite:203 tests +63 subtests PASS за137с;
+1 skip Windows binary,1 прежнее Pillow warning. Дополнительный финальный
+run11 tests +21 subtests PASS за3,85с.
+
+
 ## parallel-capacity-timing-20261002
 
 Общий safe suite после RGB-защиты: 2520 tests PASS, 280 subtests PASS,
