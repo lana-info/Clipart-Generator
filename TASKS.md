@@ -1,5 +1,14 @@
 # TASKS
 
+## Новый этап: сравнить порядок обработки
+
+- [x] Проверить доступные runtime/model без загрузок, dependencies и платных вызовов.
+- [x] Existing Linux NCNN + cached software Vulkan,32px actual probe PASS.
+- [x] Actual identical Clipart×4/2orders×2crops,Photo×4/2crops,Clipart×2/duck:7neural outputs. PNG/sourceSHA/alpha PASS.
+- [x] Actual13flower petals/leaves иroughduck feather crop; dark/white backgrounds, independent visual/pixel review PASS; только crop conclusions.
+- [x] Варианты готовы: natural watercolor remove→Photo×4; crisp lines remove→Clipart×4; upscale→remove не universal. Сохранено в researchbranch; production defaults не менялись.
+- [ ] Полноразмерный/native Windows сценарий только с доступным runtime и разумным локальным бюджетом; сборку/публикацию не запускать.
+
 ## Текущая реализация: контур, край и восстановимый экспорт
 
 - [x] Отдельная fixbranch;5016px baseline отказ исправлен без уменьшения PNG.

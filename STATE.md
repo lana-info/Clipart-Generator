@@ -1,5 +1,36 @@
 # Project state
 
+## Сравнение порядка увеличения и удаления фона, поручение владельца
+
+Рабочая ветка codex/research-upscale-order-20261002 от7677ded. Исходные PNG,
+программа, сервер, опубликованные пакеты и версии не меняются. Нужен лучший
+доступный вариант качества, без лишних пользовательских настроек.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Сравнить увеличение до удаления фона и после него на присланных файлах | Одинаковые actual model/scale, сохранённые промежуточные PNG, тёмный/светлый фон, sourceSHA | Диагностический script, existing NCNN model realesrgan-x4plus-anime ×4 | Реализовано и проверено как исследование:7actual neural outputs,2owner192px context crops,Clipart/Photo×4 иClipart×2. PNG size/mode/alpha, sourceSHA PASS; independent visual/pixel review PASS. Full-image и native Windows сравнение не выполнены |
+| Дать понятные варианты с рекомендацией по качеству | Сравнить цвет/детали и прозрачность, не считать меньшую alpha автоматически улучшением | Порядок по умолчанию и UI не меняются до данных | Реализовано и проверено: для акварели рекомендован remove→Photo×4 с компромиссом мягкости; Clipart×4 для чётких линий. Обратный порядок острее на цветке, но хуже по цветным штрихам уточки. Universal winner нет; никаких новых вопросов владельцу не требуется |
+
+Private evidence: ../artifacts/upscale-order-20261002/final-verification.json,
+flower-verification.json, duck/flower-photo-comparison-dark/white.png и
+three-options-dark/white.png. Семь neural outputs:4Clipart×4 (2orders×2objects),
+2Photo×4,1Clipart×2. Обычный bilinear и hybridRGB/alpha лишь диагностические
+контроли; hybrid не рекомендован, сильные штрихи остаются.
+
+Одинаковая alpha у Photo/Clipart×4 побайтно подтверждает, что различия штрихов
+между ними относятся к RGB/style нейроувеличения. Это не означает, что Photo
+исправляет маску или полностью удаляет цветную кайму. Меньшие partial/components
+не используются как оценка качества. Crop, пересекающий объект, потребовал32px
+blue frame только для диагностического определения background; actual192px RGB
+не менялись. PNG и хеши обоих оригиналов совпали.
+
+Production algorithm/default settings/UI не изменены. Сравнение моделей/порядка
+не даёт безопасного universal default для всех стилей из двух фрагментов.
+Для показанной акварели существующая модель «Фото» предпочтительна по сохранению
+фактуры; её полнокадровое качество и Windows ещё не проверены. Pure software
+Vulkan timing не характеризует GPU/Windows speed. Сборки/публикации не было.
+История диагностики runtime: docs/ERRORS.md#upscale-order-comparison-20261002.
+
 ## Текущие исправления: итоговая проверка исходников
 
 Ветка codex/fix-large-contours-edge-quality-20261002 от b5ff546/sourcea3f0b70.

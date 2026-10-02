@@ -954,3 +954,47 @@ Production sources после full-run не менялись; полный suite
 57skips:3native contracts (DPAPI, Windows sharing, отсутствующий RealESRGAN) и54
 отложенных six-slot Pinterest;21network/paid deselected. Pillow getdata deprecation
 в новой test-only regression зарегистрирован как warning, не дефект продукта.
+
+
+## upscale-order-comparison-20261002
+
+Владелец поручил проверить увеличение до удаления фона и выбрать качественный
+вариант. Исходники и production не менять без результата сравнения. В /tmp уже
+есть официальный Linux NCNN runtime/models; первый32px probe exit255:
+vkCreateInstance failed -9/invalid gpu device. CPU gpu-id=-1 в этом бинарнике
+также недоступен. Причина: системный Vulkan driver отсутствует, не модель/PNG.
+Обнаружен ранее скачанный /tmp/clipart-vulkan/runtime software driver; только
+для дочернего процесса заданы VK_ICD_FILENAMES/LD_LIBRARY_PATH. Повторный32px
+neural probe real realesrgan-x4plus-anime ×4 PASS. Ничего не установлено/скачано,
+сервер/лицензии/платные APIs не используются. Actual192px context crop проверяется
+двумя порядками; не выдавать его за полный5016 PNG или Windows acceptance.
+
+
+Actual cropped comparison completed:2owner192² context inputs→768²,2orders
+sameClipart realesrgan-x4plus-anime×4;2Photo realesrgan-x4plus×4;1Clipart
+realesr-animevideov3×2. Всего7real neural outputs. Первый cropped final removal
+после NN FAILED ChromaKeyAmbiguousError: crop пересекал object, разные side
+medians. Это диагностическая потеря full-background context, не доказанный
+product defect. Данные: originalsource имеетblue borders; actualcropодинside
+представленforeground. Диагностическое решение32px sourceblue frame вне768²
+crop, затем убратьframe; neural crop pixels не менялись. Повторный keyer PASS.
+Не ослаблять product uniform-background guard на основании этого crop.
+
+На duck upscaling-first усиливает green/magenta sharp strokes; flower становится
+чётче, но colour outlines на мелких выступах остаются. На обоих Photo сохраняет
+акварельную фактуру лучше Clipart с компромиссом softdetail; Clipart яснее по
+жилкам/контурам. Ordinary bilinear мягче, hybridRGBA+alphaB сильныештрихи не решает.
+Видимая kayma duck остаётся даже Photo: не обещать perfectcutout. Independent
+review совпал с выводом по стилю и отсутствиеuniversalorderwinner.
+
+Photo/Clipart alpha EXACT forboth768² и EXACT inputalphaBILINEAR. ×2 result384²
+RGBA alpha EXACT inputalphaBILINEAR. Actual rawcropbytes matchoriginal source;
+оба fulloriginalSHA before/after flower-verification exact. Для первоначального
+standalonefinisher не сохранялся beforeSHA: его booleanне использовать как
+доказательство, заменён пояснением; итоговый before/after proof независимый.
+Evidence ../artifacts/upscale-order-20261002/final-verification.json, boards,
+/tmp/upscale-order-final-verification.log. Pure software timing101/105Photo,
+30..48Clipart×4/9.87Clipart×2: не controlledbenchmark, GPU/Windows speed unknown.
+Production source/defaults unchanged7677ded; tests не повторялись без codechange.
+Full1254→5016 neural/installed Windows quality остаётся непроверенным. Рекомендация
+remove→Photo×4 относится к фактуре показанной акварели, не к идеальной маске/всемстилям.
