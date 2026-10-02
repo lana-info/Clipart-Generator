@@ -1,5 +1,35 @@
 # Vibix Images
 
+## Edge-quality and large-PNG correction, owner-authorized
+
+Continue implementation without another task approval. Preserve source colours,
+fine details and original resolution, including the owner's5016×5016 PNG.
+Keep existing simple contour controls; no new sliders or UI group. Bound proposal
+geometry and background jobs, preserve raw alpha outside local edits and keep
+cancel/Undo/Redo/separate-copy save. The opaque-clipart ambiguity policy prefers
+source paint over unsupported neighbouring-material fits. A supplied already
+processed PNG alone cannot establish the original pre-cutout colour. Actual
+intermediate generated/cutout/upscaled PNGs now establish the alpha restoration
+ringing stage. Keep visible RGB exact when preparing temporary RGB-only upscale
+input; use non-ringing alpha interpolation and preserve binary masks. Builds remain
+separately authorized and are not part of this correction.
+
+## Automatic Clipart count correction and recoverable export
+
+A changed requested count must update active objects and submitted jobs exactly.
+Excluded ideas, recorded completed outputs and paid-stage evidence must remain
+in the saved project. Returning to earlier steps does not erase ready work.
+Cancelled or never-submitted ideas must not block export of ready PNGs; genuine
+requested failures remain visible. Reusing outputs after replanning requires
+unchanged prompt/settings provenance and the existing output-path checks.
+The owner approved the export table and explicit partial-export UI on2026-10-02.
+The table immediately persists membership; counts and Add set are at the top.
+One ZIP action and explicit Save project remain. Ready-only export bypasses only
+missing results, never ambiguity or invalid PNG preflight. Unfinished jobs remain
+recoverable and require explicit confirmation before continuation. Existing user
+set names are preserved; new standard set names are English. Approved/actual
+safe-dummy screens: docs/ui/3.1/export-table-20261002/.
+
 ## Next-candidate preparation, owner-authorized2026-10-01
 
 Prepare the agreed changes together in an isolated candidate branch and finish
@@ -270,7 +300,8 @@ not copied as an implementation template. Implementation plan:
 
 ## Current handoff, 2026-09-11
 
-Automatic set export UI is now summary-first. The main screen shows only unique
+Historical handoff, superseded by the approved2026-10-02 table above.
+Automatic set export UI was summary-first. The main screen shows only unique
 PNG count and dynamic set count, proposed-set cards and `Создать наборы`; the
 manual membership matrix opens only via `Изменить состав наборов`. The old
 confirmation checkbox, technical PDF/manifest wording and redundant Close action

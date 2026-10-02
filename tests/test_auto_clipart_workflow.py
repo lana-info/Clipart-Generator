@@ -7,8 +7,9 @@ from PIL import Image, ImageDraw
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox
-from PyQt6.QtCore import QObject, Qt, pyqtSignal
+from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QFileDialog
+from PyQt6.QtCore import QObject, Qt, pyqtSignal, QEventLoop, QTimer
+from PyQt6 import sip
 
 from license_client import LicenseAuthorization, ModuleEntitlement
 from v3_clipart_flow import ClipartTransparencyEditorPage, build_clipart_run_request
@@ -66,7 +67,8 @@ def workspace(tmp_path, monkeypatch):
     controller.brief.theme.setText("Winter flowers")
     controller.brief.total.setValue(1)
     yield view, controller, gate, worker
-    controller.save_timer.stop()
+    if not sip.isdeleted(controller.save_timer):
+        controller.save_timer.stop()
     if controller.run_queue.session:
         controller.run_queue.session.running = False
     view.close()
@@ -99,6 +101,407 @@ def test_eight_steps_prepare_prompts_without_paid_work(workspace):
     worker.assert_not_called()
     record = view._project_store.load(view._active_project_id)
     assert record.module_id == "auto-clipart"
+
+
+def test_reducing_existing_plan_uses_one_slot_and_restores_unused_ideas(workspace):
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    original = controller.brief.object_editor.value()
+    assert len(original) == 20
+    for _ in range(5):
+        controller.navigate(-1)
+    controller.brief.total.setValue(1)
+    prepare_launch(controller)
+    assert len(controller.shell.state.data.prompts) == 1
+    assert len(controller.brief.object_editor.items) == 1
+    assert controller.shell.state.data.recipe['total'] == 1
+    assert len(build_clipart_run_request(controller.shell.state).generated_prompts) == 1
+    from studio_clipart_planner import planning_request
+    recipe, palette = controller.brief._planning_snapshot()
+    assert len(planning_request(recipe, palette)['targets']) == 1
+    worker.assert_not_called()
+    controller.save_timer.stop()
+    assert view.continue_saved_project(view._active_project_id)
+    resumed = view.shell.workflow_controller('auto-clipart')
+    resumed.save_timer.stop()
+    for _ in range(5):
+        resumed.navigate(-1)
+    resumed.brief.total.setValue(20)
+    prepare_launch(resumed)
+    assert [dict(item, pinned=item.get('pinned', False)) for item in resumed.brief.object_editor.value()] == [dict(item, pinned=item.get('pinned', False)) for item in original]
+    assert len(resumed.shell.state.data.prompts) == 20
+    worker.assert_not_called()
+
+
+def test_cancelled_slots_do_not_block_ready_export_after_reopen(workspace, monkeypatch, tmp_path):
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    output = session.output_dir / 'single_ready.png'
+    image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+    image.save(output)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(output)
+    for item in session.items[1:]:
+        item.status = RunItemStatus.CANCELLED
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+    assert view.continue_saved_project(view._active_project_id)
+    resumed = view.shell.workflow_controller('auto-clipart')
+    resumed.save_timer.stop()
+    assert all(item.status is RunItemStatus.CANCELLED for item in resumed.run_queue.session.items[1:])
+    resumed._refresh_export()
+    assert resumed.export_panel.review_issues == []
+    assert resumed.export_panel.export_button.isEnabled()
+    assert resumed.export_panel.groups()[0]['images'] == [output.resolve()]
+    export_folder = tmp_path / 'archives'
+    export_folder.mkdir()
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(export_folder))
+    resumed._select_step(StepId.TRANSPARENCY)
+    view.shell.next_button.click()
+    export_worker = resumed.export_panel.worker
+    assert export_worker is not None
+    loop = QEventLoop()
+    export_worker.finished.connect(loop.quit)
+    QTimer.singleShot(5000, loop.quit)
+    loop.exec()
+    assert resumed.export_panel.worker is None
+    assert resumed.export_panel.exported
+    from zipfile import ZipFile
+    for archive in resumed.export_panel.exported:
+        with ZipFile(archive) as stream:
+            assert stream.testzip() is None
+            png_names = [name for name in stream.namelist() if name.endswith('.png')]
+            assert len(png_names) == 1
+            assert stream.read(png_names[0]) == output.read_bytes()
+    worker.assert_not_called()
+
+
+def test_active_run_cannot_be_replanned_until_cancelled_and_history_is_kept(workspace, monkeypatch):
+    view, controller, _, factory = workspace
+    fake_worker = FixtureWorker()
+    factory.return_value = fake_worker
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData('kie'))
+    view.shell.go_next()
+    session = controller.run_queue.session
+    assert session.running and len(session.items) == 20
+    controller.navigate(-1)
+    assert controller.shell.state.current_step is StepId.RESULTS
+    assert controller.run_queue.session is session
+    assert fake_worker.running
+    session.items[0].source_path = str(session.output_dir / 'kept_raw.png')
+    session.items[0].paid_completed_stages = ('upscale_before',)
+    controller.run_queue.stop_now()
+    assert not fake_worker.running and not session.running
+    assert all(item.status is RunItemStatus.CANCELLED for item in session.items)
+    controller.navigate(-1)
+    assert controller.run_queue.session is session
+    assert len(controller.shell.state.data.automatic['run']) == 20
+    for _ in range(5):
+        controller.navigate(-1)
+    controller.brief.total.setValue(1)
+    prepare_launch(controller)
+    assert controller.run_queue.session is None
+    assert len(controller.shell.state.data.prompts) == 1
+    archived = controller.shell.state.data.automatic['previous_runs'][-1]
+    assert len(archived['prompts']) == 20 and len(archived['run']) == 20
+    assert all(row['status'] == 'cancelled' for row in archived['run'])
+    assert archived['run'][0]['source_path'] == session.items[0].source_path
+    assert archived['run'][0]['paid_completed_stages'] == ['upscale_before']
+    factory.assert_called_once()
+    view.shell.go_next()
+    assert factory.call_count == 2
+    assert len(controller.run_queue.session.items) == 1
+    controller.run_queue.stop_now()
+
+
+def test_real_failed_requested_output_remains_an_export_issue(workspace):
+    _, controller, _, factory = workspace
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.items[0].status = RunItemStatus.FAILED
+    session.items[0].attempts = 1
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    assert controller.run_queue.page._bundle_export_issues() == [{
+        'kind': 'missing', 'object_id': session.items[0].payload['object_id'], 'count': 0, 'paths': [],
+    }]
+    factory.assert_not_called()
+
+
+def test_manual_object_edits_survive_reduced_plan_and_do_not_collide_with_unused_ideas(workspace):
+    _, controller, _, factory = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    for _ in range(5):
+        controller.navigate(-1)
+    controller.brief.total.setValue(1)
+    prepare_launch(controller)
+    editor = controller.brief.object_editor
+    editor.add()
+    editor.fields['name'].setText('Manual flower')
+    controller.flush()
+    assert controller.brief.recipe.total == 2
+    assert controller.brief.total.value() == 2
+    assert controller.brief.sum_label.text() == 'Всего изображений: 2'
+    assert len(editor.items) == 2
+    combined = editor.items + controller.shell.state.data.automatic['inactive_objects']
+    assert len({item['id'] for item in combined}) == len(combined)
+    assert len({item['ordinal'] for item in combined}) == len(combined)
+    from studio_auto_clipart_state import AutoClipartStateExtension
+    AutoClipartStateExtension().normalize_state({'clipart': controller.shell.state.data.to_dict()})
+    factory.assert_not_called()
+
+
+@pytest.mark.parametrize('case', ['not_list', 'duplicate_id', 'duplicate_ordinal', 'too_many'])
+def test_inactive_idea_schema_rejects_invalid_combined_records(case):
+    from studio_auto_clipart_state import AutoClipartStateExtension
+    from studio_clipart_objects import new_object
+    active = new_object('hero', 1)
+    inactive = [new_object('decor', 2)]
+    if case == 'not_list':
+        inactive = None
+    elif case == 'duplicate_id':
+        inactive[0]['id'] = active['id']
+    elif case == 'duplicate_ordinal':
+        inactive[0]['ordinal'] = 1
+    else:
+        inactive = [new_object('decor', index) for index in range(2, 1002)]
+    with pytest.raises(ValueError):
+        AutoClipartStateExtension().normalize_state({'clipart': {
+            'recipe': {'objects': [active]}, 'automatic': {'inactive_objects': inactive},
+        }})
+
+
+@pytest.mark.parametrize('entry', [{}, {'prompts': [], 'run': []},
+    {'prompts': [{'prompt': 'x', 'result_kind': 'clipart', 'object_id': 'a'}], 'run': []},
+    {'prompts': [{'prompt': 'x'}], 'run': [{'status': 'failed', 'output_path': '', 'attempts': 1}]}])
+def test_previous_run_schema_rejects_invalid_history(entry):
+    from studio_auto_clipart_state import AutoClipartStateExtension
+    with pytest.raises(ValueError):
+        AutoClipartStateExtension().normalize_state({'clipart': {'automatic': {'previous_runs': [entry]}}})
+
+
+@pytest.mark.parametrize('change', ['none', 'manual_keep_hero', 'prompt', 'settings', 'missing_png', 'legacy_settings'])
+def test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance(workspace, monkeypatch, tmp_path, change):
+    view, controller, _, factory = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    output = session.output_dir / 'retained_ready.png'
+    image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+    image.save(output)
+    # The approved balanced recipe for one image retains the first decor idea.
+    role = 'hero' if change == 'manual_keep_hero' else 'decor'
+    retained_id = next(item['id'] for item in controller.brief.object_editor.items if item['role'] == role)
+    ready_item = next(item for item in session.items if item.payload['object_id'] == retained_id)
+    for item in session.items:
+        item.status = RunItemStatus.FAILED
+    ready_item.status = RunItemStatus.SUCCEEDED
+    ready_item.output_path = str(output)
+    ready_item.paid_completed_stages = ('upscale_after',)
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    if change == 'legacy_settings':
+        controller.shell.state.data.automatic.pop('run_settings_fingerprint')
+    controller.save_timer.stop()
+    assert view.continue_saved_project(view._active_project_id)
+    resumed = view.shell.workflow_controller('auto-clipart')
+    resumed.save_timer.stop()
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    for _ in range(5):
+        resumed.navigate(-1)
+    if change != 'manual_keep_hero':
+        resumed.brief.total.setValue(1)
+    if change == 'settings':
+        resumed.shell.state.data.operations.trim = not resumed.shell.state.data.operations.trim
+    if change == 'missing_png':
+        output.unlink()
+    for _ in range(4):
+        resumed.navigate(1)
+    if change == 'manual_keep_hero':
+        editor = resumed.brief.object_editor
+        while len(editor.items) > 1:
+            editor.list.setCurrentRow(len(editor.items) - 1)
+            editor.remove()
+        assert editor.items[0]['id'] == retained_id
+    if change == 'prompt':
+        resumed.brief.object_editor.items[0]['name'] = 'Different asset'
+        resumed.brief.object_editor.refresh()
+    view.shell.next_button.click()
+    archive = resumed.shell.state.data.automatic['previous_runs'][-1]
+    assert len(archive['run']) == 20
+    assert archive['run'][ready_item.index - 1]['paid_completed_stages'] == ['upscale_after']
+    if change not in {'none', 'manual_keep_hero'}:
+        assert resumed.run_queue.session is None
+        factory.assert_not_called()
+        return
+    retained = resumed.run_queue.session
+    assert retained is not None and len(retained.items) == 1 and not retained.running
+    assert resumed.brief.sum_label.text() == 'Всего изображений: 1'
+    assert resumed.shell.state.current_step is StepId.RESULTS
+    assert retained.items[0].status is RunItemStatus.SUCCEEDED
+    assert retained.items[0].output_path == str(output)
+    assert retained.items[0].paid_completed_stages == ('upscale_after',)
+    resumed._refresh_export()
+    assert resumed.export_panel.review_issues == []
+    assert resumed.export_panel.export_button.isEnabled()
+    resumed.flush()
+    assert view.continue_saved_project(view._active_project_id)
+    reopened = view.shell.workflow_controller('auto-clipart')
+    reopened.save_timer.stop()
+    assert reopened.shell.state.current_step is StepId.RESULTS
+    view.shell.next_button.click()
+    assert reopened.shell.state.current_step is StepId.TRANSPARENCY
+    export_folder = tmp_path / 'replanned-archives'
+    export_folder.mkdir()
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(export_folder))
+    view.shell.next_button.click()
+    worker = reopened.export_panel.worker
+    assert worker is not None
+    loop = QEventLoop()
+    worker.finished.connect(loop.quit)
+    QTimer.singleShot(5000, loop.quit)
+    loop.exec()
+    from zipfile import ZipFile
+    assert reopened.export_panel.exported
+    for archive_path in reopened.export_panel.exported:
+        with ZipFile(archive_path) as stream:
+            assert stream.testzip() is None
+            names = [name for name in stream.namelist() if name.endswith('.png')]
+            assert len(names) == 1 and stream.read(names[0]) == output.read_bytes()
+    factory.assert_not_called()
+
+
+@pytest.mark.parametrize('missing_paid_output', [False, True])
+def test_mixed_reused_results_retry_only_failed_and_preserve_missing_paid_provenance(workspace, monkeypatch, missing_paid_output):
+    view, controller, _, factory = workspace
+    controller.brief.total.setValue(20)
+    prepare_launch(controller)
+    controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData('kie'))
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    ids = {role: next(item['id'] for item in controller.brief.object_editor.items if item['role'] == role)
+           for role in ('hero', 'decor')}
+    ready = next(item for item in session.items if item.payload['object_id'] == ids['hero'])
+    failed = next(item for item in session.items if item.payload['object_id'] == ids['decor'])
+    for item in session.items:
+        item.status = RunItemStatus.FAILED
+    ready.output_path = str(session.output_dir / 'kept_ready.png')
+    image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+    image.save(ready.output_path)
+    ready.status = RunItemStatus.SUCCEEDED
+    if missing_paid_output:
+        failed.status = RunItemStatus.SUCCEEDED
+        failed.output_path = str(session.output_dir / 'deleted_paid_ready.png')
+        failed.source_path = str(session.output_dir / 'preserved_raw.png')
+        image.save(failed.source_path)
+        failed.attempts = 4
+        failed.paid_completed_stages = ('upscale_after',)
+        failed.stage_statuses = {'generation': 'complete', 'upscale_after': 'complete'}
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.StandardButton.Yes)
+    for _ in range(5):
+        controller.navigate(-1)
+    controller.brief.total.setValue(2)
+    for _ in range(4):
+        controller.navigate(1)
+    view.shell.next_button.click()
+    mixed = controller.run_queue.session
+    assert controller.shell.state.current_step is StepId.RESULTS
+    assert len(mixed.items) == 2
+    kept = next(item for item in mixed.items if item.payload['object_id'] == ids['hero'])
+    problem = next(item for item in mixed.items if item.payload['object_id'] == ids['decor'])
+    assert kept.status is RunItemStatus.SUCCEEDED and problem.status is RunItemStatus.FAILED
+    assert controller.run_queue.page.retry_button.isEnabled()
+    assert len(controller.run_queue.page._bundle_export_issues()) == 1
+    factory.assert_not_called()
+    if missing_paid_output:
+        assert problem.output_path == failed.output_path and problem.source_path == failed.source_path
+        assert problem.attempts == 4 and problem.paid_completed_stages == ('upscale_after',)
+        assert problem.stage_statuses == failed.stage_statuses
+        assert problem.short_message == 'Сохранённый PNG недоступен. Проверьте файл результата.'
+        assert Path(problem.source_path).is_file()
+        assert mixed.preview_retry() is None
+        controller.run_queue.page.retry_button.click()
+        factory.assert_not_called()
+    else:
+        preview = mixed.preview_retry()
+        assert len(preview.generated_prompts) == 1
+        assert preview.generated_prompts[0]['object_id'] == ids['decor']
+        factory.return_value = FixtureWorker()
+        controller.run_queue.page.retry_button.click()
+        factory.assert_called_once()
+        assert len(factory.call_args.kwargs['generated_prompts']) == 1
+        assert kept.status is RunItemStatus.SUCCEEDED
+        controller.run_queue.stop_now()
+
+
+def test_increased_reused_plan_resumes_only_19_unsubmitted_items_with_explicit_click(workspace, monkeypatch):
+    view, controller, _, factory = workspace
+    prepare_launch(controller)
+    controller.upscale_provider.setCurrentIndex(controller.upscale_provider.findData('kie'))
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    output = session.output_dir / 'previous_ready.png'
+    image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+    ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+    image.save(output)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(output)
+    retained_id = session.items[0].payload['object_id']
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    for _ in range(5):
+        controller.navigate(-1)
+    controller.brief.total.setValue(20)
+    for _ in range(4):
+        controller.navigate(1)
+    for item in controller.brief.object_editor.items:
+        item['name'] = 'Winter flower'
+    controller.brief.object_editor.refresh()
+    confirmations = []
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args: confirmations.append(args[2]) or QMessageBox.StandardButton.Yes)
+    view.shell.next_button.click()
+    resumed = controller.run_queue.session
+    assert controller.shell.state.current_step is StepId.RESULTS
+    assert len(resumed.items) == 20 and len(resumed.failed_indices) == 0
+    assert len([item for item in resumed.items if item.status is RunItemStatus.CANCELLED and item.attempts == 0]) == 19
+    factory.assert_not_called()
+    assert controller.run_queue.page.retry_button.isEnabled()
+    assert controller.run_queue.page.retry_button.text() == 'Продолжить незавершённые'
+    preview = resumed.preview_retry()
+    assert len(preview.generated_prompts) == 19
+    assert retained_id not in {item['object_id'] for item in preview.generated_prompts}
+    factory.return_value = FixtureWorker()
+    controller.run_queue.page.retry_button.click()
+    assert len(confirmations) == 2
+    factory.assert_called_once()
+    assert len(factory.call_args.kwargs['generated_prompts']) == 19
+    retained = next(item for item in resumed.items if item.payload['object_id'] == retained_id)
+    assert retained.status is RunItemStatus.SUCCEEDED and retained.output_path == str(output)
+    controller.run_queue.stop_now()
 
 
 def test_auto_worker_enables_sharp_cutout_fallback_without_changing_request(workspace, monkeypatch):
@@ -169,11 +572,11 @@ def test_export_step_embeds_editable_sets_and_persists_new_set(workspace, monkey
     controller._refresh_export()
     panel = controller.export_panel
     assert panel is not None and panel.embedded and not panel.isWindow()
-    assert panel.summary_sets_value.text() == '1'
+    assert panel.table.columnCount() == 2
     panel._show_create_page()
     panel.new_set_name.setText('Персонажи')
     panel._create_set()
-    assert panel.summary_sets_value.text() == '2'
+    assert panel.table.columnCount() == 3
     assert len(controller.shell.state.data.export_membership[str(output)]['memberships']) == 2
     controller._refresh_export()
     assert controller.export_panel is panel
@@ -183,12 +586,12 @@ def test_export_step_embeds_editable_sets_and_persists_new_set(workspace, monkey
         panel._delete_set(set_id)
     controller._refresh_export()
     assert controller.export_panel is panel
-    assert panel.summary_sets_value.text() == '0'
+    assert panel.table.columnCount() == 1
     assert controller.shell.state.data.export_membership[str(output)]['memberships'] == []
     panel._show_create_page()
     panel.new_set_name.setText('Заново собранный набор')
     panel._create_set()
-    assert panel.summary_sets_value.text() == '1'
+    assert panel.table.columnCount() == 2
 
 
 def test_auto_project_resumes_its_route_not_ordinary_generation(workspace):

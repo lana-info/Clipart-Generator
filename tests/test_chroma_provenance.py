@@ -25,13 +25,13 @@ class ChromaProvenanceTests(unittest.TestCase):
         self.assertEqual(record["observed_removal_background"], "#0225FA")
         self.assertEqual(record["result_sha256"], image_digest(self.image))
         self.assertEqual(record["quality_status"], "not_evaluated")
-        self.assertEqual(record["profile"], "opaque-clipart-v10")
+        self.assertEqual(record["profile"], "opaque-clipart-v11")
         self.assertFalse(any("path" in field or "prompt" in field for field in record))
 
     def test_previous_profile_receipt_remains_readable_without_relabeling(self):
         path = self.write()
         record = json.loads(path.read_text())
-        for profile in ("opaque-clipart-v1", "opaque-clipart-v2", "opaque-clipart-v3", "opaque-clipart-v4", "opaque-clipart-v5", "opaque-clipart-v6", "opaque-clipart-v7", "opaque-clipart-v8", "opaque-clipart-v9"):
+        for profile in ("opaque-clipart-v1", "opaque-clipart-v2", "opaque-clipart-v3", "opaque-clipart-v4", "opaque-clipart-v5", "opaque-clipart-v6", "opaque-clipart-v7", "opaque-clipart-v8", "opaque-clipart-v9", "opaque-clipart-v10"):
             record["profile"] = profile
             path.write_text(json.dumps(record))
             self.assertEqual(load_receipt(self.image)["profile"], profile)

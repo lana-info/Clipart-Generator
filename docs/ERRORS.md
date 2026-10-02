@@ -788,3 +788,169 @@ zoom-detail label исправлен300→600% в соответствии с ac
 итоговые изображения; ideal masks real/semantic edge colours неизвестны.
 Evidence: ../artifacts/edge-comparison-20261002, /tmp/edge-comparison-20261002.log.
 Исходники пользователя/приватные PNG не включать вGit; сервер/сборка неизменны.
+
+## party-duck-5016-contour-quality
+
+Actual uploaded utochka_v_prazdnichnom_01_ready.png:5016×5016RGBA,
+6858110bytes,269424partialalpha,18198068zeroalpha. Main inspected dark composite
+and original-scale ROI3190,1560,3530,1920: dark/purple-green edge stripes exist
+in the savedPNG, not merely the attached screenshot. No original pre-cutout
+or receipt metadata supplied, exact originating stage remains unknown.
+
+Hypothesis for unavailable curves: current4100-side guard. Read-only actual
+_calculate_contour('extract',alpha,(),(),Event()) reproduced ValueError:
+«Автоконтур поддерживает до4100px по каждой стороне». _start_contour rejects
+before starting. Separate core extract_contours raises too-many-contours:
+903contours,568components atalpha>0,MAX_PATHS256. At>8:16components,29contours;
+at>32:1component,5contours. These are diagnostics, not safe thresholds: applying
+threshold can delete genuine semitransparent detail. Older standalone dialog
+has separate4MP auto limit; installed version unknown. File25.16MP is below
+current editor40MP and contour32MP total limits, PNG6.54MiB is not byte-size cause.
+No limit lifted, mask thresholds applied, user file modified, source fixed,
+model/API called or build started. Preserve full resolution for a future bounded
+ROI/geometry solution rather than asking the user to downscale originals.
+Evidence/private SHA and figures: ../artifacts/party-duck-diagnostics.
+
+## large-contour-and-weak-paint-fix
+
+User's standing implementation approval reaffirmed; work on dedicatedfixbranch.
+Root cause1:5016px rejected by4100side guard despite supported32MP core budget.
+Raw faint noise creates903contours/5256nodes. Fix: existing32MP total bound with
+32768side guard; proposal extraction tries rawalpha first and only when geometry
+budget is exceeded alpha>8 proposal. Full raster alpha is never binarized/deleted;
+unchanged apply preserves bytes. Matching proposal ownership still flood-fills
+raw8-connected source. Do not infer aggregate test totals from overlaps.
+
+Review caught omitted faint4×4 island inside hole erased by outer shrink. Root:
+polygon coverage != raw connected ownership. Regression narrow corner90,90→110,110,
+hole92:108,island97:101alpha3 with many faint specks; prevent old_only removal
+for non-owned visible pixels of trusted extracted exteriors.61independenttests
+and48alpha1..8×feather0/1/2×exterior/hole probes PASS; outsideROI exact.
+First focused Qt process segfaulted after10tests while fixtures recreated QApplication;
+exact root cause unconfirmed. Holding one QApplication for the test process yields
+85then188PASS with tests/guards unchanged. One broadened invocation named two
+nonexistent test modules (exit4); corrected discovery, not production failure.
+Actual5016Qt separate-save preserves sourceSHA/RGB/alpha/size/UndoRedo.
+Global timer gap1.1s includes save/history steps: do not promise native smoothness.
+Region refresh uses worker changed bounds, avoiding full-image recomposite on normal apply.
+
+Root cause2 on knowntruth: source-painted(80,70,90) thin stroke gets treated as
+weak blue mixture (83,72,83,244); later borrowed cream fit gives92,78,66,222.
+First in-memory prototype restores precise step but fails2width cases later in
+edge_mixture. New trace proves protection must survive later stages. Explicit
+per-call sourcepaint mask: opaque_clipart/sourcealpha255/provisionalalpha242..254,
+weakkeydominance≤24/flat source tangent run/nearest eroded opaque core≤12px;
+convex fixed-colour fit residual>5 means unsupported borrowed-material correction.
+Carry sourceRGBA for admitted pixels through all later fits; no module-global mask.
+9new key×width cases at every observer stage PASS, existing187tests PASS, production
+196focused PASS,52contracts+12subtests PASS.6weak.95/.98 compatibility controls do
+not certify ideal alpha;2sourcepartial +threaded cases protect non-promotion/state.
+Identical(80,70,90) may be a true opaque additive mixture; the agreed ambiguity
+policy preserves source paint and can leave weak additive spill. No claim of
+perfect recovery or real duck stripe origin. Profilev11; existingv10 receipts
+remain original and readable. Frozen packages/builds/server untouched.
+Evidence:/tmp/duck-weak-paint-guard-carry-probe.py,/tmp/weak-material-production-first.log,
+/tmp/weak-material-contracts.log,../artifacts/party-duck-contour-fixed.
+
+
+## party-duck-upscale-alpha-ringing
+
+Владелец прислал rough_05_generated RGB1254², rough_08_bg-removed RGBA1254²
+и rough_01_upscaled-after RGBA5016². SHA originals сохранены. Весь visible RGB
+готового файла совпадает с upscaledafter, значит последний contour/save не
+перекрашивал эти пиксели. Alpha upscaledafter byte-exact равна исходной alpha,
+увеличенной Lanczos. 569 отдельных alpha-positive components появляются в ней;
+при bilinear на том же источнике 1 connected component. Это подтверждает
+ringing восстановления маски, но не доказывает, что вся тёмная краска искусственная.
+
+Также _run_local_realesrgan передавал neural model source_rgba.convert('RGB'),
+включая скрытый синий key под alpha0. Hypothesis о влиянии синего на восстановленный
+RGB подтверждается входом операции, но реальный Windows model rerun пока недоступен.
+Исправление: extend nearest opaque foreground только под alpha0 во временном RGB;
+когда opaque нет, nearest positive alpha; visible pixels byte-exact.
+Мягкая alpha теперь bilinear без отрицательных lobes, hard alpha nearest сохранена.
+Не threshold/delete/erode весь пух. Исходные файлы и сохранённые готовые PNG не меняются.
+
+Две регрессии до правки FAILED: input alpha0 оставался keyblue; restored alpha
+содержала detached lobes. После первой правки обе и straight-soft-RGB test PASS
+(3tests0.96s). Добавлены empty/opaque/soft-only и hard-mask controls, итоговый
+прогон и independent review завершены:6tests+3subtests и70controls PASS.
+RGB preparation теперь внутри try/finally; injected failure подтверждает cleanup. Private real comparison:
+../artifacts/party-duck-alpha-upscale-fixed/verification.json и alpha-only-edge-comparison.png.
+Числа569→1 относятся только к той же alpha, не к запуску neural upscaler.
+Neural RGB старого файла сохранены в сравнении намеренно: полосы, уже встроенные
+в RGB, нельзя честно объявлять устранёнными этим mask-only результатом.
+
+
+## auto-clipart-count-recoverable-export-20261002
+
+Подтверждено20→1 оставляло20objects/jobs и19missing блокировали ZIP1ready.
+Причины: fill_recipe только рос, snapshot возвращал старые counts; Back сбрасывал
+session, restore CANCELLED→FAILED; export issues учитывали inactive recipe objects.
+Исправлено exact active/inactive count, previous_runs paid history, Back без reset,
+CANCELLED сохраняется; export учитывает actual requested IDs. Reuse требует exact
+prompt/settings fingerprint и валидный output path. Legacy unknown FP не выдумывается.
+
+Независимое review выявило mixed valid-ready+missing-paid случай: пустой FAILED
+record терял source/paid evidence. Valid-ready включал reuse всей session.
+Новые данные воспроизведены; deepcopy старого record до смены status/message
+сохраняет evidence. Regression: missing paid source preview_retry None/factory0.
+После reuse1ready+19never-submitted retry выбирал только FAILED. Shared retry_indices
+включает CANCELLED, explicit confirmation и paid-stage/source guards сохранены.
+Ready1 исключён; decline не меняет statuses/attempts/evidence, provider0.
+123tests+9subtests PASS100.08s, independent28targeted и processing/Pinterest probes PASS.
+
+Владелец одобрил table/ready/issues/empty mockup2026-10-02. Таблица основной страницы,
+immediate checkbox persistence, English defaults/custom names intact. Explicit
+ready-only bypass только missing, не ambiguity/invalidPNG. Незавершённые records
+сохраняются, reopen сбрасывает partial consent. Footer ZIP+authoritative Save project;
+save error не показывает успех. Actual legacy20items/1ready/19failed→select→save→ZIP
+CRC/PNG exact→reopen selection/19failed intact, no provider.41UI+5subtests,
+7planner+5subtests и2actual integrations PASS. Independent49tests+10subtests и
+actual partial/save error/retry/freeze probes PASS; новых дефектов нет.
+Actual1120×780 footer reachable; safe-dummy approval/actual artifacts:
+docs/ui/3.1/export-table-20261002/.
+
+Первый общий прогон прерван после новых owner PNG для необходимого upscale fix;
+exit130 не является успешной проверкой. Финальный полный suite выполняется отдельно.
+
+
+Финальная root-проверка таблицы обнаружила ещё один воспроизводимый дефект:
+оба варианта включены→снять второй→включить обратно. Resolver необратимо удалял
+resolved ambiguous из единственного inventory, и повторное включение не блокировало
+экспорт. Независимое review воспроизвело то же, _export открывал picker.
+Новые данные подтвердили причину; теперь отдельный исходный candidate inventory,
+current blockers пересчитываются при каждом изменении. Regression baseline FAIL,
+после fix проверяет repeated toggle/zeroactive/partial и отсутствие picker.
+
+Общий pytest через stdin завис на multiprocessing spawn в chroma benchmark;
+faulthandler показал popen_spawn_posix._launch/process.start, не UI operation.
+Два таких прогона прерваны exit130 и не считаются PASS. Guarded временный
+file runner сохраняет одну QApplication и не запускает pytest в spawn child;
+те же19benchmark tests+6subtests PASS8.83s без изменения тестов/продукта.
+Финальный общий suite выполняется через этот file runner.
+
+Независимое повторное review того же inventory обнаружило отдельный reopen false-block:
+сохранённый выбор одного варианта отображался, но новый dialog не пересчитывал
+исходный ambiguous до первого interaction. Root baseline regression FAIL подтвердил
+условие. Constructor теперь resolver(saved_membership) перед первым summary refresh;
+новая regression требует reopen enabled и reselect blocked. Вынужденный общий
+file-run прерван до этой source правки; окончательный run начинается после неё.
+
+После обоих ambiguity исправлений:46target UI/planner/integration tests+5subtests
+PASS5.68s. Финальное независимое review52tests+10subtests PASS2.43s,50toggle/reopen
+cycles PASS; новых подтверждённых дефектов нет. Full source теперь неизменен.
+
+
+Финальный file-run общего safe suite:2481passed,1failed,57skipped,21deselected,
+281subtests PASS419.47s. Единственный failure exact architecture inventory:
+studio_auto_clipart_state→studio_clipart_objects. Причина: новая combined inactive
+schema validation использует существующий pure validate_objects, пара отсутствовала
+в reviewed baseline. Независимо подтверждено module-owned extension подключение,
+validation не импортирует flow/UI и не запускает jobs. Добавлена ровно эта пара
+с объяснением; строгий added/removed comparison и запрет wildcard не ослаблены.
+26dependency/inactive/history checks PASS2.73s; independent26PASS2.68s.
+Production sources после full-run не менялись; полный suite повторно не запускался.
+57skips:3native contracts (DPAPI, Windows sharing, отсутствующий RealESRGAN) и54
+отложенных six-slot Pinterest;21network/paid deselected. Pillow getdata deprecation
+в новой test-only regression зарегистрирован как warning, не дефект продукта.

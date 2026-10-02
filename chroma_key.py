@@ -1822,6 +1822,51 @@ def _has_enclosed_transition_solution(
     return bool(np.count_nonzero(recovered_matte >= raw_matte + 0.10) >= 9)
 
 
+def _weak_opaque_paint_mask(source: Image.Image, provisional: Image.Image, key: np.ndarray):
+    """Protect flat weak-key paint that lacks a supported local mixture.
+
+    A dark violet stroke can have slight key-channel dominance of its own.
+    Under the opaque-clipart ambiguity policy, preserve that source paint rather
+    than reinterpret it using an adjacent cream material. This is not proof that
+    all weak additive spill is absent.
+    """
+    original = np.asarray(source.convert("RGBA"), dtype=np.uint8)
+    pixels = np.asarray(provisional, dtype=np.uint8)
+    channel = int(np.argmax(key))
+    others = [c for c in range(3) if c != channel]
+    rgb = original[..., :3]
+    dominance = rgb[..., channel].astype(np.int16) - np.max(rgb[..., others], axis=2).astype(np.int16)
+    candidate = ((original[..., 3] == 255) & (pixels[..., 3] >= 242)
+                 & (pixels[..., 3] < 255) & (dominance <= 24))
+    if not np.any(candidate):
+        return original, np.zeros(candidate.shape, dtype=bool)
+    vertical = np.max(cv2.absdiff(rgb[1:], rgb[:-1]), axis=2) <= 1
+    horizontal = np.max(cv2.absdiff(rgb[:, 1:], rgb[:, :-1]), axis=2) <= 1
+    flat = np.zeros(candidate.shape, dtype=bool)
+    flat[1:-1] |= vertical[:-1] & vertical[1:]
+    flat[:, 1:-1] |= horizontal[:, :-1] & horizontal[:, 1:]
+    candidate &= flat
+    core = cv2.erode((pixels[..., 3] == 255).astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    protected = np.zeros(candidate.shape, dtype=bool)
+    if not np.any(candidate) or not np.any(core):
+        return original, protected
+    distance, labels = cv2.distanceTransformWithLabels((~core).astype(np.uint8),
+        cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+    candidate &= distance <= 12
+    if not np.any(candidate):
+        return original, protected
+    lookup = np.zeros((int(labels.max()) + 1, 3), dtype=np.float32)
+    lookup[labels[core]] = rgb[core]
+    reference = lookup[labels[candidate]]
+    observed = rgb[candidate].astype(np.float32)
+    direction = reference - key
+    coverage = np.clip(np.sum((observed - key) * direction, axis=1)
+        / np.maximum(np.sum(direction * direction, axis=1), 1), 0, 1)
+    residual = np.max(np.abs(observed - (key + coverage[:, None] * direction)), axis=1)
+    protected[candidate] = residual > 5
+    return original, protected
+
+
 def remove_chroma_key_automatic(
     image: Image.Image,
     key_color: object = "blue",
@@ -1863,6 +1908,18 @@ def remove_chroma_key_automatic(
         measured_key[other_channels[0]],
         measured_key[other_channels[1]],
     )
+    protected_source = None
+    protected_paint = None
+
+    def preserve_paint(result):
+        if protected_paint is None:
+            return result
+        restored = result.copy() if result.mode == "RGBA" else result.convert("RGBA")
+        pixels = restored.load()
+        for x, y, rgba in protected_paint:
+            pixels[x, y] = rgba
+        return restored
+
     prefer_precise = measured_other <= 36.0
     if subject_profile == "opaque_clipart":
         prefer_precise |= _has_enclosed_transition_solution(
@@ -1884,35 +1941,55 @@ def remove_chroma_key_automatic(
         except ChromaKeyAmbiguousError:
             pass
         else:
+            if subject_profile == "opaque_clipart":
+                protected_source, candidate_paint = _weak_opaque_paint_mask(image, result, measured_key)
+                if np.any(candidate_paint):
+                    rows, columns = np.nonzero(candidate_paint)
+                    protected_paint = [
+                        (int(x), int(y), tuple(int(c) for c in protected_source[y, x]))
+                        for y, x in zip(rows, columns)
+                    ]
+                    protected_source = None
+                    result = preserve_paint(result)
+                else:
+                    protected_source = None
             if stage_observer is not None:
                 stage_observer("precise_result", result.copy())
             result = _neutralize_opaque_key_spill(image, result, key_color)
+            result = preserve_paint(result)
             if stage_observer is not None:
                 stage_observer("opaque_spill", result.copy())
             if subject_profile == "legacy":
                 result = _neutralize_translucent_complement(image, result, key_color)
+                result = preserve_paint(result)
                 if stage_observer is not None:
                     stage_observer("translucent_complement", result.copy())
             result = _preserve_fully_opaque_source_rgb(
                 image, result,
                 measured_key=measured_key if subject_profile == "opaque_clipart" else None,
             )
+            result = preserve_paint(result)
             if stage_observer is not None:
                 stage_observer("source_rgb_restore", result.copy())
             if subject_profile == "opaque_clipart":
                 result = _refine_opaque_boundary(image, result, measured_key)
+                result = preserve_paint(result)
                 if stage_observer is not None:
                     stage_observer("opaque_boundary", result.copy())
                 result = reclassify_rim(image, result, measured_key)
+                result = preserve_paint(result)
                 if stage_observer is not None:
                     stage_observer("rim_reclassification", result.copy())
                 result = refine_edge_mixture(image, result, measured_key)
+                result = preserve_paint(result)
                 if stage_observer is not None:
                     stage_observer("edge_mixture", result.copy())
                 result = suppress_edge_key_spill(image, result, measured_key)
+                result = preserve_paint(result)
                 if stage_observer is not None:
                     stage_observer("edge_key_spill", result.copy())
                 result = repair_edge_chroma(image, result, measured_key)
+                result = preserve_paint(result)
                 if stage_observer is not None:
                     stage_observer("edge_chroma_repair", result.copy())
             return result
@@ -1922,32 +1999,40 @@ def remove_chroma_key_automatic(
     if stage_observer is not None:
         stage_observer("staged_result", result.copy())
     result = _neutralize_opaque_key_spill(image, result, key_color)
+    result = preserve_paint(result)
     if stage_observer is not None:
         stage_observer("opaque_spill", result.copy())
     if subject_profile == "legacy":
         result = _neutralize_translucent_complement(image, result, key_color)
+        result = preserve_paint(result)
         if stage_observer is not None:
             stage_observer("translucent_complement", result.copy())
     result = _preserve_fully_opaque_source_rgb(
         image, result,
         measured_key=measured_key if subject_profile == "opaque_clipart" else None,
     )
+    result = preserve_paint(result)
     if stage_observer is not None:
         stage_observer("source_rgb_restore", result.copy())
     if subject_profile == "opaque_clipart":
         result = _refine_opaque_boundary(image, result, measured_key)
+        result = preserve_paint(result)
         if stage_observer is not None:
             stage_observer("opaque_boundary", result.copy())
         result = reclassify_rim(image, result, measured_key)
+        result = preserve_paint(result)
         if stage_observer is not None:
             stage_observer("rim_reclassification", result.copy())
         result = refine_edge_mixture(image, result, measured_key)
+        result = preserve_paint(result)
         if stage_observer is not None:
             stage_observer("edge_mixture", result.copy())
         result = suppress_edge_key_spill(image, result, measured_key)
+        result = preserve_paint(result)
         if stage_observer is not None:
             stage_observer("edge_key_spill", result.copy())
         result = repair_edge_chroma(image, result, measured_key)
+        result = preserve_paint(result)
         if stage_observer is not None:
             stage_observer("edge_chroma_repair", result.copy())
     return result

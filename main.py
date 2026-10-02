@@ -3962,14 +3962,14 @@ class WorkerThread(QThread):
         actual_input_path = input_path
         alpha_channel = None
         temp_dir = None
-        with Image.open(input_path) as source_img:
-            if "A" in source_img.getbands():
-                source_rgba = source_img.convert("RGBA")
-                alpha_channel = source_rgba.getchannel("A")
-                temp_dir = tempfile.TemporaryDirectory()
-                actual_input_path = os.path.join(temp_dir.name, "realesrgan_rgb_input.png")
-                source_rgba.convert("RGB").save(actual_input_path, format="PNG")
         try:
+            with Image.open(input_path) as source_img:
+                if "A" in source_img.getbands():
+                    source_rgba = source_img.convert("RGBA")
+                    alpha_channel = source_rgba.getchannel("A")
+                    temp_dir = tempfile.TemporaryDirectory()
+                    actual_input_path = os.path.join(temp_dir.name, "realesrgan_rgb_input.png")
+                    self._prepare_upscale_rgb(source_rgba).save(actual_input_path, format="PNG")
             command = [
                 exe_path,
                 "-i",
@@ -4025,12 +4025,37 @@ class WorkerThread(QThread):
             self._restore_upscaled_alpha(output_path, alpha_channel)
         return output_path
 
+    @staticmethod
+    def _prepare_upscale_rgb(source_rgba):
+        """Extend foreground RGB beneath alpha zero without altering visible pixels."""
+        import cv2
+        import numpy as np
+
+        rgba = np.asarray(source_rgba, dtype=np.uint8)
+        alpha = rgba[:, :, 3]
+        transparent = alpha == 0
+        if not np.any(transparent) or not np.any(alpha):
+            return source_rgba.convert("RGB")
+        trusted = alpha == 255
+        if not np.any(trusted):
+            trusted = alpha > 0
+        _, labels = cv2.distanceTransformWithLabels(
+            (~trusted).astype(np.uint8), cv2.DIST_L2, 5,
+            labelType=cv2.DIST_LABEL_PIXEL,
+        )
+        rgb = rgba[:, :, :3].copy()
+        palette = np.empty((int(labels.max()) + 1, 3), dtype=np.uint8)
+        palette[labels[trusted]] = rgb[trusted]
+        rgb[transparent] = palette[labels[transparent]]
+        return Image.fromarray(rgb, mode="RGB")
+
     def _restore_upscaled_alpha(self, output_path, alpha_channel):
         with Image.open(output_path) as result_img:
             result = result_img.convert("RGBA")
             alpha_histogram = alpha_channel.histogram()
             has_soft_alpha = any(alpha_histogram[1:255])
-            resample = Image.Resampling.LANCZOS if has_soft_alpha else Image.Resampling.NEAREST
+            # A nonnegative interpolation kernel cannot create detached alpha rings.
+            resample = Image.Resampling.BILINEAR if has_soft_alpha else Image.Resampling.NEAREST
             upscaled_alpha = alpha_channel.resize(result.size, resample)
             result.putalpha(upscaled_alpha)
             self._save_image_object_as_png(result, output_path)

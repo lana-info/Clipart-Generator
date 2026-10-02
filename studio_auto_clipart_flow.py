@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
-from studio_clipart_objects import attach_reference_guidance, compile_objects, fill_recipe
+from studio_clipart_objects import attach_reference_guidance, compile_objects, fill_recipe, validate_objects
 from studio_clipart_recipe import ClipartRecipe, ROLES
 from studio_bundle_planner import propose_bundle_plan
 from studio_style_profiles import style_modifier_keys
@@ -23,7 +23,7 @@ from v3_clipart_flow import (
     ClipartReviewRunPage, estimate_clipart_cost,
     build_clipart_run_request,
 )
-from v3_project_state import ProjectMode, PromptGeneratorData, StepId
+from v3_project_state import ProjectMode, PromptEntry, PromptGeneratorData, StepId
 from v3_provider_registry import (
     FAL_UPSCALE_MODEL_OPTIONS, KIE_MODEL_OPTIONS, processing_provider_options,
     upscale_model_preserves_alpha, normalize_fal_upscale_factor,
@@ -32,6 +32,13 @@ from v3_provider_registry import (
 
 BRIEF_STEPS = (StepId.PROJECT, StepId.PROMPTS, StepId.PROMPT_REVIEW,
                StepId.GENERATION, StepId.PROCESSING_OPTIONS)
+
+
+def _run_settings_fingerprint(request):
+    return hashlib.sha256(json.dumps(
+        {'work_dir': request.work_dir, 'settings': request.settings},
+        sort_keys=True, ensure_ascii=False,
+    ).encode('utf-8')).hexdigest()
 
 
 class AutoClipartGenerationPage(ClipartGenerationPage):
@@ -115,6 +122,47 @@ class CollectionBrief(ClipartBuilderDialog):
         form.addRow("Рабочая папка", folder_row)
         self.project_name.setPlaceholderText("Клипарт · " + datetime.now().strftime("%d.%m.%Y %H:%M"))
         self.pages.widget(0).widget().layout().insertLayout(0, form)
+        self._applied_counts = dict(self.recipe.counts)
+        # Total changes must affect the actual slots, including an existing plan.
+        self.total.valueChanged.connect(self._suggest)
+
+    def _reconcile_objects(self, counts):
+        current = self.object_editor.value()
+        inactive = deepcopy(self.workflow_state.data.automatic.get('inactive_objects', []))
+        # New manually added objects use the editor's active ordinals. Preserve
+        # both records if an inactive idea already used that number.
+        ordinals = {item['ordinal'] for item in current}
+        next_number = max([item['ordinal'] for item in current + inactive], default=0) + 1
+        for item in inactive:
+            if item['ordinal'] in ordinals:
+                item['ordinal'] = next_number
+                next_number += 1
+            ordinals.add(item['ordinal'])
+        candidates = validate_objects(current + inactive)
+        remaining = dict(counts)
+        active, unused = [], []
+        for item in candidates:
+            if remaining[item['role']] > 0:
+                active.append(item)
+                remaining[item['role']] -= 1
+            else:
+                unused.append(item)
+        # Allocate new ordinals above inactive ideas as well, avoiding collisions
+        # when those ideas are restored after a later increase.
+        filled = fill_recipe(candidates, counts)
+        existing_ids = {item['id'] for item in candidates}
+        active.extend(item for item in filled if item['id'] not in existing_ids)
+        active.sort(key=lambda item: item['ordinal'])
+        if len(active) + len(unused) > 1000:
+            raise ValueError('Допускается до 1000 объектов')
+        if unused:
+            self.workflow_state.data.automatic['inactive_objects'] = unused
+        else:
+            self.workflow_state.data.automatic.pop('inactive_objects', None)
+        if current != active:
+            self.object_editor.items = active
+            self.object_editor.refresh()
+        return active
 
     def _choose_directory(self):
         path = QFileDialog.getExistingDirectory(self, "Рабочая папка", self.directory.text())
@@ -141,12 +189,27 @@ class CollectionBrief(ClipartBuilderDialog):
         recipe.motifs = [value.strip() for value in self.motifs.text().split(",") if value.strip()]
         recipe.visual = self._visual_values()
         recipe.references = self.reference_editor.value()
-        recipe.objects = self.object_editor.value()
         recipe.assistant = self.planning.selection()
         counts = {role: spin.value() for role, spin in self.counts.items()}
-        if recipe.objects:
-            counts = {role: sum(item["role"] == role for item in recipe.objects) for role in ROLES}
+        objects = self.object_editor.value()
+        object_counts = {role: sum(item['role'] == role for item in objects) for role in ROLES}
+        if objects and counts == self._applied_counts and object_counts != counts:
+            # Explicit manual add/remove/role edits still define the active plan.
+            counts = object_counts
+            for role, spin in self.counts.items():
+                spin.blockSignals(True)
+                spin.setValue(counts[role])
+                spin.blockSignals(False)
+            self._show_total()
+            self.total.blockSignals(True)
+            self.total.setValue(len(objects))
+            self.total.blockSignals(False)
         recipe.edit_counts(counts)
+        self.total.blockSignals(True)
+        self.total.setValue(recipe.total)
+        self.total.blockSignals(False)
+        recipe.objects = self._reconcile_objects(counts) if self.object_editor.items else []
+        self._applied_counts = dict(counts)
         if recipe.objects:
             recipe.bundle_plan = propose_bundle_plan(recipe.objects, existing=recipe.bundle_plan)
         recipe.validate()
@@ -394,9 +457,7 @@ class AutoClipartFlowController(ClipartFlowController):
             self.export_page.layout().removeWidget(existing)
             existing.deleteLater()
             self.export_panel = None
-        self.export_empty.setVisible(not bool(paths))
-        if not paths:
-            return
+        self.export_empty.hide()
         extension = page.results_extension
         if extension is None:
             return
@@ -417,6 +478,8 @@ class AutoClipartFlowController(ClipartFlowController):
         self.export_page.layout().addWidget(panel, 1)
         self.export_panel = panel
         panel.busy_changed.connect(self.shell.refresh)
+        panel.export_availability_changed.connect(lambda _enabled: self.shell.refresh())
+        panel.review_requested.connect(lambda: self._select_step(StepId.RESULTS))
 
     def navigate(self, direction):
         if self.is_busy():
@@ -427,13 +490,11 @@ class AutoClipartFlowController(ClipartFlowController):
         try:
             if direction < 0:
                 if index == 6 and self.run_queue.session is not None:
-                    if QMessageBox.question(self.run_queue.page, "Новый запуск",
-                        "Вернуться к настройке нового запуска? Текущие результаты останутся на диске; экспортируйте набор перед продолжением.",
+                    if QMessageBox.question(self.run_queue.page, "Настройки набора",
+                        "Вернуться к настройкам набора? Готовые результаты сохранятся в проекте.",
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                         QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
                         return
-                    self.run_queue.reset_for_new_workflow()
-                    self.shell.state.data.automatic.pop("run", None)
                 if index:
                     self._select_step(route[index - 1])
                 return
@@ -447,9 +508,9 @@ class AutoClipartFlowController(ClipartFlowController):
             if index == 3:
                 counts = {role: spin.value() for role, spin in self.brief.counts.items()}
                 self.brief.recipe.edit_counts(counts)
-                self.brief.object_editor.items = fill_recipe(self.brief.object_editor.value(), counts)
-                self.brief.object_editor.refresh()
+                self.brief._reconcile_objects(counts)
             if index == 4:
+                previous_session = None
                 recipe, generator = self.brief.snapshot()
                 if not recipe.objects or any(not item['name'].strip() for item in recipe.objects):
                     self.brief.planning.start(False)
@@ -465,12 +526,15 @@ class AutoClipartFlowController(ClipartFlowController):
                 if fingerprint != self.shell.state.data.automatic.get("compiled"):
                     if self.run_queue.session is not None:
                         if QMessageBox.question(self.brief, "Изменение набора",
-                            "Состав изменён. Начать новый запуск? Старые файлы останутся на диске.",
+                            "Состав изменён. Начать новый запуск? Предыдущие результаты сохранятся в проекте.",
                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                             QMessageBox.StandardButton.No) != QMessageBox.StandardButton.Yes:
                             return
+                        self._archive_run()
+                        previous_session = self.run_queue.session
                         self.run_queue.reset_for_new_workflow()
                         self.shell.state.data.automatic.pop("run", None)
+                        self.shell.state.data.automatic.pop('run_settings_fingerprint', None)
                     self.shell.state.data.prompts = prompts
                     self.shell.state.data.automatic["compiled"] = fingerprint
                 operations = self.shell.state.data.operations
@@ -478,6 +542,10 @@ class AutoClipartFlowController(ClipartFlowController):
                 operations.upscale_after = True
                 operations.remove_background = True
                 operations.remove_background_provider = "local_chroma_key"
+                if previous_session is not None:
+                    if self._reuse_completed_run(previous_session):
+                        self._select_step(StepId.RESULTS)
+                        return
             if index == 5:
                 self.flush()
                 self._refresh_launch()
@@ -609,8 +677,11 @@ class AutoClipartFlowController(ClipartFlowController):
         models = {approved.settings.get('reference_generation_model' if entry['references']
                                        else 'text_generation_model', '')
                   for entry in approved.generated_prompts}
+        session = self.run_queue.session
+        continuing = bool(session and any(item.status.value == 'cancelled' for item in session.items))
+        action = 'Продолжить незавершённые запросы' if continuing else 'Повторить неудачные запросы'
         message = (
-            f'Повторить неудачные запросы: {len(approved.generated_prompts)}?\n'
+            f'{action}: {len(approved.generated_prompts)}?\n'
             'Успешные изображения не будут созданы заново.\n'
             'Стоимость повтора не рассчитана; запросы оплачиваются отдельно.\n'
             'Модель: ' + ', '.join(sorted(models))
@@ -642,16 +713,92 @@ class AutoClipartFlowController(ClipartFlowController):
         data.operations.upscale_after = True
         data.operations.remove_background = True
         data.operations.remove_background_provider = "local_chroma_key"
+        if self.run_queue.session is not None and not self.run_queue.session.running:
+            self._archive_run()
         request = super().start()
         if request is not None:
             self.run_queue.session.changed.connect(self._save_run)
             self._save_run()
         return request
 
+    def _archive_run(self):
+        """Keep recorded outputs and paid-stage evidence before an explicit new run."""
+        data = self.shell.state.data
+        saved = data.automatic.get('run')
+        if not saved:
+            return
+        history = deepcopy(data.automatic.get('previous_runs', []))
+        session = self.run_queue.session
+        recorded_prompts = (
+            [PromptEntry.from_value(item.payload).to_dict() for item in session.items]
+            if session is not None else [prompt.to_dict() for prompt in data.prompts]
+        )
+        entry = {'prompts': recorded_prompts, 'run': deepcopy(saved)}
+        if data.automatic.get('run_settings_fingerprint'):
+            entry['settings_fingerprint'] = data.automatic['run_settings_fingerprint']
+        if history and history[-1] == entry:
+            return
+        if len(history) >= 100:
+            raise ValueError('История запусков заполнена; сохраните текущий проект отдельно')
+        history.append(entry)
+        data.automatic['previous_runs'] = history
+
+    def _reuse_completed_run(self, previous):
+        """Reuse only verified unchanged local results, without submitting work."""
+        from v3_run_queue import RunQueueSession, RunItemStatus
+        request = build_clipart_run_request(self.shell.state)
+        fingerprint = _run_settings_fingerprint(request)
+        if getattr(previous, '_settings_fingerprint', None) != fingerprint:
+            return
+        session = RunQueueSession(request, ProjectMode.CLIPART)
+        ready = set()
+        # Apply the queue's existing final-output provenance/path checks.
+        page = self.run_queue.page
+        current = page.session
+        try:
+            page.session = previous
+            ready = set(page._export_paths())
+        finally:
+            page.session = current
+        reused = False
+        for index, item in enumerate(session.items):
+            candidates = [old for old in previous.items if old.payload == item.payload]
+            if len(candidates) == 1:
+                old = candidates[0]
+                if old.status in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED, RunItemStatus.CANCELLED}:
+                    retained = deepcopy(old)
+                    retained.index, retained.display_name = item.index, item.display_name
+                    if old.status is RunItemStatus.SUCCEEDED:
+                        if not old.output_path or Path(old.output_path).resolve() not in ready:
+                            retained.status = RunItemStatus.FAILED
+                            retained.short_message = 'Сохранённый PNG недоступен. Проверьте файл результата.'
+                        else:
+                            reused = True
+                    session.items[index] = retained
+                    continue
+            # New or changed ideas have not been submitted by this replan.
+            item.status = RunItemStatus.CANCELLED
+            item.attempts = 0
+        if not reused:
+            return
+        session._settings_fingerprint = fingerprint
+        session.handle_finished()
+        self.run_queue.session = session
+        page.set_session(session)
+        session.changed.connect(self._save_run)
+        self._save_run()
+        return True
+
     def _save_run(self):
         session = self.run_queue.session
         if session is None:
             return
+        if not hasattr(session, '_settings_fingerprint'):
+            session._settings_fingerprint = _run_settings_fingerprint(session.request)
+        if session._settings_fingerprint:
+            self.shell.state.data.automatic['run_settings_fingerprint'] = session._settings_fingerprint
+        else:
+            self.shell.state.data.automatic.pop('run_settings_fingerprint', None)
         self.shell.state.data.automatic["run"] = [
             {"status": item.status.value, "output_path": item.output_path or "", "attempts": item.attempts,
              "editor_output_path": item.editor_output_path or "",
@@ -668,11 +815,14 @@ class AutoClipartFlowController(ClipartFlowController):
             return
         from v3_run_queue import RunQueueSession, RunItemStatus
         session = RunQueueSession(build_clipart_run_request(self.shell.state), ProjectMode.CLIPART)
+        # Legacy runs did not record their settings. Rebuilding a request from
+        # today's settings cannot prove that an older paid result used them.
+        session._settings_fingerprint = self.shell.state.data.automatic.get('run_settings_fingerprint')
         if len(saved) != len(session.items):
             raise ValueError("Сохранённые результаты не соответствуют составу набора")
         for item, row in zip(session.items, saved):
             status = RunItemStatus(row["status"])
-            item.status = status if status is RunItemStatus.SUCCEEDED else RunItemStatus.FAILED
+            item.status = status if status in {RunItemStatus.SUCCEEDED, RunItemStatus.CANCELLED} else RunItemStatus.FAILED
             item.output_path = row["output_path"] or None
             item.editor_output_path = row.get("editor_output_path", "")
             item.source_path = row.get("source_path", "")
@@ -684,6 +834,12 @@ class AutoClipartFlowController(ClipartFlowController):
                     "Файл сохранён для коррекции. Обработка не завершена; файл не готов к экспорту."
                     if item.output_path or item.source_path else
                     "Запуск был прерван. Повтор может потребовать оплаты."
+                )
+            elif item.status is RunItemStatus.CANCELLED:
+                item.short_message = (
+                    'Операция прервана пользователем.'
+                    if item.output_path or item.source_path or item.paid_completed_stages
+                    else 'Не выполнялся после остановки.'
                 )
         session.handle_finished()
         self.run_queue.session = session

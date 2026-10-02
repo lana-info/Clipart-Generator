@@ -1,5 +1,48 @@
 # Project state
 
+## Текущие исправления: итоговая проверка исходников
+
+Ветка codex/fix-large-contours-edge-quality-20261002 от b5ff546/sourcea3f0b70.
+Исходные PNG и несвязанные worktrees сохранены. Сборка, версии пакетов, сервер
+и опубликованные beta не меняются. Общий safe suite завершён; единственное замечание списка зависимостей
+исправлено и независимо перепроверено.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Редактировать5016×5016 PNG без потери размера, файл владельца | Actual Qt extract/move/apply/UndoRedo/save/reopen |32MP bound, bounded proposals, raw alpha/ownership сохранены, локальный refresh | Реализовано и проверено Linux/offscreen:14paths/1724mainnodes, extract0.6054s/apply0.93285s,108alpha pixels changed, RGB/sourceSHA/UndoRedo/PNG exact.188target tests PASS; independent61tests+48cases PASS. Windows responsiveness не проверена |
+| Сохранять естественную краску края при неоднозначности | Known-truth strokes, partial/concurrent controls, paired2048 benchmark | Per-call sparse weak-paint guard через все этапы; profilev11/readablev10 | Реализовано и проверено:196focused PASS,52contracts+12subtests PASS; independent230+6PASS. Quiet paired median4.738745→4.932501s; stress4.05108→4.914302s, maxRSS436.816MiB, бюджеты1.25/448MiB соблюдены. Не гарантирует удаления любой additive-примеси |
+| Увеличивать PNG без новых полос в alpha и скрытого синего во входе модели | Реальные промежуточные PNG, fake subprocess, hard/soft/empty/cleanup controls | Bilinear alpha/nearest binary, foreground под alpha0 только временного RGB | Реализовано и проверено: independent6tests+3subtests и70controls PASS. На той же реальной alpha569→1components, visible RGB/sourceSHA exact. Native Windows neural RGB результат недоступен |
+|20→1 точно ограничивает jobs и сохраняет готовую работу | Actual count/back/reopen и offline ZIP | Active/inactive objects, previous_runs paid evidence, strict fingerprint reuse, Back без сброса | Реализовано и проверено:123tests+9subtests PASS; independent28targeted PASS. Actual Next→RESULTS→EXPORT→ZIP1PNG byte-exact, no provider. Legacy unknown fingerprint не выдумывается |
+| Продолжать только незавершённое по явному выбору | Ready1+cancelled19, missing paid source, declined confirmation | retry_indices включает CANCELLED, records сохраняют paid/source evidence | Реализовано и проверено: ready1 исключён,19cancelled доступны продолжению, до подтверждения factory0. Independent processing/Pinterest queue probes PASS; платные операции не выполнялись |
+| Простая таблица экспорта, English defaults, save/partial; одобрение2026-10-02 | Actual1120×780, authoritative ProjectStore/reopen/ZIP, errors/preflight controls | Immediate membership save, Add set/counts, ready-only только missing, один ZIP action, Save project | Реализовано и проверено:Финальные46UI/planner/integration tests+5subtests PASS5.68s. Legacy1ready+19failed ZIPCRC/PNG exact,19records retained, reopen selections retained/partial reset. Save error без ложного успеха. Footer reachable1120×780, factory0. Independent52tests+10subtests и50toggle/reopen cycles PASS; actual partial/save/freeze probes PASS |
+| Завершить общий safe suite и artifact guard до сборки | Полный pytest и безопасные tracked paths | Независимые замечания ownership/paid-evidence исправлены, новых подтверждённых дефектов review нет | Реализовано и проверено на исходниках: общий run2481passed/281subtests/57skip/21deselected419.47s,1architecture allowlist failure. Новое module-state→object-validator ребро независимо одобрено; exact baseline обновлён,26dependency/inactive/history checks PASS2.73s (independent26PASS2.68s). Production sources после общего прогона не менялись; повторного полного run не было |
+
+Утверждённые макеты и actual screenshots с safe dummy content:
+docs/ui/3.1/export-table-20261002/. Private verification:
+../artifacts/party-duck-contour-fixed/verification.json,
+../artifacts/party-duck-alpha-upscale-fixed/verification.json.
+История docs/ERRORS.md#large-contour-and-weak-paint-fix,
+#party-duck-upscale-alpha-ringing, #auto-clipart-count-recoverable-export-20261002.
+Старые полосы, уже встроенные в RGB увеличенного файла, нельзя объявлять
+устранёнными mask-only сравнением. Native Windows upscaler и installed licensed
+scenario проверяются после отдельно разрешённой сборки.
+
+## Уточка5016px: новые подтверждённые ограничения
+
+Историческая диагностика до текущих исправлений, актуальный статус указан выше.
+Кандидат a3f0b70 проходит ранее записанные tests, но эти результаты не закрывают
+новый сценарий5016px и качество его края. Сборку не запускать автоматически.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Чистый естественный край уточки, новый PNG владельца | Фактическая alpha composite на тёмном фоне, фрагмент100% | Только диагностика, продукт не менялся | Проверка обнаружила дефект качества: тёмные полоски присутствуют в PNG.269424partial pixels сами по себе не доказывают дефект; исходник до обработки отсутствует, этап появления неизвестен |
+| Редактировать контур итогового5016×5016 PNG без потери разрешения | Actual _calculate_contour(extract) и core extract_contours | Не исправлено | Проверка обнаружила ограничение:4100px/side; core также отвергает903contours приMAX_PATHS256. При alpha>8 всего16components, поэтому многие элементы малопрозрачны; глобальный alpha threshold не предлагается |
+
+Evidence: ../artifacts/party-duck-diagnostics. Следующий этап: устранить причины
+цветовых артефактов и спроектировать bounded contour handling большого изображения
+с сохранением полной alpha/деталей. Не просто увеличивать лимит или уменьшать PNG.
+История docs/ERRORS.md#party-duck-5016-contour-quality.
+
 ## Раздельное сравнение цвета и остатков края, 2026-10-01 (дата владельца)
 
 После согласия «Давай» выполнена только offline диагностика кандидата a3f0b70.
@@ -4658,3 +4701,13 @@ them, for example `001_зимние-персонажи.zip`. Deleting the last s
 the asset records with zero memberships so auto-seeding does not silently bring
 that set back. Source PNGs are untouched. Local Qt captures and tests are in
 `docs/ui/3.2/export-workspace/`; native Windows acceptance remains pending.
+
+Финальные syntax/artifact/diff checks PASS.57 skips:3 native Windows/RealESRGAN
+проверки и54отложенных six-slot Pinterest;21network/paid deselected. Один warning:
+Pillow getdata deprecation в регрессии, не runtime failure. Независимое source
+ревью завершено; наблюдавшиеся ownership/paid-evidence/ambiguity дефекты закрыты.
+
+Source handoff: codex/fix-large-contours-edge-quality-20261002.
+Точный завершённый commit/upstream status проверяется в Git этой ветки.
+Следующий разрешаемый этап: отдельная Windows сборка; production публикация
+и снятие старого beta требуют успешной установленной/licensed приёмки.

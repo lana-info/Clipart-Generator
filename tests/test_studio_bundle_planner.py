@@ -7,6 +7,18 @@ from studio_clipart_recipe import ClipartRecipe
 
 
 class BundlePlannerTests(unittest.TestCase):
+    def test_new_titles_are_english_and_saved_custom_titles_are_not_translated(self):
+        objects = self._objects(80)
+        plan = propose_bundle_plan(objects)
+        expected = {'mini': 'Mini', 'standard': 'Standard', 'maxi': 'Maxi',
+                    'bundle': 'Full Bundle', 'characters': 'Characters',
+                    'compositions': 'Compositions', 'frames-wreaths': 'Frames and Wreaths',
+                    'decor': 'Decor'}
+        self.assertEqual({item['key']: item['title'] for item in plan['sets']}, expected)
+        plan['sets'][0]['title'] = 'Мои утята'
+        replanned = propose_bundle_plan(objects, existing=plan)
+        self.assertEqual(replanned['sets'][0]['title'], 'Мои утята')
+
     def _objects(self, total, preset='balanced'):
         recipe = ClipartRecipe()
         recipe.select(total, preset)

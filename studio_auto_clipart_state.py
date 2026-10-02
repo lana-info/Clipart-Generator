@@ -5,8 +5,42 @@ import re
 class AutoClipartStateExtension:
     def normalize_state(self, state):
         value = state.get("clipart", {}).get("automatic", {})
-        if not isinstance(value, dict) or set(value) - {"compiled", "run"}:
+        if not isinstance(value, dict) or set(value) - {"compiled", "run", "inactive_objects", "previous_runs", "run_settings_fingerprint"}:
             raise ValueError("Неверное состояние автоматического Clipart")
+        if 'run_settings_fingerprint' in value and (
+            not isinstance(value['run_settings_fingerprint'], str)
+            or not re.fullmatch(r'[0-9a-f]{64}', value['run_settings_fingerprint'])
+        ):
+            raise ValueError('Неверные настройки сохранённого запуска')
+        if 'inactive_objects' in value:
+            from studio_clipart_objects import validate_objects
+            active = state.get('clipart', {}).get('recipe') or {}
+            inactive = validate_objects(value['inactive_objects'])
+            validate_objects(list(active.get('objects', [])) + inactive)
+        if 'previous_runs' in value:
+            from v3_project_state import PromptEntry
+            history = value['previous_runs']
+            if not isinstance(history, list) or len(history) > 100:
+                raise ValueError('Неверная история запусков набора')
+            for entry in history:
+                if not isinstance(entry, dict) or set(entry) - {'settings_fingerprint'} != {'prompts', 'run'}:
+                    raise ValueError('Неверная история запуска')
+                if 'settings_fingerprint' in entry and (
+                    not isinstance(entry['settings_fingerprint'], str)
+                    or not re.fullmatch(r'[0-9a-f]{64}', entry['settings_fingerprint'])
+                ):
+                    raise ValueError('Неверные настройки предыдущего запуска')
+                prompts = entry['prompts']
+                if not isinstance(prompts, list) or not 1 <= len(prompts) <= 1000:
+                    raise ValueError('Неверные объекты предыдущего запуска')
+                for prompt in prompts:
+                    normalized = PromptEntry.from_value(prompt)
+                    if (normalized is None or normalized.to_dict() != prompt
+                            or normalized.result_kind != 'clipart' or not normalized.object_id):
+                        raise ValueError('Неверный объект предыдущего запуска')
+                self.normalize_state({'clipart': {'automatic': {'run': entry['run']}}})
+                if len(entry['run']) != len(prompts):
+                    raise ValueError('История результатов не соответствует объектам')
         if "compiled" in value and (not isinstance(value["compiled"], str)
             or not re.fullmatch(r"[0-9a-f]{64}", value["compiled"])):
             raise ValueError("Неверная версия промптов набора")

@@ -52,19 +52,19 @@ def test_create_rename_delete_and_recreate_sets_without_touching_png(images, mon
     dialog.new_set_name.setText('Зимние персонажи')
     dialog.new_set_images.item(1).setCheckState(Qt.CheckState.Checked)
     dialog._create_set()
-    assert [group['title'] for group in dialog.groups()] == ['Набор 1', 'Зимние персонажи']
+    assert [group['title'] for group in dialog.groups()] == ['Set 1', 'Зимние персонажи']
     set_id = next(link['set_id'] for link in dialog.saved_membership[str(images[0])]['memberships']
                   if link['title'] == 'Зимние персонажи')
     dialog._show_manual_editor(set_id)
     monkeypatch.setattr(QInputDialog, 'getText', lambda *args, **kwargs: ('Зимний набор', True))
     dialog._rename_current_set()
-    assert [group['title'] for group in dialog.groups()] == ['Набор 1', 'Зимний набор']
+    assert [group['title'] for group in dialog.groups()] == ['Set 1', 'Зимний набор']
     assert any(link['set_id'] == set_id and link['title'] == 'Зимний набор'
                for link in dialog.saved_membership[str(images[0])]['memberships'])
     monkeypatch.setattr(QMessageBox, 'question',
                         lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
     dialog._delete_set(set_id)
-    assert [group['title'] for group in dialog.groups()] == ['Набор 1']
+    assert [group['title'] for group in dialog.groups()] == ['Set 1']
     first_id = dialog._set_catalog()[0][0]
     dialog._delete_set(first_id)
     with pytest.raises(ValueError):
@@ -85,11 +85,9 @@ def test_summary_filename_hover_shows_preview(images):
     dialog = SetExportDialog(images)
     dialog.show()
     QApplication.processEvents()
-    name = next(label for label in dialog.findChildren(QLabel)
-                if label.property('previewPath') == str(images[0]))
-    QApplication.sendEvent(name, QEvent(QEvent.Type.Enter))
+    dialog.table.itemEntered.emit(dialog.table.item(0, 0))
     assert dialog.preview_popup.isVisible()
-    QApplication.sendEvent(name, QEvent(QEvent.Type.Leave))
+    QApplication.sendEvent(dialog.table.viewport(), QEvent(QEvent.Type.Leave))
     assert not dialog.preview_popup.isVisible()
     dialog.reject()
 
@@ -100,7 +98,7 @@ def test_empty_set_stays_editable_and_blocks_export(images):
     for row in range(dialog.table.rowCount()):
         dialog.table.item(row, 1).setCheckState(Qt.CheckState.Unchecked)
     dialog._save_membership()
-    assert dialog.summary_sets_value.text() == '1'
+    assert dialog.summary_counts.text() == '3 изображения · 1 набор'
     assert not dialog.export_button.isEnabled()
     dialog._show_manual_editor()
     dialog.table.item(0, 1).setCheckState(Qt.CheckState.Checked)
@@ -355,13 +353,12 @@ def test_approved_export_summary_is_primary_and_plain_language(images):
     membership = _membership_for_sets(images, ['Мини', 'Стандарт', 'Макси', 'Полный', 'Персонажи', 'Декор'])
     dialog = SetExportDialog(images, membership=membership)
     assert dialog.summary_page.isVisible() or not dialog.isVisible()
-    assert dialog.summary_unique_value.text() == '3'
-    assert dialog.summary_sets_value.text() == '6'
+    assert dialog.summary_counts.text() == '3 изображения · 6 наборов'
+    assert dialog.table.rowCount() == 3 and dialog.table.columnCount() == 7
     assert dialog.export_button.text() == 'Создать ZIP-наборы'
-    assert dialog.edit_sets_button.text() == 'Изменить состав наборов'
-    assert 'PDF Letter' not in dialog.delivery_note.text()
-    assert 'manifest' not in dialog.delivery_note.text().lower()
-    assert 'лист с превью' in dialog.delivery_note.text()
+    assert dialog.new_set_button.text() == '+ Добавить набор'
+    assert not hasattr(dialog, 'cards_scroll')
+    assert not hasattr(dialog, 'delivery_note')
     assert not hasattr(dialog, 'reviewed')
     assert not hasattr(dialog, 'close_button')
     assert dialog.stack.currentWidget() is dialog.summary_page
@@ -378,8 +375,8 @@ def test_manual_editor_is_matrix_and_return_label_fits(images):
     assert [dialog.table.horizontalHeaderItem(i).text() for i in range(1, 5)] == ['Мини', 'Стандарт', 'Макси', 'Полный']
     for column in range(1, dialog.table.columnCount()):
         assert dialog.table.horizontalHeaderItem(column).textAlignment() & Qt.AlignmentFlag.AlignHCenter
-    assert dialog.return_button.text() == 'К наборам'
-    assert dialog.return_button.minimumWidth() >= dialog.return_button.sizeHint().width()
+    assert dialog.manual_page is dialog.summary_page
+    assert dialog.rename_set_button.text() == 'Переименовать набор'
     dialog.close()
 
 
@@ -450,9 +447,10 @@ def test_summary_warning_explains_action_and_blocks_export(images):
     ]
     dialog = SetExportDialog(images, membership=membership, review_issues=issues)
     assert dialog.issue_panel.isVisible() or not dialog.isVisible()
-    assert '2' in dialog.issue_text.text()
-    assert 'ничего не выбрало автоматически' in dialog.issue_text.text()
-    assert dialog.review_now_button.text() == 'Проверить сейчас'
+    assert 'Не завершено: 1' in dialog.issue_text.text()
+    assert 'Нужно выбрать вариант: 1' in dialog.issue_text.text()
+    assert dialog.review_now_button.text() == 'Проверить'
+    assert not dialog.ready_only.isChecked()
     assert not dialog.export_button.isEnabled()
     dialog.review_now_button.click()
     assert dialog.stack.currentWidget() is dialog.manual_page
@@ -481,18 +479,50 @@ def test_bundle_export_issues_deduplicates_same_png_for_same_object(images):
     page.close()
 
 
-def test_unsaved_manual_membership_does_not_change_summary_or_export_groups(images):
+def test_table_membership_is_saved_immediately_and_restores_on_reopen(images):
     membership = _membership_for_sets(images, ['Мини', 'Полный'])
     dialog = SetExportDialog(images, membership=membership)
-    before = [(group['title'], len(group['images'])) for group in dialog.groups()]
-    dialog._show_manual_editor()
+    saved = []
+    dialog.membership_saved.connect(saved.append)
+    originals = [path.read_bytes() for path in images]
     dialog.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
-    dialog._show_summary()
-    after = [(group['title'], len(group['images'])) for group in dialog.groups()]
-    assert after == before
+    assert saved
     key = str(images[0].resolve())
-    assert dialog.saved_membership[key]['memberships'][0]['included'] is True
+    assert dialog.saved_membership[key]['memberships'][0]['included'] is False
+    assert [group['title'] for group in dialog.groups()] == ['Полный']
+    reopened = SetExportDialog(images, membership=saved[-1])
+    assert reopened.table.item(0, 1).checkState() == Qt.CheckState.Unchecked
+    assert [path.read_bytes() for path in images] == originals
     dialog.close()
+    reopened.close()
+
+
+def test_reselecting_second_variant_restores_ambiguity_and_blocks_partial_export(images, monkeypatch):
+    paths = [str(path.resolve()) for path in images[:2]]
+    ambiguous = {'kind': 'ambiguous', 'object_id': 'a', 'count': 2, 'paths': paths}
+    missing = {'kind': 'missing', 'object_id': 'b'}
+    dialog = SetExportDialog(images[:2],
+        membership=_membership_for_sets(images[:2], ['Full Bundle']),
+        review_issues=[ambiguous, missing])
+    dialog.ready_only.setChecked(True)
+    assert not dialog.export_button.isEnabled()
+    dialog.table.item(1, 1).setCheckState(Qt.CheckState.Unchecked)
+    assert dialog.review_issues == [missing]
+    assert dialog.export_button.isEnabled()
+    dialog.table.item(1, 1).setCheckState(Qt.CheckState.Checked)
+    assert dialog.review_issues == [ambiguous, missing]
+    assert not dialog.export_button.isEnabled()
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory',
+        lambda *args: pytest.fail('Ambiguous variants must not start export'))
+    dialog._export()
+    dialog.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
+    assert dialog.review_issues == [missing]
+    assert dialog.export_button.isEnabled()
+    assert dialog.groups()[0]['images'] == [images[1].resolve()]
+    dialog.table.item(1, 1).setCheckState(Qt.CheckState.Unchecked)
+    assert dialog.review_issues == [ambiguous, missing]
+    assert not dialog.export_button.isEnabled()
+    dialog.reject()
 
 
 def test_saved_manual_choice_resolves_ambiguous_issue_but_missing_stays_blocking(images):
@@ -511,6 +541,20 @@ def test_saved_manual_choice_resolves_ambiguous_issue_but_missing_stays_blocking
     assert [issue['kind'] for issue in dialog.review_issues] == ['missing']
     assert not dialog.export_button.isEnabled()
     dialog.close()
+
+
+def test_reopening_saved_variant_choice_resolves_then_rechecks_ambiguity(images):
+    paths = [str(path.resolve()) for path in images[:2]]
+    ambiguous = {'kind': 'ambiguous', 'object_id': 'a', 'count': 2, 'paths': paths}
+    membership = _membership_for_sets(images[:2], ['Full Bundle'])
+    membership[paths[1]]['memberships'][0]['included'] = False
+    dialog = SetExportDialog(images[:2], membership=membership, review_issues=[ambiguous])
+    assert dialog.review_issues == []
+    assert dialog.export_button.isEnabled()
+    dialog.table.item(1, 1).setCheckState(Qt.CheckState.Checked)
+    assert dialog.review_issues == [ambiguous]
+    assert not dialog.export_button.isEnabled()
+    dialog.reject()
 
 
 def test_bundle_membership_seed_deduplicates_duplicate_session_records(images):
@@ -670,3 +714,70 @@ def test_quality_controls_lock_while_export_worker_is_active(images, tmp_path, m
     dialog.worker.deleteLater()
     dialog.worker = None
     dialog.reject()
+
+
+def test_partial_export_needs_explicit_choice_and_preserves_missing_issues(images, tmp_path, monkeypatch):
+    issues = [{'kind': 'missing', 'object_id': str(n), 'count': 0, 'paths': []} for n in range(19)]
+    dialog = SetExportDialog(images[:1], review_issues=issues)
+    assert dialog.table.rowCount() == 1
+    assert not dialog.ready_only.isChecked()
+    assert not dialog.export_button.isEnabled()
+    assert 'Не завершено: 19' in dialog.issue_text.text()
+    originals = images[0].read_bytes()
+    dialog.ready_only.setChecked(True)
+    assert dialog.export_button.isEnabled()
+    assert dialog.review_issues == issues
+    monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(tmp_path / 'archives'))
+    (tmp_path / 'archives').mkdir()
+    dialog._export()
+    worker = dialog.worker
+    assert worker is not None
+    assert not dialog.table.isEnabled() and not dialog.ready_only.isEnabled()
+    loop = QEventLoop()
+    worker.finished.connect(loop.quit)
+    QTimer.singleShot(5000, loop.quit)
+    loop.exec()
+    assert dialog.exported and dialog.review_issues == issues
+    with ZipFile(dialog.exported[0]) as stream:
+        assert stream.testzip() is None
+        pngs = [name for name in stream.namelist() if name.endswith('.png')]
+        assert len(pngs) == 1 and stream.read(pngs[0]) == originals
+    reopened = SetExportDialog(images[:1], review_issues=issues, membership=dialog.saved_membership)
+    assert not reopened.ready_only.isChecked()
+    assert not reopened.export_button.isEnabled()
+    reopened.close()
+    dialog.close()
+
+
+def test_partial_export_does_not_override_ambiguous_or_invalid_png(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    missing = {'kind': 'missing', 'object_id': 'missing', 'count': 0, 'paths': []}
+    ambiguous = {'kind': 'ambiguous', 'object_id': 'two', 'count': 2, 'paths': [str(p) for p in images[:2]]}
+    dialog = SetExportDialog(images, review_issues=[missing, ambiguous])
+    dialog.ready_only.setChecked(True)
+    assert not dialog.export_button.isEnabled()
+    assert dialog._blocking_review_issues() == [ambiguous]
+    dialog.close()
+    report = AlphaQcReport(str(images[0].resolve()), 'block',
+        (AlphaQcIssue('opaque', 'block', 'PNG непрозрачен.', 'Проверьте фон.'),), width=32, height=32)
+    dialog = SetExportDialog(images[:1], review_issues=[missing], quality_reports=[report])
+    dialog.ready_only.setChecked(True)
+    assert not dialog.export_button.isEnabled()
+    dialog._export()
+    assert dialog.worker is None
+    assert 'блокируют экспорт' in dialog.status.text()
+    dialog.close()
+
+
+def test_empty_export_table_and_column_selection_are_reachable(images):
+    empty = SetExportDialog([])
+    assert empty.table.rowCount() == 0
+    assert empty.summary_counts.text() == '0 изображений · 0 наборов'
+    assert not empty.export_button.isEnabled()
+    empty.close()
+    dialog = SetExportDialog(images, membership=_membership_for_sets(images, ['Mini', 'Custom']))
+    assert not dialog.rename_set_button.isEnabled()
+    dialog.table.horizontalHeader().sectionClicked.emit(2)
+    assert dialog.rename_set_button.isEnabled()
+    assert dialog._editing_set_id == dialog._set_columns[1][0]
+    dialog.close()

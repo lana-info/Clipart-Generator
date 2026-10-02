@@ -1,0 +1,60 @@
+{
+  "issues": {
+    "size": [
+      1120,
+      780
+    ],
+    "rows": 1,
+    "columns": 7,
+    "summary": "1 изображение · 6 наборов",
+    "next_enabled": false,
+    "save_enabled": true,
+    "next_inside": true,
+    "worker_not_called": true
+  },
+  "partial": {
+    "next_enabled": true,
+    "issues_preserved": true
+  },
+  "ready": {
+    "size": [
+      1120,
+      780
+    ],
+    "rows": 1,
+    "columns": 7,
+    "summary": "1 изображение · 6 наборов",
+    "next_enabled": true,
+    "save_enabled": true,
+    "next_inside": true,
+    "worker_not_called": true
+  },
+  "empty": {
+    "size": [
+      1120,
+      780
+    ],
+    "rows": 0,
+    "columns": 1,
+    "summary": "0 изображений · 0 наборов",
+    "next_enabled": false,
+    "save_enabled": true,
+    "next_inside": true,
+    "worker_not_called": true
+  },
+  "approval": {
+    "date": "2026-10-02",
+    "owner_reply": "Да макет страницы одобряю",
+    "scope": "ready/issues/empty export table with English default names and explicit partial export"
+  },
+  "environment": "Linux Qt offscreen, 1120x780, scale 1; synthetic dummy PNG only",
+  "comparisons": [
+    "comparison-ready.png",
+    "comparison-issues.png",
+    "comparison-empty.png"
+  ],
+  "limitations": [
+    "Windows installed/licensed scenario not executed",
+    "Safe dummy screenshots do not prove real image cutout quality"
+  ]
+}

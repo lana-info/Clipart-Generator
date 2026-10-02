@@ -140,6 +140,14 @@ class ClipartRunResultsExtension:
                     expected.append(object_id)
                     seen.add(object_id)
         paths_by_object = {object_id: set() for object_id in expected}
+        # Plans contain ideas, not submitted jobs. An absent or explicitly
+        # cancelled job must not block delivery of the recorded ready results.
+        requested = {
+            str(item.payload.get('object_id') or '').strip()
+            for item in session.items if isinstance(item.payload, dict)
+            and getattr(getattr(item, 'status', None), 'value', None) != 'cancelled'
+        }
+        expected = [object_id for object_id in expected if object_id in requested]
         exported = {str(path.resolve()) for path in export_paths}
         for item in session.items:
             if not _succeeded(item) or not item.output_path or not isinstance(item.payload, dict):

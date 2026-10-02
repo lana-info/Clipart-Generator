@@ -61,7 +61,7 @@ from background_preview import PREVIEW_BACKGROUND_OPTIONS, composite_on_preview
 from v3_components import ButtonVariant, V3Button
 
 
-from studio_contour import BezierNode, BezierPath, ContourDocument, extract_contours, rasterize_path, MAX_NODES_PER_PATH, MAX_AUTO_CONTOUR_SIDE, changed_path_roi, _auto_handles
+from studio_contour import BezierNode, BezierPath, ContourDocument, extract_contours, rasterize_path, MAX_NODES_PER_PATH, MAX_AUTO_CONTOUR_SIDE, MAX_IMAGE_PIXELS as MAX_CONTOUR_IMAGE_PIXELS, changed_path_roi, _auto_handles
 
 from studio_contour_local import simplify_selected, smooth_selected, local_changed_path_rois
 
@@ -700,8 +700,8 @@ def _calculate_contour(kind, alpha, originals, paths, cancelled):
     """Worker owns only immutable geometry and a mask snapshot, never Qt state."""
     if cancelled.is_set():
         raise CancelledError()
-    if max(alpha.shape) > MAX_AUTO_CONTOUR_SIDE:
-        raise ValueError(f"Автоконтур поддерживает до {MAX_AUTO_CONTOUR_SIDE} px по каждой стороне.")
+    if max(alpha.shape) > MAX_AUTO_CONTOUR_SIDE or alpha.size > MAX_CONTOUR_IMAGE_PIXELS:
+        raise ValueError("Контуры поддерживают изображения до 32 мегапикселей и 32768 px по стороне.")
     if kind == "extract":
         if not np.any(alpha == 0) or not np.any(alpha > 0):
             raise ValueError("Автоконтур требует изображения с прозрачным фоном.")
@@ -1388,8 +1388,9 @@ class TransparencyCanvas(QGraphicsView):
     def _start_contour(self, kind):
         if self.document is None or self.contour_busy or self._painting:
             return
-        if max(self.document.mask.size) > MAX_AUTO_CONTOUR_SIDE:
-            self.status_changed.emit(f"Автоконтур поддерживает до {MAX_AUTO_CONTOUR_SIDE} px по каждой стороне.")
+        if (max(self.document.mask.size) > MAX_AUTO_CONTOUR_SIDE
+                or self.document.mask.width * self.document.mask.height > MAX_CONTOUR_IMAGE_PIXELS):
+            self.status_changed.emit("Контуры поддерживают изображения до 32 мегапикселей и 32768 px по стороне.")
             return
         cancelled = Event()
         paths = tuple(self.contour.paths)
@@ -1444,9 +1445,15 @@ class TransparencyCanvas(QGraphicsView):
                     self.contour.redo_stack.clear()
                     self.contour.local_before = None
                     self.contour.preview_after = True
+                had_preview = self._preview_alpha is not None
                 self._preview_alpha = None
                 self._preview_paths = None
-                self.refresh_image()
+                if had_preview:
+                    self.refresh_image()
+                else:
+                    # The worker supplies exact changed bounds. Rebuilding a
+                    # 25 MP pixmap for a small edge edit stalls the UI needlessly.
+                    self.refresh_region(bounds)
                 self.status_changed.emit("")
             success = True
         except CancelledError:

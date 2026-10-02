@@ -17,7 +17,10 @@ import numpy as np
 
 
 MAX_IMAGE_PIXELS = 32_000_000
-MAX_AUTO_CONTOUR_SIDE = 4100
+MAX_AUTO_CONTOUR_SIDE = 32_768
+# A proposal may ignore near-invisible noise only when raw geometry exceeds
+# the editing budget. The raster mask itself is never thresholded.
+_PROPOSAL_ALPHA_THRESHOLDS = (0, 8)
 MAX_PATHS = 256
 MAX_NODES_PER_PATH = 4_096
 MAX_FEATHER_PX = 2.0
@@ -169,21 +172,42 @@ def changed_path_roi(previous: BezierPath, replacement: BezierPath) -> ROI:
             min(height,int(np.ceil(points[:,1].max()))+padding+1))
 
 
+def _proposal_contours(alpha: np.ndarray, tolerance: float, cancelled=None):
+    """Choose bounded editable geometry, leaving every raster alpha unchanged."""
+    failure = "mask has too many contours to edit safely"
+    for threshold in _PROPOSAL_ALPHA_THRESHOLDS:
+        _check_cancelled(cancelled)
+        binary = cv2.compare(alpha, threshold, cv2.CMP_GT)
+        contours, hierarchy = cv2.findContours(binary, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+        if len(contours) > MAX_PATHS:
+            continue
+        too_many_nodes = False
+        for contour in contours:
+            _check_cancelled(cancelled)
+            proposal = cv2.approxPolyDP(contour, tolerance, True) if tolerance else contour
+            if len(proposal) > MAX_NODES_PER_PATH:
+                too_many_nodes = True
+                failure = "contour has too many nodes to edit safely"
+                break
+        if not too_many_nodes:
+            return contours, hierarchy
+    raise ValueError(failure)
+
+
 def extract_contours(alpha: np.ndarray, *, tolerance: float = 1.0, cancelled=None) -> list[BezierPath]:
     """Extract exteriors and holes without simplifying more than tolerance pixels.
 
     ``CHAIN_APPROX_NONE`` retains the original alpha boundary first.  OpenCV's
     Douglas-Peucker approximation is then bounded by ``tolerance`` in the final
     pixel coordinate system, so it is never a global image smoothing operation.
+    When near-invisible fragments exceed the geometry budget, proposals use
+    alpha > 8. Raw alpha, including omitted fragments, remains untouched.
     """
     alpha = _validate_alpha(alpha)
     if not isfinite(float(tolerance)) or not 0.0 <= float(tolerance) <= 8.0:
         raise ValueError("tolerance must be finite and between 0 and 8 pixels")
     _check_cancelled(cancelled)
-    binary = cv2.compare(alpha, 0, cv2.CMP_GT)
-    contours, hierarchy = cv2.findContours(binary, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
-    if len(contours) > MAX_PATHS:
-        raise ValueError("mask has too many contours to edit safely")
+    contours, hierarchy = _proposal_contours(alpha, float(tolerance), cancelled)
     paths: list[BezierPath] = []
     hierarchy_rows = hierarchy[0] if hierarchy is not None else []
     for index, contour in enumerate(contours):
@@ -358,6 +382,11 @@ class ContourDocument:
                 old_coverage, out=np.zeros_like(old_coverage), where=old_coverage > 0)
             new_only = np.clip(new_coverage - old_coverage, 0.0, 1.0)
             if np.any(old_only):
+                owned = self._extracted_footprint(previous, bounds, cancelled=cancelled)
+                if owned is not None:
+                    # Omitted faint components can lie inside the selected
+                    # polygon's hole. Polygon coverage is not raster ownership.
+                    old_only[(region > 0) & ~owned] = 0.0
                 # The simplified old polygon can miss real edge pixels. Remove
                 # those only beside a changed segment and only when they belong
                 # to this extracted exterior; unrelated raster details survive.
@@ -366,7 +395,6 @@ class ContourDocument:
                     np.ones((2 * radius + 1, 2 * radius + 1), np.uint8))[crop] > 0
                 missed_edge = protected_residual & (new_coverage == 0) & changed_edge
                 if np.any(missed_edge):
-                    owned = self._extracted_footprint(previous, bounds, cancelled=cancelled)
                     if owned is not None:
                         old_only[missed_edge & owned] = 1.0
             old_only[protected_opaque] = 0.0
@@ -407,9 +435,7 @@ class ContourDocument:
         expected = np.asarray([node.point for node in path.nodes])
         for alpha in (self.alpha, self._source_alpha):
             _check_cancelled(cancelled)
-            binary = cv2.compare(alpha, 0, cv2.CMP_GT)
-            contours, hierarchy = cv2.findContours(binary,
-                cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+            contours, hierarchy = _proposal_contours(alpha, self.extraction_tolerance, cancelled)
             if hierarchy is None:
                 continue
             candidates = list(range(len(contours)))
@@ -430,6 +456,7 @@ class ContourDocument:
                 # inside them. Membership must follow the actual 8-connected
                 # foreground, using the same connectivity as findContours.
                 seed = tuple(int(value) for value in contour[0, 0])
+                binary = cv2.compare(alpha, 0, cv2.CMP_GT)
                 cv2.floodFill(binary, None, seed, 128, flags=8)
                 _check_cancelled(cancelled)
                 return binary[top:bottom, left:right] == 128

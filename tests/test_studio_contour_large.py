@@ -149,9 +149,31 @@ def test_cancel_during_core_keeps_alpha_and_geometry_atomic():
     assert core.paths == paths
 
 
-def test_4100_side_allowed_and_4101_rejected():
+def test_contour_side_limit_and_total_pixel_budget_are_independent():
     alpha = np.zeros((4100,4100),dtype=np.uint8)
     alpha[100:4000,100:4000] = 255
     assert _calculate_contour('extract',alpha,(),(),Event())
-    with pytest.raises(ValueError, match='4100'):
-        _calculate_contour('extract',np.zeros((1,4101),dtype=np.uint8),(),(),Event())
+    assert _calculate_contour('extract',np.pad(np.ones((8, 4101), dtype=np.uint8), ((1, 1), (1, 1))),(),(),Event())
+    with pytest.raises(ValueError, match='32768'):
+        _calculate_contour('extract',np.zeros((1,32769),dtype=np.uint8),(),(),Event())
+    with pytest.raises(ValueError, match='32 мегапикселей'):
+        _calculate_contour('extract',np.zeros((5657,5657),dtype=np.uint8),(),(),Event())
+
+
+def test_contour_publication_refreshes_only_changed_region(tmp_path):
+    page, source = make_page(tmp_path)
+    try:
+        canvas = page.canvas
+        canvas.auto_contour(); wait(canvas)
+        before = np.array(page.document.mask)
+        canvas.contour.selected = (0, 0)
+        canvas.contour.toggle()
+        with patch.object(canvas, 'refresh_region', wraps=canvas.refresh_region) as region, patch.object(canvas, 'refresh_image', side_effect=AssertionError('unexpected full-image refresh')):
+            canvas.apply_contour(); wait(canvas)
+        assert region.call_count == 1
+        bounds = region.call_args.args[0]
+        assert bounds and (bounds[2]-bounds[0])*(bounds[3]-bounds[1]) < before.size
+        assert 'unexpected full-image' not in page.contour_status.text()
+        assert not np.array_equal(np.array(page.document.mask), before)
+    finally:
+        page.close(); page.deleteLater()

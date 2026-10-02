@@ -1,5 +1,24 @@
 # TASKS
 
+## Текущая реализация: контур, край и восстановимый экспорт
+
+- [x] Отдельная fixbranch;5016px baseline отказ исправлен без уменьшения PNG.
+- [x] Bounded proposals/ownership/UndoRedo/save/RGB:188target и независимые61+48cases PASS; финальный actual5016² PASS.
+- [x] Per-call weak-paint/profilev11 guard:196focused/52+12contracts и independent230+6PASS; paired performance/memory budgets соблюдены.
+- [x] Owner промежуточные PNG сопоставлены; bilinear alpha и alpha0 RGB input исправлены; independent6+3tests/70controls PASS.
+- [x]20→1, active/inactive/history/paid evidence и explicit canceled continuation:123+9tests, independent28targeted PASS.
+- [x] Table export approved и реализован: English defaults/save/partial;Финальные46+5UI/planner/integration PASS; independent52+10 и50toggle/reopen cycles PASS; actual save/freeze PASS.
+- [x] Actual ready/issues/empty/partial1120×780, footer reachable; approval artifacts в docs/ui/3.1/export-table-20261002/.
+- [x] Общий safe suite2481passed+281subtests;1exact dependency inventory failure исправлен после независимого review,26targeted checks PASS. Production source не менялся после full run; artifact/AST/diff guard PASS.
+- [x] Подготовить проверенный source handoff в codex/fix-large-contours-edge-quality-20261002; точный commit и upstream-status указаны в Git этой ветки. Сборку/production не запускать.
+- [ ] После отдельно разрешённой сборки: native Windows upscaler RGB quality и installed licensed delivery; старые beta сохраняются до приёмки.
+
+## Новый сценарий: уточка5016×5016
+
+- [x] Проверить реальный PNG и воспроизвести отказ actual contour worker.
+- [x] Устранить ограничение редактирования5016px с сохранением размера/деталей, добавить meaningful regression; docs/ERRORS.md#party-duck-5016-contour-quality.
+- [x] Промежуточные PNG локализовали alpha ringing, временный RGB input исправлен; mask-only проверка не доказывает исправление уже встроенных neural RGB полос. Native повторный запуск после сборки.
+
 ## Диагностика края после обсуждения, 2026-10-01 (дата владельца)
 
 - [x] Разделить цвет и alpha в новых сравнительных PNG на текущем a3f0b70.

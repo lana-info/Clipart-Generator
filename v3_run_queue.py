@@ -688,6 +688,12 @@ class RunQueueSession(QObject):
             if item.status is RunItemStatus.FAILED
         ]
 
+    @property
+    def retry_indices(self) -> list[int]:
+        """Explicit continuation includes cancelled work, never ready outputs."""
+        return [index for index, item in enumerate(self.items)
+                if item.status in {RunItemStatus.FAILED, RunItemStatus.CANCELLED}]
+
     def counts(self) -> dict[str, int]:
         return {
             status.value: sum(item.status is status for item in self.items)
@@ -1219,7 +1225,7 @@ class RunQueueSession(QObject):
                 or not getattr(self.request, "generated_prompts", None)):
             return None
         candidates = []
-        for index in self.failed_indices:
+        for index in self.retry_indices:
             item = self.items[index]
             path = item.output_path or item.source_path
             if not path:
@@ -1258,7 +1264,7 @@ class RunQueueSession(QObject):
         return [original[index] if original is not None else index + 1 for index in indices]
 
     def preview_retry(self) -> Any | None:
-        failed = self.failed_indices
+        failed = self.retry_indices
         if self.running or not failed:
             return None
         recovery = self._recovery_retry()
@@ -1317,7 +1323,7 @@ class RunQueueSession(QObject):
         if retry_request is None:
             return None
         recovery = self._recovery_retry()
-        failed = recovery[0] if recovery is not None else self.failed_indices
+        failed = recovery[0] if recovery is not None else self.retry_indices
         if recovery is None and getattr(self.request, "generated_prompts", None):
             failed = [index for index in failed
                       if not (self.items[index].output_path or self.items[index].source_path)]
@@ -1887,7 +1893,12 @@ class RunResultsPage(QWidget):
             self.queue.setCurrentRow(min(row, len(session.items) - 1))
         stop_visible = session.running and not session.stop_after_current_requested
         immediate_stop_visible = session.running
-        retry_visible = not session.running and bool(session.failed_indices)
+        retry_visible = not session.running and bool(session.retry_indices)
+        self.retry_button.setText(
+            'Продолжить незавершённые'
+            if any(item.status is RunItemStatus.CANCELLED for item in session.items)
+            else 'Повторить ошибки'
+        )
         process_more_visible = not session.running
         finish_visible = False
         self.stop_button.setVisible(stop_visible)
@@ -2666,7 +2677,7 @@ class RunQueueSupport:
         worker = getattr(self.controller, "worker", None)
         if worker is not None and bool(worker.isRunning()):
             return None
-        if not self.session.failed_indices:
+        if not self.session.retry_indices:
             return None
         confirm = getattr(self.controller, "confirm_retry_request", None)
         if callable(confirm):

@@ -1049,6 +1049,100 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             self.assertLess(blue, 40)
             self.assertGreater(alpha, 0)
 
+    def test_local_realesrgan_hides_key_colour_only_in_transparent_input(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-alpha-safe-") as temp_dir:
+            root = Path(temp_dir)
+            self.create_fake_realesrgan_runtime(root)
+            source_path, output_path = root / "source.png", root / "output.png"
+            source = Image.new("RGBA", (8, 8), (0, 15, 255, 0))
+            source.putpixel((3, 3), (230, 190, 130, 255))
+            source.putpixel((4, 3), (150, 100, 170, 128))
+            source.save(source_path)
+            original = source_path.read_bytes()
+            worker = self.make_worker(root, local_realesrgan_dir=str(root))
+            captured = {}
+
+            class FakeProcess:
+                returncode = 0
+
+                def __init__(self, command, **_kwargs):
+                    with Image.open(command[command.index("-i") + 1]) as image:
+                        captured["input"] = image.copy()
+                        image.resize((16, 16)).save(command[command.index("-o") + 1])
+
+                def communicate(self, timeout=None):
+                    return "", ""
+
+                def poll(self):
+                    return self.returncode
+
+            with patch.object(main.subprocess, "Popen", FakeProcess):
+                worker._run_local_realesrgan(str(source_path), str(output_path), scale=2)
+            self.assertEqual(captured["input"].getpixel((0, 0)), (230, 190, 130))
+            self.assertEqual(captured["input"].getpixel((3, 3)), (230, 190, 130))
+            self.assertEqual(captured["input"].getpixel((4, 3)), (150, 100, 170))
+            self.assertEqual(source_path.read_bytes(), original)
+
+    def test_upscale_input_preparation_failure_cleans_temporary_directory(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-upscale-prep-fail-") as temp_dir:
+            root = Path(temp_dir)
+            self.create_fake_realesrgan_runtime(root)
+            source_path = root / "source.png"
+            Image.new("RGBA", (3, 3), (200, 110, 140, 128)).save(source_path)
+            worker = self.make_worker(root, local_realesrgan_dir=str(root))
+            prepared_dir = tempfile.TemporaryDirectory()
+            prepared_name = prepared_dir.name
+            with patch.object(main.tempfile, "TemporaryDirectory", return_value=prepared_dir), \
+                    patch.object(worker, "_prepare_upscale_rgb", side_effect=ValueError("prep failed")), \
+                    patch.object(main.subprocess, "Popen") as popen:
+                with self.assertRaisesRegex(ValueError, "prep failed"):
+                    worker._run_local_realesrgan(str(source_path), str(root / "out.png"), scale=2)
+            self.assertFalse(Path(prepared_name).exists())
+            popen.assert_not_called()
+
+    def test_upscale_rgb_preserves_opaque_soft_and_empty_inputs(self):
+        for alpha in (0, 128, 255):
+            with self.subTest(alpha=alpha):
+                image = Image.new("RGBA", (3, 3), (200, 110, 140, alpha))
+                result = main.WorkerThread._prepare_upscale_rgb(image)
+                self.assertEqual(result.tobytes(), image.convert("RGB").tobytes())
+        image = Image.new("RGBA", (5, 5), (0, 15, 255, 0))
+        image.putpixel((2, 2), (170, 120, 100, 30))
+        result = main.WorkerThread._prepare_upscale_rgb(image)
+        self.assertEqual(result.getpixel((0, 0)), (170, 120, 100))
+        self.assertEqual(result.getpixel((2, 2)), (170, 120, 100))
+        self.assertEqual(image.getpixel((0, 0)), (0, 15, 255, 0))
+
+    def test_restored_hard_alpha_stays_binary(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-hard-alpha-") as temp_dir:
+            root = Path(temp_dir)
+            output_path = root / "output.png"
+            Image.new("RGB", (18, 18), (200, 180, 140)).save(output_path)
+            alpha = Image.new("L", (9, 9), 0)
+            alpha.putpixel((4, 4), 255)
+            self.make_worker(root)._restore_upscaled_alpha(str(output_path), alpha)
+            with Image.open(output_path) as result:
+                restored = result.getchannel("A")
+                self.assertEqual(set(restored.getdata()), {0, 255})
+                self.assertEqual(restored.tobytes(), alpha.resize(result.size, Image.Resampling.NEAREST).tobytes())
+
+    def test_restored_soft_alpha_has_no_disconnected_resampling_rings(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-alpha-rings-") as temp_dir:
+            root = Path(temp_dir)
+            output_path = root / "output.png"
+            Image.new("RGB", (36, 36), (200, 180, 140)).save(output_path)
+            alpha = Image.new("L", (9, 9), 0)
+            alpha.putpixel((4, 4), 128)
+            worker = self.make_worker(root)
+            worker._restore_upscaled_alpha(str(output_path), alpha)
+            with Image.open(output_path) as result:
+                restored = result.getchannel("A")
+                expected = alpha.resize(result.size, Image.Resampling.BILINEAR)
+                self.assertEqual(restored.tobytes(), expected.tobytes())
+                self.assertGreater(restored.getpixel((17, 17)), 0)
+                self.assertEqual(restored.getpixel((9, 17)), 0)
+                self.assertEqual(result.getpixel((17, 17))[:3], (200, 180, 140))
+
     def test_local_realesrgan_rejects_oversized_projected_output_before_launch(self):
         with tempfile.TemporaryDirectory(prefix="clipart-large-output-") as temp_dir:
             root = Path(temp_dir)

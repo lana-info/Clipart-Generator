@@ -2047,6 +2047,66 @@ def test_missing_saved_image_never_becomes_paid_generation_retry(tmp_path):
     assert session.prepare_retry() is None
 
 
+def test_explicit_cancelled_retry_selects_only_unfinished_rows_and_preserves_failed_counts(tmp_path):
+    session = RunQueueSession(generation_request(tmp_path, count=3), ProjectMode.CLIPART)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(session.output_dir / 'kept_ready.png')
+    session.items[1].status = RunItemStatus.CANCELLED
+    session.items[1].attempts = 0
+    session.items[2].status = RunItemStatus.FAILED
+    session.handle_finished()
+    assert session.failed_indices == [2]
+    assert session.retry_indices == [1, 2]
+    assert session.counts()['failed'] == 1 and session.counts()['cancelled'] == 1
+    preview = session.preview_retry()
+    assert len(preview.generated_prompts) == 2
+    assert preview.settings['task_item_indices'] == [2, 3]
+    assert session.items[1].status is RunItemStatus.CANCELLED
+    retry = session.prepare_retry()
+    assert retry == preview and session.active_order == [1, 2]
+    assert session.items[0].status is RunItemStatus.SUCCEEDED
+    assert session.items[0].output_path.endswith('kept_ready.png')
+    assert session.items[1].attempts == 1
+
+
+def test_cancelled_paid_missing_source_never_becomes_paid_generation_retry(tmp_path):
+    session = RunQueueSession(generation_request(tmp_path, count=2), ProjectMode.CLIPART)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    item = session.items[1]
+    item.status = RunItemStatus.CANCELLED
+    item.source_path = str(session.transient_dir / 'missing_paid_raw.png')
+    item.paid_completed_stages = ('upscale_after',)
+    item.stage_statuses = {'generation': 'complete', 'upscale_after': 'complete'}
+    item.attempts = 4
+    session.handle_finished()
+    assert session.failed_indices == [] and session.retry_indices == [1]
+    assert session.preview_retry() is None and session.prepare_retry() is None
+    assert item.status is RunItemStatus.CANCELLED and item.attempts == 4
+    assert item.source_path.endswith('missing_paid_raw.png')
+    assert item.paid_completed_stages == ('upscale_after',)
+    assert item.stage_statuses == {'generation': 'complete', 'upscale_after': 'complete'}
+
+
+def test_cancelled_saved_source_retries_local_processing_without_generation(tmp_path):
+    session = RunQueueSession(generation_request(tmp_path, count=2), ProjectMode.CLIPART)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    raw = session.transient_dir / 'paid_raw.png'
+    raw.parent.mkdir(parents=True, exist_ok=True)
+    Image.new('RGB', (32, 32), 'blue').save(raw)
+    item = session.items[1]
+    item.status = RunItemStatus.CANCELLED
+    item.source_path = str(raw)
+    item.stage_statuses = {'generation': 'complete'}
+    session.handle_finished()
+    preview = session.preview_retry()
+    assert preview.mode == 'mode2_process' and not preview.generated_prompts
+    assert preview.selected_files == [str(raw.resolve())]
+    assert preview.settings['task_item_indices'] == [2]
+    session.prepare_retry()
+    assert session.active_order == [1]
+    assert session.items[0].status is RunItemStatus.SUCCEEDED
+
+
 def test_recovery_groups_pending_stages_and_does_not_repeat_generation_failures(tmp_path):
     app = QApplication.instance() or QApplication([])
     request = generation_request(tmp_path, count=3)

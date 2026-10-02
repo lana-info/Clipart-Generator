@@ -5,16 +5,16 @@ from studio_clipart_objects import OBJECT_ROLES, validate_objects
 
 _NAMESPACE = UUID('7be224ab-d215-4bf4-89a6-cf7d20e42de1')
 _COMMERCIAL_TITLES = {
-    'mini': 'Мини',
-    'standard': 'Стандарт',
-    'maxi': 'Макси',
-    'bundle': 'Полный бандл',
+    'mini': 'Mini',
+    'standard': 'Standard',
+    'maxi': 'Maxi',
+    'bundle': 'Full Bundle',
 }
 _THEMATIC = (
-    ('characters', 'Персонажи', ('hero',)),
-    ('compositions', 'Композиции', ('composition',)),
-    ('frames-wreaths', 'Рамки и венки', ('wreath', 'border')),
-    ('decor', 'Декор', ('decor',)),
+    ('characters', 'Characters', ('hero',)),
+    ('compositions', 'Compositions', ('composition',)),
+    ('frames-wreaths', 'Frames and Wreaths', ('wreath', 'border')),
+    ('decor', 'Decor', ('decor',)),
 )
 
 
