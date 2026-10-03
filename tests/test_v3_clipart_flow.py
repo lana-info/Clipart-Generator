@@ -1080,8 +1080,12 @@ class V3ClipartFlowTests(unittest.TestCase):
                 "chroma_key_custom_color",
                 "chroma_key_tolerance",
                 "chroma_key_softness",
+                # Fixed Automatic Clipart delivery policy, not a new user control.
+                "trim_padding_percent",
             },
         )
+        self.assertNotIn("trim_padding_percent", page.operation_widgets)
+        self.assertEqual(state.clipart.operations.trim_padding_percent, 0)
         self.assertNotIn("chroma_key_tolerance", page.operation_widgets)
         self.assertNotIn("chroma_key_softness", page.operation_widgets)
         self.assertIsInstance(

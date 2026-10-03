@@ -1594,10 +1594,25 @@ def _remove_chroma_key_staged(
                     )
                 tile_alpha = alpha[tile]
                 tile_alpha[solved] = subject_amount
-                tile_rgb[solved] = (
+                foreground_signal = (
                     source_color
                     - background_amount[:, None] * measured_key[None, :]
-                ) / np.maximum(subject_amount[:, None], 0.05)
+                )
+                divisor = np.maximum(subject_amount, 0.05)
+                if opaque_subject:
+                    # A valid weak coverage sample still carries its full paint
+                    # colour. The 0.05 numerical floor must not darken it before
+                    # later stages restore coverage. Keep the historical floor
+                    # for clipped/additive fits, supplied alpha and discarded noise.
+                    weak = ((subject_amount > 0.025) & (subject_amount < 0.05)
+                            & (np.abs(subject_amount + background_amount - 1.0) < 1e-4)
+                            & (pixels[tile][solved, 3] == 255))
+                    if np.any(weak):
+                        recovered = foreground_signal[weak] / subject_amount[weak, None]
+                        valid = np.all((recovered >= 0.0) & (recovered <= 255.0), axis=1)
+                        indices = np.flatnonzero(weak)[valid]
+                        divisor[indices] = subject_amount[indices]
+                tile_rgb[solved] = foreground_signal / divisor[:, None]
             unsolved = tile_transition & ~has_reference[tile]
             if np.any(unsolved):
                 tile_alpha = alpha[tile]

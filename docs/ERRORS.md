@@ -1,5 +1,62 @@
 # Ошибки проекта
 
+## low-coverage-colour-20261003
+
+Новые данные после ранее отвергнутых B-field/тоновых/neighbor-fill вариантов:
+в первом staged solve есть floor denominator 0,05. Для известного F=(200,150,80),
+coverage=0,04, key=(0,0,255), exact composite C=(8,6,248), код возвращает
+RGB=(160,120,64). Позднее coverage восстанавливается, но тёмный RGB сохраняется.
+Это самостоятельная числовая ошибка, а не доказательство unknown paint на всей
+реальной полосе. Три key permutation воспроизведены главным агентом в baseline:
+15/18 новых known-truth tests FAIL, 3 PASS.
+
+Причина → минимальное изменение → проверка → результат: denominator floor
+для positive weak coverage → деление на actual coverage только opaque_subject,
+0,025<a<0,05, ordinary a+b≈1, original alpha255, signal/a внутри0..255 →
+255 связанных тестов PASS. Floor сохраняется для невалидного/out-of-gamut,
+additive, supplied alpha, discarded noise и legacy. Alpha здесь не меняется.
+Private baseline code/script сохранены в low-coverage-colour-20261003.
+
+Actual native уточка/цветок/ниточки:408/579/594 изменённых пикселя; исходный SHA
+не меняется, inner RGBA глубже3px exact, visible→zero0, число connected visible
+components совпадает. Два настоящих cached Clipart NN192→768 на Linux software
+Vulkan15,73/16,24с; final trim+1%padding+300DPI PNG interior RGBA roundtrip PASS.
+Просмотр dark/white показывает: длинная полоска остаётся, не заявлять полный fix.
+
+Отдельный новый эксперимент: original RGB crop → cached Clipart NN4 → chroma
+(32px measured global key frame после NN только для border estimator) против
+production cutout → NN. Край резче, но появляются насыщенные magenta/green полосы,
+black gaps/отделённые кончики, на цветке yellow/green leaf rim и pink tips.
+Root и независимый агент просмотрели dark/white boards: отвергнуто, не production.
+Настоящий foreground без исходной прозрачной ground truth нельзя установить
+из одних generated composite RGB; lowering dominance/early_rim guards может
+перекрасить настоящий контур, поэтому threshold changes не внедрялись.
+
+Доказательства вне Git: ../artifacts/edge-order-20261003/ и
+../artifacts/low-coverage-colour-20261003/. Независимое ревью P1/P2нет;180 квантованных cases +180 legacy exact,30 sourcealpha,
+18 additive,9 dark-outline equivalence PASS; root повторил полный audit PASS.
+Algorithm identity обновлён доv12, API1/старые receipts совместимы, versions
+программы/модулей не менялись. Отдельные49 tests PASS:30 новых positive/negative,
+8 provenance,10 selected component compatibility,1 internal padding UI contract.
+
+Первый общийsafe run2590PASS/1FAIL: UI field coverage test устарел после31da612
+(internaltrim_padding_percent требовалwidget вопреки одобренному fixed/noUI).
+Причина → актуализирован список internal exclusions и добавленыassertNotIn
+widget/default0 ordinary → failingtest+related49 PASS. Ни одна пользовательская
+настройка не исключена, прежнее exact field equality сохранено.
+Повторныйfull safe run2591 tests +284 subtests PASS,57skip/21networkpaid deselect,
+1 прежнееPillow warning,385,22с. 12 guards appended послеcollection полного run;
+отдельный49-targeted включает все30 lowcoverage cases.
+
+Полныйsource1254² actual WorkerThread pipeline: localchroma → pretrim577×1181 →
+realcached Clipart NN4 → final2308×4724 +48eachside →2404×4820,300DPI.357,72с.
+Inner cropped RGBA/sourceSHA unchanged,zero padding alpha,profilev12/hash-bound
+receipt,manual_transparency_requiredFalse PASS. Root просмотрел edge-dark-white:
+длинная линия остаётся. Evidence ../artifacts/low-coverage-full-pipeline-20261003/.
+Это Linux local source-to-PNG проверка, не installed Windows/customer licensing.
+Staged sensitive scan иdiff-check PASS.
+Сборка, сервер, лицензии, releases, downloads, paid calls не запускались.
+
 ## final-trim-padding-20261002
 
 Владелец уточнил: речь о transparent canvas padding после trim, а не мягкости

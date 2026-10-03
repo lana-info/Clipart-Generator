@@ -1,5 +1,36 @@
 # Project state
 
+## Слабый край: исправление цвета, 2026-10-03
+
+Продолжение по поручению владельца: улучшать край, коммиты/push разрешены,
+сборка запрещена. Ветка `codex/fix-clipart-edge-order-20261003`, база `31da612`.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Не затемнять слабые краевые пиксели; качественная обрезка без новых настроек | Известный foreground/coverage на трёх ключах, staged и public automatic | Узкая корректная нормировка только допустимых обычных смесей с покрытием 0,025–0,05 | Реализовано и проверено: до правки 15/18 новых тестов FAIL; после правки 255 связанных тестов PASS |
+| Сохранить рисунок, детали и исходники | Полные native исходники уточки/цветка/ниточек, SHA и RGB/alpha | Legacy, out-of-gamut/additive fits и supplied alpha сохраняют прежнюю нормировку | Native изменены 408/579/594 пикселя; внутренние RGBA глубже 3 px совпадают, потерь видимых пикселей нет, число компонентов прежнее, исходники неизменны. Независимые controls PASS:180 квантованных смесей/180 legacy,30 supplied alpha,18 additive,9 dark-outline; главный агент повторил все проверки |
+| Подтвердить конечный PNG после настоящего увеличения | Два cached local NN 192→768, final writer/roundtrip | Production fix, final trim, прозрачное поле 1%, 300 DPI | Проверено на Linux: 15,73/16,24 с, конечный RGBA roundtrip/300 DPI PASS. Длинная остаточная полоска всё ещё видна; качество всей обрезки не подтверждено |
+| Найти более качественный порядок операций | Настоящий NN исходного синего crop, затем chroma; dark/white сравнение | Только offline проверка, порядок программы не менялся | Проверка обнаружила ошибку качества: розовые/зелёные полоски и разрывы, вариант отвергнут; независимый просмотр подтвердил |
+
+История и доказательства: `docs/ERRORS.md#low-coverage-colour-20261003`;
+private `../artifacts/low-coverage-colour-20261003/verification.json` и
+`../artifacts/edge-order-20261003/verification.json`.
+Полный safe suite:2591 tests +284 subtests PASS,57 skipped,21 network/paid
+исключены,1 прежнее Pillow warning,385,22с. 12 отрицательных регрессий добавлены
+после collection: отдельно49 tests PASS (30 lowcoverage + metadata/component/UI).
+Независимое ревью source и дополнений: новых P1/P2 нет. Algorithm identity v12,
+receipts v11 остаются читаемыми; application/module release versions не менялись.
+Первый full run обнаружил устаревшее ожидание UI-теста после предыдущего padding:
+учтена внутренняя фиксированная политика, добавлен assert отсутствия нового control.
+
+Полный actual local pipeline на оригинальной уточке1254²: chroma v12 → pretrim
+577×1181 → настоящий cached NN4 → final2308×4724 +48px padding →2404×4820,
+300DPI, exact interior RGBA/sourceSHA/receipt hash PASS,357,72с. Предпросмотр
+`../artifacts/low-coverage-full-pipeline-20261003/edge-dark-white.png`: остаточная
+длинная кайма видна. Это Linux/local source scenario, не installed Windows.
+Staged sensitive scan/diff-check PASS. Windows, сборка и публикация не выполнялись.
+Исправление конкретной ошибки не закрывает остаточную кайму.
+
 ## Прозрачное поле после финального trim, 2026-10-02
 
 Владелец одобрил предложенный отступ1% от длинной стороны объекта с каждой

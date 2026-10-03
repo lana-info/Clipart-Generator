@@ -1,4 +1,16 @@
 # TASKS
+## Слабый край и порядок операций, 2026-10-03
+
+- [x] Подтвердить ошибку затемнения при делении на floor 0,05 вместо valid coverage.
+- [x] Добавить 18 known-truth regressions; baseline 15 FAIL, candidate 255 related PASS.
+- [x] Проверить native source/body/тонкие детали и два настоящих local NN фрагмента; final trim/padding/300 DPI PASS.
+- [x] Проверить «увеличение до удаления»: отвергнуть цветные полоски/разрывы, не менять порядок автоматически.
+- [x] Независимое ревью без новых P1/P2;180+180/30/18/9 controls PASS, root repeat PASS; safe suite2591+284 и49 дополнительных tests PASS.
+- [x] Полноразмерный actual local pipeline1254²→2404×4820 с300DPI,source/receipt/RGBA PASS; sensitive scan/diff-check PASS; подготовлено для commit/push без сборки.
+- [ ] Остаточная длинная кайма: не считать устранённой по узкому вычислительному исправлению.
+
+Текущий результат в `STATE.md`, история `docs/ERRORS.md#low-coverage-colour-20261003`.
+
 ## Прозрачное поле после финального trim, 2026-10-02
 
 - [x] Реализовать одобренный1% от длинной стороны после final trim для automatic.
