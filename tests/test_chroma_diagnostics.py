@@ -35,6 +35,7 @@ class ChromaDiagnosticsTests(unittest.TestCase):
                 self.assertEqual([item["stage"] for item in stages], [
                     "precise_result", "opaque_spill", "source_rgb_restore", "opaque_boundary",
                     "rim_reclassification", "edge_mixture", "edge_key_spill", "edge_chroma_repair",
+                    "opaque_edge_cleanup",
                 ])
                 self.assertTrue(all("quality" in item for item in stages))
                 self.assertTrue(all(item["changed_alpha_pixels"] == 0 for item in stages[1:3]))
@@ -100,6 +101,7 @@ class ChromaDiagnosticsTests(unittest.TestCase):
                 expected.append("edge_mixture")
                 expected.append("edge_key_spill")
                 expected.append("edge_chroma_repair")
+                expected.append("opaque_edge_cleanup")
             self.assertEqual([s["stage"] for s in report["stages"]], expected)
             self.assertNotIn("private details", str(report))
 

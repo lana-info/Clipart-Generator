@@ -2715,6 +2715,8 @@ class WorkerThread(QThread):
         current_path = source_path
         current_url = source_url
         local_result = False
+        chroma_working_alpha = None
+        chroma_delivery_alpha = None
 
         if (
             self._metadata_cleanup_requested()
@@ -2918,6 +2920,28 @@ class WorkerThread(QThread):
                                     source_image,
                                     selected_chroma_key_color,
                                 )
+                                working_alpha = result.info.pop("vibix:precleanup_alpha", None)
+                                if (working_alpha is not None and self.upscale_after
+                                        and self.upscale_after_provider == "local_realesrgan"):
+                                    if (not isinstance(working_alpha, Image.Image)
+                                            or working_alpha.mode != "L"
+                                            or working_alpha.size != result.size):
+                                        raise ValueError("Модуль обработки вернул некорректную маску прозрачности")
+                                    delivery_alpha = result.getchannel("A")
+                                    changed = ImageChops.difference(working_alpha, delivery_alpha).point(
+                                        lambda alpha: 255 if alpha else 0
+                                    )
+                                    forbidden = ImageChops.lighter(
+                                        delivery_alpha.point(lambda alpha: 255 if alpha else 0),
+                                        working_alpha.point(lambda alpha: 255 if alpha >= 128 else 0),
+                                    )
+                                    if (ImageChops.subtract(delivery_alpha, working_alpha).getbbox()
+                                            or ImageChops.multiply(changed, forbidden).getbbox()):
+                                        raise ValueError("Модуль обработки изменил защищённую прозрачность")
+                                    if not delivery_alpha.getbbox():
+                                        raise ValueError("Очистка края вернула пустое изображение")
+                                    chroma_working_alpha = working_alpha.copy()
+                                    chroma_delivery_alpha = delivery_alpha
                                 self._save_image_object_as_png(result, nobg_path)
                                 try:
                                     self._item_context.chroma_receipt = {
@@ -3064,6 +3088,21 @@ class WorkerThread(QThread):
             current_path = self._ensure_local_path(
                 current_path, current_url, raw_dir, idx, prefix, "before_final_upscale"
             )
+            if chroma_working_alpha is not None:
+                # Keep the normal cleaned cutout for recovery. Only this local
+                # NN working file gets the preselection matte; otherwise new
+                # alpha-zero RGB extension can make NN invent a dark rim.
+                working_path = os.path.join(
+                    raw_dir, f"{prefix}_chroma_nn_working_{idx:03d}_{self.run_stamp}.png"
+                )
+                with Image.open(current_path) as source:
+                    if source.size != chroma_working_alpha.size:
+                        raise ValueError("Рабочая маска обработки не совпадает с размером изображения")
+                    working = source.convert("RGBA")
+                    working.putalpha(chroma_working_alpha)
+                    self._save_image_object_as_png(working, working_path)
+                current_path, current_url, local_result = working_path, None, True
+                chroma_working_alpha = None
             # Crop only transparent working margins before enlarging them. The
             # final trim still runs after alpha/edge processing. Never crop
             # opaque pattern/background results or apply white/black heuristics.
@@ -3077,6 +3116,8 @@ class WorkerThread(QThread):
                             raw_dir, f"{prefix}_pretrim_upscale_{idx:03d}_{self.run_stamp}.png"
                         )
                         self._save_image_object_as_png(source.crop(bbox), pretrim_path)
+                        if chroma_delivery_alpha is not None:
+                            chroma_delivery_alpha = chroma_delivery_alpha.crop(bbox)
                 if needs_crop:
                     current_path = pretrim_path
                     current_url = None  # The remote URL still points to the uncropped image.
@@ -3147,6 +3188,17 @@ class WorkerThread(QThread):
             # Publish the bytes that were checked, without downloading the URL again.
             current_url = None
             local_result = True
+            if (chroma_delivery_alpha is not None
+                    and not self._item_context.manual_transparency_required):
+                # RGB is already reconstructed from the unchanged working NN
+                # input. Apply the approved delivery matte before later edge
+                # processing and final trim, using the existing alpha resampler.
+                with self._local_operation_lock:
+                    self._restore_upscaled_alpha(current_path, chroma_delivery_alpha)
+                with Image.open(current_path) as delivered:
+                    if not delivered.convert("RGBA").getchannel("A").getbbox():
+                        raise ValueError("Очистка края после апскейла вернула пустое изображение")
+                self._ensure_running()
 
         if (self.edge_shrink_enabled and not preserve_surface
                 and not self._item_context.manual_transparency_required):

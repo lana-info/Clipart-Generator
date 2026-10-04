@@ -1,5 +1,40 @@
 # Vibix Images
 
+## Cleaner automatic edge, owner-approved2026-10-03
+
+The owner answered yes to accepting loss of the weakest semitransparent strokes
+for a cleaner automatic edge. This supersedes mandatory retention of every weak
+AA sample in the fully opaque generated-source automatic profile. Preserve source
+files, established paint/core RGB, source-supplied alpha, legacy behaviour and
+application/module compatibility. No new controls/settings, builds, network,
+paid operations, downloads or dependencies. Use an independently implemented
+bounded final edge selection after colour refinements; do not copy AGPL source.
+Only low final coverage below half and existing background-dominated boundary
+samples are eligible; stronger coverage and alpha255 remain protected. Diagnose
+and report remaining coloured rim, detail loss and stair steps on actual images
+before claiming quality. Mathematical low-coverage colour safeguards stay valid
+before this explicit delivery selection. Existing manual editor remains separate.
+For local post-cutout NN, use the preselection working alpha/RGB input and apply
+the delivery alpha after NN. Transport alpha only in memory; preserve existing
+hidden-RGB protection, stable API1 and old components without the optional hint.
+Do not infer a recovered working matte from an already-cleaned saved PNG.
+
+## Renewed automatic edge research, owner-requested2026-10-03
+
+The owner requests stronger independent reasoning, an exact causal comparison
+with the downloaded Clipbrook background-removal reference, and an automatic
+source-level correction of coloured/dark rims. Reconsider assumptions rather
+than treating the manual retouch as completion of automatic quality. Preserve
+known paint/coverage, genuine outlines, fine geometry, source alpha and files;
+the later owner-approved weak-edge tradeoff above governs final selection.
+No new settings, builds, network, paid operations or downloads are authorized.
+Reference behaviour may guide an independent implementation; the closed product
+boundary below remains in force. Do not claim ideal edges or visual parity from
+passing tests or source preservation. Retain historical failures and verify real
+images before adopting a new candidate. Existing manual/editor and numeric v13
+worktrees remain unchanged while this isolated investigation proceeds.
+
+
 ## Edge-quality and large-PNG correction, owner-authorized
 
 Continue implementation without another task approval. Preserve source colours,

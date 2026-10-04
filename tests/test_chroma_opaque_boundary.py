@@ -14,8 +14,13 @@ def test_opaque_profile_unmixes_narrow_aa_edge_without_recoloring_core(key_name)
     rgb[5:19, 6] = np.rint(0.4 * foreground + 0.6 * key)
     source = Image.fromarray(rgb.astype('uint8'))
     before = source.tobytes()
-    result = np.asarray(remove_chroma_key_automatic(source, key_name, subject_profile='opaque_clipart'))
-    assert abs(int(result[12, 6, 3]) - 102) <= 2
+    stages = {}
+    result = np.asarray(remove_chroma_key_automatic(
+        source, key_name, subject_profile='opaque_clipart',
+        stage_observer=lambda name, image: stages.update({name: np.array(image)}),
+    ))
+    assert abs(int(stages['edge_chroma_repair'][12, 6, 3]) - 102) <= 2
+    assert result[12, 6, 3] == 0  # Approved loss of this real 40%-coverage AA.
     assert np.max(np.abs(result[12, 6, :3].astype(float) - foreground)) <= 3
     np.testing.assert_array_equal(result[8:16, 9:17, :3], rgb[8:16, 9:17])
     assert np.all(result[8:16, 9:17, 3] == 255)

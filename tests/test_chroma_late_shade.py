@@ -48,7 +48,9 @@ def test_automatic_low_coverage_does_not_add_opponent_rim(key_name, order, core,
         stage_observer=lambda name, image: stages.update({name: np.array(image)})))
     assert 'staged_result' in stages
     assert np.max(abs(result[20, 30:66, :3].astype(float) - expected)) <= 3
-    assert np.max(abs(result[20, 30:66, 3].astype(int) - 51)) <= 2
+    # Colour/coverage recovery remains physical before the approved final cut.
+    assert np.max(abs(stages['edge_chroma_repair'][20, 30:66, 3].astype(int) - 51)) <= 2
+    assert np.all(result[20, 30:66, 3] == 0)
     # Confirm the actual late stage as well as the exported public result.
     assert np.max(abs(stages['opaque_boundary'][20, 30:66, :3].astype(float) - expected)) <= 3
 

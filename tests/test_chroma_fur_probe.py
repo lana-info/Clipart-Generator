@@ -34,13 +34,20 @@ def test_extended_boundary_reference_requires_connection_and_depth_agreement(con
 def test_blue_fur_subpixel_gap_is_not_promoted_to_solid_background_color(textured):
     truth = fixture(textured)
     source = composite(truth, KEY_COLORS['blue'])
-    result = np.array(remove_chroma_key_automatic(source, 'blue', subject_profile='opaque_clipart'))
+    stages = {}
+    result = np.array(remove_chroma_key_automatic(
+        source, 'blue', subject_profile='opaque_clipart',
+        stage_observer=lambda name, image: stages.update({name: np.array(image)}),
+    ))
     # This gap is surrounded by fibres but has only quarter-pixel coverage.
     expected = np.array(truth)[88, 281].astype(int)
     assert expected[3] == 64
-    actual = result[88, 281].astype(int)
+    actual = stages['edge_chroma_repair'][88, 281].astype(int)
     assert abs(actual[3]-expected[3]) <= 2
     assert np.max(np.abs(actual[:3]-expected[:3])) <= 3
+    # The approved delivery selection intentionally drops this true weak fibre.
+    assert result[88, 281, 3] == 0
+    np.testing.assert_array_equal(result[88, 281, :3], actual[:3])
 
 
 def test_probe_distinguishes_rgb_damage_from_alpha_damage():

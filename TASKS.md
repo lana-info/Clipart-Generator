@@ -1,4 +1,78 @@
 # TASKS
+
+## Остаточная кайма после v16
+
+- [x] Зафиксировать продолжение и frozenv16 snapshot.
+- [ ] Проверить новый spatial texture factor на distinctknowntruth/actual.
+- [x] Исследовать источник NN полосы и hiddenRGB context: newNN2 mixed result, blanketclamp отвергнут, productioncandidate не принят.
+- [ ] Исправить найденную precise coverage ошибку и защитить genuine paint в spatial recovery; permanent RED до новой source правки.
+- [ ] Внедрить только доказанное правило после RED, затем actual/regressions/review.
+
+STATE.md; docs/ERRORS.md#remaining-edge-20261003.
+
+## Исправить причины окрашивания края после диагностики
+
+- [x] Зафиксировать permanent public regression RED до production edits:6FAIL18PASS, expectations заморожены.
+- [x] Исправить ранний material prior и позднее повторное перекрашивание;30newtests GREEN, active late controls, старые negatives сохранены.
+- [x] Отдельно оценить texture promotion/repair: privatepairguard отвергнут,36old/new knowntruthfails и identical-source twins записаны.
+- [x] Проверить fullnative3/darkwhite/source/geometry: yellowpatch улучшен; остаточная кайма и1previousstrongpixel loss явно открыты.
+- [x] Actual new localNN2 после fullnative3, finalwriter/trim/padding/DPI/receipt/profile16/API1 PASS.
+- [x] Независимое ревью: latecoverageP2 закрыт6active tests+ablation; syntax/diff/sensitive checks PASS, STATE актуален. Общая visual приёмка остаётся открытой.
+
+- [ ] Остаточный darkpoint/pinkgray edge и сильные key-hued strokes: безопасное правило не найдено; не объявлять весь край идеальным.
+- [ ] InstalledWindows/newfullNN: не проверены, build не разрешён.
+
+Разрешено владельцем после причинной диагностики. STATE.md и
+docs/ERRORS.md#material-edge-fix-20261003.
+
+## Найти причины остаточной каймы до следующей правки
+
+- [x] Использовать systematic-debugging, заморозить product/tests и сохранить v15 evidence.
+- [x] Независимо трассировать полный source до первого unmix, recovery и late repair.
+- [x] Проверить local-material failure и strong shaded gap на known truth,3 key permutations, root repeat.
+- [x] Разделить reference core/band/despill/finish и RGB/alpha; проверить genuine paint/additive negatives.
+- [x] Проверить cached NN усиление, premult/bilinear и Qt100% без нового NN/network.
+- [x] Получить независимый challenge; записать причины, границы и порядок следующей реализации.
+- [ ] Исправить ранний материал и его повторное повреждение в opaque_spill; автоматическое правило ещё не доказано.
+- [ ] Отдельно исправить matte promotion/late repair с сохранением настоящих opaque/key-hued линий.
+- [ ] После native исправления отдельно проверить NN и итоговые actual edges; вся visual задача остаётся открытой.
+
+Результат/требования: STATE.md. История: docs/ERRORS.md#edge-root-cause-audit-20261003.
+Private итог: `../artifacts/edge-root-cause-audit-20261003/REPORT.ru.md`.
+
+## Более чистый automatic край с разрешённой потерей слабых штрихов
+
+- [x] Зафиксировать явное «Да» владельца и обновить границы PROJECT/STATE.
+- [x] Сохранить own verifiedv14 baseline, проверить Git и чужие worktrees.
+- [x] Получить независимую оценку final selection против early classifier rollback.
+- [x] Проверить ограничение finalalpha<128 и source-boundary ring на actual3.
+- [x] Реализовать обе automatic ветки после всех refinements, preserve suppliedalpha/legacy/core/survivorRGB.
+- [x] Проверить32 mask regressions и прежнюю18+12 математику до final selection; намеренный AA loss проверяется явно.
+- [x] Исправить найденное новое NN-затемнение: прежний working input, final delivery после NN,19 protocol regressions и независимое закрытие2P2.
+- [x] Actual native3/writer3 и новые corrected cropNN2/host/writer/dark-white/source/colour/detail loss.
+- [x] Полный current pipeline с verified cached actual NN payload при identical input; final2402×4816/48pxpadding/300DPI/hash PASS.
+- [x] Profilev15, receiptsv1–v14, components/API1 и inherited UI padding:782 scoped tests+51subtests PASS; независимое review/syntax/sensitive/diff-check PASS.
+- [ ] Новый полноразмерный NN execution: timeout600с; cached replay не выдавать за завершившийся новый полный run.
+- [ ] Вся остаточная цветная/тёмная линия: уменьшается, но остаётся на actual boards; scope слабого cleanup завершён, исходная visual quality задача открыта.
+- [ ] Installed Windows/remote providers: не проверены; сборка/публикация отдельно не разрешены.
+
+Требования/приёмка: STATE.md. История: docs/ERRORS.md#strict-opaque-edge-20261003.
+
+## Повторное исследование automatic каймы по образцу
+
+- [x] Проверить Git/ветку и изолировать исследование от manual RGB tool/precision v13.
+- [x] Прочитать прошлые historical/reference проверки и не обнулять negative counterexamples.
+- [x] Поручить две независимые сложные части сильным агентам.
+- [x] Подтвердить exact reference classifier/solve block:81 executions, admission двух pixels возвращает зелёный край; genuine AA/lines loss доказан.
+- [x] Подтвердить float32 endpoint defect позднего повторного despill,30/57 baseline regressions FAIL.
+- [x] Внедрить узкий finite/roundoff guard вместе с проверенной weak precision поправкой; profilev14, без AGPL source.
+- [x] Проверить combined658 tests+51 subtests,18 known-truth+12 negatives,135 exact exclusions, old receipts/components/UI padding contract.
+- [x] Native actual3/source/core/support exact; настоящий final writer3/trim/padding/DPI/hash проверен, existing1 alpha3 trim loss отдельно учтён.
+- [ ] Остаточная автоматическая цветная/тёмная полоска: не исправлена на actual3, не выдавать numeric guard за visual fix.
+- [ ] Existing hiddenRGB direct API и white-AA material ambiguity: подтверждены отдельно, требуют самостоятельных решений и негативных controls.
+
+Требования/результаты: STATE.md. История: docs/ERRORS.md#automatic-core-reference-cause-20261003.
+
 ## Слабый край и порядок операций, 2026-10-03
 
 - [x] Подтвердить ошибку затемнения при делении на floor 0,05 вместо valid coverage.
@@ -3166,3 +3240,5 @@ Evidence and remaining limitations: `docs/ui/3.2/style-reference-ux/README.md`.
 - [ ] Verify the full page and final ZIP workflow on native Windows before release.
 
 Evidence: `docs/ui/3.2/export-workspace/README.md`.
+
+Remaining-edge blocker: disk full; owner answer pending for cleaning only /tmp/vibix-size-audit/extracted. No product adoption before stable disk, permanent RED/GREEN and negatives.

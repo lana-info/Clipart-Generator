@@ -768,6 +768,7 @@ def _blurred_subject_reference(
 
 def _prefer_local_subject_reference(
     rgb: np.ndarray, subject_mask: np.ndarray, reference: np.ndarray, key: np.ndarray,
+    *, validate_material_fallback: bool = False,
 ) -> None:
     """Prefer a nearby interior sample over an average of different materials.
 
@@ -777,7 +778,8 @@ def _prefer_local_subject_reference(
     existing reference. Check the sample against actual deeper neighbours,
     allowing brightness changes, rather than against another mixed average.
     Only a three-pixel contour band can receive a different reference.
-    This function changes neither source RGB nor coverage.
+    This function changes neither source RGB nor coverage. The opaque paint
+    policy also checks whether the retained fallback explains the local sample.
     """
     core = cv2.erode(subject_mask.astype(np.uint8), np.ones((5, 5), np.uint8)).astype(bool)
     if not np.any(core):
@@ -859,6 +861,11 @@ def _prefer_local_subject_reference(
                   & (depth[yy, xx] > depth[sample_y, sample_x] + 0.5)
                   & (components[yy, xx] == components[sample_y, sample_x]))
         contaminated |= reject_mixture(rgb[yy, xx], deeper)
+    if validate_material_fallback:
+        # A deeper donor can explain the local sample without establishing that
+        # the Gaussian fallback belongs to that material. Reject a local prior
+        # only when the fallback itself passes the same mixture/gamut checks.
+        contaminated &= reject_mixture(reference[nearby], np.ones(len(local), bool))
     values = reference[nearby]
     values[~contaminated] = local[~contaminated]
     reference[nearby] = values
@@ -960,8 +967,13 @@ def _neutralize_opaque_key_spill(
     source: Image.Image,
     result: Image.Image,
     key_color: object,
+    *, preserve_local_material: bool = False,
 ) -> Image.Image:
-    """Recover localized key reflections inside an otherwise opaque subject."""
+    """Recover localized key reflections inside an otherwise opaque subject.
+
+    The opaque clipart policy checks local material before borrowing a distant
+    key-poor colour. A pale petal is not spill merely because its centre is yellow.
+    """
     requested_key = np.asarray(parse_key_color(key_color), dtype=np.float32)
     key_channel = int(np.argmax(requested_key))
     other_channels = [index for index in range(3) if index != key_channel]
@@ -977,7 +989,9 @@ def _neutralize_opaque_key_spill(
         axis=0,
     )
     measured_key = np.median(border, axis=0)
-    del source_rgb, border
+    del border
+    if not preserve_local_material:
+        del source_rgb
 
     pixels = np.asarray(result.convert("RGBA"), dtype=np.uint8).copy()
     rgb = pixels[..., :3].astype(np.float32)
@@ -1012,6 +1026,14 @@ def _neutralize_opaque_key_spill(
         lookup[reference_labels] = rgb[..., channel][clean_reference]
         reference[:, channel] = lookup[spill_labels]
 
+    if preserve_local_material:
+        local_reference = np.zeros_like(rgb)
+        local_reference[suspected_spill] = reference
+        _prefer_local_subject_reference(
+            source_rgb, subject, local_reference, measured_key, validate_material_fallback=True,
+        )
+        reference = local_reference[suspected_spill]
+        del source_rgb, local_reference
     source_spill = rgb[suspected_spill]
     direction = measured_key[None, :] - reference
     denominator = np.sum(direction * direction, axis=1)
@@ -1372,6 +1394,7 @@ def _remove_chroma_key_staged(
     source = image.convert("RGBA")
     pixels = np.asarray(source, dtype=np.uint8).copy()
     rgb = pixels[..., :3].astype(np.float32)
+    preserve_local_material = opaque_subject and bool(np.all(pixels[..., 3] == 255))
     height, width = rgb.shape[:2]
     frame = max(4, int(0.02 * min(width, height)))
     sides = (
@@ -1487,7 +1510,10 @@ def _remove_chroma_key_staged(
             rgb, confident_subject, key_channel, other_channels,
             reference, reference_ratio,
         )
-        _prefer_local_subject_reference(rgb, confident_subject, reference, measured_key)
+        _prefer_local_subject_reference(
+            rgb, confident_subject, reference, measured_key,
+            validate_material_fallback=preserve_local_material,
+        )
         reference_other = np.maximum(
             reference[..., other_channels[0]], reference[..., other_channels[1]],
         )
@@ -1598,7 +1624,7 @@ def _remove_chroma_key_staged(
                     source_color
                     - background_amount[:, None] * measured_key[None, :]
                 )
-                divisor = np.maximum(subject_amount, 0.05)
+                solved_rgb = foreground_signal / np.maximum(subject_amount[:, None], 0.05)
                 if opaque_subject:
                     # A valid weak coverage sample still carries its full paint
                     # colour. The 0.05 numerical floor must not darken it before
@@ -1609,10 +1635,20 @@ def _remove_chroma_key_staged(
                             & (pixels[tile][solved, 3] == 255))
                     if np.any(weak):
                         recovered = foreground_signal[weak] / subject_amount[weak, None]
-                        valid = np.all((recovered >= 0.0) & (recovered <= 255.0), axis=1)
+                        # Subtraction/division in float32 may put valid black or
+                        # saturated paint just outside the gamut. Allow only
+                        # numerical roundoff, below 0.005 RGB levels in this band,
+                        # and clamp it before later stages test source consistency.
+                        roundoff = (4.0 * np.finfo(np.float32).eps * 255.0
+                                    / subject_amount[weak, None])
+                        valid = np.all(
+                            np.isfinite(recovered)
+                            & (recovered >= -roundoff)
+                            & (recovered <= 255.0 + roundoff), axis=1,
+                        )
                         indices = np.flatnonzero(weak)[valid]
-                        divisor[indices] = subject_amount[indices]
-                tile_rgb[solved] = foreground_signal / divisor[:, None]
+                        solved_rgb[indices] = np.clip(recovered[valid], 0.0, 255.0)
+                tile_rgb[solved] = solved_rgb
             unsolved = tile_transition & ~has_reference[tile]
             if np.any(unsolved):
                 tile_alpha = alpha[tile]
@@ -1647,7 +1683,10 @@ def _remove_chroma_key_staged(
         edge_reference_ratio,
     )
     if opaque_subject:
-        _prefer_local_subject_reference(rgb, confident_subject, reference, measured_key)
+        _prefer_local_subject_reference(
+            rgb, confident_subject, reference, measured_key,
+            validate_material_fallback=preserve_local_material,
+        )
         reference_other = np.maximum(
             reference[..., other_channels[0]], reference[..., other_channels[1]],
         )
@@ -1712,9 +1751,19 @@ def _remove_chroma_key_staged(
                 # The matte already unmixed these ordinary coverage samples.
                 # A darker painted edge can fit the brighter core/key plane
                 # again, but that is not evidence of another layer of spill.
+                # Float32 unmixing can overshoot a valid RGB endpoint slightly.
+                # Keep this numerical allowance below 0.005 RGB levels and only
+                # for opaque source pixels; real clipped fits still get despill.
+                roundoff = np.where(
+                    pixels[tile][tile_edge, 3] == 255,
+                    4.0 * np.finfo(np.float32).eps * 255.0 / np.maximum(coverage, 0.025),
+                    0.0,
+                )[:, None]
                 explained = (
                     (coverage > 0.0) & (coverage < 1.0)
-                    & np.all((foreground >= 0.0) & (foreground <= 255.0), axis=1)
+                    & np.all(np.isfinite(foreground)
+                             & (foreground >= -roundoff)
+                             & (foreground <= 255.0 + roundoff), axis=1)
                     & (np.max(np.abs(reconstructed - pixels[tile][tile_edge, :3]), axis=1) <= 2.0)
                 )
                 tile_edge = tile_edge.copy()
@@ -1924,6 +1973,48 @@ def _weak_opaque_paint_mask(source: Image.Image, provisional: Image.Image, key: 
     return original, protected
 
 
+def _clean_opaque_key_boundary(
+    source: Image.Image, provisional: Image.Image, measured_key: np.ndarray,
+) -> Image.Image:
+    """Apply the approved weak-edge delivery selection after colour recovery.
+
+    Keep supplied alpha and coverage of at least half. Only a one-pixel source
+    boundary dominated by the measured key is eligible. This deliberately loses
+    some real weak AA; it is a clean-edge policy, not foreground ground truth.
+    All RGB and every unselected RGBA sample remain exact.
+    """
+    pixels = np.asarray(provisional.convert("RGBA"), dtype=np.uint8)
+    weak = (pixels[..., 3] > 0) & (pixels[..., 3] < 128)
+    if not np.any(weak):
+        return provisional
+    original = np.asarray(source.convert("RGBA"), dtype=np.uint8)
+    if np.any(original[..., 3] != 255):
+        return provisional
+    key_channel = int(np.argmax(measured_key))
+    other_channels = [channel for channel in range(3) if channel != key_channel]
+    measured_other = max(float(measured_key[channel]) for channel in other_channels)
+    key_ratio = float(measured_key[key_channel]) / max(measured_other, 1.0)
+    background_ratio = float(np.clip(0.80 * key_ratio, 1.70, 2.5))
+    dominant = original[..., key_channel].astype(np.float32)
+    other = np.maximum(original[..., other_channels[0]],
+                       original[..., other_channels[1]]).astype(np.float32)
+    background = (dominant >= background_ratio * other) & (dominant >= 55.0)
+    boundary = background & cv2.dilate(
+        (~background).astype(np.uint8), np.ones((3, 3), dtype=np.uint8),
+    ).astype(bool)
+    remove = boundary & weak
+    if not np.any(remove):
+        return provisional
+    cleaned = pixels.copy()
+    cleaned[..., 3][remove] = 0
+    result = Image.fromarray(cleaned, mode="RGBA")
+    # Optional in-memory transport for the host. NN must reconstruct colours
+    # with the working matte, then receive the delivery matte after upscaling.
+    # This image is never serialized as metadata or required by API1 callers.
+    result.info["vibix:precleanup_alpha"] = provisional.getchannel("A")
+    return result
+
+
 def remove_chroma_key_automatic(
     image: Image.Image,
     key_color: object = "blue",
@@ -1940,6 +2031,10 @@ def remove_chroma_key_automatic(
     pixels; this profile choice cannot be inferred from RGB alone.
     Opaque clipart also skips the legacy translucent-material colour heuristic:
     partial edge coverage alone does not justify neutralising foreground hues.
+    Fully opaque inputs use the owner-approved final weak-edge selection: key-
+    dominated boundary samples below half coverage may be discarded for a cleaner
+    edge. Supplied alpha, stronger coverage and all retained RGB stay untouched
+    by this final selection.
 
     ``stage_observer`` is an opt-in offline diagnostic hook. It receives an
     independent RGBA snapshot after each completed pixel stage; none are
@@ -1977,6 +2072,10 @@ def remove_chroma_key_automatic(
             pixels[x, y] = rgba
         return restored
 
+    preserve_local_material = (
+        subject_profile == "opaque_clipart"
+        and np.all(np.asarray(image.convert("RGBA"))[..., 3] == 255)
+    )
     prefer_precise = measured_other <= 36.0
     if subject_profile == "opaque_clipart":
         prefer_precise |= _has_enclosed_transition_solution(
@@ -2012,7 +2111,9 @@ def remove_chroma_key_automatic(
                     protected_source = None
             if stage_observer is not None:
                 stage_observer("precise_result", result.copy())
-            result = _neutralize_opaque_key_spill(image, result, key_color)
+            result = _neutralize_opaque_key_spill(
+                image, result, key_color, preserve_local_material=preserve_local_material,
+            )
             result = preserve_paint(result)
             if stage_observer is not None:
                 stage_observer("opaque_spill", result.copy())
@@ -2049,13 +2150,20 @@ def remove_chroma_key_automatic(
                 result = preserve_paint(result)
                 if stage_observer is not None:
                     stage_observer("edge_chroma_repair", result.copy())
+                result = _clean_opaque_key_boundary(image, result, measured_key)
+                if stage_observer is not None:
+                    snapshot = result.copy()
+                    snapshot.info.pop("vibix:precleanup_alpha", None)
+                    stage_observer("opaque_edge_cleanup", snapshot)
             return result
     result = _remove_chroma_key_staged(
         image, key_color, opaque_subject=(subject_profile == "opaque_clipart"),
     )
     if stage_observer is not None:
         stage_observer("staged_result", result.copy())
-    result = _neutralize_opaque_key_spill(image, result, key_color)
+    result = _neutralize_opaque_key_spill(
+        image, result, key_color, preserve_local_material=preserve_local_material,
+    )
     result = preserve_paint(result)
     if stage_observer is not None:
         stage_observer("opaque_spill", result.copy())
@@ -2092,6 +2200,11 @@ def remove_chroma_key_automatic(
         result = preserve_paint(result)
         if stage_observer is not None:
             stage_observer("edge_chroma_repair", result.copy())
+        result = _clean_opaque_key_boundary(image, result, measured_key)
+        if stage_observer is not None:
+            snapshot = result.copy()
+            snapshot.info.pop("vibix:precleanup_alpha", None)
+            stage_observer("opaque_edge_cleanup", snapshot)
     return result
 
 

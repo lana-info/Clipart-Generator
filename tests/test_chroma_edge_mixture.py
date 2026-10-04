@@ -10,6 +10,19 @@ from scripts.probe_chroma_fur import composite, fixture, measure
 from scripts.probe_chroma_botanical import fixture as botanical_fixture
 
 
+def _assert_approved_weak_selection(recovered, result, truth):
+    before, after, expected = np.asarray(recovered), np.asarray(result), np.asarray(truth)
+    np.testing.assert_array_equal(after[..., :3], before[..., :3])
+    protected = (before[..., 3] >= 128) | (after[..., 3] > 0)
+    np.testing.assert_array_equal(after[protected], before[protected])
+    # These independent fixtures also prove that strong ground-truth paint stays.
+    np.testing.assert_array_equal(after[expected[..., 3] >= 128], before[expected[..., 3] >= 128])
+    removed = (before[..., 3] > 0) & (after[..., 3] == 0)
+    assert np.any(removed & (expected[..., 3] > 0))  # True AA is deliberately lost.
+    assert np.all(before[..., 3][removed] < 128)
+    assert np.all(after[..., 3] <= before[..., 3])
+
+
 @pytest.mark.parametrize("order", [[0, 1, 2], [2, 0, 1], [1, 2, 0]])
 @pytest.mark.parametrize("coverage", [0.8, 1.0])
 def test_additive_spill_does_not_turn_edge_into_a_clipped_highlight(order, coverage):
@@ -88,7 +101,7 @@ def test_staged_boundary_separates_brightness_from_coverage_before_restoration(k
 
 @pytest.mark.parametrize("key", ["blue", "green"])
 @pytest.mark.parametrize("textured", [False, True])
-def test_feathers_improve_on_both_backgrounds_without_changing_opaque_texture(key, textured):
+def test_feather_colour_recovery_improves_before_approved_weak_edge_selection(key, textured):
     truth = fixture(textured)
     source = composite(truth, KEY_COLORS[key])
     stages = {}
@@ -97,10 +110,12 @@ def test_feathers_improve_on_both_backgrounds_without_changing_opaque_texture(ke
         stage_observer=lambda name, image: stages.update({name: image}),
     )
     before = measure(stages["rim_reclassification"], truth)
-    after = measure(result, truth)
+    recovered = stages["edge_chroma_repair"]
+    after = measure(recovered, truth)
     for background in ("white", "black"):
         assert (after["partial_composites"][background]["mean_channel_error"]
                 < before["partial_composites"][background]["mean_channel_error"] * .95)
+    _assert_approved_weak_selection(recovered, result, truth)
     expected = np.asarray(truth)
     actual = np.asarray(result)
     opaque = expected[..., 3] == 255
@@ -196,10 +211,12 @@ def test_thin_green_stems_do_not_borrow_yellow_flower_colour(size, key):
         stage_observer=lambda name, image: stages.update({name: image}),
     )
     before = measure(stages["rim_reclassification"], truth)
-    after = measure(result, truth)
+    recovered = stages["edge_chroma_repair"]
+    after = measure(recovered, truth)
     for background in ("white", "black"):
         assert (after["partial_composites"][background]["mean_channel_error"]
                 <= before["partial_composites"][background]["mean_channel_error"])
+    _assert_approved_weak_selection(recovered, result, truth)
     expected, actual = np.asarray(truth), np.asarray(result)
     stems = ((expected[..., 1] > expected[..., 0]) & (expected[..., 3] >= 128))
     assert np.all(actual[..., 1][stems] > actual[..., 0][stems])

@@ -1,5 +1,198 @@
 # Project state
 
+## Передача текущего результата на GitHub по поручению владельца
+
+Владелец разрешил коммит и пуш текущей ветки
+`codex/fix-chroma-reference-cause-20261003`, запретив сборки и Actions.
+Публикуется проверенный v16 вместе с тестами и документацией, как промежуточный
+результат: задача устранения всей каймы остаётся открытой. Source hash совпадает
+с verifiedv16 snapshot. Для пропуска push/pull_request CI используется
+`[skip actions]` в сообщении коммита; release запускается только вручную и
+не вызывается. Никакие workflow/settings/version files для публикации не меняются.
+Факт передачи проверяется совпадением локального HEAD и remote ref; commit hash
+хранится в Git, а не дублируется как неизменный идентификатор этого документа.
+
+
+## Остаточная тёмная/цветная линия после v16, продолжение 2026-10-03
+
+Владелец поручил продолжать. Verifiedv16/source snapshot в
+../artifacts/remaining-edge-20261003/baseline-v16/, branch/HEAD прежние.
+Product пока заморожен; новые изменения только после причинного evidence/RED.
+Повторно применяем systematic-debugging. Два независимых прежних агента:
+texture recovery spatial evidence и cachedactual source/native/NN attribution;
+root отдельно проверяет hiddenRGB donor policy передNN.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Уменьшить оставшийся darkpoint без синей замены; «дальше» владельца | Spatial-knowntruth distinct scenes + fullsourceactual intervention | Диагностика в работе | Пока нового production решения нет |
+| Уменьшить внесённую алгоритмом полосу, сохранив настоящие outlines/alpha | Cachedactual attribution, NN-independent factors, genuine thin darkstroke negatives | Диагностика в работе | Blanket NN palette clamp теряет true darkstroke, не внедрять |
+| Сохранить v16 исправление/compatibility и доказать новый результат | Relevant regression suites + actualwriter/NN при changedinputs | Verifiedv16 сохранён | Snapshot/hash exact; новая проверка в работе |
+
+Последний статус: задача не завершена, приложение остаётся на проверенном
+v16. Новые NN context эксперименты дают смешанный результат и не внедрены.
+Spatial texture кандидат ещё не проходит genuine-paint negative; найден
+дополнительный дефект ранней precise alpha. Следующий шаг: защитить настоящую
+краску и подтвердить candidate public RED/GREEN до изменения приложения.
+Временный disk-full блокер снят: сейчас89ГБ свободно; каталог старой
+распаковки, предложенный к очистке, не удалялся.
+
+Сводка подтверждённых причин, гипотез и отвергнутых решений: [docs/ERRORS.md](docs/ERRORS.md#причины-цветной-каймы-сводка-доказательств-и-гипотез).
+История только docs/ERRORS.md#remaining-edge-20261003. No builds/network/paid/
+downloads/deps/commit/push. Предыдущие failedhypotheses и границы не обнулять.
+
+## Исправление выбора материала края v16, проверено в ограниченной области, 2026-10-03
+
+Владелец разрешил реализацию после причинной диагностики и предложил tests-first.
+Ветка codex/fix-chroma-reference-cause-20261003, HEADfd34e79 сохранены;
+verifiedv15 baseline в ../artifacts/material-edge-fix-20261003/baseline-v15/.
+Исправление independentlyimplemented, referenceAGPL не переносился. Source
+правил только gpt-6-astra/xhigh, новые тесты gpt-6.1-sol/high, root интегрировал
+и проверил actual pipeline; отдельный gpt-6-astra/high провёл challenge.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Не окрашивать локальную краску чужим материалом и не повторять ошибку позднее; новое разрешение | Publictruth RED/GREEN, active late positive/negative, full-source flower named stages | Реализовано и проверено для воспроизведённой причины: fallback validation и late localmaterial prior | До правки6FAIL/18PASS. Теперь30newtests PASS; lateablation3FAIL и disabledlate3negativeFAIL подтверждают защиту. Actualflower4 points sourceRGBAexact через все late stages |
+| Сохранить suppliedalpha/legacy, настоящий цвет и compatibility; прежние требования | Frozenbytes controls, existing strongpaint/additive/AA, receiptsv1–v15/API1/components | Реализовано частично: compatibility проверена, diagnostickey-hued strokes обнаружили прежнюю ошибку; вся сильная краска не защищена | Scoped813tests+77subtests PASS,1WindowsNNskip,1Pillowwarning. Actual deepcore/components unchanged, но strings1previousalpha255→0 и2weak→255: отдельный открытый риск |
+| Более чистый край на actual изображениях после полного пути; новое поручение | Fullnative3, darkwhite before/after, real localNN2, host/finalwriter/trim/DPI/receipt | Реализовано частично: сильное yellowpatch уменьшено, whole visual task открыта | SourceSHA unchanged/native3 writer3 PASS, trimpositive loss0; newNN2 output768² deliveryalphaexact/PNG/profile16receipt PASS. Тонкая pink/gray линия и strings darkpoint остаются |
+
+Нельзя приравнивать synthetic PASS/source preservation к устранению всей каймы.
+Не внедрён private texture pairguard, который лишь заменяет4darkpixels blue и
+не восстанавливает matte.36 independent genuinekey-coloured stroke probes
+не проходят иv15, иv16; known sourceRGB/AA twins неразличимы без внешних данных.
+Это диагностические незакрытые случаи, не включённые в813passedtestscount.
+Сборки/Windows установленного приложения/полноразмерного новогоNN не было;
+no network/paid/downloads/deps/commit/push. Main иchroma_rim exactv15.
+Изменено только внутреннее algorithm profile16, не schema/API/appversion.
+Root первый broad run exit143 не засчитанPASS; завершены разделённые группы.
+История причин/отвергнутых правил и доказательства: docs/ERRORS.md#material-edge-fix-20261003.
+Итог: ../artifacts/material-edge-fix-20261003/REPORT.ru.md.
+
+## Причинная диагностика остаточной каймы до новой реализации, 2026-10-03
+
+Владелец отклонил оценку края как идеального и попросил сначала найти причины
+и способы решения, затем переходить к исправлению. Source/tests v15 сохранены
+без новой правки. Ветка/HEAD прежние; новые материалы только в private artifacts.
+Два gpt-6-astra/xhigh исследовали native и Clipbrook, прежний gpt-6-astra/high
+проверил причинные утверждения; root повторил два новых public controls.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Установить причины до следующей правки; новое поручение | Full-source internal trace, one-factor interventions, самостоятельные known-truth сцены | Диагностика выполнена; новое product исправление не внедрялось | Проверка обнаружила ошибки выбора материала до unmix и promotion/late repair; два public controls независимо повторены root |
+| Проверить, почему скачанный образец выглядит иначе; новое поручение | Reference core/band/despill/finish trace, fixed-mask RGB/alpha factorial, strong AA controls | Read-only отдельное исполнение reference, без AGPL переноса | Диагностика проверена: часть strong flower pixels пропускает unmix; reference также портит соседний материал и стирает сильную краску |
+| Отделить native, увеличение и отображение; новое поручение | Cached actual NN при одинаковой alpha, bilinear/premult controls, real Qt100% vs PIL | Диагностические абляции без новых NN/настроек продукта | Проверено: измеренный NN contrast усилитель; Qt на testedpath max1RGB, constantcolour alpha не создаёт колец. Часть цветной линии уже в source |
+| Определить следующий безопасный предмет исправления; новое поручение | Independent challenge и genuine-paint/additive/sourcealpha negatives | Кандидат правила пока не реализован | Первая область: local material prior + late opaque_spill; затем отдельные matte promotion и NN проверки. Универсальная новая эвристика не доказана |
+
+Исследование завершено как диагностика, визуальная задача остаётся открытой.
+31 reference diagnostic assertions PASS; это не31 product quality tests и не
+подтверждение идеального края. Полные actual native outputs повторяют сохранённый
+v15, sourceSHA/код неизменны; новых NN/network/paid/download/build/install нет.
+История причин и вмешательств только в docs/ERRORS.md#edge-root-cause-audit-20261003.
+Итог/доказательства/следующий порядок:
+`../artifacts/edge-root-cause-audit-20261003/REPORT.ru.md`.
+Не закрывать всю кайму прежними782 tests, preservation или reference parity.
+
+## Более чистый automatic край: разрешённая потеря слабых штрихов, 2026-10-03
+
+Владелец ответил «Да» на конкретный вопрос о потере самых слабых штрихов ради
+более чистой автоматической границы. Реализован кандидат v15 в той же ветке
+`codex/fix-chroma-reference-cause-20261003`, HEAD/base `fd34e79`, без upstream.
+Own v14 сохранён в `../artifacts/strict-opaque-edge-20261003/baseline-v14/`;
+чужие worktrees сохранены. Final source-background boundary selection идёт после
+colour stages: только finalalpha1..127, opaque profile, originalalpha255 по всей
+картинке. Для local post-cutout NN финальная маска применяется после NN, рабочая
+прозрачность сохраняет прежний вход. Новых UI/settings/dependencies нет.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Более чистый автоматический край с допустимой потерей слабых штрихов; явное «Да» владельца | Actual3 native и одинаковый cached NN, dark/white, before/after | Реализована bounded final selection в обеих ветках | Реализовано и проверено для выбранной политики: удалено4396/8683/8876 pixels; слабая бахрома меньше. Вся цветная кайма остаётся частично нерешённой |
+| Не удалять сильную краску/alpha255 и не менять RGB оставшегося рисунка; согласованная граница | Native exact survivorRGBA/alpha>=128, 8 независимых GT fur/stem scenes, NN input/output comparisons | Selection меняет только выбранную alpha; NN получает прежнюю рабочую маску | Реализовано и проверено: все nativeRGB и alpha>=128 exact; 8 GT scenes теряют только truealpha<128, strong/opaque loss0. Actual NN2 RGB exactv14. Полная topology сохранность не обещана |
+| Сохранить supplied alpha и legacy; прежний контракт | Whole sourcealpha bypass в RGBA/LA/P,135 public comparisons с v14 и negative controls | Global supplied-alpha bypass, legacy exclusion | Реализовано и проверено:135 exact comparisons, inherited12 negatives и modes/bounds PASS; старые directAPI hiddenRGB ограничения остаются |
+| Числовые цвета корректны до final selection; прежние18+12 и v14 guards | Staged/private math и public preselection snapshots; явные final-mask assertions | Исходные truth RGB/coverage assertions сохранены; final слабый AA явно удаляется по новому требованию | Реализовано и проверено:18 known truth+12 negatives PASS; endpoint/divisor/mixed512 controls PASS; прежние chroma tests включены |
+| Очистка края не создаёт дополнительную тёмную NN-линию; новый causal actual check | Identical working/preparedRGB и actual cached NN output; crop, invalid masks, reuse/failure | Optional in-memory preselection L-alpha; local host применяет delivery после NN, сохраняет API1 и hiddenRGB helper | Реализовано и проверено:19 transport tests PASS, новый actual NN2 RGB exactv14,51 transport+mask cases PASS; 2 найденных protocol P2 закрыты независимым reviewer |
+| Old receipts/components/API1 и конечный PNG; исходный контракт | Relevant pytest, actual writer3+cropNN2; полный cached replay/trim/1%padding/300DPI/hash | Internal profilev15; API1 и release/app/module versions прежние | Реализовано и проверено: receiptsv1–v14 читаются, components/runtime PASS, inherited UI padding exception unchanged/PASS. Full replay final2402×4816,48pxpadding,300DPI/hash/interior exact |
+
+Итог scoped verification:782 разных tests+51 subtests PASS,1 skip Windows
+Real-ESRGAN и1 прежнее Pillow warning. Это совокупность завершённых групп,
+не новый full all-project suite;28 chroma files включены. Независимый reviewer
+gpt-6-astra/high принял исправленный transport: новых P1/P2 нет. Syntax,
+Git diff-check и sensitive scan PASS. API1 файл и AST prepare/NN/alpha restore/
+trim не менялись. Cheap-worker gpt-6-luna/low использовался только для извлечения
+test locations; неполный результат передан главному агенту, без заявления экономии.
+
+Новые настоящие crop NN192→768 с corrected host:45,52/47,13с, RGB побайтноv14,
+deliveryalpha exact, final writer/receipt PASS. Это host transport на заранее
+проверенных full-source native crops, не повтор chroma по неполному source-frame.
+Новый full1254²→NN run не завершился: штатный timeout600с. Текущий full pipeline
+проверен с реальным ранее сохранённым NN payload при доказанно identical working
+RGBA/preparedRGB577×1181; новый full NN execution не заявлять. Native writer3
+не теряет visible pixels при существующем trim; crop NN flower writer обрезает6
+veryweak pixels, full cached duck replay0. Это заданная trim policy, не lossless
+geometry guarantee. Installed Windows и реальные remote providers не проверены.
+
+На просмотренных dark/white boards бахрома уменьшена, но остаётся тонкая
+розовая/серая/зелёная линия; край может быть жёстче/ступенчатее. У native support
+components1→2/4→40/1→8, возникают мелкие fragments. Не выдавать эту политику за
+идеальное восстановление paint либо решение всей исходной visual quality задачи.
+Независимое финальное visual review по2 новым actual crop boards и1 full cached
+board подтвердило ограниченное улучшение и те же потери/остаточную кайму:
+`../artifacts/strict-opaque-edge-20261003/review/FINAL-VISUAL-REVIEW.ru.md`.
+Следующий предмет исследования: оставшийся retained native colour/NN amplification,
+без расширения cutoff, которое на проверенных controls не решает плотную линию.
+
+В первом новом test harness по ошибке не отключён default pre-upscale: были
+попытки KIE upload, все остановились на DNS failure; задача KIE не создана.
+Стенд исправлен, provider/upload/download guards добавлены; этот run исключён
+из offline успешных доказательств. История и проверки, включая это нарушение:
+docs/ERRORS.md#strict-opaque-edge-20261003. Private evidence:
+`../artifacts/strict-opaque-edge-20261003/REVIEW.ru.md` и JSON/logs.
+Сборок/download/install/новых dependencies/commit/push/merge нет. Кандидат в
+исходниках; установка/публикация не выполнялись и отдельно не разрешены.
+
+## Повторное исследование автоматической цветной каймы: результат, 2026-10-03
+
+Владелец поручил подключить сильных агентов, заново разобрать скачанный образец
+и automatic chroma, найти причинный блок и исправить его. Новая изолированная
+ветка `codex/fix-chroma-reference-cause-20261003`, база `fd34e79`, worktree
+`edge-reference-cause-worktree`. Ручная коррекция в `edge-colour-editor-worktree`
+и исходная precision/v13 в `edge-precision-worktree` сохраняются отдельно. В этот
+кандидат осознанно включены проверенная weak precision/v13 и новый числовой guard
+поздней обработки; combined algorithm identity v14. Исходники
+образца и пользовательские PNG используются read-only; build/network/paid/
+download/install/новые dependencies запрещены прежними ограничениями.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Найти точный reference-блок, из-за которого нет наблюдаемой полосы; новое поручение | Native trace, точечный admission двух pixels, known truth и обводки | Два независимых gpt-6-astra/xhigh,81 standalone reference executions | Реализовано и проверено: classify.ts:28/31 исключает pixels до solve; их admission возвращает зелёный край. Reference теряет960/8004 настоящих pixels контрольных обводок/линий |
+| Не перекрашивать уже восстановленный обычный край из-за числовой погрешности; новое исследование | Exact endpoint/shaded paint,3 ключа, staged/public и поздние stages | Float32 tolerance<0,005 RGB только original alpha255, finite и source-fit guard; weak endpoint clamped | Реализовано и проверено:57 новых controls до правки30 FAIL/27 PASS; после правки57 PASS. Public paint200/200/0 восстанавливается вместо212/212/0 |
+| Устранить automatic цветную/тёмную кайму без новой ручной настройки; новое поручение | Actual1254² native, dark/white и сравнительные абляции | Реализовано частично: два ограниченных числовых исправления, без порогового удаления настоящей краски | Все3 combined v14 RGBA совпали сv12 побайтно; длинная реальная кайма остаётся. Требование всей visual quality не выполнено |
+| Сохранить реальные цвета, слабый AA, контуры/тонкие детали, supplied alpha и исходники; PROJECT.md и предыдущая задача |18 исходных known-truth+12 negative, RGB bounds,4 mixed512-tile scenes,135 exact exclusions и source SHA | Safeguards legacy/out-of-gamut/additive/noise/source alpha сохранены; indexing и finite guards проверены | Числовые регрессии PASS,135 legacy/source-alpha comparisons exact, native core/support/source exact. Existing hiddenRGB и white-AA failures отдельно подтверждены наv14 и не исправлены этим guard |
+| Сохранить profile/old receipts/component compatibility и UI padding contract; исходное ревью | Offline provenance/component/runtime tests и inherited UI field test | Profilev14 включает weak v13+late guard; API1/schema/application/module release versions прежние | Реализовано и проверено: receiptsv1–v13 читаются без переименования, component/runtime PASS, UI padding exception из31da612 не ослаблялся |
+| Проверить конечный PNG; прежнее поручение |3 native production cutouts → настоящий WorkerThread final writer, trim/padding/300DPI/receipt hash | Current final writer и fixed1%padding | Реализовано и проверено на Linux без NN: cropped interior RGBA exact,300DPI/profilev14/hash PASS. Existing Trim alpha>12 удаляет у ниточек1 pixel alpha3; native support preservation не равна lossless final trim |
+| Сохранить закрытый продукт; PROJECT.md closed product boundary | Самостоятельная реализация без копии/перевода AGPL/runtime dependency | Reference изучается/выполняется отдельно | Граница сохраняется; no relicensing authorized |
+
+Релевантные проверки combined production:658 tests+51 subtests PASS,
+1 skip из-за отсутствия Windows Real-ESRGAN в этом worktree,1 прежнее Pillow
+warning. Все26 chroma test files включены. Дополнительно root повторил135 exact
+legacy/source-alpha exclusions,6 public known-shade controls, native3 и actual
+final writer3. Combined diff проверен независимым сильным агентом: новыхP1/P2
+не найдено. Git diff-check PASS; оригинальный referencec1473ae чист.
+
+Новые NN runs не проводились: native inputs to NN побайтно прежние, visual
+improvement отсутствует; предыдущие actual NN evidence сохраняют значение,
+но не являются новой end-to-end приёмкойv14. Installed Windows не проверен.
+Автоматическая кайма остаётся открытой; нельзя закрыть её этим guard или
+агрессивным reference classifier без потери известного настоящего AA. Ручная
+локальная RGB-коррекция остаётся отдельной уже реализованной веткой, не решением
+этого automatic требования. После проверки concrete comparison владельцу задан
+асинхронный вопрос о допустимости потери самых слабых штрихов ради более чистой
+automatic границы. В следующем сообщении владелец ответил «Да»; новый approved
+tradeoff и проверка находятся в записи выше. Classifier rollback на этом этапе
+не внедрялся. История текущего исследования:
+`docs/ERRORS.md#automatic-core-reference-cause-20261003`. Private evidence:
+`../artifacts/reference-core-cause-20261003/root/REVIEW.ru.md` и JSON/logs.
+Сборки/коммита/push/merge нет.
+
+
 ## Слабый край: исправление цвета, 2026-10-03
 
 Продолжение по поручению владельца: улучшать край, коммиты/push разрешены,
@@ -4958,3 +5151,5 @@ Source handoff: codex/fix-large-contours-edge-quality-20261002.
 Точный завершённый commit/upstream status проверяется в Git этой ветки.
 Следующий разрешаемый этап: отдельная Windows сборка; production публикация
 и снятие старого beta требуют успешной установленной/licensed приёмки.
+
+Remaining-edge-20261003: disk full193GB/0free. Product exactv16, newrules private. Own pytest temps cleaned, freed5MB vanished. Await owner answer for old ambiguous /tmp/vibix-size-audit/extracted1.5GB cleanup.
