@@ -2372,11 +2372,6 @@ class ClipartTransparencyEditorPage(QWidget):
             button.setChecked(key == tool)
         self.brush_controls.setVisible(tool == "brush")
         self.pen_controls.setVisible(tool == "pen")
-        if tool == 'pen':
-            self.files_frame.setFixedHeight(90)
-        else:
-            self.files_frame.setMinimumHeight(0)
-            self.files_frame.setMaximumHeight(16777215)
         self.canvas.viewport().update()
         self.canvas.setFocus()
         self._refresh_history_buttons()

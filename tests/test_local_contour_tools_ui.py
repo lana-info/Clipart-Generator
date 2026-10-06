@@ -244,7 +244,17 @@ def test_late_preview_cancel_file_switch_and_selection_reindex(page, tmp_path):
 
 
 def test_controls_reachable_pen_1120_by_780_and_brush_layout_restored(page):
-    assert page.files_frame.height() == 90
+    # The file list must not collapse when the contour controls are shown.
+    for index in range(20):
+        page.file_list.addItem(f'image-{index:02d}.png')
+    heights = []
+    for tool in ('brush', 'pen', 'brush', 'pen'):
+        QTest.mouseClick(page.tool_buttons[tool], Qt.MouseButton.LeftButton)
+        QApplication.processEvents()
+        heights.append(page.files_frame.height())
+        assert page.file_list.viewport().height() >= 5 * page.file_list.sizeHintForRow(0)
+        assert page.files_frame.maximumHeight() == 16777215
+    assert max(heights) - min(heights) <= 2
     for button in (page.simplify_button, page.smooth_button, page.save_button, page.back_button):
         page.tools_scroll.ensureWidgetVisible(button)
         QApplication.processEvents()
