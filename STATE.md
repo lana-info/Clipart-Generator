@@ -10,12 +10,18 @@ Source version/Azure default3.2.13. Новый Composer1.5.4 требует Core
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Коммит, push, новая Windows beta; «да» владельца | Pushed SHA, build provenance, installer SHA и native smoke | Интеграция исправлений подготовлена | Интеграция169tests+6subtests PASS24.73s; сборка/публикация ещё не выполнены |
-| Исправленный конструктор отдельно | Signed1.5.4 inspect/install/runtime, local UI | ui.py входит в module payload | Исходный90tests+2subtests PASS; пакет ещё не выпущен |
-| Новая beta без изменения stable и прав | Server SHA/discovery/status и backup | План: опубликовать2новые строки, снять только прежние Studio/Composer | Не выполнено |
-| Временный PUBLIC→build→PRIVATE; ранее утверждённый способ | Finally restore и отдельная проверка GitHub | Будет использован проверенный build helper | Не выполнено |
+| Коммит, push, новая Windows beta; «да» владельца | Pushed SHA, build provenance, installer SHA и native smoke | Интеграция исправлений подготовлена | Реализовано и проверено:169tests+6subtests PASS24.73s; source7d7bcde pushed, Windowsrun37546983128SUCCESS; installer version/SHA/provenance совпали, frozenCore13/13PASS |
+| Исправленный конструктор отдельно | Signed1.5.4 inspect/install/runtime, local UI | ui.py входит в module payload | Реализовано и проверено: officialsignature/exact6files, temporary runtime mouse/key/literal-save PASS; Core3.2.11/3.3.0 reject; beta1.5.4 опубликован |
+| Новая beta без изменения stable и прав | Server SHA/discovery/status и backup | Опубликованы2новые строки, сняты Studio3.2.12/Composer1.5.3 | Реализовано и проверено: storedSHA2/2PASS, beta discovery7current;5unchanged modules/stable fingerprints unchanged, health200/invalidtoken403 |
+| Временный PUBLIC→build→PRIVATE; ранее утверждённый способ | Finally restore и отдельная проверка GitHub | Проверенный build helper завершился с finally restore | Реализовано и проверено: PRIVATE подтверждён отдельно через GitHub API |
 
-Native Windows проверка устройства владельца остаётся отдельным этапом.
+Installed frozen Windows Server2025:13Core checks PASS, включая contour_editing_works.
+Native screenshot contour-editor.png просмотрен: список файлов расширен с выбранным пером.
+Проверка обновления и реального licensed module download/open на устройстве владельца
+не проводилась; остаётся отдельным этапом. Evidence:
+../artifacts/studio-3.2.13-composer-beta-20261006/.
+Backup перед публикацией:
+/opt/bots-stack/backups/clipart-license-service/pre-studio3213-beta-publication-20261006.dump.
 
 ## Сжатие списка файлов при выборе пера, 2026-10-06
 
@@ -28,7 +34,7 @@ Native Windows проверка устройства владельца оста
 | --- | --- | --- | --- |
 | Список файлов не сжимается при выборе пера; сообщение владельца | Реальные Qt clicks brush/pen/brush/pen, список из21строки | Убрана принудительная высота90px, действует существующее распределение места | Реализовано и проверено: regression FAIL до правки, PASS после; styled1120×780 высота296px в обоих режимах,980×700264px, возврат296px |
 | Кнопки контура и сохранения остаются доступны | ensureWidgetVisible для simplify/smooth/save/back | Существующая прокрутка инструментов сохранена | Реализовано и проверено:63связанных Qt-теста PASS,8.04s |
-| Доставка исправления владельцу | Обновление Studio и Windows-проверка | Пока только source в отдельной ветке | Не выполнено: commit/push/build/publish не разрешались для этой правки, Windows не проверен |
+| Доставка исправления владельцу | Обновление Studio и Windows-проверка | Включено в опубликованную Studio3.2.13 | Реализовано и проверено: владелец разрешил выпуск; включено в Studio3.2.13, Windows frozen smoke и beta publication PASS; устройство владельца ещё не проверено |
 
 Изменён Core-owned `v3_transparency_preview.py`, он не входит в отдельный
 пакет processing (тот содержит только v3_processing_flow.py). В отличие от
@@ -43,7 +49,7 @@ Evidence: ../artifacts/editor-file-list-height-20261006/geometry.json и capture
 Пользователь поручил отдельному сабагенту полное ревью перед выпуском. Независимый
 gpt-6.1-sol high прочитал весь заданный модуль, root проверил Core async/close и
 независимо воспроизвёл все findings. Пользователь затем явно разрешил исправить все3ошибки. Исправления выполнены
-в том же ui.py, schema/API/Core/version не менялись. Выпуск ждёт подтверждения.
+в том же ui.py, schema/API/Core/version не менялись. Выпуск выполнен после подтверждения: Composer1.5.4 beta; текущие evidence выше.
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
@@ -59,8 +65,8 @@ PASS не исключал эти3непокрытых сценария. Пос�
 полный Composer suite90PASS+2subtests,9.72s. Независимый gpt-6.1-sol high повторил
 исходные3repro на исправленном source: PASS, open findings0. Изменён только
 prompt_composer/ui.py, тесты и документы. Новых настроек, блокировки страницы,
-Core/API/schema changes нет. Commit/push/build/publish и Windows/real-provider
-приёмка не выполнялись; для выпуска нужно подтверждение готового изменения.
+Core/API/schema changes нет. После этого владелец разрешил commit/push/выпуск: выполнены, Composer1.5.4 beta.
+Платные provider calls и приёмка устройства владельца не выполнялись.
 Final evidence: ../artifacts/composer-data-loss-fixes-20261006/.
 
 ## Падение конструктора при выборе варианта, 2026-10-06
@@ -87,9 +93,9 @@ mouseclicks, continuous keyboard, selected text, clipboard, save и More7;
 независимо проверил сохранение focus, DeferredDelete и non-stealing-focus,
 подтверждённых незакрытых замечаний0. Производственная правка12строк в одном
 ui.py, новые regression tests и документы состояния; schema/API/version не менялись.
-Платные запросы, production build/sign/publish и изменение приложения владельца
-не выполнялись. Перед commit/push и выпуском обновлённого модуля требуется
-подтверждение готового изменения; Windows source/frozen приёмка остаётся открытой.
+На этапе этой проверки платные запросы/build/sign/publish не выполнялись.
+После разрешения владельца опубликован Composer1.5.4beta; см. текущий раздел
+выпуска выше. Приёмка обновления модуля на устройстве владельца остаётся открытой.
 
 ## Режим материалов Chroma Key, 2026-10-05
 

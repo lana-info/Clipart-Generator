@@ -5,10 +5,10 @@
 - [x] Получить разрешение владельца на commit/push/Studio beta + Composer.
 - [x] Объединить обе изолированные правки, сохранить историю.
 - [x] Проверить интеграцию/контракты версии:169tests+6subtests PASS24.73s.
-- [ ] Commit/push интеграции.
-- [ ] Windows3.2.13build, вернуть PRIVATE, проверить installer/provenance.
-- [ ] Signed Composer1.5.4, проверить old-Core reject и runtime.
-- [ ] Опубликовать2beta rows и снять2предыдущих, сохранить5unchanged modules/stable.
+- [x] Commit/push интеграции:7d7bcde; обе fix-ветки также отправлены.
+- [x] Windows3.2.13run37546983128SUCCESS, PRIVATE, installer SHA/provenance и frozen13checks PASS.
+- [x] Signed Composer1.5.4: независимые exactsource/signature/runtime и old-Core reject PASS.
+- [x] Опубликованы2beta rows; сняты2предыдущих;5unchanged modules/stable сохранены;liveSHA/health PASS.
 - [ ] Проверить обновление на устройстве владельца.
 
 ## Список файлов в редакторе прозрачности, 2026-10-06
@@ -16,7 +16,7 @@
 - [x] Найти setFixedHeight(90) при выборе пера и воспроизвести regression FAIL.
 - [x] Снять ограничение, проверить повторные клики и доступность controls:63PASS.
 - [x] Проверить styled geometry1120×780/980×700/1120×780 и сохранить screenshots.
-- [ ] После разрешения владельца интегрировать, commit/push и собрать новую Studio beta.
+- [x] После разрешения интегрировано/pushed и опубликовано в Studio3.2.13beta.
 - [ ] Проверить на Windows владельца.
 
 
@@ -28,7 +28,7 @@
 - [x] После подтверждения исправить сохранение при позднем переводе: modal/create/cancel/replace/othercards PASS.
 - [x] После подтверждения защитить target-поле:5cases и available unapplied result PASS.
 - [x] Добавить13новых cases; Composer90PASS+2subtests; focused independent review open findings0.
-- [ ] Выпуск модуля отложен до устранения findings и отдельного разрешения.
+- [x] Findings устранены; после разрешения опубликован Composer1.5.4beta.
 
 Результаты: STATE.md и ../artifacts/composer-full-review-20261006/REPORT.ru.md.
 
@@ -40,7 +40,7 @@
 - [x] Добавить real mouse/key subprocess регрессии, включая signed-module install/runtime.
 - [x] По ревью сохранить keyboard focus и проверить удаление прежних widgets.
 - [x] Финальные Composer77tests+2subtests PASS; focused review оппонента без замечаний.
-- [ ] После подтверждения владельца commit/push и выпуск обновления только prompt-composer.
+- [x] После подтверждения commit/push и выпуск Composer1.5.4beta выполнены.
 - [ ] Проверить обновлённый модуль на Windows владельца.
 
 Требования и доказательства: STATE.md, «Падение конструктора при выборе варианта».

@@ -1,5 +1,25 @@
 # Official Module Releases
 
+## Beta Studio3.2.13 и Composer1.5.4, 2026-10-06
+
+Владелец разрешил commit/push и выпуск после просмотра результатов. Build source
+7d7bcde2fc2cbaa2be7fd138bd04163a9c140abb; Windowsrun37546983128SUCCESS.
+PUBLIC→build→PRIVATE выполнено, итогPRIVATE проверен отдельно. Installer SHA/version/
+provenance совпали; установленный frozenCore13/13checks PASS, в том числе contour.
+Studio исправляет высоту списка файлов при выборе пера. Composer1.5.4 исправляет
+падение при выборе варианта и3ошибки потери текста; это отдельное обновление модуля.
+
+Пакет1.5.4: windows-x64,Core>=3.2.12,<3.3.0, pinnedpublisher signature и все6files
+побайтно соответствуют build source. Independent temporary install/runtime PASS,
+Core3.2.11/3.3.0 reject. Остальные5модулей остаются опубликованными1.5.3.
+Новые2релиза published beta; предшественники Studio3.2.12/Composer1.5.3 withdrawn,
+старые файлы сохранены. Stable и остальные релизы неизменны. Live storedSHA2/2PASS,
+health200/invalidtoken403. Перед публикацией создана и проверена backup базы.
+
+Evidence: ../artifacts/studio-3.2.13-composer-beta-20261006/.
+Реальное обновление устройства владельца и licensed download/open ещё не проверены.
+Не заменять байты версий1.5.3/1.5.4/3.2.12/3.2.13: для будущих правок новая версия.
+
 ## Chroma material candidate, 2026-10-05
 
 Studio source version and Azure default now3.2.12. Local unpublished signed module1.5.3 candidates: auto-clipart, clipart, processing and image-processing, minCore3.2.12 and windows-x64. Existing module/version bytes are not overwritten or published. Local Ed25519 inspect/install verifies4/4; previous Core3.2.11 rejects4/4. Source evidence and actual/approved UI: STATE.md current task and docs/ui/3.2/chroma-material-mode-20261005/README.md. Artifacts: ../artifacts/chroma-material-beta-3.2.12-modules-1.5.3-20261005/release-set.json.
