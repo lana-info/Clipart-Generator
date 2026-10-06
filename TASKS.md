@@ -1,5 +1,16 @@
 # TASKS
 
+## Выпуск исправленной беты, 2026-10-06
+
+- [x] Получить разрешение владельца на commit/push/Studio beta + Composer.
+- [x] Объединить обе изолированные правки, сохранить историю.
+- [x] Проверить интеграцию/контракты версии:169tests+6subtests PASS24.73s.
+- [ ] Commit/push интеграции.
+- [ ] Windows3.2.13build, вернуть PRIVATE, проверить installer/provenance.
+- [ ] Signed Composer1.5.4, проверить old-Core reject и runtime.
+- [ ] Опубликовать2beta rows и снять2предыдущих, сохранить5unchanged modules/stable.
+- [ ] Проверить обновление на устройстве владельца.
+
 ## Список файлов в редакторе прозрачности, 2026-10-06
 
 - [x] Найти setFixedHeight(90) при выборе пера и воспроизвести regression FAIL.
