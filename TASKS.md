@@ -1,5 +1,30 @@
 # TASKS
 
+## Полное ревью конструктора перед выпуском, 2026-10-06
+
+- [x] Независимый whole-module read-only review gpt-6.1-sol high.
+- [x] Root независимо воспроизвёл3P2 и проверил close/cancel/late replies3/3PASS.
+- [x] После подтверждения исправить literal HTML text loss: roundtrip3cases PASS.
+- [x] После подтверждения исправить сохранение при позднем переводе: modal/create/cancel/replace/othercards PASS.
+- [x] После подтверждения защитить target-поле:5cases и available unapplied result PASS.
+- [x] Добавить13новых cases; Composer90PASS+2subtests; focused independent review open findings0.
+- [ ] Выпуск модуля отложен до устранения findings и отдельного разрешения.
+
+Результаты: STATE.md и ../artifacts/composer-full-review-20261006/REPORT.ru.md.
+
+## Падение конструктора при выборе готового промпта, 2026-10-06
+
+- [x] Уточнить действие: выбор варианта слева на последнем шаге.
+- [x] Воспроизвести native SIGSEGV реальным Qt mouseclick с minimal draft.
+- [x] Исправить время удаления старой страницы без изменения required-field policy.
+- [x] Добавить real mouse/key subprocess регрессии, включая signed-module install/runtime.
+- [x] По ревью сохранить keyboard focus и проверить удаление прежних widgets.
+- [x] Финальные Composer77tests+2subtests PASS; focused review оппонента без замечаний.
+- [ ] После подтверждения владельца commit/push и выпуск обновления только prompt-composer.
+- [ ] Проверить обновлённый модуль на Windows владельца.
+
+Требования и доказательства: STATE.md, «Падение конструктора при выборе варианта».
+
 ## Режим материалов Chroma Key, 2026-10-05
 
 - [x] Утвердить план и макет: пользователь «да, все ок»; сохранить approved/actual UI evidence.

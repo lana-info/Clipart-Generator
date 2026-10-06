@@ -1974,3 +1974,65 @@ Spatialveto candidate improvesdarkpoint but distinct9x9paintmarker negative fail
 ## artifact-download-20261006
 
 Первая gh run download передачи Windows3.2.12 артефакта завершилась SIGTERM143 без сохранённого файла. Причина прекращения процесса неизвестна; сборкаGitHubrun37490182834 при этом SUCCESS, artifact11425258051 доступен. Проверены доступность и82GB free space. Изменена только доставка: gh api artifact/zip пишет поток в новый .part. Повторная передача exit0,242819696bytes; ZIPCRC PASS, installer SHA совпала с checksum/provenance, версия3.2.12 иsource438a665 подтверждены. Новая сборка/настройки приложения не требовались. Evidence: ../artifacts/studio-3.2.12-chroma-beta-20261006/installer-verification.json.
+
+
+## composer-results-crash-20261006
+
+Симптом владельца: Studio закрылась при выборе одного из7готовых промптов слева,
+до этого параметры заполнены частично. Первый реальный QTest.mouseClick по
+строке1 на default draft (толькоsubject) воспроизвёл SIGSEGV/139. Источник не в
+нехватке данных: генерация успешно вернула7вариантов, падение началось в click.
+
+Причина: currentRowChanged → _select_variant → _render → QScrollArea.setWidget
+синхронно удаляет предыдущий body вместе с emitting QListWidget, пока нативный
+Qt mouse/key handler ещё использует этот widget. Прямые вызовы _select_variant
+в прежних тестах не проверяли этот lifecycle и не выявляли native crash.
+
+Попытка1: перед setWidget отделить старый body через takeWidget, hide/deleteLater.
+Проверка: исходный15clicks+actions repro PASS; связанные51tests+2subtests PASS,
+полный Composer77tests+2subtests PASS. Независимая DeferredDelete-проверка
+подтвердила освобождение body/list, но нашла потерю keyboard focus после первого
+Down. Это отдельный UX дефект: новый список не получает фокус прежнего.
+
+Доработка по данным ревью: _select_variant восстанавливает фокус нового списка
+только если прежний список был сфокусирован. Регрессия использует Down/Down/Up/
+End/Home через настоящий app.focusWidget без повторного setFocus. Добавлено
+sendPostedEvents(DeferredDelete) и sip.isdeleted старого списка после завершения
+mouse event. Minimal/enriched/AI proposal и временный подписанный модуль
+проверяются в отдельных процессах, чтобы native crash не завершал весь pytest.
+Итоговые результаты и delivery status ведутся в STATE.md; production и paid
+операции этим исследованием не выполнялись.
+
+
+## composer-full-review-20261006
+
+По поручению пользователя отдельный readonly reviewer и root независимо
+воспроизвели3существовавшихP2. Попыток исправления пока нет, выпуск отложен.
+1. QTextEdit(current) распознаёт HTML: Edit/Save без изменений теряет literal
+   <lora:…>. Причина и проверка: plain-text-probe.log.
+2. Save snapshot берётся до modal exec; поздний перевод создаёт edit во время
+   диалога, после записи старого snapshot pop() удаляет новый edit и снимает dirty.
+   Real Qt/SQLite подтверждают потерю: save-race-probe.log.
+3. Field translation сравнивает только source; новый ручной target до ответа
+   затирается setText. Независимые пробы: field-race-probe.log.
+Evidence в ../artifacts/composer-full-review-20261006/. Root close/cancel/late
+callbacks3/3PASS; paid/network/production не использовались. Требования, статус
+и следующий шаг ведутся в STATE.md, без объявления findings устранёнными.
+
+
+### Исправление composer-full-review-20261006, разрешено владельцем
+
+HTML parsing → пустой QTextEdit + setPlainText → literal LoRA/HTML/angle-bracket
+roundtrip3cases PASS. Save race → свежий content snapshot после Save и replace
+confirmation; guard identities выбранной карточки/proposal/record → actual modal
+QTimer callback сохраняется в SQLite и UI, cancel сохраняет edit, replace
+сохраняет late translation и othercard edits; arrival нового AIproposal отменяет
+устаревшее сохранение без потери proposal. Target overwrite → capture target
+перед запросом, apply только при неизменных source+target и видимом editor;
+конфликтный/закрытый/deleted editor показывает перевод отдельно для копирования,
+через существующий readonly dialog.5cases + literal readonly result PASS.
+Production исправления ограничены тем же module ui.py, без изменения Core.
+Первый regression subset23PASS; полный Composer90PASS+2subtests9.72s. Оппонент
+независимо повторил исходные3сценария с реальными Qt/SQLite:PASS, новых findings0.
+Evidence: ../artifacts/composer-data-loss-fixes-20261006/. Windows/real provider и
+публикация модуля не выполнялись, доступ пользователя ещё на старом модуле.

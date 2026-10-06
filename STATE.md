@@ -1,5 +1,58 @@
 # Project state
 
+## Полное ревью конструктора, 2026-10-06
+
+Пользователь поручил отдельному сабагенту полное ревью перед выпуском. Независимый
+gpt-6.1-sol high прочитал весь заданный модуль, root проверил Core async/close и
+независимо воспроизвёл все findings. Пользователь затем явно разрешил исправить все3ошибки. Исправления выполнены
+в том же ui.py, schema/API/Core/version не менялись. Выпуск ждёт подтверждения.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Полное независимое ревью; пользователь «хорошо сделай» | Separate context, whole UI/state/storage/AI review | Ревью выполнено, root independently reproduces | Все3P2 исправлены и перепроверены, final focused review без замечаний |
+| Ручной редактор сохраняет literal prompt | Open/Edit/Save без ввода, token <lora:…> | QTextEdit.setPlainText вместо HTML constructor | Реализовано и проверено:3literal roundtrip, real modal opponent PASS |
+| Save не теряет пришедший перевод | Fake callback в modal Save, real Qt/SQLite | Fresh snapshot после обоих диалогов и проверка контекста выбранной карточки | Реализовано и проверено: actual modal eventloop/SQLite, cancel, replace confirmation, othercard edits, new proposal guard PASS |
+| Поздний перевод не стирает ручной target | RU→EN request, edit target, deliver callback | Проверяются source и target; конфликтный перевод доступен отдельно для копирования | Реализовано и проверено: unchanged/source/target/closed/deleted5cases и literal readonly result PASS |
+| Закрытая страница не получает поздние ответы | Actual Host/page, close+DeferredDelete при quote/variants/translation | Existing cancel/serial/cleanup | Реализовано и проверено:3/3PASS, jobs released, uncaught0, no paid transport |
+
+Подробности/evidence: ../artifacts/composer-full-review-20261006/REPORT.ru.md.
+История: docs/ERRORS.md#composer-full-review-20261006. Предыдущий77tests+2subtests
+PASS не исключал эти3непокрытых сценария. После исправлений13новых кейсов;
+полный Composer suite90PASS+2subtests,9.72s. Независимый gpt-6.1-sol high повторил
+исходные3repro на исправленном source: PASS, open findings0. Изменён только
+prompt_composer/ui.py, тесты и документы. Новых настроек, блокировки страницы,
+Core/API/schema changes нет. Commit/push/build/publish и Windows/real-provider
+приёмка не выполнялись; для выпуска нужно подтверждение готового изменения.
+Final evidence: ../artifacts/composer-data-loss-fixes-20261006/.
+
+## Падение конструктора при выборе варианта, 2026-10-06
+
+Пользователь уточнил: последний шаг «Готовые промпты», щелчок по одному из семи
+вариантов слева. Ветка codex/fix-composer-results-crash-20261006 от647e25a,
+актуального source Studio3.2.12; base включает develop/3.2. Незакоммиченные STATE,
+TASKS и runbook прежнего chroma-worktree не тронуты. Полный rebuild Studio не нужен:
+изменяемый ui.py входит в отдельный signed prompt-composer payload.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Выбор любого из7вариантов не закрывает приложение; сообщение владельца | Real QTest mouse/key delivery в дочернем процессе | takeWidget + deferred deletion до setWidget | До исправления первый mouseclick SIGSEGV/139; после реальный mouse/key PASS |
+| Дополнительные незаполненные поля допустимы, не блокировать переход без причины; вопрос владельца | Default draft толькоsubject, enriched draft, existing missing-English guard | Engine/schema/required-field policy не менялись | Minimal draft получает7вариантов; selection/copy/save/more PASS; validation guard в связанном наборе |
+| Последовательные стрелки продолжают выбор | Down/Down/Up/End/Home через фактический app.focusWidget | Фокус списка сохраняется только когда был в списке | Реализовано и проверено: последовательные1/2/1/6/0, actual focus и DeferredDelete PASS; независимое ревью PASS |
+| Исправление работает в отдельном модуле Studio3.2.12 | Temporary signed install/runtime и те же real Qt clicks | Изменён только prompt_composer/ui.py и регрессии | Signed-module scenario source tests PASS; доставка на Windows ещё не выполнена |
+
+Причина/попытки: docs/ERRORS.md#composer-results-crash-20261006.
+Evidence: ../artifacts/composer-results-crash-20261006/.
+Финальный полный связанный Composer suite:77PASS+2subtests,8.86s, Linux Qt offscreen.
+Проверены4subprocess случая (minimal, enriched, AI proposal, signed module),
+mouseclicks, continuous keyboard, selected text, clipboard, save и More7;
+старые UI/host/AI/storage/engine/runtime/integration tests также PASS. Оппонент
+независимо проверил сохранение focus, DeferredDelete и non-stealing-focus,
+подтверждённых незакрытых замечаний0. Производственная правка12строк в одном
+ui.py, новые regression tests и документы состояния; schema/API/version не менялись.
+Платные запросы, production build/sign/publish и изменение приложения владельца
+не выполнялись. Перед commit/push и выпуском обновлённого модуля требуется
+подтверждение готового изменения; Windows source/frozen приёмка остаётся открытой.
+
 ## Режим материалов Chroma Key, 2026-10-05
 
 План и макет утверждены пользователем. Изолированная ветка `codex/feature-chroma-material-mode-20261005` от7ddc995, который включает актуальный develop/3.2. Прежние незакоммиченные исследования сохранены в edge-reference-cause-worktree, не включены в diff этой задачи. Последний найденный готовый Windows installer3.2.11; версия устройства неизвестна. Кандидат3.2.12, modules1.5.3 минимумCore3.2.12.

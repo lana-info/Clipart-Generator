@@ -346,6 +346,13 @@ class PromptComposerPage(QWidget):
                 next_btn.setProperty("primary", True)
                 self.footer.addWidget(next_btn)
         layout.addStretch()
+        # setWidget deletes the previous body immediately. A selection signal
+        # can arrive inside that body's mouse/key handler; keep its widgets
+        # alive until Qt finishes dispatching the current event.
+        previous_body = self.scroll.takeWidget()
+        if previous_body is not None:
+            previous_body.hide()
+            previous_body.deleteLater()
         self.scroll.setWidget(body)
 
     def _previous_step(self):
@@ -706,6 +713,8 @@ class PromptComposerPage(QWidget):
     def _select_variant(self, index):
         if index < 0:
             return
+        listing = self.scroll.widget().findChild(QListWidget, "variantList")
+        restore_focus = listing is not None and listing.hasFocus()
         if self._proposal:
             self._proposal_index = index
         else:
@@ -713,6 +722,8 @@ class PromptComposerPage(QWidget):
                 self._variant_index = index
                 self._set_dirty()
         self._render()
+        if restore_focus:
+            self.scroll.widget().findChild(QListWidget, "variantList").setFocus()
 
     def _change_language(self, language):
         self._language = language
@@ -744,7 +755,8 @@ class PromptComposerPage(QWidget):
         dialog.setWindowTitle("Ручная правка текста")
         layout = QVBoxLayout(dialog)
         layout.addWidget(QLabel("Ручной текст может отличаться от сохранённых параметров."))
-        editor = QTextEdit(current)
+        editor = QTextEdit()
+        editor.setPlainText(current)
         editor.setObjectName("manualPromptEditor")
         layout.addWidget(editor)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
@@ -783,7 +795,10 @@ class PromptComposerPage(QWidget):
 
     def save_current(self):
         draft = self._selected_draft()
-        working_draft = deepcopy(self.draft)
+        save_variant = self._active_variant()
+        save_proposal = self._proposal
+        save_record = self._saved_record
+        save_step = self._step
         dialog = QDialog(self)
         dialog.setWindowTitle("Сохранить промпт")
         layout = QVBoxLayout(dialog)
@@ -814,9 +829,6 @@ class PromptComposerPage(QWidget):
             return False
         metadata = {"name": name.text().strip(), "tags": [x.strip() for x in tags.text().split(",") if x.strip()],
                     "favorite": favorite.isChecked(), "kind": "prompt"}
-        variant = self._active_variant() if not self._proposal and self._step == 4 else None
-        metadata["source"] = variant.get("source", "local") if variant else "local"
-        draft["name"] = metadata["name"]
         if self._saved_record and choice == 1:
             metadata["parent_id"] = self._saved_record["id"]
         try:
@@ -825,6 +837,18 @@ class PromptComposerPage(QWidget):
                                               QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if answer != QMessageBox.StandardButton.Yes:
                     return False
+            if (self._step != save_step or self._active_variant() is not save_variant
+                    or self._proposal is not save_proposal or self._saved_record is not save_record):
+                self._show_message("Выбранный вариант изменился. Повторите сохранение.")
+                return False
+            # Modal dialogs dispatch AI callbacks. Take the content snapshot
+            # after both dialogs so a newly received translation is saved too.
+            draft = self._selected_draft()
+            working_draft = deepcopy(self.draft)
+            variant = self._active_variant() if not self._proposal and self._step == 4 else None
+            metadata["source"] = variant.get("source", "local") if variant else "local"
+            draft["name"] = metadata["name"]
+            if choice == 2 and self._saved_record:
                 record = self.host.save(draft, metadata, entry_id=self._saved_record["id"],
                                         expected_revision=self._saved_record["revision"])
             else:
@@ -1110,6 +1134,19 @@ class PromptComposerPage(QWidget):
             return False
         return self._request_ai("translation", text=text, target=target, field_key=key, parent_dialog=parent_dialog)
 
+    def _show_unapplied_translation(self, translated, message):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Перевод прежнего черновика")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(message))
+        editor = QTextEdit()
+        editor.setPlainText(translated)
+        editor.setReadOnly(True)
+        layout.addWidget(editor)
+        layout.addWidget(_button("Закрыть", dialog.accept))
+        dialog.resize(620, 360)
+        dialog.exec()
+
     def _request_ai(self, operation, text="", target="ru", field_key=None, parent_dialog=None):
         if self._ai_ticket is not None:
             self._show_message("AI-запрос уже выполняется.")
@@ -1124,6 +1161,13 @@ class PromptComposerPage(QWidget):
             return False
         snapshot = self._selected_draft() if self._step == 4 and not self._proposal else deepcopy(self.draft)
         translation_index = self._variant_index
+        field_target_text = None
+        if field_key and parent_dialog is not None:
+            try:
+                target_editor = parent_dialog.composer_en if target == "en" else parent_dialog.composer_ru
+                field_target_text = target_editor.text()
+            except RuntimeError:
+                return False
         if field_key:
             source_language = "ru" if target == "en" else "en"
             snapshot.setdefault("fields", {}).setdefault(field_key, {"ru": "", "en": ""})[source_language] = text
@@ -1183,17 +1227,8 @@ class PromptComposerPage(QWidget):
                     self._tab = "composer"
                     self._render()
                 elif stale:
-                    dialog = QDialog(self)
-                    dialog.setWindowTitle("Перевод прежнего черновика")
-                    layout = QVBoxLayout(dialog)
-                    layout.addWidget(QLabel("Черновик изменён. Можно скопировать полученный перевод; он не применён."))
-                    editor = QTextEdit()
-                    editor.setPlainText(str(response.get("text", "")))
-                    editor.setReadOnly(True)
-                    layout.addWidget(editor)
-                    layout.addWidget(_button("Закрыть", dialog.accept))
-                    dialog.resize(620, 360)
-                    dialog.exec()
+                    self._show_unapplied_translation(str(response.get("text", "")),
+                        "Черновик изменён. Можно скопировать полученный перевод; он не применён.")
                 else:
                     translated = str(response.get("text", ""))
                     if field_key:
@@ -1202,12 +1237,15 @@ class PromptComposerPage(QWidget):
                             try:
                                 source_editor = parent_dialog.composer_ru if target == "en" else parent_dialog.composer_en
                                 target_editor = parent_dialog.composer_en if target == "en" else parent_dialog.composer_ru
-                                if parent_dialog.isVisible() and source_editor.text() == text:
+                                if (parent_dialog.isVisible() and source_editor.text() == text
+                                        and target_editor.text() == field_target_text):
                                     target_editor.setText(translated)
                                 else:
-                                    self._show_message("Поле изменилось или окно закрыто. Перевод не применён.")
+                                    self._show_unapplied_translation(translated,
+                                        "Поле изменилось или окно закрыто. Можно скопировать перевод; он не применён.")
                             except RuntimeError:
-                                pass
+                                self._show_unapplied_translation(translated,
+                                    "Окно закрыто. Можно скопировать перевод; он не применён.")
                         else:
                             self._set_field(field_key, pair.get("ru", "") if target == "en" else translated,
                                             translated if target == "en" else pair.get("en", ""))
