@@ -9,7 +9,9 @@
 - [x] Подготовить4 подписанных module1.5.3 ZIP minCore3.2.12, verify/install4PASS,reject oldCore4PASS.
 - [x] Завершить full offline-suite и финальное ревью:2770PASS/2old expectations; после их обновления affected194PASS/1skip/9subtests; финальных замечаний оппонента0.
 - [x] Показать окончательный diff/проверки; пользователь2026-10-06 разрешил commit/push, Windows3.2.12/modules и временный PUBLIC→build→PRIVATE.
-- [ ] После разрешённой сборки проверить installed Windows/upgrade, доставить бету и нужные модули без замены прежней беты до приёмки.
+- [x] Commit438a665/push feature-ветки; Windows3.2.12run37490182834SUCCESS; PUBLIC→PRIVATE завершён, GitHub APIPRIVATE проверен.
+- [x] Проверить installer/version/source/SHA; installed frozen Core13checks и local-processing smoke PASS;4modules committed-source audit PASS. Подготовить отдельный beta kit, старые релизы не изменять.
+- [ ] Публикация beta-каталога, licensed download/run новых модулей и обновление устройства владельца с сохранением данных остаются невыполненными.
 
 Подробности требований/рисков: STATE.md, «Режим материалов Chroma Key».
 

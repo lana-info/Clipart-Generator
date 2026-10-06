@@ -6,7 +6,7 @@ Studio source version and Azure default now3.2.12. Local unpublished signed modu
 
 Core API1 remains backward compatible with old opaque-only components. Material mode requires a component explicitly advertising legacy; worker construction rejects unsupported mode before any generation starts. The new component factory uses a Core field absent from3.2.11, so do not relax studio_min. New automatic/ordinary workflow code also depends on the new Core settings/registry. The processing candidate retains the previously reviewed white-readiness Core dependency. No new Pinterest/prompt-composer packages are required for this feature.
 
-Windows build, catalog/upload/publication and native/device upgrade remain pending. Obtain the explicit build command, build exactly the reviewed commit, verify installer/source/hash, exercise all3 settings paths and old-module rejection/update/rollback. Keep prior beta available until acceptance. Do not deploy production while fulfilling beta acceptance.
+Owner authorized commit/push/build and temporary PUBLIC→PRIVATE on2026-10-06. Source438a665, Windowsrun37490182834SUCCESS; repositoryPRIVATE verified, installer/source/version/SHA exact. Installed frozen Core13checks and local-processing smoke PASS. Beta kit: ../artifacts/studio-3.2.12-chroma-beta-20261006/. All4 module payloads independently match committed source. Catalog/upload/publication, licensed new-module download/run, owner-device upgrade and full3-settings Windows acceptance remain pending. Keep prior beta available until acceptance. Do not deploy production while fulfilling beta acceptance.
 
 
 ## Next reviewed candidate, 2026-10-01

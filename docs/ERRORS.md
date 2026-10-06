@@ -1969,3 +1969,8 @@ full-symmetric-verification.json и реальные dark/white сравнени
 remaining-edge-20261003 continuation: two realNN context probes at exactalpha: flower280480 improves239195185→226223221; duck265340 worsens176153162→135116146. Opaquedonor variant rejected, localstrong-donor variant not started: full disk. Product exactv16.
 Disk193GB/0free: only own regenerateable NN inputs and completed pytest-564/565/566 temporary fixtures removed, savedreports/inputs/models intact;5MB vanished again. Agent readonly trace auto-review deadline timeout, ordinary readonly path later worked. Await owner for old /tmp/vibix-size-audit/extracted1.5GB cleanup, not deleted.
 Spatialveto candidate improvesdarkpoint but distinct9x9paintmarker negative fails: notaccepted. Precise rawmatte misestimates variableGT coverage; localphysicalfit prototype3keys maxerror1. Need pigmentsupportnegatives and permanentRED before adoption; no newproduct edit.
+
+
+## artifact-download-20261006
+
+Первая gh run download передачи Windows3.2.12 артефакта завершилась SIGTERM143 без сохранённого файла. Причина прекращения процесса неизвестна; сборкаGitHubrun37490182834 при этом SUCCESS, artifact11425258051 доступен. Проверены доступность и82GB free space. Изменена только доставка: gh api artifact/zip пишет поток в новый .part. Повторная передача exit0,242819696bytes; ZIPCRC PASS, installer SHA совпала с checksum/provenance, версия3.2.12 иsource438a665 подтверждены. Новая сборка/настройки приложения не требовались. Evidence: ../artifacts/studio-3.2.12-chroma-beta-20261006/installer-verification.json.
