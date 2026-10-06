@@ -1080,6 +1080,8 @@ class V3ClipartFlowTests(unittest.TestCase):
                 "chroma_key_custom_color",
                 "chroma_key_tolerance",
                 "chroma_key_softness",
+                # Explicit colour-selection provenance, not a user control.
+                "chroma_key_color_override",
                 # Fixed Automatic Clipart delivery policy, not a new user control.
                 "trim_padding_percent",
             },
@@ -1529,7 +1531,8 @@ class V3ClipartFlowTests(unittest.TestCase):
             widgets["remove_background_provider"].findData("local_rembg")
         )
         self.assertTrue(widgets["local_ben2_alpha_threshold"].isHidden())
-        self.assertTrue(widgets["local_rembg_model"].isHidden())
+        self.assertFalse(widgets["local_rembg_model"].isHidden())
+        self.assertTrue(widgets["chroma_subject_profile"].isHidden())
         self.assertTrue(widgets["kie_remove_bg_model"].isHidden())
         widgets["unsharp"].setChecked(True)
         self.assertFalse(widgets["unsharp_amount"].isHidden())

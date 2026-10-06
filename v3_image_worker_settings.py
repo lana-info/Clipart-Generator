@@ -82,6 +82,11 @@ def build_image_run_settings(
         "cleanup_preserve_icc": operations.preserve_icc,
         "cleanup_preserve_dpi": operations.preserve_dpi,
     })
+    # Preserve old saved run fingerprints when behaviour is unchanged.
+    if operations.chroma_subject_profile != "opaque_clipart":
+        settings["chroma_subject_profile"] = operations.chroma_subject_profile
+    if operations.chroma_key_color_override:
+        settings["chroma_key_color_override"] = True
     # Omit the default to preserve older non-automatic request fingerprints.
     if operations.trim_padding_percent:
         settings["trim_padding_percent"] = operations.trim_padding_percent

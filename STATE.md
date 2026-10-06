@@ -1,5 +1,23 @@
 # Project state
 
+## Режим материалов Chroma Key, 2026-10-05
+
+План и макет утверждены пользователем. Изолированная ветка `codex/feature-chroma-material-mode-20261005` от7ddc995, который включает актуальный develop/3.2. Прежние незакоммиченные исследования сохранены в edge-reference-cause-worktree, не включены в diff этой задачи. Последний найденный готовый Windows installer3.2.11; версия устройства неизвестна. Кандидат3.2.12, modules1.5.3 минимумCore3.2.12.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Воспроизвести принятую юбку мишки, план пользователя | Реальный WorkerThread pipeline на прежних источниках, exact RGBA | Выбор opaque_clipart/legacy через стабильный API1 и shared settings | Реализовано и проверено: утята/морковь opaque и мишка legacy совпали с прежними PNG,0 различий каждого;1254×1254 |
+| Автоматически определять цвет и учитывать ручной выбор |15 регрессий UI→save→snapshot→Worker, generation record, старые defaults/fingerprint | Авто определяется по реальному источнику; persisted override действует только после явного ручного выбора | Реализовано и проверено:15PASS; запись генерации и старый per-entry приоритет сохранены; изменение режима меняет fingerprint, defaults не добавляют ключи в settings |
+| Три пути: автоматический клипарт, обработка, генератор | Реальные Qt controls, условная видимость, actual-vs-approved1120×780 | Общий editor и панель запуска auto-clipart, сохранение настроек | Реализовано и проверено:10 actual captures, UI unit tests; native Windows/полная платная генерация не проверены |
+| Сохранять готовую alpha, источники и прежние результаты | Native RGBA byte comparison, SHA12; белые источники auto без fallback | Existing skip-remover сохранён, white ambiguity требует ручной коррекции | Реализовано и проверено: alpha/RGB exact, SHA12unchanged;3 белых исходника возвращены неизменными и требуют проверки, проблема потерь белого не объявлена решённой |
+| Провести ревью с оппонентом | Независимый readonly gpt-6.1-sol high, локальные пробы | Constructor order и manual override исправлены по ревью, _sync recipe contract исправлен по регрессии | Реализовано и проверено: финальное readonly ревью замечаний не выявило; lease close и4 payload независимо проверены |
+| Подготовить совместимое обновление и бету | Ed25519 verification/install4, rejection старогоCore4 |4 подписанных ZIP1.5.3 для Core>=3.2.12; version/Azure default3.2.12 | Реализовано частично:4install/signature PASS,4oldCore rejection PASS. Сборка Windows, publish/catalog delivery и установка на устройстве не выполнены |
+
+Макет/actual: `docs/ui/3.2/chroma-material-mode-20261005/README.md`. Evidence: `../artifacts/chroma-material-validation-20261005/`. Signed ZIP: `../artifacts/chroma-material-beta-3.2.12-modules-1.5.3-20261005/`. История исправлений: `docs/ERRORS.md#chroma-material-mode-20261005`.
+
+Проверки завершены: full2770PASS/2failure/57skip/21deselected/284subtests; два устаревших test expectations обновлены по утверждённой спецификации, affected-suite194PASS/1skip/9subtests включая оба случая. Полный suite повторно не запускался, production-код после него не менялся. Evidence: ../artifacts/chroma-material-validation-20261005/checks-summary.json и REPORT.ru.md. Платные генерации и новые зависимости не выполнялись. 2026-10-06 пользователь явно разрешил commit/push, Windows-сборку3.2.12 и модули, а также временно PUBLIC→сборка→PRIVATE. Сборка и доставка пока ожидают выполнения; публикация серверного каталога этим не подтверждена.
+
+
 ## Передача текущего результата на GitHub по поручению владельца
 
 Владелец разрешил коммит и пуш текущей ветки

@@ -1,5 +1,14 @@
 # Official Module Releases
 
+## Chroma material candidate, 2026-10-05
+
+Studio source version and Azure default now3.2.12. Local unpublished signed module1.5.3 candidates: auto-clipart, clipart, processing and image-processing, minCore3.2.12 and windows-x64. Existing module/version bytes are not overwritten or published. Local Ed25519 inspect/install verifies4/4; previous Core3.2.11 rejects4/4. Source evidence and actual/approved UI: STATE.md current task and docs/ui/3.2/chroma-material-mode-20261005/README.md. Artifacts: ../artifacts/chroma-material-beta-3.2.12-modules-1.5.3-20261005/release-set.json.
+
+Core API1 remains backward compatible with old opaque-only components. Material mode requires a component explicitly advertising legacy; worker construction rejects unsupported mode before any generation starts. The new component factory uses a Core field absent from3.2.11, so do not relax studio_min. New automatic/ordinary workflow code also depends on the new Core settings/registry. The processing candidate retains the previously reviewed white-readiness Core dependency. No new Pinterest/prompt-composer packages are required for this feature.
+
+Windows build, catalog/upload/publication and native/device upgrade remain pending. Obtain the explicit build command, build exactly the reviewed commit, verify installer/source/hash, exercise all3 settings paths and old-module rejection/update/rollback. Keep prior beta available until acceptance. Do not deploy production while fulfilling beta acceptance.
+
+
 ## Next reviewed candidate, 2026-10-01
 
 The source candidate is ready for a separately authorized Studio3.2.12 build.

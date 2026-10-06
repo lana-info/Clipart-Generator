@@ -780,6 +780,7 @@ class V3ApplicationView(QWidget):
             return
         state = ProjectState(mode=ProjectMode.CLIPART)
         self._apply_preferences(state, ProjectMode.CLIPART)
+        state.clipart.operations.chroma_key_color = "auto"
         previous = self._active_project_id
         self._active_project_id = None
         if not self._replace_shell(state, module_id=module_id):

@@ -20,6 +20,10 @@ CHROMA_KEY_COLOR_OPTIONS: Final = tuple(
     ({"blue": "Синий", "red": "Красный", "green": "Зелёный"}[name], name)
     for name in KEY_COLORS
 )
+CHROMA_SUBJECT_PROFILE_OPTIONS: Final = (
+    ("Непрозрачный клипарт", "opaque_clipart"),
+    ("Полупрозрачные материалы", "legacy"),
+)
 
 @dataclass(frozen=True, slots=True)
 class ProviderSpec:
@@ -124,7 +128,7 @@ PROVIDER_SPECS: Final[dict[str, ProviderSpec]] = {
         requires_cost=False,
         preserves_alpha=True,
         requires_api_key=False,
-        visible_controls=("chroma_key_color",),
+        visible_controls=("chroma_key_color", "chroma_subject_profile"),
     ),
     "local_realesrgan": ProviderSpec(
         provider_id="local_realesrgan",

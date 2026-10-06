@@ -133,7 +133,7 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertIn("local_ben2_alpha_threshold", provider_visible_controls("local_ben2"))
         self.assertEqual(
             provider_visible_controls("local_chroma_key"),
-            ("chroma_key_color",),
+            ("chroma_key_color", "chroma_subject_profile"),
         )
         self.assertEqual(provider_visible_controls("photoroom"), ())
 

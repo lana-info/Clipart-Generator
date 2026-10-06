@@ -1,5 +1,10 @@
 # Vibix Images
 
+## Выбор материалов и автоматический фон, owner-approved2026-10-05
+
+Пользователь утвердил план доработки трёх сценариев auto-clipart/processing/clipart и затем полноэкранный макет двух списков «Цвет фона»/«Тип изображения». Это разрешает эти конкретные настройки сверх более раннего запрета новых controls в исследовании кромки. Поддержать opaque_clipart и legacy для полупрозрачных материалов; сохранить алгоритм/RGB, старые проекты/defaults, supplied alpha и generation provenance. Авто определяется по реальному supported-key источнику, explicit manual override не заменяет запись генерации. Белые/неоднозначные sources требуют проверки, универсальная matting accuracy не заявляется. Независимый оппонент, source/module checks и Windows-beta delivery входят в план; сборка запускается только по отдельной явной команде AGENTS, production publication не разрешена. КандидатStudio3.2.12, изменённые/зависимые modules1.5.3 minimumCore3.2.12. Windows/device acceptance остаётся обязательной после сборки.
+
+
 ## Cleaner automatic edge, owner-approved2026-10-03
 
 The owner answered yes to accepting loss of the weakest semitransparent strokes

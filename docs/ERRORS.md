@@ -1,5 +1,20 @@
 # Ошибки проекта
 
+## chroma-material-mode-20261005
+
+Full-suite2770PASS/2failure: test_auto_chroma_detects_each_file... предполагал приоритет generation record над auto, а test_processing_page_exposes_every... предполагал отдельный UI для каждого dataclass field. Это противоречит утверждённым actual-auto и внутреннему override. Новые ожидания проверяют actual color/RGBA/source preservation несмотря на другую declared key, а completeness исключает только невидимый compatibility flag. Production-код ради этих проверок не менялся. Контрольный affected-suite194PASS/1skip/9subtests; final readonly review0findings.
+
+Причина исходного расхождения мишки: ProcessingEngine.remove жёстко передавал opaque_clipart, а принятый серверный PNG получен legacy. Новый optional профиль в API1, объявление поддерживаемых режимов engine и сохранение настройки → real Worker pipeline на3 синих исходниках →0RGBA различий у каждого, включая мишку. Белый фон не исправляется:3 white sources получили manual_transparency_required, originals unchanged.
+
+Ревью оппонента выявило constructor AttributeError: проверка совместимости обращалась к remove_bg_provider до присваивания. Перенос после initialization → существующий component integration и новые worker tests →PASS. New roundtrip test выявил существующий _sync bug: recipe='custom' записывался и в ClipartModeData.recipe dict|None. Ограничение assignment случаями str → mode change/save/reopen →PASS, Processing recipe semantics сохранены.
+
+Дополнительное ревью подтвердило, что manual GUI color проигрывал per-entry/record. Persisted chroma_key_color_override=False и activated-only callback, override после прежней проверки record → новое15-case suitePASS, generation record unchanged. Нулевые default-ключи исключены из worker settings для сохранения старых fingerprints. Старый компонент поддерживает opaque, а legacy отклоняется до запуска Worker и платной генерации; metadata новых пакетов блокирует Core<3.2.12.
+
+Два первоначальных pytest command ссылались на несуществующие файлы и не запускали тесты. После rg --files команды составлены по существующим тестам. Первое выполнение связанных проверок:2failures (constructor bug и устаревшее ожидание скрытия активной rembg-модели). Constructor исправлен; UI tests обновлены по утверждённому показу метода, проверки скрытия неактивных полей сохранены. Provider registry old tuple ожидал1 поле; обновлён на2 по новой спецификации. Итоговый targeted suite167PASS+5subtests, new tests15PASS.
+
+Офлайн-стенд check_real.py сохранил все6 результатов, но финальный SHA assertion упал: helper ожидал Path, а JSON keys имели str. Original script/parameters/results сохранены. Отдельный finish_verification.py повторно проверил PNG byte comparisons и12SHA без повторной обработки:PASS. Это ошибка проверочного стенда, не конвейера приложения.
+
+
 ## remaining-edge-20261003
 
 ### Причины цветной каймы: сводка доказательств и гипотез

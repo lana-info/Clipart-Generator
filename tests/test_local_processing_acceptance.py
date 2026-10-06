@@ -853,10 +853,18 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                     self.assertEqual(output.getpixel((32, 32)), (235, 230, 210, 255))
                 self.assertEqual(source.read_bytes(), before)
                 self.assertEqual(worker.chroma_key_color, "auto")
-            # A generation record takes priority; no pixel colour guess needed.
-            with patch("chroma_generation_record.load_generation_color", return_value=color), \
-                 patch.object(main, "detect_chroma_key_color", side_effect=AssertionError("metadata ignored")):
-                worker._run_processing_pipeline(str(source), None, str(raw), 9, "recorded")
+            # Auto inspects the actual background even if generation declared another key.
+            declared = "blue" if color != "blue" else "green"
+            with patch("chroma_generation_record.load_generation_color", return_value=declared), \
+                 patch.object(main, "detect_chroma_key_color", wraps=main.detect_chroma_key_color) as detect:
+                result = worker._run_processing_pipeline(str(source), None, str(raw), 9, "recorded")
+            detect.assert_called_once()
+            with Image.open(result) as output:
+                self.assertEqual(output.getpixel((0, 0))[3], 0)
+                self.assertEqual(output.getpixel((32, 32)), (235, 230, 210, 255))
+            self.assertEqual(source.read_bytes(), before)
+            self.assertEqual(worker._item_context.chroma_receipt["requested_background"],
+                             "#%02X%02X%02X" % rgb)
 
     def test_auto_chroma_uncertain_background_does_not_call_neural_fallback(self):
         with tempfile.TemporaryDirectory() as temp:

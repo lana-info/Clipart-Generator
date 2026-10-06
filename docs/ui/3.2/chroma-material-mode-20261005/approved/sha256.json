@@ -1,0 +1,18 @@
+{
+  "processing-current.png": "7e2295148be3aa2bd253d308c3308feb83a3040990831db8c90129866b0ad3f6",
+  "processing-opaque.png": "43065ae2bc9e6c1ad1536548d8808ebd72aaba01e13b7ebf3f9bf87141d48bc7",
+  "processing-translucent.png": "f5536596335482251f674161c6020175cf2159a7ce5d90453c590277b582b126",
+  "processing-ambiguous.png": "41e0ab314cd510303a533df4f4f726e876385ceb3da1516ab3f4cffb728093ac",
+  "processing-other-method.png": "489babaa00667379ba0e30798318599950afbc51cae86be5f93a1a558deb7647",
+  "processing-disabled.png": "617b9825db7db39fcb38e46a35638a188aa83a98a64b628ac20a65a7b300ca51",
+  "clipart-current.png": "6910310e216efb74534b6025e4fc54cbf6a91bec11aac5088557b6a1d6b7486c",
+  "clipart-opaque.png": "2062c9c28e9dec875df026357405c6d550392e6b9c9117f9703dd08683bd00c4",
+  "clipart-translucent.png": "cd5df43546297a6d92c997c410540c71dd27144efe3dbb98411c12c88bca096c",
+  "clipart-ambiguous.png": "f0b28c3298929d2c8af66c2853fab7ab9112a8f548be9b39634fa62359cccf98",
+  "clipart-other-method.png": "65af8716cb5b64018230573d6d60893f607d5285e0422fff1cacb5ae884898b8",
+  "clipart-disabled.png": "6a101ef1ccf3b713719295e57329a8cb027ccd6026a6d8cb1840b9bac70b135f",
+  "auto-clipart-current.png": "5f4bd7fb6d2afb2ce8c709340276eed523a376284179ef8202df8b71cf260876",
+  "auto-clipart-opaque.png": "a6a54ae79a5113339f36b67b56406bf1ecb80cc6beb79b16edc065a0b81957bd",
+  "auto-clipart-translucent.png": "a45382ffd38281c187e62a04059862618c86d9ff720c99fb54e0027d92e572ce",
+  "auto-clipart-ambiguous.png": "8a6c7fd6c79173dbc3853272a9db9ddfc987707b60cc57d312da8492007c1c73"
+}

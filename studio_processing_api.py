@@ -34,15 +34,21 @@ class ProcessingEngine:
     remove_background: Callable = field(repr=False, compare=False)
     measure_background: Callable = field(repr=False, compare=False)
     api_version: int = 1
+    subject_profiles: tuple[str, ...] = ("opaque_clipart",)
 
     def __post_init__(self):
         if (type(self.api_version) is not int or self.api_version != 1
                 or not valid_processing_profile(self.profile)
+                or not isinstance(self.subject_profiles, tuple)
+                or not self.subject_profiles or "opaque_clipart" not in self.subject_profiles
+                or any(value not in ("opaque_clipart", "legacy") for value in self.subject_profiles)
                 or not callable(self.remove_background) or not callable(self.measure_background)):
             raise ValueError("Unsupported image-processing contract")
 
-    def remove(self, source: Image.Image, color: str) -> Image.Image:
-        result = self.remove_background(source, color, subject_profile="opaque_clipart")
+    def remove(self, source: Image.Image, color: str, *, subject_profile: str = "opaque_clipart") -> Image.Image:
+        if subject_profile not in self.subject_profiles:
+            raise ValueError("Модуль обработки не поддерживает выбранный тип изображения. Обновите модуль обработки.")
+        result = self.remove_background(source, color, subject_profile=subject_profile)
         if not isinstance(result, Image.Image) or result.mode != "RGBA" or result.size != source.size:
             raise ValueError("Image-processing component returned an invalid image")
         return result
@@ -56,4 +62,3 @@ class ProcessingEngineLease:
     def close(self, *_args):
         if self.lease is not None:
             self.lease.close()
-

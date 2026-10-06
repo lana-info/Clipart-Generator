@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QComboBox, QDialog, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPushButton, QSizePolicy, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -26,6 +26,7 @@ from v3_clipart_flow import (
 from v3_project_state import ProjectMode, PromptEntry, PromptGeneratorData, StepId
 from v3_provider_registry import (
     FAL_UPSCALE_MODEL_OPTIONS, KIE_MODEL_OPTIONS, processing_provider_options,
+    CHROMA_KEY_COLOR_OPTIONS, CHROMA_SUBJECT_PROFILE_OPTIONS,
     upscale_model_preserves_alpha, normalize_fal_upscale_factor,
 )
 
@@ -260,6 +261,7 @@ class AutoClipartFlowController(ClipartFlowController):
         self._review_page.setParent(self.launch_page)
         self._review_page.hide()
         self._install_upscale_controls()
+        self._install_background_controls()
         self.launch_page.refresh_from_state = self._refresh_launch
         self.pages.register_instance(StepId.REVIEW_RUN, self.launch_page)
         self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
@@ -337,6 +339,7 @@ class AutoClipartFlowController(ClipartFlowController):
     def _refresh_launch(self):
         self._restore_prompt_references()
         self._refresh_upscale_controls()
+        self._refresh_background_controls()
         for page in (self.prompt_page, self.generation_page, self._review_page):
             page.refresh_from_state()
         self._refresh_preflight()
@@ -366,6 +369,58 @@ class AutoClipartFlowController(ClipartFlowController):
         self.upscale_provider.currentIndexChanged.connect(self._upscale_provider_changed)
         self.upscale_model.currentIndexChanged.connect(self._upscale_model_changed)
         self.upscale_scale.currentIndexChanged.connect(self._upscale_scale_changed)
+
+    def _install_background_controls(self):
+        panel = QGroupBox("Прозрачный фон готового клипарта")
+        form = QFormLayout(panel)
+        self.background_color = QComboBox()
+        self.background_color.setMaximumWidth(240)
+        self.background_color.setAccessibleName("Цвет фона")
+        for label, value in (("Авто", "auto"),) + CHROMA_KEY_COLOR_OPTIONS:
+            self.background_color.addItem(label, value)
+        self.subject_profile = QComboBox()
+        self.subject_profile.setMaximumWidth(300)
+        self.subject_profile.setAccessibleName("Тип изображения")
+        for label, value in CHROMA_SUBJECT_PROFILE_OPTIONS:
+            self.subject_profile.addItem(label, value)
+        form.addRow("Цвет фона", self.background_color)
+        form.addRow("Тип изображения", self.subject_profile)
+        note = QLabel(
+            "Для тюля и других полупрозрачных материалов выбирайте второй режим. "
+            "Проверьте готовый PNG на разных подложках."
+        )
+        note.setWordWrap(True)
+        note.setProperty("v3Subtitle", True)
+        form.addRow("", note)
+        self.generation_page.add_widget(panel)
+        self._refresh_background_controls()
+        self.background_color.currentIndexChanged.connect(self._background_control_changed)
+        self.background_color.activated.connect(self._background_color_activated)
+        self.subject_profile.currentIndexChanged.connect(self._background_control_changed)
+
+    def _refresh_background_controls(self):
+        operations = self.shell.state.data.operations
+        for control, value in (
+            (self.background_color, operations.chroma_key_color),
+            (self.subject_profile, operations.chroma_subject_profile),
+        ):
+            blocked = control.blockSignals(True)
+            control.setCurrentIndex(control.findData(value))
+            control.blockSignals(blocked)
+
+    def _background_control_changed(self):
+        operations = self.shell.state.data.operations
+        operations.chroma_key_color = self.background_color.currentData()
+        operations.chroma_subject_profile = self.subject_profile.currentData()
+        self.shell.mark_dirty()
+        self._refresh_preflight()
+
+    def _background_color_activated(self, *_):
+        self.shell.state.data.operations.chroma_key_color_override = (
+            self.background_color.currentData() != "auto"
+        )
+        self.shell.mark_dirty()
+        self._refresh_preflight()
 
     def _upscale_fields(self):
         provider = self.shell.state.data.operations.upscale_after_provider

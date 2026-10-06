@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 from v3_components import DEFAULT_TOKENS, V3DesignTokens
 from v3_provider_registry import (
     CHROMA_KEY_COLOR_OPTIONS,
+    CHROMA_SUBJECT_PROFILE_OPTIONS,
     FAL_BIREFNET_MODEL_OPTIONS,
     FAL_BIREFNET_RESOLUTION_OPTIONS,
     FAL_BRIA_INCREASE_RESOLUTION_MODEL_ID,
@@ -173,7 +174,7 @@ class ProcessingPipelineEditor(QScrollArea):
         "remove_background_provider", "kie_remove_bg_model", "fal_remove_bg_model",
         "fal_birefnet_model", "fal_birefnet_resolution",
         "fal_birefnet_refine_foreground", "fal_rembg_crop_to_bbox",
-        "chroma_key_color", "local_rembg_profile", "local_rembg_model",
+        "chroma_key_color", "chroma_subject_profile", "local_rembg_profile", "local_rembg_model",
         "local_rembg_edge_quality", "local_ben2_refine_foreground",
         "local_ben2_alpha_threshold", "local_ben2_edge_softness",
         "local_ben2_corner_radius",
@@ -383,6 +384,13 @@ class ProcessingPipelineEditor(QScrollArea):
         )
         self._add_combo(
             advanced_form,
+            "chroma_subject_profile",
+            "Тип изображения",
+            CHROMA_SUBJECT_PROFILE_OPTIONS,
+            operations,
+        )
+        self._add_combo(
+            advanced_form,
             "local_realesrgan_profile",
             "Real-ESRGAN профиль",
             (("Клипарт", "clipart"), ("Фото", "photo")),
@@ -535,6 +543,7 @@ class ProcessingPipelineEditor(QScrollArea):
             "fal_birefnet_model": "Вариант BiRefNet",
             "fal_birefnet_resolution": "Разрешение BiRefNet",
             "chroma_key_color": "Цвет фона",
+            "chroma_subject_profile": "Тип изображения",
             "local_rembg_profile": "Профиль rembg",
             "local_rembg_model": "Модель rembg",
             "local_rembg_edge_quality": "Качество края",
@@ -560,7 +569,7 @@ class ProcessingPipelineEditor(QScrollArea):
                 "remove_background_provider", "kie_remove_bg_model",
                 "fal_remove_bg_model", "fal_birefnet_model",
                 "fal_birefnet_resolution", "fal_birefnet_refine_foreground",
-                "fal_rembg_crop_to_bbox", "chroma_key_color",
+                "fal_rembg_crop_to_bbox", "chroma_key_color", "chroma_subject_profile",
                 "local_rembg_profile", "local_rembg_model",
                 "local_rembg_edge_quality", "local_ben2_refine_foreground",
                 "local_ben2_alpha_threshold", "local_ben2_edge_softness",
@@ -587,6 +596,14 @@ class ProcessingPipelineEditor(QScrollArea):
         self.white_background_note.setWordWrap(True)
         self.white_background_note.setProperty("v3Subtitle", True)
         stage_forms["remove_background"].addRow("", self.white_background_note)
+        self.chroma_subject_note = QLabel(
+            "Для тюля и прозрачной ткани выбирайте полупрозрачные материалы. "
+            "Проверьте результат на разных подложках."
+        )
+        self.chroma_subject_note.setWordWrap(True)
+        self.chroma_subject_note.setMaximumWidth(600)
+        self.chroma_subject_note.setProperty("v3Subtitle", True)
+        stage_forms["remove_background"].addRow("", self.chroma_subject_note)
         operations_group.layout().activate()
 
     def _add_stage_section(self, key: str, title: str) -> QFormLayout:
@@ -680,6 +697,7 @@ class ProcessingPipelineEditor(QScrollArea):
             control.setMinimumContentsLength(12)
             control.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
             control.setMaximumWidth(
+                300 if name == "chroma_subject_profile" else
                 360 if "model" in name or name == "remove_background_provider" else 240
             )
             control.setToolTip(control.currentText())
@@ -733,6 +751,7 @@ class ProcessingPipelineEditor(QScrollArea):
         self.operation_widgets[name] = control
 
     def _connect_controls(self) -> None:
+        self.operation_widgets["chroma_key_color"].activated.connect(self._chroma_color_activated)
         for control in self.operation_widgets.values():
             if isinstance(control, QCheckBox):
                 control.toggled.connect(self._sync)
@@ -742,6 +761,12 @@ class ProcessingPipelineEditor(QScrollArea):
                 control.valueChanged.connect(self._sync)
             elif isinstance(control, QLineEdit):
                 control.textChanged.connect(self._sync)
+
+    def _chroma_color_activated(self, *_: Any) -> None:
+        self.state_owner.operations.chroma_key_color_override = (
+            self.operation_widgets["chroma_key_color"].currentData() != "auto"
+        )
+        self.changed()
 
     @staticmethod
     def _value(control: QWidget) -> Any:
@@ -782,7 +807,7 @@ class ProcessingPipelineEditor(QScrollArea):
         for name, value in current.items():
             setattr(operations, name, value)
         self.state_owner.operations = operations
-        if hasattr(self.state_owner, "recipe"):
+        if isinstance(getattr(self.state_owner, "recipe", None), str):
             self.state_owner.recipe = "custom"
         self._refresh_control_visibility()
         self._refresh_pipeline()
@@ -887,6 +912,8 @@ class ProcessingPipelineEditor(QScrollArea):
             and "local_ben2_corner_radius" in remove_controls,
             "chroma_key_color": operations.remove_background
             and "chroma_key_color" in remove_controls,
+            "chroma_subject_profile": operations.remove_background
+            and "chroma_subject_profile" in remove_controls,
             "unsharp_amount": operations.unsharp,
             "unsharp_radius": operations.unsharp,
             "unsharp_threshold": operations.unsharp,
@@ -898,6 +925,10 @@ class ProcessingPipelineEditor(QScrollArea):
                 self._set_control_visible(name, False)
         self._refresh_stage_visibility()
         self._refresh_white_background_method()
+        self.chroma_subject_note.setVisible(
+            self.show_background_controls and operations.remove_background
+            and operations.remove_background_provider == "local_chroma_key"
+        )
 
     def _refresh_white_background_method(self) -> None:
         control = self.operation_widgets["remove_background_provider"]
@@ -1005,6 +1036,7 @@ class ProcessingPipelineEditor(QScrollArea):
             "local_ben2_edge_softness": "remove_background",
             "local_ben2_corner_radius": "remove_background",
             "chroma_key_color": "remove_background",
+            "chroma_subject_profile": "remove_background",
             "unsharp_amount": "unsharp",
             "unsharp_radius": "unsharp",
             "unsharp_threshold": "unsharp",

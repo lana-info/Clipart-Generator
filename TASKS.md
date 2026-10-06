@@ -1,5 +1,19 @@
 # TASKS
 
+## Режим материалов Chroma Key, 2026-10-05
+
+- [x] Утвердить план и макет: пользователь «да, все ок»; сохранить approved/actual UI evidence.
+- [x] Реализовать режим материалов в auto-clipart, processing, clipart; old API1/project compatibility.
+- [x] Подключить реальный auto color и явный manual override без изменения generation record.
+- [x] Проверить15 новых регрессий,167 связанных tests+5subtests; проверить3 пользовательских PNG exactRGBA и3white manual review, SHA12unchanged.
+- [x] Подготовить4 подписанных module1.5.3 ZIP minCore3.2.12, verify/install4PASS,reject oldCore4PASS.
+- [x] Завершить full offline-suite и финальное ревью:2770PASS/2old expectations; после их обновления affected194PASS/1skip/9subtests; финальных замечаний оппонента0.
+- [x] Показать окончательный diff/проверки; пользователь2026-10-06 разрешил commit/push, Windows3.2.12/modules и временный PUBLIC→build→PRIVATE.
+- [ ] После разрешённой сборки проверить installed Windows/upgrade, доставить бету и нужные модули без замены прежней беты до приёмки.
+
+Подробности требований/рисков: STATE.md, «Режим материалов Chroma Key».
+
+
 ## Остаточная кайма после v16
 
 - [x] Зафиксировать продолжение и frozenv16 snapshot.

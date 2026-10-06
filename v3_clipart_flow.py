@@ -955,6 +955,7 @@ class _SharedClipartProcessingPage(ProcessingPipelineEditor):
             description="",
             include_cleanup=True,
             require_operation=False,
+            show_background_controls=True,
             allowed_operations=workflow_for_mode(ProjectMode.CLIPART).processing_operations,
             tokens=tokens,
         )

@@ -5,4 +5,6 @@ from studio_processing_api import ProcessingEngine
 
 
 def create_engine():
-    return ProcessingEngine(PROFILE_VERSION, remove_chroma_key_automatic, measure_chroma_background)
+    return ProcessingEngine(PROFILE_VERSION, remove_chroma_key_automatic,
+                            measure_chroma_background,
+                            subject_profiles=("opaque_clipart", "legacy"))

@@ -1184,6 +1184,12 @@ class WorkerThread(QThread):
         ).strip().lower()
         if self.chroma_key_color not in (*KEY_COLORS, "auto"):
             self.chroma_key_color = "blue"
+        self.chroma_subject_profile = settings.get("chroma_subject_profile", "opaque_clipart")
+        self.chroma_key_color_override = settings.get("chroma_key_color_override", False)
+        if type(self.chroma_key_color_override) is not bool:
+            raise ValueError("Некорректная настройка выбора цвета фона")
+        if self.chroma_subject_profile not in ("opaque_clipart", "legacy"):
+            raise ValueError("Неизвестный тип изображения для Chroma Key")
         self.upscale_factor = normalize_topaz_upscale_factor(
             settings.get("upscale_factor", 4)
         )
@@ -1200,6 +1206,10 @@ class WorkerThread(QThread):
             settings.get("local_realesrgan_after_scale", self.local_realesrgan_scale)
         )
         self.remove_bg_provider = settings.get("remove_bg_provider", "kie")
+        if (self._processing_engine is not None and self.remove_bg
+                and self.remove_bg_provider == "local_chroma_key"
+                and self.chroma_subject_profile not in self._processing_engine.subject_profiles):
+            raise ValueError("Модуль обработки не поддерживает выбранный тип изображения. Обновите модуль обработки.")
         self.auto_clipart_sharp_fallback = bool(settings.get("auto_clipart_sharp_fallback", False))
         self.skip_remover_for_alpha = bool(settings.get("skip_remover_for_alpha", True))
         self.local_rembg_profile = settings.get("local_rembg_profile", "clipart")
@@ -2547,6 +2557,7 @@ class WorkerThread(QThread):
             from studio_processing_api import ProcessingEngine
             self._processing_engine = ProcessingEngine(
                 PROFILE_VERSION, remove_chroma_key_automatic, measure_chroma_background,
+                subject_profiles=("opaque_clipart", "legacy"),
             )
         return self._processing_engine
 
@@ -2668,6 +2679,8 @@ class WorkerThread(QThread):
                     raise ValueError("Цвет фона задания не совпадает со сведениями исходного изображения")
                 selected_chroma_key_color = recorded_color
         if selected_chroma_key_color not in KEY_COLORS:
+            selected_chroma_key_color = self.chroma_key_color
+        if self.chroma_key_color == "auto" or self.chroma_key_color_override:
             selected_chroma_key_color = self.chroma_key_color
         order_error = validate_upscale_after_background_order(
             remove_background,
@@ -2919,6 +2932,8 @@ class WorkerThread(QThread):
                                 result = engine.remove(
                                     source_image,
                                     selected_chroma_key_color,
+                                    **({"subject_profile": self.chroma_subject_profile}
+                                       if self.chroma_subject_profile != "opaque_clipart" else {}),
                                 )
                                 working_alpha = result.info.pop("vibix:precleanup_alpha", None)
                                 if (working_alpha is not None and self.upscale_after
@@ -2949,6 +2964,7 @@ class WorkerThread(QThread):
                                         "requested_background": "#%02X%02X%02X" % KEY_COLORS[selected_chroma_key_color],
                                         "observed_background": "#%02X%02X%02X" % engine.measure_background(source_image),
                                         "profile": engine.profile,
+                                        "subject_profile": self.chroma_subject_profile,
                                     }
                                 except (OSError, ValueError):
                                     self.progress.emit("  Не удалось подготовить сведения об обработке Chroma Key")
@@ -4421,6 +4437,7 @@ class WorkerThread(QThread):
                         observed_background=chroma_receipt["observed_background"],
                         expected_result_sha256=published_digest,
                         profile=chroma_receipt.get("profile", self._chroma_engine().profile),
+                        subject_profile=chroma_receipt.get("subject_profile", "opaque_clipart"),
                     )
                 except (OSError, ValueError):
                     self.progress.emit("  PNG сохранён; сведения об обработке Chroma Key записать не удалось")

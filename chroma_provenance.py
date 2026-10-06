@@ -42,8 +42,10 @@ def receipt_path(image_path: str | Path) -> Path:
 
 
 def _validate(payload: object) -> dict:
-    if not isinstance(payload, dict) or set(payload) != _KEYS:
+    if not isinstance(payload, dict) or set(payload) not in (_KEYS, _KEYS | {"subject_profile"}):
         raise ValueError("Invalid chroma receipt fields")
+    if payload.get("subject_profile", "opaque_clipart") not in ("opaque_clipart", "legacy"):
+        raise ValueError("Invalid chroma subject profile")
     if type(payload["schema_version"]) is not int or payload["schema_version"] != 1:
         raise ValueError("Unsupported chroma receipt version")
     if not valid_processing_profile(payload["profile"]) or payload["status"] != "processed":
@@ -61,18 +63,22 @@ def _validate(payload: object) -> dict:
 def write_receipt(result_path: str | Path, *, source_sha256: str,
                   requested_background: str, observed_background: str,
                   expected_result_sha256: str | None = None,
-                  profile: str = PROFILE_VERSION) -> Path:
+                  profile: str = PROFILE_VERSION,
+                  subject_profile: str = "opaque_clipart") -> Path:
     target = receipt_path(result_path)
     result_digest = image_digest(result_path)
     if expected_result_sha256 is not None and result_digest != expected_result_sha256:
         raise ValueError("Export changed before its receipt was saved")
-    payload = _validate({
+    payload = {
         "schema_version": 1, "profile": profile, "status": "processed",
         "quality_status": "not_evaluated", "source_sha256": source_sha256,
         "result_sha256": result_digest,
         "requested_removal_background": requested_background,
         "observed_removal_background": observed_background,
-    })
+    }
+    if subject_profile != "opaque_clipart":
+        payload["subject_profile"] = subject_profile
+    payload = _validate(payload)
     data = (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     # No overwrite: preserve any existing receipt/user file. A stale receipt
     # cannot load successfully against different image bytes.

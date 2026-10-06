@@ -532,6 +532,8 @@ class ImageOperationData:
     local_ben2_edge_softness: int = 0
     local_ben2_corner_radius: int = 0
     chroma_key_color: str = "blue"
+    chroma_subject_profile: str = "opaque_clipart"
+    chroma_key_color_override: bool = False
     # Retained only so older drafts round-trip safely. Automatic chroma removal
     # ignores custom colors and the two former numeric controls.
     chroma_key_custom_color: str = "#0000FF"
@@ -648,6 +650,8 @@ class ImageOperationData:
         self.chroma_key_color = _text(self.chroma_key_color, limit=20).lower()
         if self.chroma_key_color not in (*KEY_COLORS, "auto"):
             self.chroma_key_color = "blue"
+        if self.chroma_subject_profile not in ("opaque_clipart", "legacy"):
+            raise ProjectStateError("Неизвестный тип изображения для Chroma Key")
         self.chroma_key_custom_color = _text(self.chroma_key_custom_color, limit=20) or "#0000FF"
         self.chroma_key_tolerance = _bounded_int(
             self.chroma_key_tolerance, default=32, minimum=0, maximum=255
@@ -781,6 +785,8 @@ class ImageOperationData:
             local_ben2_corner_radius=config.get("local_ben2_corner_radius", 0),
             chroma_key_color=config.get("chroma_key_color", "blue"),
             chroma_key_custom_color=config.get("chroma_key_custom_color", "#0000FF"),
+            chroma_subject_profile=config.get("chroma_subject_profile", "opaque_clipart"),
+            chroma_key_color_override=_boolean(config.get("chroma_key_color_override"), default=False),
             chroma_key_tolerance=config.get("chroma_key_tolerance", 32),
             chroma_key_softness=config.get("chroma_key_softness", 8),
             unsharp=_boolean(config.get("unsharp_enabled"), default=False),
