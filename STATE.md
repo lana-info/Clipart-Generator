@@ -18,12 +18,12 @@
 | Убрать повторное сглаживание, группы, короткие tips | RealQt controls/states/layout/tooltips | Масштаб/Край/Инструмент/Контур, тонкие icons, только Упростить снизу | Реализовано и проверено: actual1120×780 сравнены с approved final, busy980×700; tooltips<=2слов |
 | Видимый расчёт и защита от повторных кликов; запрос владельца | Delayed worker, cancel/error/completion, repeat guard | Bottom-image-only indeterminate strip, отдельная отмена; vector transform внеUI | Реализовано и проверено: busy до copy/transform и до конца commit, конфликтующие edits blocked; cache bounded |
 | Сглаживание лесенки без общего blur | Геометрические фигуры/тонкие детали, RGB/history | Conservative inward corner AA, alpha-only | Реализовано и проверено:25pure tests; analytic circle MAE1.21094→1.08904, existingAA/1px сохранены;40MPstraight0.8s |
-| Выпустить Windows beta3.2.16; «создавай обновление» | Version/SHA/provenance, installed smoke, server discovery | Version3.2.16; modules unchanged | Реализовано частично: исходники готовы, сборка и публикация ещё не запускались |
-| Обновить устройство владельца | Установить beta и проверить реальные файлы | Будет доступно после публикации | Не проверено: доступа к устройству нет |
+| Выпустить Windows beta3.2.16; «создавай обновление» | Version/SHA/provenance, installed smoke, server discovery | Version3.2.16; modules unchanged | Реализовано и проверено: source943543e pushed, Windowsrun37675889793SUCCESS; installedCore13/13PASS, SHA/provenance/CRC PASS; beta опубликована, Studio3.2.15withdrawn, modules/stable unchanged, PRIVATE |
+| Обновить устройство владельца | Установить beta и проверить реальные файлы | Доступно через beta-канал Studio | Не проверено: доступа к устройству нет |
 
 Consolidated mockup: docs/ui/3.1/edge-smoothing-20261007/README.md.
 Владелец одобрил итоговый макет и поручил «хорошо. создавай обновление».
-Реализация и новая Windows beta разрешены; сборка/публикация ещё не запускались.
+Владелец разрешил реализацию и новую Windows beta; Studio3.2.16 опубликована.
 Интеграционные231tests+15subtestsPASS42.74s; buildcontracts26+4subtestsPASS5.60s.
 FocusedUI47PASS8.75s; независимый review0open findings,46Qt+6subtestsPASS и3probes.
 Evidence: ../artifacts/editor-shared-edge-20261007/; actual screenshots в mockup folder.
@@ -37,6 +37,17 @@ Evidence: ../artifacts/editor-shared-edge-20261007/; actual screenshots в mocku
 3×3соседи безpartialalpha, минимум4solid samples; alpha0/weak strokes/RGB
 и silhouette>=128 сохраняются. ГотовыйAA может давать no-op.
 Предыдущий audit сохранён, защищённый вариант идёт отдельно protected-aa.
+
+Release Studio3.2.16: id2b5d0226-de63-d084-adfa-fea8efdc0d33, source
+943543ee4a3bebf5364b4dbfa42f3ebf11f6bcc4. Installer243009482bytes, SHA256
+34d4fefb10e5393533af4568a8cb7c8f12d76ba54dceae1df3ff8e3741702316.
+NativeWindowsedge-editor.png просмотрен: две кнопки/группы и рядкистей на месте.
+FrozenCore13/13PASS включает smooth→Undo→Redo→sharp→Undo→Save, exactRGB/alpha.
+Serververify:7activebeta (Studio3.2.16+6неизменённыхмодулей), health200,
+invalidtoken403,storedSHAPASS; oldStudio3.2.15filepreserved;PRIVATE отдельно
+подтверждён послеbuild. Evidence: ../artifacts/studio-3.2.16-shared-edge-beta-20261007/.
+Backup: /opt/bots-stack/backups/clipart-license-service/pre-studio3216-beta-publication-20261007.dump.
+Licensedcustomerdownload/open и устройство владельца не проверены: доступа нет.
 
 ## Шесть размеров кисти, уточнение владельца2026-10-07
 

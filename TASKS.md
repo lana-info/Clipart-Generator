@@ -10,7 +10,7 @@
 - [x] Интеграция edge actions/history/RGB/save в общем Qt editor.
 - [x] Bottom busy feedback, отдельная отмена, repeated/stale guards; vector transform внеUI.
 - [x] Pure25, интеграция231+15subtests, buildcontracts26+4subtests, focusedUI47PASS; actualQt сравнены с макетом; independent review0findings.
-- [ ] Commit/push, Windows3.2.16 beta build и публикация; предыдущую Studio beta снять, modules/stable сохранить.
+- [x] Source943543e committed/pushed; Windows3.2.16run37675889793SUCCESS, installedCore13/13PASS; beta published,3.2.15withdrawn,6modules/stable unchanged,PRIVATE.
 - [ ] Проверить обновление на устройстве владельца.
 
 ## Шесть размеров кисти,2026-10-07
