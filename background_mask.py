@@ -41,8 +41,8 @@ def apply_mask_stroke(
 def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) -> None:
     if mask.mode != "L":
         raise ValueError("Маска должна быть в режиме L")
-    if radius < 1:
-        raise ValueError("Радиус кисти должен быть положительным")
+    if radius < 0:
+        raise ValueError("Радиус кисти не может быть отрицательным")
     if action not in {"add", "remove"}:
         raise ValueError("Действие кисти должно быть add или remove")
     if not 0 <= hardness <= 100:
@@ -51,6 +51,9 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
 
 @lru_cache(maxsize=16)
 def _brush_opacity(radius: int, hardness: int) -> Image.Image:
+    if radius == 0:
+        # A single pixel has no feathered neighbours, regardless of hardness.
+        return Image.new("L", (1, 1), 255)
     diameter = radius * 2 + 1
     shape = Image.new("L", (diameter, diameter), 0)
     ImageDraw.Draw(shape).ellipse((0, 0, diameter - 1, diameter - 1), fill=255)

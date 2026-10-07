@@ -77,11 +77,29 @@ class BackgroundMaskTests(unittest.TestCase):
         self.assertEqual(removed.getpixel((50, 10)), 0)
         self.assertEqual(removed.getpixel((30, 15)), 255)
 
+    def test_single_pixel_stamp_changes_only_target_for_every_hardness(self):
+        for action, initial, expected in (("add", 0, 255), ("remove", 255, 0)):
+            for hardness in (0, 50, 85, 100):
+                with self.subTest(action=action, hardness=hardness):
+                    before = Image.new("L", (9, 9), initial)
+                    after = apply_mask_stroke(before, (4, 4), radius=0,
+                                              action=action, hardness=hardness)
+                    self.assertEqual(after.getpixel((4, 4)), expected)
+                    self.assertEqual(sum(a != b for a, b in zip(before.tobytes(), after.tobytes())), 1)
+
+    def test_single_pixel_path_is_continuous_and_does_not_widen(self):
+        before = Image.new("L", (12, 9), 255)
+        after = apply_mask_path(before, ((2, 4), (9, 4)), radius=0,
+                                action="remove", hardness=85)
+        changed = {(x, y) for y in range(9) for x in range(12)
+                   if before.getpixel((x, y)) != after.getpixel((x, y))}
+        self.assertEqual(changed, {(x, 4) for x in range(2, 10)})
+
     def test_invalid_stroke_is_rejected(self):
         mask = Image.new("L", (3, 3), 0)
 
         with self.assertRaises(ValueError):
-            apply_mask_stroke(mask, (1, 1), radius=0, action="add")
+            apply_mask_stroke(mask, (1, 1), radius=-1, action="add")
         with self.assertRaises(ValueError):
             apply_mask_stroke(mask, (1, 1), radius=1, action="paint")
         with self.assertRaises(ValueError):

@@ -1,5 +1,6 @@
 """Real canvas interactions: no modal, shared alpha, keyboard and persisted output."""
 import tempfile
+from io import BytesIO
 import unittest
 import time
 from pathlib import Path
@@ -58,6 +59,49 @@ class ContourIntegrationTests(unittest.TestCase):
         self.assertEqual(self.canvas.contour.selected, (pi,0))
         return pi, node
 
+    def test_one_pixel_real_click_at_different_zooms_undo_redo_and_saved_rgb(self):
+        original = self.source.read_bytes()
+        for zoom in (50, 100, 300):
+            for action, initial, target in (("remove", 255, 0), ("add", 0, 255)):
+                with self.subTest(zoom=zoom, action=action):
+                    self.page.document.mask = Image.new("L", (128, 128), initial)
+                    self.canvas.refresh_image()
+                    self.page._set_zoom(zoom)
+                    self.page._set_action(action)
+                    QTest.mouseClick(self.page.diameter_buttons[1], Qt.MouseButton.LeftButton)
+                    self.app.processEvents()
+                    pos = self.canvas.mapFromScene(QPointF(35.5, 35.5))
+                    point = self.canvas._image_point(pos)
+                    self.assertIsNotNone(point)
+                    before = np.array(self.page.document.mask)
+                    QTest.mouseClick(self.canvas.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+                    after = np.array(self.page.document.mask)
+                    self.assertEqual(np.count_nonzero(before != after), 1)
+                    self.assertEqual(after[point[1], point[0]], target)
+                    self.page.undo()
+                    np.testing.assert_array_equal(np.array(self.page.document.mask), before)
+                    self.page.redo()
+                    np.testing.assert_array_equal(np.array(self.page.document.mask), after)
+        self.assertEqual(self.source.read_bytes(), original)
+        output, _ = self.page.save_current()
+        with Image.open(output) as saved, Image.open(BytesIO(original)) as source:
+            np.testing.assert_array_equal(np.array(saved)[..., :3], np.array(source)[..., :3])
+            np.testing.assert_array_equal(np.array(saved)[..., 3], after)
+
+    def test_three_pixel_brush_preserves_three_pixel_footprint(self):
+        self.page.document.mask = Image.new("L", (128, 128), 255)
+        self.canvas.refresh_image()
+        self.page._set_zoom(300)
+        self.page.hardness_slider.setValue(100)
+        QTest.mouseClick(self.page.diameter_buttons[3], Qt.MouseButton.LeftButton)
+        self.app.processEvents()
+        pos = self.canvas.mapFromScene(QPointF(35.5, 35.5))
+        point = self.canvas._image_point(pos)
+        QTest.mouseClick(self.canvas.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        ys, xs = np.where(np.array(self.page.document.mask) != 255)
+        self.assertEqual((xs.min(), ys.min(), xs.max(), ys.max()),
+                         (point[0]-1, point[1]-1, point[0]+1, point[1]+1))
+
     def test_switch_preserves_canvas_zoom_draft_and_keyboard_diameters(self):
         document = self.page.document
         self.page._set_zoom(200)
@@ -71,12 +115,14 @@ class ContourIntegrationTests(unittest.TestCase):
         for expected in (32,64,64):
             QTest.keyClick(self.canvas, Qt.Key.Key_Equal)
             self.assertEqual(self.canvas.brush_radius*2, expected)
-        for expected in (32,16,10,6,2,2):
+        for expected in (32,16,10,6,3,1,1):
             QTest.keyClick(self.canvas, Qt.Key.Key_Minus)
-            self.assertEqual(self.canvas.brush_radius*2, expected)
+            self.assertTrue(self.page.diameter_buttons[expected].isChecked())
+            self.assertEqual(self.canvas.brush_radius, expected // 2)
         QTest.keyClick(self.canvas, Qt.Key.Key_Equal, Qt.KeyboardModifier.ControlModifier)
         self.assertEqual(self.canvas.zoom_percent, 250)
-        self.assertEqual(self.canvas.brush_radius*2, 2)
+        self.assertEqual(self.canvas.brush_radius, 0)
+        self.assertTrue(self.page.diameter_buttons[1].isChecked())
         QTest.keyClick(self.canvas, Qt.Key.Key_Minus, Qt.KeyboardModifier.ControlModifier)
         self.assertEqual(self.canvas.zoom_percent, 200)
         QApplication.sendEvent(self.canvas, QKeyEvent(QEvent.Type.KeyPress, 0, Qt.KeyboardModifier.NoModifier, 'з'))

@@ -1,5 +1,26 @@
 # TASKS
 
+## Немедленный «Сделать край чётче», 2026-10-07
+
+- [x] Зафиксировать approved immediate/repeated steps, arrows, stop, explicitSave.
+- [x] Удалить dedicated edge preview/state/guards, сохранить contour-local preview.
+- [x] Проверить exactalpha/history/budget/save/guards/drafts/keyboard и кисть1px вместе:105tests+15subtests PASS.
+- [x] Сохранить actualUI first/second/undo/disabled1120×780 и980×700.
+- [x] Независимое focused ревью:0findings;57tests+15subtests и40baselinecomparisons PASS.
+- [ ] Выпустить разрешённую Windows beta CoreStudio3.2.14 с обеими правками.
+- [ ] Проверить на устройстве владельца.
+
+
+## Кисть1px в редакторе прозрачности, 2026-10-07
+
+- [x] Проверить общий editor во всех3модулях и старую radius/diameter семантику.
+- [x] Реализовать1–3–6–10–16–32–64 и настоящий stamp1×1, сохранить defaults.
+- [x] Проверить реальные clicks/zoom/add/remove, Undo/Redo/saveRGB, keyboard и layouts.
+- [x] 88tests+15subtests PASS9.28s; diff check PASS, screenshots сохранены.
+- [ ] Выпустить разрешённую Windows beta Studio3.2.14; версии модулей не менять.
+- [ ] Проверить на устройстве владельца.
+
+
 ## Выпуск исправленной беты, 2026-10-06
 
 - [x] Получить разрешение владельца на commit/push/Studio beta + Composer.

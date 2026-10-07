@@ -1,4 +1,4 @@
-"""Deliberate edge contrast with a non-destructive Qt preview and exact RGB."""
+"""Immediate alpha contrast: independent undo steps, unchanged RGB and explicit save."""
 from unittest.mock import patch
 
 import numpy as np
@@ -6,7 +6,7 @@ from PIL import Image
 import pytest
 from PyQt6.QtCore import QPointF, Qt
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QMessageBox, QPushButton
 
 from studio_contour import BezierNode, BezierPath
 from v3_transparency_preview import ClipartTransparencyEditorPage, MaskEditDocument
@@ -35,185 +35,196 @@ def page(app, tmp_path):
     app.processEvents()
 
 
-def test_preview_compare_cancel_preserves_mask_rgb_history_and_source(page):
-    document = page.document
-    mask, rgb = document.mask.tobytes(), document.image.convert('RGB').tobytes()
-    source = page.current_path.read_bytes()
-    page.sharpen_edge_button.click()
-    assert page.canvas.edge_preview_active
-    assert page.edge_comparison.isVisible()
-    assert page.canvas.edge_preview_mask.tobytes() != mask
-    assert document.mask.tobytes() == mask and not document.is_dirty
-    assert not document.can_undo and not document.can_redo
-    after = page.canvas._item.pixmap().toImage()
-    page.edge_before_button.click()
-    before = page.canvas._item.pixmap().toImage()
-    assert after != before
-    assert page.canvas.edge_preview_mask is None and page.canvas.edge_preview_active
-    page.edge_after_button.click()
-    assert page.canvas._item.pixmap().toImage() == after
-    assert document.image.convert('RGB').tobytes() == rgb
-    with pytest.raises(ValueError, match='предпросмотр'):
-        page.save_current()
-    page.cancel_edge_button.click()
-    assert document.mask.tobytes() == mask and not document.can_undo
-    assert not page.canvas.edge_preview_active and not page.edge_comparison.isVisible()
-    assert page.canvas._item.pixmap().toImage() == before
-    assert page.current_path.read_bytes() == source
+def click(page, button):
+    page.tools_scroll.ensureWidgetVisible(button)
+    QApplication.processEvents()
+    QTest.mouseClick(button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
 
 
-def test_apply_while_viewing_before_commits_after_one_undo_copy_save_and_reset(page):
+def test_single_click_commits_exact_alpha_without_extra_confirmation(page):
+    doc = page.document
+    before = np.array(doc.mask)
+    rgb = doc.image.convert('RGB').tobytes()
+    original = page.current_path.read_bytes()
+    view = page.canvas._item.pixmap().toImage()
+    click(page, page.sharpen_edge_button)
+    expected = {0:0, 16:0, 64:0, 96:64, 127:126, 128:128,
+                160:192, 191:254, 224:255, 255:255}
+    np.testing.assert_array_equal(np.array(doc.mask), np.vectorize(expected.__getitem__)(before))
+    assert doc.is_dirty and len(doc._undo) == 1 and not doc.can_redo
+    assert page.canvas._item.pixmap().toImage() != view
+    assert doc.image.convert('RGB').tobytes() == rgb
+    assert page.current_path.read_bytes() == original
+    assert not hasattr(page, 'edge_comparison')
+    assert not {'До', 'После', 'Применить'} & {b.text() for b in page.findChildren(QPushButton) if b.isVisible()}
+    assert page.save_button.isEnabled() and page.undo_button.isEnabled()
+    assert all(button.isEnabled() for button in page.tool_buttons.values())
+
+
+def test_repeat_clicks_each_undo_redo_and_explicit_save_reset(page):
     doc = page.document
     old = doc.mask.tobytes()
     original = page.current_path.read_bytes()
     rgb = doc.image.convert('RGB').tobytes()
-    page.sharpen_edge_button.click()
-    proposal = page.canvas.edge_preview_mask.tobytes()
-    page.edge_before_button.click()
-    page.apply_edge_button.click()
-    assert doc.mask.tobytes() == proposal
-    assert len(doc._undo) == 1 and doc.is_dirty
-    page.undo()
-    assert doc.mask.tobytes() == old
-    page.redo()
-    assert doc.mask.tobytes() == proposal
+    click(page, page.sharpen_edge_button)
+    once = doc.mask.tobytes()
+    click(page, page.sharpen_edge_button)
+    twice = doc.mask.tobytes()
+    assert old != once != twice and len(doc._undo) == 2
+    click(page, page.undo_button)
+    assert doc.mask.tobytes() == once
+    click(page, page.undo_button)
+    assert doc.mask.tobytes() == old and not doc.is_dirty
+    click(page, page.redo_button)
+    assert doc.mask.tobytes() == once
+    click(page, page.redo_button)
+    assert doc.mask.tobytes() == twice
     output, mask = page.save_current()
     assert output != page.current_path and page.current_path.read_bytes() == original
     with Image.open(output) as saved:
         assert saved.convert('RGB').tobytes() == rgb
-        assert saved.getchannel('A').tobytes() == proposal
+        assert saved.getchannel('A').tobytes() == twice
     with Image.open(mask) as saved:
-        assert saved.tobytes() == proposal
+        assert saved.tobytes() == twice
     page.reset()
     assert doc.mask.tobytes() == old
-    assert doc.image.convert('RGB').tobytes() == rgb
 
 
-def test_preview_blocks_canvas_edits_contour_jobs_save_reset_and_redo_but_allows_zoom(page):
+def test_terminal_mask_disables_button_and_undo_reenables_without_empty_history(page):
     doc = page.document
-    old = doc.mask.tobytes()
-    page.sharpen_edge_button.click()
-    for button in (page.save_button, page.reset_button, page.undo_button, page.redo_button, *page.tool_buttons.values()):
-        assert not button.isEnabled()
-    QTest.mouseClick(page.canvas.viewport(), Qt.MouseButton.LeftButton,
-                    pos=page.canvas.mapFromScene(QPointF(32, 20)))
-    QTest.keyClick(page.canvas, Qt.Key.Key_Delete)
-    QTest.keyClick(page.canvas, Qt.Key.Key_Return)
-    QTest.keyClick(page.canvas, Qt.Key.Key_P)
-    page.canvas.auto_contour()
-    page.redo()
-    page.reset()
-    page._save_clicked()
-    assert doc.mask.tobytes() == old and not doc.can_undo
-    assert not page.canvas.contour_busy and page._edge_preview is not None
-    zoom = page.canvas.transform().m11()
-    QTest.keyClick(page.canvas, Qt.Key.Key_Plus, Qt.KeyboardModifier.ControlModifier)
-    assert page.canvas.transform().m11() > zoom
-    QTest.keyClick(page.canvas, Qt.Key.Key_Escape)
-    assert page._edge_preview is None and doc.mask.tobytes() == old
+    start = np.array(doc.mask)
+    steps = 0
+    while page.sharpen_edge_button.isEnabled():
+        assert steps < 10
+        before = doc.mask.tobytes()
+        click(page, page.sharpen_edge_button)
+        assert doc.mask.tobytes() != before
+        steps += 1
+    expected = np.where(start < 128, 0, np.where(start > 128, 255, 128))
+    np.testing.assert_array_equal(np.array(doc.mask), expected)
+    assert len(doc._undo) == steps
+    page.sharpen_edge()
+    assert len(doc._undo) == steps
+    click(page, page.undo_button)
+    assert page.sharpen_edge_button.isEnabled()
+    click(page, page.redo_button)
+    assert not page.sharpen_edge_button.isEnabled()
 
 
-@pytest.mark.parametrize('method', ['undo', 'hide', 'switch', 'reload', 'back'])
-def test_leaving_or_undo_discards_only_preview(page, method, tmp_path):
-    old_doc = page.document
-    old = old_doc.mask.tobytes()
-    page.sharpen_edge_button.click()
-    if method == 'switch':
-        second = tmp_path / 'second.png'
-        Image.new('RGBA', (10, 10), (10, 20, 30, 255)).save(second)
-        page._paths.append(second)
-        page.file_list.addItem(second.name)
-        page.file_list.setCurrentRow(1)
-    elif method == 'reload':
-        page.set_files([page.current_path])
-    elif method == 'back':
-        page._back_clicked()
-    else:
-        getattr(page, method)()
-    assert old_doc.mask.tobytes() == old and not old_doc.can_undo
-    assert page._edge_preview is None and not page.canvas.edge_preview_active
-
-
-def test_stale_proposal_is_not_committed(page):
-    doc = page.document
-    page.sharpen_edge_button.click()
-    doc.begin_stroke()
-    doc.extend_stroke(((30, 20),), radius=2, action='remove', hardness=100)
-    doc.end_stroke()
-    current = doc.mask.tobytes()
-    count = len(doc._undo)
-    page.apply_edge_button.click()
-    assert page._edge_preview is None
-    assert doc.mask.tobytes() == current and len(doc._undo) == count
-
-
-def test_limit_empty_and_pending_geometry_disable_the_action(page):
-    page.document.mask = Image.new('L', page.document.mask.size, 255)
+@pytest.mark.parametrize('terminal', [0, 128, 255])
+def test_unchangeable_and_empty_masks_do_not_add_history(page, terminal):
+    page.document.mask = Image.new('L', page.document.mask.size, terminal)
     page._refresh_history_buttons()
     assert not page.sharpen_edge_button.isEnabled()
-    # Reaching a fixed point also stops repeated steps without accumulating history.
-    page.document.mask = Image.new('L', page.document.mask.size, 128)
-    page._refresh_history_buttons()
-    assert not page.sharpen_edge_button.isEnabled()
-    page.preview_sharper_edge()
-    assert page._edge_preview is None and not page.document.can_undo
-    page.document.mask.putpixel((3, 3), 96)
-    page.document.mask_revision += 1
-    path = BezierPath(tuple(BezierNode(p) for p in [(10,10),(25,10),(25,25),(10,25)]),255,(64,40))
-    page.canvas.contour.paths = [path]
-    page.canvas.contour.original = []
-    page._refresh_history_buttons()
-    assert not page.sharpen_edge_button.isEnabled()
-    page.preview_sharper_edge()
-    assert page._edge_preview is None
+    page.sharpen_edge()
+    assert not page.document.can_undo
     page.set_files([])
+    page.sharpen_edge()
     assert not page.sharpen_edge_button.isEnabled()
 
 
-def test_apply_budget_failure_keeps_mask_history_and_cancels_preview(page):
-    old = page.document.mask.tobytes()
-    page.sharpen_edge_button.click()
+def test_budget_failure_preserves_mask_revision_and_both_history_stacks(page):
+    doc = page.document
+    click(page, page.sharpen_edge_button)
+    page.undo()
+    before = (doc.mask.tobytes(), doc.mask_revision, list(doc._undo), list(doc._redo))
     with patch.object(MaskEditDocument, 'HISTORY_MEMORY_LIMIT', 8):
-        page.apply_edge_button.click()
-    assert page._edge_preview is None
-    assert page.document.mask.tobytes() == old and not page.document.can_undo
+        click(page, page.sharpen_edge_button)
+    assert before == (doc.mask.tobytes(), doc.mask_revision, doc._undo, doc._redo)
     assert 'Маска не изменена' in page.contour_status.text()
 
 
-def test_repeat_after_apply_is_a_separate_step_and_after_undo_reenables(page):
-    old = page.document.mask.tobytes()
-    page.sharpen_edge_button.click()
-    page.apply_edge_button.click()
-    once = page.document.mask.tobytes()
-    page.sharpen_edge_button.click()
-    assert page.document.mask.tobytes() == once
-    page.apply_edge_button.click()
-    twice = page.document.mask.tobytes()
-    assert twice != once and len(page.document._undo) == 2
-    page.undo()
-    assert page.document.mask.tobytes() == once
-    page.undo()
-    assert page.document.mask.tobytes() == old and page.sharpen_edge_button.isEnabled()
-
-
-def test_cancel_preserves_prior_edits_and_redo_history(page):
+def test_brush_and_sharpen_steps_keep_their_own_order_and_new_branch_clears_redo(page):
     doc = page.document
     initial = doc.mask.tobytes()
     doc.begin_stroke()
-    doc.extend_stroke(((30, 20),), radius=2, action='remove', hardness=100)
+    doc.extend_stroke(((30,20),), radius=2, action='remove', hardness=100)
     doc.end_stroke()
-    edited = doc.mask.tobytes()
+    brushed = doc.mask.tobytes()
     page._refresh_history_buttons()
-    page.sharpen_edge_button.click()
-    page.cancel_edge_button.click()
-    assert doc.mask.tobytes() == edited and len(doc._undo) == 1
+    click(page, page.sharpen_edge_button)
+    sharpened = doc.mask.tobytes()
     page.undo()
-    assert doc.mask.tobytes() == initial and doc.can_redo
-    page.sharpen_edge_button.click()
-    page.cancel_edge_button.click()
-    assert doc.can_redo
+    assert doc.mask.tobytes() == brushed
+    page.undo()
+    assert doc.mask.tobytes() == initial
     page.redo()
-    assert doc.mask.tobytes() == edited
+    assert doc.mask.tobytes() == brushed
+    click(page, page.sharpen_edge_button)
+    assert doc.mask.tobytes() == sharpened and not doc.can_redo
+    # A fresh brush stroke after sharpening remains a separate undo step.
+    doc.begin_stroke()
+    doc.extend_stroke(((40,25),), radius=0, action='add', hardness=100)
+    doc.end_stroke()
+    page.undo()
+    assert doc.mask.tobytes() == sharpened
+
+
+@pytest.mark.parametrize('method', ['hide', 'switch', 'reload'])
+def test_leaving_preserves_committed_step_as_draft_without_writing_source(page, method, tmp_path):
+    source = page.current_path
+    original = source.read_bytes()
+    doc = page.document
+    click(page, page.sharpen_edge_button)
+    changed = doc.mask.tobytes()
+    if method == 'hide':
+        page.hide()
+        page.show()
+    elif method == 'reload':
+        page.set_files([source], save_dir=tmp_path/'edited')
+    else:
+        second = tmp_path/'second.png'
+        Image.new('RGBA',(10,10),(10,20,30,255)).save(second)
+        page._paths.append(second)
+        page.file_list.addItem(second.name)
+        page.file_list.setCurrentRow(1)
+        assert page.document.mask.getextrema() == (255,255)
+        page.file_list.setCurrentRow(0)
+    assert page.document.mask.tobytes() == changed and page.document.is_dirty
+    if method == 'hide':
+        assert page.document is doc and page.document.can_undo
+    else:
+        # Existing per-file policy restores the draft mask, not raster undo stacks.
+        assert not page.document.can_undo
+    assert source.read_bytes() == original
+
+
+def test_back_requires_explicit_discard_of_immediate_changes(page):
+    doc = page.document
+    click(page, page.sharpen_edge_button)
+    changed = doc.mask.tobytes()
+    with patch.object(QMessageBox, 'warning', return_value=QMessageBox.StandardButton.Cancel) as warning:
+        page._back_clicked()
+        warning.assert_called_once()
+    assert page.document.mask.tobytes() == changed
+    with patch.object(QMessageBox, 'warning', return_value=QMessageBox.StandardButton.Discard):
+        page._back_clicked()
+    assert page._document is None and not page._draft_masks
+
+
+@pytest.mark.parametrize('guard', ['points', 'dirty', 'painting', 'busy'])
+def test_incomplete_or_active_edits_block_sharpening(page, guard):
+    old = page.document.mask.tobytes()
+    if guard == 'points':
+        page.canvas.contour.add_point((10,10))
+    elif guard == 'dirty':
+        path = BezierPath(tuple(BezierNode(p) for p in [(10,10),(25,10),(25,25),(10,25)]),255,(64,40))
+        page.canvas.contour.paths = [path]
+        page.canvas.contour.original = []
+    elif guard == 'painting':
+        page.canvas._painting = True
+    else:
+        page.canvas._contour_job = {'kind':'extract'}
+    try:
+        page._refresh_history_buttons()
+        if guard != 'painting':
+            assert not page.sharpen_edge_button.isEnabled()
+        page.sharpen_edge()
+        assert page.document.mask.tobytes() == old and not page.document.can_undo
+    finally:
+        page.canvas._painting = False
+        page.canvas._contour_job = None
 
 
 def test_proposal_history_trim_retains_new_step_and_rejection_preserves_existing_history():

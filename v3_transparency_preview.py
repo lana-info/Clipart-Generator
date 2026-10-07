@@ -67,7 +67,7 @@ from studio_contour_local import simplify_selected, smooth_selected, local_chang
 
 _CONTOUR_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vibix-contour")
 
-BRUSH_DIAMETERS = (2, 6, 10, 16, 32, 64)
+BRUSH_DIAMETERS = (1, 3, 6, 10, 16, 32, 64)
 _EDGE_SHARPEN_LUT = tuple(round(max(0, min(255, 2 * value - 127.5))) for value in range(256))
 
 MAX_EDITOR_IMAGE_PIXELS = 40_000_000
@@ -977,7 +977,6 @@ class TransparencyCanvas(QGraphicsView):
     diameter_requested = pyqtSignal(int)
     zoom_requested = pyqtSignal(int)
     history_requested = pyqtSignal(bool)
-    preview_cancel_requested = pyqtSignal()
     status_changed = pyqtSignal(str)
     contour_finished = pyqtSignal(str, bool)
 
@@ -995,8 +994,6 @@ class TransparencyCanvas(QGraphicsView):
         self._preview_alpha = None
         self._preview_paths = None
         self._preview_mask_revision = -1
-        self.edge_preview_active = False
-        self.edge_preview_mask: Image.Image | None = None
         self._contour_job = None
         self._contour_timer = QTimer(self)
         self._contour_timer.setInterval(20)
@@ -1036,8 +1033,6 @@ class TransparencyCanvas(QGraphicsView):
 
     def set_document(self, document: MaskEditDocument | None) -> None:
         self.cancel_contour()
-        self.edge_preview_active = False
-        self.edge_preview_mask = None
         self.document = document
         self.status_changed.emit("")
         self._lasso_points = []
@@ -1101,9 +1096,7 @@ class TransparencyCanvas(QGraphicsView):
             self._scene.setSceneRect(0, 0, 1, 1)
             return
         rendered = document.corrected_image()
-        if self.edge_preview_active and self.edge_preview_mask is not None:
-            rendered.putalpha(self.edge_preview_mask)
-        elif (self.contour.local_active and self.contour.preview_after
+        if (self.contour.local_active and self.contour.preview_after
                 and self._preview_alpha is not None and self._preview_paths == tuple(self.contour.paths)
                 and self._preview_mask_revision == document.mask_revision):
             rendered.putalpha(Image.fromarray(self._preview_alpha))
@@ -1155,7 +1148,7 @@ class TransparencyCanvas(QGraphicsView):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
-        if self.contour_busy or self.edge_preview_active:
+        if self.contour_busy:
             event.accept()
             return
         if self.tool == "pen" and self.document is not None:
@@ -1317,7 +1310,7 @@ class TransparencyCanvas(QGraphicsView):
         return self.brush_action
 
     def mouseDoubleClickEvent(self, event):
-        if self.contour_busy or self.edge_preview_active:
+        if self.contour_busy:
             event.accept()
             return
         if self.tool == "pen" and self.document is not None and event.button() == Qt.MouseButton.LeftButton:
@@ -1412,8 +1405,6 @@ class TransparencyCanvas(QGraphicsView):
             self.status_changed.emit("Отмена…")
 
     def _start_contour(self, kind):
-        if self.edge_preview_active:
-            return
         if self.document is None or self.contour_busy or self._painting:
             return
         if (max(self.document.mask.size) > MAX_AUTO_CONTOUR_SIDE
@@ -1560,12 +1551,6 @@ class TransparencyCanvas(QGraphicsView):
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         key, mods = event.key(), event.modifiers()
         ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
-        if self.edge_preview_active and not (
-                key == Qt.Key.Key_Space or ctrl and key in (Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus)):
-            if key == Qt.Key.Key_Escape or ctrl and key == Qt.Key.Key_Z:
-                self.preview_cancel_requested.emit()
-            event.accept()
-            return
         if self.contour_busy and key == Qt.Key.Key_Escape:
             self.cancel_contour()
             event.accept()
@@ -1748,7 +1733,7 @@ class TransparencyCanvas(QGraphicsView):
         pen.setCosmetic(True)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        radius = self.brush_radius
+        radius = max(0.5, self.brush_radius)
         painter.drawEllipse(self._brush_scene_point, radius, radius)
 
 
@@ -1772,7 +1757,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self._draft_contours = {}
         self._save_after_contour = False
         self._focus_mode = False
-        self._edge_preview: tuple[MaskEditDocument, int, Image.Image] | None = None
         self._edge_sharpen_check_key = None
         self._edge_sharpen_possible = False
 
@@ -1878,39 +1862,8 @@ class ClipartTransparencyEditorPage(QWidget):
         tools_layout.addLayout(zoom_grid)
 
         self.sharpen_edge_button = QPushButton('Сделать край чётче')
-        self.sharpen_edge_button.clicked.connect(self.preview_sharper_edge)
+        self.sharpen_edge_button.clicked.connect(self.sharpen_edge)
         tools_layout.addWidget(self.sharpen_edge_button)
-        self.edge_comparison = QWidget()
-        edge_layout = QVBoxLayout(self.edge_comparison)
-        edge_layout.setContentsMargins(0, 0, 0, 0)
-        edge_layout.setSpacing(5)
-        edge_views = QHBoxLayout()
-        self.edge_before_button = QPushButton('До')
-        self.edge_after_button = QPushButton('После')
-        self.edge_comparison_group = QButtonGroup(self)
-        for button, after in ((self.edge_before_button, False), (self.edge_after_button, True)):
-            button.setCheckable(True)
-            self.edge_comparison_group.addButton(button)
-            button.clicked.connect(lambda checked=False, value=after: self.show_edge_preview(value))
-            edge_views.addWidget(button)
-        edge_layout.addLayout(edge_views)
-        edge_actions = QHBoxLayout()
-        self.cancel_edge_button = QPushButton('Отмена')
-        self.apply_edge_button = QPushButton('Применить')
-        self.apply_edge_button.setStyleSheet('QPushButton {border-color:#28cbbb;background:#164741;}')
-        self.cancel_edge_button.clicked.connect(self.cancel_edge_preview)
-        self.apply_edge_button.clicked.connect(self.apply_edge_preview)
-        edge_actions.addWidget(self.cancel_edge_button)
-        edge_actions.addWidget(self.apply_edge_button)
-        edge_layout.addLayout(edge_actions)
-        edge_note = QLabel('Проверьте тонкие детали перед применением')
-        edge_note.setWordWrap(True)
-        edge_note.setStyleSheet('font-size:11px;color:#93a4b8;')
-        edge_layout.addWidget(edge_note)
-        tools_layout.addWidget(self.edge_comparison)
-        self.edge_comparison.hide()
-        self.canvas.preview_cancel_requested.connect(self.cancel_edge_preview)
-
         tool_row = QHBoxLayout()
         self.tool_buttons = {}
         for key, label, shortcut in (("brush", "Кисть", "B / И"), ("pen", "Перо", "P / З")):
@@ -2190,7 +2143,6 @@ class ClipartTransparencyEditorPage(QWidget):
         save_dir: str | Path | None = None,
         saved_copies: dict[str, str] | None = None,
     ) -> None:
-        self.cancel_edge_preview()
         self._stash_current_document()
         self._paths = [Path(path) for path in paths]
         self._rough_dir = Path(rough_dir) if rough_dir is not None else None
@@ -2241,7 +2193,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def _select_file(self, row: int) -> None:
-        self.cancel_edge_preview()
         self._stash_current_document()
         self._document = None
         self._loaded_path = None
@@ -2384,7 +2335,8 @@ class ClipartTransparencyEditorPage(QWidget):
         self.canvas.setFocus()
 
     def _cycle_diameter(self, step):
-        index = BRUSH_DIAMETERS.index(self.canvas.brush_radius * 2)
+        current = next(value for value, button in self.diameter_buttons.items() if button.isChecked())
+        index = BRUSH_DIAMETERS.index(current)
         self._set_diameter(BRUSH_DIAMETERS[max(0, min(len(BRUSH_DIAMETERS)-1, index+step))])
 
     def _cycle_zoom(self, step):
@@ -2398,68 +2350,30 @@ class ClipartTransparencyEditorPage(QWidget):
     def _set_background(self, label: str) -> None:
         self.canvas.set_background(label)
 
-    def preview_sharper_edge(self) -> None:
-        """Offer one deliberate contrast step; never alter RGB or auto-apply it."""
+    def sharpen_edge(self) -> None:
+        """Apply one alpha-contrast step immediately, with its own undo entry."""
         canvas = self.canvas
-        if (self._edge_preview is not None or canvas.contour_busy or canvas.contour.dirty or canvas.contour.local_active
-                or canvas.contour.points or canvas._painting or canvas.document is None):
+        if (canvas.contour_busy or canvas.contour.dirty or canvas.contour.local_active
+                or canvas.contour.points or canvas._painting or canvas.document is None
+                or canvas.document is not self._document):
             return
         document = self.document
         proposal = document.mask.point(_EDGE_SHARPEN_LUT)
         if ImageChops.difference(document.mask, proposal).getbbox() is None:
             self._refresh_history_buttons()
             return
-        self._edge_preview = (document, document.mask_revision, proposal)
-        canvas.edge_preview_active = True
-        self.show_edge_preview(True)
-        self._refresh_history_buttons()
-
-    def show_edge_preview(self, after: bool) -> None:
-        if self._edge_preview is None:
-            return
-        self.canvas.edge_preview_mask = self._edge_preview[2] if after else None
-        self.edge_before_button.setChecked(not after)
-        self.edge_after_button.setChecked(after)
-        self.canvas.refresh_image()
-
-    def cancel_edge_preview(self) -> None:
-        if self._edge_preview is None:
-            return
-        self._edge_preview = None
-        self.canvas.edge_preview_active = False
-        self.canvas.edge_preview_mask = None
-        self.canvas.refresh_image()
-        self._refresh_history_buttons()
-
-    def apply_edge_preview(self) -> None:
-        if self._edge_preview is None:
-            return
-        document, revision, proposal = self._edge_preview
-        if (document is not self._document or document is not self.canvas.document
-                or document.mask_revision != revision or self.canvas.contour_busy
-                or self.canvas.contour.dirty or self.canvas._painting):
-            self.cancel_edge_preview()
-            self._show_contour_status('Изображение изменилось. Повторите предпросмотр края.')
-            return
         try:
             document.apply_mask_proposal(proposal)
         except ValueError as error:
-            self.cancel_edge_preview()
             self._show_contour_status(str(error))
             return
-        self._edge_preview = None
-        self.canvas.edge_preview_active = False
-        self.canvas.edge_preview_mask = None
         document.pending_contour = InlineContour()
-        self.canvas.set_document(document)
+        canvas.set_document(document)
         if self.current_path is not None:
-            self._draft_contours[self.current_path] = self.canvas.contour
+            self._draft_contours[self.current_path] = canvas.contour
         self._refresh_history_buttons()
 
     def undo(self) -> None:
-        if self._edge_preview is not None:
-            self.cancel_edge_preview()
-            return
         if self.canvas.contour_busy:
             return
         if self.canvas.tool == "pen" and self.canvas.contour.history(redo=False):
@@ -2480,8 +2394,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def redo(self) -> None:
-        if self._edge_preview is not None:
-            return
         if self.canvas.contour_busy:
             return
         if self.canvas.tool == "pen" and self.canvas.contour.history(redo=True):
@@ -2502,8 +2414,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def reset(self) -> None:
-        if self._edge_preview is not None:
-            return
         if self.canvas.contour_busy:
             return
         try:
@@ -2547,7 +2457,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self.local_selection_label.setText(label)
 
     def _refresh_history_buttons(self) -> None:
-        edge_active = self._edge_preview is not None
         document = self.canvas.document
         key = (document, document.mask_revision, document.mask) if document is not None else None
         if key != self._edge_sharpen_check_key:
@@ -2556,13 +2465,11 @@ class ClipartTransparencyEditorPage(QWidget):
                 count and _EDGE_SHARPEN_LUT[value] != value
                 for value, count in enumerate(document.mask.histogram())))
         self.sharpen_edge_button.setEnabled(
-            self._edge_sharpen_possible and not edge_active and not self.canvas.contour_busy
+            self._edge_sharpen_possible and not self.canvas.contour_busy
             and not self.canvas.contour.dirty and not self.canvas.contour.local_active and not self.canvas.contour.points)
         self.sharpen_edge_button.setToolTip(
-            'Предпросмотр одного шага без изменения цвета. Тонкие детали могут ослабнуть.'
+            'Один шаг сразу, без изменения цвета. Отмена — стрелкой назад. Тонкие детали могут ослабнуть.'
             if self._edge_sharpen_possible else 'Следующий шаг не изменит край или изображение не выбрано')
-        self.edge_comparison.setVisible(edge_active)
-        self.pen_controls.setEnabled(not edge_active)
         self.canvas.contour.sanitize_selection()
         self._refresh_local_buttons()
         busy = self.canvas.contour_busy
@@ -2575,12 +2482,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self.keep_contour_button.setVisible(manual)
         self.new_contour_button.setEnabled(not busy and self.canvas.document is not None)
         self.keep_contour_button.setEnabled(not busy and bool(self.canvas.contour.paths))
-        if edge_active:
-            for button in (self.undo_button, self.redo_button, self.reset_button, self.save_button,
-                           self.contour_button, self.apply_contour_button, *self.tool_buttons.values()):
-                button.setEnabled(False)
-            self.brush_controls.setEnabled(False)
-            return
         if manual:
             self.apply_contour_button.setText('Удалить внутри')
         self.apply_contour_button.setIcon(self._contour_action_icon(False) if manual else QIcon())
@@ -2626,8 +2527,6 @@ class ClipartTransparencyEditorPage(QWidget):
             self._save_clicked()
 
     def save_current(self) -> tuple[Path, Path]:
-        if self._edge_preview is not None:
-            raise ValueError('Сначала примените или отмените предпросмотр края')
         if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
             job = self.canvas._contour_job
             if job['future'].done():
@@ -2701,9 +2600,6 @@ class ClipartTransparencyEditorPage(QWidget):
         raise ValueError("Не удалось выбрать свободное имя для копии PNG")
 
     def _save_clicked(self) -> None:
-        if self._edge_preview is not None:
-            self._show_contour_status('Сначала примените или отмените предпросмотр края.')
-            return
         if self.canvas.contour_busy:
             return
         if self.canvas.contour.local_active:
@@ -2732,7 +2628,6 @@ class ClipartTransparencyEditorPage(QWidget):
         return current_dirty or bool(self._draft_masks) or self.canvas.contour.dirty or any(c.dirty for c in self._draft_contours.values())
 
     def _back_clicked(self) -> None:
-        self.cancel_edge_preview()
         if self.canvas.contour_busy:
             self.canvas.cancel_contour()
             return
@@ -2755,13 +2650,11 @@ class ClipartTransparencyEditorPage(QWidget):
         self.back_requested.emit()
 
     def hideEvent(self, event):
-        self.cancel_edge_preview()
         self._save_after_contour = False
         self.canvas.cancel_contour()
         super().hideEvent(event)
 
     def closeEvent(self, event):
-        self.cancel_edge_preview()
         self._save_after_contour = False
         self.canvas.cancel_contour()
         super().closeEvent(event)
@@ -2783,10 +2676,6 @@ class ClipartTransparencyEditorPage(QWidget):
             self.toggle_focus_mode()
 
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self._edge_preview is not None and event.key() == Qt.Key.Key_Escape:
-            self.cancel_edge_preview()
-            event.accept()
-            return
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
             key = event.key()
             if key in (Qt.Key.Key_Z, Qt.Key.Key_Y):

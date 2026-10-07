@@ -1,5 +1,56 @@
 # Project state
 
+## Немедленный шаг «Сделать край чётче», 2026-10-07
+
+Владелец утвердил убрать отдельные До/После/Применить у этой кнопки. Реализация
+продолжена в существующей изолированной ветке one-pixel-brush: незакоммиченные
+правки кисти принадлежат текущей задаче редактора, сохранены и проверены вместе.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Один клик сразу выполняет один шаг; «Хорошо. Так и сделай» | Real Qt mouseclick и ручная expected alpha таблица | sharpen_edge синхронно вызывает existing apply_mask_proposal | Реализовано и проверено: mask/preview immediately changed, один history entry, source/RGB unchanged |
+| Повторять до предела, затем disabled | Реальные повторные клики, fixed0/128/255, direct call at limit | Existing LUT/availability cache сохранены | Реализовано и проверено:7steps в syntheticUI, no-op не добавляет history; Undo re-enables, Redo disables |
+| Сравнивать через существующие стрелки | Real undo/redo buttons, mixed brush→sharp→brush, reset | Каждый шаг — existing raster undo transaction | Реализовано и проверено: порядок и branching redo PASS; нехватка history memory оставляет mask/revision/stacks неизменными |
+| Убрать подтверждение только для edge contrast, оставить SavePNG | UI controls, imported source vs saved alpha/RGB, contour guards | Edge preview controls/state/guards удалены; contour-local preview сохранён | Реализовано и проверено: save_current доступен сразу; busy/manual/unfinished guards PASS; local contour tests PASS |
+| Доставка вместе с кистью1px | Новая beta CoreStudio | Core Studio3.2.14; пакеты модулей сохраняются | Реализовано и локально проверено; владелец разрешил commit/push/build/publish, выпуск в процессе; Windows ещё не проверен |
+
+Полный связанный набор105PASS+15subtests,11.49s, LinuxQt offscreen; diff checkPASS.
+Независимое focused ревью завершено:0findings;57tests+15subtests PASS6.82s.
+Дополнительно40byte-exact comparisons кистей6–64сbaseline и local/mismatch guardsPASS.
+Evidence/screenshots:
+../artifacts/editor-immediate-sharpen-20261007/.
+
+Математика не менялась: alpha_new=round(clamp(2*alpha-127.5,0,255)), по всей
+маске, включая полупрозрачные внутренние детали. RGB не меняется. Это alpha
+contrast, не сглаживание геометрии и не удаление colour spill. Тонкие слабые
+штрихи могут исчезать, прозрачные ткани становиться плотнее. Fixed128 сохраняет
+промежуточное покрытие. По прежнему договору смена файла сохраняет draft mask,
+но растровая undo история пересоздаётся; это не менялось. История проверок:
+docs/ERRORS.md#editor-immediate-sharpen-20261007.
+
+
+## Кисти1/3px во всех редакторах прозрачности, 2026-10-07
+
+Владелец попросил добавить кисть1px, заменить2px на3px и сохранить остальные
+размеры. Изолированная ветка `codex/feature-one-pixel-brush-20261007` от9df25d7,
+актуальной опубликованной Studio3.2.13. Работа в других worktree сохранена.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Ряд1–3–6и остальные прежние; запрос владельца | Real Qt controls и keyboard sequence | BRUSH_DIAMETERS1,3,6,10,16,32,64; default16 сохранён | Реализовано и проверено: UI и +/- reach/clamp; все7buttons помещаются1120×780/980×700 |
+| Кисть1px действительно меняет один пиксель | Real mouse при50/100/300%,add/remove, compare alpha | Radius0 — stamp1×1, без feather neighbours; cursor minimum0.5 | Реализовано и проверено: ровно1changed pixel во всех6cases, все4hardness и continuous1pxpath PASS |
+| Общий результат во всех модулях с редактором | Проверка composition imports и связанные entry tests | Общий ClipartTransparencyEditorPage для processing/clipart/auto-clipart | Реализовано и проверено: static routes все3кобщемуCore; related Qt/entry regressions PASS |
+| История и сохранение без RGB damage | Real Undo/Redo/save, compare original RGB+result alpha | Existing history/save APIs не менялись | Реализовано и проверено:88tests+15subtests PASS9.28s; исходный файл доSave unchanged; saved RGB exact |
+| Обновление устройства владельца | Новая Windows beta Studio | Core Studio3.2.14; пакеты модулей сохраняются | Реализовано и локально проверено; выпуск3.2.14 разрешён и в процессе; Windows ещё не проверен |
+
+Размеры6–64 работают прежним алгоритмом, default16 и настройки жёсткости сохранены.
+Для1px нет соседей для растушёвки, выбранный пиксель получает0/255 при любой
+жёсткости. Обновляется Core (background_mask.py/v3_transparency_preview.py),
+новые пакеты модулей не нужны. Standalone ContourEditorDialog не вызывается
+этими модулями и не изменялся. История проверки: docs/ERRORS.md#one-pixel-brush-20261007.
+Evidence: ../artifacts/one-pixel-brush-20261007/.
+
+
 ## Выпуск исправлений Studio3.2.13 и Composer1.5.4, 2026-10-06
 
 Владелец явно разрешил commit/push/выпуск беты после просмотра результатов.

@@ -2052,3 +2052,36 @@ brush/pen/brush/pen упал до исправления: viewport52px прот�
 1120×780 files296px в обоих режимах,980×700264px, возврат296px.
 Изменения исходных изображений/alpha/алгоритма отсутствуют. Windows/device и
 production release пока не проверены; код редактора принадлежит Core Studio.
+
+## one-pixel-brush-20261007
+
+До изменения1pxнельзя было получить добавлением кнопки: diameter//2 даётradius0,
+background_mask отклонялradius<1, а keyboard искалradius*2 в списке диаметров.
+Решение: radius0явно означает1×1opaque stamp, отрицательные radius отклоняются;
+keyboard использует выбранную кнопку; видимый cursor minimum radius0.5. Для3px
+используется прежнийradius1; все6–64неизменны. Проверены1pxadd/remove на4hardness,
+continuous stroke, реальные клики при50/100/300%,undo/redo/save RGB и3pxbbox.
+
+Первый новый save-тест ошибочно требовал неизменность обработанногоoutput-файла
+послеSave: текущий договор сохраняет output in place. Исправлен толькоfixture/assertion:
+unchanged source доSave, saved RGB сравнивается с исходнымиbytes, saved alpha смаской.
+Производственный save-код не менялся. Итог88tests+15subtests PASS9.28s,
+UI geometry1120×780/980×700 PASS. Windows/build/publish пока не выполнялись.
+
+## editor-immediate-sharpen-20261007
+
+Прежняя схема намеренно предлагала edge contrast preview с отдельным Apply.
+Владелец признал лишние подтверждения неудобными и утвердил immediate single
+step+existing Undo/Redo. sharpen_edge теперь синхронно считает прежнийLUT,
+коммитит через apply_mask_proposal и сбрасывает устаревший векторный контур.
+Preview-only state/signals/UI/guards удалены; busy/manual/local-edit guards и
+history-memory rejection сохранены. Fixed points0/128/255 останавливают повтор.
+
+Первый новый набор выявил3ошибочных допущения тестов: скрытые До/После относятся
+к contour-local preview, а при switch/reload прежняя реализация восстанавливает
+маску-черновик без raster undo stacks. Проверки уточнены под утверждённый scope,
+поведение history между файлами не расширялось. Immediate per-file history,
+source/RGB/save, limit/Undo-reenable/Redo-disable и budget rollback проверены.
+Связанный набор105tests+15subtests PASS11.49s; UI captures и diff checkPASS.
+Windows/build/publish ещё не выполнялись. Independent review0findings,
+57tests+15subtests PASS6.82s;40baseline brush comparisons и local/doc-mismatch guardsPASS.
