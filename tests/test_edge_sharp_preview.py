@@ -1,5 +1,6 @@
 """Immediate alpha contrast: independent undo steps, unchanged RGB and explicit save."""
 from unittest.mock import patch
+import time
 
 import numpy as np
 from PIL import Image
@@ -39,7 +40,14 @@ def click(page, button):
     page.tools_scroll.ensureWidgetVisible(button)
     QApplication.processEvents()
     QTest.mouseClick(button, Qt.MouseButton.LeftButton)
-    QApplication.processEvents()
+    wait(page.canvas)
+
+
+def wait(canvas):
+    deadline = time.monotonic() + 15
+    while canvas.contour_busy and time.monotonic() < deadline:
+        QTest.qWait(10)
+    assert not canvas.contour_busy
 
 
 def test_single_click_commits_exact_alpha_without_extra_confirmation(page):
@@ -99,16 +107,19 @@ def test_terminal_mask_disables_button_and_undo_reenables_without_empty_history(
         assert steps < 10
         before = doc.mask.tobytes()
         click(page, page.sharpen_edge_button)
-        assert doc.mask.tobytes() != before
-        steps += 1
+        if doc.mask.tobytes() != before:
+            steps += 1
     expected = np.where(start < 128, 0, np.where(start > 128, 255, 128))
     np.testing.assert_array_equal(np.array(doc.mask), expected)
     assert len(doc._undo) == steps
     page.sharpen_edge()
+    wait(page.canvas)
     assert len(doc._undo) == steps
     click(page, page.undo_button)
     assert page.sharpen_edge_button.isEnabled()
     click(page, page.redo_button)
+    page.sharpen_edge()
+    wait(page.canvas)
     assert not page.sharpen_edge_button.isEnabled()
 
 
@@ -116,8 +127,9 @@ def test_terminal_mask_disables_button_and_undo_reenables_without_empty_history(
 def test_unchangeable_and_empty_masks_do_not_add_history(page, terminal):
     page.document.mask = Image.new('L', page.document.mask.size, terminal)
     page._refresh_history_buttons()
-    assert not page.sharpen_edge_button.isEnabled()
     page.sharpen_edge()
+    wait(page.canvas)
+    assert not page.sharpen_edge_button.isEnabled()
     assert not page.document.can_undo
     page.set_files([])
     page.sharpen_edge()

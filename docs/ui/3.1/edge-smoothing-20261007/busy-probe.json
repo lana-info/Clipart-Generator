@@ -1,0 +1,9 @@
+{
+  "contour_busy": true,
+  "status_text": "Строим контур…",
+  "status_y": 342,
+  "viewport_height": 443,
+  "status_fully_visible": true,
+  "auto_button_text_during_job": "Отменить",
+  "auto_button_enabled": true
+}

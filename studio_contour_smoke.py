@@ -20,6 +20,52 @@ def _wait_for_contour(canvas):
         raise TimeoutError("Contour worker timed out")
 
 
+def _check_shared_edge_actions(page, source, evidence_dir):
+    """Exercise the shipped edge helper, busy indication, history and PNG save."""
+    y, x = np.indices((80, 100))
+    alpha = (np.hypot(x-49.3, y-39.8) <= 26.6).astype(np.uint8)*255
+    rgba = np.zeros((80, 100, 4), dtype=np.uint8)
+    rgba[..., :3] = (31, 99, 180)
+    rgba[..., 3] = alpha
+    Image.fromarray(rgba).save(source)
+    original = source.read_bytes()
+    page.set_files([source])
+    page.tool_buttons['brush'].click()
+    if tuple(page.diameter_buttons) != (1, 3, 6, 16, 32, 64):
+        return False
+    page.smooth_edge_button.click()
+    if not page.canvas.contour_busy or not page.busy_bar.isVisible():
+        return False
+    _wait_for_contour(page.canvas)
+    smoothed = np.array(page.document.mask)
+    if (np.array_equal(smoothed, alpha)
+            or not np.array_equal(smoothed >= 128, alpha >= 128)
+            or source.read_bytes() != original):
+        return False
+    page.undo_button.click()
+    if not np.array_equal(np.array(page.document.mask), alpha):
+        return False
+    page.redo_button.click()
+    if not np.array_equal(np.array(page.document.mask), smoothed):
+        return False
+    if evidence_dir:
+        page.tools_scroll.ensureWidgetVisible(page.smooth_edge_button)
+        QApplication.instance().processEvents()
+        page.grab().save(str(Path(evidence_dir) / 'edge-editor.png'))
+    page.sharpen_edge_button.click()
+    _wait_for_contour(page.canvas)
+    if not np.array_equal(np.array(page.document.mask), alpha):
+        return False
+    page.undo_button.click()
+    output, mask = page.save_current()
+    with Image.open(output) as saved, Image.open(mask) as saved_mask:
+        result = np.array(saved.convert('RGBA'))
+        return (np.array_equal(result[..., :3], rgba[..., :3])
+                and np.array_equal(result[..., 3], smoothed)
+                and np.array_equal(np.array(saved_mask), smoothed)
+                and not page.busy_bar.isVisible())
+
+
 def check_contour_editing(evidence_dir=None):
     with TemporaryDirectory(prefix="vibix-curve-smoke-") as temporary:
         source = Path(temporary) / "output" / "original.png"
@@ -76,7 +122,7 @@ def check_contour_editing(evidence_dir=None):
                 _wait_for_contour(canvas)
                 app.processEvents()
                 page.grab().save(str(evidence / "contour-editor.png"))
-            return valid
+            return valid and _check_shared_edge_actions(page, source.with_name('edge.png'), evidence_dir)
         finally:
             page.close()
             page.deleteLater()

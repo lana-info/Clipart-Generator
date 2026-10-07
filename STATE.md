@@ -1,5 +1,43 @@
 # Project state
 
+## Две общие кнопки края и видимый расчёт,2026-10-07
+
+Ветка codex/feature-edge-smoothing-20261007 от2f452c3. Все текущие изменения
+документов, макетов и исходников принадлежат этой задаче.
+Владелец одобрил логику: общие Чётче/Сгладить над кистью/пером; если есть
+выделенные лассо точки, обработать соответствующий участок границы; иначе
+обрабатывать весь край. Включённый инструмент лассо без выделенных точек
+не ограничивает обработку. Повторную кнопку Сгладить снизу убрать, Упростить
+оставить как отдельную операцию над точками. Короткие tooltips, тонкие иконки
+Вернуть/Убрать/Лассо, группы Масштаб/Край/Инструмент/Контур. Индикатор расчёта
+снизу только под изображением, отдельная Отмена; повторный автоконтур blocked.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Общие две кнопки с областью по выделению; согласие владельца | Global/local alpha, scope isolation, undo/save/RGB | Shared async alpha actions, guide сохраняется при edge Undo/Redo | Реализовано и проверено: pure25 и Qt regressions; stale/cancel не публикуются, no-op без истории |
+| Убрать повторное сглаживание, группы, короткие tips | RealQt controls/states/layout/tooltips | Масштаб/Край/Инструмент/Контур, тонкие icons, только Упростить снизу | Реализовано и проверено: actual1120×780 сравнены с approved final, busy980×700; tooltips<=2слов |
+| Видимый расчёт и защита от повторных кликов; запрос владельца | Delayed worker, cancel/error/completion, repeat guard | Bottom-image-only indeterminate strip, отдельная отмена; vector transform внеUI | Реализовано и проверено: busy до copy/transform и до конца commit, конфликтующие edits blocked; cache bounded |
+| Сглаживание лесенки без общего blur | Геометрические фигуры/тонкие детали, RGB/history | Conservative inward corner AA, alpha-only | Реализовано и проверено:25pure tests; analytic circle MAE1.21094→1.08904, existingAA/1px сохранены;40MPstraight0.8s |
+| Выпустить Windows beta3.2.16; «создавай обновление» | Version/SHA/provenance, installed smoke, server discovery | Version3.2.16; modules unchanged | Реализовано частично: исходники готовы, сборка и публикация ещё не запускались |
+| Обновить устройство владельца | Установить beta и проверить реальные файлы | Будет доступно после публикации | Не проверено: доступа к устройству нет |
+
+Consolidated mockup: docs/ui/3.1/edge-smoothing-20261007/README.md.
+Владелец одобрил итоговый макет и поручил «хорошо. создавай обновление».
+Реализация и новая Windows beta разрешены; сборка/публикация ещё не запускались.
+Интеграционные231tests+15subtestsPASS42.74s; buildcontracts26+4subtestsPASS5.60s.
+FocusedUI47PASS8.75s; независимый review0open findings,46Qt+6subtestsPASS и3probes.
+Evidence: ../artifacts/editor-shared-edge-20261007/; actual screenshots в mockup folder.
+
+Диагностика delayedFuture в realQt: busy=true, сообщение «Строим контур…»;
+в1120×780 label виден (y342, viewport443), всегда скрытым не называется.
+Нет indeterminate animation; Автоконтур превращается в enabled Отменить,
+повторный клик отменяет задание. История: docs/ERRORS.md, запись2026-10-07.
+Независимое math review нашло ослабление готовогоAA/1pxштрихов; оба контроля
+воспроизведеныFAIL и исправлены. Сглаживаются только solid corner pixels,
+3×3соседи безpartialalpha, минимум4solid samples; alpha0/weak strokes/RGB
+и silhouette>=128 сохраняются. ГотовыйAA может давать no-op.
+Предыдущий audit сохранён, защищённый вариант идёт отдельно protected-aa.
+
 ## Шесть размеров кисти, уточнение владельца2026-10-07
 
 По запросу «Хорошо, сделай так» убран10px: итоговый ряд1,3,6,16,32,64.

@@ -2098,3 +2098,42 @@ radius3 и selected6px послеMinus. Проверки маски, Undo/Redo, 
 повторный Windowsrun37579444354SUCCESS, installedCore13/13PASS.
 Подробности выпуска и evidence см. STATE.md.
 Первый запуск не создал установщик; PRIVATE восстановлен, публикации не было.
+
+
+## Автоконтур: незаметный ход расчёта,2026-10-07
+
+Владелец сообщил отсутствие заметного отклика и повторные клики.
+Диагностика до правок: worker уже асинхронный; статус QLabel расположен
+в прокручиваемой панели, indeterminate animation отсутствует; активная
+кнопка Автоконтур превращается в Отменить. RealQt delayedFuture probe
+подтвердил busy=true и enabled Отменить. В1120×780 label был виден,
+поэтому скрытость при любом размере не утверждается. Повторный клик
+по существующему handler при busy вызывает cancel_contour.
+Предложено вынести feedback наверх и отмену в отдельную кнопку.
+Исправлений источников/сборок ещё нет; статус и макеты в STATE.md.
+
+
+## Сглаживание: готовыйAA и тонкие штрихи,2026-10-07
+
+Независимое pure review: первый inward-AA кандидат уменьшал alpha17pixels
+готовогоAA-круга (MAE.00606→.03445), 1px diagonal масса−20.4%, isolated255→159.
+Два независимых контроля воспроизведеныFAIL до правки. Изменение: затрагивать
+толькоalpha255, безfractionalalpha в3×3окрестности, solid support>=4. Это
+защищает existingAA и sparse1px strokes, не раскрываяalpha0.25puretestsPASS
+после правки, включая arc handles/tile seams/cancel/scope. Предыдущие результаты
+не переписаны: artifacts/editor-shared-edge-20261007/; защищённый кандидат
+в protected-aa/. Итоговый status/evidence находятся в STATE.md.
+
+
+## Shared edge: scope history и lifetime,2026-10-07
+
+Review до выпуска обнаружило: обычный rasterUndo сбрасывает guide/selection;
+no-op set удерживал старые документы и геометрию. Edge history отмечается
+отдельно, только его Undo/Redo сохраняют чистый guide; обычная brush history
+не меняется. Обаcache ограничены текущей геометрией/выделением, edge также
+doc/revision. Регрессии selectedUndoRedo и document cache release PASS.
+Итоговый read-onlyreview0open findings; cancel-before-submit/stale-selection
+независимыеQtprobesPASS. Autocontourfeedback исправлен: bottom-image-only
+indeterminate strip, отдельнаяCancel, повторныйstartignored, busy доcopy
+и до конца commit; vector transform теперь worker. Длительные операции
+проверены delayed workers, errors/cancel не публикуют mask/history.

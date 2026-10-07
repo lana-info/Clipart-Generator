@@ -92,25 +92,29 @@ def test_freehand_lasso_shift_individual_additive_zoom_and_replace(page):
     assert '1' in page.local_selection_label.text()
 
 
-def test_independent_steps_limits_recalculate_and_cached_availability(page):
-    assert not page.simplify_button.isEnabled() and not page.smooth_button.isEnabled()
+def test_vector_simplification_limits_cached_availability_and_new_edge_controls(page):
+    assert not page.simplify_button.isEnabled()
+    assert page.smooth_edge_button.isEnabled()
+    assert not hasattr(page, 'smooth_button')
     assert page.local_selection_label.text() == 'Точки не выделены'
+    assert page.edge_scope_label.text() == 'Весь край'
     assert not page.pen_controls.findChildren(QComboBox)
     select(page)
-    assert page.simplify_button.isEnabled() and page.smooth_button.isEnabled()
+    assert page.edge_scope_label.text() == 'Выделенный участок'
+    assert page.simplify_button.isEnabled()
     with patch('v3_transparency_preview.simplify_selected', wraps=simplify_selected) as simplify:
         with patch('v3_transparency_preview.smooth_selected', wraps=smooth_selected) as smooth:
             for _ in range(6):
                 page._refresh_history_buttons()
                 page.canvas.viewport().repaint()
             assert simplify.call_count == smooth.call_count == 0
-    # Smoothing stabilizes before simplification exhausts removable anchors.
+    # Retain vector smoothing coverage independently of removed lower UI action.
     for _ in range(100):
-        if not page.smooth_button.isEnabled():
+        if not page.canvas.contour.local_steps()[1].changed:
             break
-        page.smooth_button.click()
+        page.canvas.local_operation('smooth')
         wait(page.canvas)
-    assert not page.smooth_button.isEnabled()
+    assert not page.canvas.contour.local_steps()[1].changed
     assert page.simplify_button.isEnabled()
     for _ in range(100):
         if not page.simplify_button.isEnabled():
@@ -118,21 +122,19 @@ def test_independent_steps_limits_recalculate_and_cached_availability(page):
         page.simplify_button.click()
         wait(page.canvas)
     assert not page.simplify_button.isEnabled()
-    assert not page.smooth_button.isEnabled()
     assert 'Достигнут предел' in page.local_selection_label.text()
     page.undo()
     wait(page.canvas)
     assert page.simplify_button.isEnabled()
-    # Manual editing and changing selection invalidate the two cached results.
     select(page, [(0,0)])
     assert not page.simplify_button.isEnabled()
     page.canvas.contour.paths = [noisy_path()]
     select(page)
-    assert page.smooth_button.isEnabled()
+    assert page.canvas.contour.local_steps()[1].changed
     QTest.keyClick(page.canvas, Qt.Key.Key_Right)
     wait(page.canvas)
     expected = smooth_selected(tuple(page.canvas.contour.paths), page.canvas.contour.selection)
-    assert page.smooth_button.isEnabled() == expected.changed
+    assert page.canvas.contour.local_steps()[1] == expected
 
 
 def test_preview_before_cancel_history_apply_undo_save_rgb(page):
@@ -193,7 +195,8 @@ def test_local_cancel_keeps_prior_manual_draft_and_manual_action_is_explicit(pag
     assert canvas.contour.dirty
     canvas.contour.manual = True
     select(page)
-    page.smooth_button.click()
+    page.canvas.local_operation('smooth')
+    wait(canvas)
     assert canvas.contour.local_active
     assert not canvas.contour_busy
     assert canvas._preview_alpha is None
@@ -218,12 +221,16 @@ def test_late_preview_cancel_file_switch_and_selection_reindex(page, tmp_path):
         return real(*args)
     with patch('v3_transparency_preview._calculate_contour', side_effect=delayed):
         page.simplify_button.click()
-        assert started.wait(5)
-        assert not page.smooth_button.isEnabled()
+        deadline = time.monotonic() + 5
+        while not started.is_set() and time.monotonic() < deadline:
+            QTest.qWait(10)
+        assert started.is_set()
+        assert not page.smooth_edge_button.isEnabled()
         assert not page.file_list.isEnabled()
-        page.cancel_local_button.click()
+        page.cancel_job_button.click()
         release.set()
         wait(canvas)
+        page.cancel_local_button.click()
     assert tuple(canvas.contour.paths) == original
     assert canvas._preview_alpha is None
     select(page, [(0,2),(0,5)])
@@ -255,7 +262,7 @@ def test_controls_reachable_pen_1120_by_780_and_brush_layout_restored(page):
         assert page.file_list.viewport().height() >= 5 * page.file_list.sizeHintForRow(0)
         assert page.files_frame.maximumHeight() == 16777215
     assert max(heights) - min(heights) <= 2
-    for button in (page.simplify_button, page.smooth_button, page.save_button, page.back_button):
+    for button in (page.simplify_button, page.smooth_edge_button, page.save_button, page.back_button):
         page.tools_scroll.ensureWidgetVisible(button)
         QApplication.processEvents()
         rectangle = button.mapTo(page.tools_scroll.viewport(), button.rect().topLeft())
@@ -368,10 +375,14 @@ def test_selected_hole_expansion_preview_and_apply_match_changed_hole_alpha(page
     page.canvas.contour.original = [outer,hole]
     page.canvas.refresh_image()
     select(page,{(1,0),(1,1),(1,2)})
-    button = page.simplify_button if operation == 'simplify' else page.smooth_button
+    button = page.simplify_button if operation == 'simplify' else None
     for _ in range(3 if operation == 'smooth' else 1):
-        assert button.isEnabled()
-        button.click()
+        if button is not None:
+            assert button.isEnabled()
+            button.click()
+        else:
+            assert page.canvas.contour.local_steps()[1].changed
+            page.canvas.local_operation('smooth')
         wait(page.canvas)
     changed_hole = rasterize_path(page.canvas.contour.paths[1],(0,0,130,130))
     expected = initial.copy()
@@ -401,7 +412,10 @@ def test_file_switch_discards_late_preview_publication_and_restores_draft(page,t
         return real(*args)
     with patch('v3_transparency_preview._calculate_contour',side_effect=delayed):
         page.simplify_button.click()
-        assert started.wait(5)
+        deadline = time.monotonic() + 5
+        while not started.is_set() and time.monotonic() < deadline:
+            QTest.qWait(10)
+        assert started.is_set()
         draft = tuple(canvas.contour.paths)
         page.set_files([source,second],selected_index=1)
         release.set()
@@ -428,7 +442,10 @@ def test_preview_worker_rejects_changed_mask_revision(page):
         return real(*args)
     with patch('v3_transparency_preview._calculate_contour',side_effect=delayed):
         page.simplify_button.click()
-        assert started.wait(5)
+        deadline = time.monotonic() + 5
+        while not started.is_set() and time.monotonic() < deadline:
+            QTest.qWait(10)
+        assert started.is_set()
         page.document.mask.putpixel((40,60),0)
         page.document.mask_revision += 1
         release.set()

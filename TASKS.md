@@ -1,5 +1,18 @@
 # TASKS
 
+## Общие действия края и заметный расчёт,2026-10-07
+
+- [x] Исследовать общий редактор, подтвердить механизм случайной отмены автоконтура.
+- [x] Согласовать общие Чётче/Сгладить по выделению или всему краю, без дублирования снизу.
+- [x] Подготовить consolidated mockup с группами, тонкими иконками и индикатором под изображением.
+- [x] Итоговый макет/поведение одобрены; владелец поручил создание обновления.
+- [x] Pure alpha helper/selection region реализованы:25testsPASS; existingAA/1px density findings исправлены.
+- [x] Интеграция edge actions/history/RGB/save в общем Qt editor.
+- [x] Bottom busy feedback, отдельная отмена, repeated/stale guards; vector transform внеUI.
+- [x] Pure25, интеграция231+15subtests, buildcontracts26+4subtests, focusedUI47PASS; actualQt сравнены с макетом; independent review0findings.
+- [ ] Commit/push, Windows3.2.16 beta build и публикация; предыдущую Studio beta снять, modules/stable сохранить.
+- [ ] Проверить обновление на устройстве владельца.
+
 ## Шесть размеров кисти,2026-10-07
 
 - [x] Убрать10px, оставить1/3/6/16/32/64, default16.
