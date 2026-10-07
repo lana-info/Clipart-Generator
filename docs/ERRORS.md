@@ -2085,3 +2085,14 @@ source/RGB/save, limit/Undo-reenable/Redo-disable и budget rollback прове�
 Связанный набор105tests+15subtests PASS11.49s; UI captures и diff checkPASS.
 Windows/build/publish ещё не выполнялись. Independent review0findings,
 57tests+15subtests PASS6.82s;40baseline brush comparisons и local/doc-mismatch guardsPASS.
+
+
+## Шесть размеров: устаревшее ожидание native smoke,2026-10-07
+
+Windowsrun37579012511 остановлен на двух packaged entrypoint tests.
+Причина: studio_contour_smoke после default16 и Minus проверял radius5
+(10px), удалённый по утверждённому ряду1/3/6/16/32/64. Локально оба теста
+воспроизведены FAIL до исправления. Изменено только ожидаемое поведение:
+radius3 и selected6px послеMinus. Проверки маски, Undo/Redo, RGB, исходника
+и сохранения не ослаблены. Результат последующей проверки см. STATE.md.
+Первый запуск не создал установщик; PRIVATE восстановлен, публикации не было.

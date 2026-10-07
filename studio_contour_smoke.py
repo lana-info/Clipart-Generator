@@ -58,7 +58,8 @@ def check_contour_editing(evidence_dir=None):
                 return False
             page.tool_buttons["brush"].click()
             QTest.keyClick(canvas, Qt.Key.Key_Minus)
-            if canvas.brush_radius != 5 or source.read_bytes() != original:
+            if (canvas.brush_radius != 3 or not page.diameter_buttons[6].isChecked()
+                    or source.read_bytes() != original):
                 return False
             output, mask = page.save_current()
             with Image.open(output) as saved, Image.open(mask) as saved_mask:
