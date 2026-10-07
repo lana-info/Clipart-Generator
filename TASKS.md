@@ -7,7 +7,7 @@
 - [x] Проверить exactalpha/history/budget/save/guards/drafts/keyboard и кисть1px вместе:105tests+15subtests PASS.
 - [x] Сохранить actualUI first/second/undo/disabled1120×780 и980×700.
 - [x] Независимое focused ревью:0findings;57tests+15subtests и40baselinecomparisons PASS.
-- [ ] Выпустить разрешённую Windows beta CoreStudio3.2.14 с обеими правками.
+- [x] Commitb135a07/push; Windows3.2.14run37567991417SUCCESS; Core13/13PASS; опубликована beta, PRIVATE восстановлен.
 - [ ] Проверить на устройстве владельца.
 
 
@@ -17,7 +17,7 @@
 - [x] Реализовать1–3–6–10–16–32–64 и настоящий stamp1×1, сохранить defaults.
 - [x] Проверить реальные clicks/zoom/add/remove, Undo/Redo/saveRGB, keyboard и layouts.
 - [x] 88tests+15subtests PASS9.28s; diff check PASS, screenshots сохранены.
-- [ ] Выпустить разрешённую Windows beta Studio3.2.14; версии модулей не менять.
+- [x] Studio3.2.14beta опубликована; версии шести модулей сохранены; Studio3.2.13 снята с выдачи, файл сохранён.
 - [ ] Проверить на устройстве владельца.
 
 

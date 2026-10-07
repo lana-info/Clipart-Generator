@@ -1,5 +1,28 @@
 # Project state
 
+## Выпуск беты Studio3.2.14, 2026-10-07
+
+Владелец разрешил commit/push/build/publish: «Да делай». Изменения общего
+редактора доставляются только через обновление Core Studio. Source commit
+b135a077d1404bcee3b6ef7e5ec2db9b125863b5 отправлен в отдельную feature branch.
+Версии модулей сохранены: Composer1.5.4, остальные5модулей1.5.3.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Доставить кисти1/3px и немедленный шаг чёткости; разрешение владельца | Qt regressions, native Windows installer/smoke | Studio3.2.14, обе правки общего редактора | Реализовано и проверено:105tests+15subtestsPASS, независимое ревью0findings;12release tests+4subtestsPASS; Windowsrun37567991417SUCCESS, frozenCore13/13PASS |
+| Временно PUBLIC для сборки, затем PRIVATE; ранее разрешённый способ | Finally restore плюс отдельный GitHub API read | Проверенный helper с обязательным restore | Реализовано и проверено: PRIVATE после сборки и при финальной проверке |
+| Beta обновление без изменения stable и модулей | Server SHA/discovery/baseline fingerprints | Новая Studio3.2.14beta; Studio3.2.13 withdrawn | Реализовано и проверено:7активных beta, six module rows unchanged; stable unchanged; stored SHA совпал, old files preserved, health200/invalidtoken403 |
+| Работа обновления на устройстве владельца | Обновить установленную Studio и проверить редактор | Бета доступна на лицензионном сервере | Реализовано, но не проверено на устройстве владельца: доступа к нему нет |
+
+Installer SHA256: ffbb865914514bf42ff1192b278baa00ee6a677939079d712e9584fb4fd39f2d,
+242984663байт. Source/provenance/version/archiveCRC совпали.
+Native contour screenshot просмотрен: список файлов расширен при выборе пера,
+лишнего подтверждения кнопки чёткости нет. Exact1px/пошаговый Undo проверены
+realQt на Linux; WindowsCore smoke подтверждает contour_editing_works, но не
+заменяет отдельный ручной сценарий этих двух изменений на устройстве владельца.
+Evidence: ../artifacts/studio-3.2.14-editor-beta-20261007/.
+Backup: /opt/bots-stack/backups/clipart-license-service/pre-studio3214-beta-publication-20261007.dump.
+
 ## Немедленный шаг «Сделать край чётче», 2026-10-07
 
 Владелец утвердил убрать отдельные До/После/Применить у этой кнопки. Реализация
@@ -12,7 +35,7 @@
 | Повторять до предела, затем disabled | Реальные повторные клики, fixed0/128/255, direct call at limit | Existing LUT/availability cache сохранены | Реализовано и проверено:7steps в syntheticUI, no-op не добавляет history; Undo re-enables, Redo disables |
 | Сравнивать через существующие стрелки | Real undo/redo buttons, mixed brush→sharp→brush, reset | Каждый шаг — existing raster undo transaction | Реализовано и проверено: порядок и branching redo PASS; нехватка history memory оставляет mask/revision/stacks неизменными |
 | Убрать подтверждение только для edge contrast, оставить SavePNG | UI controls, imported source vs saved alpha/RGB, contour guards | Edge preview controls/state/guards удалены; contour-local preview сохранён | Реализовано и проверено: save_current доступен сразу; busy/manual/unfinished guards PASS; local contour tests PASS |
-| Доставка вместе с кистью1px | Новая beta CoreStudio | Core Studio3.2.14; пакеты модулей сохраняются | Реализовано и локально проверено; владелец разрешил commit/push/build/publish, выпуск в процессе; Windows ещё не проверен |
+| Доставка вместе с кистью1px | Новая beta CoreStudio | Core Studio3.2.14; пакеты модулей сохраняются | Реализовано и проверено: Studio3.2.14 опубликована beta; Windowsrun37567991417SUCCESS, installedCore13/13PASS; устройство владельца не проверено |
 
 Полный связанный набор105PASS+15subtests,11.49s, LinuxQt offscreen; diff checkPASS.
 Независимое focused ревью завершено:0findings;57tests+15subtests PASS6.82s.
@@ -41,7 +64,7 @@ docs/ERRORS.md#editor-immediate-sharpen-20261007.
 | Кисть1px действительно меняет один пиксель | Real mouse при50/100/300%,add/remove, compare alpha | Radius0 — stamp1×1, без feather neighbours; cursor minimum0.5 | Реализовано и проверено: ровно1changed pixel во всех6cases, все4hardness и continuous1pxpath PASS |
 | Общий результат во всех модулях с редактором | Проверка composition imports и связанные entry tests | Общий ClipartTransparencyEditorPage для processing/clipart/auto-clipart | Реализовано и проверено: static routes все3кобщемуCore; related Qt/entry regressions PASS |
 | История и сохранение без RGB damage | Real Undo/Redo/save, compare original RGB+result alpha | Existing history/save APIs не менялись | Реализовано и проверено:88tests+15subtests PASS9.28s; исходный файл доSave unchanged; saved RGB exact |
-| Обновление устройства владельца | Новая Windows beta Studio | Core Studio3.2.14; пакеты модулей сохраняются | Реализовано и локально проверено; выпуск3.2.14 разрешён и в процессе; Windows ещё не проверен |
+| Обновление устройства владельца | Новая Windows beta Studio | Core Studio3.2.14; пакеты модулей сохраняются | Реализовано и проверено: Studio3.2.14beta опубликована; installedWindowsCore13/13PASS, exact1px проверен LinuxQt; устройство владельца не проверено |
 
 Размеры6–64 работают прежним алгоритмом, default16 и настройки жёсткости сохранены.
 Для1px нет соседей для растушёвки, выбранный пиксель получает0/255 при любой
