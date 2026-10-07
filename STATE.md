@@ -7,11 +7,23 @@ Default16 и алгоритмы кисти сохранены. Реализов�
 39tests+6subtestsPASS (realQt offscreen,3.46s), включая ряд кнопок и
 клавиатурный переход16→6→3→1 с ограничением на минимуме/максимуме.
 Diff checkPASS. Отдельная ветка codex/fix-six-brush-sizes-20261007 отbf93f03.
-Владелец разрешил commit/push/build/publish. Выпуск3.2.15 в процессе; опубликованная3.2.14 пока содержит7размеров.
+Владелец разрешил commit/push/build/publish. Studio3.2.15 опубликована beta;
+source893736c6a175870a1fcea49cb603e5da8e36b1cb pushed. Studio3.2.14 снята с выдачи, файл сохранён.
 Первый Windowsrun37579012511FAIL: smoke ожидал удалённую10px.
 Исправлен ожидаемый переход16→6; после исправления166tests+29subtestsPASS,
 1deselected (LinuxQt,12.27s), включая оба ранее упавших packaged tests.
 История: docs/ERRORS.md, «Шесть размеров: устаревшее ожидание native smoke».
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Шесть размеров1/3/6/16/32/64; уточнение владельца | Qt controls/keyboard и native installed smoke |10px убран, default16 сохранён | Реализовано и проверено:39tests+6subtestsPASS; после smoke fix166tests+29subtestsPASS; Windowsrun37579444354SUCCESS, frozenCore13/13PASS |
+| Выпустить новую Windows beta; «Да» владельца | Installer version/SHA/source, server discovery | Studio3.2.15 beta опубликована | Реализовано и проверено: SHA/provenance/version/CRC PASS,7active beta; Studio3.2.14withdrawn, modules/stable unchanged; health200/token403; PRIVATE подтверждён отдельно |
+| Получить обновление на устройстве владельца | Обновить Studio и проверить ряд кистей | Установщик доступен через beta-канал | Реализовано, но не проверено на устройстве: доступа к нему нет |
+
+Installer SHA256:781e3cfdb9e7d1ea1f3b8a736119ef527b7e72019adc0b0fe8985d8a589d09fd,
+243000753байт. Evidence: ../artifacts/studio-3.2.15-six-brush-beta-20261007/.
+Backup: /opt/bots-stack/backups/clipart-license-service/pre-studio3215-beta-publication-20261007.dump.
+
 
 ## Выпуск беты Studio3.2.14, 2026-10-07
 

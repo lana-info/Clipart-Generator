@@ -4,7 +4,8 @@
 
 - [x] Убрать10px, оставить1/3/6/16/32/64, default16.
 - [x] Кнопки/keyboard:39tests+6subtestsPASS, diff checkPASS.
-- [ ] Выпустить разрешённую Windows beta3.2.15;3.2.14 пока прежняя.
+- [x] Source893736c pushed; Windows3.2.15run37579444354SUCCESS, installedCore13/13PASS; beta опубликована,3.2.14withdrawn, modules/stable unchanged, PRIVATE восстановлен.
+- [ ] Проверка обновления на устройстве владельца: доступа к устройству нет.
 
 ## Немедленный «Сделать край чётче», 2026-10-07
 
