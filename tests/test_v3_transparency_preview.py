@@ -372,7 +372,7 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             Qt.ScrollBarPolicy.ScrollBarAsNeeded,
         )
         self.assertTrue(page.canvas.space_pan_enabled)
-        self.assertEqual(tuple(page.diameter_buttons), (1, 3, 6, 10, 16, 32, 64))
+        self.assertEqual(tuple(page.diameter_buttons), (1, 3, 6, 16, 32, 64))
         self.assertEqual(page.hardness_slider.value(), 85)
         self.assertEqual(page.canvas.brush_action, "remove")
         page.deleteLater()

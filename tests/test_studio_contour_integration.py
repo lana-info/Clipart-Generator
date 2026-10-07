@@ -115,7 +115,7 @@ class ContourIntegrationTests(unittest.TestCase):
         for expected in (32,64,64):
             QTest.keyClick(self.canvas, Qt.Key.Key_Equal)
             self.assertEqual(self.canvas.brush_radius*2, expected)
-        for expected in (32,16,10,6,3,1,1):
+        for expected in (32,16,6,3,1,1):
             QTest.keyClick(self.canvas, Qt.Key.Key_Minus)
             self.assertTrue(self.page.diameter_buttons[expected].isChecked())
             self.assertEqual(self.canvas.brush_radius, expected // 2)

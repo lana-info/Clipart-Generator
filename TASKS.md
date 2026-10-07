@@ -1,5 +1,11 @@
 # TASKS
 
+## Шесть размеров кисти,2026-10-07
+
+- [x] Убрать10px, оставить1/3/6/16/32/64, default16.
+- [x] Кнопки/keyboard:39tests+6subtestsPASS, diff checkPASS.
+- [ ] Выпустить разрешённую Windows beta3.2.15;3.2.14 пока прежняя.
+
 ## Немедленный «Сделать край чётче», 2026-10-07
 
 - [x] Зафиксировать approved immediate/repeated steps, arrows, stop, explicitSave.

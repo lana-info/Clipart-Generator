@@ -67,7 +67,7 @@ from studio_contour_local import simplify_selected, smooth_selected, local_chang
 
 _CONTOUR_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vibix-contour")
 
-BRUSH_DIAMETERS = (1, 3, 6, 10, 16, 32, 64)
+BRUSH_DIAMETERS = (1, 3, 6, 16, 32, 64)
 _EDGE_SHARPEN_LUT = tuple(round(max(0, min(255, 2 * value - 127.5))) for value in range(256))
 
 MAX_EDITOR_IMAGE_PIXELS = 40_000_000
