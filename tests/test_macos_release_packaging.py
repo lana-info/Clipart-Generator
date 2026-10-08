@@ -44,3 +44,7 @@ def test_mac_workflow_has_explicit_native_targets_and_required_artifacts():
     assert "build-provenance.json" in mac
     assert "if-no-files-found: error" in mac
     assert "continue-on-error: true" not in mac
+    assert 'lipo "$executable" -verify_arch ${{ matrix.target_arch }}' in mac
+    assert 'lipo realesrgan-ncnn-vulkan-20220424-macos/realesrgan-ncnn-vulkan -verify_arch ${{ matrix.target_arch }}' in mac
+    assert "lipo -verify_arch" not in mac
+    assert "if: ${{ inputs.build_windows }}" in workflow

@@ -18,6 +18,10 @@ on:
         description: "Also build native Apple Silicon and Intel macOS betas"
         type: boolean
         default: false
+      build_windows:
+        description: "Build the Windows installer (disable for a macOS-only retry)"
+        type: boolean
+        default: true
       legacy_installer_url:
         description: "Optional verified 3.1.4 installer URL for production upgrade test"
         required: false
@@ -25,6 +29,7 @@ on:
 
 jobs:
   build-windows:
+    if: ${{ inputs.build_windows }}
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -323,7 +328,7 @@ jobs:
           mkdir -p realesrgan-ncnn-vulkan-20220424-macos
           ditto -x -k "$archive_path" realesrgan-ncnn-vulkan-20220424-macos
           chmod 755 realesrgan-ncnn-vulkan-20220424-macos/realesrgan-ncnn-vulkan
-          lipo -verify_arch ${{ matrix.target_arch }} realesrgan-ncnn-vulkan-20220424-macos/realesrgan-ncnn-vulkan
+          lipo realesrgan-ncnn-vulkan-20220424-macos/realesrgan-ncnn-vulkan -verify_arch ${{ matrix.target_arch }}
           echo "REAL_ESRGAN_ARCHIVE_URL=$archive_url" >> "$GITHUB_ENV"
           echo "REAL_ESRGAN_ARCHIVE_SHA256=$expected_sha256" >> "$GITHUB_ENV"
 
@@ -337,7 +342,7 @@ jobs:
           set -euo pipefail
           app='dist/Vibix Images.app'
           executable="$app/Contents/MacOS/Vibix Images"
-          lipo -verify_arch ${{ matrix.target_arch }} "$executable"
+          lipo "$executable" -verify_arch ${{ matrix.target_arch }}
           "$executable" --release-entrypoint-smoke "--expected-app-version=$APP_VERSION" --expected-profile=production --ui-evidence-dir=release/ui-evidence
           ditto -c -k --sequesterRsrc --keepParent "$app" "release/$ARCHIVE_BASENAME.zip"
           unzip -t "release/$ARCHIVE_BASENAME.zip"
