@@ -4,7 +4,7 @@ import json
 import re
 
 import requests
-from studio_text_errors import TextGenerationError
+from studio_text_errors import TextGenerationError, ComposerAIError, composer_error_code
 from studio_prompt_composer_api import parse_composer_response, resolve_composer_model
 
 MAX_OUTPUT_TOKENS = 12000
@@ -118,7 +118,7 @@ def validate_response(value, snapshot, operation='variants', target='ru', *, ker
 def perform_request(snapshot, *, provider, model, api_key, operation='variants', text='', target='ru', cancelled=lambda: False, kernel=None):
     route = resolve_composer_model(provider, model)
     if not isinstance(api_key, str) or not api_key.strip() or any(c in api_key for c in '\r\n'):
-        raise TextGenerationError('Укажите ключ выбранного сервиса')
+        raise ComposerAIError('auth', submitted=False)
     body = request_body(snapshot, provider, model, operation, text, target, kernel=kernel)
     if cancelled():
         return None
@@ -126,15 +126,28 @@ def perform_request(snapshot, *, provider, model, api_key, operation='variants',
         with requests.post(route.endpoint, headers={'Authorization': f'Bearer {api_key}'}, json=body,
                            timeout=(10, 90), allow_redirects=False, stream=True) as response:
             if response.status_code != 200:
-                raise ValueError('provider status')
+                raise ComposerAIError(composer_error_code(response.status_code), http_status=response.status_code)
             raw = bytearray()
             for chunk in response.iter_content(65536):
                 if cancelled():
                     return None
                 raw.extend(chunk)
                 if len(raw) > 2_000_000:
-                    raise ValueError('response limit')
-            parsed = parse_composer_response(json.loads(raw), provider)
-        return validate_response(parsed, snapshot, operation, target, kernel=kernel)
-    except (requests.RequestException, ValueError, KeyError, TypeError, TextGenerationError):
-        raise TextGenerationError('AI не вернул корректную подборку. Возможно списание за отправленный запрос. Черновик сохранён; автоматического повтора нет.') from None
+                    raise ComposerAIError('response_limit', http_status=200)
+            try:
+                data = json.loads(raw)
+            except (ValueError, UnicodeError):
+                raise ComposerAIError('json', http_status=200) from None
+            parsed = parse_composer_response(data, provider)
+        try:
+            return validate_response(parsed, snapshot, operation, target, kernel=kernel)
+        except (ValueError, KeyError, TypeError):
+            raise ComposerAIError('invalid_contract', http_status=200) from None
+    except ComposerAIError:
+        raise
+    except requests.Timeout:
+        raise ComposerAIError('timeout') from None
+    except requests.RequestException:
+        raise ComposerAIError('network') from None
+    except (ValueError, KeyError, TypeError, TextGenerationError):
+        raise ComposerAIError('json') from None

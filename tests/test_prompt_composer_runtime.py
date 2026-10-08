@@ -43,12 +43,21 @@ def test_verified_package_kernel_page_and_leases(runtime, tmp_path):
     host.load_active('prompt-composer')
     kernel = host.invoke_command('prompt-composer', 'kernel')
     assert kernel.validate_draft.__module__.startswith('_studio_module_prompt_composer_')
-    assert len(kernel.catalogue()['templates']) == 21
+    assert len(kernel.catalogue()['templates']) == 319
+    assert len(kernel.catalogue()['categories']) == 6
+    assert len(kernel.catalogue()['directions']) == 25
+    assert sum(t.get('reusable', False) for t in kernel.catalogue()['templates']) == 298
     service = PromptComposerHost(tmp_path / 'library', settings_provider=lambda: {},
                                  authorize=lambda: True, runtime=host, kernel=kernel)
     page_handle = host.create_page('prompt-composer', 'main', service)
     page = page_handle.value
     assert page.__class__.__module__.startswith('_studio_module_prompt_composer_')
+    page._select_template_category('products')
+    assert page._select_template_direction('ugc')
+    recipe = next(t for t in kernel.catalogue()['templates'] if t.get('direction') == 'ugc' and t['category'] == 'products' and t['draft']['mode'] == 'image')
+    page._select_start_template(recipe)
+    assert page.goto_step(1)
+    assert page.draft['fields']['action'] == recipe['draft']['fields']['action']
     assert page.generate_local() and len(page._variants) == 7
     with pytest.raises(ModuleRuntimeError):
         host.unload('prompt-composer')

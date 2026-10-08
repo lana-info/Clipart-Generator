@@ -7,6 +7,9 @@ from studio_modules import MAX_PACKAGE_BYTES, ModulePackageError
 COMPOSER_PAYLOAD = (
     'prompt_composer/__init__.py',
     'prompt_composer/catalog.py',
+    'prompt_composer/directions.py',
+    'prompt_composer/scenario_people_products.py',
+    'prompt_composer/scenario_other.py',
     'prompt_composer/engine.py',
     'prompt_composer/model.py',
     'prompt_composer/ui.py',

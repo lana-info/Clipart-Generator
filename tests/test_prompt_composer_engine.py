@@ -18,16 +18,139 @@ from prompt_composer.model import FIELD_KEYS
 
 def test_catalogue_is_bilingual_stable_and_isolated() -> None:
     first = catalogue()
-    assert len(first["templates"]) == 21
-    assert len({item["id"] for item in first["templates"]}) == 21
-    assert len([item for item in first["templates"] if item["id"].startswith("image_")]) == 7
-    assert len([item for item in first["templates"] if item["id"].startswith("reels_")]) == 7
-    for item in first["templates"]:
-        validated = validate_draft(item["draft"])
-        assert validated["fields"]["subject"]["en"]
-        assert validated["fields"]["subject"]["ru"]
+    templates = first["templates"]
+    legacy = [item for item in templates if item.get("legacy")]
+    scenes = [item for item in templates if item.get("reusable") and not item.get("direction")]
+    nested = [item for item in templates if item.get("direction")]
+    assert len(templates) == len({item["id"] for item in templates}) == 319
+    assert len(nested) == 250
+    assert len(legacy) == 21
+    assert len(scenes) == 48
+    assert {item["id"] for item in legacy} == {
+        "tw_morning_look", "tw_man_at_work", "tw_mature_audience",
+        "tw_living_portrait", "tw_product_in_life", "tw_unboxing",
+        "tw_character_micro_story", "image_paper_podium", "image_botanical_still_life",
+        "image_pet_window", "image_greeting_card", "image_handmade_texture",
+        "image_workshop_portrait", "image_backlit_dessert", "reels_cup_turn",
+        "reels_fabric_window", "reels_petal_fall", "reels_cocoa_stir",
+        "reels_brush_paper", "reels_cat_blink", "reels_bottle_drop",
+    }
+    assert first["categories"] == [
+        {"id": "people", "label": "Люди"},
+        {"id": "products", "label": "Товары"},
+        {"id": "food", "label": "Еда и напитки"},
+        {"id": "spaces", "label": "Интерьеры и архитектура"},
+        {"id": "animals", "label": "Животные"},
+        {"id": "nature", "label": "Природа и путешествия"},
+    ]
+    for mode in ("image", "reels"):
+        assert sum(item["draft"]["mode"] == mode for item in scenes) == 24
+        for category in first["categories"]:
+            expected = 6 if category["id"] in ("people", "products") else 3
+            assert sum(item["category"] == category["id"] and item["draft"]["mode"] == mode
+                       for item in scenes) == expected
+    for item in templates:
+        assert validate_draft(item["draft"]) == item["draft"]
+        assert apply_template(item["id"]) == item["draft"]
+        for pair in item["draft"]["fields"].values():
+            assert pair["ru"].strip() and pair["en"].strip(), item["id"]
     first["templates"][0]["draft"]["name"] = "tampered"
+    first["categories"][0]["label"] = "tampered"
+    first["options"]["style"][0]["en"] = "tampered"
     assert catalogue()["templates"][0]["draft"]["name"] != "tampered"
+    assert catalogue()["categories"][0]["label"] == "Люди"
+    assert catalogue()["options"]["style"][0]["en"] != "tampered"
+    copied = apply_template(scenes[0]["id"])
+    copied["fields"]["subject"]["en"] = "tampered"
+    assert apply_template(scenes[0]["id"])["fields"]["subject"]["en"] == "person"
+
+
+def test_reusable_scene_recipes_have_neutral_subjects_and_detailed_bilingual_fields() -> None:
+    subjects = {
+        "people": ("человек", "person"), "products": ("товар", "product"),
+        "food": ("блюдо или напиток", "dish or drink"), "spaces": ("помещение", "space"),
+        "animals": ("животное", "animal"), "nature": ("пейзаж", "landscape"),
+    }
+    for item in catalogue()["templates"]:
+        if not item.get("reusable") or item.get("direction"):
+            continue
+        draft = item["draft"]
+        fields = draft["fields"]
+        subject = ("здание", "building") if "_exterior_" in item["id"] else subjects[item["category"]]
+        assert fields["subject"] == {"ru": subject[0], "en": subject[1]}
+        assert draft["locks"] == []
+        assert not {"wardrobe", "appearance", "color", "material"} & fields.keys()
+        assert item["id"].startswith(f"scene_{item['category']}_")
+        assert item["id"].endswith("_" + draft["mode"])
+        assert not item.get("legacy")
+        for key in ("style", "lighting", "location", "shot", "angle", "camera", "exclusions"):
+            for language in ("ru", "en"):
+                assert len(fields[key][language].split()) >= 3, (item["id"], key, language)
+        if draft["mode"] == "reels":
+            assert fields["duration"] == {"ru": "8 секунд", "en": "8 seconds"}
+            assert all(len(fields["action"][language].split()) >= 5 for language in ("ru", "en"))
+        else:
+            assert "duration" not in fields
+
+
+def test_scene_cards_match_approved_titles_and_descriptions() -> None:
+    from pathlib import Path
+    outline_path = Path(__file__).resolve().parents[1] / "docs/ui/3.1/composer-directions-20261007/scenario-outline.json"
+    outline = json.loads(outline_path.read_text(encoding="utf-8"))
+    scenes = [item for item in catalogue()["templates"] if item.get("reusable") and not item.get("direction")]
+    for category, approved in outline["scenes"].items():
+        for mode, description_index in (("image", 1), ("reels", 2)):
+            actual = [(item["label"], item["description"]) for item in scenes
+                      if item["category"] == category and item["draft"]["mode"] == mode]
+            assert actual == [(row[0], row[description_index]) for row in approved]
+
+
+def test_scene_variations_are_isolated_bilingual_relative_options() -> None:
+    scenes = [item for item in catalogue()["templates"] if item.get("reusable")]
+    for mode in ("image", "reels"):
+        signatures = [item["draft"]["fields"]["style"]["en"] for item in scenes
+                      if item["draft"]["mode"] == mode]
+        assert len(signatures) == len(set(signatures)) == 149
+    sizes = {"style": 1, "time": 1, "camera": 1, "shot": 4, "angle": 3, "lighting": 3}
+    for item in scenes:
+        pools = item["variation_options"]
+        assert set(pools) == sizes.keys()
+        assert item["draft"]["locks"] == []
+        for key, size in sizes.items():
+            assert len(pools[key]) == size
+            assert pools[key][0] == {"ru": "", "en": ""}
+            assert len({(pair["ru"], pair["en"]) for pair in pools[key]}) == size
+            for pair in pools[key][1:]:
+                assert set(pair) == {"ru", "en"}
+                assert all(pair[language].startswith(", ") and len(pair[language].split()) >= 3
+                           for language in ("ru", "en"))
+        pools["style"][0]["en"] = "tampered"
+        assert pools["camera"][0]["en"] == ""
+        assert catalogue()["templates"][-1]["variation_options"]["style"][0]["en"] == ""
+        assert apply_template(item["id"])["fields"]["style"] == item["draft"]["fields"]["style"]
+
+
+def test_image_scenes_capture_actions_without_video_camera_movement() -> None:
+    for item in catalogue()["templates"]:
+        if not item.get("reusable") or item["draft"]["mode"] != "image":
+            continue
+        fields = item["draft"]["fields"]
+        video_fields = apply_template(item["id"].removesuffix("image") + "reels")["fields"]
+        assert fields["action"] != video_fields["action"]
+        assert fields["action"]["ru"] and fields["action"]["en"]
+        assert "duration" not in fields
+        assert all(word not in fields["camera"]["en"] for word in ("moves", "tracks", "pans", "approaches"))
+        for variant in generate_variants(item["draft"])["variants"]:
+            assert fields["action"]["ru"] in variant["ru"]
+            assert fields["action"]["en"] in variant["en"]
+    expectations = {
+        "scene_products_on_person_image": "a person",
+        "scene_products_ugc_hands_image": "hands",
+        "scene_products_ugc_unboxing_image": "packaging open",
+        "scene_food_preparation_image": "stirring movement",
+    }
+    for identifier, expected in expectations.items():
+        assert expected in apply_template(identifier)["fields"]["action"]["en"]
 
 
 def test_blank_start_and_every_template_produce_seven_offline_pairs() -> None:

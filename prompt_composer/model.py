@@ -13,6 +13,7 @@ FIELD_KEYS = (
     "surface", "style", "lighting", "time", "camera", "shot", "angle",
     "action", "duration", "aspect", "exclusions",
 )
+FIELD_TEXT_LIMIT = 600
 MODES = ("image", "reels")
 SUBJECT_TYPES = ("person", "character", "animal", "product", "object", "place")
 _DRAFT_KEYS = {
@@ -67,8 +68,8 @@ def validate_draft(draft: dict) -> dict:
     for key, pair in draft["fields"].items():
         if key not in FIELD_KEYS or not isinstance(pair, dict) or set(pair) != {"ru", "en"}:
             raise ValueError(f"Invalid bilingual field: {key}")
-        _text(pair["ru"], f"fields.{key}.ru", 600)
-        _text(pair["en"], f"fields.{key}.en", 600)
+        _text(pair["ru"], f"fields.{key}.ru", FIELD_TEXT_LIMIT)
+        _text(pair["en"], f"fields.{key}.en", FIELD_TEXT_LIMIT)
     locks = draft["locks"]
     if not isinstance(locks, list) or len(locks) != len(set(map(str, locks))):
         raise ValueError("locks must be a list of unique fields")

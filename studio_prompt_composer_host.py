@@ -10,6 +10,7 @@ from studio_prompt_composer_ai import MAX_OUTPUT_TOKENS, perform_request, reques
 from studio_prompt_composer_storage import PromptLibrary
 from studio_prompt_composer_api import COMPOSER_TEXT_MODELS, resolve_composer_model
 from studio_text_pricing import fetch_text_tariff
+from studio_text_errors import ComposerAIError
 
 MODULE_ID = 'prompt-composer'
 
@@ -36,6 +37,8 @@ class ComposerJob(QObject):
         try:
             if not self._cancelled.is_set():
                 result = self._work(self._cancelled.is_set)
+        except ComposerAIError as exc:
+            error = str(exc)
         except Exception:
             # Provider/network exceptions may embed authorization headers or URLs.
             error = 'Не удалось завершить запрос. Если он был отправлен, возможно списание. Черновик сохранён; автоматического повтора нет.'
@@ -72,7 +75,7 @@ class _Quote:
 class PromptComposerHost:
     can_handoff = False
 
-    def __init__(self, root, *, settings_provider, authorize, runtime=None, authorize_request=None, tariff=fetch_text_tariff, transport=None, kernel=None):
+    def __init__(self, root, *, settings_provider, authorize, runtime=None, authorize_request=None, tariff=fetch_text_tariff, transport=None, kernel=None, diagnostic_journal=None):
         if kernel is None:
             # Local source tests may construct the host without a signed runtime.
             from prompt_composer import catalog, engine, model
@@ -91,6 +94,7 @@ class PromptComposerHost:
         self._transport = transport or (lambda *args, **kwargs: perform_request(*args, kernel=self._kernel, **kwargs))
         self._quotes, self._jobs = {}, set()
         self._closed = False
+        self._diagnostic_journal = diagnostic_journal
 
     def _check(self):
         if self._closed:
@@ -193,6 +197,28 @@ class PromptComposerHost:
             raise ValueError('Подтверждение устарело; запросите новую оценку')
         if self._authorize() is not True:
             raise ValueError('Нет доступа к модулю')
+        correlation = uuid.uuid4().hex
+
+        def record(event, outcome, error=None):
+            if self._diagnostic_journal is None:
+                return
+            details = {'provider': private.provider, 'model': private.model,
+                       'operation_type': private.operation, 'correlation_id': correlation}
+            if error is not None:
+                details['error_code'] = error.code if isinstance(error, ComposerAIError) else 'unexpected'
+                if isinstance(error, ComposerAIError):
+                    if error.http_status is not None:
+                        details['http_status'] = error.http_status
+                    if error.provider_code is not None:
+                        details['reason'] = str(error.provider_code)
+            try:
+                self._diagnostic_journal.record(event, 'AI-запрос конструктора: ' + outcome,
+                    operation_id=correlation, screen=MODULE_ID, outcome=outcome,
+                    severity='error' if error is not None else 'info', details=details)
+            except Exception:
+                # Diagnostics must neither interrupt a paid call nor leak its data.
+                pass
+
         def work(cancelled):
             if cancelled():
                 return None
@@ -200,9 +226,16 @@ class PromptComposerHost:
                 raise ValueError('Нет доступа к модулю')
             if cancelled():
                 return None
-            return self._transport(private.snapshot, provider=private.provider, model=private.model,
-                                   api_key=private.api_key, operation=private.operation, text=private.text,
-                                   target=private.target, cancelled=cancelled)
+            record('composer_ai_started', 'started')
+            try:
+                result = self._transport(private.snapshot, provider=private.provider, model=private.model,
+                    api_key=private.api_key, operation=private.operation, text=private.text,
+                    target=private.target, cancelled=cancelled)
+            except Exception as error:
+                record('composer_ai_failed', 'cancelled' if cancelled() else 'failed', error)
+                raise
+            record('composer_ai_finished', 'cancelled' if cancelled() else 'completed')
+            return result
         return self._job(work, on_done, on_error)
 
     def close(self):

@@ -1,0 +1,133 @@
+{
+  "environment": "Linux Qt offscreen 1120x780",
+  "states": [
+    {
+      "path": "template",
+      "mode": "image",
+      "bounds": {
+        "start_template": [
+          366,
+          200,
+          190,
+          38
+        ],
+        "start_custom": [
+          564,
+          200,
+          190,
+          38
+        ],
+        "mode_image": [
+          366,
+          246,
+          190,
+          38
+        ],
+        "mode_reels": [
+          564,
+          246,
+          190,
+          38
+        ]
+      },
+      "aligned": true,
+      "screenshot": "actual-aligned-start-template-image-20261008.png"
+    },
+    {
+      "path": "template",
+      "mode": "reels",
+      "bounds": {
+        "start_template": [
+          366,
+          200,
+          190,
+          38
+        ],
+        "start_custom": [
+          564,
+          200,
+          190,
+          38
+        ],
+        "mode_image": [
+          366,
+          246,
+          190,
+          38
+        ],
+        "mode_reels": [
+          564,
+          246,
+          190,
+          38
+        ]
+      },
+      "aligned": true,
+      "screenshot": "actual-aligned-start-template-reels-20261008.png"
+    },
+    {
+      "path": "custom",
+      "mode": "image",
+      "bounds": {
+        "start_template": [
+          366,
+          200,
+          190,
+          38
+        ],
+        "start_custom": [
+          564,
+          200,
+          190,
+          38
+        ],
+        "mode_image": [
+          366,
+          246,
+          190,
+          38
+        ],
+        "mode_reels": [
+          564,
+          246,
+          190,
+          38
+        ]
+      },
+      "aligned": true,
+      "screenshot": "actual-aligned-start-custom-image-20261008.png"
+    },
+    {
+      "path": "custom",
+      "mode": "reels",
+      "bounds": {
+        "start_template": [
+          366,
+          200,
+          190,
+          38
+        ],
+        "start_custom": [
+          564,
+          200,
+          190,
+          38
+        ],
+        "mode_image": [
+          366,
+          246,
+          190,
+          38
+        ],
+        "mode_reels": [
+          564,
+          246,
+          190,
+          38
+        ]
+      },
+      "aligned": true,
+      "screenshot": "actual-aligned-start-custom-reels-20261008.png"
+    }
+  ]
+}

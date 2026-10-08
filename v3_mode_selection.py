@@ -825,7 +825,7 @@ class V3ApplicationView(QWidget):
                     Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)))
             host = PromptComposerHost(root / "prompt_composer", settings_provider=self._composer_settings,
                 authorize=self._composer_allowed, authorize_request=self._composer_authorize_request,
-                runtime=runtime, kernel=kernel)
+                runtime=runtime, kernel=kernel, diagnostic_journal=self._diagnostic_journal)
             handle = runtime.create_page("prompt-composer", "main", host)
             self._composer_page_handle = handle
             page = handle.value

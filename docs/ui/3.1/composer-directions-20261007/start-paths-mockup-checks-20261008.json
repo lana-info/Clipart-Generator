@@ -1,0 +1,24 @@
+{
+  "mockup_only": true,
+  "network_requests": 0,
+  "states": [
+    {
+      "route": "template",
+      "cards": 6,
+      "next_label": "Далее",
+      "size": [
+        1120,
+        780
+      ]
+    },
+    {
+      "route": "custom",
+      "cards": 0,
+      "next_label": "Далее",
+      "size": [
+        1120,
+        780
+      ]
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "network_requests": 0,
+  "paid_requests": 0,
+  "size": [
+    1120,
+    780
+  ],
+  "states": [
+    {
+      "category": "people",
+      "mode": "image",
+      "cards": 6,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "products",
+      "mode": "image",
+      "cards": 6,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "food",
+      "mode": "image",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "spaces",
+      "mode": "image",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "animals",
+      "mode": "image",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "nature",
+      "mode": "image",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "people",
+      "mode": "reels",
+      "cards": 6,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "products",
+      "mode": "reels",
+      "cards": 6,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "food",
+      "mode": "reels",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "spaces",
+      "mode": "reels",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "animals",
+      "mode": "reels",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    },
+    {
+      "category": "nature",
+      "mode": "reels",
+      "cards": 3,
+      "all_cards_above_footer": true,
+      "tabs_centered": true
+    }
+  ],
+  "library_captured": true,
+  "custom_product_preserved": true
+}

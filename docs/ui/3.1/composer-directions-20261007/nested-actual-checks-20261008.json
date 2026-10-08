@@ -1,0 +1,3478 @@
+{
+  "environment": "Linux PyQt6 offscreen, real implementation, no monkeypatches",
+  "size": [
+    1120,
+    780
+  ],
+  "network_requests": 0,
+  "states": [
+    {
+      "name": "people-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "portrait",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "fashion",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "editorial",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "beauty",
+          "rect": [
+            19,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "lifestyle",
+          "rect": [
+            383,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "ugc",
+          "rect": [
+            747,
+            573,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-image-20261008.png"
+    },
+    {
+      "name": "people-portrait-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_portrait_people_portrait_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-portrait-image-20261008.png"
+    },
+    {
+      "name": "people-fashion-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_fashion_people_fashion_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-fashion-image-20261008.png"
+    },
+    {
+      "name": "people-editorial-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_editorial_people_editorial_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-editorial-image-20261008.png"
+    },
+    {
+      "name": "people-beauty-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_beauty_people_beauty_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-beauty-image-20261008.png"
+    },
+    {
+      "name": "people-lifestyle-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-lifestyle-image-20261008.png"
+    },
+    {
+      "name": "people-lifestyle-image-selected",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-lifestyle-image-selected-20261008.png"
+    },
+    {
+      "name": "people-ugc-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_ugc_people_ugc_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-ugc-image-20261008.png"
+    },
+    {
+      "name": "products-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "catalogue",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "composition",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "on_person",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "lifestyle",
+          "rect": [
+            19,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "ugc",
+          "rect": [
+            383,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "handmade",
+          "rect": [
+            747,
+            573,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-image-20261008.png"
+    },
+    {
+      "name": "products-catalogue-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-catalogue-image-20261008.png"
+    },
+    {
+      "name": "products-catalogue-image-selected",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-catalogue-image-selected-20261008.png"
+    },
+    {
+      "name": "products-composition-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_composition_products_composition_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-composition-image-20261008.png"
+    },
+    {
+      "name": "products-on_person-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_on_person_products_on_person_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-on_person-image-20261008.png"
+    },
+    {
+      "name": "products-lifestyle-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-lifestyle-image-20261008.png"
+    },
+    {
+      "name": "products-ugc-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_ugc_products_ugc_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-ugc-image-20261008.png"
+    },
+    {
+      "name": "products-ugc-image-selected",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_ugc_products_ugc_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-ugc-image-selected-20261008.png"
+    },
+    {
+      "name": "products-handmade-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_handmade_products_handmade_01_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_02_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_03_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_04_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_05_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-handmade-image-20261008.png"
+    },
+    {
+      "name": "food-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "menu",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "serving",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "cooking",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "ugc",
+          "rect": [
+            19,
+            573,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-image-20261008.png"
+    },
+    {
+      "name": "food-menu-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_menu_menu_complete_serving_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_texture_closeup_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_drink_pairing_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_fresh_ingredients_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_shared_table_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-menu-image-20261008.png"
+    },
+    {
+      "name": "food-serving-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_serving_serving_place_setting_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_gentle_gesture_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_home_table_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_shared_portions_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_warm_toast_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-serving-image-20261008.png"
+    },
+    {
+      "name": "food-cooking-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_cooking_cooking_prep_surface_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_mix_bowl_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_add_ingredient_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_final_touch_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_finished_result_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-cooking-image-20261008.png"
+    },
+    {
+      "name": "food-ugc-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_ugc_ugc_first_taste_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_hands_serve_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_home_cooking_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_dish_detail_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_two_dishes_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-ugc-image-20261008.png"
+    },
+    {
+      "name": "spaces-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "interior",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "architecture",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "atmosphere",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-image-20261008.png"
+    },
+    {
+      "name": "spaces-interior-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_spaces_v2_interior_interior_room_overview_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_functional_zone_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_entry_view_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_quiet_corner_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_material_detail_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-interior-image-20261008.png"
+    },
+    {
+      "name": "spaces-architecture-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_spaces_v2_architecture_architecture_facade_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_entrance_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_angle_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_surroundings_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_detail_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-architecture-image-20261008.png"
+    },
+    {
+      "name": "spaces-atmosphere-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_window_light_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_surface_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_geometry_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_evening_room_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_quiet_pause_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-atmosphere-image-20261008.png"
+    },
+    {
+      "name": "animals-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "portrait",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "everyday",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "story",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-image-20261008.png"
+    },
+    {
+      "name": "animals-portrait-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_animals_v2_portrait_animal_face_portrait_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_profile_portrait_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_full_body_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_character_expression_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_portrait_surroundings_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-portrait-image-20261008.png"
+    },
+    {
+      "name": "animals-everyday-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_animals_v2_everyday_animal_resting_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_window_watch_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_companion_moment_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_familiar_place_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_nearby_exploration_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-everyday-image-20261008.png"
+    },
+    {
+      "name": "animals-story-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_animals_v2_story_animal_toy_focus_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_new_discovery_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_short_approach_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_meet_companion_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_settle_after_play_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-story-image-20261008.png"
+    },
+    {
+      "name": "nature-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "landscape",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "travel",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "detail",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-image-20261008.png"
+    },
+    {
+      "name": "nature-landscape-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_nature_v2_landscape_landscape_wide_horizon_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_reflection_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_foreground_depth_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_natural_light_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_layered_view_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-landscape-image-20261008.png"
+    },
+    {
+      "name": "nature-travel-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_nature_v2_travel_travel_local_street_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_viewpoint_pause_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_first_person_path_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_place_detail_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_arrival_moment_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-travel-image-20261008.png"
+    },
+    {
+      "name": "nature-detail-image",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_nature_v2_detail_nature_leaf_detail_image",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_water_detail_image",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_texture_detail_image",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_detail_light_image",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_small_discovery_image",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-detail-image-20261008.png"
+    },
+    {
+      "name": "custom-image",
+      "scroll_max": 0,
+      "cards": [],
+      "file": "actual-nested-custom-image-20261008.png"
+    },
+    {
+      "name": "people-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "portrait",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "fashion",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "editorial",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "beauty",
+          "rect": [
+            19,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "lifestyle",
+          "rect": [
+            383,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "ugc",
+          "rect": [
+            747,
+            573,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-reels-20261008.png"
+    },
+    {
+      "name": "people-portrait-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_portrait_people_portrait_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_portrait_people_portrait_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-portrait-reels-20261008.png"
+    },
+    {
+      "name": "people-fashion-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_fashion_people_fashion_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_fashion_people_fashion_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-fashion-reels-20261008.png"
+    },
+    {
+      "name": "people-editorial-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_editorial_people_editorial_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_editorial_people_editorial_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-editorial-reels-20261008.png"
+    },
+    {
+      "name": "people-beauty-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_beauty_people_beauty_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_beauty_people_beauty_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-beauty-reels-20261008.png"
+    },
+    {
+      "name": "people-lifestyle-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-lifestyle-reels-20261008.png"
+    },
+    {
+      "name": "people-lifestyle-reels-selected",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_lifestyle_people_lifestyle_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-lifestyle-reels-selected-20261008.png"
+    },
+    {
+      "name": "people-ugc-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_people_v2_ugc_people_ugc_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_people_v2_ugc_people_ugc_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-people-ugc-reels-20261008.png"
+    },
+    {
+      "name": "products-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "catalogue",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "composition",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "on_person",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "lifestyle",
+          "rect": [
+            19,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "ugc",
+          "rect": [
+            383,
+            573,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "handmade",
+          "rect": [
+            747,
+            573,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-reels-20261008.png"
+    },
+    {
+      "name": "products-catalogue-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-catalogue-reels-20261008.png"
+    },
+    {
+      "name": "products-catalogue-reels-selected",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_catalogue_products_catalogue_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-catalogue-reels-selected-20261008.png"
+    },
+    {
+      "name": "products-composition-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_composition_products_composition_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_composition_products_composition_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-composition-reels-20261008.png"
+    },
+    {
+      "name": "products-on_person-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_on_person_products_on_person_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_on_person_products_on_person_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-on_person-reels-20261008.png"
+    },
+    {
+      "name": "products-lifestyle-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_lifestyle_products_lifestyle_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-lifestyle-reels-20261008.png"
+    },
+    {
+      "name": "products-ugc-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_ugc_products_ugc_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-ugc-reels-20261008.png"
+    },
+    {
+      "name": "products-ugc-reels-selected",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_ugc_products_ugc_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_ugc_products_ugc_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-ugc-reels-selected-20261008.png"
+    },
+    {
+      "name": "products-handmade-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_products_v2_handmade_products_handmade_01_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_02_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_03_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_04_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_products_v2_handmade_products_handmade_05_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-products-handmade-reels-20261008.png"
+    },
+    {
+      "name": "food-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "menu",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "serving",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "cooking",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "ugc",
+          "rect": [
+            19,
+            573,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-reels-20261008.png"
+    },
+    {
+      "name": "food-menu-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_menu_menu_complete_serving_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_texture_closeup_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_drink_pairing_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_fresh_ingredients_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_menu_menu_shared_table_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-menu-reels-20261008.png"
+    },
+    {
+      "name": "food-serving-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_serving_serving_place_setting_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_gentle_gesture_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_home_table_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_shared_portions_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_serving_serving_warm_toast_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-serving-reels-20261008.png"
+    },
+    {
+      "name": "food-cooking-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_cooking_cooking_prep_surface_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_mix_bowl_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_add_ingredient_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_final_touch_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_cooking_cooking_finished_result_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-cooking-reels-20261008.png"
+    },
+    {
+      "name": "food-ugc-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_food_v2_ugc_ugc_first_taste_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_hands_serve_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_home_cooking_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_dish_detail_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_food_v2_ugc_ugc_two_dishes_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-food-ugc-reels-20261008.png"
+    },
+    {
+      "name": "spaces-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "interior",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "architecture",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "atmosphere",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-reels-20261008.png"
+    },
+    {
+      "name": "spaces-interior-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_spaces_v2_interior_interior_room_overview_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_functional_zone_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_entry_view_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_quiet_corner_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_interior_interior_material_detail_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-interior-reels-20261008.png"
+    },
+    {
+      "name": "spaces-architecture-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_spaces_v2_architecture_architecture_facade_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_entrance_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_angle_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_surroundings_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_architecture_architecture_detail_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-architecture-reels-20261008.png"
+    },
+    {
+      "name": "spaces-atmosphere-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_window_light_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_surface_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_geometry_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_evening_room_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_spaces_v2_atmosphere_atmosphere_quiet_pause_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-spaces-atmosphere-reels-20261008.png"
+    },
+    {
+      "name": "animals-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "portrait",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "everyday",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "story",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-reels-20261008.png"
+    },
+    {
+      "name": "animals-portrait-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_animals_v2_portrait_animal_face_portrait_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_profile_portrait_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_full_body_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_character_expression_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_portrait_animal_portrait_surroundings_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-portrait-reels-20261008.png"
+    },
+    {
+      "name": "animals-everyday-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_animals_v2_everyday_animal_resting_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_window_watch_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_companion_moment_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_familiar_place_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_everyday_animal_nearby_exploration_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-everyday-reels-20261008.png"
+    },
+    {
+      "name": "animals-story-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_animals_v2_story_animal_toy_focus_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_new_discovery_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_short_approach_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_meet_companion_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_animals_v2_story_animal_settle_after_play_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-animals-story-reels-20261008.png"
+    },
+    {
+      "name": "nature-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "landscape",
+          "rect": [
+            19,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "travel",
+          "rect": [
+            383,
+            455,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "detail",
+          "rect": [
+            747,
+            455,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-reels-20261008.png"
+    },
+    {
+      "name": "nature-landscape-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_nature_v2_landscape_landscape_wide_horizon_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_reflection_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_foreground_depth_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_natural_light_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_landscape_landscape_layered_view_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-landscape-reels-20261008.png"
+    },
+    {
+      "name": "nature-travel-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_nature_v2_travel_travel_local_street_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_viewpoint_pause_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_first_person_path_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_place_detail_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_travel_travel_arrival_moment_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-travel-reels-20261008.png"
+    },
+    {
+      "name": "nature-detail-reels",
+      "scroll_max": 0,
+      "cards": [
+        {
+          "id": "scene_nature_v2_detail_nature_leaf_detail_reels",
+          "rect": [
+            19,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_water_detail_reels",
+          "rect": [
+            383,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_texture_detail_reels",
+          "rect": [
+            747,
+            468,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_detail_light_reels",
+          "rect": [
+            19,
+            586,
+            354,
+            108
+          ]
+        },
+        {
+          "id": "scene_nature_v2_detail_nature_small_discovery_reels",
+          "rect": [
+            383,
+            586,
+            354,
+            108
+          ]
+        }
+      ],
+      "file": "actual-nested-nature-detail-reels-20261008.png"
+    },
+    {
+      "name": "custom-reels",
+      "scroll_max": 0,
+      "cards": [],
+      "file": "actual-nested-custom-reels-20261008.png"
+    }
+  ],
+  "summary": {
+    "categories": 6,
+    "directions": 25,
+    "scenarios_per_direction_per_mode": 5,
+    "direction_grids": 12,
+    "scenario_grids": 50,
+    "selected_grids": 6,
+    "custom_states": 2,
+    "draft_preserved_on_browse_select_back": true
+  }
+}

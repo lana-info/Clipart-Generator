@@ -1,0 +1,116 @@
+{
+  "environment": "Linux Qt offscreen 1120x780",
+  "checks": [
+    {
+      "tab": "composer",
+      "bounds": {
+        "composerTab": [
+          366,
+          115,
+          190,
+          38
+        ],
+        "libraryTab": [
+          564,
+          115,
+          190,
+          38
+        ],
+        "start_template": [
+          366,
+          208,
+          190,
+          38
+        ],
+        "start_custom": [
+          564,
+          208,
+          190,
+          38
+        ],
+        "mode_image": [
+          366,
+          254,
+          190,
+          38
+        ],
+        "mode_reels": [
+          564,
+          254,
+          190,
+          38
+        ]
+      },
+      "size_equal": true,
+      "columns_aligned": true,
+      "click_navigation": true,
+      "screenshot": "actual-equal-tabs-composer-20261008.png"
+    },
+    {
+      "tab": "library",
+      "bounds": {
+        "composerTab": [
+          366,
+          115,
+          190,
+          38
+        ],
+        "libraryTab": [
+          564,
+          115,
+          190,
+          38
+        ]
+      },
+      "size_equal": true,
+      "columns_aligned": true,
+      "click_navigation": true,
+      "screenshot": "actual-equal-tabs-library-20261008.png"
+    },
+    {
+      "tab": "composer",
+      "bounds": {
+        "composerTab": [
+          366,
+          115,
+          190,
+          38
+        ],
+        "libraryTab": [
+          564,
+          115,
+          190,
+          38
+        ],
+        "start_template": [
+          366,
+          208,
+          190,
+          38
+        ],
+        "start_custom": [
+          564,
+          208,
+          190,
+          38
+        ],
+        "mode_image": [
+          366,
+          254,
+          190,
+          38
+        ],
+        "mode_reels": [
+          564,
+          254,
+          190,
+          38
+        ]
+      },
+      "size_equal": true,
+      "columns_aligned": true,
+      "click_navigation": true,
+      "screenshot": "actual-equal-tabs-composer-20261008.png"
+    }
+  ]
+}

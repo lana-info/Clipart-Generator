@@ -1,0 +1,96 @@
+{
+  "size": [
+    1120,
+    780
+  ],
+  "network_requests": 0,
+  "states": [
+    {
+      "category": "people",
+      "mode": "image",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "products",
+      "mode": "image",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "food",
+      "mode": "image",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "spaces",
+      "mode": "image",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "animals",
+      "mode": "image",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "nature",
+      "mode": "image",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "people",
+      "mode": "reels",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "products",
+      "mode": "reels",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "food",
+      "mode": "reels",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "spaces",
+      "mode": "reels",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "animals",
+      "mode": "reels",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    },
+    {
+      "category": "nature",
+      "mode": "reels",
+      "groups_separated": true,
+      "duplicates_removed": true,
+      "cards_visible": true
+    }
+  ],
+  "independent_setup_preserves_draft": true,
+  "back_and_next_labels_correct": true,
+  "upper_library_button_works": true
+}

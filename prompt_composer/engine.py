@@ -6,7 +6,7 @@ from math import gcd, prod
 import re
 
 from .catalog import catalogue
-from .model import validate_draft
+from .model import FIELD_TEXT_LIMIT, validate_draft
 
 _VARIABLE_KEYS = ("style", "lighting", "time", "camera", "shot", "angle")
 _ORDER = (
@@ -77,18 +77,42 @@ def _scene_issue(snapshot: dict) -> tuple[str | None, list[str]]:
 
 
 def _choice_sets(snapshot: dict, clauses: list[tuple[str, frozenset[str]]]) -> tuple[list[tuple[str, list[dict]]], str | None]:
-    options = catalogue()["options"]
+    catalog = catalogue()
+    options = catalog["options"]
+    # Scene style is stable across relative variations and survives save/rename.
+    # Ambiguous or edited styles use the existing general-purpose choice pools.
+    scenes = [template for template in catalog["templates"]
+              if template.get("reusable") and template["draft"]["mode"] == snapshot["mode"]
+              and template["draft"]["fields"].get("style") == snapshot["fields"].get("style")]
+    scene_options = scenes[0].get("variation_options") if len(scenes) == 1 else None
     choices = []
     for key in _VARIABLE_KEYS:
         if key in snapshot["locks"]:
             continue
         current = snapshot["fields"].get(key, {"ru": "", "en": ""})
-        pool = ([current] if current["ru"].strip() or current["en"].strip() else []) + [
-            {"ru": item["ru"], "en": item["en"]} for item in options[key]
-        ]
+        if scene_options is not None:
+            base = current.copy()
+            # A saved variant may already contain one relative adjustment.
+            # Replace only known, paired RU/EN terminal adjustments, not user text.
+            while True:
+                previous = next((suffix for suffix in scene_options[key]
+                                 if all(suffix[language] and base[language].endswith(suffix[language])
+                                        for language in ("ru", "en"))), None)
+                if previous is None:
+                    break
+                base = {language: base[language][:-len(previous[language])] for language in ("ru", "en")}
+            pool = [current] + [{language: base[language] + suffix[language] for language in ("ru", "en")}
+                    for suffix in scene_options[key]
+                    if not any(suffix.values()) or all(base[language].strip() for language in ("ru", "en"))]
+        else:
+            pool = ([current] if current["ru"].strip() or current["en"].strip() else []) + [
+                {"ru": item["ru"], "en": item["en"]} for item in options[key]
+            ]
         unique = []
         seen = set()
         for pair in pool:
+            if any(len(pair[language]) > FIELD_TEXT_LIMIT for language in ("ru", "en")):
+                continue
             semantic = (_normalized(pair["ru"]), _normalized(pair["en"]))
             if semantic in seen:
                 continue

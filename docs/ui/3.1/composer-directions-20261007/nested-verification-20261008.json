@@ -1,0 +1,47 @@
+{
+  "task": "nested-directions-20261008",
+  "test_command": "QT_QPA_PLATFORM=offscreen PYTHONDONTWRITEBYTECODE=1 /tmp/vibix32-venv/bin/python -B -m pytest -q -p no:cacheprovider tests/test_prompt_composer*.py tests/test_composer_ai_failure_diagnostics.py tests/test_diagnostics.py tests/test_v3_diagnostics.py tests/test_studio_shell_packaging.py",
+  "tests": {
+    "passed": 501,
+    "subtests_passed": 2,
+    "seconds": 69.96,
+    "exit_code": 0
+  },
+  "actual_ui": {
+    "file": "nested-actual-checks-20261008.json",
+    "states": 70,
+    "size": [
+      1120,
+      780
+    ],
+    "no_scroll": true
+  },
+  "legacy_compatibility": {
+    "recipes": 69,
+    "hash_fixture": "legacy-recipe-sha256-before-nesting.json",
+    "exact_payloads": true
+  },
+  "semantic_review": {
+    "findings": 4,
+    "open": 0,
+    "repeat_review": "All four closed; no significant new contradictions"
+  },
+  "ui_state_package_review": {
+    "open_findings": 0,
+    "targeted_tests_passed": 33,
+    "scope": [
+      "nested navigation",
+      "pending/applied reset",
+      "manual guards",
+      "new/load/AI reset",
+      "signed runtime",
+      "frozen shell boundary"
+    ]
+  },
+  "not_run": [
+    "Windows build/install",
+    "real image/video generation",
+    "paid API requests",
+    "commit/push/publication"
+  ]
+}

@@ -2,7 +2,7 @@
 import json
 from dataclasses import dataclass
 
-from studio_text_errors import TextGenerationError
+from studio_text_errors import TextGenerationError, ComposerAIError, composer_error_code
 
 
 @dataclass(frozen=True)
@@ -40,19 +40,35 @@ def resolve_composer_model(provider, model):
 def parse_composer_response(data, provider):
     """Reject truncated, refused, tool-only and malformed JSON responses."""
     try:
+        if not isinstance(data, dict):
+            raise ValueError
+        # KIE documents business errors returned with HTTP 200.
+        if provider == 'kie' and 'code' in data and str(data['code']) != '200':
+            value = data['code']
+            code = int(value) if type(value) is int or (isinstance(value, str) and value.isdigit() and len(value) <= 6) else None
+            category = composer_error_code(code) if code in (401, 402, 403, 429) or (type(code) is int and 500 <= code <= 599) else 'provider_error'
+            raise ComposerAIError(category, http_status=200, provider_code=code)
         if 'choices' in data:
             choice = data['choices'][0]
             message = choice['message']
-            if choice['finish_reason'] != 'stop' or message.get('refusal') or message.get('tool_calls'):
+            if choice['finish_reason'] == 'length':
+                raise ComposerAIError('truncated', http_status=200)
+            if message.get('refusal') or message.get('tool_calls') or choice['finish_reason'] == 'content_filter':
+                raise ComposerAIError('refused', http_status=200)
+            if choice['finish_reason'] != 'stop':
                 raise ValueError
             text = message['content']
         elif provider == 'kie':
             candidate = data['candidates'][0]
+            if candidate['finishReason'] == 'MAX_TOKENS':
+                raise ComposerAIError('truncated', http_status=200)
+            if candidate['finishReason'] in ('SAFETY', 'RECITATION'):
+                raise ComposerAIError('refused', http_status=200)
             if candidate['finishReason'] != 'STOP':
                 raise ValueError
             parts = candidate['content']['parts']
             if any('functionCall' in part for part in parts):
-                raise ValueError
+                raise ComposerAIError('refused', http_status=200)
             text = ''.join(part['text'] for part in parts
                            if not part.get('thought') and 'text' in part)
         else:
@@ -64,4 +80,4 @@ def parse_composer_response(data, provider):
             raise ValueError
         return result
     except (KeyError, IndexError, TypeError, ValueError, AttributeError):
-        raise TextGenerationError('Модель не вернула полный JSON-ответ. Набор не изменён.') from None
+        raise ComposerAIError('json', http_status=200) from None

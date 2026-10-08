@@ -1,0 +1,42 @@
+[
+  {
+    "state": "scene-image",
+    "size": [
+      1120,
+      780
+    ],
+    "pass": true
+  },
+  {
+    "state": "scene-reels",
+    "size": [
+      1120,
+      780
+    ],
+    "pass": true
+  },
+  {
+    "state": "templates-image",
+    "size": [
+      1120,
+      780
+    ],
+    "pass": true
+  },
+  {
+    "state": "templates-reels",
+    "size": [
+      1120,
+      780
+    ],
+    "pass": true
+  },
+  {
+    "state": "details",
+    "size": [
+      1120,
+      780
+    ],
+    "pass": true
+  }
+]

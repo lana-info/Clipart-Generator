@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import random
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QGuiApplication
@@ -21,12 +22,13 @@ FIELDS = {
     "color": "Цвет", "location": "Место", "surface": "Поверхность",
     "style": "Стиль", "lighting": "Освещение", "time": "Время",
     "camera": "Камера / движение", "shot": "Крупность", "angle": "Ракурс",
-    "action": "Действие", "duration": "Длительность", "aspect": "Формат",
+    "action": "Действие", "duration": "Длительность", "aspect": "Формат кадра",
     "exclusions": "Что исключить",
 }
-STEPS = ("Шаблон", "Кто / что в кадре", "Детали", "Сцена", "Готовые промпты")
+STEPS = ("Начало", "Кто / что в кадре", "Детали", "Сцена", "Готовые промпты")
 TYPES = ("person", "character", "animal", "product", "object", "place")
 TYPE_NAMES = ("Человек", "Персонаж", "Животное", "Товар", "Предмет", "Место")
+IDENTITY_FIELDS = frozenset({"subject", "appearance", "wardrobe", "material", "color"})
 
 
 def _button(label, slot, name=""):
@@ -71,6 +73,9 @@ class PromptComposerPage(QWidget):
         self._dirty = False
         self._step = 0
         self._tab = "composer"
+        self._template_category = "people"
+        self._template_placeholder = None
+        self._reset_start_path()
         self._variants = []
         self._variant_index = 0
         self._variant_edits = {}
@@ -104,15 +109,18 @@ class PromptComposerPage(QWidget):
         top.addStretch()
         top.addWidget(_button("Каталог Studio", self._request_back, "backButton"))
         top.addWidget(_button("Настройки AI", self.settings_requested.emit, "settingsButton"))
-        top.addWidget(_button("Отменить AI", self.cancel_ai, "cancelAiButton"))
         outer.addLayout(top)
         title = QLabel("Конструктор промптов")
         title.setStyleSheet("font-size:23px;font-weight:bold")
         outer.addWidget(title)
         outer.addWidget(QLabel("От идеи до готового текста. Сохраняйте удачные варианты и меняйте детали."))
         tabs = QHBoxLayout()
+        tabs.setSpacing(8)
         self.composer_tab = _button("Конструктор", lambda: self._show_tab("composer"), "composerTab")
         self.library_tab = _button("Сохранённые промпты", lambda: self._show_tab("library"), "libraryTab")
+        for button in (self.composer_tab, self.library_tab):
+            button.setFixedSize(190, 38)
+        tabs.addStretch()
         tabs.addWidget(self.composer_tab)
         tabs.addWidget(self.library_tab)
         tabs.addStretch()
@@ -161,6 +169,8 @@ class PromptComposerPage(QWidget):
             if not self._guard_manual_rebuild():
                 return
             self.draft.setdefault("fields", {})[key] = pair
+            if key in IDENTITY_FIELDS:
+                self._template_placeholder = None
             if not self.draft.get("manual_en") and not self.draft.get("manual_ru"):
                 self.draft["base_en"] = self.draft["base_ru"] = ""
             self.draft["selection_seed"] = 0
@@ -171,6 +181,8 @@ class PromptComposerPage(QWidget):
             if key in ("mode", "subject_type") and not self._guard_manual_rebuild():
                 return
             self.draft[key] = value
+            if key == "subject_type":
+                self._template_placeholder = None
             if key in ("mode", "subject_type", "locks"):
                 self.draft["selection_seed"] = 0
             self._set_dirty()
@@ -178,8 +190,12 @@ class PromptComposerPage(QWidget):
     def _set_mode(self, mode):
         if mode != self.draft.get("mode"):
             if not self._guard_manual_rebuild():
+                # Checkable buttons toggle before clicked; restore the draft's mode.
+                self._render()
                 return
             self._set_property("mode", mode)
+            self._pending_template_id = self._applied_template_id = None
+            self._template_direction = None
             if mode == "reels" and "aspect" not in self.draft.get("locks", []):
                 self._set_field("aspect", "9:16", "9:16")
             self._render()
@@ -297,6 +313,19 @@ class PromptComposerPage(QWidget):
         self._render()
 
     def goto_step(self, index):
+        if self._step == 0 and index != 0 and self._start_path == "template" and self._pending_template_id:
+            identifier = self._pending_template_id
+            templates = self._catalog.get("templates", [])
+            if isinstance(templates, dict):
+                templates = templates.values()
+            template = next((item for item in templates
+                             if item.get("id") == identifier and item["draft"]["mode"] == self.draft.get("mode")), None)
+            self._pending_template_id = None
+            if template is not None and not self.apply_template(template):
+                self._pending_template_id = identifier
+                return False
+            if template is not None and index == 1:
+                return True
         if self._step == 4 and index != 4 and not self._proposal and self._active_variant():
             cursor = self.draft.get("selection_seed", 0)
             self.draft = self._selected_draft()
@@ -340,9 +369,11 @@ class PromptComposerPage(QWidget):
                 self.footer.addWidget(_button("Ещё 7 вариантов", self.generate_local, "moreVariantsButton"))
                 self.footer.addWidget(_button("Предложить с AI…", self.request_ai_variants, "aiButton"))
             else:
-                self.footer.addWidget(_button("Назад" if self._step else "Сохранённые", self._previous_step, "previousButton"))
+                if self._step:
+                    self.footer.addWidget(_button("Назад", self._previous_step, "previousButton"))
                 self.footer.addStretch()
-                next_btn = _button("Получить 7 вариантов" if self._step == 3 else "Далее", self._next_step, "nextButton")
+                next_label = "Получить 7 вариантов" if self._step == 3 else "Далее"
+                next_btn = _button(next_label, self._next_step, "nextButton")
                 next_btn.setProperty("primary", True)
                 self.footer.addWidget(next_btn)
         layout.addStretch()
@@ -376,35 +407,165 @@ class PromptComposerPage(QWidget):
         return layout
 
     def _render_templates(self, outer):
-        row = QHBoxLayout()
-        row.addWidget(QLabel("С чего начнём? Выберите основу или соберите свою сцену."))
-        row.addStretch()
-        row.addWidget(_button("Начать с нуля", lambda: self.goto_step(1), "blankTemplateButton"))
-        outer.addLayout(row)
-        modes = QHBoxLayout()
-        for mode, label in (("image", "Изображение"), ("reels", "Reels · одна сцена")):
-            btn = _button(label, lambda checked=False, m=mode: self._set_mode(m))
-            if self.draft.get("mode") == mode:
-                btn.setStyleSheet("background:#146e70")
-            modes.addWidget(btn)
-        modes.addStretch()
-        outer.addLayout(modes)
-        grid = QGridLayout()
+        outer.setSpacing(8)
+        paths = QHBoxLayout()
+        paths.addStretch()
+        for key, label in (("template", "По шаблону"), ("custom", "Самостоятельно")):
+            selected = self._start_path == key
+            button = _button(("✓  " if selected else "") + label,
+                             lambda checked=False, path=key: self._set_start_path(path), "start_" + key)
+            button.setFixedWidth(190)
+            button.setMinimumHeight(38)
+            button.setCheckable(True)
+            button.setChecked(selected)
+            if selected:
+                button.setStyleSheet("background:#146e70;border-color:#29c9ba;font-weight:bold;")
+            paths.addWidget(button)
+        paths.addStretch()
+        outer.addLayout(paths)
+        self._mode_selector(outer)
+        if self._start_path == "custom":
+            panel = self._panel(outer, "Самостоятельная настройка")
+            panel.addWidget(QLabel("Героя, детали и сцену можно задать на следующих шагах."))
+            return
+        categories = self._catalog.get("categories", [])
+        if categories:
+            heading = QLabel("Тип")
+            heading.setObjectName("templateTypeHeading")
+            heading.setStyleSheet("font-size:14px;font-weight:bold;color:#a8c9c8;")
+            outer.addWidget(heading)
+            ids = {item["id"] for item in categories}
+            if self._template_category not in ids:
+                self._template_category = categories[0]["id"]
+            category_grid = QGridLayout()
+            category_grid.setSpacing(8)
+            for index, category in enumerate(categories):
+                selected = category["id"] == self._template_category
+                button = _button(("✓  " if selected else "") + category["label"],
+                    lambda checked=False, key=category["id"]: self._select_template_category(key),
+                    "category_" + category["id"])
+                button.setCheckable(True)
+                button.setChecked(selected)
+                button.setMinimumHeight(38)
+                if selected:
+                    button.setStyleSheet("background:#146e70;border-color:#29c9ba;font-weight:bold;")
+                category_grid.addWidget(button, index // 3, index % 3)
+            outer.addLayout(category_grid)
+            outer.addSpacing(4)
+            divider = QFrame()
+            divider.setObjectName("templateGroupsDivider")
+            divider.setFixedHeight(1)
+            divider.setStyleSheet("background:#3b5062;")
+            outer.addWidget(divider)
         templates = self._catalog.get("templates", [])
         if isinstance(templates, dict):
             templates = list(templates.values())
         templates = [t for t in templates if isinstance(t, dict) and t.get("mode", t.get("draft", {}).get("mode", self.draft.get("mode"))) == self.draft.get("mode")]
+        if categories:
+            templates = [t for t in templates if not t.get("legacy") and t.get("category") == self._template_category]
+        directions = [item for item in self._catalog.get("directions", [])
+                      if item.get("category") == self._template_category]
+        direction = next((item for item in directions if item["id"] == self._template_direction), None)
+        header = QHBoxLayout()
+        showing_directions = bool(directions) and direction is None
+        if showing_directions:
+            templates = directions
+            heading = QLabel("Направление")
+            heading.setObjectName("templateDirectionHeading")
+        else:
+            if direction:
+                back = _button("← Направления", lambda: self._select_template_direction(None), "directionsBack")
+                back.setFixedSize(150, 30)
+                header.addWidget(back)
+                templates = [t for t in templates if t.get("direction") == direction["id"]]
+            heading = QLabel("Сценарий" + (" · " + direction["label"] if direction else ""))
+            heading.setObjectName("templateScenarioHeading")
+        heading.setStyleSheet("font-size:14px;font-weight:bold;color:#a8c9c8;")
+        header.addWidget(heading)
+        header.addStretch()
+        outer.addLayout(header)
+        grid = QGridLayout()
+        grid.setSpacing(10)
         for index, template in enumerate(templates):
-            btn = _button(f"{template.get('label', template.get('id', 'Шаблон'))}\n{template.get('description', '')}",
-                          lambda checked=False, t=template: self.apply_template(t), f"template{index}")
-            btn.setMinimumHeight(75)
+            selected = not showing_directions and template.get("id") == (self._pending_template_id or self._applied_template_id)
+            name = f"direction{index}" if showing_directions else f"template{index}"
+            callback = (lambda checked=False, key=template["id"]: self._select_template_direction(key)) if showing_directions else (
+                lambda checked=False, t=template: self._select_start_template(t))
+            btn = _button("", callback, name)
+            if selected:
+                btn.setStyleSheet(f"QPushButton#{name} {{border:2px solid #29c9ba;background:#1b3d46;}}")
+            btn.setAccessibleName(template.get("label", "Шаблон"))
+            btn.setProperty("directionId" if showing_directions else "templateId", template.get("id", ""))
+            btn.setMinimumHeight(108)
+            card = QVBoxLayout(btn)
+            card.setContentsMargins(14, 12, 14, 12)
+            title = _label(("✓  " if selected else "") + template.get("label", template.get("id", "Шаблон")))
+            title.setStyleSheet("font-weight:bold;font-size:14px;background:transparent;")
+            description = _label(template.get("description", ""))
+            description.setStyleSheet("color:#b5c8d7;background:transparent;")
+            for label in (title, description):
+                label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                card.addWidget(label)
             grid.addWidget(btn, index // 3, index % 3)
         outer.addLayout(grid)
-        outer.addWidget(QLabel("Встроенные шаблоны работают локально и не расходуют AI-бюджет."))
+
+    def _select_template_category(self, category):
+        if category != self._template_category:
+            self._pending_template_id = None
+            self._template_direction = None
+        self._template_category = category
+        self._render()
+
+    def _reset_start_path(self, path="template"):
+        self._start_path = path
+        self._pending_template_id = self._applied_template_id = None
+        self._template_direction = None
+
+    def _set_start_path(self, path):
+        self._start_path = path
+        if path == "custom":
+            self._pending_template_id = None
+            self._template_direction = None
+        self._render()
+
+    def _select_template_direction(self, direction):
+        if direction is not None and not any(item.get("category") == self._template_category and item.get("id") == direction
+                                             for item in self._catalog.get("directions", [])):
+            return False
+        self._template_direction = direction
+        self._pending_template_id = None
+        self._render()
+        return True
+
+    def _select_start_template(self, template):
+        self._pending_template_id = template["id"]
+        self._render()
 
     def apply_template(self, template):
         replacement = deepcopy(template.get("draft", {}))
         locked = set(self.draft.get("locks", []))
+        custom_subject = True
+        if template.get("reusable"):
+            fields = self.draft.get("fields", {})
+            subject = fields.get("subject", {})
+            # A fresh draft's neutral placeholder is not a user-selected hero.
+            default_subject = {"ru": "предмет", "en": "object"}
+            current_type = self.draft.get("subject_type")
+            generated_placeholder = self._template_placeholder == (current_type, subject)
+            custom_subject = (subject != default_subject and not generated_placeholder and any(subject.get(lang, "").strip() for lang in ("ru", "en"))) or "subject" in locked or bool(self.draft.get("references"))
+            target_type = replacement.get("subject_type")
+            groups = ({"person", "character"}, {"product", "object"}, {"animal"}, {"place"})
+            if custom_subject and not any(current_type in group and target_type in group for group in groups):
+                self._show_message("Этот сценарий рассчитан на другой тип героя. Выберите подходящий раздел или начните новый промпт.")
+                return False
+            incoming = replacement.setdefault("fields", {})
+            for key in {"appearance", "wardrobe", "material", "color", "exclusions"} | locked | ({"subject"} if custom_subject else set()):
+                pair = fields.get(key)
+                if pair is not None and (key in locked or any(pair.get(lang, "").strip() for lang in ("ru", "en"))):
+                    incoming[key] = deepcopy(pair)
+            if custom_subject:
+                replacement["subject_type"] = current_type
+            replacement["profile_id"] = self.draft.get("profile_id")
         clashes = [key for key in locked if replacement.get("fields", {}).get(key) not in (None, self.draft.get("fields", {}).get(key))]
         if clashes:
             self._show_message("Шаблон конфликтует с закреплениями: " + ", ".join(FIELDS.get(k, k) for k in clashes))
@@ -420,6 +581,9 @@ class PromptComposerPage(QWidget):
         for key, value in replacement.items():
             if key not in ("revision", "schema_version", "catalog_version"):
                 self.draft[key] = value
+        self._template_placeholder = (self.draft.get("subject_type"), deepcopy(self.draft.get("fields", {}).get("subject", {}))) if template.get("reusable") and not custom_subject else None
+        self._pending_template_id = None
+        self._applied_template_id = template.get("id")
         self._set_dirty()
         self.goto_step(1)
         return True
@@ -456,7 +620,6 @@ class PromptComposerPage(QWidget):
             line.addWidget(QLabel("Референс: " + ("доступен" if available else "файл недоступен")))
             line.addWidget(_button("Удалить", lambda checked=False, h=handle: self._remove_reference(h)))
             panel.addLayout(line)
-        self._summary(outer)
 
     def _change_subject_type(self, kind):
         if kind != self.draft.get("subject_type"):
@@ -483,7 +646,10 @@ class PromptComposerPage(QWidget):
             combo.setCurrentIndex(selected)
         else:
             combo.setEditable(True)
-            combo.setCurrentText(pair.get("ru", ""))
+            combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+            combo.setCurrentIndex(-1)
+            combo.lineEdit().setPlaceholderText("Выберите или введите своё…")
+            combo.setEditText(pair.get("ru", ""))
         combo.currentIndexChanged.connect(lambda _=0, c=combo, k=key: self._select_option(k, c))
         if combo.isEditable():
             combo.lineEdit().editingFinished.connect(lambda c=combo, k=key: self._custom_field(k, c.currentText()))
@@ -539,51 +705,64 @@ class PromptComposerPage(QWidget):
 
     def _render_details(self, outer):
         panel = self._panel(outer, "Детали и атмосфера")
+        actions = QHBoxLayout()
+        actions.addStretch()
+        randomize = _button("Случайные параметры", self.randomize_unlocked, "randomizeButton")
+        randomize.setFixedWidth(320)
+        randomize.setMinimumHeight(40)
+        randomize.setStyleSheet(
+            "QPushButton { background:#20ae9e; color:#071b20; "
+            "border:1px solid #6df5e2; border-radius:6px; font-weight:700; }"
+            "QPushButton:hover { background:#36c4b3; }"
+            "QPushButton:pressed { background:#178f83; }"
+        )
+        actions.addWidget(randomize)
+        actions.addStretch()
+        panel.addLayout(actions)
         for key in ("location", "surface", "style", "lighting", "time"):
             self._field_editor(panel, key)
-        panel.addWidget(_button("Случайные параметры", self.randomize_unlocked, "randomizeButton"))
-        self._summary(outer)
 
     def randomize_unlocked(self):
         if not self._guard_manual_rebuild():
             return
-        seed = int(self.draft.get("selection_seed", 0))
-        for key, options in self._catalog.get("options", {}).items():
+        keys = ("location", "surface", "style", "lighting", "time")
+        keys += ("action", "camera", "duration", "aspect") if self.draft.get("mode") == "reels" else ("shot", "angle", "aspect")
+        for key in keys:
+            options = self._catalog.get("options", {}).get(key, [])
             if key in self.draft.get("locks", []) or not options:
                 continue
             current = self._field_pair(key)
             alternatives = [o for o in options if (o.get("ru"), o.get("en")) != (current.get("ru"), current.get("en"))]
             if alternatives:
-                option = alternatives[seed % len(alternatives)]
+                option = random.choice(alternatives)
                 self._set_field(key, option.get("ru", ""), option.get("en", ""))
-                seed += 1
         self._render()
 
-    def _render_scene(self, outer):
-        panel = self._panel(outer, "Одна сцена с действием" if self.draft.get("mode") == "reels" else "Постановка кадра")
+    def _mode_selector(self, outer):
         modes = QHBoxLayout()
-        for mode, label in (("image", "Изображение"), ("reels", "Reels")):
-            modes.addWidget(_button(label, lambda checked=False, m=mode: self._set_mode(m)))
         modes.addStretch()
-        panel.addLayout(modes)
+        for mode, label in (("image", "Изображение"), ("reels", "Рилс")):
+            button = _button(("✓  " if self.draft.get("mode") == mode else "") + label,
+                             lambda checked=False, m=mode: self._set_mode(m), f"mode_{mode}")
+            button.setFixedWidth(190)
+            button.setMinimumHeight(38)
+            button.setCheckable(True)
+            button.setAutoExclusive(True)
+            button.setChecked(self.draft.get("mode") == mode)
+            button.setStyleSheet(
+                "QPushButton { background:#25394a; color:#9aaebb; border:1px solid #496175; }"
+                "QPushButton:checked { background:#20ae9e; color:#071b22; border:1px solid #6df5e2; font-weight:bold; }"
+                "QPushButton:hover { border-color:#6df5e2; }"
+            )
+            modes.addWidget(button)
+        modes.addStretch()
+        outer.addLayout(modes)
+
+    def _render_scene(self, outer):
+        panel = self._panel(outer, "Сцена")
         keys = ("action", "camera", "duration", "aspect", "exclusions") if self.draft.get("mode") == "reels" else ("shot", "angle", "aspect", "exclusions")
         for key in keys:
             self._field_editor(panel, key)
-        panel.addWidget(QLabel("Здесь создаётся только текст. Reels описывает одно действие без смены сцен."))
-        self._summary(outer)
-
-    def _summary(self, outer):
-        frame = QFrame()
-        frame.setProperty("panel", True)
-        layout = QVBoxLayout(frame)
-        layout.addWidget(QLabel("Ваша сцена"))
-        for key in ("subject", "style", "location", "action" if self.draft.get("mode") == "reels" else "angle"):
-            value = self._field_pair(key).get("ru", "") or "Не задано"
-            layout.addWidget(QLabel(f"{FIELDS[key]}: {value}"))
-        if self.draft.get("locks"):
-            layout.addWidget(QLabel("Закреплено: " + ", ".join(FIELDS.get(k, k) for k in self.draft["locks"])))
-        layout.addWidget(QLabel("Референсы не отправляются AI-помощнику."))
-        outer.addWidget(frame)
 
     def _missing_translation(self):
         return [FIELDS.get(key, key) for key, pair in self.draft.get("fields", {}).items()
@@ -876,6 +1055,8 @@ class PromptComposerPage(QWidget):
             return False
         self.cancel_ai()
         self.draft = deepcopy(self.host.new_draft())
+        self._template_placeholder = None
+        self._reset_start_path()
         self._saved_record = None
         self._favorite = False
         self._variants = []
@@ -974,6 +1155,8 @@ class PromptComposerPage(QWidget):
             return False
         self.cancel_ai()
         self.draft = deepcopy(record["payload"])
+        self._template_placeholder = None
+        self._reset_start_path("custom")
         self._saved_record = deepcopy(record)
         self._favorite = bool(record.get("favorite"))
         self._dirty = False
@@ -1077,6 +1260,7 @@ class PromptComposerPage(QWidget):
         if not self._guard_manual_rebuild():
             return False
         self.draft["profile_id"] = record["id"]
+        self._template_placeholder = None
         self.draft["fields"].update(profile_fields)
         if snapshot.get("subject_type"):
             self.draft["subject_type"] = snapshot["subject_type"]
@@ -1204,7 +1388,7 @@ class PromptComposerPage(QWidget):
                 self._show_message("Черновик изменился до отправки. Повторите запрос для новых настроек.")
                 return
             self._ai_ticket = "submitting"
-            self.status.setText("AI-запрос выполняется. Отмена после отправки может не отменить списание.")
+            self.status.setText("AI-запрос выполняется…")
 
             def done(response):
                 if serial != self._ai_serial:
@@ -1294,6 +1478,8 @@ class PromptComposerPage(QWidget):
         if not variant:
             return False
         self.draft = deepcopy(variant.get("draft") or self._proposal["snapshot"])
+        self._template_placeholder = None
+        self._reset_start_path("custom")
         self.draft["base_en"] = variant.get("en", "")
         self.draft["base_ru"] = variant.get("ru", "")
         self.draft["manual_en"] = None
@@ -1315,6 +1501,8 @@ class PromptComposerPage(QWidget):
             return False
         variant = self._active_variant()
         self.draft = deepcopy(variant.get("draft") or self._proposal["snapshot"])
+        self._template_placeholder = None
+        self._reset_start_path("custom")
         self.draft["base_en"] = variant.get("en", "")
         self.draft["base_ru"] = variant.get("ru", "")
         self.draft["manual_en"] = None
