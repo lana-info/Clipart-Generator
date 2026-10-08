@@ -2301,3 +2301,18 @@ Evidence: docs/ui/3.1/composer-directions-20261007/aligned-start-checks-20261008
 build_windows(defaulttrue), чтобы не повторять незатронутую Windows-сборку.
 Источник приложения и подписанные payload не менялись. После новой проверки
 конфигурации выполняется native Mac build; результат в STATE.md.
+
+После исправления lipo native Mac run37722280070 SUCCESS (ARM/Intel). Оба готовых
+приложения и распакованные ZIP прошли frozen Core13/13; локальный audit ZIP CRC,
+SHA/provenance/version/Mach-O architecture PASS. Windows job113129760042 SUCCESS.
+GitHubPRIVATE подтверждён отдельно. Текущий итог публикации в STATE.md.
+
+## Beta3.2.17: сервер не разрешал Mac Intel, 2026-10-08
+
+До stage обнаружено: deployed Postgres create_release whitelist не включал
+macos-x64, хотя ZIP transport и клиент уже поддерживали Intel. Рабочих данных
+до исправления не меняли. Поддержка добавлена в отдельной server branch81e5003,
+Memory/Postgres и admin ZIP selector. Полные215tests на отдельной PostgreSQL и
+Chrome6states PASS; read-only review без findings; offline образ развёрнут с
+backup/rollback, без migrations/изменения прав/config/key. Подробная история
+в ../license-macos-beta-worktree/docs/ERRORS.md, текущий статус в STATE.md.

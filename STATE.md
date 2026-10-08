@@ -1,30 +1,36 @@
 ## Выпуск Studio 3.2.17 и конструктора 1.5.5, 2026-10-08
 
-Владелец поручил «сделай» после перечисления commit/push/Windows build/publication
-и реального запроса KIE. Затем отдельно поручены macOS-сборки и размещение
-всего комплекта в beta. Подтверждена исходная опубликованная бета Studio3.2.16,
-Composer1.5.4, остальные пять модулей1.5.3. Новые изменения этой feature-ветки
-принадлежат согласованной работе над конструктором, включая Core AI-адаптер.
-План выпуска: Studio3.2.17 и отдельный Composer1.5.5, windows-x64,
-Core>=3.2.17,<3.3.0. Добавлены macos-arm64 и macos-x64; Composer пакет
-для всех3платформ, остальные5модулей1.5.5 для Mac, Windows остаются1.5.3. Минимум нового Core нужен для согласованного AI-адаптера,
-диагностики и обработки ошибок; старой Studio пакет не предлагать.
-Stable и остальные модули сохраняются. Прежние заменяемые беты снять после
-проверки новой пары, файлы не удалять. Ранее разрешённый порядок GitHub:
-PUBLIC только на Windows build, затем PRIVATE с отдельной проверкой.
+Владелец поручил commit/push, сборки Windows/macOS и публикацию всего комплекта
+как beta. Выполнено: Studio 3.2.17 для Windows x64, Mac Apple Silicon и Mac Intel;
+отдельный Composer 1.5.5 для всех трёх платформ. Остальные пять Windows-модулей
+остались 1.5.3; для обеих Mac-платформ опубликованы их пакеты 1.5.5.
+Все новые модульные пакеты требуют Core >=3.2.17,<3.3.0. Права лицензий и наборы
+не менялись. Stable и остальные актуальные релизы сохранены. Предыдущие Windows
+Studio 3.2.16 и Composer 1.5.4 сняты с выдачи, их файлы сохранены.
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Выпустить согласованный конструктор; пользователь «сделай», затем Windows/macOS beta | Commit/source SHA, tests, signed ZIP и native builds | Studio3.2.17; Composer1.5.5 для3платформ, остальные5 Mac-модулей1.5.5; подпись publisher-v1 | Реализовано частично: source501+2subtests PASS; release34+4subtests PASS, Mac packaging10PASS. Native build/publication выполняются |
-| Доступное бета-обновление с совместимостью и без изменения stable | Серверные SHA, discovery, старый Core reject, fingerprints остальных релизов | План новой пары и снятия прежней пары из beta | Ещё не проверено: публикация не выполнялась |
-| Проверить реальный AI-запрос KIE | Один запрос с ключом владельца, без автоповторов | Пользователь подтвердил: ключ только в Studio на компьютере | Заблокировано доступом: на сервере ключа нет, доступ Commander ограничен D:\\WorkOS; credential store не читается и не переносится. Офлайн-контроли PASS, live запрос не выполнен |
+| Выпустить согласованный конструктор; команды «сделай» и macOS beta | Source SHA, tests, signed ZIP, native builds и packaged Core | Studio 3.2.17; Composer 1.5.5 для трёх платформ; пять Mac-модулей 1.5.5 | Реализовано и проверено: 501 tests +2subtests PASS; release34 +4subtests PASS; Mac packaging10 PASS. Signed6ZIP inspect/install/activate/old-Core reject PASS; official Composer click/apply/generate7 в трёх target profiles PASS. Native Core13/13 на всех платформах, Mac extracted13/13 |
+| Доступное beta-обновление, совместимость и сохранность stable | Stored SHA, platform/channel discovery, предыдущий Core reject, fingerprints | Published16 новых rows; active21, по7 на платформу; withdrawn2 прежних Windows rows | Реализовано и проверено: серверные SHA16/16, beta discovery, absence in stable PASS; stable/пять Windows-модулей/остальные releases unchanged; прежние файлы сохранены. HTTPS health200, invalid download token403 |
+| Доставка Mac Intel через сервер; поручение macOS beta | Isolated PG signed shell/module/platform/beta/revoke, Chrome6states, deployment fingerprints | Server macos-intel-81e5003; Intel whitelist и ZIP форма | Реализовано и проверено: 215tests PASS без skips35.080s; Chrome6states PASS; независимое ревью без findings; deploy source inventory exact; config/business/releases/names/keys/ledger unchanged, health200/admin401 |
+| Проверить реальный AI-запрос KIE | Один запрос с ключом владельца, без автоповторов | Пользователь подтвердил: ключ только в Studio на компьютере | Не проверено, блокер доступа: на сервере ключа нет, Commander ограничен D:\WorkOS; credential store не читается и не переносится. Offline controls PASS, live запрос не выполнялся |
 
-Mac CI обновлён под текущую Core shell: общий inventory с Windows, два native
-runner, constrained dependencies, signed-module runtime tests, frozen и extracted
-Core smoke, SHA/provenance/архитектура. Apple Developer ID/notary secrets отсутствуют;
-Mac beta ad-hoc signed, без Apple notarization. Проверка на устройствах владельца
-не выполнялась. Runner labels сверены по официальной GitHub документации.
-Evidence выпуска: ../artifacts/studio-3.2.17-composer-beta-20261008/.
+Windows source a743e50a7cb14685eb98873d66c021dbc6e898c5, job113129760042 SUCCESS
+в run37721439647. Первые Mac jobs этого run отказали до упаковки из-за lipo.
+Mac source06b32396e64d0871d529503ed7dd38bf685563fd, run37722280070 SUCCESS для
+ARM/Intel. Разница source commits только workflow/test/docs; приложение и ZIP
+payload совпадают. История причин и исправления: docs/ERRORS.md.
+Commits/push приложения и серверной поддержки завершены в отдельных feature-ветках.
+GitHub после временного PUBLIC для сборок возвращён в PRIVATE и проверен отдельно.
+
+Mac beta подписана ad-hoc, Apple Developer ID/notarization отсутствуют.
+Mac updater скачивает ZIP и открывает его в Finder; замена приложения вручную.
+Проверка обновления и licensed download/open на устройствах владельца не выполнялась.
+Сначала обновляется Studio, затем отдельно устанавливается/обновляется Composer.
+Evidence: ../artifacts/studio-3.2.17-composer-beta-20261008/:
+beta-release-manifest.json, три *-installer-verification.json,
+server-final-live-verification.json, server-retirement-receipt.json, server-macos/.
+Backup публикации: /opt/bots-stack/backups/clipart-license-service/pre-studio3217-beta-publication-20261008.dump.
 
 ## Заметная кнопка «Случайные параметры»,2026-10-07
 

@@ -1,5 +1,33 @@
 # Official Module Releases
 
+## Beta Studio 3.2.17 / Composer 1.5.5, 2026-10-08
+
+Владелец поручил commit/push, Windows/macOS build и размещение beta.
+Published Studio3.2.17 для windows-x64/macos-arm64/macos-x64; отдельный signed
+Composer1.5.5 для всех трёх платформ. Остальные пять Mac-модулей1.5.5, пять
+Windows-модулей остаются1.5.3. Новые ZIP: Core>=3.2.17,<3.3.0, publisher-v1.
+Каждый declared platform прошёл inspect/install/activation и old-Core reject;
+официальный Composer ZIP прошёл click/apply/generate7 на трёх target profiles.
+
+Windows sourcea743e50, job113129760042 SUCCESS в run37721439647; первые Mac jobs
+этого run FAIL/lipo до упаковки. Mac source06b3239/run37722280070 SUCCESS для
+ARM и Intel. Приложение/payload между commits одинаковы, разница только CI/test/docs.
+Native frozen Core13/13 на всех платформах, Mac extracted Core13/13. ZIP CRC,
+SHA/source/version и Mach-O native architecture PASS; GitHubPRIVATE подтверждён.
+
+Server support Intel81e5003 deployed,215isolatedPGtests/Chrome6states PASS;
+no migration/dependency/license change. Published16 новых rows; active21/по7.
+Withdrawn только WindowsStudio3.2.16/Composer1.5.4, их файлы сохранены. Stable и
+остальные пять Windows-модулей неизменны. StoredSHA16/16, beta discovery,
+absence in stable, health200/invalidtoken403 PASS; verified backup перед stage.
+
+Mac beta ad-hoc signed без Apple notarization. Updater скачивает ZIP и открывает
+Finder, установка вручную. Реальное обновление/licensed download/open на
+устройстве владельца не проверены; liveKIE тоже не проверен, ключ только на ПК.
+Не читать и не переносить credential store. Сначала Studio, затем Composer.
+Evidence: ../artifacts/studio-3.2.17-composer-beta-20261008/.
+Не заменять существующие bytes под выпущенной версией; для правок новая версия.
+
 ## Beta Studio3.2.13 и Composer1.5.4, 2026-10-06
 
 Владелец разрешил commit/push и выпуск после просмотра результатов. Build source
