@@ -1,5 +1,33 @@
 # Official Module Releases
 
+## Beta Studio 3.2.18 / Composer 1.5.6, 2026-10-08
+
+Команда владельца «сделай обновление приложения». Published beta Studio3.2.18
+и signed Composer1.5.6 для Windows x64, macOS arm64/x64. Core>=3.2.18,<3.3.0;
+остальные пять модулей каждой платформы сохранены (Windows1.5.3, Mac1.5.5).
+Изменения: подробные camera/light/composition промпты, один ввод RU/EN с авто EN,
+короткие карточки вариантов, ожидание AI внизу без cost popup, единая навигация,
+компактное «Продолжить работу», отсутствие пустых новостей.
+
+Source341c526; run37872628923 SUCCESS для всех трёх платформ. Репозиторий всё
+время PRIVATE. Source Composer561tests+2subtests PASS, финальные уточнения79/26
+PASS; release22+4subtests, license/updater/runtime183+27subtests PASS. Native
+frozen Core13/13 на каждой платформе, Mac extracted13/13. Windows installer
+install/upgrade CI PASS. SHA/provenance/version/native architecture PASS.
+Official signed Composer inspect/install/activate и incompatible-Core reject
+PASS; actual Qt runtime для трёх целевых профилей PASS (Linux offscreen).
+
+Backup создан и проверен pg_restore --list перед stage; published6rows,
+withdrawn6 прежних Studio3.2.17/Composer1.5.5, их файлы сохранены. Active21,
+storedSHA6/6, beta discovery и отсутствие в stable PASS. Stable и все прочие
+release fingerprints неизменны; health200/invalidtoken403. Evidence:
+../artifacts/studio-3.2.18-composer-beta-20261008/.
+
+Сначала обновить Studio, затем Composer через «Обновления модулей».
+Mac beta ad-hoc без Apple notarization, ручная установка ZIP. Реальный licensed
+download/open и живой AI на устройстве владельца не проверены; платных запросов0.
+
+
 ## Beta Studio 3.2.17 / Composer 1.5.5, 2026-10-08
 
 Владелец поручил commit/push, Windows/macOS build и размещение beta.

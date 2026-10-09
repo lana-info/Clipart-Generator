@@ -5,11 +5,19 @@ Windows x64, macOS arm64/x64. Предыдущие записи ниже опи�
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Доставить согласованные UI и качество промптов | Native CI, provenance/SHA, подписанный модуль и сервер discovery | Версия Core 3.2.18; план Composer 1.5.6, minCore 3.2.18 | Исходный конструктор: 561 tests +2subtests PASS; финальные уточнения 79 и 26 tests PASS. Сборка и публикация ожидаются |
-| Сохранить остальные модули и stable | Серверные fingerprints до/после | План: только 3 Core +3 Composer beta rows | Не проверено до публикации |
+| Доставить согласованные UI и качество промптов | Native CI, provenance/SHA, подписанный модуль и сервер discovery | Published beta Core 3.2.18 и Composer 1.5.6, minCore 3.2.18 | Исходный конструктор: 561 tests +2subtests PASS; финальные уточнения 79 и 26 tests PASS. Release packaging: 22 tests +4subtests PASS; license/updater/runtime: 183 tests +27subtests PASS (1 native Windows check skipped on Linux, выполняется CI). Официальный подписанный Composer install/activate/runtime для трёх профилей PASS. Native CI для всех трёх платформ SUCCESS; SHA/version/provenance/архитектура PASS. Frozen Core13/13 в каждой сборке, Mac extracted13/13; Windows install/upgrade сценарии CI PASS |
+| Сохранить остальные модули и stable | Серверные fingerprints до/после | Опубликованы только 3 Core +3 Composer beta rows; прежние 6 withdrawn, файлы сохранены | Реализовано и проверено: 6 stored SHA PASS, 21 active beta rows, beta discovery PASS, stable/unrelated fingerprints неизменны; health200/invalid token403 |
 
 Ограничения: реальные AI-ответы и установка на компьютере владельца не проверены;
 Mac beta ad-hoc без Apple notarization. Репозиторий остаётся private.
+Build source: 341c526; workflow 37872628923 SUCCESS. Evidence:
+../artifacts/studio-3.2.18-composer-beta-20261008/ (installer-verification,
+official-composer-runtime, beta-release-manifest, server-final-live-verification).
+Backup перед stage создан, pg_restore --list PASS. Репозиторий оставался PRIVATE
+весь выпуск. Commit/push выполнены в codex/fix-composer-results-20261008.
+Обновление: сначала Studio, затем конструктор через «Обновления модулей».
+Настоящий licensed download/open на пользовательском устройстве не проверен;
+живой AI не запускался, платных запросов 0. Mac ZIP устанавливается вручную.
 
 ## Подробная постановка промптов, 2026-10-08
 

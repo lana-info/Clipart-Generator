@@ -1,9 +1,9 @@
 ## Выпуск Studio 3.2.18 / Composer 1.5.6, 2026-10-08
 
 - [x] Подготовить версии и зафиксировать согласованные изменения.
-- [ ] Собрать и проверить Windows x64, Mac arm64/x64.
-- [ ] Проверить официальный подписанный Composer 1.5.6.
-- [ ] Опубликовать и проверить 6 beta rows; остальные модули/stable сохранить.
+- [x] Собрать и проверить Windows x64, Mac arm64/x64: run37872628923 SUCCESS; version/SHA/provenance и native Core PASS.
+- [x] Проверить официальный подписанный Composer 1.5.6: install/activate/reject old Core и runtime 3 профиля PASS.
+- [x] Опубликовать и проверить 6 beta rows: SHA/discovery PASS; остальные модули/stable неизменны, прежние файлы сохранены.
 
 ## Подробные промпты по уровню TrendWatcher, 2026-10-08
 
