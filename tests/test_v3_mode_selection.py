@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtTest import QTest
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QMenu
 
 from license_client import LicenseAuthorization, ModuleEntitlement
 from v3_components import V3_WINDOW_DEFAULT_SIZE, V3_WINDOW_MINIMUM_SIZE
@@ -426,14 +426,14 @@ class V3ModeSelectionTests(unittest.TestCase):
         continued = []
         view.project_continued.connect(continued.append)
 
-        self.assertFalse(view.mode_selection.recent_project_card.isHidden())
-        self.assertIn(
-            "Summer Pins",
-            view.mode_selection.continue_button.accessibleDescription(),
-        )
+        self.assertTrue(view.mode_selection.all_projects_button.isEnabled())
 
         recent.pinterest.pin.pin_title = "mutated outside"
-        view.mode_selection.continue_button.click()
+        def choose_draft(menu, *args):
+            self.assertIn("Summer Pins", menu.actions()[0].text())
+            menu.actions()[0].trigger()
+        with patch.object(QMenu, "exec", choose_draft):
+            view.mode_selection.all_projects_button.click()
         state = view.project_state
         self.assertEqual(state.mode, ProjectMode.PINTEREST)
         self.assertEqual(state.current_step, StepId.PROMPTS)
@@ -459,11 +459,12 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.deleteLater()
 
             restored = V3ApplicationView(draft_path=draft_path)
-            self.assertFalse(restored.mode_selection.saved_projects_card.isHidden())
-            self.assertTrue(
-                restored.mode_selection.saved_project_buttons[0].accessibleName()
-            )
-            restored.mode_selection.saved_project_buttons[0].click()
+            self.assertTrue(restored.mode_selection.all_projects_button.isEnabled())
+            def choose_first(menu, *args):
+                self.assertIn("Генерация изображений", menu.actions()[0].text())
+                menu.actions()[0].trigger()
+            with patch.object(QMenu, "exec", choose_first):
+                restored.mode_selection.all_projects_button.click()
             restored_state = restored.project_state
             self.assertEqual(
                 restored_state.clipart.prompts[0].prompt,
@@ -500,7 +501,7 @@ class V3ModeSelectionTests(unittest.TestCase):
             view.close()
             view.deleteLater()
 
-    def test_three_recent_projects_retain_four_and_resume_without_worker(self):
+    def test_compact_projects_menu_retains_all_and_resumes_without_worker(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "project_state.json"
             factory = Mock(side_effect=AssertionError("resume must not create paid work"))
@@ -511,13 +512,13 @@ class V3ModeSelectionTests(unittest.TestCase):
                 view.project_state.clipart.prompts = [PromptEntry(f"subject {number}")]
                 view.shell.mark_dirty()
                 view.show_new_project()
-            self.assertEqual(len(view.mode_selection.saved_project_buttons), 3)
+            self.assertTrue(view.mode_selection.all_projects_button.isEnabled())
             self.assertEqual(len(view._project_store.recent(limit=None)), 4)
             oldest = view._project_store.recent(limit=None)[-1]
             view.close()
             view.deleteLater()
             restored = V3ApplicationView(draft_path=path, worker_factory=factory)
-            self.assertEqual(len(restored.mode_selection.saved_project_buttons), 3)
+            self.assertTrue(restored.mode_selection.all_projects_button.isEnabled())
             self.assertTrue(restored.continue_saved_project(oldest.project_id))
             self.assertEqual(restored.project_state.clipart.prompts[0].prompt, "subject 0")
             restored.project_state.common.project_name = "Исправлено"
@@ -635,7 +636,7 @@ class V3ModeSelectionTests(unittest.TestCase):
 
     def test_continue_is_unavailable_without_a_recent_project(self):
         view = V3ApplicationView()
-        self.assertTrue(view.mode_selection.recent_project_card.isHidden())
+        self.assertFalse(view.mode_selection._has_recent_draft)
         self.assertFalse(view.continue_last_project())
         self.assertIsNone(view.project_state)
         view.close()
@@ -651,7 +652,7 @@ class V3ModeSelectionTests(unittest.TestCase):
         view.shell.change_mode_button.click()
         self.assertEqual(view.selection_intent, SelectionIntent.SWITCH_MODE)
         self.assertIs(view.stack.currentWidget(), view.mode_selection)
-        self.assertTrue(view.mode_selection.recent_project_card.isHidden())
+        self.assertFalse(view.mode_selection._has_recent_draft)
         self.assertTrue(view.mode_selection.cancel_button.isHidden())
 
         view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()

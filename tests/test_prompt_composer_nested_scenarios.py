@@ -67,18 +67,19 @@ def test_all_previous_69_recipes_keep_exact_payload_and_loadable_ids():
 
 
 def test_camera_actions_and_viewpoints_are_consistent_after_review():
-    for category, direction, identifier in [
-        ('nature', 'detail', 'nature_texture_detail'),
-        ('nature', 'travel', 'travel_first_person_path'),
-        ('food', 'cooking', 'cooking_finished_result'),
-        ('animals', 'portrait', 'animal_portrait_surroundings'),
-        ('products', 'composition', 'products_composition_01'),
+    for category, direction, identifier, viewpoint in [
+        ('nature', 'detail', 'nature_texture_detail', 'side view'),
+        ('nature', 'travel', 'travel_first_person_path', 'eye-level'),
+        ('food', 'cooking', 'cooking_finished_result', 'main-subject-level'),
+        ('animals', 'portrait', 'animal_portrait_surroundings', 'animal level'),
+        ('products', 'composition', 'products_composition_01', 'directly overhead'),
     ]:
         template = next(t for t in recipes(category, direction, 'reels') if t['scenario_id'] == identifier)
         fields = template['draft']['fields']
         assert 'locked' not in fields['camera']['en']
         assert not fields['action']['en'].startswith('The camera')
-        assert 'consistent with selected framing' in fields['angle']['en']
+        assert viewpoint in fields['angle']['en']
+        assert 'consistent with selected framing' not in fields['angle']['en']
     nature = recipes('nature', 'travel', 'reels')
     assert all('facades' not in t['draft']['fields']['lighting']['en'] for t in nature)
     path = next(t for t in nature if t['scenario_id'] == 'travel_first_person_path')

@@ -1,0 +1,20 @@
+{
+  "method": "250 current recipes, seven real locally generated variants each; serialize complete bilingual response fields and final texts, labels trimmed to 40 characters; count with official OpenAI vocabulary files using existing system tiktoken",
+  "sample_count": 250,
+  "max_output_tokens": 12000,
+  "before_compacting": {
+    "o200k_base": 9395,
+    "cl100k_base": 12574
+  },
+  "after_compacting": {
+    "o200k_base": {
+      "tokens": 8510,
+      "recipe": "scene_nature_v2_detail_nature_texture_detail_reels"
+    },
+    "cl100k_base": {
+      "tokens": 11210,
+      "recipe": "scene_spaces_v2_atmosphere_atmosphere_surface_reels"
+    }
+  },
+  "limitations": "Local synthetic response measurement, not a real model output; these are two reference tokenizers, not exact tokenizers for all supported providers. Arbitrary longer user values or actual AI output can still exceed the cap; truncated responses remain rejected without automatic retries."
+}

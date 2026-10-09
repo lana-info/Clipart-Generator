@@ -33,9 +33,8 @@ def main():
         view.resize(1120, 780)
         view.show()
         app.processEvents()
-        assert len(view.mode_selection.saved_project_buttons) == 3
-        for button in view.mode_selection.saved_project_buttons:
-            assert button.isVisible() and button.width() > 0
+        button = view.mode_selection.all_projects_button
+        assert button.isVisible() and button.isEnabled() and button.width() > 0
         assert view.grab().save(str(output / "recent-projects-1120x780.png"))
         screen = view.mode_selection
         screen.set_saved_projects([])

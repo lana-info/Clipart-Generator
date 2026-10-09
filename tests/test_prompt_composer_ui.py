@@ -138,9 +138,9 @@ class PromptComposerUITest(unittest.TestCase):
         self.assertFalse(self.host.closed)
         self.assertEqual(self.page.draft["fields"]["color"]["en"], "blue")
 
-    def test_ai_requires_quote_consent_and_stale_offer_opens_separate(self):
+    def test_ai_submits_without_payment_dialog_and_stale_offer_opens_separate(self):
         self.page.generate_local()
-        with patch.object(self.page, "_quote_consent", return_value=True):
+        with patch.object(QMessageBox, "question", side_effect=AssertionError("unexpected payment dialog")):
             self.assertTrue(self.page.request_ai_variants())
             self.assertIsNone(self.host.submit_done)
             self.host.quote_done({"id": "quote-1", "provider": "fake", "model": "small", "price": None, "configured": True})
@@ -182,20 +182,20 @@ class PromptComposerUITest(unittest.TestCase):
         self.page._select_variant(0)
         self.assertEqual(self.page._variant_text(self.page._variants[0], "en"), "Manual variant zero")
 
-    def test_missing_english_pair_keeps_previous_results(self):
+    def test_missing_english_pair_does_not_block_generation(self):
         self.page.generate_local()
-        previous = deepcopy(self.page._variants)
         self.page._set_field("color", "синий", "")
-        with patch.object(self.page, "_show_message"):
-            self.assertFalse(self.page.generate_local())
-        self.assertEqual(self.page._variants, previous)
+        with patch.object(self.page, "_show_message", side_effect=AssertionError("unexpected translation requirement")):
+            self.assertTrue(self.page.generate_local())
+        self.assertIsNotNone(self.host.quote_done)
+        self.assertEqual(self.page.draft["fields"]["color"], {"ru": "синий", "en": ""})
         self.assertEqual(len(self.host.generated), 1)
 
-    def test_ai_rejected_price_confirmation_never_submits(self):
+    def test_unconfigured_ai_never_submits(self):
         self.page.generate_local()
-        with patch.object(self.page, "_quote_consent", return_value=False):
+        with patch.object(self.page, "_show_message"):
             self.page.request_ai_variants()
-            self.host.quote_done({"id": "quote-1", "provider": "fake", "model": "small", "price": None, "configured": True})
+            self.host.quote_done({"id": "quote-1", "configured": False})
         self.assertIsNone(self.host.submit_done)
 
     def test_profile_application_keeps_scene_fields(self):
@@ -225,7 +225,7 @@ class PromptComposerUITest(unittest.TestCase):
         self.assertEqual(self.page._variant_text(self.page._active_variant(), "en"), "ONLY ZERO")
 
     def test_ai_proposal_becomes_stale_after_response(self):
-        with patch.object(self.page, "_quote_consent", return_value=True):
+        with patch.object(QMessageBox, "question", side_effect=AssertionError("unexpected payment dialog")):
             self.page.request_ai_variants()
             self.host.quote_done({"id": "quote", "configured": True})
         self.host.submit_done(self.host.generate(draft()))
@@ -234,17 +234,18 @@ class PromptComposerUITest(unittest.TestCase):
         self.assertTrue(self.page._proposal["stale"])
         self.assertEqual(self.page.draft["fields"]["color"]["en"], "blue")
 
-    def test_manual_edit_survives_declined_ai(self):
+    def test_manual_edit_survives_cancelled_ai(self):
         self.page.generate_local()
         self.page._variant_edits[0] = {"manual_en": "Keep me"}
-        with patch.object(self.page, "_quote_consent", return_value=False):
-            self.page.request_ai_variants()
-            self.host.quote_done({"id": "quote", "configured": True})
+        self.page.request_ai_variants()
+        self.page.cancel_ai()
+        self.host.quote_done({"id": "quote", "configured": True})
+        self.assertIsNone(self.host.submit_done)
         self.assertEqual(self.page._selected_draft()["manual_en"], "Keep me")
 
     def test_translation_never_moves_to_other_variant(self):
         self.page.generate_local()
-        with patch.object(self.page, "_quote_consent", return_value=True):
+        with patch.object(QMessageBox, "question", side_effect=AssertionError("unexpected payment dialog")):
             self.page.translate_active_text()
             self.host.quote_done({"id": "quote", "configured": True})
         self.page._select_variant(1)
@@ -317,14 +318,11 @@ class PromptComposerUITest(unittest.TestCase):
                 self.assertEqual({call[0]["manual_en"] for call in self.host.saved_calls}, {"Edited A", "Edited B"})
                 self.tearDown()
 
-    def test_cancel_during_ai_consent_never_submits(self):
+    def test_changed_draft_before_quote_never_submits(self):
         self.page.generate_local()
         self.page.request_ai_variants()
-        def consent(*args):
-            self.assertIsNotNone(self.page._ai_ticket)
-            self.page.cancel_ai()
-            return True
-        with patch.object(self.page, "_quote_consent", side_effect=consent):
+        self.page._set_field("color", "синий", "blue")
+        with patch.object(self.page, "_show_message"):
             self.host.quote_done({"id": "quote-1", "configured": True})
         self.assertIsNone(self.host.submit_done)
         self.assertIsNone(self.page._ai_ticket)

@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from .model import new_draft
 from .directions import DIRECTIONS, SCENARIOS, STYLE_OVERRIDES
+from .photography import enrich_recipe
 
 # IDs are persisted identifiers. Change text freely, but never recycle an ID.
 _OPTIONS = {
@@ -636,7 +637,7 @@ def _nested_recipes():
                               "камера телефона с естественной перспективой", "phone camera with natural perspective")
                     recipe["draft"]["fields"]["camera"] = _pair(*camera)
                 recipe.update(direction=direction, scenario_id=scene["id"])
-                yield recipe
+                yield enrich_recipe(recipe, category, direction, scene, mode)
 
 
 _TEMPLATES.extend(_nested_recipes())

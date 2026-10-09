@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import gcd, prod
+from os.path import commonprefix
 import re
 
 from .catalog import catalogue
@@ -30,12 +31,10 @@ def _normalized(value: str) -> str:
     return " ".join(re.findall(r"\w+", value.casefold()))
 
 
-def _check_translations(fields: dict) -> None:
-    for key, pair in fields.items():
-        if pair["ru"].strip() and not pair["en"].strip():
-            raise ValueError(f"Поле «{key}» требует английского перевода перед генерацией")
-        if pair["en"].strip() and not pair["ru"].strip():
-            raise ValueError(f"Поле «{key}» требует русского перевода перед генерацией")
+def _field_text(fields: dict, key: str, language: str) -> str:
+    pair = fields.get(key, {})
+    return (pair.get(language, "").strip()
+            or pair.get("en" if language == "ru" else "ru", "").strip())
 
 
 def _exclusion_clauses(fields: dict) -> list[tuple[str, frozenset[str]]]:
@@ -76,6 +75,16 @@ def _scene_issue(snapshot: dict) -> tuple[str | None, list[str]]:
     return None, warnings
 
 
+def _without_adjustment(pair: dict, options: list[dict]) -> dict:
+    base = pair.copy()
+    while True:
+        suffix = next((item for item in options if all(
+            item[language] and base[language].endswith(item[language]) for language in ('ru', 'en'))), None)
+        if suffix is None:
+            return base
+        base = {language: base[language][:-len(suffix[language])] for language in ('ru', 'en')}
+
+
 def _choice_sets(snapshot: dict, clauses: list[tuple[str, frozenset[str]]]) -> tuple[list[tuple[str, list[dict]]], str | None]:
     catalog = catalogue()
     options = catalog["options"]
@@ -83,24 +92,25 @@ def _choice_sets(snapshot: dict, clauses: list[tuple[str, frozenset[str]]]) -> t
     # Ambiguous or edited styles use the existing general-purpose choice pools.
     scenes = [template for template in catalog["templates"]
               if template.get("reusable") and template["draft"]["mode"] == snapshot["mode"]
-              and template["draft"]["fields"].get("style") == snapshot["fields"].get("style")]
+              and _without_adjustment(
+                  snapshot["fields"].get("style", {"ru": "", "en": ""}),
+                  template.get("variation_options", {}).get("style", [])) in
+                  [template["draft"]["fields"].get("style"), *template.get("style_aliases", [])]]
     scene_options = scenes[0].get("variation_options") if len(scenes) == 1 else None
+    legacy_options = scenes[0].get("legacy_variation_options", {}) if len(scenes) == 1 else {}
     choices = []
     for key in _VARIABLE_KEYS:
         if key in snapshot["locks"]:
             continue
         current = snapshot["fields"].get(key, {"ru": "", "en": ""})
-        if scene_options is not None:
-            base = current.copy()
+        # Time is a scene fact: generic fallback after a style edit must not
+        # insert a random morning into an evening or indoor brief.
+        if key == 'time':
+            pool = [current]
+        elif scene_options is not None:
             # A saved variant may already contain one relative adjustment.
             # Replace only known, paired RU/EN terminal adjustments, not user text.
-            while True:
-                previous = next((suffix for suffix in scene_options[key]
-                                 if all(suffix[language] and base[language].endswith(suffix[language])
-                                        for language in ("ru", "en"))), None)
-                if previous is None:
-                    break
-                base = {language: base[language][:-len(previous[language])] for language in ("ru", "en")}
+            base = _without_adjustment(current, scene_options[key] + legacy_options.get(key, []))
             pool = [current] + [{language: base[language] + suffix[language] for language in ("ru", "en")}
                     for suffix in scene_options[key]
                     if not any(suffix.values()) or all(base[language].strip() for language in ("ru", "en"))]
@@ -128,20 +138,20 @@ def _choice_sets(snapshot: dict, clauses: list[tuple[str, frozenset[str]]]) -> t
 
 def _render(snapshot: dict, language: str) -> str:
     fields = snapshot["fields"]
-    subject = fields.get("subject", {}).get(language, "").strip()
+    subject = _field_text(fields, "subject", language)
     if not subject:
         raise ValueError("Укажите героя или объект в поле «subject» для генерации")
     reels = snapshot["mode"] == "reels"
     if reels:
-        action = fields.get("action", {}).get(language, "").strip()
-        location = fields.get("location", {}).get(language, "").strip()
+        action = _field_text(fields, "action", language)
+        location = _field_text(fields, "location", language)
         if not action or not location:
             raise ValueError("Для Reels нужны одно действие «action» и одно место «location»")
-        start = (f"Одна непрерывная короткая видеосцена: {subject}; место: {location}; действие: {action}. "
+        start = (f"Одна непрерывная короткая видеосцена: {subject}; место: {location}; действие: {action}"
                  if language == "ru" else
-                 f"One continuous short video scene: {subject}; location: {location}; action: {action}. ")
+                 f"One continuous short video scene: {subject}; location: {location}; action: {action}")
     else:
-        start = f"Один статичный кадр: {subject}. " if language == "ru" else f"One still image: {subject}. "
+        start = f"Один статичный кадр: {subject}" if language == "ru" else f"One still image: {subject}"
     excluded_keys = {"subject", "duration"}
     if reels:
         excluded_keys.add("action")
@@ -157,17 +167,23 @@ def _render(snapshot: dict, language: str) -> str:
                "time": "time", "camera": "camera", "shot": "framing", "angle": "angle",
                "action": "captured action", "aspect": "aspect ratio"},
     }
-    details = [f"{labels[language][key]}: {fields[key][language].strip()}"
-               for key in keys if key in fields and fields[key][language].strip()]
-    if reels and fields.get("duration", {}).get(language, "").strip():
-        details.append(("пожелание по длительности" if language == "ru" else "preferred duration")
-                       + ": " + fields["duration"][language].strip())
-    if details:
-        start += "; ".join(details) + ". "
-    exclusions = fields.get("exclusions", {}).get(language, "").strip()
+    def sentence(text):
+        return text if text.endswith(('.', '!', '?')) else text + '.'
+
+    paragraphs = [sentence(start)]
+    for group in (("appearance", "wardrobe", "material", "color", "location", "surface", "action"),
+                  ("style", "lighting", "time"), ("camera", "shot", "angle"), ("aspect",)):
+        details = [f"{labels[language][key]}: {_field_text(fields, key, language)}"
+                   for key in group if key in keys and key in fields and _field_text(fields, key, language)]
+        if details:
+            paragraphs.append(sentence("; ".join(details)))
+    if reels and _field_text(fields, "duration", language):
+        paragraphs.append(sentence(("пожелание по длительности" if language == "ru" else "preferred duration")
+                                   + ": " + _field_text(fields, "duration", language)))
+    exclusions = _field_text(fields, "exclusions", language)
     if exclusions:
-        start += ("Исключить: " if language == "ru" else "Exclude: ") + exclusions + ". "
-    return start.strip()
+        paragraphs.append(sentence(("Исключить: " if language == "ru" else "Exclude: ") + exclusions))
+    return "\n\n".join(paragraphs)
 
 
 def _at_ordinal(choices: list[tuple[str, list[dict]]], ordinal: int) -> dict[str, dict]:
@@ -176,6 +192,19 @@ def _at_ordinal(choices: list[tuple[str, list[dict]]], ordinal: int) -> dict[str
         ordinal, index = divmod(ordinal, len(values))
         result[key] = values[index]
     return result
+
+
+def _choice_summary(key: str, pair: dict, choices: list[tuple[str, list[dict]]]) -> str:
+    text = pair['ru'].strip() or pair['en'].strip()
+    values = next(values for field, values in choices if field == key)
+    shared = commonprefix([value['ru'].strip() or value['en'].strip() for value in values])
+    # Show the actual treatment, not the identical long scene prefix on every card.
+    if shared:
+        return text[len(shared):].lstrip(', ;') or {
+            'style': 'Базовая подача', 'lighting': 'Исходный свет',
+            'shot': 'Исходная композиция', 'angle': 'Исходный ракурс',
+        }.get(key, text)
+    return text
 
 
 def generate_variants(draft: dict, limit: int = 7) -> dict:
@@ -189,8 +218,7 @@ def generate_variants(draft: dict, limit: int = 7) -> dict:
     snapshot = validate_draft(draft)
     if snapshot["manual_en"] is not None or snapshot["manual_ru"] is not None:
         raise ValueError("Сначала сохраните ручной текст копией или явно замените его новой сборкой")
-    _check_translations(snapshot["fields"])
-    # Validate required bilingual scene properties even if there is no option space.
+    # Validate required scene properties even if there is no option space.
     _render(snapshot, "en")
     _render(snapshot, "ru")
     scene_error, scene_warnings = _scene_issue(snapshot)
@@ -229,7 +257,8 @@ def generate_variants(draft: dict, limit: int = 7) -> dict:
         resolved["base_ru"] = _render(resolved, "ru")
         resolved["translation_stale"] = False
         changed = [key for key, pair in selected.items() if pair != snapshot["fields"].get(key)]
-        difference = ", ".join(resolved["fields"][key]["ru"] for key in changed[:2])
+        differences = [_choice_summary(key, selected[key], choices) for key in changed if any(selected[key].values())]
+        difference = ", ".join(differences[:2])
         variants.append({
             "label": f"Вариант {cursor + offset + 1}" + (f": {difference}" if difference else ""),
             "draft": resolved, "en": resolved["base_en"], "ru": resolved["base_ru"],
@@ -250,7 +279,6 @@ def preflight_ai(draft: dict) -> None:
     """
     from .model import FIELD_KEYS
     snapshot = validate_draft(draft)
-    _check_translations(snapshot['fields'])
     _render(snapshot, 'en')
     _render(snapshot, 'ru')
     validate_single_scene(snapshot)

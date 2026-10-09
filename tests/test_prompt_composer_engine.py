@@ -117,9 +117,10 @@ def test_scene_variations_are_isolated_bilingual_relative_options() -> None:
         assert set(pools) == sizes.keys()
         assert item["draft"]["locks"] == []
         for key, size in sizes.items():
-            assert len(pools[key]) == size
+            expected_size = 3 if key == 'style' and item.get('direction') else size
+            assert len(pools[key]) == expected_size
             assert pools[key][0] == {"ru": "", "en": ""}
-            assert len({(pair["ru"], pair["en"]) for pair in pools[key]}) == size
+            assert len({(pair["ru"], pair["en"]) for pair in pools[key]}) == expected_size
             for pair in pools[key][1:]:
                 assert set(pair) == {"ru", "en"}
                 assert all(pair[language].startswith(", ") and len(pair[language].split()) >= 3
@@ -285,12 +286,13 @@ def test_exactly_six_and_cursor_exhaustion() -> None:
     assert generate_variants(draft)["variants"] == []
 
 
-def test_free_form_pair_is_saveable_but_missing_english_blocks_local_generation() -> None:
+def test_free_form_single_language_is_saveable_and_used_without_translation() -> None:
     draft = apply_template("image_pet_window")
     draft["fields"]["material"] = {"ru": "шерсть особой фактуры", "en": ""}
     assert validate_draft(draft) == draft
-    with pytest.raises(ValueError, match="material.*английского"):
-        generate_variants(draft)
+    result = generate_variants(draft)
+    assert "шерсть особой фактуры" in result["variants"][0]["en"]
+    assert "шерсть особой фактуры" in result["variants"][0]["ru"]
     draft["fields"]["material"]["en"] = "wool with a distinctive texture"
     assert "distinctive texture" in generate_variants(draft)["variants"][0]["en"]
 

@@ -203,6 +203,12 @@ class ModeSelectionScreen(QWidget):
         catalog_heading = QHBoxLayout()
         catalog_heading.addWidget(title)
         catalog_heading.addStretch()
+        self.all_projects_button = V3Button("Продолжить работу", ButtonVariant.SECONDARY)
+        self.all_projects_button.clicked.connect(self.all_projects_requested.emit)
+        self.all_projects_button.setEnabled(False)
+        catalog_heading.addWidget(self.all_projects_button)
+        self._has_saved_projects = False
+        self._has_recent_draft = False
         layout.addLayout(catalog_heading)
 
         self.cards_container = QWidget()
@@ -221,54 +227,10 @@ class ModeSelectionScreen(QWidget):
         layout.addWidget(self.catalog_scroll, 1)
         self.set_module_catalog(BUILTIN_CATALOG)
 
-        self.recent_project_card = QFrame()
-        self.recent_project_card.setProperty("v3Card", True)
-        recent_layout = QHBoxLayout(self.recent_project_card)
-        recent_layout.setContentsMargins(
-            tokens.space_4,
-            tokens.space_3,
-            tokens.space_4,
-            tokens.space_3,
-        )
-        recent_layout.setSpacing(tokens.space_3)
-
-        self.recent_project_label = QLabel()
-        self.recent_project_label.setProperty("v3Description", True)
-        self.recent_project_label.setWordWrap(True)
-        recent_layout.addWidget(self.recent_project_label, 1)
-
-        self.continue_button = V3Button(
-            "Продолжить черновик",
-            ButtonVariant.SECONDARY,
-        )
-        self.continue_button.clicked.connect(
-            self.continue_last_project_requested.emit
-        )
-        recent_layout.addWidget(self.continue_button)
-        self.recent_project_card.hide()
-        layout.insertWidget(1, self.recent_project_card)
-
-        self.saved_projects_card = QFrame()
-        self.saved_projects_card.setProperty("v3Card", True)
-        saved_layout = QVBoxLayout(self.saved_projects_card)
-        saved_layout.setContentsMargins(10, 6, 10, 6)
-        saved_layout.setSpacing(4)
-        saved_heading = QHBoxLayout()
-        heading = QLabel("Продолжить работу")
-        saved_heading.addWidget(heading, 1)
-        self.all_projects_button = V3Button("Все проекты", ButtonVariant.GHOST)
-        self.all_projects_button.clicked.connect(self.all_projects_requested.emit)
-        saved_heading.addWidget(self.all_projects_button)
-        saved_layout.addLayout(saved_heading)
-        self.saved_projects_layout = QHBoxLayout()
-        saved_layout.addLayout(self.saved_projects_layout)
-        self.saved_project_buttons: list[V3Button] = []
-        self.saved_projects_card.hide()
-        layout.insertWidget(1, self.saved_projects_card)
         from studio_news_ui import StudioNewsPanel
         self.news_panel = StudioNewsPanel()
         self.news_label = self.news_panel.body
-        layout.insertWidget(2, self.news_panel)
+        layout.insertWidget(1, self.news_panel)
 
         self.cancel_button = V3Button(
             "Вернуться",
@@ -376,26 +338,8 @@ class ModeSelectionScreen(QWidget):
         self._layout_module_cards()
 
     def set_saved_projects(self, projects: list) -> None:
-        while self.saved_projects_layout.count():
-            item = self.saved_projects_layout.takeAt(0)
-            item.widget().hide()
-            item.widget().deleteLater()
-        self.saved_project_buttons = []
-        for project in projects[:3]:
-            title = {"auto-clipart": "Автоматический клипарт", "clipart": "Генерация изображений",
-                     "processing": "Обработка изображений", "pinterest": "Pinterest"}.get(project.module_id, project.module_id)
-            button = V3Button(f"{project.name}\n{title} · {project.updated_at[:16].replace('T', ' ')}", ButtonVariant.SECONDARY)
-            button.setMinimumHeight(64)
-            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
-            button.setToolTip(f"{project.name}\n{project.updated_at}")
-            button.setAccessibleName(f"Продолжить проект: {project.name}")
-            button.clicked.connect(
-                lambda _checked=False, project_id=project.project_id:
-                self.project_requested.emit(project_id)
-            )
-            self.saved_projects_layout.addWidget(button, 1)
-            self.saved_project_buttons.append(button)
-        self.saved_projects_card.setVisible(bool(projects))
+        self._has_saved_projects = bool(projects)
+        self.all_projects_button.setEnabled(self._has_saved_projects or self._has_recent_draft)
 
     def reset_selection(self) -> None:
         for card in self.mode_cards.values():
@@ -412,24 +356,8 @@ class ModeSelectionScreen(QWidget):
         self.license_verification_label.setAccessibleDescription(safe_verification)
 
     def set_recent_project_summary(self, state: ProjectState | None) -> None:
-        if state is None:
-            self.recent_project_label.clear()
-            self.recent_project_label.setAccessibleName("")
-            self.continue_button.setAccessibleDescription("")
-            self.recent_project_card.hide()
-            return
-
-        project_name = state.common.project_name.strip() or "Без названия"
-        summary = (
-            f"Последний черновик: {project_name} · "
-            f"{MODE_TITLES[state.mode]} · "
-            f"шаг «{STEP_TITLES[state.current_step]}»"
-        )
-        self.recent_project_label.setText(summary)
-        self.recent_project_label.setAccessibleName(summary)
-        self.continue_button.setAccessibleDescription(summary)
-        self.recent_project_card.show()
-
+        self._has_recent_draft = state is not None
+        self.all_projects_button.setEnabled(self._has_saved_projects or self._has_recent_draft)
 
     def set_mode_switch_context(self, enabled: bool) -> None:
         self.cancel_button.setVisible(bool(enabled))
@@ -524,6 +452,14 @@ class V3ApplicationView(QWidget):
         layout.addWidget(self.stack)
 
         self.mode_selection = ModeSelectionScreen(tokens=tokens)
+        # Core owns one header for the home screen and every module page.
+        self.studio_header = QWidget()
+        apply_v3_theme(self.studio_header, tokens)
+        header_layout = QVBoxLayout(self.studio_header)
+        header_layout.setContentsMargins(tokens.space_6, tokens.space_6, tokens.space_6, 0)
+        self.mode_selection.layout().removeWidget(self.mode_selection.account_card)
+        header_layout.addWidget(self.mode_selection.account_card)
+        layout.insertWidget(0, self.studio_header)
         self.mode_selection.module_updates_button.setVisible(module_delivery is not None)
         self.mode_selection.module_updates_requested.connect(self._show_module_updates)
         self.mode_selection.mode_selected.connect(self._handle_mode_selected)
@@ -831,6 +767,14 @@ class V3ApplicationView(QWidget):
             page = handle.value
             page.back_requested.connect(self._close_composer)
             page.settings_requested.connect(self._show_api_settings)
+            # Keep module navigation; account/settings controls live in Core.
+            from PyQt6.QtWidgets import QPushButton
+            settings = page.findChild(QPushButton, "settingsButton")
+            if settings is not None:
+                settings.hide()
+            for label in page.findChildren(QLabel):
+                if label.text() == "VIBIX Studio  /  Конструктор промптов":
+                    label.hide()
             self.stack.addWidget(page)
             self._set_application_screen(page, "prompt-composer", "module_open")
         except Exception:
@@ -872,6 +816,8 @@ class V3ApplicationView(QWidget):
         preserved_size = self.size()
         preserve_window_state = self.isMaximized() or self.isFullScreen()
         self.stack.setCurrentWidget(widget)
+        focused = bool(getattr(widget, "_canvas_focus_active", False))
+        self.studio_header.setVisible(not focused)
         if not preserve_window_state:
             self.resize(preserved_size)
         self.screen_changed.emit(screen)
@@ -1008,8 +954,6 @@ class V3ApplicationView(QWidget):
             records = []
         self.mode_selection.set_saved_projects(records)
         self._recent_saved_project_id = records[0].project_id if records else None
-        if records:
-            self.mode_selection.recent_project_card.hide()
 
     def continue_saved_project(self, project_id: str) -> bool:
         if not self._save_before_leaving():
@@ -1040,22 +984,48 @@ class V3ApplicationView(QWidget):
         self.project_continued.emit(session.record.module_id)
         return True
 
+    def _project_menu_label(self, record) -> str:
+        titles = {entry.module_id: entry.title for entry in BUILTIN_CATALOG}
+        titles.update({entry.module_id: entry.title for entry in
+                       (card.entry for card in self.mode_selection.module_cards.values())})
+        module = titles.get(record.module_id, record.module_id)
+        name = record.name.strip()
+        parts = [module]
+        if name and name.casefold() != "без названия":
+            parts.append(" ".join(name.split()))
+        try:
+            timestamp = datetime.fromisoformat(record.updated_at.replace("Z", "+00:00"))
+            if timestamp.tzinfo is not None:
+                timestamp = timestamp.astimezone()
+            parts.append(timestamp.strftime("%d.%m.%Y %H:%M"))
+        except (ValueError, TypeError):
+            parts.append(record.updated_at[:16].replace("T", " "))
+        return " · ".join(parts)
+
     def _show_all_projects(self) -> None:
-        if self._project_store is None:
-            return
         menu = QMenu(self)
         try:
-            records = self._project_store.recent(limit=None)
+            records = self._project_store.recent(limit=None) if self._project_store else []
         except (OSError, ValueError):
+            menu.deleteLater()
             QMessageBox.warning(self, "Проекты", "Не удалось прочитать список проектов.")
             return
         for record in records:
-            action = menu.addAction(record.name.replace("&", "&&"))
+            action = menu.addAction(self._project_menu_label(record).replace("&", "&&"))
             action.triggered.connect(
                 lambda _checked=False, project_id=record.project_id:
                 self.continue_saved_project(project_id)
             )
-        if not records:
+        if not records and self._recent_project is not None:
+            state = self._recent_project
+            parts = [MODE_TITLES[state.mode]]
+            draft_name = state.common.project_name.strip()
+            if draft_name and draft_name.casefold() != "без названия":
+                parts.append(draft_name)
+            parts.append("Последний черновик")
+            action = menu.addAction(" · ".join(parts).replace("&", "&&"))
+            action.triggered.connect(self.continue_last_project)
+        elif not records:
             menu.addAction("Нет сохранённых проектов").setEnabled(False)
         button = self.mode_selection.all_projects_button
         menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
@@ -1326,6 +1296,11 @@ class V3ApplicationView(QWidget):
         shell.mode_picker_requested.connect(self.show_mode_switcher)
         shell.api_settings_requested.connect(self._show_api_settings)
         shell.diagnostics_requested.connect(self._show_diagnostics)
+        shell.api_settings_button.hide()
+        shell.diagnostics_button.hide()
+        shell.canvas_focus_changed.connect(
+            lambda focused, current_shell=shell: self.studio_header.setVisible(
+                not focused if self.stack.currentWidget() is current_shell else True))
         shell.finish_requested.connect(self._finish_workflow)
         self.shell = shell
         self.stack.addWidget(shell)

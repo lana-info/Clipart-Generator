@@ -5,13 +5,14 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import random
+import re
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
-    QListWidget, QMessageBox, QPushButton, QScrollArea, QSplitter,
+    QListWidget, QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QScrollArea, QSplitter,
     QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -132,11 +133,25 @@ class PromptComposerPage(QWidget):
             self.step_buttons.append(btn)
             self.steps_row.addWidget(btn)
         outer.addLayout(self.steps_row)
+        self.ai_activity = QFrame()
+        self.ai_activity.setObjectName("aiActivity")
+        self.ai_activity.setStyleSheet("QFrame#aiActivity { background:#1d3c43; border:1px solid #27c4b1; border-radius:6px; }")
+        activity_layout = QHBoxLayout(self.ai_activity)
+        self.ai_activity_text = _label("AI готовит варианты…")
+        activity_layout.addWidget(self.ai_activity_text, 1)
+        progress = QProgressBar()
+        progress.setObjectName("aiProgress")
+        progress.setRange(0, 0)
+        progress.setFixedWidth(160)
+        activity_layout.addWidget(progress)
+        activity_layout.addWidget(_button("Отменить ожидание", self.cancel_ai, "cancelAiButton"))
+        self.ai_activity.hide()
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         outer.addWidget(self.scroll, 1)
         self.footer = QHBoxLayout()
         outer.addLayout(self.footer)
+        outer.addWidget(self.ai_activity)
         self.status = QLabel("")
         self.status.setObjectName("composerStatus")
         self.status.setStyleSheet("color:#a8c9c8")
@@ -385,6 +400,7 @@ class PromptComposerPage(QWidget):
             previous_body.hide()
             previous_body.deleteLater()
         self.scroll.setWidget(body)
+        self._sync_ai_activity()
 
     def _previous_step(self):
         if self._step == 0:
@@ -649,12 +665,12 @@ class PromptComposerPage(QWidget):
             combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
             combo.setCurrentIndex(-1)
             combo.lineEdit().setPlaceholderText("Выберите или введите своё…")
-            combo.setEditText(pair.get("ru", ""))
+            combo.setEditText(pair.get("ru") or pair.get("en", ""))
         combo.currentIndexChanged.connect(lambda _=0, c=combo, k=key: self._select_option(k, c))
         if combo.isEditable():
             combo.lineEdit().editingFinished.connect(lambda c=combo, k=key: self._custom_field(k, c.currentText()))
         row.addWidget(combo, 1)
-        custom = _button("Своё RU/EN", lambda checked=False, k=key: self._edit_custom_pair(k), f"custom_{key}")
+        custom = _button("Своё значение", lambda checked=False, k=key: self._edit_custom_pair(k), f"custom_{key}")
         row.addWidget(custom)
         lock = _button("Закреплено" if key in self.draft.get("locks", []) else "Закрепить",
                        lambda checked=False, k=key: self._toggle_lock(k), f"lock_{key}")
@@ -667,31 +683,33 @@ class PromptComposerPage(QWidget):
             self._set_field(key, option.get("ru", ""), option.get("en", ""))
 
     def _custom_field(self, key, text):
-        if text != self._field_pair(key).get("ru", ""):
-            self._set_field(key, text, "")
+        text = text.strip()
+        pair = self._field_pair(key)
+        if text != (pair.get("ru") or pair.get("en", "")):
+            language = "ru" if re.search(r"[А-Яа-яЁё]", text) else "en"
+            self._set_field(key, text if language == "ru" else "", text if language == "en" else "")
 
     def _edit_custom_pair(self, key):
         dialog = QDialog(self)
         dialog.setWindowTitle("Своё значение: " + FIELDS[key])
+        dialog.setMinimumWidth(480)
+        dialog.setStyleSheet("QDialog { background:#111b29; color:#e8f1f4; }")
         layout = QVBoxLayout(dialog)
-        form = QFormLayout()
         pair = self._field_pair(key)
-        ru = QLineEdit(pair.get("ru", ""))
-        en = QLineEdit(pair.get("en", ""))
-        form.addRow("Русский", ru)
-        form.addRow("English", en)
-        dialog.composer_ru = ru
-        dialog.composer_en = en
-        layout.addLayout(form)
-        layout.addWidget(QLabel("Неполную пару можно сохранить как черновик. Для готового EN нужен перевод."))
-        translate = _button("Перевести с AI…", lambda: self.request_translation(ru.text(), "en", key, dialog))
-        layout.addWidget(translate)
+        value = QLineEdit(pair.get("ru") or pair.get("en", ""))
+        value.setObjectName("customFieldText")
+        value.setMaxLength(600)
+        value.setPlaceholderText("Введите на русском или английском")
+        layout.addWidget(value)
+        layout.addWidget(_label("Введите на удобном языке. Английскую версию подготовит AI."))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Сохранить")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._set_field(key, ru.text(), en.text())
+            self._custom_field(key, value.text())
             self._render()
 
     def _toggle_lock(self, key):
@@ -764,17 +782,19 @@ class PromptComposerPage(QWidget):
         for key in keys:
             self._field_editor(panel, key)
 
-    def _missing_translation(self):
-        return [FIELDS.get(key, key) for key, pair in self.draft.get("fields", {}).items()
-                if isinstance(pair, dict) and pair.get("ru", "").strip() and not pair.get("en", "").strip()]
+    def _needs_english_translation(self):
+        for pair in self.draft.get("fields", {}).values():
+            if isinstance(pair, dict):
+                original = pair.get("en", "").strip() or pair.get("ru", "").strip()
+                if original and (not pair.get("en", "").strip() or re.search(r"[А-Яа-яЁё]", original)):
+                    return True
+        return False
 
     def generate_local(self):
         if not self._guard_manual_rebuild(clear=False):
             return False
-        missing = self._missing_translation()
-        if missing:
-            self._show_message("Для английского промпта заполните перевод: " + ", ".join(missing))
-            return False
+        if self._needs_english_translation():
+            return self._request_ai("variants")
         try:
             candidate = deepcopy(self.draft)
             candidate.update(manual_en=None, manual_ru=None, translation_stale=False)
@@ -818,10 +838,21 @@ class PromptComposerPage(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         list_widget = QListWidget()
         list_widget.setObjectName("variantList")
-        list_widget.setWordWrap(True)
+        list_widget.setWordWrap(False)
+        list_widget.setMinimumWidth(240)
+        list_widget.setSpacing(6)
+        list_widget.setStyleSheet("QListWidget::item { background:#1d2b3b; border:1px solid #496175; border-radius:6px; padding:9px; } QListWidget::item:selected { background:#205552; border-color:#27c4b1; }")
         list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         for i, variant in enumerate(self._active_variants()):
-            list_widget.addItem(f"{i + 1}. {variant.get('label', 'Вариант')}")
+            full_label = str(variant.get("label", ""))
+            summary = re.sub(r"^Вариант\s*\d+\s*:?\s*", "", full_label, flags=re.I)
+            summary = " ".join(summary.split()).split(",")[0]
+            if len(summary) > 30:
+                summary = summary[:29].rstrip() + "…"
+            item = QListWidgetItem(f"Вариант {i + 1}" + ("\n" + summary if summary else ""))
+            item.setToolTip(full_label)
+            item.setSizeHint(QSize(220, 66))
+            list_widget.addItem(item)
         selected = self._proposal_index if self._proposal else self._variant_index
         if list_widget.count():
             list_widget.setCurrentRow(selected)
@@ -831,12 +862,9 @@ class PromptComposerPage(QWidget):
         right_layout = QVBoxLayout(right)
         variant = self._active_variant()
         if variant:
-            heading = _label(variant.get("label", "Вариант"))
-            heading.setStyleSheet("font-size:17px;font-weight:bold")
+            heading = _label(f"Вариант {selected + 1}")
+            heading.setObjectName("variantHeading")
             right_layout.addWidget(heading)
-            if not self._proposal:
-                right_layout.addWidget(_button("★ В избранном" if self._favorite else "☆ В избранное",
-                                               self._toggle_favorite, "favoriteButton"))
             source = "AI · предложение" if self._proposal else "Локально / сохранено"
             locked = ", ".join(FIELDS.get(k, k) for k in self.draft.get("locks", [])) or "нет"
             right_layout.addWidget(_label(f"{source}  ·  Закреплено: {locked}"))
@@ -871,7 +899,6 @@ class PromptComposerPage(QWidget):
                 actions.addWidget(_button("Изменить текст", self.edit_variant_text, "editTextButton"))
                 actions.addWidget(_button("Обновить перевод с AI…", self.translate_active_text, "translateButton"))
                 actions.addWidget(_button("Сохранить", self.save_current, "saveButton"))
-                actions.addWidget(_button("Открыть в конструкторе", lambda: self.goto_step(2), "editParametersButton"))
             right_layout.addLayout(actions)
         splitter.addWidget(right)
         splitter.setStretchFactor(1, 2)
@@ -1300,15 +1327,6 @@ class PromptComposerPage(QWidget):
         label, accepted = QInputDialog.getItem(self, "Модель AI", "Провайдер и модель", labels, 0, False)
         return configured[labels.index(label)] if accepted else None
 
-    def _quote_consent(self, quote, operation):
-        price = quote.get("price")
-        cost = "Стоимость неизвестна" if price is None else f"Оценка стоимости: ${price:.4f}. Это не предел списания."
-        provider = quote.get("provider") or "AI"
-        model = quote.get("model") or "модель"
-        text = f"{operation}\n{provider} / {model}\n{cost}\nОтправить один платный запрос?"
-        return QMessageBox.question(self, "Подтверждение AI", text,
-                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
-
     def request_ai_variants(self):
         return self._request_ai("variants")
 
@@ -1331,15 +1349,38 @@ class PromptComposerPage(QWidget):
         dialog.resize(620, 360)
         dialog.exec()
 
+    def _set_ai_ticket(self, ticket):
+        self._ai_ticket = ticket
+        if ticket in ("quoting", "submitting"):
+            self._ai_phase = ticket
+        self._sync_ai_activity()
+
+    def _sync_ai_activity(self):
+        busy = self._ai_ticket is not None
+        self.ai_activity.setVisible(busy)
+        phase = getattr(self, "_ai_phase", "submitting")
+        self.ai_activity_text.setText({
+            "quoting": "Получаем оценку AI-запроса…",
+            "submitting": "AI готовит ответ. Дождитесь завершения…",
+        }[phase])
+        # Old bodies and footer buttons await deleteLater after a render.
+        # Only update controls in the current body/footer.
+        translate = self.scroll.widget().findChild(QPushButton, "translateButton")
+        if translate is not None:
+            translate.setEnabled(not busy)
+        for index in range(self.footer.count()):
+            button = self.footer.itemAt(index).widget()
+            if isinstance(button, QPushButton):
+                name = button.objectName()
+                if name in ("aiButton", "moreVariantsButton") or (name == "nextButton" and self._step == 3):
+                    button.setEnabled(not busy)
+                if name == "aiButton":
+                    button.setText("AI готовит ответ…" if busy else "Предложить с AI…")
+
     def _request_ai(self, operation, text="", target="ru", field_key=None, parent_dialog=None):
         if self._ai_ticket is not None:
             self._show_message("AI-запрос уже выполняется.")
             return False
-        if operation == "variants":
-            missing = self._missing_translation()
-            if missing:
-                self._show_message("Заполните английский перевод: " + ", ".join(missing))
-                return False
         model = self._ai_model()
         if not model:
             return False
@@ -1358,42 +1399,35 @@ class PromptComposerPage(QWidget):
         fingerprint = self._fingerprint()
         self._ai_serial += 1
         serial = self._ai_serial
-        self._ai_ticket = "quoting"
+        self._set_ai_ticket("quoting")
         self.status.setText("Получаем оценку AI-запроса…")
 
         def error(exc):
             if serial != self._ai_serial:
                 return
-            self._ai_ticket = None
+            self._set_ai_ticket(None)
             self._error(exc)
 
         def quoted(quote):
             if serial != self._ai_serial:
                 return
-            self._ai_ticket = "confirming"
             if not quote.get("configured", True):
-                self._ai_ticket = None
+                self._set_ai_ticket(None)
                 self._show_message("Выбранная модель не подключена. Проверьте настройки AI.")
                 self.settings_requested.emit()
                 return
-            consent = self._quote_consent(quote, "Семь вариантов" if operation == "variants" else "Перевод текста")
-            if serial != self._ai_serial:
-                return
-            if not consent:
-                self._ai_ticket = None
-                self.status.setText("AI-запрос отменён до отправки.")
-                return
             if fingerprint != self._fingerprint():
-                self._ai_ticket = None
+                self._set_ai_ticket(None)
                 self._show_message("Черновик изменился до отправки. Повторите запрос для новых настроек.")
                 return
-            self._ai_ticket = "submitting"
+            self._set_ai_ticket("submitting")
             self.status.setText("AI-запрос выполняется…")
 
             def done(response):
                 if serial != self._ai_serial:
                     return
-                self._ai_ticket = None
+                self._set_ai_ticket(None)
+                self.status.setText("Ответ AI получен.")
                 stale = fingerprint != self._fingerprint() or (operation == "translation" and not field_key and translation_index != self._variant_index)
                 if operation == "variants":
                     if not response.get("variants"):
@@ -1407,6 +1441,7 @@ class PromptComposerPage(QWidget):
                                       "reason": response.get("reason", ""),
                                       "snapshot": snapshot, "stale": stale}
                     self._proposal_index = 0
+                    self._language = "en"
                     self._step = 4
                     self._tab = "composer"
                     self._render()
@@ -1443,7 +1478,7 @@ class PromptComposerPage(QWidget):
             try:
                 ticket = self.host.submit_ai(quote, done, error)
                 if self._ai_ticket == "submitting":
-                    self._ai_ticket = ticket
+                    self._set_ai_ticket(ticket)
             except Exception as exc:
                 error(exc)
 
@@ -1452,7 +1487,7 @@ class PromptComposerPage(QWidget):
                                         provider=model.get("provider"), model=model.get("model"),
                                         text=text, target=target)
             if self._ai_ticket == "quoting":
-                self._ai_ticket = ticket
+                self._set_ai_ticket(ticket)
         except Exception as exc:
             error(exc)
             return False
@@ -1461,7 +1496,7 @@ class PromptComposerPage(QWidget):
     def cancel_ai(self):
         ticket = self._ai_ticket
         self._ai_serial += 1
-        self._ai_ticket = None
+        self._set_ai_ticket(None)
         if ticket is not None and hasattr(ticket, "cancel"):
             ticket.cancel()
         if ticket is not None:

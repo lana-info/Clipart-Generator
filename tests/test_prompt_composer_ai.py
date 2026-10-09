@@ -113,3 +113,28 @@ def test_freeform_scene_warning_in_russian_requires_human_review():
     value['variants'][0]['ru'] = 'Чашка у окна. Затем переход ко второй сцене.'
     result = validate_response(value, draft)
     assert any('без монтажа' in warning for warning in result['variants'][0]['warnings'])
+
+
+@pytest.mark.parametrize('provider', ['kie', 'openrouter'])
+@pytest.mark.parametrize('fence', ['', 'json', 'JSON'])
+def test_whole_fenced_json_preserves_strict_variant_validation(provider, fence):
+    from studio_prompt_composer_api import parse_composer_response
+    draft = new_draft()
+    value = reply(draft)
+    data = {'choices': [{'finish_reason': 'stop', 'message': {
+        'content': f'```{fence}\n' + json.dumps(value) + '\n```'}}]}
+    assert len(validate_response(parse_composer_response(data, provider), draft)['variants']) == 7
+
+
+@pytest.mark.parametrize('text', [
+    'Explanation\n```json\n{"status":"complete"}\n```',
+    '```json\n{"status":"complete"\n```',
+    '```json\n{}\n```\nExtra text',
+    '```json\n{}\n```\n```json\n{}\n```',
+])
+def test_json_wrapper_never_repairs_or_extracts_partial_content(text):
+    from studio_prompt_composer_api import parse_composer_response
+    from studio_text_errors import ComposerAIError
+    with pytest.raises(ComposerAIError) as exc:
+        parse_composer_response({'choices': [{'finish_reason': 'stop', 'message': {'content': text}}]}, 'kie')
+    assert exc.value.code == 'json'

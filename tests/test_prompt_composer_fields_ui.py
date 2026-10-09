@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from PyQt6.QtCore import QEvent, QPoint, QTimer
-from PyQt6.QtWidgets import QApplication, QComboBox, QDialog, QLabel, QPushButton
+from PyQt6.QtWidgets import QLineEdit, QApplication, QComboBox, QDialog, QLabel, QPushButton
 
 from prompt_composer.catalog import catalogue
 from prompt_composer.ui import FIELDS, PromptComposerPage
@@ -84,7 +84,8 @@ def test_mode_chosen_at_start_controls_scene_fields_without_duplicate_switches(c
 def test_forms_no_repeated_summary_or_cancel(composer, app, step):
     composer.goto_step(step)
     app.processEvents()
-    assert composer.findChild(QPushButton, "cancelAiButton") is None
+    cancel = composer.findChild(QPushButton, "cancelAiButton")
+    assert cancel is None or not cancel.isVisible()
     labels = [label.text() for label in composer.findChildren(QLabel)]
     assert "Ваша сцена" not in labels
     assert not any("Здесь создаётся только текст" in text for text in labels)
@@ -128,7 +129,7 @@ def test_randomize_manual_guard_can_decline_without_changes(composer):
     choose.assert_not_called()
 
 
-def test_empty_placeholder_and_custom_bilingual_value_survive_render(composer, app):
+def test_empty_placeholder_and_single_custom_value_survive_render(composer, app):
     page = composer
     page.goto_step(2)
     combo = page.findChild(QComboBox, "field_location")
@@ -139,14 +140,13 @@ def test_empty_placeholder_and_custom_bilingual_value_survive_render(composer, a
     def fill_dialog():
         dialog = app.activeModalWidget()
         assert isinstance(dialog, QDialog)
-        dialog.composer_ru.setText("свой двор")
-        dialog.composer_en.setText("custom yard")
+        dialog.findChild(QLineEdit, "customFieldText").setText("свой двор")
         dialog.accept()
     QTimer.singleShot(0, fill_dialog)
     page.findChild(QPushButton, "custom_location").click()
     combo = page.findChild(QComboBox, "field_location")
     assert combo.currentText() == "свой двор"
-    assert page.draft["fields"]["location"] == {"ru": "свой двор", "en": "custom yard"}
+    assert page.draft["fields"]["location"] == {"ru": "свой двор", "en": ""}
     combo.lineEdit().setText("новое место")
     combo.lineEdit().editingFinished.emit()
     assert page.draft["fields"]["location"] == {"ru": "новое место", "en": ""}

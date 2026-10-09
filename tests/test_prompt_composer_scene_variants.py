@@ -19,8 +19,15 @@ def test_seven_variants_keep_scene_camera_style_action_and_subject(template):
     assert len({v['ru'] for v in result['variants']}) == 7
     for variant in result['variants']:
         fields = variant['draft']['fields']
-        for key in ('style', 'camera', 'action', 'subject', 'location', 'exclusions'):
+        for key in ('camera', 'action', 'subject', 'location', 'exclusions'):
             assert fields[key] == original['fields'][key]
+        if not template.get('direction'):
+            assert fields['style'] == original['fields']['style']
+        else:
+            for lang in ('ru', 'en'):
+                assert fields['style'][lang].startswith(original['fields']['style'][lang])
+                suffix = fields['style'][lang][len(original['fields']['style'][lang]):]
+                assert suffix in [pair[lang] for pair in template['variation_options']['style']]
         for key in ('shot', 'lighting', 'angle'):
             for lang in ('ru', 'en'):
                 assert fields[key][lang].startswith(original['fields'][key][lang])

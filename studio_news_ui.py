@@ -33,6 +33,7 @@ class StudioNewsPanel(QFrame):
 
     def set_news(self, items, *, offline=False):
         row = items[0] if items else None
+        self.setVisible(row is not None)
         self.title.setVisible(row is not None)
         self.date.setVisible(row is not None)
         self.note.setVisible(offline and row is not None)

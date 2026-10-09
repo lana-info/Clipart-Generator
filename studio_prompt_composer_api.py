@@ -1,5 +1,6 @@
 """Core-owned, text-only model routes and strict Composer response parsing."""
 import json
+import re
 from dataclasses import dataclass
 
 from studio_text_errors import TextGenerationError, ComposerAIError, composer_error_code
@@ -75,6 +76,11 @@ def parse_composer_response(data, provider):
             raise ValueError
         if not isinstance(text, str) or not text.strip():
             raise ValueError
+        # Accept a whole Markdown code block, never extract a fragment or repair JSON.
+        text = text.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", text, flags=re.DOTALL | re.IGNORECASE)
+        if fenced:
+            text = fenced.group(1)
         result = json.loads(text)
         if not isinstance(result, dict):
             raise ValueError

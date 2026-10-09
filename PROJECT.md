@@ -1,5 +1,39 @@
 # Vibix Images
 
+## Подробная постановка промптов, уточнение владельца 2026-10-08
+
+Качество ориентируется на Content Studio в TrendWatcher: конкретные оптика,
+фокус, глубина резкости, ракурс, направление света, композиция и фактуры под
+выбранный сценарий. Текущие 250 вложенных рецептов получают такую постановку;
+семь вариантов могут менять фотографический акцент без подмены героя, товара
+и исходного действия. UGC сохраняет естественную съёмку на телефон. Рилс
+остаётся одной непрерывной сценой с согласованной камерой и стабильным фокусом.
+AI составляет связный подробный текст без бессмысленного набора «8K/masterpiece»
+и без выдуманных личных особенностей, реквизита или содержимого упаковки.
+Существующие пользовательские данные и закрепления сохраняются; дополнительные
+запросы, новые поля ввода и миграции не требуются. Реальное качество медиа
+подтверждается отдельно, локальные проверки не заменяют генерацию у провайдера.
+Проверки и примеры: STATE.md.
+
+## Свои параметры и автоматический английский, уточнение владельца 2026-10-08
+
+В конструкторе одно поле «Своё значение» на русском или английском; ручной
+перевод не требуется. Если для заполненного параметра нет английского значения,
+обычная кнопка получения вариантов запускает один текстовый AI-запрос: перевод
+и семь вариантов готовятся вместе. Готовый английский текст показывается первым.
+При заполненном английском варианте локальная генерация сохраняется. Исходные
+значения героя, закреплений и исключений остаются точными, AI может дополнить
+их пустые переводные слоты. Ошибка или отмена не стирает черновик и результаты.
+Схема сохранённых проектов совместима, второй ручной ввод не требуется.
+Отдельный перевод готового текста остаётся необязательным. Проверки: STATE.md.
+
+## Текстовый AI конструктора, уточнение владельца2026-10-08
+
+Нажатие Предложить сAI или перевода запускает текстовый запрос без отдельного
+подтверждения стоимости. Индикатор ожидания показывается внизу под кнопками,
+с отменой ожидания; повторный запрос во время выполнения блокируется.
+Визуал карточек готовых вариантов утверждён владельцем. Проверки: STATE.md.
+
 ## Направление с выбором сценария, уточнение владельца 2026-10-08
 
 Ориентир: Content Studio в TrendWatcher Video. Владелец поручил распространить
@@ -533,9 +567,14 @@ experimental candidate; difference matting is not a default. Details and measure
 candidate rejection: docs/research/attached-pipeline-review-2026-09-10.ru.md.
 The attachment's implementation prompt is research input, not project authority.
 
-Approved home: three recently saved projects above an equal-sized illustrated
-module catalog. All projects are retained, with autosave and explicit resume;
-reopening must never resubmit paid work. Module actions: Open/Update,
+Home clarification, 2026-10-08: replace the three recent-project cards with
+one «Продолжить работу» dropdown beside the module heading. Every saved-project
+item shows module, optional meaningful name, and local date/time. Core owns one
+shared top header with License, Module updates, API settings and Diagnostics
+for home and all modules; canvas focus mode temporarily hides it. Hide the news
+panel while no actual or cached announcement is available. All projects
+are retained, with autosave and explicit resume; reopening must never resubmit
+paid work. Module actions: Open/Update,
 Download if entitled, Buy if not entitled, Coming soon if not released.
 
 Product clarification, 2026-09-08: Studio is a modular seller workspace, not a

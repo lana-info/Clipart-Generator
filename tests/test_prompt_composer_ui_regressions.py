@@ -172,7 +172,6 @@ def _controlled_ai(page, host, monkeypatch):
     from types import SimpleNamespace
     replies = []
     monkeypatch.setattr(page, '_ai_model', lambda: {'provider': 'openrouter', 'model': 'openai/gpt-5-mini'})
-    monkeypatch.setattr(page, '_quote_consent', lambda *_: True)
     def quote(draft, done, error, **kwargs):
         done({'id': 'synthetic', 'configured': True})
         return SimpleNamespace(cancel=lambda: None)
@@ -311,3 +310,101 @@ def test_unapplied_translation_is_available_as_literal_readonly_text(composer):
         return 1
     with patch.object(QDialog, 'exec', new=inspect):
         page._show_unapplied_translation(translated, 'Keep the edited field')
+
+
+def test_result_cards_have_two_lines_and_one_save_action(composer, app):
+    from PyQt6.QtWidgets import QLabel, QListWidget, QPushButton
+    page, host = composer
+    assert page.generate_local()
+    page.resize(1120, 780)
+    page.show()
+    page._variants[1]['label'] = 'Вариант 2: ' + 'длинное описание ' * 20
+    page._select_variant(1)
+    app.processEvents()
+    listing = page.scroll.widget().findChild(QListWidget, 'variantList')
+    assert listing.spacing() >= 6
+    assert listing.item(1).text().count('\n') == 1
+    assert len(listing.item(1).text().split('\n')[1]) <= 30
+    assert page.scroll.widget().findChild(QLabel, 'variantHeading').text() == 'Вариант 2'
+    assert page.scroll.widget().findChild(QPushButton, 'favoriteButton') is None
+    assert page.scroll.widget().findChild(QPushButton, 'editParametersButton') is None
+    assert page.scroll.widget().findChild(QPushButton, 'saveButton') is not None
+    first = listing.visualItemRect(listing.item(0))
+    second = listing.visualItemRect(listing.item(1))
+    assert second.top() > first.bottom()
+
+
+@pytest.mark.parametrize('outcome', ['success', 'error', 'cancel', 'unconfigured'])
+def test_ai_wait_is_visible_survives_render_and_clears(composer, app, outcome):
+    from PyQt6.QtWidgets import QPushButton, QProgressBar
+    page, host = composer
+    assert page.generate_local()
+    page.show()
+    callbacks = {}
+    class Ticket:
+        cancelled = False
+        def cancel(self):
+            self.cancelled = True
+    ticket = Ticket()
+    def quote(snapshot, done, error, **kwargs):
+        callbacks['quote'] = done
+        callbacks['error'] = error
+        return ticket
+    def submit(quote, done, error):
+        callbacks['done'] = done
+        return ticket
+    with patch.object(page, '_ai_model', return_value={'provider': 'kie', 'model': 'test'}), \
+         patch.object(host, 'quote_ai', side_effect=quote), \
+         patch.object(host, 'submit_ai', side_effect=submit), \
+         patch.object(page, '_show_message'):
+        assert page.request_ai_variants()
+        assert page.ai_activity.isVisible()
+        progress = page.findChild(QProgressBar, 'aiProgress')
+        assert progress.minimum() == progress.maximum() == 0
+        page._change_language("ru")
+        assert page.ai_activity.isVisible()
+        active_ai = page.footer.itemAt(1).widget()
+        assert not active_ai.isEnabled()
+        assert active_ai.text() == 'AI готовит ответ…'
+        assert not page.scroll.widget().findChild(QPushButton, 'translateButton').isEnabled()
+        callbacks['quote']({'configured': outcome != 'unconfigured'})
+        if outcome == 'success':
+            callbacks['done']({'variants': deepcopy(page._variants), 'status': 'complete'})
+            assert page._proposal
+        elif outcome == 'error':
+            callbacks['error']('Безопасная ошибка')
+        elif outcome == 'cancel':
+            page.cancel_ai()
+            assert ticket.cancelled
+            callbacks['done']({'variants': deepcopy(page._variants)})
+            assert page._proposal is None
+        assert not page.ai_activity.isVisible()
+        assert page.footer.itemAt(1).widget().isEnabled()
+
+
+@pytest.mark.parametrize('operation', ['variants', 'translation'])
+@pytest.mark.parametrize('price', [None, 0.01])
+def test_text_ai_submits_once_without_payment_dialog(composer, operation, price):
+    from PyQt6.QtWidgets import QMessageBox
+    page, host = composer
+    page.generate_local()
+    page.resize(1120, 780)
+    page.show()
+    def quote(snapshot, done, error, **kwargs):
+        done({'id': 'test', 'configured': True, 'price': price})
+        return 'quote-ticket'
+    with patch.object(page, '_ai_model', return_value={'provider': 'kie', 'model': 'test'}), \
+         patch.object(host, 'quote_ai', side_effect=quote), \
+         patch.object(host, 'submit_ai', return_value='request-ticket') as submit, \
+         patch.object(QMessageBox, 'question', side_effect=AssertionError('unexpected payment dialog')), \
+         patch.object(page, '_show_message'):
+        if operation == 'variants':
+            assert page.request_ai_variants()
+        else:
+            assert page.request_translation('Исходный текст', target='en')
+        assert submit.call_count == 1
+        assert page.ai_activity.isVisible()
+        page.layout().activate()
+        assert page.ai_activity.y() >= page.footer.geometry().bottom()
+        assert not page.request_ai_variants()
+        assert submit.call_count == 1

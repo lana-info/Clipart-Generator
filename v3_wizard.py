@@ -126,6 +126,7 @@ class AppShell(QWidget):
     mode_picker_requested = pyqtSignal()
     api_settings_requested = pyqtSignal()
     diagnostics_requested = pyqtSignal()
+    canvas_focus_changed = pyqtSignal(bool)
     run_requested = pyqtSignal(str)
     finish_requested = pyqtSignal(str)
     initialization_stage = pyqtSignal(str, int, int)
@@ -243,6 +244,8 @@ class AppShell(QWidget):
     def set_canvas_focus_mode(self, enabled: bool) -> None:
         """Temporarily maximize an editor canvas without changing OS fullscreen."""
         focused = bool(enabled)
+        self._canvas_focus_active = focused
+        self.canvas_focus_changed.emit(focused)
         self.top_bar.setVisible(not focused)
         self.sidebar.setVisible(not focused)
         self.footer.setVisible(not focused)
