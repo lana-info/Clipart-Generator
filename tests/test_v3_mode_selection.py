@@ -92,6 +92,18 @@ class V3ModeSelectionTests(unittest.TestCase):
     def tearDown(self):
         self.app.processEvents()
 
+    def test_module_uses_one_shared_header_and_restores_home_header(self):
+        view = V3ApplicationView()
+        self.assertEqual(view.mode_selection.active_module_label.text(), "")
+        self.assertFalse(view.mode_selection.studio_home_button.isVisible())
+        view._handle_mode_selected(ProjectMode.PROCESSING.value)
+        self.assertIsNotNone(view.shell)
+        self.assertEqual(view.mode_selection.active_module_label.text(), "Обработка изображений")
+        self.assertTrue(view.shell.top_bar.isHidden())
+        view.show_mode_switcher()
+        self.assertEqual(view.mode_selection.active_module_label.text(), "")
+        view.close()
+
     def test_application_uses_one_default_and_minimum_window_size(self):
         view = V3ApplicationView()
 

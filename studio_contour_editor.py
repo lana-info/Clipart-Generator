@@ -84,6 +84,7 @@ class ContourCanvas(QWidget):
         self.background: Literal["checker", "black", "white"] = "checker"
         self.tool: Literal["select", "restore", "remove", "pan"] = "select"
         self.brush_radius = 8
+        self.brush_style = "hard"
         self._space_pan = False
         self.zoom = 1.0
         self.pan = QPointF(0, 0)
@@ -459,10 +460,17 @@ class ContourCanvas(QWidget):
         before = self.alpha.copy()
         left, top, right, bottom = self.roi
         mask = np.zeros((bottom - top, right - left), dtype=np.uint8)
-        cv2.line(mask, (round(start[0] - left), round(start[1] - top)),
-                 (round(end[0] - left), round(end[1] - top)), 255, max(1, self.brush_radius * 2), cv2.LINE_AA)
+        p0 = (round(start[0] - left), round(start[1] - top))
+        p1 = (round(end[0] - left), round(end[1] - top))
+        cv2.line(mask, p0, p1, 255, max(1, self.brush_radius * 2), cv2.LINE_AA)
+        cv2.circle(mask, p0, self.brush_radius, 255, -1, cv2.LINE_AA)
+        cv2.circle(mask, p1, self.brush_radius, 255, -1, cv2.LINE_AA)
+        if self.brush_style == "soft":
+            sigma = max(0.45, self.brush_radius * 0.12)
+            mask = cv2.GaussianBlur(mask, (0, 0), sigmaX=sigma, sigmaY=sigma)
         region = self.alpha[top:bottom, left:right]
-        region[mask > 0] = value
+        coverage = mask.astype(np.float32) / 255.0
+        region[:] = np.rint(region.astype(np.float32) * (1.0 - coverage) + value * coverage).astype(np.uint8)
         if not np.array_equal(before, self.alpha): self.update()
 
     def _apply_nodes_locally(self) -> bool:
@@ -713,6 +721,20 @@ class ContourEditorDialog(QDialog):
         for value in (0,1,2):
             b=QToolButton(); b.setText(f"{value} px"); b.setCheckable(True); b.setChecked(value==0); b.clicked.connect(lambda checked=False,v=value:self._set_feather(v)); group.addButton(b); row.addWidget(b); self.feather_buttons.append(b)
         right.addLayout(row)
+        right.addWidget(QLabel("Тип кисти"))
+        brush_styles = QHBoxLayout()
+        self.brush_style_buttons = {}
+        self.brush_style_group = QButtonGroup(self)
+        for style, label in (("hard", "Жёсткая"), ("soft", "Мягкая")):
+            button = QToolButton()
+            button.setText(label)
+            button.setCheckable(True)
+            button.setChecked(style == "hard")
+            button.clicked.connect(lambda checked=False, selected=style: self._set_brush_style(selected))
+            self.brush_style_group.addButton(button)
+            self.brush_style_buttons[style] = button
+            brush_styles.addWidget(button)
+        right.addLayout(brush_styles)
         right.addWidget(QLabel("Кисть, пиксели"))
         self.brush_sizes = (2, 8, 16, 32, 64)
         self.brush_buttons = {}
@@ -763,6 +785,7 @@ class ContourEditorDialog(QDialog):
         self._set_tool("select")
         self._set_feather(0)
         self.feather_buttons[0].setChecked(True)
+        self._set_brush_style("hard")
         self._set_brush(16)
         self._set_background("checker")
         self._set_snap(self.snap_button.isChecked())
@@ -783,6 +806,11 @@ class ContourEditorDialog(QDialog):
 
     def _toggle_snap(self) -> None:
         self.snap_button.setChecked(not self.snap_button.isChecked())
+
+    def _set_brush_style(self, style: str) -> None:
+        self.brush_style_buttons[style].setChecked(True)
+        if hasattr(self, "canvas"):
+            self.canvas.brush_style = style
 
     def _set_brush(self,value:int)->None:
         self.brush_buttons[value].setChecked(True)

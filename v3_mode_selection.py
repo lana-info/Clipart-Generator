@@ -182,6 +182,13 @@ class ModeSelectionScreen(QWidget):
         brand = QLabel("VIBIX Studio")
         brand.setStyleSheet("font-size:24px;font-weight:600;color:#22c9c6;")
         account_layout.addWidget(brand, 1)
+        self.active_module_label = QLabel("")
+        self.active_module_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.active_module_label.setStyleSheet("font-size:16px;font-weight:600;")
+        account_layout.addWidget(self.active_module_label, 2)
+        self.studio_home_button = V3Button("Главная Studio", ButtonVariant.GHOST)
+        self.studio_home_button.hide()
+        account_layout.addWidget(self.studio_home_button)
 
         self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
         self.license_button.clicked.connect(self.license_requested.emit)
@@ -462,6 +469,7 @@ class V3ApplicationView(QWidget):
         layout.insertWidget(0, self.studio_header)
         self.mode_selection.module_updates_button.setVisible(module_delivery is not None)
         self.mode_selection.module_updates_requested.connect(self._show_module_updates)
+        self.mode_selection.studio_home_button.clicked.connect(self.show_mode_switcher)
         self.mode_selection.mode_selected.connect(self._handle_mode_selected)
         self.mode_selection.module_action_requested.connect(self._handle_module_action)
         self.mode_selection.continue_last_project_requested.connect(
@@ -816,6 +824,12 @@ class V3ApplicationView(QWidget):
         preserved_size = self.size()
         preserve_window_state = self.isMaximized() or self.isFullScreen()
         self.stack.setCurrentWidget(widget)
+        in_module = widget is not self.mode_selection
+        self.mode_selection.active_module_label.setText(
+            MODE_TITLES.get(widget.state.mode, "") if isinstance(widget, AppShell)
+            else ("Автоматический клипарт" if in_module else "")
+        )
+        self.mode_selection.studio_home_button.setVisible(in_module)
         focused = bool(getattr(widget, "_canvas_focus_active", False))
         self.studio_header.setVisible(not focused)
         if not preserve_window_state:
@@ -1274,6 +1288,10 @@ class V3ApplicationView(QWidget):
             shell = AutoClipartShell(state, tokens=self.tokens)
         else:
             shell = AppShell(state, tokens=self.tokens)
+        if isinstance(shell, AppShell):
+            # The global Studio header already contains navigation and module name.
+            shell._embedded_header = True
+            shell.top_bar.hide()
         shell.diagnostic_journal = self._diagnostic_journal
         shell.initialization_stage.connect(self._show_initialization_stage)
         try:

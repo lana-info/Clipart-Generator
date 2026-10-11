@@ -28,6 +28,7 @@ from PyQt6.QtGui import (
     QPixmap,
 )
 from PyQt6.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QComboBox,
     QFrame,
@@ -1812,6 +1813,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._draft_masks: dict[Path, bytes] = {}
         self._draft_contours = {}
         self._save_after_contour = False
+        self._saving = False
         self._focus_mode = False
         self._edge_sharpen_check_key = None
         self._edge_sharpen_possible = False
@@ -2004,10 +2006,19 @@ class ClipartTransparencyEditorPage(QWidget):
             diameter_row.addWidget(button)
             self.diameter_buttons[diameter] = button
         brush_layout.addLayout(diameter_row)
-        self.hardness_slider, self.hardness_value = self._slider_row(
-            brush_layout, "Жёсткость", 0, 100, 85, "%",
-        )
-        self.hardness_slider.valueChanged.connect(self._hardness_changed)
+        style_row = QHBoxLayout()
+        self.brush_style_buttons = {}
+        self.brush_style_group = QButtonGroup(self)
+        for style, label, hardness in (("hard", "Жёсткая", 100), ("soft", "Мягкая", 50)):
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setChecked(style == "hard")
+            button.clicked.connect(lambda checked=False, value=hardness: self._hardness_changed(value))
+            self.brush_style_group.addButton(button)
+            self.brush_style_buttons[hardness] = button
+            style_row.addWidget(button)
+        brush_layout.addLayout(style_row)
+        self.canvas.brush_hardness = 100
         tools_layout.addWidget(self.brush_controls)
         self.pen_controls = QWidget()
         pen_layout = QVBoxLayout(self.pen_controls)
@@ -2469,8 +2480,8 @@ class ClipartTransparencyEditorPage(QWidget):
         self._set_zoom(max(10, min(1600, round(current * (1.25 if step > 0 else .8)))))
 
     def _hardness_changed(self, value: int) -> None:
-        self.hardness_value.setText(f"{value}%")
         self.canvas.brush_hardness = value
+        self.brush_style_buttons[value].setChecked(True)
 
     def _set_background(self, label: str) -> None:
         self.canvas.set_background(label)
@@ -2690,6 +2701,8 @@ class ClipartTransparencyEditorPage(QWidget):
         raise ValueError("Не удалось выбрать свободное имя для копии PNG")
 
     def _save_clicked(self) -> None:
+        if self._saving:
+            return
         if self.canvas.contour_busy:
             return
         if self.canvas.contour.local_active:
@@ -2704,14 +2717,25 @@ class ClipartTransparencyEditorPage(QWidget):
             if not self.canvas.contour_busy:
                 self._save_after_contour = False
             return
+        self._saving = True
+        self.save_button.setEnabled(False)
+        self.save_button.setText("Сохранение…")
+        self._show_contour_status("Сохранение PNG…")
+        QApplication.processEvents()
         try:
-            self.save_current()
+            output_path, _ = self.save_current()
+            self._show_contour_status(f"Сохранено: {output_path.name} • {output_path.parent}")
         except (OSError, ValueError) as error:
+            self._show_contour_status(f"Ошибка сохранения: {error}")
             QMessageBox.critical(
                 self,
                 "Не удалось сохранить PNG",
                 f"Проверьте доступ к папке и свободное место.\n\n{error}",
             )
+        finally:
+            self._saving = False
+            self.save_button.setText("Сохранить PNG")
+            self.save_button.setEnabled(True)
 
     def _has_unsaved_changes(self) -> bool:
         current_dirty = self._document is not None and self._document.is_dirty

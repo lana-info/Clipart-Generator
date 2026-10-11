@@ -61,6 +61,20 @@ class BackgroundMaskTests(unittest.TestCase):
         self.assertLess(removed.getpixel((29, 20)), 255)
         self.assertEqual(removed.getpixel((31, 20)), 255)
 
+    def test_hard_brush_has_antialiased_alpha_on_a_diagonal_edge(self):
+        before = Image.new("L", (61, 61), 255)
+        after = apply_mask_stroke(before, (30, 30), radius=13, action="remove", hardness=100)
+        self.assertEqual(after.getpixel((30, 30)), 0)
+        self.assertTrue(any(0 < pixel < 255 for pixel in after.getdata()))
+
+    def test_soft_brush_fades_more_than_hard_brush(self):
+        before = Image.new("L", (61, 61), 255)
+        hard = apply_mask_stroke(before, (30, 30), radius=13, action="remove", hardness=100)
+        soft = apply_mask_stroke(before, (30, 30), radius=13, action="remove", hardness=50)
+        self.assertEqual(soft.getpixel((30, 30)), 0)
+        self.assertGreater(sum(0 < x < 255 for x in soft.getdata()),
+                           sum(0 < x < 255 for x in hard.getdata()))
+
     def test_path_stroke_fills_the_gap_between_pointer_events(self):
         mask = Image.new("L", (61, 21), 255)
 

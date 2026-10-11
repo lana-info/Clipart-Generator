@@ -246,7 +246,7 @@ class AppShell(QWidget):
         focused = bool(enabled)
         self._canvas_focus_active = focused
         self.canvas_focus_changed.emit(focused)
-        self.top_bar.setVisible(not focused)
+        self.top_bar.setVisible(not focused and not getattr(self, "_embedded_header", False))
         self.sidebar.setVisible(not focused)
         self.footer.setVisible(not focused)
         if focused:

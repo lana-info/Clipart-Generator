@@ -55,8 +55,13 @@ def _brush_opacity(radius: int, hardness: int) -> Image.Image:
         # A single pixel has no feathered neighbours, regardless of hardness.
         return Image.new("L", (1, 1), 255)
     diameter = radius * 2 + 1
-    shape = Image.new("L", (diameter, diameter), 0)
-    ImageDraw.Draw(shape).ellipse((0, 0, diameter - 1, diameter - 1), fill=255)
+    # Supersampling retains fractional pixel coverage even for a hard brush.
+    scale = 4
+    large = Image.new("L", (diameter * scale, diameter * scale), 0)
+    ImageDraw.Draw(large).ellipse(
+        (0, 0, diameter * scale - 1, diameter * scale - 1), fill=255
+    )
+    shape = large.resize((diameter, diameter), Image.Resampling.LANCZOS)
     if hardness == 100:
         return shape
     gradient = Image.radial_gradient("L").resize(
