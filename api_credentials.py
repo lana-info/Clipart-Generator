@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Mapping
 
-SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key", "fal_api_key", "openrouter_api_key")
+SECRET_CONFIG_KEYS = ("kie_api_key", "photoroom_api_key", "fal_api_key", "openrouter_api_key", "atlascloud_api_key", "piapi_api_key")
 ALL_PROVIDER_CREDENTIAL_KEYS = SECRET_CONFIG_KEYS + ("runpod_api_key", "runpod_endpoint_id")
 
 

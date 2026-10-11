@@ -8,7 +8,8 @@ from provider_upscale_contract import normalize_fal_upscale_factor
 
 
 _CORE_RUNTIME_KEYS = (
-    "kie_api_key", "photoroom_api_key", "fal_api_key", "local_realesrgan_dir"
+    "kie_api_key", "photoroom_api_key", "fal_api_key",
+    "atlascloud_api_key", "piapi_api_key", "local_realesrgan_dir"
 )
 
 

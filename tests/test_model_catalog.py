@@ -11,6 +11,7 @@ from model_catalog import (
     validate_generation_contract,
 )
 from fal_model_catalog import is_fal_generation_model
+from model_catalog import generation_provider_id
 
 
 class ModelCatalogTests(unittest.TestCase):
@@ -36,19 +37,19 @@ class ModelCatalogTests(unittest.TestCase):
     def test_every_visible_model_has_an_explicit_provider_label(self):
         for model_id in VISIBLE_GENERATION_MODEL_IDS:
             label = model_spec(model_id).label
-            expected_prefix = "Fal.ai — " if is_fal_generation_model(model_id) else "KIE — "
+            expected_prefix = {"fal": "Fal.ai — ", "kie": "KIE — ", "atlascloud": "AtlasCloud — ", "piapi": "PiAPI — "}[generation_provider_id(model_id)]
             self.assertTrue(label.startswith(expected_prefix), label)
 
     def test_catalog_is_immutable_and_preserves_visible_snapshot(self):
-        self.assertEqual(len(GENERATION_MODELS), 33)
-        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 18)
+        self.assertEqual(len(GENERATION_MODELS), 38)
+        self.assertEqual(len(VISIBLE_GENERATION_MODEL_IDS), 23)
         self.assertEqual(model_spec("gpt-image-2").resolutions, {"1K", "2K", "4K"})
         with self.assertRaises(TypeError):
             MODEL_SPECS["new-model"] = model_spec("gpt-image-2")
         for model_id in VISIBLE_GENERATION_MODEL_IDS:
             spec = model_spec(model_id)
             self.assertEqual(spec.model_id, model_id)
-            if model_id != "fal-ai/flux/schnell":
+            if model_id not in {"fal-ai/flux/schnell", "atlascloud/gpt-image-2.5-flare", "piapi/gpt-image-2.5-flare", "atlascloud/gpt-image-2.5-sunburst", "piapi/gpt-image-2.5-sunburst", "piapi/gpt-image-2.5"}:
                 self.assertIsNotNone(spec.pricing)
             self.assertIsInstance(spec.ratios, frozenset)
 

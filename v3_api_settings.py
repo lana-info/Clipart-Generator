@@ -330,22 +330,12 @@ class ApiSettingsDialog(QDialog):
         values = dict(load_credentials())
         values.update(initial or {})
         layout = QVBoxLayout(self)
-        layout.addWidget(
-            QLabel(
-                "Ключи KIE/OpenRouter/PhotoRoom хранятся локально в пользовательском .env; "
-                "Fal.ai сохраняется в защищённом хранилище Windows и не показывается в логах."
-            )
+        credentials_help = QLabel(
+            "Ключи KIE/OpenRouter/PhotoRoom/AtlasCloud/PiAPI хранятся локально в пользовательском .env; "
+            "Fal.ai сохраняется в защищённом хранилище Windows и не показывается в логах."
         )
-        runpod_help = QLabel(
-            '<b>RunPod:</b> создайте аккаунт, пополните баланс и Serverless Endpoint; '
-            '<a href="https://www.runpod.io/console/user/settings">получить API-ключ</a> · '
-            '<a href="https://console.runpod.io/user/billing">открыть баланс и пополнить</a> · '
-            '<a href="https://docs.runpod.io/serverless/overview">инструкция Serverless</a> · '
-            '<a href="https://www.runpod.io/pricing">цены</a>'
-        )
-        runpod_help.setOpenExternalLinks(True)
-        runpod_help.setWordWrap(True)
-        layout.addWidget(runpod_help)
+        credentials_help.setWordWrap(True)
+        layout.addWidget(credentials_help)
         provider_help = QLabel(
             '<b>Пополнение и управление:</b> '
             '<a href="https://kie.ai/billing">KIE Billing</a> · '
@@ -361,9 +351,14 @@ class ApiSettingsDialog(QDialog):
         self.openrouter_edit = QLineEdit(values.get("openrouter_api_key", ""))
         self.photo_edit = QLineEdit(values.get("photoroom_api_key", ""))
         self.fal_edit = QLineEdit(values.get("fal_api_key", ""))
-        self.runpod_key_edit = QLineEdit(values.get("runpod_api_key", ""))
-        self.runpod_endpoint_edit = QLineEdit(values.get("runpod_endpoint_id", ""))
-        for edit in (self.kie_edit, self.openrouter_edit, self.photo_edit, self.fal_edit, self.runpod_key_edit):
+        self.atlascloud_edit = QLineEdit(values.get("atlascloud_api_key", ""))
+        self.piapi_edit = QLineEdit(values.get("piapi_api_key", ""))
+        self.runpod_key_edit = QLineEdit(values.get("runpod_api_key", ""), self)
+        self.runpod_endpoint_edit = QLineEdit(values.get("runpod_endpoint_id", ""), self)
+        # Keep stored values when saving other keys; RunPod is not exposed yet.
+        self.runpod_key_edit.hide()
+        self.runpod_endpoint_edit.hide()
+        for edit in (self.kie_edit, self.openrouter_edit, self.photo_edit, self.fal_edit, self.atlascloud_edit, self.piapi_edit, self.runpod_key_edit):
             edit.setEchoMode(QLineEdit.EchoMode.Password)
         kie_row = QHBoxLayout()
         kie_row.addWidget(self.kie_edit)
@@ -389,8 +384,8 @@ class ApiSettingsDialog(QDialog):
         self.fal_balance_button.clicked.connect(self._check_fal_balance)
         fal_row.addWidget(self.fal_balance_button)
         form.addRow("Fal.ai API Key", fal_row)
-        form.addRow("RunPod API Key", self.runpod_key_edit)
-        form.addRow("RunPod Endpoint ID", self.runpod_endpoint_edit)
+        form.addRow("AtlasCloud API Key", self.atlascloud_edit)
+        form.addRow("PiAPI API Key", self.piapi_edit)
         self.kie_concurrency_combo = QComboBox()
         for concurrency in PROVIDER_CONCURRENCY_CHOICES:
             self.kie_concurrency_combo.addItem(str(concurrency), concurrency)
@@ -464,6 +459,8 @@ class ApiSettingsDialog(QDialog):
             "openrouter_api_key": self.openrouter_edit.text().strip(),
             "photoroom_api_key": self.photo_edit.text().strip(),
             "fal_api_key": self.fal_edit.text().strip(),
+            "atlascloud_api_key": self.atlascloud_edit.text().strip(),
+            "piapi_api_key": self.piapi_edit.text().strip(),
             "runpod_api_key": self.runpod_key_edit.text().strip(),
             "runpod_endpoint_id": self.runpod_endpoint_edit.text().strip(),
             "kie_concurrency": normalize_provider_concurrency(

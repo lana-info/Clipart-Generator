@@ -79,6 +79,7 @@ class CoreImageRunGateway:
             for name in (
                 "kie_api_key", "fal_api_key", "photoroom_api_key",
                 "runpod_api_key", "openrouter_api_key",
+                "atlascloud_api_key", "piapi_api_key",
             )
             if isinstance(runtime.get(name), str)
         )

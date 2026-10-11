@@ -159,11 +159,13 @@ class ImageReviewRunPage(ScrollableStepPage):
             "kie": "KIE",
             "fal": "Fal.ai",
             "photoroom": "PhotoRoom",
+            "atlascloud": "AtlasCloud",
+            "piapi": "PiAPI",
         }
         lines = ["Ориентировочная стоимость"]
         total = Decimal("0")
         total_complete = True
-        for provider in ("kie", "fal", "photoroom"):
+        for provider in ("kie", "fal", "photoroom", "atlascloud", "piapi"):
             if provider not in estimate.provider_usd:
                 continue
             if provider == "fal":

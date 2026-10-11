@@ -19,6 +19,8 @@ def _capability_summary(option: GenerationModelOption) -> str:
         resolutions = ", ".join(option.resolutions[:4])
     else:
         resolutions = "задаётся моделью"
+    if option.model_id == "piapi/gpt-image-2.5":
+        return "Бюджетный GPT Image 2.5: размер и качество выбирает модель. Один файл за запрос."
     reference_mode = (
         "поддерживает reference-mode"
         if option.reference_compatible_text or option.model_type in {"image_to_image", "edit"}
@@ -237,7 +239,10 @@ class ImageGenerationSettingsPage(ScrollableStepPage):
     ) -> None:
         combo.blockSignals(True)
         combo.clear()
-        if values:
+        if tuple(values) == ("auto",):
+            combo.addItem("Авто (выбирает модель)", "auto")
+            combo.setEnabled(False)
+        elif values:
             combo.addItems(values)
             combo.setCurrentText(
                 preferred if preferred in values else str(values[0])
@@ -286,6 +291,8 @@ class ImageGenerationSettingsPage(ScrollableStepPage):
             )
         if sync:
             self._sync()
+        if hasattr(self, "ratio_preview"):
+            self._refresh_ratio_preview()
 
     @staticmethod
     def _combo_value(combo: QComboBox) -> str:
@@ -294,7 +301,7 @@ class ImageGenerationSettingsPage(ScrollableStepPage):
     def _sync(self, *_: Any, mark: bool = True) -> None:
         self.data.generation = GenerationData(
             model=str(self.model_combo.currentData() or ""),
-            ratio=self.ratio_combo.currentText(),
+            ratio=self._combo_value(self.ratio_combo),
             resolution=self._combo_value(self.resolution_combo),
             reference_model=(
                 str(self.model_combo.currentData() or "")
@@ -302,9 +309,9 @@ class ImageGenerationSettingsPage(ScrollableStepPage):
                 else str(self.reference_model_combo.currentData() or "")
             ),
             reference_ratio=(
-                self.ratio_combo.currentText()
+                self._combo_value(self.ratio_combo)
                 if self.shared_generation_settings or self.shared_reference_format
-                else self.reference_ratio_combo.currentText()
+                else self._combo_value(self.reference_ratio_combo)
             ),
             reference_resolution=(
                 self._combo_value(self.resolution_combo)
@@ -354,7 +361,8 @@ class ImageGenerationSettingsPage(ScrollableStepPage):
         self._sync(mark=False)
 
     def _refresh_ratio_preview(self, *_: Any) -> None:
-        ratio = self.ratio_combo.currentText()
+        ratio = self._combo_value(self.ratio_combo)
+        self.ratio_preview.setVisible(ratio != "auto")
         try:
             width_value, height_value = (
                 max(1, int(value)) for value in ratio.split(":", 1)

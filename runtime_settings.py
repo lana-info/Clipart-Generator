@@ -43,6 +43,8 @@ def build_runtime_settings(
         "openrouter_api_key",
         "photoroom_api_key",
         "fal_api_key",
+        "atlascloud_api_key",
+        "piapi_api_key",
         "runpod_api_key",
         "runpod_endpoint_id",
     ):

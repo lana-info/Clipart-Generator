@@ -68,7 +68,8 @@ def safe_runtime_error(
     source = runtime_settings or {}
     secrets = tuple(
         source.get(name)
-        for name in ("kie_api_key", "photoroom_api_key", "fal_api_key")
+        for name in ("kie_api_key", "photoroom_api_key", "fal_api_key",
+                     "atlascloud_api_key", "piapi_api_key")
         if isinstance(source.get(name), str)
     )
     safe_message = redact_text(str(error).strip() or error.__class__.__name__, secrets, limit=500)

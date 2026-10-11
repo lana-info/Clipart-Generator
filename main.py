@@ -107,6 +107,15 @@ from fal_model_catalog import (
     fal_generation_payload,
     is_fal_generation_model,
 )
+from gpt25_provider import (
+    generation_payload as gpt25_generation_payload,
+    provider_for_model as gpt25_provider_for_model,
+    request_headers as gpt25_request_headers,
+    submit_url as gpt25_submit_url,
+    status_url as gpt25_status_url,
+    submitted_task_id as gpt25_submitted_task_id,
+    task_result as gpt25_task_result,
+)
 from provider_contract import ProviderTaskRequest
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
@@ -120,6 +129,7 @@ from model_catalog import (
     SUPPORTED_GENERATION_MODEL_IDS as CATALOG_SUPPORTED_GENERATION_MODEL_IDS,
     VISIBLE_GENERATION_MODEL_IDS as CATALOG_VISIBLE_GENERATION_MODEL_IDS,
     MODEL_SPECS,
+    generation_provider_id,
     ratios_for_mode,
     resolve_generation_endpoint,
     validate_generation_contract,
@@ -1037,6 +1047,7 @@ class WorkerThread(QThread):
         self._shared_state_lock = threading.Lock()
         self._claimed_fal_task_ids: set[str] = set()
         self._claimed_kie_task_ids: set[str] = set()
+        self._claimed_gpt25_task_ids = {"atlascloud": set(), "piapi": set()}
         self._fal_poll_attempts: dict[str, int] = {}
         self._kie_uploaded_content_ids: dict[str, str] = {}
         self._precleaned_paths: set[str] = set()
@@ -1057,6 +1068,12 @@ class WorkerThread(QThread):
         self.kie_task_journal = FalTaskJournal(
             os.path.join(self.work_dir, f".vibix_kie_tasks{journal_suffix}.json")
         )
+        self.gpt25_task_journals = {
+            provider: FalTaskJournal(
+                os.path.join(self.work_dir, f".vibix_{provider}_tasks{journal_suffix}.json")
+            )
+            for provider in ("atlascloud", "piapi")
+        }
 
         sensitive_markers = ("api_key", "license_key", "password", "secret", "token")
         self._secret_values = tuple(
@@ -1072,6 +1089,8 @@ class WorkerThread(QThread):
         self.kie_api_key = settings.get("kie_api_key", "").strip()
         self.photoroom_api_key = settings.get("photoroom_api_key", "").strip()
         self.fal_api_key = settings.get("fal_api_key", "").strip()
+        self.atlascloud_api_key = settings.get("atlascloud_api_key", "").strip()
+        self.piapi_api_key = settings.get("piapi_api_key", "").strip()
         self.kie_upload_path = settings.get("kie_upload_path", "clipart-generator")
         self.text_generation_model = settings.get(
             "text_generation_model",
@@ -1106,6 +1125,8 @@ class WorkerThread(QThread):
             self.photoroom_concurrency
         )
         self._fal_slots = threading.BoundedSemaphore(self.fal_concurrency)
+        self._atlascloud_slots = threading.BoundedSemaphore(self.kie_concurrency)
+        self._piapi_slots = threading.BoundedSemaphore(self.kie_concurrency)
         try:
             configured_interval = float(settings.get("generation_launch_interval", 1.0))
         except (TypeError, ValueError):
@@ -1325,6 +1346,8 @@ class WorkerThread(QThread):
             "kie": self._kie_slots,
             "photoroom": self._photoroom_slots,
             "fal": self._fal_slots,
+            "atlascloud": self._atlascloud_slots,
+            "piapi": self._piapi_slots,
         }[provider_name]
         acquired = False
         try:
@@ -1451,6 +1474,10 @@ class WorkerThread(QThread):
         hostname = str(parsed.hostname or "").lower()
         if str(getattr(req, "full_url", "")) == PHOTOROOM_SEGMENT_URL:
             return "photoroom"
+        if hostname == "api.atlascloud.ai":
+            return "atlascloud"
+        if hostname == "api.piapi.ai":
+            return "piapi"
         if (
             hostname == "kie.ai"
             or hostname.endswith(".kie.ai")
@@ -1476,6 +1503,10 @@ class WorkerThread(QThread):
                 raise ValueError("Не указан Fal.ai API Key")
         if self._uses_kie_generation() and not self.kie_api_key:
             raise ValueError("Не указан KIE API Key")
+        if self._uses_atlascloud_generation() and not self.atlascloud_api_key:
+            raise ValueError("Не указан AtlasCloud API Key")
+        if self._uses_piapi_generation() and not self.piapi_api_key:
+            raise ValueError("Не указан PiAPI API Key")
         if process_generated and self._uses_photoroom_remove_bg() and not self.photoroom_api_key:
             raise ValueError("Не указан PhotoRoom API Key")
         if process_generated:
@@ -1647,6 +1678,7 @@ class WorkerThread(QThread):
         process_generated: bool,
     ) -> str:
         self._item_context.manual_transparency_required = False
+        self._item_context.gpt25_completion = None
         self._set_diagnostic_context(idx, total, "generation")
         self.progress.emit(f"[{idx}/{total}] Генерация")
         self._emit_file_progress(idx, total, 4)
@@ -1685,6 +1717,11 @@ class WorkerThread(QThread):
         self._emit_file_progress(idx, total, 36)
         self._ensure_running()
         self._download_file(image_url, gen_path)
+        completed_gpt25 = getattr(self._item_context, "gpt25_completion", None)
+        if completed_gpt25:
+            provider_name, paid_task_id = completed_gpt25
+            self.gpt25_task_journals[provider_name].update_status(paid_task_id, "completed")
+            self._item_context.gpt25_completion = None
         raw_record_bound = True
         try:
             bind_generation_record(gen_path, generation_intent, stage="raw")
@@ -2593,6 +2630,8 @@ class WorkerThread(QThread):
             include_processing
             and (self._uses_any_fal_upscale() or self._uses_fal_remove_bg())
         )
+        uses_atlascloud = include_generation and self._uses_atlascloud_generation()
+        uses_piapi = include_generation and self._uses_piapi_generation()
         limit = 0
         if uses_kie:
             limit += self.kie_concurrency
@@ -2600,6 +2639,10 @@ class WorkerThread(QThread):
             limit += self.photoroom_concurrency
         if uses_fal:
             limit += self.fal_concurrency
+        if uses_atlascloud:
+            limit += self.kie_concurrency
+        if uses_piapi:
+            limit += self.kie_concurrency
         return max(1, min(MAX_REMOTE_CONCURRENCY, limit))
 
     def _can_use_legacy_kie_processing_pipeline(self):
@@ -5004,7 +5047,10 @@ class WorkerThread(QThread):
         provider = self._request_provider(req)
         method = req.get_method().upper()
         retry_limit = self.retries if method in {"GET", "HEAD", "OPTIONS"} else 0
-        rate_limit_retry_limit = min(max(self.retries, 1), 2)
+        rate_limit_retry_limit = (
+            0 if provider in {"atlascloud", "piapi"} and method == "POST"
+            else min(max(self.retries, 1), 2)
+        )
         for attempt in range(max(retry_limit, rate_limit_retry_limit) + 1):
             self._ensure_running()
             try:
@@ -5412,6 +5458,10 @@ class WorkerThread(QThread):
     def _kie_generate_image(self, prompt, references=None):
         reference_items = split_references(references or [])
         normalized_model = self._select_generation_model(reference_items)
+        if gpt25_provider_for_model(normalized_model):
+            if reference_items:
+                raise RuntimeError("GPT Image 2.5 пока доступен только для текста без референсов")
+            return self._gpt25_generate_image(prompt, normalized_model)
         if is_fal_generation_model(normalized_model):
             with self._provider_lease("fal"):
                 self._set_provider_diagnostic_context(
@@ -5465,7 +5515,13 @@ class WorkerThread(QThread):
         return any(is_fal_generation_model(model) for model in self._generation_models_in_use())
 
     def _uses_kie_generation(self):
-        return any(not is_fal_generation_model(model) for model in self._generation_models_in_use())
+        return any(generation_provider_id(model) == "kie" for model in self._generation_models_in_use())
+
+    def _uses_atlascloud_generation(self):
+        return any(generation_provider_id(model) == "atlascloud" for model in self._generation_models_in_use())
+
+    def _uses_piapi_generation(self):
+        return any(generation_provider_id(model) == "piapi" for model in self._generation_models_in_use())
 
     def _generation_models_in_use(self):
         entries = self.generated_prompts or []
@@ -5477,6 +5533,123 @@ class WorkerThread(QThread):
             model = self.reference_generation_model if references else self.text_generation_model
             models.add(str(model or "").strip())
         return models
+
+    def _gpt25_generate_image(self, prompt, model_id):
+        """Journal an asynchronous paid request and poll without reposting on recovery."""
+        provider = gpt25_provider_for_model(model_id)
+        if provider not in {"atlascloud", "piapi"}:
+            raise ValueError("Неизвестный провайдер GPT Image 2.5")
+        if "gpt25_cost_confirmed" in self.settings and not self.settings["gpt25_cost_confirmed"]:
+            raise RuntimeError("Проверьте актуальную цену у провайдера и подтвердите платный запуск")
+        api_key = self.atlascloud_api_key if provider == "atlascloud" else self.piapi_api_key
+        ratio, resolution = self._get_generation_profile(False)
+        validate_generation_contract(
+            model_id, has_references=False, ratio=ratio, resolution=resolution, prompt=prompt
+        )
+        payload = gpt25_generation_payload(model_id, prompt, ratio, resolution)
+        headers = gpt25_request_headers(provider, api_key)
+        fingerprint = self._paid_task_fingerprint(payload)
+        journal = self.gpt25_task_journals[provider]
+        operation = str(getattr(self._diagnostic_context, "stage", "") or "generation")
+        self._set_provider_diagnostic_context(operation, provider, model_id)
+        with self._provider_lease(provider):
+            pending = self._claim_pending_task(
+                journal, operation, model_id, self._claimed_gpt25_task_ids[provider],
+                input_fingerprint=fingerprint,
+            )
+            if pending is not None:
+                if pending.request_id.startswith("unconfirmed_"):
+                    raise RuntimeError(
+                        f"{provider}: результат предыдущей платной отправки неизвестен. "
+                        "Запрос не повторён во избежание двойного списания."
+                    )
+                task_id = pending.request_id
+                self.progress.emit(f"  {provider}: продолжаем задачу {task_id}")
+            else:
+                self._wait_for_generation_launch_slot()
+                self._ensure_provider_submission_allowed()
+                # A durable pre-submit guard prevents another paid POST if the app
+                # crashes, loses its response or is stopped before the task ID is saved.
+                marker = "unconfirmed_" + uuid.uuid4().hex
+                journal.upsert(
+                    marker, self._task_operation_key(operation), model_id, "submitting",
+                    input_fingerprint=fingerprint,
+                )
+                # Only this POST may determine whether the submit was rejected.
+                # A status from an earlier request cannot clear the paid-task guard.
+                self._diagnostic_context.last_http_status = None
+                try:
+                    submitted = self._request_json(
+                        gpt25_submit_url(provider), method="POST", payload=payload,
+                        headers={**headers, "Content-Type": "application/json"},
+                        timeout=max(30, self.timeout),
+                    )
+                    task_id = gpt25_submitted_task_id(provider, submitted)
+                except Exception:
+                    http_status = getattr(self._diagnostic_context, "last_http_status", None)
+                    if http_status in {400, 401, 402, 403, 404, 429}:
+                        journal.update_status(marker, "failed")
+                    raise RuntimeError(
+                        f"{provider}: отправка не завершена. Проверьте задачу в "
+                        "кабинете провайдера перед повторным запуском."
+                    ) from None
+                journal.upsert(
+                    task_id, self._task_operation_key(operation), model_id, "queued",
+                    input_fingerprint=fingerprint,
+                )
+                journal.update_status(marker, "completed")
+                self._emit_diagnostic(
+                    "provider_task_submitted", provider=provider, model=model_id,
+                    task=task_id, provider_state="queued",
+                )
+            started = time.monotonic()
+            deadline = time.monotonic() + self.generation_wait_timeout
+            attempt = 0
+            while time.monotonic() < deadline:
+                self._ensure_running()
+                attempt += 1
+                try:
+                    response = self._request_json(
+                        gpt25_status_url(provider, task_id), headers=headers,
+                        timeout=30,
+                    )
+                    state, result_url = gpt25_task_result(provider, response)
+                except ProcessingCancelled:
+                    raise
+                except Exception as error:
+                    journal.update_status(task_id, "poll_deferred")
+                    self._emit_diagnostic(
+                        "provider_task_recovery_deferred", provider=provider,
+                        task=task_id, error_message=self._safe_error_text(error),
+                    )
+                    raise RuntimeError(
+                        f"{provider}: запрос оплачен, но результат сейчас недоступен. "
+                        "При повторном запуске продолжим ожидание без новой оплаты."
+                    ) from None
+                self._emit_diagnostic(
+                    "provider_task_polled", provider=provider, task=task_id,
+                    provider_state=state, poll_attempt=attempt,
+                )
+                if state == "completed":
+                    # Keep the paid task recoverable until the image bytes are
+                    # actually downloaded and persisted by _generate_entry.
+                    journal.update_status(task_id, "result_ready")
+                    self._item_context.gpt25_completion = (provider, task_id)
+                    self._emit_diagnostic(
+                        "provider_task_succeeded", provider=provider,
+                        model=model_id, task=task_id, outcome="succeeded",
+                        elapsed_ms=round((time.monotonic() - started) * 1000),
+                    )
+                    return result_url
+                if state == "failed":
+                    journal.update_status(task_id, "failed")
+                    raise RuntimeError(f"{provider}: генерация завершилась ошибкой")
+                journal.update_status(task_id, "processing")
+                time.sleep(self.status_poll_interval)
+            journal.update_status(task_id, "timeout")
+            raise TimeoutError(
+                f"{provider}: задача ещё выполняется. Повторный запуск продолжит ожидание."
+            )
 
     def _fal_generate_image(self, prompt, model_id):
         self._ensure_fal_cost_confirmed()
@@ -5768,7 +5941,7 @@ class WorkerThread(QThread):
             model_id = entry.get("id")
             if model_id not in VISIBLE_GENERATION_MODEL_IDS:
                 continue
-            if is_fal_generation_model(model_id):
+            if generation_provider_id(model_id) != "kie":
                 continue
             if entry.get("type") == required_type and model_id in SUPPORTED_GENERATION_MODEL_IDS:
                 return model_id
@@ -6876,6 +7049,8 @@ class MainWindow(QMainWindow):
         self.api_key_locked = True
         self.photoroom_api_key_locked = True
         self.fal_api_key_locked = True
+        self.atlascloud_api_key_locked = True
+        self.piapi_api_key_locked = True
         self.secret_settings = {key: "" for key in SECRET_CONFIG_KEYS}
         self.credential_store = ProviderCredentialStore(
             ENV_FILE,
@@ -7510,6 +7685,14 @@ class MainWindow(QMainWindow):
             self.secret_settings.get("fal_api_key", self.config.get("fal_api_key", ""))
         )
         self.fal_api_key_input.setReadOnly(True)
+        self.atlascloud_api_key_input = QLineEdit()
+        self.atlascloud_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.atlascloud_api_key_input.setText(self.secret_settings.get("atlascloud_api_key", ""))
+        self.atlascloud_api_key_input.setReadOnly(True)
+        self.piapi_api_key_input = QLineEdit()
+        self.piapi_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.piapi_api_key_input.setText(self.secret_settings.get("piapi_api_key", ""))
+        self.piapi_api_key_input.setReadOnly(True)
         self.btn_fal_api_key_lock = QPushButton("🔒")
         self.btn_fal_api_key_lock.setFixedSize(40, 32)
         self.btn_fal_api_key_lock.setToolTip("Ключ заблокирован")
@@ -7566,6 +7749,8 @@ class MainWindow(QMainWindow):
         settings_field_width = 220
         self.kie_api_key_input.setFixedSize(settings_field_width, 32)
         self.fal_api_key_input.setFixedSize(settings_field_width, 32)
+        self.atlascloud_api_key_input.setFixedSize(settings_field_width, 32)
+        self.piapi_api_key_input.setFixedSize(settings_field_width, 32)
         self.text_generation_model_combo.setFixedSize(settings_field_width, 32)
         self.reference_generation_model_combo.setFixedSize(settings_field_width, 32)
         self.text_ratio_combo.setFixedSize(110, 32)
@@ -7676,6 +7861,27 @@ class MainWindow(QMainWindow):
         lbl_photoroom_api_key.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         kie_layout.addWidget(lbl_photoroom_api_key, 6, 0)
         kie_layout.addWidget(photoroom_access_widget, 6, 1, 1, 3)
+        for row, provider, title, edit in (
+            (7, "atlascloud", "AtlasCloud API Key:", self.atlascloud_api_key_input),
+            (8, "piapi", "PiAPI API Key:", self.piapi_api_key_input),
+        ):
+            label = QLabel(title)
+            label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            access = QWidget()
+            access_layout = QHBoxLayout(access)
+            access_layout.setContentsMargins(0, 0, 0, 0)
+            access_layout.setSpacing(6)
+            access_layout.addWidget(edit)
+            lock_button = QPushButton("🔒")
+            lock_button.setFixedSize(40, 32)
+            lock_button.clicked.connect(
+                lambda _checked=False, name=provider: self.toggle_gpt25_key_lock(name)
+            )
+            access_layout.addWidget(lock_button)
+            access_layout.addStretch()
+            setattr(self, f"btn_{provider}_api_key_lock", lock_button)
+            kie_layout.addWidget(label, row, 0)
+            kie_layout.addWidget(access, row, 1, 1, 3)
 
         self.btn_next_to_processing = QPushButton("Далее: обработка →")
         self.btn_next_to_processing.setFixedSize(190, 36)
@@ -8267,6 +8473,8 @@ class MainWindow(QMainWindow):
         self.kie_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.kie_api_key_input.textChanged.connect(self.on_api_key_changed)
         self.fal_api_key_input.textChanged.connect(self.schedule_settings_save)
+        self.atlascloud_api_key_input.textChanged.connect(self.schedule_settings_save)
+        self.piapi_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.photoroom_api_key_input.textChanged.connect(self.schedule_settings_save)
         self.text_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
         self.reference_generation_model_combo.currentTextChanged.connect(self.schedule_settings_save)
@@ -9022,8 +9230,8 @@ class MainWindow(QMainWindow):
     ):
         selected_model = self._normalize_generation_model_id(preferred_model_id)
         fallback_model = self._normalize_generation_model_id(fallback_model_id)
-        if is_fal_generation_model(selected_model):
-            # Fal queue requests are paid; availability is checked only by the
+        if is_fal_generation_model(selected_model) or gpt25_provider_for_model(selected_model):
+            # Provider generation requests are paid; availability is checked only by the
             # explicit user-confirmed run, never by an implicit probe.
             self._select_combo_model_id(combo_box, selected_model)
             return True
@@ -9170,22 +9378,28 @@ class MainWindow(QMainWindow):
         current_fal_api_key = self.secret_settings.get("fal_api_key", "").strip()
         selected_generation_models = {
             self.get_selected_generation_model_id(self.text_generation_model_combo),
-            self.get_selected_generation_model_id(self.reference_generation_model_combo),
         }
+        if not self.radio_run_process.isChecked() and any(
+            split_references(entry.get("references", []))
+            for entry in self.get_list_mode_prompts()
+        ):
+            selected_generation_models.add(
+                self.get_selected_generation_model_id(self.reference_generation_model_combo)
+            )
         will_process = self.radio_run_process.isChecked() or self.radio_run_both.isChecked()
 
         needs_kie_api = (
             (
                 not self.radio_run_process.isChecked()
-                and any(not is_fal_generation_model(model) for model in selected_generation_models)
+                and any(generation_provider_id(model) == "kie" for model in selected_generation_models)
             )
-            or (self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() == "kie")
+            or (will_process and self.chk_upscale.isChecked() and self.upscale_provider_combo.currentData() == "kie")
             or (
-                self.chk_upscale_after.isChecked()
+                will_process and self.chk_upscale_after.isChecked()
                 and self.upscale_after_provider_combo.currentData() == "kie"
             )
             or (
-                self.chk_remove_bg.isChecked()
+                will_process and self.chk_remove_bg.isChecked()
                 and self.remove_bg_provider_combo.currentData() == "kie"
             )
         )
@@ -9228,6 +9442,33 @@ class MainWindow(QMainWindow):
                 return
             fal_cost_confirmed = True
 
+        gpt25_cost_confirmed = False
+        needs_gpt25 = False
+        for provider, key_name, label in (
+            ("atlascloud", "atlascloud_api_key", "AtlasCloud"),
+            ("piapi", "piapi_api_key", "PiAPI"),
+        ):
+            needs_provider = (
+                not self.radio_run_process.isChecked()
+                and any(generation_provider_id(model) == provider for model in selected_generation_models)
+            )
+            if needs_provider and not self.secret_settings.get(key_name, "").strip():
+                QMessageBox.warning(self, "Ошибка", f"Укажите {label} API Key на вкладке «Настройки»")
+                return
+            needs_gpt25 = needs_gpt25 or needs_provider
+        if needs_gpt25:
+            answer = QMessageBox.question(
+                self, "Подтвердите платную генерацию GPT Image 2.5",
+                "Стоимость зависит от актуального тарифа AtlasCloud или PiAPI. "
+                "Проверьте цену в кабинете выбранного провайдера перед генерацией. "
+                "Запустить платные задачи?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            gpt25_cost_confirmed = True
+
         needs_photoroom_api = (
             will_process
             and self.chk_remove_bg.isChecked()
@@ -9236,7 +9477,7 @@ class MainWindow(QMainWindow):
         if needs_photoroom_api and not current_photoroom_api_key:
             QMessageBox.warning(self, "Ошибка", "Укажите PhotoRoom API Key на вкладке «Настройки»")
             return
-        if self.credential_store_error and (needs_kie_api or needs_photoroom_api or needs_fal_api):
+        if self.credential_store_error and (needs_kie_api or needs_photoroom_api or needs_fal_api or needs_gpt25):
             QMessageBox.warning(
                 self,
                 "Ошибка",
@@ -9246,6 +9487,7 @@ class MainWindow(QMainWindow):
 
         runtime_settings = build_runtime_settings(self.config, self.secret_settings)
         runtime_settings["fal_cost_confirmed"] = fal_cost_confirmed
+        runtime_settings["gpt25_cost_confirmed"] = gpt25_cost_confirmed
         self.has_generated_output_in_run = False
         active_prompts = []
         visible_mark_confirmed_regions = {}
@@ -9329,6 +9571,8 @@ class MainWindow(QMainWindow):
             self.secret_settings,
             visible_mark_confirmed_regions=visible_mark_confirmed_regions,
         )
+        runtime_settings["fal_cost_confirmed"] = fal_cost_confirmed
+        runtime_settings["gpt25_cost_confirmed"] = gpt25_cost_confirmed
 
         self.stop_pending = False
         self.worker = launch_worker(
@@ -9472,6 +9716,21 @@ class MainWindow(QMainWindow):
             self.kie_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
         if self.fal_api_key_locked:
             self.fal_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
+        for provider in ("atlascloud", "piapi"):
+            if getattr(self, f"{provider}_api_key_locked"):
+                getattr(self, f"{provider}_api_key_input").setEchoMode(QLineEdit.EchoMode.Password)
+
+    def toggle_gpt25_key_lock(self, provider):
+        if provider not in {"atlascloud", "piapi"}:
+            raise ValueError("Unknown provider")
+        locked = not getattr(self, f"{provider}_api_key_locked")
+        setattr(self, f"{provider}_api_key_locked", locked)
+        edit = getattr(self, f"{provider}_api_key_input")
+        button = getattr(self, f"btn_{provider}_api_key_lock")
+        edit.setReadOnly(locked)
+        edit.setEchoMode(QLineEdit.EchoMode.Password if locked else QLineEdit.EchoMode.Normal)
+        button.setText("🔒" if locked else "🔓")
+        button.setToolTip("Ключ заблокирован" if locked else "Ключ можно редактировать")
 
     def toggle_api_key_lock(self):
         self.api_key_locked = not self.api_key_locked
@@ -10048,6 +10307,8 @@ class MainWindow(QMainWindow):
         self.secret_settings["kie_api_key"] = self.config["kie_api_key"] = self.kie_api_key_input.text().strip()
         self.secret_settings["photoroom_api_key"] = self.config["photoroom_api_key"] = self.photoroom_api_key_input.text().strip()
         self.secret_settings["fal_api_key"] = self.config["fal_api_key"] = self.fal_api_key_input.text().strip()
+        self.secret_settings["atlascloud_api_key"] = self.config["atlascloud_api_key"] = self.atlascloud_api_key_input.text().strip()
+        self.secret_settings["piapi_api_key"] = self.config["piapi_api_key"] = self.piapi_api_key_input.text().strip()
         self.config["text_generation_model"] = self.get_selected_generation_model_id(self.text_generation_model_combo)
         self.config["reference_generation_model"] = self.get_selected_generation_model_id(
             self.reference_generation_model_combo

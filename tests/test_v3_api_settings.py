@@ -300,3 +300,24 @@ def test_api_dialog_returns_provider_concurrency_but_never_writes_it_as_credenti
     assert "fal_concurrency" not in saved[0]
     dialog.close()
     app.processEvents()
+
+
+def test_runpod_hidden_and_preserved_when_other_keys_saved(monkeypatch):
+    import v3_api_settings
+    from PyQt6.QtWidgets import QLabel
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr(v3_api_settings, "load_credentials", lambda: {
+        "runpod_api_key": "dummy-runpod-key", "runpod_endpoint_id": "dummy-endpoint"})
+    saved = []
+    monkeypatch.setattr(v3_api_settings, "save_credentials", lambda values:saved.append(values))
+    dialog = ApiSettingsDialog({})
+    dialog.show()
+    app.processEvents()
+    assert dialog.runpod_key_edit.isHidden()
+    assert dialog.runpod_endpoint_edit.isHidden()
+    assert not any("RunPod" in label.text() for label in dialog.findChildren(QLabel))
+    dialog.kie_edit.setText("dummy-new-kie")
+    dialog._save()
+    assert saved[0]["runpod_api_key"] == "dummy-runpod-key"
+    assert saved[0]["runpod_endpoint_id"] == "dummy-endpoint"
+    assert saved[0]["kie_api_key"] == "dummy-new-kie"

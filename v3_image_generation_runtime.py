@@ -11,6 +11,7 @@ from types import MappingProxyType
 from typing import Any
 
 from fal_model_catalog import is_fal_generation_model, is_fal_model_id
+from model_catalog import generation_provider_id
 from model_catalog import (
     GENERATION_MODELS as CATALOG_GENERATION_MODELS,
     PROCESSING_PRICING as CATALOG_PROCESSING_PRICING,
@@ -220,9 +221,9 @@ def estimate_image_generation_cost(data: Any) -> CostEstimate:
             if has_references
             else generation.resolution
         )
-        provider = "fal" if is_fal_generation_model(option.model_id) else "kie"
+        provider = generation_provider_id(option.model_id)
         use_provider(provider)
-        if provider == "fal":
+        if provider in {"fal", "atlascloud", "piapi"}:
             incomplete_providers.add(provider)
             continue
         unit = _price_usd(option.pricing, resolution)
@@ -591,12 +592,15 @@ def missing_runtime_requirements(request: FlowRunRequest) -> tuple[str, ...]:
             ).strip()
             for entry in request.generated_prompts
         }
-        if any(is_fal_generation_model(model) for model in generation_models):
-            if not str(request.settings.get("fal_api_key") or "").strip():
-                add_missing("Fal.ai API Key")
-        if any(not is_fal_generation_model(model) for model in generation_models):
-            if not str(request.settings.get("kie_api_key") or "").strip():
-                add_missing("KIE API Key")
+        for provider_id, field, label in (
+            ("fal", "fal_api_key", "Fal.ai API Key"),
+            ("kie", "kie_api_key", "KIE API Key"),
+            ("atlascloud", "atlascloud_api_key", "AtlasCloud API Key"),
+            ("piapi", "piapi_api_key", "PiAPI API Key"),
+        ):
+            if any(generation_provider_id(model) == provider_id for model in generation_models):
+                if not str(request.settings.get(field) or "").strip():
+                    add_missing(label)
 
     for enabled_field, provider_field in (
         ("upscale", "upscale_provider"),
