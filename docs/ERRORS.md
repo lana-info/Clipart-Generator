@@ -1,3 +1,22 @@
+## release-portable-doc-links-20261012
+
+Final Desktop CI38199191490:3378PASS+303subtests,1FAIL338.24s.
+test_local_markdown_links_resolve нашёл3ссылки в старой записи docs/ERRORS.md
+на sibling artifacts VDS. Локально эти файлы существуют, в GitHub checkout их нет.
+Ссылки заменены явными локальными путями без неработающей Markdown-навигации;
+доказательства не удалены и тест не изменён. Проверка tracked-file layout в
+изолированном каталоге без sibling artifacts PASS;4documentation tests PASS0.17s.
+
+Дополнительная HTTPS-доставка: первый запуск не стартовал18fixtures из-за
+отсутствующего psycopg в UI-venv. Выбран существующий license-entitlements venv,
+зависимости не добавлялись. Старый release-catalog service затем дал12FAIL/6PASS:
+он не имеет shared image-processing entitlement bridge. Код подтвердил прямую
+проверку module_id вместо allows_release_package. Актуальный coming-soon service
+имеет bridge: тот же набор18HTTPS tests PASS32.63s, временные ключи/лицензии,
+production business-data не менялись. Fixture создал :memory:.ses в checkout;
+файл mode0600 сохранён в /tmp/clipart-delivery-fixture-20261012 вне source.
+Path.rename между mounts дал EXDEV; shutil.move сохранил файл без вывода содержимого.
+
 ## release-contour-brush-control-20261012
 
 Полный offline suite:1182PASS+95subtests,1FAIL,1native Windows SKIP250.72s.
@@ -172,9 +191,10 @@ Full-suite2770PASS/2failure: test_auto_chroma_detects_each_file... предпо�
 могут соответствовать разным foreground/alpha; одну интерпретацию нельзя
 объявлять доказанной истиной только по совпадению с желаемым результатом.
 
-**Доказательства:** [v16 и actual-проверки](../../artifacts/material-edge-fix-20261003/REPORT.ru.md),
-[независимый разбор native/NN](../../artifacts/remaining-edge-20261003/rim/REPORT.ru.md),
-[управляемый NN-эксперимент](../../artifacts/remaining-edge-20261003/nn-context/result.json).
+**Локальные доказательства на VDS:** v16 и actual-проверки:
+`../../artifacts/material-edge-fix-20261003/REPORT.ru.md`;
+независимый разбор native/NN: `../../artifacts/remaining-edge-20261003/rim/REPORT.ru.md`;
+управляемый NN-эксперимент: `../../artifacts/remaining-edge-20261003/nn-context/result.json`.
 Далее нужны постоянные public RED/GREEN для нового дефекта, отрицательные
 контроли настоящей краски/source alpha/legacy и одинаковые actual-сравнения
 после всей цепочки. Прошедшие тесты и сохранение исходника не заменяют
