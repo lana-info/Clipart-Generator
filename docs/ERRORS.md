@@ -1,3 +1,12 @@
+## stable-promotion-checks-20261012
+
+Первый promotion-test command не собрал tests: source-пакетlicense_service
+не был в PYTHONPATH существующего venv. Добавлен только актуальный service/src
+в env команды; зависимости и production source не менялись. Повтор:2PASS0.84s,
+1SKIP требует disposable PostgreSQL URL,45deselected. Рабочая штатная PG-операция
+проверена preflight/backup/channel-only invariant и после неё14SHA/discovery PASS.
+Текущий результат и ограничения: STATE.md; source artifacts и beta история сохранены.
+
 ## release-final-verification-20261012
 
 После portable-doc fix full CI38200009717 SUCCESS:

@@ -1,3 +1,13 @@
+## Stable Studio3.2.21 и все модули1.5.7
+
+- [x] Проверить текущие14beta identities/SHA и создать verified backup.
+- [x] Перевести14записей вstable штатной операцией, сохранив bytes/подписи.
+- [x] Проверить stable/beta-client discovery, old/unrelated fingerprints и health.
+- [x] Обновить STATE/runbook и сохранить фактические результаты.
+
+Результат: stable3.2.21/1.5.7,14promoted rows; discovery/SHA/fingerprints PASS.
+Проверки и ограничения: STATE.md. Новые Intel сборки не выпускались.
+
 ## Выпуск Studio3.2.21 и модулей1.5.7, 2026-10-11
 
 - [x] Проверить весь офлайн-набор, зафиксировать source/version и отправить release branch.

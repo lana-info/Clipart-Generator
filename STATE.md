@@ -1,3 +1,33 @@
+## Stable Studio 3.2.21 и все модули 1.5.7, 2026-10-12 (UTC)
+
+Источник: владелец поручил разместить готовый выпуск на лицензионном сервере
+как стабильные версии. **Опубликован stable: приложение3.2.21 и все6модулей1.5.7
+для Windows x64 и единственной Mac-версии Apple Silicon.** Сначала приложение,
+затем «Обновления модулей»; minCore3.2.21, maxExclusive3.3.0 сохраняются.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Приложение3.2.21 доступно stable клиентам; поручение владельца | Штатное продвижение, stored SHA и stable/latest discovery | Реализовано и проверено:2Core rows переведены beta→stable | Preflight identity/SHA и verified0600backup PASS. Сервер stable и stable+beta discovery выбирает3.2.21 на Windows/ARM; Core bytes и все остальные поля прежние |
+| Все6модулей1.5.7 доступны stable клиентам после Core3.2.21; поручение владельца |12module identities/SHA/compatibility и обе клиентские выборки | Реализовано и проверено:12module rows переведены вstable | Все14stored SHA PASS; signature/compatibility/payload сохранены. Обычные и beta клиенты выбирают1.5.7 для всех6IDs на обеих платформах |
+| Сохранить старые stable, файлы, Intel и лицензии; границы выпуска | Backup, fingerprints, channel-only invariant | Реализовано и проверено: изменён только канал14target rows | Старыеstable/Intel/other products fingerprints прежние; releases не добавлялись/не удалялись. Статусы, IDs, пути, sizes, SHA, notes и остальные поля сохранены; licenses/grants не менялись. Health200/invalid-token403 |
+
+Штатный promote_release_to_stable проверен на рабочем сервере. Локальные
+promotion contracts:2PASS0.84s,1disposable-Postgres SKIP,45deselected;
+фактическая рабочая PostgreSQL-операция и последующая проверка14rows PASS.
+Исходные native/full/HTTPS/signature/runtime проверки ниже остаются применимы:
+код и файлы выпуска не пересобирались и не изменялись. Backup mode0600,
+pg_restore --list PASS перед продвижением.
+
+Артефакты: ../artifacts/studio-3.2.21-modules-stable-20261012/:
+before-promotion.json, promotion-receipt.json, stable-server-verification.json,
+stable-release-manifest.json. Предыдущие beta evidence сохранены как история.
+Для остановки выдачи withdraw14target stable rows из promotion-receipt.json;
+старые stable остаются published. Уже установленный код при этом сохраняется.
+
+Ограничения: на устройстве владельца update/download и платные AI-ответы
+не проверялись; Mac ad-hoc signed без Apple notarization, ZIP вручную.
+Первоначальная публикация и детали native/full проверки ниже описывают beta-этап.
+
 ## Выпуск приложения и всех модулей, 2026-10-12 (UTC)
 
 Источник: владелец поручил готовое приложение и обновление приложения/модулей;

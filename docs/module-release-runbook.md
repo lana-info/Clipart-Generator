@@ -1,5 +1,26 @@
 # Official Module Releases
 
+## Stable Studio3.2.21 / все модули1.5.7, 2026-10-12 (UTC)
+
+По прямому поручению владельца14published beta rows переведены вstable
+штатным PostgresLicenseService.promote_release_to_stable:2Core+6modules×2platforms
+(Windows x64/Mac Apple Silicon). Версии3.2.21/1.5.7, minCore3.2.21,<3.3.0.
+Менялся только channel. Подписи, bytes/SHA, IDs, status, notes и compatibility
+сохранены; перепаковка, новые uploads и пересборки не выполнялись.
+
+До операции: совпадение14identities/storedSHA, отсутствиеstable conflicts,
+0600backup/pg_restore list PASS. После:14stable/latest discovery и storedSHA PASS
+для обычных и beta клиентов; старыеstable/Intel/прочиеfingerprints прежние.
+Ни реальные лицензии/права, ни старые файлы не менялись. Health200/token403.
+Promotion contracts2PASS,1disposable-Postgres SKIP; реальная PG-операция проверена.
+Артефакты: ../artifacts/studio-3.2.21-modules-stable-20261012/.
+Остановить новую выдачу: withdraw14rows из promotion-receipt.json;
+старыеstable остаются published. Уже установленный код при этом сохраняется.
+
+Проверки исходного выпуска и ограничения ниже сохраняются. Mac по-прежнему
+ad-hoc signed, без Apple notarization; update на устройстве владельца не проверен.
+Предыдущий раздел фиксирует beta-этап до продвижения вstable.
+
 ## Beta Studio 3.2.21 / все модули 1.5.7, 2026-10-12 (UTC)
 
 По поручению владельца опубликованы Windows x64 и одна Mac-версия, Apple Silicon.
