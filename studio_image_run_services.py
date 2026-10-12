@@ -5,6 +5,7 @@ import weakref
 from dataclasses import replace
 from typing import Any, Callable, Mapping
 
+from gpt25_recovery import confirm_expired_generation_retries
 from security_redaction import redact_absolute_paths, redact_text
 from studio_job_services import CoreWorkerJobHandle
 from v3_flow_runtime import FlowRunRequest
@@ -139,8 +140,17 @@ class CoreImageRunGateway:
             project_id = prepare()
             kwargs = request.worker_kwargs()
             kwargs["settings"] = dict(internal.settings)
+            kwargs["settings"]["gpt25_expired_task_confirmations"] = ()
             if project_id is not None:
                 kwargs["project_id"] = project_id
+            if kwargs["mode"] != "mode2_process":
+                approvals = confirm_expired_generation_retries(
+                    kwargs["work_dir"], kwargs["settings"], kwargs["generated_prompts"],
+                    project_id=project_id,
+                )
+                if approvals is None:
+                    raise ImageRunGatewayError("Новая платная генерация отменена")
+                kwargs["settings"]["gpt25_expired_task_confirmations"] = approvals
             factory = _load_callback(self._worker_factory, "worker")
             worker = factory(**kwargs)
         except ImageRunGatewayError:

@@ -1,3 +1,54 @@
+## Выпуск приложения и всех модулей, 2026-10-11
+
+Источник: владелец поручил сделать готовое приложение с обновлением приложения
+и модулей. Разрешены необходимые commit/push, native builds и публикация.
+Текущий канал beta; stable и остальные продукты не меняются. Исходный кандидат
+fd46e5a уже собирался как3.2.20 (run38104953011), поэтому новая версия3.2.21.
+Все6 модулей1.5.7 для windows-x64/macos-arm64/macos-x64, Core>=3.2.21,<3.3.0.
+Состав: проверенный fd46e5a и исправления GPT Image recovery ниже. Пять чужих
+незакоммиченных файлов composer-results-worktree в этот выпуск не включаются.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Приложение можно обновить на Windows/Mac ARM/Intel; поручение владельца | Native CI, installer/ZIP, version/SHA/source/frozen Core, серверный discovery/download | В работе: Core3.2.21, новые recovery tests в native jobs | Ранее548tests+35subtests PASS; native сборки этой версии ещё не выполнены |
+| Все6 модулей можно обновить без обхода подписи/совместимости; поручение владельца | Pinned publisher signature, inspect/install/activate/runtime3profiles, old-Core reject, серверные SHA и compatibility | В работе: signed1.5.7, minCore3.2.21 | Текущие опубликованные версии прочитаны; новые пакеты ещё не готовы |
+| Сохранить stable, другие продукты и старые файлы; действующий runbook | Verified DB backup, release fingerprints до/после, только target beta statuses | В работе: новые21rows, старые bytes сохраняются | GitHub PRIVATE подтверждён; текущие beta21rows прочитаны; публикация ещё не выполнялась |
+
+Артефакты выпуска: ../artifacts/studio-3.2.21-modules-beta-20261011/.
+Release contracts/acceptance: 46 tests +4 subtests PASS10.97s. Azure default
+согласован с VERSION3.2.21. Полный offline suite выполняется; до его успешного
+завершения и native checks публикация запрещена. История: docs/ERRORS.md,
+release-acceptance-resume-20261011 и release-version-consistency-20261012.
+На устройстве владельца обновление не проверено. Live/paid AI calls не входят
+в выпуск; macOS beta остаётся ad-hoc signed без Apple notarization.
+
+## Исправление восстановления GPT Image 2.5, 2026-10-11
+
+Источник: ревью fd46e5a и поручение владельца «Исправь тогда».
+Изолированная ветка codex/fix-gpt25-recovery-20261011 от fd46e5a.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Принятая задача восстанавливается после сбоя записи без нового POST; ревью P2 | Fault injection до/после os.replace, новый worker, старые split-записи | Принятие task_id и удаление submitting-маркера одной атомарной записью; известная задача приоритетна для безопасного GET | Реализовано и проверено: реальные журнал/transport/worker; после successful replace только GET, до replace остаётся защитный маркер; старые split-записи восстанавливаются без POST |
+| Отмена до отправки не блокирует повтор; неизвестный результат отправки защищён от повторной оплаты; ревью P2 | Stop до open и после read ответа, HTTP403/429/500/504, новый worker | Учёт начала POST непосредственно перед transport; до отправки маркер отменяется, после отправки сохраняется | Реализовано и проверено: до сети 0 opens и следующий запуск успешен; после отправки/5xx повторный POST блокируется; 403/429 не оставляют неопределённую отправку |
+| Недоступный результат не опрашивается бесконечно; новый платный запуск требует явного подтверждения; ревью P2 | HTTP404/410, временные/authorization errors; Core и legacy UI Yes/No; project/item/payload scopes | expired сохраняет прежнюю задачу; Core и legacy окно спрашивают о новой оплате; согласие привязано к конкретному ID и не берётся из сохранённого плана; принятие замены атомарно сохраняет superseded-историю | Реализовано и проверено: без согласия 0 новых HTTP requests; Yes даёт один POST, новая задача затем восстанавливается GET; No сохраняет expired; 401/403/429/500 сохраняют возможность восстановления; scopes и реальный Qt default No PASS |
+
+Итоговая проверка Linux/Python3.11.15, pytest9.1.1, Qt6.11.0 offscreen через
+scripts/run_isolated_tests.py: **548 tests +35subtests PASS, 37.82s**;
+**1 SKIP**: native Windows DPAPI contract. Включены 41 новых recovery checks,
+все5 моделей до итогового PNG с fake API/download, provider/journal/parallel,
+Core/legacy UI, run queue, credentials/security и shell/dependency regressions.
+Git diff --check и py_compile затронутых Python-файлов PASS.
+Реальный Qt-диалог: default No и клик No PASS; screenshot:
+/tmp/pytest-of-root/pytest-656/test_real_qt_cancel_button_pre0/expired-dialog.png.
+Причины, изменения и история проверок: docs/ERRORS.md, gpt25-recovery-20261011.
+
+Платных/live запросов 0; native Windows/macOS, сборка и публикация не выполнялись.
+Commit/push/merge не выполнялись. Исходная composer-results-worktree и её5
+незакоммиченных файлов не изменялись. Неопределённые отправки остаются защитным
+стопом; получение известного результата из старого split-журнала не означает
+автоматического снятия всех старых неопределённых отправок.
+
 ## Выпуск Studio 3.2.18 / Composer 1.5.6, 2026-10-08
 
 Источник: команда владельца «сделай обновление приложения». Канал beta;

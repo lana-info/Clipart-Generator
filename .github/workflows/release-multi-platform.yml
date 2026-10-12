@@ -92,6 +92,13 @@ jobs:
             tests/test_api_credentials.py::ApiCredentialKeysTests::test_fal_key_round_trips_through_dpapi_after_store_restart `
             tests/test_update_client.py::UpdateClientTests::test_verified_installer_is_immutable_until_protected_context_closes
 
+      - name: Verify GPT Image paid-job recovery on native Windows
+        shell: powershell
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          python scripts/run_isolated_tests.py -q tests/test_gpt25_recovery.py tests/test_gpt25_provider.py tests/test_gpt25_async_worker.py tests/test_gpt25_integration.py
+          if ($LASTEXITCODE -ne 0) { throw "GPT Image recovery verification failed" }
+
       - name: Download bundled Local Real-ESRGAN
         shell: powershell
         run: |
@@ -314,7 +321,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/check_sensitive_artifacts.py --git-tracked --allow-path scripts/check_sensitive_artifacts.py --allow-path tests/test_security_redaction.py
-          python -m pytest -q tests/test_license_client_security.py tests/test_v3_license_gate.py tests/test_v3_license_flow_gate.py tests/test_v3_run_queue.py tests/test_release_entrypoint.py tests/test_license_service_contract.py tests/test_update_client.py tests/test_v3_updater.py tests/test_studio_shell_packaging.py tests/test_macos_release_packaging.py tests/test_prompt_composer_runtime.py tests/test_prompt_composer_directions_ui.py tests/test_prompt_composer_nested_scenarios.py
+          python -m pytest -q tests/test_license_client_security.py tests/test_v3_license_gate.py tests/test_v3_license_flow_gate.py tests/test_v3_run_queue.py tests/test_release_entrypoint.py tests/test_license_service_contract.py tests/test_update_client.py tests/test_v3_updater.py tests/test_studio_shell_packaging.py tests/test_macos_release_packaging.py tests/test_prompt_composer_runtime.py tests/test_prompt_composer_directions_ui.py tests/test_prompt_composer_nested_scenarios.py tests/test_gpt25_recovery.py tests/test_gpt25_provider.py tests/test_gpt25_async_worker.py tests/test_gpt25_integration.py
 
       - name: Download verified macOS Real-ESRGAN runtime
         shell: bash

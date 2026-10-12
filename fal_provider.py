@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 from urllib.parse import quote, urlsplit
 from datetime import datetime, timezone
@@ -248,6 +248,34 @@ class FalTaskJournal:
             self._write(records)
             return record
 
+    def accept_submission(
+        self, marker_id: str, request_id: str, *, superseded_id: str = ""
+    ) -> FalTaskRecord:
+        """Replace a pre-submit guard with the accepted receipt in one atomic write."""
+        with self._lock, _journal_process_lock(self.path):
+            records = self._read()
+            marker = records.get(marker_id)
+            if marker is None or marker.status != "submitting":
+                raise FalProviderError("Защитная запись отправки отсутствует в журнале")
+            if request_id in records or request_id.startswith("unconfirmed_"):
+                raise FalProviderError("Некорректный идентификатор принятой задачи")
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            accepted = replace(marker, request_id=request_id, status="queued", updated_at=now)
+            if superseded_id:
+                previous = records.get(superseded_id)
+                if (previous is None or previous.status != "expired"
+                        or previous.operation not in {
+                            marker.operation, marker.operation.rsplit(":", 1)[0]
+                        }
+                        or previous.model_id != marker.model_id
+                        or previous.input_fingerprint != marker.input_fingerprint):
+                    raise FalProviderError("Истёкшая задача не соответствует новой отправке")
+                records[superseded_id] = replace(previous, status="superseded", updated_at=now)
+            del records[marker_id]
+            records[request_id] = accepted
+            self._write(records)
+            return accepted
+
     def update_status(self, request_id: str, status: str) -> FalTaskRecord | None:
         with self._lock, _journal_process_lock(self.path):
             records = self._read()
@@ -290,7 +318,7 @@ class FalTaskJournal:
 _MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}$")
 _REQUEST_RE = re.compile(r"^[A-Za-z0-9_-]{1,256}$")
 _TERMINAL_TASK_STATUSES = frozenset(
-    {"completed", "completed_after_cancel", "cancelled", "failed"}
+    {"completed", "completed_after_cancel", "cancelled", "failed", "superseded"}
 )
 
 

@@ -1,6 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from PyQt6.QtWidgets import QApplication
 
@@ -128,7 +128,22 @@ def test_home_refreshes_rights_and_keeps_saved_project(tmp_path):
         controller.brief.project_name.setText('Saved acceptance')
         view.show_mode_switcher()
         assert card.start_button.text() == 'Открыть'
-        assert view.mode_selection.saved_project_buttons
-        assert 'Saved acceptance' in view.mode_selection.saved_project_buttons[0].text()
+        from PyQt6.QtWidgets import QMenu
+        resume = view.mode_selection.all_projects_button
+        assert resume.text() == 'Продолжить работу' and resume.isEnabled()
+        record = next(item for item in view._project_store.recent(limit=None)
+                      if item.name == 'Saved acceptance')
+
+        def choose_saved_project(menu, *args):
+            actions = [action for action in menu.actions() if 'Saved acceptance' in action.text()]
+            assert len(actions) == 1
+            actions[0].trigger()
+
+        with patch.object(QMenu, 'exec', choose_saved_project):
+            resume.click()
+        assert view._active_project_id == record.project_id
+        reopened = view.shell.workflow_controller('auto-clipart')
+        assert reopened.brief.project_name.text() == 'Saved acceptance'
+        assert reopened.worker is None
     finally:
         view.close()

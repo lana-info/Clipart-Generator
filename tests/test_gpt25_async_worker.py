@@ -82,6 +82,8 @@ class OfflineWorker:
         self.provider = provider
 
     def _request_json(self, url, method="GET", payload=None, headers=None, timeout=None):
+        if method == "POST":
+            self._diagnostic_context.gpt25_post_started = True
         self.calls.append((method, url, payload, headers))
         item = self.responses.pop(0)
         if isinstance(item, Exception):

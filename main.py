@@ -116,6 +116,7 @@ from gpt25_provider import (
     submitted_task_id as gpt25_submitted_task_id,
     task_result as gpt25_task_result,
 )
+from gpt25_recovery import confirm_expired_generation_retries
 from provider_contract import ProviderTaskRequest
 from processing_contract import publish_atomic, run_workspace
 from local_ben2 import load_local_ben2_onnx_model
@@ -3836,6 +3837,7 @@ class WorkerThread(QThread):
         claimed_ids,
         *,
         input_fingerprint,
+        prefer_accepted=False,
     ):
         desired_operation = self._task_operation_key(operation)
         base_operation = desired_operation.rsplit(":", 1)[0]
@@ -3870,6 +3872,12 @@ class WorkerThread(QThread):
                 and task.input_fingerprint == str(input_fingerprint)
             ]
             candidates = exact or legacy
+            if prefer_accepted:
+                # An accepted receipt can be polled safely even if an older
+                # version left its pre-submit marker in the same journal.
+                candidates.sort(key=lambda task: (
+                    task.status == "expired", task.request_id.startswith("unconfirmed_")
+                ))
             if not candidates:
                 if (self.settings.get("publish_recovered_source") is True
                         and getattr(self._diagnostic_context, "stage", "")
@@ -5058,6 +5066,8 @@ class WorkerThread(QThread):
                     if provider == "photoroom":
                         self._wait_for_photoroom_launch()
                     self._admit_paid_submission(provider, method)
+                    if provider in {"atlascloud", "piapi"} and method == "POST":
+                        self._diagnostic_context.gpt25_post_started = True
                     with open_url_secure(req, timeout=req_timeout, context=ssl_context) as resp:
                         response_status = getattr(resp, "status", None)
                         response_getcode = getattr(resp, "getcode", None)
@@ -5075,7 +5085,9 @@ class WorkerThread(QThread):
                 last_error = RuntimeError(f"HTTP status={e.code}")
 
                 # Не ретраим ошибки авторизации/доступа, чтобы лог был понятнее.
-                if e.code in {400, 401, 402, 403, 404}:
+                if e.code in {400, 401, 402, 403, 404} or (
+                    provider in {"atlascloud", "piapi"} and method == "GET" and e.code == 410
+                ):
                     break
 
                 # 429 безопасно повторить даже для POST: KIE отклонил запрос
@@ -5553,10 +5565,23 @@ class WorkerThread(QThread):
         operation = str(getattr(self._diagnostic_context, "stage", "") or "generation")
         self._set_provider_diagnostic_context(operation, provider, model_id)
         with self._provider_lease(provider):
+            superseded_id = ""
             pending = self._claim_pending_task(
                 journal, operation, model_id, self._claimed_gpt25_task_ids[provider],
-                input_fingerprint=fingerprint,
+                input_fingerprint=fingerprint, prefer_accepted=True,
             )
+            if pending is not None and pending.status == "expired":
+                approval = f"{provider}:{pending.request_id}"
+                if approval not in self.settings.get("gpt25_expired_task_confirmations", ()):
+                    raise RuntimeError(
+                        f"{provider}: результат прежней задачи больше недоступен. "
+                        "Повторный запуск требует подтверждения новой платной генерации."
+                    )
+                superseded_id = pending.request_id
+                pending = self._claim_pending_task(
+                    journal, operation, model_id, self._claimed_gpt25_task_ids[provider],
+                    input_fingerprint=fingerprint, prefer_accepted=True,
+                )
             if pending is not None:
                 if pending.request_id.startswith("unconfirmed_"):
                     raise RuntimeError(
@@ -5578,6 +5603,7 @@ class WorkerThread(QThread):
                 # Only this POST may determine whether the submit was rejected.
                 # A status from an earlier request cannot clear the paid-task guard.
                 self._diagnostic_context.last_http_status = None
+                self._diagnostic_context.gpt25_post_started = False
                 try:
                     submitted = self._request_json(
                         gpt25_submit_url(provider), method="POST", payload=payload,
@@ -5585,19 +5611,20 @@ class WorkerThread(QThread):
                         timeout=max(30, self.timeout),
                     )
                     task_id = gpt25_submitted_task_id(provider, submitted)
+                except ProcessingCancelled:
+                    if not self._diagnostic_context.gpt25_post_started:
+                        journal.update_status(marker, "cancelled")
+                    raise
                 except Exception:
                     http_status = getattr(self._diagnostic_context, "last_http_status", None)
-                    if http_status in {400, 401, 402, 403, 404, 429}:
+                    if (not self._diagnostic_context.gpt25_post_started
+                            or http_status in {400, 401, 402, 403, 404, 429}):
                         journal.update_status(marker, "failed")
                     raise RuntimeError(
                         f"{provider}: отправка не завершена. Проверьте задачу в "
                         "кабинете провайдера перед повторным запуском."
                     ) from None
-                journal.upsert(
-                    task_id, self._task_operation_key(operation), model_id, "queued",
-                    input_fingerprint=fingerprint,
-                )
-                journal.update_status(marker, "completed")
+                journal.accept_submission(marker, task_id, superseded_id=superseded_id)
                 self._emit_diagnostic(
                     "provider_task_submitted", provider=provider, model=model_id,
                     task=task_id, provider_state="queued",
@@ -5608,6 +5635,7 @@ class WorkerThread(QThread):
             while time.monotonic() < deadline:
                 self._ensure_running()
                 attempt += 1
+                self._diagnostic_context.last_http_status = None
                 try:
                     response = self._request_json(
                         gpt25_status_url(provider, task_id), headers=headers,
@@ -5617,6 +5645,12 @@ class WorkerThread(QThread):
                 except ProcessingCancelled:
                     raise
                 except Exception as error:
+                    if getattr(self._diagnostic_context, "last_http_status", None) in {404, 410}:
+                        journal.update_status(task_id, "expired")
+                        raise RuntimeError(
+                            f"{provider}: результат прежней задачи больше недоступен. "
+                            "Повторный запуск требует подтверждения новой платной генерации."
+                        ) from None
                     journal.update_status(task_id, "poll_deferred")
                     self._emit_diagnostic(
                         "provider_task_recovery_deferred", provider=provider,
@@ -9573,6 +9607,19 @@ class MainWindow(QMainWindow):
         )
         runtime_settings["fal_cost_confirmed"] = fal_cost_confirmed
         runtime_settings["gpt25_cost_confirmed"] = gpt25_cost_confirmed
+
+        runtime_settings["gpt25_expired_task_confirmations"] = ()
+        if mode != "mode2_process":
+            try:
+                approvals = confirm_expired_generation_retries(
+                    self.work_dir, runtime_settings, self.generated_prompts, parent=self,
+                )
+            except (OSError, ValueError, FalProviderError) as error:
+                QMessageBox.warning(self, "Ошибка", safe_error_text(error, self.secret_settings.values()))
+                return
+            if approvals is None:
+                return
+            runtime_settings["gpt25_expired_task_confirmations"] = approvals
 
         self.stop_pending = False
         self.worker = launch_worker(

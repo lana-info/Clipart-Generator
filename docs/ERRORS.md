@@ -1,3 +1,67 @@
+## release-acceptance-resume-20261011
+
+Полный offline suite перед выпуском обнаружил устаревший
+acceptance test_home_refreshes_rights_and_keeps_saved_project:
+AttributeError saved_project_buttons. Дефект теста воспроизведён отдельно на
+исходном fd46e5a, до recovery/version изменений (1FAIL2.30s).
+PROJECT.md требует одно меню «Продолжить работу» вместо карточек; текущий
+ModeSelectionScreen уже использует all_projects_button/QMenu.
+Изменение: тест выбирает сохранённый проект через реальное действие меню,
+проверяет точный project_id, восстановление имени и отсутствие worker.
+Production UI не меняется, сохранение и reopening продолжают проверяться.
+Обновлённый сценарий PASS в focused release suite (36PASS до следующего сбоя).
+Исходный full suite остановлен после найденного сбоя; повтор полного набора
+предстоит после проверок версий.
+
+## release-version-consistency-20261012
+
+Focused release suite: 36PASS, 1FAIL11.73s. test_azure_default_matches_release_version
+обнаружил default3.2.18 в azure-pipelines.yml при новом release/VERSION.txt3.2.21.
+Причина: смена версии должна согласованно менять обе release-конфигурации.
+Исправлен только default до3.2.21; проверка исходного контракта без изменений.
+Повтор release contracts: 46tests+4subtests PASS10.97s. Полный offline suite в работе.
+
+## gpt25-recovery-20261011
+
+Ревью fd46e5a: три воспроизводимых дефекта восстановления.
+1. Сохранение accepted task_id и завершение unconfirmed-маркера двумя записями:
+   прерывание второй записи оставляет submitting раньше queued; повтор блокируется.
+2. Отмена после сохранения submitting, но до сети попадает в общий except:
+   неоплаченный запуск становится «неизвестным» и блокирует повтор (0 HTTP opens).
+3. Любой отказ GET становится poll_deferred: удалённая задача PiAPI (HTTP404)
+   опрашивается при каждом новом запуске. Документация PiAPI хранит async-результат
+   60 минут: https://piapi.ai/docs/gpt-image/gpt-image-api.
+
+Исходные воспроизведения: /tmp/clipart-review-fd46e5a-2na22m9z/review_probes.py.
+Решение:
+- accept_submission заменяет submitting-маркер принятой queued-задачей одним
+  atomic replace под существующими thread/process locks. Известные receipts
+  старых split-журналов восстанавливаются безопасным GET; неизвестные отправки
+  не снимаются автоматически, чтобы не допустить повторной оплаты.
+- Transport выставляет gpt25_post_started только непосредственно перед open.
+  Отмена до этого момента завершает маркер как cancelled; отмена/потеря ответа
+  после начала отправки сохраняет guard. Paid POST не ретраится.
+- HTTP404/410 сохраняет expired; следующий запуск не делает GET/POST без
+  отдельного согласия на новую оплату. Core и legacy окно используют общий
+  QMessageBox с default No и родителем активного окна. Согласие связано с ID
+  задачи и точными project/item/model/payload scopes; Core удаляет согласие из
+  пользовательского плана до проверки. Новый receipt и superseded-история
+  сохраняются атомарно. Временные/authorization ошибки остаются poll_deferred.
+
+Проверки:
+- До реализации:11 регрессионных checks FAILED на исходном fd46e5a,
+  подтверждая дефекты и отсутствие атомарного принятия.
+- Первая реализация:33tests+5subtests PASS. При проверке diff исправлен вызов
+  отсутствующего helper в legacy-обработчике ошибок; добавлена проверка этого UI.
+  Уточнена совместимость старого unindexed generation receipt; отдельный test PASS.
+- После расширения:41 recovery checks PASS1.95s. Реальные transport/journal/worker,
+  прерывание до/после atomic replace и POST, HTTP403/429/500/504 без повторных POST,
+  HTTP404/410, consent Yes/No, forged saved consent, scopes, all5 final PNG routes,
+  legacy/Core UI и реальный Qt-клик No.
+- Итоговая интеграция:548tests+35subtests PASS37.82s;1 native Windows DPAPI SKIP.
+  Git diff --check и py_compile PASS. Платных/live запросов0; сборка/native
+  Windows/macOS и публикация не выполнялись. Итоговое состояние: STATE.md.
+
 # Ошибки проекта
 
 ## chroma-material-mode-20261005
