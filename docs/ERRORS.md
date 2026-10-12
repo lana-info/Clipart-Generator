@@ -7,6 +7,17 @@
 проверки stroke, preview, undo/redo и применения контура. Production-код не менялся.
 Focused contour/release:26tests+4subtests PASS3.56s. Повтор полного suite в работе.
 
+Второй full suite:3378PASS+303subtests,1FAIL,57SKIP,21network deselected493.33s.
+Единственный remaining test_studio_contour_integration обращался к тому же
+удалённому hardness_slider. На fd46e5a:13PASS+6subtests/1FAIL1.94s.
+Исправлен выбор реальной Жёсткой кисти через QTest; проверка3px footprint сохранена.
+Contour/transparency после исправления:54tests+6subtests PASS6.48s.
+Первый focused command содержал неверный test_transparency_preview.py, тесты не
+запускались; после rg --files выбран существующий test_v3_transparency_preview.py.
+Runtime-проверка подписанных модулей сначала использовала fixture без права
+auto-clipart и получила ожидаемый authorization deny. Добавлено только тестовое
+право; actual4workflow opens и image-processing на2profiles PASS, 0 paid jobs.
+
 ## release-acceptance-resume-20261011
 
 Полный offline suite перед выпуском обнаружил устаревший

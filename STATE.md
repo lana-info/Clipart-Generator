@@ -28,6 +28,12 @@ release-acceptance-resume-20261011 и release-version-consistency-20261012.
 Контур/release после исправления устаревшего UI-теста:26tests+4subtests PASS3.56s.
 Полный suite остановился на1182PASS+95subtests/1FAIL (неактуальный slider),
 теперь повторяется без остановки после первого сбоя. История: docs/ERRORS.md.
+Второй full suite:3378PASS+303subtests/1FAIL493.33s. Последний stale slider
+исправлен;54contour/transparency tests+6subtests PASS6.48s. Финальный CI предстоит.
+Signed1.5.7:6packages×2profiles inspect/install/activate и reject3.2.20/3.3.0 PASS.
+Actual signed runtime:4workflow open, shared-engine remove/subject/source checks,
+Composer catalogue+Qt nested click+7local variants и unload PASS на2profiles.
+Сборки и модули из db3e5c3; последующие исправления затрагивают только тесты/docs.
 
 ## Исправление восстановления GPT Image 2.5, 2026-10-11
 
