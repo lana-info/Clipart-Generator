@@ -1,3 +1,27 @@
+## Удалены все beta Vibix Studio, 2026-10-12 (UTC)
+
+Источник: владелец поручил удалить все beta и уточнил **только Vibix Studio**;
+TrendWatcher Video сохранён. Удалены27beta-релизов clipart-generator и27файлов
+(1482827633bytes) из рабочего хранилища.7published сначалаwithdrawn,20withdrawn
+удалены напрямую штатным delete_release. Beta Vibix в каталоге/выдаче больше нет.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Все beta Vibix удалены из каталога и выдачи; поручение владельца | Native deletion, отсутствующие файлы, zero undeleted/beta discovery | Реализовано и проверено:27deleted release rows/27removed files | Осталось0undeleted Beta Vibix; beta discovery пуст для всех целевых платформ и module scopes, включая прежнийIntel. Admin UI скрывает deleted записи |
+| Stable3.2.21/1.5.7, прочие stable и TrendWatcher сохранены; уточнение владельца | Non-target fingerprints, реальныеfileSHA, stable/latest discovery | Реализовано и проверено: менялись только27Clipart beta IDs | Всеprotected metadata/file hashes прежние; Windows/MacARM stable выбираютCore3.2.21 и6modules1.5.7. TrendWatcher beta1published и её файл сохранены. Licenses/grants не менялись. Health200/token403 |
+| Восстановление подготовлено до удаления; надёжность операции | Closed0600DB dump/pg_restore list, tar27members/size/SHA | Реализовано и проверено: private backup вне опубликованногоartifact root | Все27backup member SHA/size PASS; DB dump listing PASS; оба backup mode0600. Резервная копия не доступна через download endpoint |
+
+Артефакты: ../artifacts/beta-cleanup-20261012/: inventory.json, cleanup-plan.json,
+prepared-backup.json, deletion-receipt.json, cleanup-verification.json.
+Backup: /opt/bots-stack/backups/clipart-license-service/
+pre-vibix-studio-beta-cleanup-20261012.dump и .tar, отдельно от рабочего хранилища.
+Штатные DB tombstones остаются status=deleted для истории и скрыты в admin UI;
+это не доступные релизы. Уже установленные приложения/модули не удалялись.
+Восстановление возможно из private archive и before metadata только для этих IDs;
+не откатывать всю business-базу поверх новых изменений без отдельной диагностики.
+Исторические beta rollback-инструкции ниже теперь требуют восстановления файлов
+из закрытой копии; текущийstable продолжает работать.
+
 ## Stable Studio 3.2.21 и все модули 1.5.7, 2026-10-12 (UTC)
 
 Источник: владелец поручил разместить готовый выпуск на лицензионном сервере

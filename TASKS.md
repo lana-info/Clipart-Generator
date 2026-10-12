@@ -1,3 +1,13 @@
+## Удаление только beta Vibix Studio
+
+- [x] Зафиксировать27targets и сохранить verified DB/file backup.
+- [x] Удалить27beta-релизов и27файлов штатной операцией.
+- [x] Проверить отсутствиеbeta выдачи, сохранениеstable иTrendWatcher.
+- [x] ОбновитьSTATE/runbook и результаты проверки.
+
+Результат:27beta Vibix/27files удалены,0ввыдаче; stable/TrendWatcher PASS.
+Private verified backup сохранён; детали: STATE.md.
+
 ## Stable Studio3.2.21 и все модули1.5.7
 
 - [x] Проверить текущие14beta identities/SHA и создать verified backup.

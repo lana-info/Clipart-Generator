@@ -1,5 +1,20 @@
 # Official Module Releases
 
+## Удаление beta Vibix после stable, 2026-10-12 (UTC)
+
+По явному поручению владельца удалены только27beta Vibix Studio и27файлов
+(1482827633bytes); TrendWatcher Video исключён по ответу владельца.
+Перед удалением verified0600DB dump и private tar27members/SHA/size PASS.
+Штатный delete_release:7published сначалаwithdrawn;20withdrawn удалены напрямую.
+После:0undeleted beta/пустой beta discovery для Windows/MacARM/Intel;
+Core3.2.21+6modules1.5.7stable discovery PASS; protectedmetadata/files SHA прежние,
+включаястарыеstable иTrendWatcher beta. Licenses/grants не менялись. Health200/token403.
+
+Штатные status=deleted tombstones остаются в DB и скрыты в admin UI.
+Старыеbeta bytes теперь только в private backup вне опубликованногоartifactroot;
+исторические rollback-команды ниже требуют сначала восстановить нужные файлы.
+Артефакты: ../artifacts/beta-cleanup-20261012/; текущая таблица: STATE.md.
+
 ## Stable Studio3.2.21 / все модули1.5.7, 2026-10-12 (UTC)
 
 По прямому поручению владельца14published beta rows переведены вstable
