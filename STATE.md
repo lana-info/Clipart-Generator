@@ -1,39 +1,35 @@
-## Выпуск приложения и всех модулей, 2026-10-11
+## Выпуск приложения и всех модулей, 2026-10-12 (UTC)
 
-Источник: владелец поручил сделать готовое приложение с обновлением приложения
-и модулей. Разрешены необходимые commit/push, native builds и публикация.
-Текущий канал beta; stable и остальные продукты не меняются. Исходный кандидат
-fd46e5a уже собирался как3.2.20 (run38104953011), поэтому новая версия3.2.21.
-Все6 модулей1.5.7 для windows-x64/macos-arm64, Core>=3.2.21,<3.3.0.
-Состав: проверенный fd46e5a и исправления GPT Image recovery ниже. Пять чужих
-незакоммиченных файлов composer-results-worktree в этот выпуск не включаются.
+Источник: владелец поручил готовое приложение и обновление приложения/модулей;
+затем уточнил одну Mac-версию, Apple Silicon. **Опубликована beta: Studio 3.2.21
+и все шесть модулей 1.5.7 для Windows x64 и macOS ARM.** Модули требуют
+Core >=3.2.21 и <3.3.0. Сначала обновить приложение, затем «Обновления модулей».
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Приложение можно обновить на Windows/Mac ARM; поручение владельца | Native CI, installer/ZIP, version/SHA/source/frozen Core, серверный discovery/download | В работе: Core3.2.21, новые recovery tests в native jobs | Ранее548tests+35subtests PASS; native сборки этой версии ещё не выполнены |
-| Все6 модулей можно обновить без обхода подписи/совместимости; поручение владельца | Pinned publisher signature, inspect/install/activate/runtime2profiles, old-Core reject, серверные SHA и compatibility | В работе: signed1.5.7, minCore3.2.21 | Текущие опубликованные версии прочитаны; новые пакеты ещё не готовы |
-| Сохранить stable, другие продукты и старые файлы; действующий runbook | Verified DB backup, release fingerprints до/после, только target beta statuses | В работе: новые14rows, старые bytes сохраняются | GitHub PRIVATE подтверждён; текущие beta21rows прочитаны; публикация ещё не выполнялась |
+| Приложение можно обновить на Windows и Mac Apple Silicon; поручение владельца | Native CI, version/SHA/source, frozen Core, updater contracts, серверная выдача | Реализовано и проверено: опубликованы 2 Core 3.2.21 beta rows | Native run38198534059 SUCCESS на обеих платформах; Windows установленное приложение PASS; Core13/13, Mac extracted13/13; версии, SHA и ARM-архитектура PASS. Full CI38200009717:3379 tests+303subtests PASS326.30s,57SKIP,21network deselected. Server discovery и2Core SHA PASS |
+| Все шесть модулей обновляются с проверкой подписи и совместимости; поручение владельца | Pinned publisher, install/activate/runtime2profiles, incompatible-Core deny, HTTPS transport | Реализовано и проверено: подписанные6ZIP 1.5.7,12published beta rows, minCore3.2.21 | Все6×2profiles inspect/install/activate PASS; Core3.2.20/3.3.0 отвергаются. Actual4workflow pages, shared engine, Composer catalogue/Qt/7variants/unload PASS (Linux Qt offscreen,2target profiles).18loopback HTTPS cases PASS32.63s, включая download/signature/independent update/revocation.12module server SHA/discovery PASS |
+| Сохранить stable, старый Intel, другие продукты и прежние файлы; runbook и границы выпуска | DB backup, fingerprints до/после, старые bytes/SHA, channel isolation | Реализовано и проверено:14новых published rows;14прежних Windows/ARM beta rows withdrawn без удаления | Backup mode0600/pg_restore list PASS. Все14новых SHA PASS; старые14файлов сохранены/SHA PASS; stable/Intel/unrelated fingerprints неизменны. Health200, invalid-download-token403, GitHub PRIVATE |
 
-Артефакты выпуска: ../artifacts/studio-3.2.21-modules-beta-20261011/.
-Release contracts/acceptance: 46 tests +4 subtests PASS10.97s. Azure default
-согласован с VERSION3.2.21. Полный offline suite выполняется; до его успешного
-завершения и native checks публикация запрещена. История: docs/ERRORS.md,
-release-acceptance-resume-20261011 и release-version-consistency-20261012.
-На устройстве владельца обновление не проверено. Live/paid AI calls не входят
-в выпуск; macOS beta остаётся ad-hoc signed без Apple notarization.
+Состав: reviewed fd46e5a и исправления GPT Image recovery. Payload/native builds
+и подписанные модули из db3e5c3; финальная проверка e8cac6a меняет только tests/docs.
+Ветка codex/fix-gpt25-recovery-20261011 отправлена; release/main не менялись.
+Пять чужих незакоммиченных файлов composer-results-worktree сохранены и исключены.
+Причины сбоев и история исправлений: docs/ERRORS.md, release-* и gpt25-recovery-*.
 
-Уточнение владельца 2026-10-12: выпускаем одну Mac-версию, Apple Silicon.
-Новые14rows для Windows/ARM; прежние Intel beta rows и stable сохраняются.
-Первый CIrun38198208646 запущен до уточнения; его артефакты не публикуются.
-Контур/release после исправления устаревшего UI-теста:26tests+4subtests PASS3.56s.
-Полный suite остановился на1182PASS+95subtests/1FAIL (неактуальный slider),
-теперь повторяется без остановки после первого сбоя. История: docs/ERRORS.md.
-Второй full suite:3378PASS+303subtests/1FAIL493.33s. Последний stale slider
-исправлен;54contour/transparency tests+6subtests PASS6.48s. Финальный CI предстоит.
-Signed1.5.7:6packages×2profiles inspect/install/activate и reject3.2.20/3.3.0 PASS.
-Actual signed runtime:4workflow open, shared-engine remove/subject/source checks,
-Composer catalogue+Qt nested click+7local variants и unload PASS на2profiles.
-Сборки и модули из db3e5c3; последующие исправления затрагивают только тесты/docs.
+Артефакты: ../artifacts/studio-3.2.21-modules-beta-20261011/.
+Основные подтверждения: beta-release-manifest.json, final-desktop-ci-verification.json,
+final-desktop-ci.log, final-source-equivalence.json, release-verification-summary.json,
+server-final-live-verification.json, modules/release-set.json и official-*-runtime.json.
+Rollback: withdraw новые14rows и вернуть published прежним14из previous-releases.json;
+пакеты/инсталляторы не перезаписывать и не удалять. DB dump хранится отдельно, mode0600.
+
+Ограничения: на устройстве владельца обновление и реальные платные AI-ответы
+не проверялись (0paid calls). Оригинальный Windows3.1.4 upgrade не выполнялся:
+legacy_installer_url не задан. macOS beta ad-hoc signed, без Apple notarization;
+ZIP устанавливается вручную.57SKIP относятся к native/непоставленному Linux
+Real-ESRGAN и ранее отложенным Pinterest сценариям; native security contracts
+выполнены Windows CI,21network deselected не выдаются за проверенные офлайн.
 
 ## Исправление восстановления GPT Image 2.5, 2026-10-11
 

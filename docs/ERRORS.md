@@ -1,3 +1,11 @@
+## release-final-verification-20261012
+
+После portable-doc fix full CI38200009717 SUCCESS:
+3379tests+303subtests PASS326.30s,57SKIP,21network deselected,4Pillow warnings.
+Native Windows/Mac ARM run38198534059 SUCCESS; frozen/extracted evidence PASS.
+Published14beta rows, previous14withdrawn без удаления, new/oldSHA/fingerprints,
+health200/token403/PRIVATE PASS. Текущий статус и ограничения только в STATE.md.
+
 ## release-portable-doc-links-20261012
 
 Final Desktop CI38199191490:3378PASS+303subtests,1FAIL338.24s.

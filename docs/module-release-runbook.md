@@ -1,5 +1,33 @@
 # Official Module Releases
 
+## Beta Studio 3.2.21 / все модули 1.5.7, 2026-10-12 (UTC)
+
+По поручению владельца опубликованы Windows x64 и одна Mac-версия, Apple Silicon.
+Core3.2.21 и auto-clipart/clipart/processing/pinterest/prompt-composer/image-processing
+1.5.7; совместимость Core>=3.2.21,<3.3.0. Сначала приложение, затем модульные обновления.
+Новых Intel rows нет; старый Intel beta, stable и другие продукты сохранены.
+
+Source payload db3e5c3; native CI38198534059 SUCCESS. Финальный full CI38200009717
+на e8cac6a:3379tests+303subtests PASS326.30s;57SKIP,21network deselected.
+Последующие исходные изменения только tests/docs, payload equivalence проверена.
+Windows installation/frozenCore13/13 и Mac ARM/extractedCore13/13 PASS;
+version/SHA/architecture/secret-free provenance PASS. Все6signed ZIP install/activate,
+compatibility deny и actual runtime на2profiles PASS (Linux Qt offscreen).18локальных HTTPS delivery cases
+PASS32.63s, включая реальное скачивание, проверку подписи и отзыв доступа.
+
+Backup создан до stage, mode0600, pg_restore --list PASS. Опубликованы14beta rows;
+прежние14target beta rows withdrawn, файлы и их SHA сохранены. Все14новых server
+SHA/discovery PASS; stable/Intel/unrelated fingerprints неизменны; health200,
+invalid token403, repository PRIVATE. Реальные licenses/grants не менялись.
+Артефакты: ../artifacts/studio-3.2.21-modules-beta-20261011/ (вне Git).
+Для rollback использовать previous-releases.json и server-retirement-receipt.json:
+withdraw новые14, вернуть published старым14, не менять существующие bytes.
+
+На устройстве владельца update/download не проверялись; paid AI calls0.
+Оригинальный Windows3.1.4 upgrade не запускался без legacy fixture URL.
+Mac ZIP устанавливается вручную, ad-hoc signed без Apple notarization.
+Полная таблица результатов: STATE.md; причины/попытки: docs/ERRORS.md.
+
 ## Beta Studio 3.2.18 / Composer 1.5.6, 2026-10-08
 
 Команда владельца «сделай обновление приложения». Published beta Studio3.2.18
