@@ -333,7 +333,8 @@ def test_brush_during_local_draft_refreshes_after_without_losing_stroke_or_histo
     wait(canvas)
     page._set_tool('brush')
     page._set_diameter(6)
-    page.hardness_slider.setValue(100)
+    page.brush_style_buttons[100].click()
+    assert canvas.brush_hardness == 100
     QTest.mouseClick(canvas.viewport(),Qt.MouseButton.LeftButton,
                      pos=canvas.mapFromScene(QPointF(40,60)))
     wait(canvas)

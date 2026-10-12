@@ -1,4 +1,4 @@
-"""Both native Mac builds must retain the current downloadable-module boundary."""
+"""Mac packaging retains the module boundary; this release targets Apple Silicon."""
 from pathlib import Path
 import re
 
@@ -37,8 +37,10 @@ def test_mac_workflow_has_explicit_native_targets_and_required_artifacts():
     workflow = (ROOT / ".github/workflows/release-multi-platform.yml").read_text()
     mac = workflow.split("  build-macos:\n", 1)[1]
     assert "inputs.build_macos" in mac
-    assert "runner: macos-15-intel" in mac and "runner: macos-15" in mac
-    assert "target_arch: x86_64" in mac and "target_arch: arm64" in mac
+    assert "runner: macos-15" in mac and "platform: macos-arm64" in mac
+    assert "target_arch: arm64" in mac
+    assert "runner: macos-15-intel" not in mac and "platform: macos-x64" not in mac
+    assert "target_arch: x86_64" not in mac
     assert "--release-entrypoint-smoke" in mac
     assert "test_prompt_composer_runtime.py" in mac
     assert "build-provenance.json" in mac

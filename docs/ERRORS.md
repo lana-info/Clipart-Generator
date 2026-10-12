@@ -1,3 +1,12 @@
+## release-contour-brush-control-20261012
+
+Полный offline suite:1182PASS+95subtests,1FAIL,1native Windows SKIP250.72s.
+Ошибка hardness_slider воспроизведена на исходном fd46e5a (1FAIL0.69s).
+Текущий UI выбирает Жёсткая/Мягкая через brush_style_buttons; slider удалён.
+Тест переключает настоящую кнопку Жёсткая и проверяет hardness100, сохраняя
+проверки stroke, preview, undo/redo и применения контура. Production-код не менялся.
+Focused contour/release:26tests+4subtests PASS3.56s. Повтор полного suite в работе.
+
 ## release-acceptance-resume-20261011
 
 Полный offline suite перед выпуском обнаружил устаревший

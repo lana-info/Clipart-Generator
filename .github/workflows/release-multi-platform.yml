@@ -15,7 +15,7 @@ on:
         type: boolean
         default: false
       build_macos:
-        description: "Also build native Apple Silicon and Intel macOS betas"
+        description: "Also build the native Apple Silicon macOS beta"
         type: boolean
         default: false
       build_windows:
@@ -276,9 +276,6 @@ jobs:
           - platform: macos-arm64
             runner: macos-15
             target_arch: arm64
-          - platform: macos-x64
-            runner: macos-15-intel
-            target_arch: x86_64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     env:

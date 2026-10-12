@@ -4,15 +4,15 @@
 и модулей. Разрешены необходимые commit/push, native builds и публикация.
 Текущий канал beta; stable и остальные продукты не меняются. Исходный кандидат
 fd46e5a уже собирался как3.2.20 (run38104953011), поэтому новая версия3.2.21.
-Все6 модулей1.5.7 для windows-x64/macos-arm64/macos-x64, Core>=3.2.21,<3.3.0.
+Все6 модулей1.5.7 для windows-x64/macos-arm64, Core>=3.2.21,<3.3.0.
 Состав: проверенный fd46e5a и исправления GPT Image recovery ниже. Пять чужих
 незакоммиченных файлов composer-results-worktree в этот выпуск не включаются.
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Приложение можно обновить на Windows/Mac ARM/Intel; поручение владельца | Native CI, installer/ZIP, version/SHA/source/frozen Core, серверный discovery/download | В работе: Core3.2.21, новые recovery tests в native jobs | Ранее548tests+35subtests PASS; native сборки этой версии ещё не выполнены |
-| Все6 модулей можно обновить без обхода подписи/совместимости; поручение владельца | Pinned publisher signature, inspect/install/activate/runtime3profiles, old-Core reject, серверные SHA и compatibility | В работе: signed1.5.7, minCore3.2.21 | Текущие опубликованные версии прочитаны; новые пакеты ещё не готовы |
-| Сохранить stable, другие продукты и старые файлы; действующий runbook | Verified DB backup, release fingerprints до/после, только target beta statuses | В работе: новые21rows, старые bytes сохраняются | GitHub PRIVATE подтверждён; текущие beta21rows прочитаны; публикация ещё не выполнялась |
+| Приложение можно обновить на Windows/Mac ARM; поручение владельца | Native CI, installer/ZIP, version/SHA/source/frozen Core, серверный discovery/download | В работе: Core3.2.21, новые recovery tests в native jobs | Ранее548tests+35subtests PASS; native сборки этой версии ещё не выполнены |
+| Все6 модулей можно обновить без обхода подписи/совместимости; поручение владельца | Pinned publisher signature, inspect/install/activate/runtime2profiles, old-Core reject, серверные SHA и compatibility | В работе: signed1.5.7, minCore3.2.21 | Текущие опубликованные версии прочитаны; новые пакеты ещё не готовы |
+| Сохранить stable, другие продукты и старые файлы; действующий runbook | Verified DB backup, release fingerprints до/после, только target beta statuses | В работе: новые14rows, старые bytes сохраняются | GitHub PRIVATE подтверждён; текущие beta21rows прочитаны; публикация ещё не выполнялась |
 
 Артефакты выпуска: ../artifacts/studio-3.2.21-modules-beta-20261011/.
 Release contracts/acceptance: 46 tests +4 subtests PASS10.97s. Azure default
@@ -21,6 +21,13 @@ Release contracts/acceptance: 46 tests +4 subtests PASS10.97s. Azure default
 release-acceptance-resume-20261011 и release-version-consistency-20261012.
 На устройстве владельца обновление не проверено. Live/paid AI calls не входят
 в выпуск; macOS beta остаётся ad-hoc signed без Apple notarization.
+
+Уточнение владельца 2026-10-12: выпускаем одну Mac-версию, Apple Silicon.
+Новые14rows для Windows/ARM; прежние Intel beta rows и stable сохраняются.
+Первый CIrun38198208646 запущен до уточнения; его артефакты не публикуются.
+Контур/release после исправления устаревшего UI-теста:26tests+4subtests PASS3.56s.
+Полный suite остановился на1182PASS+95subtests/1FAIL (неактуальный slider),
+теперь повторяется без остановки после первого сбоя. История: docs/ERRORS.md.
 
 ## Исправление восстановления GPT Image 2.5, 2026-10-11
 

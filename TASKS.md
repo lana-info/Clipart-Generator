@@ -1,9 +1,9 @@
 ## Выпуск Studio3.2.21 и модулей1.5.7, 2026-10-11
 
 - [ ] Проверить весь офлайн-набор, зафиксировать source/version и отправить release branch.
-- [ ] Собрать и проверить Windows x64, macOS ARM/Intel с native recovery tests.
-- [ ] Подписать и проверить все6 модулей1.5.7 на3профилях и old-Core gates.
-- [ ] Создать verified backup, подготовить21beta rows, проверить и опубликовать.
+- [ ] Собрать и проверить Windows x64, macOS ARM с native recovery tests.
+- [ ] Подписать и проверить все6 модулей1.5.7 на2профилях и old-Core gates.
+- [ ] Создать verified backup, подготовить14beta rows, проверить и опубликовать.
 - [ ] Проверить discovery/download/SHA/health, сохранение stable/old files; обновить STATE/runbook.
 
 ## Восстановление GPT Image 2.5 после ревью, 2026-10-11
