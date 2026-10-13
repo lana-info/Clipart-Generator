@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import sys
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QPalette, QPixmap
@@ -62,6 +63,36 @@ class V3DesignTokens:
 
 
 DEFAULT_TOKENS = V3DesignTokens()
+
+
+def dropdown_indicator_stylesheet(
+    selector: str = "QComboBox",
+    tokens: V3DesignTokens = DEFAULT_TOKENS,
+) -> str:
+    """Visible right-hand chevron for dropdowns across Studio and its modules."""
+    asset_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "assets"
+    arrow = (asset_root / "dropdown-chevron.png").as_posix()
+    disabled_arrow = (asset_root / "dropdown-chevron-disabled.png").as_posix()
+    return f"""
+{selector} {{ padding-right: 36px; }}
+{selector}::drop-down {{
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 28px;
+    background: {tokens.surface_muted};
+    border-left: 1px solid {tokens.border};
+    border-top-right-radius: {tokens.radius_control}px;
+    border-bottom-right-radius: {tokens.radius_control}px;
+}}
+{selector}::drop-down:hover {{ background: {tokens.accent_soft}; }}
+{selector}::down-arrow {{
+    image: url("{arrow}");
+    width: 14px;
+    height: 10px;
+}}
+{selector}::drop-down:disabled {{ background: {tokens.disabled_soft}; }}
+{selector}::down-arrow:disabled {{ image: url("{disabled_arrow}"); }}
+"""
 
 # One geometry contract for the whole desktop application. Pages may scroll,
 # but switching screens must never resize the top-level window.
@@ -254,13 +285,7 @@ QComboBox QAbstractItemView {{
     selection-background-color: {tokens.accent};
     selection-color: white;
 }}
-QComboBox::drop-down {{
-    border: 0;
-}}
-QComboBox::down-arrow {{
-    width: 10px;
-    height: 10px;
-}}
+{dropdown_indicator_stylesheet("QComboBox", tokens)}
 QTableWidget,
 QListWidget,
 QListView {{

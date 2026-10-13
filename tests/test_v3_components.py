@@ -5,8 +5,8 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPalette
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtGui import QPalette, QPixmap
+from PyQt6.QtWidgets import QApplication, QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from v3_components import (
     DEFAULT_TOKENS,
@@ -19,6 +19,7 @@ from v3_components import (
     V3DesignTokens,
     apply_v3_theme,
     build_v3_stylesheet,
+    dropdown_indicator_stylesheet,
 )
 
 
@@ -54,6 +55,32 @@ class V3ComponentTests(unittest.TestCase):
         self.assertIn('QToolButton[v3Disclosure="true"]:disabled', stylesheet)
         self.assertIn('[state="warning"]', stylesheet)
         self.assertIn('[state="error"]', stylesheet)
+
+    def test_every_shared_dropdown_has_visible_chevron_and_disabled_state(self):
+        from pathlib import Path
+        css = build_v3_stylesheet()
+        self.assertIn('QComboBox::drop-down', css)
+        self.assertIn('QComboBox::down-arrow', css)
+        self.assertIn('QComboBox::down-arrow:disabled', css)
+        self.assertIn('padding-right: 36px', css)
+        self.assertIn('dropdown-chevron.png', css)
+        self.assertIn('dropdown-chevron-disabled.png', css)
+        self.assertIn('QWidget#promptComposerPage QComboBox::down-arrow',
+                      dropdown_indicator_stylesheet('QWidget#promptComposerPage QComboBox'))
+        root = Path(__file__).resolve().parents[1]
+        for icon in ('dropdown-chevron.png', 'dropdown-chevron-disabled.png'):
+            pixmap = QPixmap(str(root / 'assets' / icon))
+            self.assertFalse(pixmap.isNull(), icon)
+            self.assertEqual((pixmap.width(), pixmap.height()), (28, 20))
+        parent = QWidget()
+        apply_v3_theme(parent)
+        combo = QComboBox(parent)
+        combo.addItems(['Model A', 'Model B'])
+        combo.setCurrentIndex(1)
+        self.assertEqual(combo.currentText(), 'Model B')
+        self.assertIn('QComboBox::down-arrow', parent.styleSheet())
+        combo.deleteLater()
+        parent.deleteLater()
 
     def test_button_variants_are_accessible_and_focusable(self):
         button = V3Button("Продолжить", ButtonVariant.SECONDARY)

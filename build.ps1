@@ -53,6 +53,8 @@ Write-Host "==> Build app with PyInstaller"
     --icon "assets/vibix-images.ico" `
     --add-data ".env.example;." `
     --add-data "assets/vibix-images.ico;assets" `
+    --add-data "assets/dropdown-chevron.png;assets" `
+    --add-data "assets/dropdown-chevron-disabled.png;assets" `
     --add-data "assets/mode-clipart.png;assets" `
     --add-data "assets/mode-pinterest.png;assets" `
     --add-data "assets/mode-processing.png;assets" `

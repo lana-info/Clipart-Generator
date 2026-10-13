@@ -9,6 +9,8 @@ import re
 
 from PyQt6.QtCore import Qt, QSize, pyqtSignal
 from PyQt6.QtGui import QGuiApplication
+from v3_components import dropdown_indicator_stylesheet
+
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
@@ -99,7 +101,7 @@ class PromptComposerPage(QWidget):
             QWidget#promptComposerPage QPushButton[primary="true"] { background: #20ae9e; color: #071b22; border-color: #20ae9e; font-weight: bold; }
             QWidget#promptComposerPage QLineEdit, QWidget#promptComposerPage QTextEdit, QWidget#promptComposerPage QComboBox, QWidget#promptComposerPage QListWidget { background: #152332; color: #f3f8f9; border: 1px solid #486077; border-radius: 5px; padding: 5px; selection-background-color: #247e79; }
             QWidget#promptComposerPage QScrollArea { border: 0; background: transparent; }
-        """)
+        """ + dropdown_indicator_stylesheet("QWidget#promptComposerPage QComboBox"))
         outer = QVBoxLayout(self)
         outer.setContentsMargins(18, 14, 18, 12)
         outer.setSpacing(10)
