@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 from typing import Any, Mapping
 
+from PyQt6.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -323,9 +324,37 @@ def _legacy_check_kie_balance(api_key: str, timeout: float = 15.0) -> str:
     return "Баланс KIE получен, формат ответа требует уточнения."
 
 
+class _BalanceSignals(QObject):
+    completed = pyqtSignal(str)
+
+
+class _BalanceCheck(QRunnable):
+    """One bounded, read-only request; no widgets are accessed from the pool."""
+
+    def __init__(self, provider: str, key: str):
+        super().__init__()
+        self.provider = provider
+        self.key = key
+        self.signals = _BalanceSignals()
+
+    def run(self):
+        try:
+            message = check_provider_balance(self.provider, self.key)
+        except Exception:
+            # Raw transport exceptions can contain the supplied credential.
+            message = (
+                f"{self.provider}: проверить баланс не удалось. "
+                "Проверьте API-ключ и права доступа."
+            )
+        finally:
+            self.key = ""
+        self.signals.completed.emit(message)
+
+
 class ApiSettingsDialog(QDialog):
     def __init__(self, initial: Mapping[str, Any] | None = None, parent=None) -> None:
         super().__init__(parent)
+        self._balance_job = None
         self.setWindowTitle("Настройки API")
         self.setMinimumWidth(560)
         values = dict(load_credentials())
@@ -453,22 +482,24 @@ class ApiSettingsDialog(QDialog):
             self.status.setText(str(error))
 
     def _check_external_balance(self, provider: str, key: str) -> None:
-        # Read-only endpoint; never show raw HTTP errors containing credentials.
-        button = (
-            self.atlascloud_balance_button if provider == "atlascloud"
-            else self.piapi_balance_button
-        )
-        button.setEnabled(False)
+        if self._balance_job is not None:
+            return
+        self.atlascloud_balance_button.setEnabled(False)
+        self.piapi_balance_button.setEnabled(False)
         self.status.setText("Проверяем баланс…")
-        try:
-            self.status.setText(check_provider_balance(provider, key))
-        except (RuntimeError, ValueError):
-            self.status.setText(
-                f"{provider}: проверить баланс не удалось. "
-                "Проверьте API-ключ и права доступа."
-            )
-        finally:
-            button.setEnabled(True)
+        job = _BalanceCheck(provider, key)
+        self._balance_job = job
+        # Qt disconnects this bound slot if the dialog is destroyed while the
+        # request is running. The application pool owns the running task.
+        job.signals.completed.connect(self._external_balance_finished, Qt.ConnectionType.QueuedConnection)
+        QThreadPool.globalInstance().start(job)
+
+    @pyqtSlot(str)
+    def _external_balance_finished(self, message: str) -> None:
+        self._balance_job = None
+        self.status.setText(message)
+        self.atlascloud_balance_button.setEnabled(True)
+        self.piapi_balance_button.setEnabled(True)
 
     def _save(self) -> None:
         self.settings = {

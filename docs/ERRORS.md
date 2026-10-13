@@ -1,3 +1,60 @@
+## api-settings-review-9074a1c
+
+Независимое ревью трёх коммитов cf9bb95, 99eb03e, 9074a1c обнаружило:
+
+- P1: api_concurrency сохранялся в Core preferences, но
+  enrich_image_worker_settings копировал только строковые поля. Общий шлюз
+  запускал модули с прежним default3 вместо выбранных1/5; старые индивидуальные
+  лимиты также не передавались. Реальные gateway/WorkerThread probes подтвердили
+  api_concurrency=None и effective_limit=3 при обоих значениях.
+- P2: AtlasCloud/PiAPI balance GET выполнялся в UI-потоке. При задержанном ответе
+  Qt timer не срабатывал до возврата функции, окно не обрабатывало события.
+
+До исправления: regression suite11FAIL/2PASS5.09s, лог
+/tmp/vibix-api-fixes-red.log. Существовавшие558tests/70subtestsPASS не покрывали
+эти сквозные сценарии;54отложенных Pinterest casesSKIP.
+
+Попытка1: подтверждённые причины → нормализованные общий/legacy лимиты
+передаются из Core с приоритетом над старым планом; два новых balance GET
+вынесены в QThreadPool, результат доставляется queued signal в UI. Один запрос
+одновременно, ключ очищается в worker, исключения не раскрывают его. Уничтожение
+диалога автоматически отключает Qt slot, задача завершается в application pool.
+Проверка → реальные исполнители генерации/обработки для1–5, legacy limits,
+event-loop responsiveness, повторный клик, уничтожение окна и error redaction.
+Результат →57PASS1.28s, /tmp/vibix-api-fixes-focused.log.
+
+Расширенная проверка обнаружила новую архитектурную зависимость
+v3_image_worker_settings(shared_api) → runtime_settings(Core):1FAIL1.70s,
+/tmp/vibix-api-fixes-architecture.log. Причина: нормализаторы были импортированы
+в общий слой. Коррекция по этим данным: общий слой только передаёт лимиты,
+нормализация остаётся в существующем WorkerThread; legacy alias получает
+приоритет Core. Allowlist и исходное архитектурное требование не менялись.
+Проверка исправления границы вместе с новыми регрессиями:33PASS4.40s,
+/tmp/vibix-api-fixes-boundary.log, включая save/reopen settings1/5.
+
+Смешанный порядок mode-selection/composer → gpt25_recovery вызвал Qt
+double free/corruption в существующем test_real_qt_cancel_button_preserves_expired_receipt.
+Минимальный набор new-regressions+recovery:56PASS3.72s; расширенный порядок
+воспроизвёл SIGABRT. Проверка удержания QApplication не помогла и удалена.
+Тот же старый порядок без новых тестов тоже SIGABRT. Контроль с исходными
+v3_api_settings/v3_image_worker_settings из9074a1c, загруженными из/tmp без правок
+рабочей папки, воспроизвёл тот же SIGABRT: /tmp/vibix-api-fixes-qt-baseline.log.
+Это прежний зависимый от порядка native Qt сбой тестов; точная причина
+double-free пока не установлена. Production recovery не менялся, тесты не
+ослаблялись. Отдельный порядок recovery → новые регрессии → UI:
+177tests/30subtestsPASS31.44s, /tmp/vibix-api-fixes-qt-final.log.
+
+Общий офлайн-набор на окончательных исходниках:3413tests/331subtestsPASS,
+57SKIP,21network/paid deselected,4прежних Pillow warnings,501.26s.
+Лог:/tmp/vibix-api-fixes-full.log, Python3.11.15/Qt6.11.0 Linux offscreen.
+Полный порядок прошёл в том числе исходный Qt recovery case. Архитектурный
+allowlist не менялся. Syntax, sensitive-artifact guard, diff-check и реальный
+offscreen startup приложения PASS. Source-review финальных двухproduction diff
+не выявил новых подтверждённых проблем. Из15новых регрессионных случаев10
+измеряют реальные исполнители,2проверяют save/reopen,1legacy и2balance lifecycle.
+Сеть и платные запросы в тестах заменены фиктивными ответами, production ключи
+не читались. Windows и настоящие provider responses отдельно не проверены.
+
 ## stable-promotion-checks-20261012
 
 Первый promotion-test command не собрал tests: source-пакетlicense_service

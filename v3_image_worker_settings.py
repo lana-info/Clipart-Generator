@@ -105,6 +105,16 @@ def enrich_image_worker_settings(
         value = source.get(name)
         if isinstance(value, str):
             settings[name] = value
+    # Concurrency is owned by Core, not by the saved module run plan. Keep
+    # legacy provider limits when the user has not saved a shared limit yet.
+    # WorkerThread applies the existing normalizers at the execution boundary.
+    # Avoid introducing a shared-API dependency on the Core settings module.
+    for name in ("api_concurrency", "kie_concurrency", "generation_concurrency",
+                 "photoroom_concurrency", "fal_concurrency"):
+        if name in source:
+            settings[name] = source[name]
+    if "kie_concurrency" not in source and "generation_concurrency" in source:
+        settings["kie_concurrency"] = source["generation_concurrency"]
     return settings
 
 

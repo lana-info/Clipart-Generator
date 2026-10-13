@@ -277,6 +277,12 @@ def test_external_balance_button_never_shows_key_in_error(monkeypatch):
         raise RuntimeError("private-sentinel")
     monkeypatch.setattr("v3_api_settings.check_provider_balance", failure)
     dialog.piapi_balance_button.click()
+    import time
+    deadline = time.monotonic() + 3
+    while not dialog.piapi_balance_button.isEnabled() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(.001)
+    assert "проверить баланс не удалось" in dialog.status.text()
     assert "private-sentinel" not in dialog.status.text()
     assert dialog.piapi_balance_button.isEnabled()
     dialog.close()
