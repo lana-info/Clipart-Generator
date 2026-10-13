@@ -142,9 +142,11 @@ Private verified backup сохранён; детали: STATE.md.
 - [x] Исправить PiAPI multipart для одного/нескольких референсов и безопасную диагностику баланса.
 - [x] Поднять версию приложения до3.2.23; целевая платформа Windows x64 подтверждена онлайн-ноутбуком владельца.
 - [x] Пройти локальные релевантные проверки:124tests/27subtestsPASS;1native Windows testSKIP вне Windows.
-- [ ] Выполнить native Windows release build и установить/проверить приложение.
+- [x] Выполнить native Windows release build и установить/проверить приложение: workflow38479444082SUCCESS; artifact SHA сверена с sidecar/provenance.
 - [ ] Опубликовать только Windows x64 Studio3.2.23 в signed stable service, проверить manifest/download/SHA.
 - [ ] Сохранить финальные release evidence и rollback receipt.
+
+Блокер публикации: production admin требует пароль администратора и актуальный TOTP; подходящей активной сессии в доступных инструментах нет. Артефакт CI хранится до2026-10-16T22:49:39Z и уже скачан в `/tmp/studio-3.2.23-release/`.
 
 Статус и требования: `STATE.md`. Причины исходных ошибок: `docs/ERRORS.md#piapi-rejection-diagnostics-20261013`.
 

@@ -12,9 +12,9 @@
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Пользователь может обновить Studio до исправленной версии из приложения; прямое поручение владельца | Windows release CI, установка/обновление, SHA/provenance, подписанный stable manifest, скачивание через лицензирующий сервис | Версия назначена 3.2.23; PiAPI multipart и безопасная диагностика включены | В работе; локальные проверки PASS (124 tests + 27 subtests, 1 Windows-only SKIP на Linux), py_compile и diff-check PASS. Native сборка, установка и публикация ещё не выполнены |
+| Пользователь может обновить Studio до исправленной версии из приложения; прямое поручение владельца | Windows release CI, установка/обновление, SHA/provenance, подписанный stable manifest, скачивание через лицензирующий сервис | Версия назначена 3.2.23; PiAPI multipart и безопасная диагностика включены | Сборка и установка проверены: workflow `38479444082` SUCCESS, включая native Windows installed smoke; artifact 243041115 bytes, SHA-256 `0ea9617aa77ab1a626bc4194c44cc773d4fa0ef560272bd51ec05c450e5970bb`, sidecar/provenance соответствуют. Локальные проверки PASS (124 tests + 27 subtests, 1 Windows-only SKIP на Linux), py_compile и diff-check PASS. Stable manifest и download пока не проверены: серверная публикация требует admin login+TOTP для административной панели, активного сеанса в доступных инструментах нет |
 
-Публиковать только Windows x64 artifact; прежние Core/modules stable сохраняются. Источники: `docs/module-release-runbook.md` и release workflow. Не публиковать в приватный GitHub updates-репозиторий.
+Публиковать только Windows x64 artifact; прежние Core/modules stable сохраняются. Источники: `docs/module-release-runbook.md` и release workflow. Не публиковать в приватный GitHub updates-репозиторий. CI artifact скачан в `/tmp/studio-3.2.23-release/`; его можно повторно получить до 2026-10-16T22:49:39Z. Публикация остаётся незавершённой, поскольку для неё необходима текущая owner admin-аутентификация; секреты не запрашивались и не передавались в чат.
 
 История: `docs/ERRORS.md#piapi-rejection-diagnostics-20261013`.
 
