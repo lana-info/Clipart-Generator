@@ -1,5 +1,37 @@
 # Official Module Releases
 
+## Stable Studio3.2.22 / все модули1.5.8, 2026-10-13
+
+По прямому поручению владельца опубликованы2Core и12module stable rows:
+Windows x64 и Mac Apple Silicon. Core3.2.22, все6модулей1.5.8,
+minCore3.2.22,maxExclusive3.3.0. Сначала приложение, затем «Обновления модулей».
+Source1f2c45f, исправленияe4755ee. Native38344764797SUCCESS на2платформах;
+Windows installed/frozen и Mac frozen/extractedCore13checksPASS. DesktopCI
+38344764852:3413tests/331subtestsPASS,57SKIP/21deselected. Пакеты проверены
+поSHA/version/source/ARM;6signed ZIPinspect/install/activate/runtimePASS,
+несовместимыеCore3.2.21/3.3.0отвергнуты,18loopbackHTTPSPASS.
+
+Перед публикацией сохранён проверенныйmode0600DB dump:
+/opt/bots-stack/backups/clipart-license-service/
+pre-studio3222-modules158-stable-publication-20261013.dump; pg_restore listPASS.
+Серверные14newSHA и14previousSHA PASS; stable/latest выдача новых версий для
+ordinary/beta clientsPASS. Protected release metadata и другие продукты прежние;
+health200,invalid-download-token403,repositoryPRIVATE.
+
+Удаление разрешено только для прежних выпусков, опубликованных сегодня:
+на13октябряAmerica/New_York совпадений0, удалено0. Прежние3.2.21/1.5.7
+остаютсяpublished, их файлы сохранены и проверены. Для rollback withdraw только
+14новыхIDs изserver-stable-receipts.json, не откатывать всю business-базу.
+Установленные версии приwithdraw не удаляются.
+
+Evidence:../artifacts/studio-3.2.22-modules-stable-20261013/;
+stable-release-manifest.json,server-final-live-verification.json,
+same-day-deletion-audit.json иfinal-ci-verification.json. develop/3.2
+интегрированаfast-forward; production sources совпадают с native source1f2c45f.
+На устройстве владельца update/download и платныеAI не проверялись (0calls).
+Mac ZIP ad-hoc signed без Apple notarization; legacyWindows3.1.4upgrade fixture
+не задан. Эти ограничения не выдаются за пройденные проверки.
+
 ## Удаление beta Vibix после stable, 2026-10-12 (UTC)
 
 По явному поручению владельца удалены только27beta Vibix Studio и27файлов

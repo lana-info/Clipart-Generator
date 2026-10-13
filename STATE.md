@@ -8,13 +8,28 @@
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Выпустить исправленные API-настройки и референсы на Windows/Mac; поручение владельца | Exact commit native CI, frozen/installed app, source/version/SHA | Версия Core3.2.22 подготовлена, version/Azure default согласованы | Реализовано частично: исходники3413tests/331subtestsPASS; native builds ещё не выполнены |
-| Обновить отдельно все6модулей и stable выдачу; поручение владельца | Подписи, install/activate/runtime, совместимость, серверные SHA/discovery | Запланированы6signed ZIP1.5.8 для2платформ после Core3.2.22 | Реализовано частично: публикация ещё не выполнена |
-| Сохранить другие продукты и удалить только разрешённые сегодняшние замены; границы поручения | Inventory dates, backup, target-only fingerprints | Текущий inventory прочитан без изменения сервера | Реализовано частично: последние3.2.21/1.5.7 published_at2026-10-12UTC, сегодняшних13октября замен пока нет; удаление не выполнялось |
+| Выпустить исправленные API-настройки и референсы на Windows/Mac; поручение владельца | Exact commit native CI, frozen/installed app, source/version/SHA | Опубликованы2Core3.2.22 stable; версии исходников и Azure согласованы | Реализовано и проверено: source1f2c45f; native run38344764797SUCCESS, Windows installed/frozen13checks и Mac frozen/extracted13checksPASS; SHA/versions/ARM architecturePASS. Desktop CI38344764852:3413tests/331subtestsPASS313.76s,57SKIP/21deselected |
+| Обновить отдельно все6модулей и stable выдачу; поручение владельца | Подписи, install/activate/runtime, совместимость, серверные SHA/discovery | Опубликованы12module rows1.5.8, Core>=3.2.22,<3.3.0,6signed ZIP | Реализовано и проверено:6×2inspect/install/activatePASS, Core3.2.21/3.3.0reject;4workflow pages+shared engine и Composer7variants/unloadPASS для2profiles.18loopbackHTTPSPASS30.60s;14storedSHA и stable/latest selection для ordinary/beta clientsPASS; health200/token403 |
+| Сохранить другие продукты и удалить только разрешённые сегодняшние замены; границы поручения | Inventory dates, backup, target-only fingerprints | Проверенный0600DB backup; прежние выпуски и другие продукты сохранены | Реализовано и проверено: всеprotected release fingerprints прежние;14предыдущих файловSHA PASS. На13октября America/New_York совпадений0, удалено0;3.2.21/1.5.7 published_at12октябряUTC, до разрешённого дня |
 
 Evidence directory: ../artifacts/studio-3.2.22-modules-stable-20261013/.
-Windows на устройстве владельца и живые paidAPI ранее не проверялись;
+Исходные коммиты:e4755ee(fixes),1f2c45f(release/native checks). Веткаdevelop/3.2
+интегрированаfast-forward от2d1f00c до проверенного1f2c45f; конфликтов/production
+diff при интеграции нет. Финальная запись результатов отправляется в обе ветки.
+Native regressions: Windows81tests/9subtestsPASS, macOS271tests/36subtestsPASS
+включают15новых случаев лимита/баланса. RepositoryPRIVATE всё время.
+Backup:/opt/bots-stack/backups/clipart-license-service/
+pre-studio3222-modules158-stable-publication-20261013.dump, mode0600,
+pg_restore listPASS. Rollback: withdraw только14IDs изserver-stable-receipts.json;
+прежние3.2.21/1.5.7 остаютсяpublished и их файлы проверены. Не восстанавливать
+полную business-базу поверх новых данных. Лицензии/grants этим выпуском не менялись.
+Основные evidence:stable-release-manifest.json,server-final-live-verification.json,
+same-day-deletion-audit.json,final-ci-verification.json,modules/release-set.json.
+Windows на устройстве владельца и живые paidAPI не проверялись (0paid calls);
 Mac ad-hoc signing без Apple notarization, ручная установкаZIP остаются ограничениями.
+ОригинальныйWindows3.1.4upgrade не запускался безlegacy fixture URL; native
+текущая установка и frozen/extracted checksPASS. Старый зависимый от порядка
+Qt-test SIGABRT сохранён вdocs/ERRORS.md; полныйCI иnative наборыPASS.
 
 ## Исправления ревью API-настроек после 9074a1c
 

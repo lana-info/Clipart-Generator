@@ -1,12 +1,15 @@
 ## Stable-выпуск Studio3.2.22 и модулей1.5.8
 
 - [x] Зафиксировать проверенные исправленияe4755ee и прочитатьserver inventory.
-- [ ] Отправитьrelease source, выполнитьnative Windows/Mac builds и проверки.
-- [ ] Подписать и проверить6модулей1.5.8 для2платформ, Core>=3.2.22,<3.3.0.
-- [ ] Сделатьbackup, опубликовать14stable rows, проверитьSHA/discovery/health.
-- [ ] Сверить разрешённые сегодняшние замены, завершитьrunbook иGit handoff.
+- [x] Отправитьrelease source, выполнитьnative Windows/Mac builds и проверки.
+- [x] Подписать и проверить6модулей1.5.8 для2платформ, Core>=3.2.22,<3.3.0.
+- [x] Сделатьbackup, опубликовать14stable rows, проверитьSHA/discovery/health.
+- [x] Сверить разрешённые сегодняшние замены, завершитьrunbook иGit handoff.
 
 Источник: прямое поручение владельца о полномstable выпуске. Статус: STATE.md.
+Результат:stable3.2.22/1.5.8 наWindows/MacARM,14storedSHA/discoveryPASS;
+native38344764797 иDesktopCI38344764852SUCCESS. Сегодняшних замен0, удалено0;
+старые3.2.21/1.5.7 и другие продукты сохранены. develop/3.2fast-forward интегрирована.
 
 ## Исправления ревью API-настроек после 9074a1c
 
