@@ -8,6 +8,8 @@ from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from gpt25_provider import (
     Gpt25ProviderError,
     generation_payload,
+    prepare_reference_inputs,
+    submit_url,
     provider_for_model,
     request_headers,
     status_url,
@@ -49,6 +51,68 @@ class Gpt25ContractTests(unittest.TestCase):
             generation_payload(ATLAS, "cat", "1:1", "4K")
         with self.assertRaises(Gpt25ProviderError):
             generation_payload(PIAPI, "cat", "16:9", "1K")
+
+    def test_reference_edit_payloads_route_to_correct_endpoints(self):
+        ref = "https://images.example.org/reference.png"
+        for model in ("gpt-image-2.5-flare", "gpt-image-2.5-sunburst"):
+            atlas = generation_payload(f"atlascloud/{model}", "Change the style", "1:1", "1K", [ref])
+            self.assertEqual(atlas["model"], f"openai/{model}/edit")
+            self.assertEqual(atlas["images"], [ref])
+            piapi = generation_payload(f"piapi/{model}", "Change the style", "1:1", "1K", [ref])
+            self.assertEqual(piapi["model"], model)
+            self.assertEqual(piapi["image"], ref)
+        self.assertTrue(submit_url("piapi", has_references=True).endswith("/images/edits/async"))
+        self.assertTrue(submit_url("piapi").endswith("/images/generations/async"))
+        budget = generation_payload("piapi/gpt-image-2.5", "Change it", "auto", "auto", [ref, ref])
+        self.assertEqual(budget["image"], [ref, ref])
+
+    def test_reference_preflight_checks_local_bytes_and_safe_transport(self):
+        from pathlib import Path
+        import tempfile
+        with tempfile.TemporaryDirectory() as root:
+            file = Path(root) / "private-name.png"
+            file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"small-test-image")
+            values = prepare_reference_inputs([str(file)])
+            self.assertEqual(len(values), 1)
+            self.assertTrue(values[0].startswith("data:image/png;base64,"))
+            self.assertNotIn(str(file), values[0])
+            self.assertNotIn(file.name, str(generation_payload(ATLAS, "cat", "1:1", "1K", values)))
+            file.write_bytes(b"not an image")
+            with self.assertRaisesRegex(Gpt25ProviderError, "PNG"):
+                prepare_reference_inputs([str(file)])
+        for invalid in ("http://images.example.org/a.png", "file:///etc/passwd", "ftp://example.org/img.png"):
+            with self.assertRaises(Gpt25ProviderError):
+                prepare_reference_inputs([invalid])
+        with self.assertRaisesRegex(Gpt25ProviderError, "недоступ"):
+            prepare_reference_inputs([r"C:\Users\owner\reference.png"])
+        with self.assertRaisesRegex(Gpt25ProviderError, "16"):
+            prepare_reference_inputs([IMAGE] * 17)
+
+    def test_reference_edit_expiration_requires_exact_paid_retry_consent(self):
+        import hashlib
+        import json
+        from pathlib import Path
+        from fal_provider import FalTaskJournal
+        from gpt25_recovery import expired_generation_retries
+        with tempfile.TemporaryDirectory() as root:
+            file = Path(root) / "reference.png"
+            file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"image-content")
+            settings = {
+                "text_generation_model": "gpt-image-2",
+                "reference_generation_model": PIAPI,
+                "reference_generation_ratio": "1:1",
+                "reference_generation_resolution": "1K",
+            }
+            entry = {"prompt": "Make a blue owl", "references": [str(file)]}
+            payload = generation_payload(PIAPI, entry["prompt"], "1:1", "1K",
+                                         prepare_reference_inputs(entry["references"]))
+            digest = hashlib.sha256(json.dumps(payload, sort_keys=True,
+                         ensure_ascii=True, separators=(",", ":")).encode()).hexdigest()
+            journal = FalTaskJournal(Path(root) / ".vibix_piapi_tasks.json")
+            journal.upsert("expired_edit", "generation:1", PIAPI, "expired", input_fingerprint=digest)
+            self.assertEqual(expired_generation_retries(root, settings, [entry]), ("piapi:expired_edit",))
+            file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"changed-content")
+            self.assertEqual(expired_generation_retries(root, settings, [entry]), ())
 
     def test_auth_and_urls(self):
         self.assertEqual(request_headers("atlascloud", "abc")["Authorization"], "Bearer abc")

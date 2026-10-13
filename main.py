@@ -109,6 +109,7 @@ from fal_model_catalog import (
 )
 from gpt25_provider import (
     generation_payload as gpt25_generation_payload,
+    prepare_reference_inputs as gpt25_prepare_reference_inputs,
     provider_for_model as gpt25_provider_for_model,
     request_headers as gpt25_request_headers,
     submit_url as gpt25_submit_url,
@@ -5471,9 +5472,7 @@ class WorkerThread(QThread):
         reference_items = split_references(references or [])
         normalized_model = self._select_generation_model(reference_items)
         if gpt25_provider_for_model(normalized_model):
-            if reference_items:
-                raise RuntimeError("GPT Image 2.5 пока доступен только для текста без референсов")
-            return self._gpt25_generate_image(prompt, normalized_model)
+            return self._gpt25_generate_image(prompt, normalized_model, reference_items)
         if is_fal_generation_model(normalized_model):
             with self._provider_lease("fal"):
                 self._set_provider_diagnostic_context(
@@ -5546,7 +5545,7 @@ class WorkerThread(QThread):
             models.add(str(model or "").strip())
         return models
 
-    def _gpt25_generate_image(self, prompt, model_id):
+    def _gpt25_generate_image(self, prompt, model_id, references=None):
         """Journal an asynchronous paid request and poll without reposting on recovery."""
         provider = gpt25_provider_for_model(model_id)
         if provider not in {"atlascloud", "piapi"}:
@@ -5554,11 +5553,22 @@ class WorkerThread(QThread):
         if "gpt25_cost_confirmed" in self.settings and not self.settings["gpt25_cost_confirmed"]:
             raise RuntimeError("Проверьте актуальную цену у провайдера и подтвердите платный запуск")
         api_key = self.atlascloud_api_key if provider == "atlascloud" else self.piapi_api_key
-        ratio, resolution = self._get_generation_profile(False)
-        validate_generation_contract(
-            model_id, has_references=False, ratio=ratio, resolution=resolution, prompt=prompt
+        reference_items = split_references(references or [])
+        has_references = bool(reference_items)
+        ratio, resolution = self._get_generation_profile(has_references)
+        reference_sizes = tuple(
+            os.path.getsize(ref) for ref in reference_items
+            if not urlparse(ref).scheme and os.path.isfile(ref)
         )
-        payload = gpt25_generation_payload(model_id, prompt, ratio, resolution)
+        validate_generation_contract(
+            model_id, has_references=has_references, ratio=ratio,
+            resolution=resolution, prompt=prompt,
+            reference_count=len(reference_items), reference_sizes=reference_sizes,
+        )
+        prepared_references = gpt25_prepare_reference_inputs(reference_items)
+        payload = gpt25_generation_payload(
+            model_id, prompt, ratio, resolution, prepared_references
+        )
         headers = gpt25_request_headers(provider, api_key)
         fingerprint = self._paid_task_fingerprint(payload)
         journal = self.gpt25_task_journals[provider]
@@ -5606,7 +5616,8 @@ class WorkerThread(QThread):
                 self._diagnostic_context.gpt25_post_started = False
                 try:
                     submitted = self._request_json(
-                        gpt25_submit_url(provider), method="POST", payload=payload,
+                        gpt25_submit_url(provider, has_references=has_references),
+                        method="POST", payload=payload,
                         headers={**headers, "Content-Type": "application/json"},
                         timeout=max(30, self.timeout),
                     )

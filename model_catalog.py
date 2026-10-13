@@ -74,11 +74,11 @@ _CAPABILITIES = {
     # Fal pricing and endpoint-specific image-size capabilities are resolved
     # separately; leaving these fields open prevents fabricated estimates.
     "fal-ai/flux/schnell": {"reference_compatible_text": False},
-    "atlascloud/gpt-image-2.5-flare": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}},
-    "piapi/gpt-image-2.5-flare": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}},
-    "atlascloud/gpt-image-2.5-sunburst": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}},
-    "piapi/gpt-image-2.5-sunburst": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}},
-    "piapi/gpt-image-2.5": {"ratios": {"auto"}, "resolutions": {"auto"}},
+    "atlascloud/gpt-image-2.5-flare": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}, "reference_compatible_text": True},
+    "piapi/gpt-image-2.5-flare": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}, "reference_compatible_text": True},
+    "atlascloud/gpt-image-2.5-sunburst": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}, "reference_compatible_text": True},
+    "piapi/gpt-image-2.5-sunburst": {"ratios": {"1:1", "2:3", "3:2"}, "resolutions": {"1K"}, "reference_compatible_text": True},
+    "piapi/gpt-image-2.5": {"ratios": {"auto"}, "resolutions": {"auto"}, "reference_compatible_text": True},
     "fal-ai/ideogram/v3": {
         "ratios": {"1:1", "3:4", "4:3", "9:16", "16:9"},
         "pricing": "Turbo $0.03 / Balanced $0.06 / Quality $0.09",
@@ -135,6 +135,11 @@ _MODE_RATIOS = MappingProxyType({
 })
 
 _REFERENCE_LIMITS = MappingProxyType({
+    **{model: (16, 10 * 1024 * 1024) for model in (
+        "atlascloud/gpt-image-2.5-flare", "atlascloud/gpt-image-2.5-sunburst",
+        "piapi/gpt-image-2.5-flare", "piapi/gpt-image-2.5-sunburst",
+        "piapi/gpt-image-2.5",
+    )},
     "gpt-image/1.5-image-to-image": (16, 10 * 1024 * 1024),
     "gpt-image-2": (16, 30 * 1024 * 1024),
     "nano-banana-2": (14, 30 * 1024 * 1024),

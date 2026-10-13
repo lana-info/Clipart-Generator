@@ -45,7 +45,7 @@ def test_unknown_token_cost_never_displays_free_total(provider, label):
     assert 'Итого — не рассчитано полностью' in text
     assert 'Итого — 0.000 USD' not in text
     assert f'{provider}/gpt-image-2.5-flare' in {option.model_id for option in generation_model_options(references=False)}
-    assert f'{provider}/gpt-image-2.5-flare' not in {option.model_id for option in generation_model_options(references=True)}
+    assert f'{provider}/gpt-image-2.5-flare' in {option.model_id for option in generation_model_options(references=True)}
 
 @pytest.mark.parametrize('provider', ['atlascloud','piapi'])
 def test_sunburst_routes_independently(provider):

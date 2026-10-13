@@ -57,6 +57,18 @@ class ModelCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, "Unknown generation model"):
             model_spec("does-not-exist")
 
+    def test_all_external_gpt25_models_are_reference_compatible(self):
+        from model_catalog import MODEL_SPECS, reference_limits
+        models = (
+            "atlascloud/gpt-image-2.5-flare", "atlascloud/gpt-image-2.5-sunburst",
+            "piapi/gpt-image-2.5-flare", "piapi/gpt-image-2.5-sunburst",
+            "piapi/gpt-image-2.5",
+        )
+        for model in models:
+            with self.subTest(model=model):
+                self.assertTrue(MODEL_SPECS[model].reference_compatible_text)
+                self.assertEqual(reference_limits(model), (16, 10 * 1024 * 1024))
+
     def test_gpt_image_two_uses_distinct_reference_endpoints(self):
         self.assertEqual(
             resolve_generation_endpoint("gpt-image-2"),

@@ -6,29 +6,38 @@ import json
 from pathlib import Path
 
 from fal_provider import FalTaskJournal
-from gpt25_provider import generation_payload, provider_for_model
+from gpt25_provider import Gpt25ProviderError, generation_payload, prepare_reference_inputs, provider_for_model
 
 
 def expired_generation_retries(work_dir, settings, prompts, *, project_id=None):
     """Find only expired receipts matching this project's exact requested inputs."""
-    model = str(settings.get("text_generation_model") or "")
-    provider = provider_for_model(model)
-    if not provider or not prompts:
+    if not prompts:
         return ()
     suffix = f".{project_id}" if project_id else ""
-    path = Path(work_dir) / f".vibix_{provider}_tasks{suffix}.json"
-    if not path.is_file():
-        return ()
-    pending = FalTaskJournal(path).pending()
     indices = settings.get("task_item_indices")
     approvals = []
     for index, entry in enumerate(prompts, start=1):
-        if entry.get("references"):
+        refs = entry.get("references") or []
+        has_references = bool(refs)
+        model = str(settings.get(
+            "reference_generation_model" if has_references else "text_generation_model"
+        ) or "")
+        provider = provider_for_model(model)
+        if not provider:
             continue
-        payload = generation_payload(
-            model, entry["prompt"], settings.get("text_generation_ratio", "1:1"),
-            settings.get("text_generation_resolution", "1K"),
-        )
+        path = Path(work_dir) / f".vibix_{provider}_tasks{suffix}.json"
+        if not path.is_file():
+            continue
+        pending = FalTaskJournal(path).pending()
+        try:
+            payload = generation_payload(
+                model, entry["prompt"],
+                settings.get("reference_generation_ratio" if has_references else "text_generation_ratio", "1:1"),
+                settings.get("reference_generation_resolution" if has_references else "text_generation_resolution", "1K"),
+                prepare_reference_inputs(refs),
+            )
+        except (Gpt25ProviderError, OSError, ValueError):
+            continue
         canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
         fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         original_index = indices[index - 1] if indices is not None else index

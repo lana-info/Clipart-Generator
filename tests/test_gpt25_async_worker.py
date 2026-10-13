@@ -10,6 +10,8 @@ import ast
 import contextlib
 import hashlib
 import json
+import os
+from urllib.parse import urlparse
 import re
 import tempfile
 import threading
@@ -21,7 +23,7 @@ from types import SimpleNamespace
 
 from fal_provider import FalProviderError, FalTaskJournal
 from gpt25_provider import (
-    generation_payload, provider_for_model, request_headers, status_url,
+    generation_payload, prepare_reference_inputs, provider_for_model, request_headers, status_url,
     submit_url, submitted_task_id, task_result,
 )
 from model_catalog import validate_generation_contract
@@ -41,6 +43,9 @@ picked = [
 namespace = {
     "gpt25_provider_for_model": provider_for_model,
     "gpt25_generation_payload": generation_payload,
+    "gpt25_prepare_reference_inputs": prepare_reference_inputs,
+    "split_references": lambda refs: list(refs),
+    "os": os, "urlparse": urlparse,
     "gpt25_request_headers": request_headers,
     "gpt25_submit_url": submit_url,
     "gpt25_status_url": status_url,
@@ -136,6 +141,31 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
                                  "https://images.example.org/a.png")
                 self.assertEqual([call[0] for call in worker.calls], ["POST","GET"])
                 self.assertEqual(worker.calls[0][2]["model"],MODEL_ENDPOINT_IDS[model])
+
+    def test_reference_edits_use_paid_job_journal_and_provider_edit_route(self):
+        for provider in ("piapi", "atlascloud"):
+            for variant in ("flare", "sunburst"):
+                with self.subTest(provider=provider, variant=variant), tempfile.TemporaryDirectory() as temp:
+                    worker = OfflineWorker(temp, provider)
+                    file = Path(temp) / "private-reference.png"
+                    file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"image-content")
+                    model = f"{provider}/gpt-image-2.5-{variant}"
+                    if provider == "atlascloud":
+                        worker.responses = [{"data":{"id":"edit1"}},
+                            {"data":{"status":"completed","outputs":["https://images.example.org/edit.png"]}}]
+                    else:
+                        worker.responses = [{"task_id":"edit1"},
+                            {"status":"completed","output":{"data":[{"url":"https://images.example.org/edit.png"}]}}]
+                    worker._get_generation_profile = lambda refs: ("1:1", "1K") if refs else ("auto", "auto")
+                    self.assertEqual(worker._gpt25_generate_image("Make it blue", model, [str(file)]),
+                                     "https://images.example.org/edit.png")
+                    self.assertIn("data:image/png;base64,", str(worker.calls[0][2]))
+                    self.assertNotIn(str(file), str(worker.calls[0][2]))
+                    self.assertEqual([entry[0] for entry in worker.calls], ["POST", "GET"])
+                    if provider == "piapi":
+                        self.assertTrue(worker.calls[0][1].endswith("/images/edits/async"))
+                    else:
+                        self.assertTrue(worker.calls[0][2]["model"].endswith("/edit"))
 
     def test_atlas_submit_and_poll(self):
         with tempfile.TemporaryDirectory() as temp:
