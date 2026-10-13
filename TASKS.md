@@ -22,6 +22,14 @@ native38344764797 иDesktopCI38344764852SUCCESS. Сегодняшних заме
 Полный офлайн-набор:3413tests/331subtestsPASS,57SKIP/21deselected; source/startup guardsPASS.
 Без сборки, платных запросов, commit/push/merge.
 
+## Ошибки отправки PiAPI, 2026-10-13
+
+- [x] Передавать PiAPI референсы multipart-полями `image` (1 файл) / `image[]` (несколько) и сохранять безопасную диагностику submit/balance.
+- [ ] Уточнить судьбу legacy `piapi/gpt-image-2.5`: текущая официальная документация перечисляет только Flare/Sunburst; не считать бюджетный alias подтверждённым.
+- [ ] Проверить ответ баланса и отправку на устройстве владельца после установки обновлённой версии; до этого не запускать пакет из 50 платных генераций.
+
+Статус: `STATE.md`. Причина потери диагностических деталей: `docs/ERRORS.md#piapi-rejection-diagnostics-20261013`.
+
 ## Удаление только beta Vibix Studio
 
 - [x] Зафиксировать27targets и сохранить verified DB/file backup.
@@ -128,6 +136,17 @@ Private verified backup сохранён; детали: STATE.md.
 - [x] Доставлено в Composer1.5.5 / Studio3.2.17 beta на Windows/macOS; серверные SHA/discovery PASS.
 
 # TASKS
+
+## Stable-обновление Studio3.2.23, 2026-10-13
+
+- [x] Исправить PiAPI multipart для одного/нескольких референсов и безопасную диагностику баланса.
+- [x] Поднять версию приложения до3.2.23; целевая платформа Windows x64 подтверждена онлайн-ноутбуком владельца.
+- [x] Пройти локальные релевантные проверки:124tests/27subtestsPASS;1native Windows testSKIP вне Windows.
+- [ ] Выполнить native Windows release build и установить/проверить приложение.
+- [ ] Опубликовать только Windows x64 Studio3.2.23 в signed stable service, проверить manifest/download/SHA.
+- [ ] Сохранить финальные release evidence и rollback receipt.
+
+Статус и требования: `STATE.md`. Причины исходных ошибок: `docs/ERRORS.md#piapi-rejection-diagnostics-20261013`.
 
 ## Направления с вложенными сценариями, 2026-10-08
 

@@ -24,7 +24,7 @@ from types import SimpleNamespace
 from fal_provider import FalProviderError, FalTaskJournal
 from gpt25_provider import (
     generation_payload, prepare_reference_inputs, provider_for_model, request_headers, status_url,
-    submit_url, submitted_task_id, task_result,
+    submit_url, submitted_task_id, task_result, piapi_edit_multipart_body,
 )
 from model_catalog import validate_generation_contract
 
@@ -51,6 +51,7 @@ namespace = {
     "gpt25_status_url": status_url,
     "gpt25_submitted_task_id": submitted_task_id,
     "gpt25_task_result": task_result,
+    "gpt25_piapi_edit_multipart_body": piapi_edit_multipart_body,
     "validate_generation_contract": validate_generation_contract,
     "ProcessingCancelled": type("ProcessingCancelled", (RuntimeError,), {}),
     "FalProviderError": FalProviderError,
@@ -85,6 +86,7 @@ class OfflineWorker:
         self.calls = []
         self.responses = []
         self.provider = provider
+        self.diagnostics = []
 
     def _request_json(self, url, method="GET", payload=None, headers=None, timeout=None):
         if method == "POST":
@@ -116,8 +118,8 @@ class OfflineWorker:
     def _ensure_running(self):
         pass
 
-    def _emit_diagnostic(self, *_args, **_kwargs):
-        pass
+    def _emit_diagnostic(self, *args, **kwargs):
+        self.diagnostics.append((args, kwargs))
 
     def _safe_error_text(self, error):
         return str(error)
@@ -147,8 +149,9 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
             for variant in ("flare", "sunburst"):
                 with self.subTest(provider=provider, variant=variant), tempfile.TemporaryDirectory() as temp:
                     worker = OfflineWorker(temp, provider)
-                    file = Path(temp) / "private-reference.png"
-                    file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"image-content")
+                    files = [Path(temp) / f"private-reference-{index}.png" for index in range(3)]
+                    for index, file in enumerate(files):
+                        file.write_bytes(b"\x89PNG\r\n\x1a\n" + f"image-content-{index}".encode())
                     model = f"{provider}/gpt-image-2.5-{variant}"
                     if provider == "atlascloud":
                         worker.responses = [{"data":{"id":"edit1"}},
@@ -157,14 +160,20 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
                         worker.responses = [{"task_id":"edit1"},
                             {"status":"completed","output":{"data":[{"url":"https://images.example.org/edit.png"}]}}]
                     worker._get_generation_profile = lambda refs: ("1:1", "1K") if refs else ("auto", "auto")
-                    self.assertEqual(worker._gpt25_generate_image("Make it blue", model, [str(file)]),
+                    self.assertEqual(worker._gpt25_generate_image("Make it blue", model, [str(file) for file in files]),
                                      "https://images.example.org/edit.png")
-                    self.assertIn("data:image/png;base64,", str(worker.calls[0][2]))
-                    self.assertNotIn(str(file), str(worker.calls[0][2]))
                     self.assertEqual([entry[0] for entry in worker.calls], ["POST", "GET"])
                     if provider == "piapi":
                         self.assertTrue(worker.calls[0][1].endswith("/images/edits/async"))
+                        self.assertTrue(worker.calls[0][2].startswith(b"--VibixPiAPI"))
+                        self.assertEqual(worker.calls[0][2].count(b'name="image[]"; filename='), 3)
+                        self.assertIn("multipart/form-data; boundary=VibixPiAPI", worker.calls[0][3]["Content-Type"])
+                        self.assertIn(b"\x89PNG\r\n\x1a\nimage-content-0", worker.calls[0][2])
+                        self.assertIn(b"\x89PNG\r\n\x1a\nimage-content-1", worker.calls[0][2])
+                        self.assertIn(b"\x89PNG\r\n\x1a\nimage-content-2", worker.calls[0][2])
                     else:
+                        self.assertIn("data:image/png;base64,", str(worker.calls[0][2]))
+                        self.assertNotIn(str(file), str(worker.calls[0][2]))
                         self.assertTrue(worker.calls[0][2]["model"].endswith("/edit"))
 
     def test_atlas_submit_and_poll(self):
@@ -211,11 +220,28 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
             worker = OfflineWorker(temp, "atlascloud")
             worker._diagnostic_context.last_http_status = 401  # stale earlier request
             worker.responses = [TimeoutError("Ambiguous response to paid POST")]
-            with self.assertRaisesRegex(RuntimeError, "Проверьте задачу"):
+            with self.assertRaisesRegex(RuntimeError, "Проверьте историю задач"):
                 worker._gpt25_generate_image("A tulip", "atlascloud/gpt-image-2.5-flare")
             with self.assertRaisesRegex(RuntimeError, "двойного списания"):
                 worker._gpt25_generate_image("A tulip", "atlascloud/gpt-image-2.5-flare")
             self.assertEqual(len([entry for entry in worker.calls if entry[0] == "POST"]), 1)
+
+    def test_rejected_piapi_submit_exposes_safe_http_reason_and_diagnostic(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = OfflineWorker(temp, "piapi")
+
+            def reject_submit(*_args, **_kwargs):
+                worker._diagnostic_context.gpt25_post_started = True
+                worker._diagnostic_context.last_http_status = 401
+                raise RuntimeError("HTTP status=401")
+
+            worker._request_json = reject_submit
+            with self.assertRaisesRegex(RuntimeError, "API-ключ или права доступа.*401"):
+                worker._gpt25_generate_image("A tulip", "piapi/gpt-image-2.5-flare")
+            failure = next(item for item in worker.diagnostics if item[0][0] == "provider_task_failed")
+            self.assertEqual(failure[1]["http_status"], 401)
+            self.assertNotIn("TEST_PIAPI_KEY", repr(failure))
+            self.assertEqual(worker.gpt25_task_journals["piapi"].pending(), ())
 
     def test_cannot_start_paid_job_without_confirmation(self):
         with tempfile.TemporaryDirectory() as temp:

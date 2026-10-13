@@ -9,6 +9,10 @@ from typing import Any, Mapping
 from network_security import NetworkSecurityError, secure_json_request
 
 
+class ProviderBalanceError(RuntimeError):
+    """A provider error message that is safe to show without its response body."""
+
+
 def _usd(value: Any) -> str:
     if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
         raise ValueError("Неизвестный формат баланса")
@@ -55,13 +59,13 @@ def check_provider_balance(provider: str, api_key: str, timeout: float = 12.0) -
         payload = secure_json_request(url, headers=headers, timeout=timeout, max_bytes=65536)
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
-            raise RuntimeError(f"{provider}: ключ отклонён или нет прав на баланс") from None
+            raise ProviderBalanceError(f"{provider}: ключ отклонён или нет прав на баланс") from None
         if exc.code == 429:
-            raise RuntimeError(f"{provider}: слишком частые запросы") from None
-        raise RuntimeError(f"{provider}: баланс сейчас недоступен") from None
+            raise ProviderBalanceError(f"{provider}: слишком частые запросы") from None
+        raise ProviderBalanceError(f"{provider}: баланс сейчас недоступен (HTTP {exc.code})") from None
     except (NetworkSecurityError, urllib.error.URLError, OSError, ValueError):
-        raise RuntimeError(f"{provider}: не удалось безопасно получить баланс") from None
+        raise ProviderBalanceError(f"{provider}: не удалось безопасно получить баланс") from None
     try:
         return parse_balance(provider, payload)
     except ValueError:
-        raise RuntimeError(f"{provider}: формат ответа не распознан; проверьте баланс в кабинете") from None
+        raise ProviderBalanceError(f"{provider}: формат ответа не распознан; проверьте баланс в кабинете") from None

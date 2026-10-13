@@ -289,6 +289,29 @@ def test_external_balance_button_never_shows_key_in_error(monkeypatch):
     app.processEvents()
 
 
+def test_external_balance_button_preserves_safe_provider_reason(monkeypatch):
+    from provider_balance import ProviderBalanceError
+    app = QApplication.instance() or QApplication([])
+    monkeypatch.setattr("v3_api_settings.load_credentials", lambda: {})
+    dialog = ApiSettingsDialog(initial={"piapi_api_key": "private-sentinel"})
+    monkeypatch.setattr(
+        "v3_api_settings.check_provider_balance",
+        lambda _provider, _key: (_ for _ in ()).throw(
+            ProviderBalanceError("piapi: ключ отклонён или нет прав на баланс")
+        ),
+    )
+    dialog.piapi_balance_button.click()
+    import time
+    deadline = time.monotonic() + 3
+    while not dialog.piapi_balance_button.isEnabled() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(.001)
+    assert dialog.status.text() == "piapi: ключ отклонён или нет прав на баланс"
+    assert "private-sentinel" not in dialog.status.text()
+    dialog.close()
+    app.processEvents()
+
+
 def test_runpod_hidden_and_preserved_when_other_keys_saved(monkeypatch):
     import v3_api_settings
     from PyQt6.QtWidgets import QLabel

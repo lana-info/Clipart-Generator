@@ -7,9 +7,12 @@ Both endpoints are asynchronous, so callers can journal an accepted paid task.
 from __future__ import annotations
 
 import base64
+import binascii
 import re
+import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote, urlsplit
 
 MODEL_TO_PROVIDER = {
@@ -132,6 +135,67 @@ def submit_url(provider: str, *, has_references: bool = False) -> str:
     if provider == "piapi" and has_references:
         return "https://api.piapi.ai/api/v1/images/edits/async"
     return _SUBMIT_URLS[provider]
+
+
+def piapi_edit_multipart_body(payload: Mapping[str, Any]) -> tuple[bytes, str]:
+    """Encode PiAPI image edits as multipart with one `image[]` part per reference."""
+    raw_images = payload.get("image")
+    images = list(raw_images) if isinstance(raw_images, (list, tuple)) else [raw_images]
+    if not images or any(not isinstance(image, str) or not image.strip() for image in images):
+        raise Gpt25ProviderError("PiAPI edit требует корректные референсы изображений")
+
+    boundary = "VibixPiAPI" + uuid.uuid4().hex
+    chunks: list[bytes] = []
+
+    def add_field(name: str, value: str, *, filename: str = "", mime: str = "") -> None:
+        header = [f"--{boundary}", f'Content-Disposition: form-data; name="{name}"']
+        if filename:
+            header[-1] += f'; filename="{filename}"'
+        if mime:
+            header.append(f"Content-Type: {mime}")
+        chunks.append(("\r\n".join(header) + "\r\n\r\n").encode("ascii"))
+        chunks.append(value.encode("utf-8"))
+        chunks.append(b"\r\n")
+
+    for key, value in payload.items():
+        if key == "image":
+            continue
+        if not re.fullmatch(r"[a-zA-Z0-9_]+", str(key)):
+            raise Gpt25ProviderError("Некорректное поле PiAPI")
+        if isinstance(value, bool):
+            value = "true" if value else "false"
+        elif not isinstance(value, (str, int, float)):
+            raise Gpt25ProviderError("Некорректное значение поля PiAPI")
+        add_field(str(key), str(value))
+
+    image_field = "image" if len(images) == 1 else "image[]"
+    for index, image in enumerate(images, start=1):
+        match = re.fullmatch(r"data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)", image)
+        if match:
+            mime, encoded = match.groups()
+            try:
+                image_bytes = base64.b64decode(encoded, validate=True)
+            except (ValueError, binascii.Error) as error:
+                raise Gpt25ProviderError("Некорректный референс изображения") from error
+            if not image_bytes or len(image_bytes) > MAX_REFERENCE_BYTES:
+                raise Gpt25ProviderError("Референс пустой или превышает 10 МБ")
+            extension = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[mime]
+            header = (
+                f"--{boundary}\r\n"
+                f'Content-Disposition: form-data; name="{image_field}"; filename="reference-{index}.{extension}"\r\n'
+                f"Content-Type: {mime}\r\n\r\n"
+            ).encode("ascii")
+            chunks.extend((header, image_bytes, b"\r\n"))
+        else:
+            parsed = urlsplit(image)
+            if (parsed.scheme != "https" or not parsed.hostname or parsed.username
+                    or parsed.password or parsed.port not in (None, 443)
+                    or "\r" in image or "\n" in image):
+                raise Gpt25ProviderError("Референс должен быть корректным HTTPS URL или изображением")
+            add_field(image_field, image)
+
+    chunks.append(f"--{boundary}--\r\n".encode("ascii"))
+    return b"".join(chunks), f"multipart/form-data; boundary={boundary}"
 
 def status_url(provider: str, task_id: str) -> str:
     value = str(task_id or "").strip()

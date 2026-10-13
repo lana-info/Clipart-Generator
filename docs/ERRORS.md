@@ -2657,3 +2657,35 @@ Actual Qt обнаружил одинаковые начала подписей 
 79 целевых tests PASS, после фильтрации пустого time из подписи 26 photography
 tests PASS. Финальные максимумы с новыми названиями: 8 510/o200k_base,
 11 210/cl100k_base. Примеры и Qt-снимки пересозданы из финальных исходников.
+## PiAPI submit and balance failures hide rejection reason, 2026-10-13 {#piapi-rejection-diagnostics-20261013}
+
+Owner diagnostics show 73 completed items failed before any `provider_task_submitted`
+event across two runs, each with three references; 3 more items were cancelled.
+The old request encoded the array of base64 data URLs as one JSON `image` field.
+PiAPI's documented multi-image edit contract requires multipart with a repeated
+`image[]` file field. This is a confirmed request-format mismatch matching every
+failed item. The archive has no HTTP status or provider response body, so we cannot
+confirm which HTTP rejection the provider returned. The balance error is separate:
+the official `/account/info` URL and `X-API-KEY` header are in use, but the old
+dialog hid its sanitized provider error.
+
+Change: encode each local reference as a multipart file part named `image[]`; keep
+text fields in the same multipart body. Submission errors record safe HTTP status
+and classification; balance UI preserves the typed safe error. Provider response
+bodies and credentials remain unlogged. Verification: 96 focused tests +19 subtests
+PASS; no live API or paid request performed. The cause of balance failure remains
+unknown until the owner checks it using the updated app.
+
+Documentation follow-up: official docs specify the single-file multipart field as
+`image` and multiple files as repeated `image[]`; the encoder now follows that split.
+The documented async route, `X-API-KEY`, task polling route and account-info
+`equivalent_in_usd` parsing match the implementation. Current GPT Image docs list
+only `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst`, not the UI's legacy
+`piapi/gpt-image-2.5` budget alias. That alias remains unverified and should not be
+reported as document-confirmed working. Sources: https://piapi.ai/docs/gpt-image/gpt-image-api
+and https://piapi.ai/docs/account-info-api. Focused tests now include one- and
+multi-reference multipart field names.
+
+Release preparation check: the version-contract test caught the Azure Windows
+pipeline default still set to `3.2.22` after the intended Studio version bump.
+Updated that default to `3.2.23`; rerun the release-contract suite before build.

@@ -1,5 +1,10 @@
 ﻿# CHANGELOG
 
+## Studio 3.2.23, 2026-10-13
+
+- Исправлена отправка изображений-референсов в PiAPI для генерации и редактирования.
+- В проверке баланса PiAPI показывается безопасная причина отказа, если её вернул сервер.
+
 ## Studio 3.2.8 candidate, 2026-09-29
 
 - Automatic Clipart: preserve object textures while explicitly excluding paper

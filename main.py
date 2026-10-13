@@ -116,6 +116,7 @@ from gpt25_provider import (
     status_url as gpt25_status_url,
     submitted_task_id as gpt25_submitted_task_id,
     task_result as gpt25_task_result,
+    piapi_edit_multipart_body as gpt25_piapi_edit_multipart_body,
 )
 from gpt25_recovery import confirm_expired_generation_retries
 from provider_contract import ProviderTaskRequest
@@ -5128,7 +5129,7 @@ class WorkerThread(QThread):
         req_headers = headers or {}
         data_bytes = None
         if payload is not None:
-            data_bytes = json.dumps(payload).encode("utf-8")
+            data_bytes = payload if isinstance(payload, bytes) else json.dumps(payload).encode("utf-8")
         req = request.Request(url, data=data_bytes, headers=req_headers, method=method)
         raw = self._request_with_retries(req, timeout=timeout)
         return json.loads(raw.decode("utf-8"))
@@ -5581,6 +5582,11 @@ class WorkerThread(QThread):
         )
         headers = gpt25_request_headers(provider, api_key)
         fingerprint = self._paid_task_fingerprint(payload)
+        submit_payload = payload
+        submit_headers = {**headers, "Content-Type": "application/json"}
+        if provider == "piapi" and has_references:
+            submit_payload, content_type = gpt25_piapi_edit_multipart_body(payload)
+            submit_headers["Content-Type"] = content_type
         journal = self.gpt25_task_journals[provider]
         operation = str(getattr(self._diagnostic_context, "stage", "") or "generation")
         self._set_provider_diagnostic_context(operation, provider, model_id)
@@ -5624,11 +5630,12 @@ class WorkerThread(QThread):
                 # A status from an earlier request cannot clear the paid-task guard.
                 self._diagnostic_context.last_http_status = None
                 self._diagnostic_context.gpt25_post_started = False
+                submit_started = time.monotonic()
                 try:
                     submitted = self._request_json(
                         gpt25_submit_url(provider, has_references=has_references),
-                        method="POST", payload=payload,
-                        headers={**headers, "Content-Type": "application/json"},
+                        method="POST", payload=submit_payload,
+                        headers=submit_headers,
                         timeout=max(30, self.timeout),
                     )
                     task_id = gpt25_submitted_task_id(provider, submitted)
@@ -5636,15 +5643,40 @@ class WorkerThread(QThread):
                     if not self._diagnostic_context.gpt25_post_started:
                         journal.update_status(marker, "cancelled")
                     raise
-                except Exception:
+                except Exception as error:
                     http_status = getattr(self._diagnostic_context, "last_http_status", None)
                     if (not self._diagnostic_context.gpt25_post_started
                             or http_status in {400, 401, 402, 403, 404, 429}):
                         journal.update_status(marker, "failed")
-                    raise RuntimeError(
-                        f"{provider}: отправка не завершена. Проверьте задачу в "
-                        "кабинете провайдера перед повторным запуском."
-                    ) from None
+                    if http_status in {401, 403}:
+                        message = f"{provider}: провайдер отклонил API-ключ или права доступа (HTTP {http_status})."
+                    elif http_status == 402:
+                        message = f"{provider}: провайдер отклонил запрос по оплате или балансу (HTTP 402)."
+                    elif http_status == 400:
+                        message = f"{provider}: провайдер отклонил параметры запроса (HTTP 400)."
+                    elif http_status == 404:
+                        message = f"{provider}: endpoint или модель не найдены/недоступны (HTTP 404)."
+                    elif http_status == 429:
+                        message = f"{provider}: превышен лимит запросов или одновременных задач (HTTP 429)."
+                    elif http_status is not None and http_status >= 400:
+                        message = f"{provider}: ошибка при создании задачи (HTTP {http_status})."
+                    else:
+                        if http_status is None:
+                            message = f"{provider}: ответ на отправку не получен."
+                        else:
+                            message = f"{provider}: ответ получен, но ID задачи не подтверждён (HTTP {http_status})."
+                        message += (
+                            " Проверьте историю задач перед повторным запуском "
+                            "во избежание повторной оплаты."
+                        )
+                    self._emit_diagnostic(
+                        "provider_task_failed", provider=provider, model=model_id,
+                        http_status=http_status, submission_started=bool(
+                            self._diagnostic_context.gpt25_post_started
+                        ), error_message=message,
+                        elapsed_ms=round((time.monotonic() - submit_started) * 1000),
+                    )
+                    raise RuntimeError(message) from None
                 journal.accept_submission(marker, task_id, superseded_id=superseded_id)
                 self._emit_diagnostic(
                     "provider_task_submitted", provider=provider, model=model_id,

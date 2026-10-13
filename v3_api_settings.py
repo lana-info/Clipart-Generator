@@ -27,7 +27,7 @@ from provider_clients import check_kie_balance, check_photoroom_balance
 from app_identity import APP_NAME, APP_STORAGE_NAME
 from network_security import HttpsOnlyRedirectHandler
 from runtime_settings import API_CONCURRENCY_CHOICES, normalize_api_concurrency
-from provider_balance import check_provider_balance
+from provider_balance import ProviderBalanceError, check_provider_balance
 
 
 def check_openrouter_balance(api_key: str, timeout: float = 15.0) -> str:
@@ -340,6 +340,11 @@ class _BalanceCheck(QRunnable):
     def run(self):
         try:
             message = check_provider_balance(self.provider, self.key)
+        except ProviderBalanceError as error:
+            message = str(error)
+            if self.key:
+                message = message.replace(self.key, "[скрыто]")
+            message = message[:400]
         except Exception:
             # Raw transport exceptions can contain the supplied credential.
             message = (

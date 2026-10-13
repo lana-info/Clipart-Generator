@@ -8,6 +8,7 @@ from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from gpt25_provider import (
     Gpt25ProviderError,
     generation_payload,
+    piapi_edit_multipart_body,
     prepare_reference_inputs,
     submit_url,
     provider_for_model,
@@ -65,6 +66,34 @@ class Gpt25ContractTests(unittest.TestCase):
         self.assertTrue(submit_url("piapi").endswith("/images/generations/async"))
         budget = generation_payload("piapi/gpt-image-2.5", "Change it", "auto", "auto", [ref, ref])
         self.assertEqual(budget["image"], [ref, ref])
+
+    def test_piapi_multi_reference_edit_uses_repeated_multipart_image_fields(self):
+        import base64
+        image_a = b"\x89PNG\r\n\x1a\nfirst-image"
+        image_b = b"\x89PNG\r\n\x1a\nsecond-image"
+        payload = generation_payload(
+            "piapi/gpt-image-2.5", "Use both references", "auto", "auto",
+            [f"data:image/png;base64,{base64.b64encode(image_a).decode()}",
+             f"data:image/png;base64,{base64.b64encode(image_b).decode()}"],
+        )
+        body, content_type = piapi_edit_multipart_body(payload)
+        self.assertTrue(content_type.startswith("multipart/form-data; boundary="))
+        self.assertEqual(body.count(b'name="image[]"; filename='), 2)
+        self.assertIn(b'name="prompt"', body)
+        self.assertIn(image_a, body)
+        self.assertIn(image_b, body)
+        self.assertNotIn(b"data:image/png;base64,", body)
+
+    def test_piapi_single_reference_edit_uses_image_file_field(self):
+        import base64
+        image = b"\x89PNG\r\n\x1a\none-image"
+        payload = generation_payload(
+            "piapi/gpt-image-2.5-flare", "Edit this", "1:1", "1K",
+            [f"data:image/png;base64,{base64.b64encode(image).decode()}"]
+        )
+        body, _ = piapi_edit_multipart_body(payload)
+        self.assertIn(b'name="image"; filename="reference-1.png"', body)
+        self.assertNotIn(b'name="image[]"', body)
 
     def test_reference_preflight_checks_local_bytes_and_safe_transport(self):
         from pathlib import Path
