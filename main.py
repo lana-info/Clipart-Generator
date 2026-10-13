@@ -81,7 +81,7 @@ from output_naming import (
 )
 from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
 from runtime_settings import build_runtime_settings
-from runtime_settings import normalize_kie_concurrency, normalize_provider_concurrency
+from runtime_settings import normalize_kie_concurrency, normalize_provider_concurrency, normalize_api_concurrency
 from worker_runtime import launch_worker
 from run_modes import label_for as run_mode_label, worker_mode_for
 from run_validation import validate_inputs
@@ -1119,8 +1119,16 @@ class WorkerThread(QThread):
         self.fal_concurrency = normalize_provider_concurrency(
             settings.get("fal_concurrency"),
         )
-        # Compatibility name for the generation-only executor. The same value
-        # now governs every KIE operation in the run.
+        # New setting limits the whole image job, across all API providers.
+        # Keep old per-provider behavior for projects that have not saved it yet.
+        self.api_concurrency = (
+            normalize_api_concurrency(settings["api_concurrency"])
+            if "api_concurrency" in settings else None
+        )
+        if self.api_concurrency is not None:
+            self.kie_concurrency = self.api_concurrency
+            self.photoroom_concurrency = self.api_concurrency
+            self.fal_concurrency = self.api_concurrency
         self.generation_concurrency = self.kie_concurrency
         self._kie_slots = threading.BoundedSemaphore(self.kie_concurrency)
         self._photoroom_slots = threading.BoundedSemaphore(
@@ -2645,6 +2653,8 @@ class WorkerThread(QThread):
             limit += self.kie_concurrency
         if uses_piapi:
             limit += self.kie_concurrency
+        if self.api_concurrency is not None:
+            limit = min(limit, self.api_concurrency) if limit else 1
         return max(1, min(MAX_REMOTE_CONCURRENCY, limit))
 
     def _can_use_legacy_kie_processing_pipeline(self):

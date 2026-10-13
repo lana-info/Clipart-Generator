@@ -51,12 +51,14 @@ class ConfigSchemaTests(unittest.TestCase):
                 "kie_concurrency": 1,
                 "photoroom_concurrency": 2,
                 "fal_concurrency": 3,
+                "api_concurrency": 5,
             }
         )
 
         self.assertEqual(migrated["kie_concurrency"], 1)
         self.assertEqual(migrated["photoroom_concurrency"], 2)
         self.assertEqual(migrated["fal_concurrency"], 3)
+        self.assertEqual(migrated["api_concurrency"], 5)
 
     def test_output_dir_preserves_configured_path_with_writable_parent(self):
         with tempfile.TemporaryDirectory() as directory:

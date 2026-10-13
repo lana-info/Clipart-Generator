@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QComboBox, QDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QStackedWidget,
+    QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QAbstractSpinBox, QStackedWidget,
     QVBoxLayout, QWidget, QFrame, QSizePolicy,
 )
 from studio_clipart_recipe import ClipartRecipe, ROLES
@@ -55,6 +55,18 @@ class PalettePreview(QWidget):
         painter.setBrush(self.colors[3])
         painter.drawEllipse(46, 17, 15, 15)
         painter.end()
+
+
+class PlainNumberSpinBox(QSpinBox):
+    """Editable integer field with no arrows or accidental wheel changes."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event):
+        event.ignore()
 
 
 def combo(values):
@@ -135,8 +147,9 @@ class ClipartBuilderDialog(QDialog):
         self.motifs = QLineEdit(", ".join(self.recipe.motifs))
         self.motifs.setMaxLength(4000)
         self.motifs.setPlaceholderText("Машинки, самолёты, поезда")
-        self.total = QSpinBox()
+        self.total = PlainNumberSpinBox()
         self.total.setRange(1, 1000)
+        self.total.setMaximumWidth(120)
         self.total.setValue(self.recipe.total)
         for label, field in (("Основная тема", self.theme), ("Контекст", self.context),
                              ("Дополнительные мотивы", self.motifs),
@@ -518,21 +531,30 @@ class ClipartBuilderDialog(QDialog):
                            ("Больше оформления", "decorative")):
             self.presets.addItem(title, key)
         self.presets.setAccessibleName("Рецепт распределения")
-        layout.addWidget(self.presets)
+        self.presets.setMaximumWidth(280)
+        layout.addWidget(self.presets, alignment=Qt.AlignmentFlag.AlignLeft)
         suggest = QPushButton("Предложить распределение")
+        suggest.setMaximumWidth(280)
         suggest.clicked.connect(self._suggest)
-        layout.addWidget(suggest)
-        form = QFormLayout()
+        layout.addWidget(suggest, alignment=Qt.AlignmentFlag.AlignLeft)
+        form_widget = QWidget()
+        form_widget.setMaximumWidth(540)
+        form = QFormLayout(form_widget)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        form.setSpacing(12)
         self.counts = {}
         for key, label in zip(ROLES, ROLE_LABELS):
-            spin = QSpinBox()
+            spin = PlainNumberSpinBox()
             spin.setRange(0, 1000)
+            spin.setFixedWidth(104)
+            spin.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            spin.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             spin.setValue(self.recipe.counts[key])
             spin.setAccessibleName(label)
             spin.valueChanged.connect(self._show_total)
             self.counts[key] = spin
             form.addRow(label, spin)
-        layout.addLayout(form)
+        layout.addWidget(form_widget, alignment=Qt.AlignmentFlag.AlignLeft)
         self.sum_label = QLabel()
         layout.addWidget(self.sum_label)
         self._show_total()

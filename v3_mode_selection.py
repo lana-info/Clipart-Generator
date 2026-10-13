@@ -447,6 +447,11 @@ class V3ApplicationView(QWidget):
                 self._v3_runtime_settings[key] = normalize_provider_concurrency(
                     self._preferences.get(key)
                 )
+        if "api_concurrency" in self._preferences:
+            from runtime_settings import normalize_api_concurrency
+            self._v3_runtime_settings["api_concurrency"] = normalize_api_concurrency(
+                self._preferences["api_concurrency"]
+            )
         self.shell: AppShell | None = None
 
         self.setMinimumSize(*V3_WINDOW_MINIMUM_SIZE)
@@ -549,6 +554,12 @@ class V3ApplicationView(QWidget):
             from runtime_settings import normalize_provider_concurrency
 
             updated_provider_concurrency = False
+            if "api_concurrency" in dialog.settings:
+                from runtime_settings import normalize_api_concurrency
+                self._preferences["api_concurrency"] = normalize_api_concurrency(
+                    dialog.settings["api_concurrency"]
+                )
+                updated_provider_concurrency = True
             for key in ("kie_concurrency", "photoroom_concurrency", "fal_concurrency"):
                 if key in dialog.settings:
                     self._preferences[key] = normalize_provider_concurrency(

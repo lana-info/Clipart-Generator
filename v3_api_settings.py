@@ -25,7 +25,8 @@ from api_credentials import ALL_PROVIDER_CREDENTIAL_KEYS, ProviderCredentialStor
 from provider_clients import check_kie_balance, check_photoroom_balance
 from app_identity import APP_NAME, APP_STORAGE_NAME
 from network_security import HttpsOnlyRedirectHandler
-from runtime_settings import PROVIDER_CONCURRENCY_CHOICES, normalize_provider_concurrency
+from runtime_settings import API_CONCURRENCY_CHOICES, normalize_api_concurrency
+from provider_balance import check_provider_balance
 
 
 def check_openrouter_balance(api_key: str, timeout: float = 15.0) -> str:
@@ -384,39 +385,37 @@ class ApiSettingsDialog(QDialog):
         self.fal_balance_button.clicked.connect(self._check_fal_balance)
         fal_row.addWidget(self.fal_balance_button)
         form.addRow("Fal.ai API Key", fal_row)
-        form.addRow("AtlasCloud API Key", self.atlascloud_edit)
-        form.addRow("PiAPI API Key", self.piapi_edit)
-        self.kie_concurrency_combo = QComboBox()
-        for concurrency in PROVIDER_CONCURRENCY_CHOICES:
-            self.kie_concurrency_combo.addItem(str(concurrency), concurrency)
-        selected_concurrency = normalize_provider_concurrency(
-            values.get("kie_concurrency"),
-            legacy_value=values.get("generation_concurrency"),
+        atlas_row = QHBoxLayout()
+        atlas_row.addWidget(self.atlascloud_edit)
+        self.atlascloud_balance_button = V3Button("Проверить баланс", ButtonVariant.SECONDARY)
+        self.atlascloud_balance_button.clicked.connect(
+            lambda: self._check_external_balance("atlascloud", self.atlascloud_edit.text())
         )
-        self.kie_concurrency_combo.setCurrentIndex(
-            self.kie_concurrency_combo.findData(selected_concurrency)
+        atlas_row.addWidget(self.atlascloud_balance_button)
+        form.addRow("AtlasCloud API Key", atlas_row)
+        piapi_row = QHBoxLayout()
+        piapi_row.addWidget(self.piapi_edit)
+        self.piapi_balance_button = V3Button("Проверить баланс", ButtonVariant.SECONDARY)
+        self.piapi_balance_button.clicked.connect(
+            lambda: self._check_external_balance("piapi", self.piapi_edit.text())
         )
-        form.addRow("Одновременных задач KIE", self.kie_concurrency_combo)
-        self.photoroom_concurrency_combo = QComboBox()
-        for concurrency in PROVIDER_CONCURRENCY_CHOICES:
-            self.photoroom_concurrency_combo.addItem(str(concurrency), concurrency)
-        selected_photoroom_concurrency = normalize_provider_concurrency(
-            values.get("photoroom_concurrency")
+        piapi_row.addWidget(self.piapi_balance_button)
+        form.addRow("PiAPI API Key", piapi_row)
+        self.api_concurrency_combo = QComboBox()
+        for concurrency in API_CONCURRENCY_CHOICES:
+            self.api_concurrency_combo.addItem(str(concurrency), concurrency)
+        selected = normalize_api_concurrency(
+            values.get("api_concurrency"),
+            legacy_value=values.get("kie_concurrency", values.get("generation_concurrency")),
         )
-        self.photoroom_concurrency_combo.setCurrentIndex(
-            self.photoroom_concurrency_combo.findData(selected_photoroom_concurrency)
+        self.api_concurrency_combo.setCurrentIndex(
+            self.api_concurrency_combo.findData(selected)
         )
-        form.addRow("Одновременных задач PhotoRoom", self.photoroom_concurrency_combo)
-        self.fal_concurrency_combo = QComboBox()
-        for concurrency in PROVIDER_CONCURRENCY_CHOICES:
-            self.fal_concurrency_combo.addItem(str(concurrency), concurrency)
-        selected_fal_concurrency = normalize_provider_concurrency(
-            values.get("fal_concurrency")
+        self.api_concurrency_combo.setToolTip(
+            "Один общий лимит одновременно выполняемых задач для всех API. "
+            "Ограничения провайдеров продолжают действовать."
         )
-        self.fal_concurrency_combo.setCurrentIndex(
-            self.fal_concurrency_combo.findData(selected_fal_concurrency)
-        )
-        form.addRow("Одновременных задач Fal.ai", self.fal_concurrency_combo)
+        form.addRow("Одновременных задач (все API)", self.api_concurrency_combo)
         layout.addLayout(form)
         actions = QVBoxLayout()
         self.status = QLabel()
@@ -453,6 +452,24 @@ class ApiSettingsDialog(QDialog):
         except (RuntimeError, ValueError) as error:
             self.status.setText(str(error))
 
+    def _check_external_balance(self, provider: str, key: str) -> None:
+        # Read-only endpoint; never show raw HTTP errors containing credentials.
+        button = (
+            self.atlascloud_balance_button if provider == "atlascloud"
+            else self.piapi_balance_button
+        )
+        button.setEnabled(False)
+        self.status.setText("Проверяем баланс…")
+        try:
+            self.status.setText(check_provider_balance(provider, key))
+        except (RuntimeError, ValueError):
+            self.status.setText(
+                f"{provider}: проверить баланс не удалось. "
+                "Проверьте API-ключ и права доступа."
+            )
+        finally:
+            button.setEnabled(True)
+
     def _save(self) -> None:
         self.settings = {
             "kie_api_key": self.kie_edit.text().strip(),
@@ -463,14 +480,8 @@ class ApiSettingsDialog(QDialog):
             "piapi_api_key": self.piapi_edit.text().strip(),
             "runpod_api_key": self.runpod_key_edit.text().strip(),
             "runpod_endpoint_id": self.runpod_endpoint_edit.text().strip(),
-            "kie_concurrency": normalize_provider_concurrency(
-                self.kie_concurrency_combo.currentData()
-            ),
-            "photoroom_concurrency": normalize_provider_concurrency(
-                self.photoroom_concurrency_combo.currentData()
-            ),
-            "fal_concurrency": normalize_provider_concurrency(
-                self.fal_concurrency_combo.currentData()
+            "api_concurrency": normalize_api_concurrency(
+                self.api_concurrency_combo.currentData()
             ),
         }
         try:

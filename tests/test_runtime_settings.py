@@ -1,6 +1,7 @@
 from runtime_settings import (
     build_runtime_settings,
     normalize_provider_concurrency,
+    normalize_api_concurrency,
 )
 
 
@@ -35,3 +36,12 @@ def test_runtime_settings_adds_normalized_provider_concurrency():
     assert build_runtime_settings({}, {})["photoroom_concurrency"] == 3
     assert build_runtime_settings({}, {})["fal_concurrency"] == 3
     assert build_runtime_settings({"fal_concurrency": 35}, {})["fal_concurrency"] == 3
+
+
+def test_shared_api_concurrency_accepts_1_to_5_and_preserves_legacy_profiles():
+    for value in range(1, 6):
+        assert normalize_api_concurrency(value) == value
+        assert build_runtime_settings({"api_concurrency": value, "kie_concurrency": 2}, {})["api_concurrency"] == value
+    assert normalize_api_concurrency(9) == 3
+    assert normalize_api_concurrency(None, legacy_value=2) == 2
+    assert "api_concurrency" not in build_runtime_settings({"kie_concurrency": 2}, {})

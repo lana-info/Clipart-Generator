@@ -7,6 +7,8 @@ from typing import Any
 
 PROVIDER_CONCURRENCY_CHOICES = (1, 2, 3)
 DEFAULT_PROVIDER_CONCURRENCY = 3
+API_CONCURRENCY_CHOICES = (1, 2, 3, 4, 5)
+DEFAULT_API_CONCURRENCY = 3
 
 # Compatibility names for existing KIE-only callers.
 KIE_CONCURRENCY_CHOICES = PROVIDER_CONCURRENCY_CHOICES
@@ -26,6 +28,15 @@ def normalize_provider_concurrency(
     if normalized not in PROVIDER_CONCURRENCY_CHOICES:
         return DEFAULT_PROVIDER_CONCURRENCY
     return normalized
+
+
+def normalize_api_concurrency(value: Any, *, legacy_value: Any = None) -> int:
+    candidate = legacy_value if value in (None, "") else value
+    try:
+        normalized = int(candidate)
+    except (TypeError, ValueError, OverflowError):
+        return DEFAULT_API_CONCURRENCY
+    return normalized if normalized in API_CONCURRENCY_CHOICES else DEFAULT_API_CONCURRENCY
 
 
 normalize_kie_concurrency = normalize_provider_concurrency
@@ -51,6 +62,8 @@ def build_runtime_settings(
         settings[key] = str(secrets.get(key, config.get(key, "")) or "").strip()
     if visible_mark_confirmed_regions is not None:
         settings["visible_mark_confirmed_regions"] = dict(visible_mark_confirmed_regions)
+    if "api_concurrency" in settings:
+        settings["api_concurrency"] = normalize_api_concurrency(settings["api_concurrency"])
     settings["kie_concurrency"] = normalize_provider_concurrency(
         settings.get("kie_concurrency"),
         legacy_value=settings.get("generation_concurrency"),

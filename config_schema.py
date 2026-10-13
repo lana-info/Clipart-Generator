@@ -63,7 +63,7 @@ def migrate_preferences(value: Any) -> dict[str, Any]:
     result["last_work_dir"] = source.get("last_work_dir", "") if isinstance(source.get("last_work_dir", ""), str) else ""
     result["last_output_dir"] = source.get("last_output_dir", "") if isinstance(source.get("last_output_dir", ""), str) else ""
     result["app_language"] = normalize_locale(source.get("app_language"))
-    for key in ("kie_concurrency", "photoroom_concurrency", "fal_concurrency"):
+    for key in ("api_concurrency", "kie_concurrency", "photoroom_concurrency", "fal_concurrency"):
         if key in source:
             result[key] = source[key]
     for key in _MODE_KEYS:
