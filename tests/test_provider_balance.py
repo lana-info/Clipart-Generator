@@ -36,6 +36,22 @@ class ProviderBalanceTests(unittest.TestCase):
                 self.assertIn("3.00 USD", result)
                 self.assertNotIn("secret-only-test", result)
 
+    def test_piapi_balance_identifies_application_on_actual_transport(self):
+        from app_identity import APP_USER_AGENT
+
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def read(self, size): return b'{"equivalent_in_usd":"3.0"}'
+
+        with patch("network_security.urllib.request.OpenerDirector.open",
+                   return_value=Response()) as transport:
+            self.assertEqual(check_provider_balance("piapi", "test-only-key"),
+                             "Баланс PiAPI: 3.00 USD")
+        request = transport.call_args.args[0]
+        self.assertEqual(request.get_header("User-agent"), APP_USER_AGENT)
+        self.assertEqual(request.get_header("X-api-key"), "test-only-key")
+
     def test_never_reports_bad_or_unknown_balance_as_free(self):
         for provider in ("piapi", "atlascloud"):
             with self.subTest(provider=provider):

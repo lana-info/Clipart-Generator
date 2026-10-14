@@ -144,6 +144,21 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
                 self.assertEqual([call[0] for call in worker.calls], ["POST","GET"])
                 self.assertEqual(worker.calls[0][2]["model"],MODEL_ENDPOINT_IDS[model])
 
+    def test_piapi_submit_and_poll_identify_application_to_gateway(self):
+        from app_identity import APP_USER_AGENT
+        with tempfile.TemporaryDirectory() as temp:
+            worker = OfflineWorker(temp, "piapi")
+            worker.responses = [
+                {"task_id": "render1"},
+                {"status": "completed", "output": {"data": [
+                    {"url": "https://images.example.org/a.png"}
+                ]}},
+            ]
+            worker._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare")
+            self.assertEqual([call[0] for call in worker.calls], ["POST", "GET"])
+            for call in worker.calls:
+                self.assertEqual(call[3].get("User-Agent"), APP_USER_AGENT)
+
     def test_reference_edits_use_paid_job_journal_and_provider_edit_route(self):
         for provider in ("piapi", "atlascloud"):
             for variant in ("flare", "sunburst"):
@@ -164,6 +179,9 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
                                      "https://images.example.org/edit.png")
                     self.assertEqual([entry[0] for entry in worker.calls], ["POST", "GET"])
                     if provider == "piapi":
+                        from app_identity import APP_USER_AGENT
+                        for call in worker.calls:
+                            self.assertEqual(call[3].get("User-Agent"), APP_USER_AGENT)
                         self.assertTrue(worker.calls[0][1].endswith("/images/edits/async"))
                         self.assertTrue(worker.calls[0][2].startswith(b"--VibixPiAPI"))
                         self.assertEqual(worker.calls[0][2].count(b'name="image[]"; filename='), 3)

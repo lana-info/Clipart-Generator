@@ -1,3 +1,38 @@
+## PiAPI Cloudflare blocks Python User-Agent, 2026-10-13 {#piapi-cloudflare-user-agent-20261013}
+
+Studio3.2.23 Windows11: свежий экспорт591events содержит последний пакет50images:
+49provider_task_failed имеютHTTP403 дляpiapi/gpt-image-2.5-flare, ещё1item_failed
+защищён старымunconfirmed marker. Новых submit/poll/succeeded нет. Повторное
+сохранение ключа и бесплатная проверка баланса не помогли.403сам по себе не
+доказывает неверный ключ; раньше приложение показывало только общую классификацию.
+
+Причина подтверждена безопасным GET /account/info без ключа: стандартный
+urllib User-Agent получает403 JSON с error_code1010,
+error_name=browser_signature_banned, owner_action_required=true,
+сообщением о блокировке browser signature. То же соединение с
+VibixStudio/3.2.23 и Mozilla/5.0 получает401 Invalid API key.
+Существующий APP_USER_AGENT="VibixImages/1.0 (+PyQt6)" получает401 как на
+/account/info, так и GET /api/v1/task/vibix_readonly_probe_nonexistent.
+Никакие реальные ключи, платные POST или существующие taskID не использовались.
+Это подтверждает блокировку транспортного клиента на проверочной машине,
+но ещё не подтверждает действительность ключа владельца или его IP/права.
+
+Попытка1: отсутствующий явный UA в gpt25_provider.request_headers и
+provider_balance.check_provider_balance → добавить существующий APP_USER_AGENT
+только для PiAPI → регрессии worker POST/GET и actual balance transport сначала
+2FAIL/13PASS, после правки весь профиль31PASS; GETс APP_USER_AGENT достигает401.
+Multipart edit regression проверяет UAи на POSTс3локальными референсами, и наpoll.
+Защита от повторной оплаты, ключевые headers и redirect guard не изменены.
+Дополнительный live GET через исправленные request_headers/secure_json_request
+с заведомо фиктивным ключом: poll401, JSON Failed to verify api key; Cloudflare1010
+отсутствует. Исправленный check_provider_balance также достигает проверки
+фиктивного ключа. Эти запросы не подтверждают баланс владельца.
+Новых зависимостей нет. Сборка/публикация и платная Windows приёмка не проводились.
+
+Дополнительная сверка официальной страницы GPT-image API в этой сессии:
+https://piapi.ai/docs/gpt-image/gpt-image-api явно описывает gpt-image-2.5без
+суффикса; прежнее утверждение об отсутствии модели в docs устарело.
+
 ## api-settings-review-9074a1c
 
 Независимое ревью трёх коммитов cf9bb95, 99eb03e, 9074a1c обнаружило:

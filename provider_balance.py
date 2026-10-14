@@ -6,6 +6,7 @@ import urllib.error
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
+from app_identity import APP_USER_AGENT
 from network_security import NetworkSecurityError, secure_json_request
 
 
@@ -49,7 +50,7 @@ def check_provider_balance(provider: str, api_key: str, timeout: float = 12.0) -
         raise ValueError("Введите корректный API Key")
     if provider == "piapi":
         url = "https://api.piapi.ai/account/info"
-        headers = {"X-API-KEY": key, "Accept": "application/json"}
+        headers = {"X-API-KEY": key, "Accept": "application/json", "User-Agent": APP_USER_AGENT}
     elif provider == "atlascloud":
         url = "https://api.atlascloud.ai/public/v1/balance"
         headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}

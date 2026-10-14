@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+from app_identity import APP_USER_AGENT
+
 MODEL_TO_PROVIDER = {
     **{f"atlascloud/gpt-image-2.5-{variant}": "atlascloud" for variant in ("flare", "sunburst")},
     **{f"piapi/{model}": "piapi" for model in ("gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5")},
@@ -213,6 +215,7 @@ def request_headers(provider: str, api_key: str) -> dict[str, str]:
         headers["Authorization"] = f"Bearer {key}"
     elif provider == "piapi":
         headers["X-API-KEY"] = key
+        headers["User-Agent"] = APP_USER_AGENT
     else:
         raise Gpt25ProviderError("Неизвестный провайдер")
     return headers
