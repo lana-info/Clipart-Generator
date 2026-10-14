@@ -1,3 +1,21 @@
+## Desktop CI3.2.24 byte-baseline mismatch, 2026-10-13
+
+Run38504974478 наa5f60b1:1FAIL/3418PASS/57SKIP/21deselected/331subtests.
+Отказ: test_chroma_material_causality legacy-blue SHA77eef4... →cfa8c2...;
+chroma source/test файлы не изменены относительноdevelop/3.2 и3.2.23.
+CI ставит незакреплённые requirements и получил NumPy2.5.4/OpenCV5.0.0.93/
+Pillow12.3.0, тогда как native builds ставят constraints-build
+NumPy2.2.6/OpenCV4.12.0.88/Pillow11.3.0. Локальный causal suite30PASS с
+NumPy2.5.3/OpenCV5/Pillow12.3; изолированная замена толькоNumPy на2.5.4
+тоже30PASS, поэтому одна версияNumPy не установлена как причина.
+
+Перед правкой: подтверждено различие полного CI/native dependency stack;
+точная численная операция, зависящая от среды, пока не установлена.
+Попытка1: привести DesktopCI к уже согласованным native build constraints
+без изменения golden SHA и тестов → полный CI на том же application payload.
+Результат проверки будет записан после завершения. Native installers не
+пересобираются ради CI/docs: идентичность application payload проверяетсяgitdiff.
+
 ## PiAPI Cloudflare blocks Python User-Agent, 2026-10-13 {#piapi-cloudflare-user-agent-20261013}
 
 Studio3.2.23 Windows11: свежий экспорт591events содержит последний пакет50images:
