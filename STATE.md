@@ -1,3 +1,33 @@
+## Stable Studio3.2.24, Windows/Mac, 2026-10-13
+
+Источник: владелец явно разрешил commit/push, необходимые действия, Windows/Mac
+build, публикацию stable на лицензионном сервере и удаление предыдущего выпуска.
+Mac: прежняя поддерживаемая Apple Silicon платформа; Intel не добавляется.
+Удаление ограничено предыдущими Core stable для windows-x64/macos-arm64;
+модули и другие продукты сохраняются. Удаление после проверки нового stable,
+с предварительной резервной копией старых metadata и bytes.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Windows/Mac пользователь получает исправление PiAPI; поручение владельца | Native builds exact commit, frozen/installed/extracted smoke, SHA/version/provenance | Версия3.2.24; PiAPI APP_USER_AGENT, native balance regression включена | Локально105tests+23subtestsPASS, secret scanner/diff-checkPASS; native builds ещё не запущены |
+| Обновление доступно как stable; поручение владельца | Server SHA, stable/latest selection, health, download authorization | План2Core rows прежним service store | Не опубликовано |
+| Предыдущий выпуск удалён; поручение владельца | Inventory latest per platform, backup DB/bytes, штатный delete_release, protected fingerprint checks | План удалить только заменённые2Core rows после публикации | Не выполнено |
+
+## PiAPI HTTP403 / Cloudflare1010, 2026-10-13
+
+Источник: повторные отказы владельца в Studio3.2.23; диагностика из вложения
+`6d036bcd-f0b3-4746-895c-f58fbac3896d/VibixImages-diagnostics.zip`.
+Изолированная ветка `codex/fix-piapi-user-agent-20261013` основана на source
+релиза3.2.23 `e3ffb87`, поскольку develop/3.2 пока не содержит этого исправления.
+Чужие незакоммиченные STATE/TASKS в api-settings-compact-worktree не изменены.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| PiAPI принимает запросы приложения до проверки ключа, без блокировки стандартного клиента Python; сообщение владельца | Бесплатные GET без действительного ключа, регрессии balance transport и worker submit/poll с локальными референсами | PiAPI balance, submit и polling передают существующий APP_USER_AGENT; платные retry/журналы не изменены | Реализовано и проверено в пределах транспорта: 31 unittest PASS; две новые регрессии до правки FAIL; GET без ключа с Python UA:403/Cloudflare1010, с APP_USER_AGENT:401/Invalid API key. Генерация с ключом владельца и Windows EXE не проверены; установленная3.2.23 ещё содержит прежний код |
+
+Причина и доказательства: [docs/ERRORS.md#piapi-cloudflare-user-agent-20261013](docs/ERRORS.md#piapi-cloudflare-user-agent-20261013).
+Commit/push и native build/publication теперь разрешены владельцем; актуальный статус в разделе Stable Studio3.2.24.
+
 ## Диагностика отказов PiAPI, 2026-10-13
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |

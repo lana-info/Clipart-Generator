@@ -1,3 +1,15 @@
+## PiAPI: блокировка User-Agent Python, 2026-10-13
+
+- [x] Проверить диагностику3.2.23:49POST403,1старый unconfirmed guard,
+  нет provider_task_submitted/polled/succeeded в последнем запуске.
+- [x] Воспроизвести бесплатным GET Cloudflare1010 для Python user-agent.
+- [x] Добавить APP_USER_AGENT для PiAPI balance/submit/poll, проверить
+  31unittest и отсутствие изменений paid retry/recovery.
+- [ ] По отдельному поручению собрать и выпустить исправленный Windows EXE.
+- [ ] Проверить баланс и согласованный платный сценарий на устройстве владельца.
+
+Текущее состояние и ограничения: STATE.md, раздел PiAPI HTTP403.
+
 ## Stable-выпуск Studio3.2.22 и модулей1.5.8
 
 - [x] Зафиксировать проверенные исправленияe4755ee и прочитатьserver inventory.
