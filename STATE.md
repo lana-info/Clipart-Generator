@@ -9,9 +9,22 @@ Mac: прежняя поддерживаемая Apple Silicon платформ�
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Windows/Mac пользователь получает исправление PiAPI; поручение владельца | Native builds exact commit, frozen/installed/extracted smoke, SHA/version/provenance | Версия3.2.24; PiAPI APP_USER_AGENT, native balance regression включена | Локально105tests+23subtestsPASS, secret scanner/diff-checkPASS; native builds ещё не запущены |
-| Обновление доступно как stable; поручение владельца | Server SHA, stable/latest selection, health, download authorization | План2Core rows прежним service store | Не опубликовано |
-| Предыдущий выпуск удалён; поручение владельца | Inventory latest per platform, backup DB/bytes, штатный delete_release, protected fingerprint checks | План удалить только заменённые2Core rows после публикации | Не выполнено |
+| Windows/Mac пользователь получает исправление PiAPI; поручение владельца | Native builds, frozen/installed/extracted smoke, SHA/version/provenance | Собраны Windows x64 EXE и Mac Apple Silicon ZIP3.2.24; PiAPI APP_USER_AGENT, native balance regression | Реализовано и проверено в пределах сборки: native38504974041SUCCESS наsource a5f60b1; Windows installed/frozen и Mac frozen/extracted13checksPASS,2SHA/provenance/versionPASS,MacARM PASS. Локально105tests+23subtestsPASS; полныйCI38505749323:3419tests+331subtestsPASS,57SKIP/21deselected; application payload a5f60b1/4927b37 идентичен. На устройстве владельца установка и платная генерация не проверены |
+| Обновление доступно как stable; поручение владельца | Server SHA, stable/latest selection, health, download authorization | Опубликованы2Core stable3.2.24 прежним service store | Реализовано и проверено на сервере: windows68b5ecfc-b022-c38b-dab3-659c3a731d93,mac0344fe14-bda4-c0fc-a0ce-73ffbcc9f3e5;2storedSHA,ordinary/beta-client latest selectionPASS; health200,invalid download token403. Авторизованный HTTP manifest/download без клиентской сессии не проверен |
+| Предыдущий выпуск удалён; поручение владельца | Backup DB/bytes, штатный delete_release, protected fingerprints | Удалены предыдущие Windows3.2.23 и Mac3.2.22,2artifact files; DB tombstones deleted | Реализовано и проверено: verified0600pg_dump и tar2members/SHA; послеwithdraw/delete файлов нет, новыеstablePASS, всепрочиеmetadata/modules прежние |
+
+Evidence: ../artifacts/studio-3.2.24-stable-20261013/;
+server-final-live-verification.json,server-deletion-receipt.json,
+final-ci-verification.json и application-payload-equivalence.json.
+Rollback: восстановить выбранный предыдущий Core из private tar и DBmetadata,
+затем штатноwithdraw новыеIDs; всюbusinessбазу не откатывать.
+Backups: /opt/bots-stack/backups/clipart-license-service/
+pre-studio3224-stable-publication-20261013.dump и
+studio3224-previous-core-20261013.tar (0600,проверены).
+Mac ZIP ad-hoc signed,без Apple notarization;Intel не собирался.
+Платных проверок0;на устройстве владельца download/update/AI не проверены.
+Исходники и результат сохранены в codex/fix-piapi-user-agent-20261013;
+чужие незакоммиченные STATE/TASKS в прежнемworktree сохранены.
 
 ## PiAPI HTTP403 / Cloudflare1010, 2026-10-13
 
@@ -23,7 +36,7 @@ Mac: прежняя поддерживаемая Apple Silicon платформ�
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| PiAPI принимает запросы приложения до проверки ключа, без блокировки стандартного клиента Python; сообщение владельца | Бесплатные GET без действительного ключа, регрессии balance transport и worker submit/poll с локальными референсами | PiAPI balance, submit и polling передают существующий APP_USER_AGENT; платные retry/журналы не изменены | Реализовано и проверено в пределах транспорта: 31 unittest PASS; две новые регрессии до правки FAIL; GET без ключа с Python UA:403/Cloudflare1010, с APP_USER_AGENT:401/Invalid API key. Генерация с ключом владельца и Windows EXE не проверены; установленная3.2.23 ещё содержит прежний код |
+| PiAPI принимает запросы приложения до проверки ключа, без блокировки стандартного клиента Python; сообщение владельца | Бесплатные GET без действительного ключа, регрессии balance transport и worker submit/poll с локальными референсами | PiAPI balance, submit и polling передают существующий APP_USER_AGENT; платные retry/журналы не изменены | Реализовано и проверено в пределах транспорта: 31 unittest PASS; две новые регрессии до правки FAIL; GET без ключа с Python UA:403/Cloudflare1010, с APP_USER_AGENT:401/Invalid API key. Native EXE/ZIP3.2.24 проверены и опубликованы; генерация с ключом владельца не проверена, установленная3.2.23 требует обновления |
 
 Причина и доказательства: [docs/ERRORS.md#piapi-cloudflare-user-agent-20261013](docs/ERRORS.md#piapi-cloudflare-user-agent-20261013).
 Commit/push и native build/publication теперь разрешены владельцем; актуальный статус в разделе Stable Studio3.2.24.
@@ -32,7 +45,7 @@ Commit/push и native build/publication теперь разрешены влад
 
 | Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
 | --- | --- | --- | --- |
-| Запросы PiAPI с референсами должны соответствовать формату API; причина отказа баланса должна быть видна без раскрытия ключа | Сверить submit, polling, balance и multipart поля с официальной документацией; offline submit/poll и balance tests | Одна картинка отправляется как `image`, несколько как повторные `image[]`; submit/poll и account-info используют документированные async URL и `X-API-KEY`; безопасная причина ошибки показывается | Реализовано и проверено: 97 тестов + 19 subtests PASS. Архив содержит 73 завершённых ошибки, все с 3 референсами, и 3 отменённых задания; предыдущий JSON-массив не соответствовал multipart-контракту. По официальным docs `piapi/gpt-image-2.5` как модель не перечислена (документированы только `gpt-image-2.5-flare` и `gpt-image-2.5-sunburst`): её нельзя считать гарантированно рабочей без отдельного подтверждения/решения. Платная приёмка и причина ошибки баланса не установлены |
+| Запросы PiAPI с референсами должны соответствовать формату API; причина отказа баланса должна быть видна без раскрытия ключа | Сверить submit, polling, balance и multipart поля с официальной документацией; offline submit/poll и balance tests | Одна картинка отправляется как `image`, несколько как повторные `image[]`; submit/poll и account-info используют документированные async URL и `X-API-KEY`; безопасная причина ошибки показывается | Реализовано и проверено: 97 тестов + 19 subtests PASS. Архив содержит 73 завершённых ошибки, все с 3 референсами, и 3 отменённых задания; предыдущий JSON-массив не соответствовал multipart-контракту. Повторная сверка текущих официальных docs подтвердила модель `piapi/gpt-image-2.5` без суффикса; прежнее сомнение в её наличии в документации снято. Платная приёмка и причина ошибки баланса не установлены |
 
 Документы: [GPT Image API](https://piapi.ai/docs/gpt-image/gpt-image-api), [Account Info API](https://piapi.ai/docs/account-info-api).
 

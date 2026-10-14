@@ -5,7 +5,9 @@
 - [x] Воспроизвести бесплатным GET Cloudflare1010 для Python user-agent.
 - [x] Добавить APP_USER_AGENT для PiAPI balance/submit/poll, проверить
   31unittest и отсутствие изменений paid retry/recovery.
-- [ ] По отдельному поручению собрать и выпустить исправленный Windows EXE.
+- [x] Владелец разрешил commit/push и stable Windows/Mac3.2.24; native build38504974041SUCCESS.
+- [x] Опубликовать2Core stable3.2.24 и удалить предыдущие Windows3.2.23/Mac3.2.22 после проверенного backup; serverSHA/discovery/health/protectedmetadataPASS.
+- [x] Полный CI3419tests/331subtestsPASS,57SKIP/21deselected; предыдущий сбой bytebaseline устранён согласованием dependency stack без ослабления теста.
 - [ ] Проверить баланс и согласованный платный сценарий на устройстве владельца.
 
 Текущее состояние и ограничения: STATE.md, раздел PiAPI HTTP403.

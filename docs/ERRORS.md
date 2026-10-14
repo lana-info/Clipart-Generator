@@ -13,7 +13,9 @@ NumPy2.5.3/OpenCV5/Pillow12.3; изолированная замена толь�
 точная численная операция, зависящая от среды, пока не установлена.
 Попытка1: привести DesktopCI к уже согласованным native build constraints
 без изменения golden SHA и тестов → полный CI на том же application payload.
-Результат проверки будет записан после завершения. Native installers не
+Результат: run38505749323 на4927b37SUCCESS,3419tests/331subtestsPASS,
+57SKIP/21deselected342.15s; golden test неизменен. Это подтверждает работу
+согласованного dependency stack, но не локализует отдельную численнуюоперацию. Native installers не
 пересобираются ради CI/docs: идентичность application payload проверяетсяgitdiff.
 
 ## PiAPI Cloudflare blocks Python User-Agent, 2026-10-13 {#piapi-cloudflare-user-agent-20261013}
