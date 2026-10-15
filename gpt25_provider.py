@@ -247,20 +247,27 @@ def _result_url(value: object) -> str:
     return candidate
 
 
+_FAILED_STATUSES = frozenset({"failed", "error", "cancelled", "canceled"})
+
+
 def task_result(provider: str, response: object) -> tuple[str, str | None]:
-    """Return (pending|completed|failed, image-url-if-completed)."""
+    """Return (pending|completed|failed, image-url-if-completed).
+
+    A non-terminal or unrecognized status keeps the caller polling: right after
+    an async submit the task record can still answer with an error envelope
+    (PiAPI: {"error": "task not found"}), and an unknown status word must not
+    abandon the paid task either. The caller's deadline bounds the wait.
+    """
     if not isinstance(response, Mapping):
         raise Gpt25ProviderError("Провайдер вернул некорректный статус задачи")
     data = response.get("data") if provider == "atlascloud" else response
     if not isinstance(data, Mapping):
         raise Gpt25ProviderError("Провайдер вернул некорректные данные задачи")
     status = str(data.get("status") or "").lower()
-    if status in {"failed", "error", "cancelled", "canceled"}:
+    if status in _FAILED_STATUSES:
         return "failed", None
-    if status in {"created", "pending", "processing", "running", "queued"}:
-        return "pending", None
     if status != "completed":
-        raise Gpt25ProviderError("Неизвестный статус задачи у провайдера")
+        return "pending", None
     if provider == "atlascloud":
         urls = data.get("outputs")
         if not isinstance(urls, list) or not urls:
@@ -273,3 +280,30 @@ def task_result(provider: str, response: object) -> tuple[str, str | None]:
     if not isinstance(images, list) or not images or not isinstance(images[0], Mapping):
         raise Gpt25ProviderError("PiAPI не вернул URL изображения")
     return "completed", _result_url(images[0].get("url"))
+
+
+def failure_reason(provider: str, response: object) -> str | None:
+    """Best-effort provider failure text for a 'failed' task; safe to show.
+
+    The message is provider-generated (never our credentials or inputs), kept
+    single-line and truncated so it fits the UI and the diagnostics bundle.
+    """
+    if provider != "piapi" or not isinstance(response, Mapping):
+        return None
+    body: object = response
+    output = response.get("output")
+    if isinstance(output, Mapping):
+        nested = output.get("error_body")
+        if isinstance(nested, Mapping):
+            body = nested
+    if not isinstance(body, Mapping):
+        return None
+    error = body.get("error")
+    if not isinstance(error, Mapping):
+        return None
+    message = str(error.get("message") or "").strip().replace("\r", " ").replace("\n", " ")
+    if not message:
+        return None
+    upstream = error.get("upstream_status")
+    suffix = f" (upstream {upstream})" if isinstance(upstream, int) else ""
+    return message[:200].rstrip(".") + suffix

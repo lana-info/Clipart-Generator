@@ -7,6 +7,7 @@ from unittest.mock import patch
 from api_credentials import EnvCredentialStore, SECRET_CONFIG_KEYS
 from gpt25_provider import (
     Gpt25ProviderError,
+    failure_reason,
     generation_payload,
     piapi_edit_multipart_body,
     prepare_reference_inputs,
@@ -158,6 +159,40 @@ class Gpt25ContractTests(unittest.TestCase):
         self.assertEqual(task_result("piapi", {"status":"pending"}), ("pending", None))
         with self.assertRaises(Gpt25ProviderError):
             task_result("piapi", {"status":"completed","output":{"data":[{"url":"http://bad"}]}})
+
+    def test_unknown_or_deferred_status_keeps_polling_paid_task(self):
+        # Right after an async submit PiAPI can answer with a bare error
+        # envelope; it must never end the paid task early.
+        for response in (
+            {"status": "waiting"},
+            {"task_id": "task_1", "status": "new-provider-word"},
+            {"task_id": "task_1", "error": "task not found"},
+            {"error": "A task ID is required."},
+            {},
+        ):
+            self.assertEqual(task_result("piapi", response), ("pending", None), response)
+        for data in ({"status": "waiting"}, {"status": "unknown-word"}, {}):
+            self.assertEqual(task_result("atlascloud", {"data": data}), ("pending", None), data)
+        # Truly malformed answers still fail loudly.
+        self.assertRaises(Gpt25ProviderError, task_result, "piapi", "oops")
+        self.assertRaises(Gpt25ProviderError, task_result, "atlascloud", {"data": None})
+
+    def test_failure_reason_extracts_provider_error_text(self):
+        response = {"status": "failed", "error": {"code": 10000, "message": "Internal error."},
+                    "output": {"error_body": {"error": {
+                        "message": "response handler failed: Our servers are currently overloaded.",
+                        "type": "upstream_error", "upstream_status": 500}}}}
+        reason = failure_reason("piapi", response)
+        self.assertIsNotNone(reason)
+        self.assertIn("overloaded", reason)
+        self.assertIn("upstream 500", reason)
+        self.assertNotIn("\n", reason)
+        self.assertLessEqual(len(reason), 220)
+        self.assertIsNone(failure_reason("piapi", {"status": "failed"}))
+        self.assertIsNone(failure_reason("piapi", {"status": "completed"}))
+        self.assertIsNone(failure_reason("atlascloud", response))
+        top = {"status": "failed", "error": {"code": 10000, "message": "Provider refused."}}
+        self.assertEqual(failure_reason("piapi", top), "Provider refused")
 
     def test_keys_are_separated_from_regular_settings(self):
         self.assertIn("atlascloud_api_key", SECRET_CONFIG_KEYS)

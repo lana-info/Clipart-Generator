@@ -116,6 +116,7 @@ from gpt25_provider import (
     status_url as gpt25_status_url,
     submitted_task_id as gpt25_submitted_task_id,
     task_result as gpt25_task_result,
+    failure_reason as gpt25_failure_reason,
     piapi_edit_multipart_body as gpt25_piapi_edit_multipart_body,
 )
 from gpt25_recovery import confirm_expired_generation_retries
@@ -5698,7 +5699,9 @@ class WorkerThread(QThread):
                 except ProcessingCancelled:
                     raise
                 except Exception as error:
-                    if getattr(self._diagnostic_context, "last_http_status", None) in {404, 410}:
+                    # PiAPI answers HTTP 400 once the task record is gone
+                    # (results are kept for 60 minutes) — treat it as expired.
+                    if getattr(self._diagnostic_context, "last_http_status", None) in {400, 404, 410}:
                         journal.update_status(task_id, "expired")
                         raise RuntimeError(
                             f"{provider}: результат прежней задачи больше недоступен. "
@@ -5730,7 +5733,16 @@ class WorkerThread(QThread):
                     return result_url
                 if state == "failed":
                     journal.update_status(task_id, "failed")
-                    raise RuntimeError(f"{provider}: генерация завершилась ошибкой")
+                    detail = gpt25_failure_reason(provider, response)
+                    message = f"{provider}: генерация завершилась ошибкой"
+                    if detail:
+                        message += f" ({detail})"
+                    self._emit_diagnostic(
+                        "provider_task_failed", provider=provider, model=model_id,
+                        task=task_id, provider_state="failed",
+                        error_message=detail or "",
+                    )
+                    raise RuntimeError(message)
                 journal.update_status(task_id, "processing")
                 time.sleep(self.status_poll_interval)
             journal.update_status(task_id, "timeout")

@@ -23,8 +23,9 @@ from types import SimpleNamespace
 
 from fal_provider import FalProviderError, FalTaskJournal
 from gpt25_provider import (
-    generation_payload, prepare_reference_inputs, provider_for_model, request_headers, status_url,
-    submit_url, submitted_task_id, task_result, piapi_edit_multipart_body,
+    failure_reason, generation_payload, prepare_reference_inputs, provider_for_model,
+    request_headers, status_url, submit_url, submitted_task_id, task_result,
+    piapi_edit_multipart_body,
 )
 from model_catalog import validate_generation_contract
 
@@ -51,6 +52,7 @@ namespace = {
     "gpt25_status_url": status_url,
     "gpt25_submitted_task_id": submitted_task_id,
     "gpt25_task_result": task_result,
+    "gpt25_failure_reason": failure_reason,
     "gpt25_piapi_edit_multipart_body": piapi_edit_multipart_body,
     "validate_generation_contract": validate_generation_contract,
     "ProcessingCancelled": type("ProcessingCancelled", (RuntimeError,), {}),
@@ -219,6 +221,62 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
             url = worker._gpt25_generate_image("A tulip", "piapi/gpt-image-2.5-flare")
             self.assertEqual(url, "https://images.example.org/piapi.png")
             self.assertEqual(len([entry for entry in worker.calls if entry[0] == "POST"]), 1)
+
+    def test_piapi_not_yet_visible_record_keeps_polling(self):
+        # A fresh async record can answer with an error envelope or a status
+        # word we do not know — neither ends the paid task.
+        with tempfile.TemporaryDirectory() as temp:
+            worker = OfflineWorker(temp, "piapi")
+            worker.responses = [
+                {"task_id": "piapi_task_9"},
+                {"error": "task not found"},
+                {"status": "waiting"},
+                {"status": "completed", "output": {"data": [{"url": "https://images.example.org/ok.png"}]}},
+            ]
+            url = worker._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare")
+            self.assertEqual(url, "https://images.example.org/ok.png")
+            self.assertEqual([call[0] for call in worker.calls], ["POST", "GET", "GET", "GET"])
+            states = [d[1].get("provider_state") for d in worker.diagnostics if d[0][0] == "provider_task_polled"]
+            self.assertEqual(states, ["pending", "pending", "completed"])
+
+    def test_piapi_failed_poll_surfaces_provider_reason(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = OfflineWorker(temp, "piapi")
+            worker.responses = [
+                {"task_id": "piapi_task_10"},
+                {"status": "failed", "error": {"code": 10000, "message": "Internal error."},
+                 "output": {"error_body": {"error": {
+                     "message": "response handler failed: Our servers are currently overloaded.\nTry later.",
+                     "type": "upstream_error", "upstream_status": 500}}}},
+            ]
+            with self.assertRaisesRegex(RuntimeError, "overloaded"):
+                worker._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare")
+            failure = [d for d in worker.diagnostics if d[0][0] == "provider_task_failed"]
+            self.assertTrue(failure)
+            self.assertIn("overloaded", failure[0][1]["error_message"])
+            self.assertIn("upstream 500", failure[0][1]["error_message"])
+            # The failed task is terminal: nothing stays pending on the journal.
+            self.assertEqual(worker.gpt25_task_journals["piapi"].pending(), ())
+            self.assertNotIn("TEST_PIAPI_KEY", repr(worker.diagnostics))
+
+    def test_piapi_poll_http400_marks_task_expired(self):
+        with tempfile.TemporaryDirectory() as temp:
+            worker = OfflineWorker(temp, "piapi")
+
+            def gone(url, method="GET", payload=None, headers=None, timeout=None):
+                worker.calls.append((method, url, payload, headers))
+                if method == "POST":
+                    worker._diagnostic_context.gpt25_post_started = True
+                    return {"task_id": "piapi_task_11"}
+                worker._diagnostic_context.last_http_status = 400
+                raise RuntimeError("Ошибка HTTP-запроса: HTTP status=400")
+
+            worker._request_json = gone
+            with self.assertRaisesRegex(RuntimeError, "больше недоступен"):
+                worker._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare")
+            with self.assertRaisesRegex(RuntimeError, "требует подтверждения"):
+                worker._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare")
+            self.assertEqual([call[0] for call in worker.calls], ["POST", "GET"])
 
     def test_completed_job_stays_recoverable_until_image_is_saved(self):
         with tempfile.TemporaryDirectory() as temp:
