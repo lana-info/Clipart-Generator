@@ -1,3 +1,11 @@
+## Studio 3.2.26: diagnostic release preparation, 2026-10-15
+
+Owner explicitly requested building and publishing the balance-diagnostics update.
+Target platforms: Windows x64 and Mac Apple Silicon; previous releases and modules are preserved.
+Source diagnostics commit: 2ca6d0a. Targeted offline regression suite: 103 PASS; full Desktop CI 38785492644 SUCCESS.
+A read-only live PiAPI account-info request returned HTTP 200, with valid data.equivalent_in_usd; the published 3.2.25 balance parser accepts this response. The original user-side failure was not reproduced; this release improves diagnostics, not an established account-format defect. No paid generation was performed.
+New installer builds, checksums and server publication remain pending. Evidence and run IDs will be recorded in ../artifacts/studio-3.2.26-stable-20261015/.
+
 ## PiAPI polling: оплаченная задача не теряется на промежуточных статусах, 2026-10-14
 
 Источник: владелец поручил довести до конца фикс отслеживания статуса задач
