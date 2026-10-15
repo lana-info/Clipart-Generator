@@ -3,10 +3,10 @@
 - [x] Implement privacy-safe balance diagnostics and journal/ZIP integration.
 - [x] Targeted 103 regressions PASS; full CI 38785492644 SUCCESS.
 - [x] Confirm real PiAPI response is accepted; original failure not reproduced.
-- [ ] Build Windows x64 and Mac Apple Silicon with native diagnostic regressions.
-- [ ] Verify exact-source CI, installer version, SHA and provenance.
-- [ ] Back up service database and publish 2 Core stable releases; preserve previous releases and modules.
-- [ ] Verify server update selection and health; record final release state.
+- [x] Build Windows x64 and Mac Apple Silicon with native diagnostic regressions.
+- [x] Verify exact-source CI, installer version, SHA and provenance.
+- [x] Back up service database and publish 2 Core stable releases; preserve previous releases and modules.
+- [x] Verify server update selection and health; record final release state.
 
 ## PiAPI: polling до готовности и причина отказа, 2026-10-14
 

@@ -1,3 +1,11 @@
+## Studio 3.2.26 stable published, Windows/Mac, 2026-10-15
+
+Published 2 Core stable releases from exact source 33a717df4f2fda52b275504675bb3f8c7e676077. Native build 38792120951 and full Desktop CI 38792121825 SUCCESS. Installer version, SHA, provenance and native/frozen application checks passed. Native checks include balance-diagnostics and journal/ZIP regressions.
+
+Server stored SHA checks passed for both installers; stable/latest selection passed for ordinary and beta clients. Health 200; invalid download token 403. A mode-0600 database backup was verified with pg_restore --list. Previous releases, modules and other products were preserved. Evidence: ../artifacts/studio-3.2.26-stable-20261015/, stable-release-manifest.json and server-predeletion-live-verification.json.
+
+The original user-side balance failure was not reproduced by the read-only live request. This release adds diagnostics, not a verified fix of an unknown account-response defect. No paid generations were run. Owner-device update/balance checks and authenticated manifest/download remain unverified; Mac is Apple Silicon, ad-hoc signed without Apple notarization.
+
 ## Studio 3.2.26: diagnostic release preparation, 2026-10-15
 
 Owner explicitly requested building and publishing the balance-diagnostics update.
