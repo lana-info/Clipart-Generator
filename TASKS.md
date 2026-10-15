@@ -1,3 +1,12 @@
+## PiAPI: polling до готовности и причина отказа, 2026-10-14
+
+- [x] Свежая задача с «task not found»/неизвестным статусом держит polling до дедлайна.
+- [x] failure_reason безопасно показывает текст провайдера; HTTP 400 на polling -> expired.
+- [x] 26 unittest PASS, из них 5 новых; py_compile PASS; STATE.md обновлён.
+- [ ] Прогнать полный CI, собрать и опубликовать stable 3.2.25 Windows/Mac.
+
+Текущее состояние и ограничения: STATE.md, раздел PiAPI polling 2026-10-14.
+
 ## PiAPI: блокировка User-Agent Python, 2026-10-13
 
 - [x] Проверить диагностику3.2.23:49POST403,1старый unconfirmed guard,
