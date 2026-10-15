@@ -27,7 +27,7 @@ class HttpsOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def secure_json_request(url: str, *, headers: dict[str, str], timeout: float, max_bytes: int = 256 * 1024):
+def secure_json_request(url: str, *, headers: dict[str, str], timeout: float, max_bytes: int = 256 * 1024, on_response=None):
     parsed = urlparse(url)
     if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise NetworkSecurityError("credential-bearing requests require a clean HTTPS URL")
@@ -39,6 +39,10 @@ def secure_json_request(url: str, *, headers: dict[str, str], timeout: float, ma
             request.add_unredirected_header(key, value)
     opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
     with opener.open(request, timeout=max(1.0, min(float(timeout), 60.0))) as response:
+        if on_response is not None:
+            status = getattr(response, "status", None)
+            if isinstance(status, int) and not isinstance(status, bool):
+                on_response(status)
         raw = response.read(max_bytes + 1)
     if len(raw) > max_bytes:
         raise NetworkSecurityError("API response exceeds size limit")

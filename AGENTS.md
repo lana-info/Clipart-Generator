@@ -78,3 +78,7 @@
 - Never copy working files directly between machines and never run two independent editing sessions on the same branch.
 - Use `scripts/bootstrap_vds.sh` only for environment setup and safe baseline checks. It must not install secrets, alter SSH/firewall settings, start production workers, or deploy.
 - The main agent owns planning, integration, final tests, review, commit, and push. Subagents must not edit the same files in parallel.
+
+## Required actionable diagnostics
+
+For each provider failure, preserve the operation, failing stage, observed HTTP status, available safe error code, expected contract and bounded response structure. Distinguish an established cause from an unknown cause. For paid operations, report accepted-task state and repeat-payment risk without guessing whether a charge occurred. User-facing errors must explain the actionable cause when known; diagnostic ZIP export must retain the safe technical evidence. Never log credentials, scalar account values, raw responses, prompts, images or personal paths. Test both failure explanation and privacy-safe journal/ZIP persistence.

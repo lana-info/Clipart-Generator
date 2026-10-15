@@ -548,7 +548,8 @@ class V3ApplicationView(QWidget):
 
     def _show_api_settings(self) -> None:
         from v3_api_settings import ApiSettingsDialog
-        dialog = ApiSettingsDialog(initial=self._runtime_settings(), parent=self.shell or self)
+        dialog = ApiSettingsDialog(initial=self._runtime_settings(), parent=self.shell or self,
+                                   diagnostic_journal=self._diagnostic_journal)
         if dialog.exec():
             self._v3_runtime_settings.update(dialog.settings)
             from runtime_settings import normalize_provider_concurrency

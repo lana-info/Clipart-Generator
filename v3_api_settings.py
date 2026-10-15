@@ -331,15 +331,32 @@ class _BalanceSignals(QObject):
 class _BalanceCheck(QRunnable):
     """One bounded, read-only request; no widgets are accessed from the pool."""
 
-    def __init__(self, provider: str, key: str):
+    def __init__(self, provider: str, key: str, diagnostic_journal=None):
         super().__init__()
         self.provider = provider
         self.key = key
+        self.diagnostic_journal = diagnostic_journal
         self.signals = _BalanceSignals()
+
+    def _record_diagnostic(self, event):
+        journal = self.diagnostic_journal
+        if journal is None:
+            return
+        details = event["details"]
+        summaries = {"provider_balance_started": "Начата проверка баланса провайдера.",
+                     "provider_balance_succeeded": "Баланс провайдера прочитан.",
+                     "provider_balance_failed": "Проверка баланса провайдера завершилась ошибкой."}
+        journal.record(event["event"], summaries[event["event"]],
+                       severity="error" if event["outcome"] == "failed" else "info",
+                       screen="api_settings", operation_id=details["correlation_id"],
+                       outcome=event["outcome"], retry="read_only_balance_check", details=details)
 
     def run(self):
         try:
-            message = check_provider_balance(self.provider, self.key)
+            if self.diagnostic_journal is None:
+                message = check_provider_balance(self.provider, self.key)
+            else:
+                message = check_provider_balance(self.provider, self.key, diagnostic=self._record_diagnostic)
         except ProviderBalanceError as error:
             message = str(error)
             if self.key:
@@ -357,8 +374,9 @@ class _BalanceCheck(QRunnable):
 
 
 class ApiSettingsDialog(QDialog):
-    def __init__(self, initial: Mapping[str, Any] | None = None, parent=None) -> None:
+    def __init__(self, initial: Mapping[str, Any] | None = None, parent=None, *, diagnostic_journal=None) -> None:
         super().__init__(parent)
+        self._diagnostic_journal = diagnostic_journal
         self._balance_job = None
         self.setWindowTitle("Настройки API")
         self.setMinimumWidth(560)
@@ -492,7 +510,7 @@ class ApiSettingsDialog(QDialog):
         self.atlascloud_balance_button.setEnabled(False)
         self.piapi_balance_button.setEnabled(False)
         self.status.setText("Проверяем баланс…")
-        job = _BalanceCheck(provider, key)
+        job = _BalanceCheck(provider, key, diagnostic_journal=self._diagnostic_journal)
         self._balance_job = job
         # Qt disconnects this bound slot if the dialog is destroyed while the
         # request is running. The application pool owns the running task.
