@@ -1,3 +1,11 @@
+## Studio 3.2.27 stable published, 2026-10-15
+
+Windows x64 and Mac Apple Silicon published from source3ef706543d8aef5ed216d0a7ac2f5d1fbbb2a8f0. Native build38831433270 and repeated fullCI38831432277 SUCCESS. Version/SHA/provenance and native/frozen/installed checks passed. New regression covers nested PiAPI task status/output and GET-only recovery. Server storedSHA2/2 and stable/latest discovery PASS; health200 and invalid-token403. Verified0600 database backup retained. Previous releases/modules preserved. Evidence: ../artifacts/studio-3.2.27-stable-20261015/.
+
+Initial fullCI failed on unchanged legacy-blue chroma byte baseline (3440PASS/1FAIL); the same-source failed job was repeated without changing tests or golden bytes. Its instability is not established as fixed. Release status bookkeeping error was corrected without rebuilding installers.
+
+No new paid generation was submitted. Prior tasks returned HTTP400; their images were not restored. Owner-device generation and saving remain unverified; blanket HTTP400/404/410 expiry classification remains a separate unresolved issue. Mac: Apple Silicon, ad-hoc signed, no notarization.
+
 ## Studio 3.2.27 release preparation, 2026-10-15
 
 Owner requested completion of the PiAPI repair. Source fix4776ec4 unwraps data.status/output; 98 isolated regression checks PASS, including failure-before/fix-after and GET-only restart recovery. At the initial live check all four task records were completed while the old adapter returned pending. Later read-only checks returned HTTP400; image restoration was not verified. No new paid generations or image downloads were performed.
