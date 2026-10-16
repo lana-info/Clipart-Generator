@@ -1,3 +1,9 @@
+## Studio 3.2.27 release preparation, 2026-10-15
+
+Owner requested completion of the PiAPI repair. Source fix4776ec4 unwraps data.status/output; 98 isolated regression checks PASS, including failure-before/fix-after and GET-only restart recovery. At the initial live check all four task records were completed while the old adapter returned pending. Later read-only checks returned HTTP400; image restoration was not verified. No new paid generations or image downloads were performed.
+
+Windows x64/Mac Apple Silicon builds and exact-source CI will gate publication. Previous releases and modules must be preserved. Evidence: ../artifacts/studio-3.2.27-stable-20261015/. User-device acceptance and broader HTTP400/404/410 expiry classification remain unresolved; do not label the entire project complete.
+
 ## Studio 3.2.26 stable published, Windows/Mac, 2026-10-15
 
 Published 2 Core stable releases from exact source 33a717df4f2fda52b275504675bb3f8c7e676077. Native build 38792120951 and full Desktop CI 38792121825 SUCCESS. Installer version, SHA, provenance and native/frozen application checks passed. Native checks include balance-diagnostics and journal/ZIP regressions.

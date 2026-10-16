@@ -1,3 +1,12 @@
+## Studio 3.2.27 PiAPI task-envelope release, 2026-10-15
+
+- [x] Correct PiAPI task envelope and pass98 isolated regressions.
+- [ ] Build and verify native Windows/Mac3.2.27 with task-envelope regression.
+- [ ] Verify exact-source fullCI and installer SHA/provenance for3.2.27.
+- [ ] Back up DB, publish2Core3.2.27stable, preserve previous releases/modules.
+- [ ] Verify live3.2.27update selection and health; record evidence.
+- [ ] Verify generation/result saving on owner device; no success claim before verification.
+
 ## Studio 3.2.26 balance diagnostics release, 2026-10-15
 
 - [x] Implement privacy-safe balance diagnostics and journal/ZIP integration.
