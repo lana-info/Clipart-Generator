@@ -260,7 +260,7 @@ def task_result(provider: str, response: object) -> tuple[str, str | None]:
     """
     if not isinstance(response, Mapping):
         raise Gpt25ProviderError("Провайдер вернул некорректный статус задачи")
-    data = response.get("data") if provider == "atlascloud" else response
+    data = response.get("data") if provider == "atlascloud" or (provider == "piapi" and "data" in response) else response
     if not isinstance(data, Mapping):
         raise Gpt25ProviderError("Провайдер вернул некорректные данные задачи")
     status = str(data.get("status") or "").lower()
@@ -290,8 +290,11 @@ def failure_reason(provider: str, response: object) -> str | None:
     """
     if provider != "piapi" or not isinstance(response, Mapping):
         return None
-    body: object = response
-    output = response.get("output")
+    record = response.get("data", response)
+    if not isinstance(record, Mapping):
+        return None
+    body: object = record
+    output = record.get("output")
     if isinstance(output, Mapping):
         nested = output.get("error_body")
         if isinstance(nested, Mapping):
