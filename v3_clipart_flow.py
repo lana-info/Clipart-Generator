@@ -1216,6 +1216,7 @@ class ClipartFlowController(QObject):
         try:
             request = build_clipart_run_request(self.shell.state)
             worker = self.create_worker_for_request(request)
+            self.shell.show_results()
         except (ClipartFlowError, OSError, RuntimeError, TypeError, ValueError) as error:
             message = _safe_runtime_error(error)
             self.review_page.set_run_status(message, error=True)
@@ -1226,7 +1227,6 @@ class ClipartFlowController(QObject):
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
         worker.start()
-        self.shell.show_results()
         self.review_page.set_run_status("Запуск передан существующему pipeline 2.0")
         self.started.emit(request)
         return request

@@ -230,6 +230,11 @@ def fal_generation_payload(
     """Translate shared generation controls into an endpoint-safe Fal payload."""
 
     profile = fal_endpoint_profile(model_id, "generation")
+    from model_catalog import validate_generation_contract
+    validate_generation_contract(
+        model_id, has_references=False, ratio=ratio,
+        resolution=resolution, prompt=prompt,
+    )
     payload = {"prompt": str(prompt or "")}
     if "aspect_ratio" in profile.parameter_names:
         payload["aspect_ratio"] = str(ratio or "1:1")

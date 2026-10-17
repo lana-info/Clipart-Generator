@@ -11,6 +11,8 @@ import binascii
 import re
 import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlsplit
@@ -47,6 +49,41 @@ MAX_REFERENCE_IMAGES = 16
 
 class Gpt25ProviderError(ValueError):
     """Provider response or unsupported request; safe for user-facing errors."""
+
+
+MAX_INLINE_IMAGE_BYTES = 64 * 1024 * 1024
+
+@dataclass(frozen=True, slots=True)
+class InlineImageResult:
+    data: bytes = field(repr=False)
+
+def _inline_image(value: object) -> InlineImageResult:
+    if not isinstance(value, str) or not value or len(value) > ((MAX_INLINE_IMAGE_BYTES + 2) // 3) * 4:
+        raise Gpt25ProviderError("PiAPI: некорректное или слишком большое b64_json изображение")
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (ValueError, binascii.Error, UnicodeError):
+        raise Gpt25ProviderError("PiAPI: некорректное base64 изображение") from None
+    if not raw or len(raw) > MAX_INLINE_IMAGE_BYTES:
+        raise Gpt25ProviderError("PiAPI: изображение превышает лимит размера")
+    if not (raw.startswith(b"\x89PNG\r\n\x1a\n") or raw.startswith(b"\xff\xd8\xff") or (raw.startswith(b"RIFF") and raw[8:12] == b"WEBP")):
+        raise Gpt25ProviderError("PiAPI: ожидается PNG, JPEG или WEBP")
+    return InlineImageResult(raw)
+
+
+RESULT_RETENTION_SECONDS = 60 * 60
+
+
+def result_retention_elapsed(created_at, *, now=None, retention_seconds=RESULT_RETENTION_SECONDS) -> bool:
+    # True only when the journal proves that PiAPI's documented retention window has passed.
+    try:
+        created = datetime.fromisoformat(str(created_at or ''))
+    except ValueError:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    current = now if now is not None else datetime.now(timezone.utc)
+    return (current - created).total_seconds() >= retention_seconds
 
 
 def provider_for_model(model_id: str) -> str | None:
@@ -224,7 +261,7 @@ def request_headers(provider: str, api_key: str) -> dict[str, str]:
 def submitted_task_id(provider: str, response: object) -> str:
     if not isinstance(response, Mapping):
         raise Gpt25ProviderError("Провайдер не вернул данные о задаче")
-    data = response.get("data") if provider == "atlascloud" else response
+    data = response.get("data") if provider == "atlascloud" or (provider == "piapi" and "data" in response) else response
     if not isinstance(data, Mapping):
         raise Gpt25ProviderError("Провайдер не вернул задачу")
     task_id = str(data.get("id" if provider == "atlascloud" else "task_id") or "")
@@ -250,7 +287,7 @@ def _result_url(value: object) -> str:
 _FAILED_STATUSES = frozenset({"failed", "error", "cancelled", "canceled"})
 
 
-def task_result(provider: str, response: object) -> tuple[str, str | None]:
+def task_result(provider: str, response: object) -> tuple[str, str | InlineImageResult | None]:
     """Return (pending|completed|failed, image-url-if-completed).
 
     A non-terminal or unrecognized status keeps the caller polling: right after
@@ -266,7 +303,7 @@ def task_result(provider: str, response: object) -> tuple[str, str | None]:
     status = str(data.get("status") or "").lower()
     if status in _FAILED_STATUSES:
         return "failed", None
-    if status != "completed":
+    if status != "completed" and not (provider == "atlascloud" and status == "succeeded"):
         return "pending", None
     if provider == "atlascloud":
         urls = data.get("outputs")
@@ -279,6 +316,9 @@ def task_result(provider: str, response: object) -> tuple[str, str | None]:
     images = output.get("data")
     if not isinstance(images, list) or not images or not isinstance(images[0], Mapping):
         raise Gpt25ProviderError("PiAPI не вернул URL изображения")
+    encoded = images[0].get("b64_json")
+    if encoded is not None and encoded != "":
+        return "completed", _inline_image(encoded)
     return "completed", _result_url(images[0].get("url"))
 
 

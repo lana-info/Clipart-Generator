@@ -61,7 +61,7 @@ class RunPodClient:
             f"{self.base_url}/{path.lstrip('/')}",
             data=body,
             headers={
-                "Authorization": self.config.api_key.strip(),
+                "Authorization": self.config.api_key.strip() if self.config.api_key.strip().lower().startswith("bearer ") else "Bearer " + self.config.api_key.strip(),
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },

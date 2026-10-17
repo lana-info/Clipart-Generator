@@ -1552,6 +1552,7 @@ class PinterestFlowController(QObject):
         try:
             request = self._request()
             worker = self.create_worker_for_request(request)
+            self.shell.show_results()
         except (PinterestFlowError, OSError, RuntimeError, TypeError, ValueError) as error:
             message = _safe_runtime_error(error)
             self.review_page.set_run_status(message, error=True)
@@ -1562,7 +1563,6 @@ class PinterestFlowController(QObject):
         self.run_queue.start_new(request)
         self.run_queue.connect_worker(worker)
         worker.start()
-        self.shell.show_results()
         message = "Запуск передан существующему pipeline 2.0"
         self.review_page.set_run_status(message)
         self.started.emit(request)

@@ -22,7 +22,7 @@ COMPOSER_TEXT_MODELS = (
     ComposerTextModel('openrouter', 'deepseek/deepseek-v4.1-flash', 'DeepSeek V4.1 Flash', _OPENROUTER),
     ComposerTextModel('openrouter', 'openai/gpt-6-sol', 'GPT-6 Sol', _OPENROUTER),
     ComposerTextModel('openrouter', 'anthropic/claude-sonnet-4.6', 'Claude Sonnet 4.6', _OPENROUTER),
-    ComposerTextModel('openrouter', 'qwen/qwen3.5-397b-a17b-20260216', 'Qwen3.5 397B', _OPENROUTER),
+    ComposerTextModel('openrouter', 'qwen/qwen3.5-397b-a17b', 'Qwen3.5 397B', _OPENROUTER),
     ComposerTextModel('openrouter', 'x-ai/grok-4.7', 'Grok 4.7', _OPENROUTER),
     ComposerTextModel('openrouter', 'openai/gpt-5.6-sol', 'GPT-5.6 Sol', _OPENROUTER),
     ComposerTextModel('openrouter', 'deepseek/deepseek-v4-flash-vision-exp',

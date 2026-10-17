@@ -108,6 +108,8 @@ from fal_model_catalog import (
     is_fal_generation_model,
 )
 from gpt25_provider import (
+    InlineImageResult as Gpt25InlineImage,
+    result_retention_elapsed as gpt25_result_retention_elapsed,
     generation_payload as gpt25_generation_payload,
     prepare_reference_inputs as gpt25_prepare_reference_inputs,
     provider_for_model as gpt25_provider_for_model,
@@ -1456,6 +1458,8 @@ class WorkerThread(QThread):
         except ItemExecutionError:
             raise
         except Exception as error:
+            if getattr(self._diagnostic_context, "provider", "") in {"piapi", "atlascloud"}:
+                self.request_stop_after_current()
             known_paths = _item_error_known_paths(error, args)
             raise ItemExecutionError(
                 sanitize_item_error_paths(
@@ -1729,6 +1733,8 @@ class WorkerThread(QThread):
         self._emit_file_progress(idx, total, 36)
         self._ensure_running()
         self._download_file(image_url, gen_path)
+        if isinstance(image_url, Gpt25InlineImage):
+            image_url = None
         completed_gpt25 = getattr(self._item_context, "gpt25_completion", None)
         if completed_gpt25:
             provider_name, paid_task_id = completed_gpt25
@@ -5592,163 +5598,172 @@ class WorkerThread(QThread):
         operation = str(getattr(self._diagnostic_context, "stage", "") or "generation")
         self._set_provider_diagnostic_context(operation, provider, model_id)
         with self._provider_lease(provider):
-            superseded_id = ""
-            pending = self._claim_pending_task(
-                journal, operation, model_id, self._claimed_gpt25_task_ids[provider],
-                input_fingerprint=fingerprint, prefer_accepted=True,
-            )
-            if pending is not None and pending.status == "expired":
-                approval = f"{provider}:{pending.request_id}"
-                if approval not in self.settings.get("gpt25_expired_task_confirmations", ()):
-                    raise RuntimeError(
-                        f"{provider}: результат прежней задачи больше недоступен. "
-                        "Повторный запуск требует подтверждения новой платной генерации."
-                    )
-                superseded_id = pending.request_id
+            try:
+                superseded_id = ""
                 pending = self._claim_pending_task(
                     journal, operation, model_id, self._claimed_gpt25_task_ids[provider],
                     input_fingerprint=fingerprint, prefer_accepted=True,
                 )
-            if pending is not None:
-                if pending.request_id.startswith("unconfirmed_"):
-                    raise RuntimeError(
-                        f"{provider}: результат предыдущей платной отправки неизвестен. "
-                        "Запрос не повторён во избежание двойного списания."
-                    )
-                task_id = pending.request_id
-                self.progress.emit(f"  {provider}: продолжаем задачу {task_id}")
-            else:
-                self._wait_for_generation_launch_slot()
-                self._ensure_provider_submission_allowed()
-                # A durable pre-submit guard prevents another paid POST if the app
-                # crashes, loses its response or is stopped before the task ID is saved.
-                marker = "unconfirmed_" + uuid.uuid4().hex
-                journal.upsert(
-                    marker, self._task_operation_key(operation), model_id, "submitting",
-                    input_fingerprint=fingerprint,
-                )
-                # Only this POST may determine whether the submit was rejected.
-                # A status from an earlier request cannot clear the paid-task guard.
-                self._diagnostic_context.last_http_status = None
-                self._diagnostic_context.gpt25_post_started = False
-                submit_started = time.monotonic()
-                try:
-                    submitted = self._request_json(
-                        gpt25_submit_url(provider, has_references=has_references),
-                        method="POST", payload=submit_payload,
-                        headers=submit_headers,
-                        timeout=max(30, self.timeout),
-                    )
-                    task_id = gpt25_submitted_task_id(provider, submitted)
-                except ProcessingCancelled:
-                    if not self._diagnostic_context.gpt25_post_started:
-                        journal.update_status(marker, "cancelled")
-                    raise
-                except Exception as error:
-                    http_status = getattr(self._diagnostic_context, "last_http_status", None)
-                    if (not self._diagnostic_context.gpt25_post_started
-                            or http_status in {400, 401, 402, 403, 404, 429}):
-                        journal.update_status(marker, "failed")
-                    if http_status in {401, 403}:
-                        message = f"{provider}: провайдер отклонил API-ключ или права доступа (HTTP {http_status})."
-                    elif http_status == 402:
-                        message = f"{provider}: провайдер отклонил запрос по оплате или балансу (HTTP 402)."
-                    elif http_status == 400:
-                        message = f"{provider}: провайдер отклонил параметры запроса (HTTP 400)."
-                    elif http_status == 404:
-                        message = f"{provider}: endpoint или модель не найдены/недоступны (HTTP 404)."
-                    elif http_status == 429:
-                        message = f"{provider}: превышен лимит запросов или одновременных задач (HTTP 429)."
-                    elif http_status is not None and http_status >= 400:
-                        message = f"{provider}: ошибка при создании задачи (HTTP {http_status})."
-                    else:
-                        if http_status is None:
-                            message = f"{provider}: ответ на отправку не получен."
-                        else:
-                            message = f"{provider}: ответ получен, но ID задачи не подтверждён (HTTP {http_status})."
-                        message += (
-                            " Проверьте историю задач перед повторным запуском "
-                            "во избежание повторной оплаты."
-                        )
-                    self._emit_diagnostic(
-                        "provider_task_failed", provider=provider, model=model_id,
-                        http_status=http_status, submission_started=bool(
-                            self._diagnostic_context.gpt25_post_started
-                        ), error_message=message,
-                        elapsed_ms=round((time.monotonic() - submit_started) * 1000),
-                    )
-                    raise RuntimeError(message) from None
-                journal.accept_submission(marker, task_id, superseded_id=superseded_id)
-                self._emit_diagnostic(
-                    "provider_task_submitted", provider=provider, model=model_id,
-                    task=task_id, provider_state="queued",
-                )
-            started = time.monotonic()
-            deadline = time.monotonic() + self.generation_wait_timeout
-            attempt = 0
-            while time.monotonic() < deadline:
-                self._ensure_running()
-                attempt += 1
-                self._diagnostic_context.last_http_status = None
-                try:
-                    response = self._request_json(
-                        gpt25_status_url(provider, task_id), headers=headers,
-                        timeout=30,
-                    )
-                    state, result_url = gpt25_task_result(provider, response)
-                except ProcessingCancelled:
-                    raise
-                except Exception as error:
-                    # PiAPI answers HTTP 400 once the task record is gone
-                    # (results are kept for 60 minutes) — treat it as expired.
-                    if getattr(self._diagnostic_context, "last_http_status", None) in {400, 404, 410}:
-                        journal.update_status(task_id, "expired")
+                if pending is not None and pending.status == "expired":
+                    approval = f"{provider}:{pending.request_id}"
+                    if approval not in self.settings.get("gpt25_expired_task_confirmations", ()):
                         raise RuntimeError(
                             f"{provider}: результат прежней задачи больше недоступен. "
                             "Повторный запуск требует подтверждения новой платной генерации."
+                        )
+                    superseded_id = pending.request_id
+                    pending = self._claim_pending_task(
+                        journal, operation, model_id, self._claimed_gpt25_task_ids[provider],
+                        input_fingerprint=fingerprint, prefer_accepted=True,
+                    )
+                if pending is not None:
+                    if pending.request_id.startswith("unconfirmed_"):
+                        raise RuntimeError(
+                            f"{provider}: результат предыдущей платной отправки неизвестен. "
+                            "Запрос не повторён во избежание двойного списания."
+                        )
+                    task_id = pending.request_id
+                    task_created_at = pending.created_at
+                    self.progress.emit(f"  {provider}: продолжаем задачу {task_id}")
+                else:
+                    self._wait_for_generation_launch_slot()
+                    self._ensure_provider_submission_allowed()
+                    # A durable pre-submit guard prevents another paid POST if the app
+                    # crashes, loses its response or is stopped before the task ID is saved.
+                    marker = "unconfirmed_" + uuid.uuid4().hex
+                    journal.upsert(
+                        marker, self._task_operation_key(operation), model_id, "submitting",
+                        input_fingerprint=fingerprint,
+                    )
+                    # Only this POST may determine whether the submit was rejected.
+                    # A status from an earlier request cannot clear the paid-task guard.
+                    self._diagnostic_context.last_http_status = None
+                    self._diagnostic_context.gpt25_post_started = False
+                    submit_started = time.monotonic()
+                    try:
+                        submitted = self._request_json(
+                            gpt25_submit_url(provider, has_references=has_references),
+                            method="POST", payload=submit_payload,
+                            headers=submit_headers,
+                            timeout=max(30, self.timeout),
+                        )
+                        task_id = gpt25_submitted_task_id(provider, submitted)
+                    except ProcessingCancelled:
+                        if not self._diagnostic_context.gpt25_post_started:
+                            journal.update_status(marker, "cancelled")
+                        raise
+                    except Exception as error:
+                        http_status = getattr(self._diagnostic_context, "last_http_status", None)
+                        if (not self._diagnostic_context.gpt25_post_started
+                                or http_status in {400, 401, 402, 403, 404, 429}):
+                            journal.update_status(marker, "failed")
+                        if http_status in {401, 403}:
+                            message = f"{provider}: провайдер отклонил API-ключ или права доступа (HTTP {http_status})."
+                        elif http_status == 402:
+                            message = f"{provider}: провайдер отклонил запрос по оплате или балансу (HTTP 402)."
+                        elif http_status == 400:
+                            message = f"{provider}: провайдер отклонил параметры запроса (HTTP 400)."
+                        elif http_status == 404:
+                            message = f"{provider}: endpoint или модель не найдены/недоступны (HTTP 404)."
+                        elif http_status == 429:
+                            message = f"{provider}: превышен лимит запросов или одновременных задач (HTTP 429)."
+                        elif http_status is not None and http_status >= 400:
+                            message = f"{provider}: ошибка при создании задачи (HTTP {http_status})."
+                        else:
+                            if http_status is None:
+                                message = f"{provider}: ответ на отправку не получен."
+                            else:
+                                message = f"{provider}: ответ получен, но ID задачи не подтверждён (HTTP {http_status})."
+                            message += (
+                                " Проверьте историю задач перед повторным запуском "
+                                "во избежание повторной оплаты."
+                            )
+                        self._emit_diagnostic(
+                            "provider_task_failed", provider=provider, model=model_id,
+                            http_status=http_status, submission_started=bool(
+                                self._diagnostic_context.gpt25_post_started
+                            ), error_message=message,
+                            elapsed_ms=round((time.monotonic() - submit_started) * 1000),
+                        )
+                        raise RuntimeError(message) from None
+                    task_created_at = journal.accept_submission(marker, task_id, superseded_id=superseded_id).created_at
+                    self._emit_diagnostic(
+                        "provider_task_submitted", provider=provider, model=model_id,
+                        task=task_id, provider_state="queued",
+                    )
+                started = time.monotonic()
+                deadline = time.monotonic() + self.generation_wait_timeout
+                attempt = 0
+                while time.monotonic() < deadline:
+                    self._ensure_running()
+                    attempt += 1
+                    self._diagnostic_context.last_http_status = None
+                    try:
+                        response = self._request_json(
+                            gpt25_status_url(provider, task_id), headers=headers,
+                            timeout=30,
+                        )
+                        state, result_url = gpt25_task_result(provider, response)
+                    except ProcessingCancelled:
+                        raise
+                    except Exception as error:
+                        # PiAPI keeps results for 60 minutes; HTTP 400 proves expiry only after that window.
+                        status_code = getattr(self._diagnostic_context, "last_http_status", None)
+                        if status_code in {404, 410} or (
+                                status_code == 400 and provider == "piapi"
+                                and gpt25_result_retention_elapsed(task_created_at)):
+                            journal.update_status(task_id, "expired")
+                            raise RuntimeError(
+                                f"{provider}: результат прежней задачи больше недоступен. "
+                                "Повторный запуск требует подтверждения новой платной генерации."
+                            ) from None
+                        journal.update_status(task_id, "poll_deferred")
+                        self._emit_diagnostic(
+                            "provider_task_recovery_deferred", provider=provider,
+                            task=task_id, error_message=self._safe_error_text(error),
+                        )
+                        raise RuntimeError(
+                            f"{provider}: запрос оплачен, но результат сейчас недоступен. "
+                            "При повторном запуске продолжим ожидание без новой оплаты."
                         ) from None
-                    journal.update_status(task_id, "poll_deferred")
                     self._emit_diagnostic(
-                        "provider_task_recovery_deferred", provider=provider,
-                        task=task_id, error_message=self._safe_error_text(error),
+                        "provider_task_polled", provider=provider, task=task_id,
+                        provider_state=state, poll_attempt=attempt,
                     )
-                    raise RuntimeError(
-                        f"{provider}: запрос оплачен, но результат сейчас недоступен. "
-                        "При повторном запуске продолжим ожидание без новой оплаты."
-                    ) from None
-                self._emit_diagnostic(
-                    "provider_task_polled", provider=provider, task=task_id,
-                    provider_state=state, poll_attempt=attempt,
+                    if state == "completed":
+                        # Keep the paid task recoverable until the image bytes are
+                        # actually downloaded and persisted by _generate_entry.
+                        journal.update_status(task_id, "result_ready")
+                        self._item_context.gpt25_completion = (provider, task_id)
+                        self._emit_diagnostic(
+                            "provider_task_succeeded", provider=provider,
+                            model=model_id, task=task_id, outcome="succeeded",
+                            elapsed_ms=round((time.monotonic() - started) * 1000),
+                        )
+                        return result_url
+                    if state == "failed":
+                        journal.update_status(task_id, "failed")
+                        detail = gpt25_failure_reason(provider, response)
+                        message = f"{provider}: генерация завершилась ошибкой"
+                        if detail:
+                            message += f" ({detail})"
+                        self._emit_diagnostic(
+                            "provider_task_failed", provider=provider, model=model_id,
+                            task=task_id, provider_state="failed",
+                            error_message=detail or "",
+                        )
+                        raise RuntimeError(message)
+                    journal.update_status(task_id, "processing")
+                    time.sleep(self.status_poll_interval)
+                journal.update_status(task_id, "timeout")
+                raise TimeoutError(
+                    f"{provider}: задача ещё выполняется. Повторный запуск продолжит ожидание."
                 )
-                if state == "completed":
-                    # Keep the paid task recoverable until the image bytes are
-                    # actually downloaded and persisted by _generate_entry.
-                    journal.update_status(task_id, "result_ready")
-                    self._item_context.gpt25_completion = (provider, task_id)
-                    self._emit_diagnostic(
-                        "provider_task_succeeded", provider=provider,
-                        model=model_id, task=task_id, outcome="succeeded",
-                        elapsed_ms=round((time.monotonic() - started) * 1000),
-                    )
-                    return result_url
-                if state == "failed":
-                    journal.update_status(task_id, "failed")
-                    detail = gpt25_failure_reason(provider, response)
-                    message = f"{provider}: генерация завершилась ошибкой"
-                    if detail:
-                        message += f" ({detail})"
-                    self._emit_diagnostic(
-                        "provider_task_failed", provider=provider, model=model_id,
-                        task=task_id, provider_state="failed",
-                        error_message=detail or "",
-                    )
-                    raise RuntimeError(message)
-                journal.update_status(task_id, "processing")
-                time.sleep(self.status_poll_interval)
-            journal.update_status(task_id, "timeout")
-            raise TimeoutError(
-                f"{provider}: задача ещё выполняется. Повторный запуск продолжит ожидание."
-            )
+            except ProcessingCancelled:
+                raise
+            except Exception:
+                self.request_stop_after_current()
+                raise
 
     def _fal_generate_image(self, prompt, model_id):
         self._ensure_fal_cost_confirmed()
@@ -6498,6 +6513,24 @@ class WorkerThread(QThread):
         raise RuntimeError("Не удалось извлечь URL результата из resultJson")
 
     def _download_file(self, url, output_path):
+        if isinstance(url, Gpt25InlineImage):
+            self._ensure_running()
+            if not str(output_path).lower().endswith(".png"):
+                raise RuntimeError("Встроенное изображение должно сохраняться как PNG")
+            folder = os.path.dirname(os.path.abspath(output_path))
+            os.makedirs(folder, exist_ok=True)
+            with tempfile.NamedTemporaryFile(prefix=".clipart-inline-", suffix=".stage.png", dir=folder, delete=False) as staged:
+                staged_path = staged.name
+            try:
+                self._save_png_from_any_image_bytes(url.data, staged_path)
+                self._ensure_running()
+                os.replace(staged_path, output_path)
+                self._emit_diagnostic("provider_result_downloaded", provider="piapi", result_index=1, downloaded_bytes=len(url.data), **inspect_diagnostic_image(output_path))
+            finally:
+                if os.path.exists(staged_path):
+                    os.remove(staged_path)
+            return
+
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

@@ -26,7 +26,7 @@ TEXT_MODELS = (
     TextModel('openrouter', 'deepseek/deepseek-v4.1-flash', 'DeepSeek V4.1 Flash', OPENROUTER_ENDPOINT),
     TextModel('openrouter', 'openai/gpt-6-sol', 'GPT-6 Sol', OPENROUTER_ENDPOINT),
     TextModel('openrouter', 'anthropic/claude-sonnet-4.6', 'Claude Sonnet 4.6', OPENROUTER_ENDPOINT),
-    TextModel('openrouter', 'qwen/qwen3.5-397b-a17b-20260216', 'Qwen3.5 397B A17B', OPENROUTER_ENDPOINT),
+    TextModel('openrouter', 'qwen/qwen3.5-397b-a17b', 'Qwen3.5 397B A17B', OPENROUTER_ENDPOINT),
     TextModel('openrouter', 'x-ai/grok-4.7', 'Grok 4.7', OPENROUTER_ENDPOINT, additional=True),
     TextModel('openrouter', 'openai/gpt-5.6-sol', 'GPT-5.6 Sol', OPENROUTER_ENDPOINT, additional=True),
     TextModel('openrouter', 'deepseek/deepseek-v4-flash-vision-exp',

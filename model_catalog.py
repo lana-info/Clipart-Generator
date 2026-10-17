@@ -150,6 +150,7 @@ _REFERENCE_LIMITS = MappingProxyType({
 })
 
 _PROMPT_LIMITS = MappingProxyType({
+    "fal-ai/kling-image/o3/text-to-image": (1, 2500),
     "gpt-image-2": (1, 20_000),
     "flux-2/flex-text-to-image": (3, 5_000),
     "flux-2/pro-text-to-image": (3, 5_000),

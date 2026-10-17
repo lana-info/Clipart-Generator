@@ -25,7 +25,7 @@ from fal_provider import FalProviderError, FalTaskJournal
 from gpt25_provider import (
     failure_reason, generation_payload, prepare_reference_inputs, provider_for_model,
     request_headers, status_url, submit_url, submitted_task_id, task_result,
-    piapi_edit_multipart_body,
+    piapi_edit_multipart_body, result_retention_elapsed,
 )
 from model_catalog import validate_generation_contract
 
@@ -54,6 +54,7 @@ namespace = {
     "gpt25_task_result": task_result,
     "gpt25_failure_reason": failure_reason,
     "gpt25_piapi_edit_multipart_body": piapi_edit_multipart_body,
+    "gpt25_result_retention_elapsed": result_retention_elapsed,
     "validate_generation_contract": validate_generation_contract,
     "ProcessingCancelled": type("ProcessingCancelled", (RuntimeError,), {}),
     "FalProviderError": FalProviderError,
@@ -113,6 +114,9 @@ class OfflineWorker:
 
     def _wait_for_generation_launch_slot(self):
         pass
+
+    def request_stop_after_current(self):
+        self.batch_stop_requested = True
 
     def _ensure_provider_submission_allowed(self):
         pass
@@ -259,7 +263,7 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
             self.assertEqual(worker.gpt25_task_journals["piapi"].pending(), ())
             self.assertNotIn("TEST_PIAPI_KEY", repr(worker.diagnostics))
 
-    def test_piapi_poll_http400_marks_task_expired(self):
+    def test_piapi_poll_http400_preserves_get_only_recovery(self):
         with tempfile.TemporaryDirectory() as temp:
             worker = OfflineWorker(temp, "piapi")
 
@@ -272,11 +276,14 @@ class AsyncWorkerSafetyTests(unittest.TestCase):
                 raise RuntimeError("Ошибка HTTP-запроса: HTTP status=400")
 
             worker._request_json = gone
-            with self.assertRaisesRegex(RuntimeError, "больше недоступен"):
+            with self.assertRaisesRegex(RuntimeError, "без новой оплаты"):
                 worker._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare")
-            with self.assertRaisesRegex(RuntimeError, "требует подтверждения"):
-                worker._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare")
-            self.assertEqual([call[0] for call in worker.calls], ["POST", "GET"])
+            self.assertEqual(worker.gpt25_task_journals["piapi"].pending()[0].status, "poll_deferred")
+            restarted = OfflineWorker(temp, "piapi")
+            restarted.responses = [{"status": "completed", "output": {"data": [{"url": "https://images.example.org/recovered.png"}]}}]
+            self.assertEqual(restarted._gpt25_generate_image("A cup", "piapi/gpt-image-2.5-flare"), "https://images.example.org/recovered.png")
+            self.assertEqual([c[0] for c in worker.calls], ["POST", "GET"])
+            self.assertEqual([c[0] for c in restarted.calls], ["GET"])
 
     def test_completed_job_stays_recoverable_until_image_is_saved(self):
         with tempfile.TemporaryDirectory() as temp:

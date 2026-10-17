@@ -35,7 +35,7 @@ def test_runpod_submit_uses_bounded_json_request(monkeypatch):
     assert result["id"] == "job-1"
     assert seen["limit"] == 2 * 1024 * 1024
     assert seen["url"].endswith("/run")
-    assert seen["auth"] == "secret"
+    assert seen["auth"] == "Bearer secret"
 
 
 def test_runpod_submit_defaults_to_user_started_upload(monkeypatch):
