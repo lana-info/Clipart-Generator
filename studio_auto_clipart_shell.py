@@ -71,12 +71,19 @@ class AutoClipartShell(AppShell):
     def go_next(self):
         controller = self.workflow_controller(self.module_id)
         if controller:
-            if self.state.current_step is StepId.REVIEW_RUN:
+            reviewing = self.state.current_step is StepId.REVIEW_RUN
+            save_timer = getattr(controller, "save_timer", None)
+            resume_autosave = bool(reviewing and save_timer is not None and save_timer.isActive())
+            if resume_autosave:
+                save_timer.stop()
+            if reviewing:
                 self._run_request_key = (self.state.mode, StepId.REVIEW_RUN)
             try:
                 controller.navigate(1)
             finally:
                 self._run_request_key = None
+                if resume_autosave:
+                    save_timer.start()
         return self.state.current_step
 
     def go_back(self):
