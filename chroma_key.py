@@ -2227,9 +2227,17 @@ def chroma_key_prompt_block(
         "color spill on the subject. The subject is fully opaque and solid: "
         "no transparency, translucency, semi-transparent materials, glass, "
         "tulle, lace mesh, veil, smoke, mist, haze or see-through parts. "
-        "Crisp hard edges, everything in sharp "
-        "focus, the complete subject centered with at least 10% empty margin, "
-        "nothing cropped, no text, no watermark, no stray fragments."
+        "Crisply resolved forms: every element, including small secondary "
+        "details and repeated motifs, stays individually recognisable and "
+        "cleanly drawn, never merged into blotches or mush. The subject holds "
+        "one continuous closed silhouette that separates cleanly from the "
+        "flat background: fur, down, feather tips and painterly texture stay "
+        "short, grouped and inside the silhouette, so the boundary itself is "
+        "a stable firm contour, not a saw-tooth fringe, with no watercolor "
+        "bleed, no soft transition band, no halo, glow or pale rim reaching "
+        "into the background, and no specks or dots detached from the "
+        "subject. The complete subject centered with at least 10% empty "
+        "margin, nothing cropped, no text, no watermark, no stray fragments."
     )
     selected = {str(item).strip().casefold() for item in materials}
     if watercolor:

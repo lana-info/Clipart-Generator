@@ -178,6 +178,18 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertNotIn("genuinely semi-transparent", prompt)
         self.assertNotIn("Whatever lies behind them", prompt)
 
+    def test_prompt_block_sets_silhouette_quality_standard(self):
+        prompt = chroma_key_prompt_block("blue", watercolor=True)
+
+        self.assertIn("Crisply resolved forms", prompt)
+        self.assertIn("individually recognisable", prompt)
+        self.assertIn("never merged into blotches or mush", prompt)
+        self.assertIn("one continuous closed silhouette", prompt)
+        self.assertIn("not a saw-tooth fringe", prompt)
+        self.assertIn("pale rim reaching into the background", prompt)
+        self.assertIn("no specks or dots detached from the subject", prompt)
+        self.assertNotIn("Crisp hard edges", prompt)
+
     def test_invalid_color_is_rejected(self):
         with self.assertRaises(ValueError):
             parse_key_color("#12")
