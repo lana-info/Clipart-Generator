@@ -18,6 +18,7 @@ from studio_clipart_recipe import ClipartRecipe, ROLES
 from studio_bundle_planner import propose_bundle_plan
 from studio_style_profiles import style_modifier_keys
 from studio_workflow_host import workflow_host_for
+from gpt25_recovery import expired_generation_retries
 from v3_clipart_flow import (
     ClipartFlowController, ClipartGenerationPage, ClipartPromptReviewPage,
     ClipartReviewRunPage, estimate_clipart_cost,
@@ -623,6 +624,19 @@ class AutoClipartFlowController(ClipartFlowController):
                 model_label = 'Модель' if len(models) == 1 else 'Модели'
                 message = (f"Создать изображения для {len(self.shell.state.data.prompts)} объектов?\n"
                            f"{model_label}: {', '.join(models)}\n{cost.summary}")
+                expired_retries: tuple[str, ...] = ()
+                try:
+                    expired_retries = expired_generation_retries(
+                        prepared.work_dir, prepared.settings, prepared.generated_prompts,
+                        project_id=getattr(self.shell, 'project_id', None),
+                    )
+                except (OSError, ValueError):
+                    expired_retries = ()
+                if expired_retries:
+                    message += (f"\n\nПрежние результаты больше недоступны для {len(expired_retries)} "
+                                f"объект(ов) ({', '.join(sorted(exhausted.split(':', 1)[0].capitalize() for exhausted in expired_retries))}).\n"
+                                "Подтверждая запуск, вы соглашаетесь на их новую платную генерацию "
+                                "по текущему тарифу. Успешные изображения заново не создаются.")
                 if references:
                     message += '\nРеференсы будут переданы модели ' + self.shell.state.data.generation.reference_model
                     message += ':\n' + '\n'.join(Path(path).name for path in sorted(references))
@@ -630,10 +644,12 @@ class AutoClipartFlowController(ClipartFlowController):
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
                     self._reference_consent = (deepcopy(prepared), snapshots)
+                    self._pre_approved_retries = expired_retries
                     try:
                         self.start()
                     finally:
                         self._reference_consent = None
+                        self._pre_approved_retries = None
                 return
             if index == 7:
                 if self.export_panel is not None:

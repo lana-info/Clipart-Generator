@@ -144,9 +144,10 @@ class CoreImageRunGateway:
             if project_id is not None:
                 kwargs["project_id"] = project_id
             if kwargs["mode"] != "mode2_process":
+                pre_approved = kwargs["settings"].pop("gpt25_pre_approved_retries", None)
                 approvals = confirm_expired_generation_retries(
                     kwargs["work_dir"], kwargs["settings"], kwargs["generated_prompts"],
-                    project_id=project_id,
+                    project_id=project_id, pre_approved=pre_approved,
                 )
                 if approvals is None:
                     raise ImageRunGatewayError("Новая платная генерация отменена")

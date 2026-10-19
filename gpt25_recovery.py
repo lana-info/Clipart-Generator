@@ -52,10 +52,21 @@ def expired_generation_retries(work_dir, settings, prompts, *, project_id=None):
     return tuple(dict.fromkeys(approvals))
 
 
-def confirm_expired_generation_retries(work_dir, settings, prompts, *, project_id=None, parent=None):
+def confirm_expired_generation_retries(
+    work_dir, settings, prompts, *, project_id=None, parent=None, pre_approved=None
+):
+    """Confirm paid re-generation for unavailable results.
+
+    ``pre_approved`` carries approvals already accepted in the single launch
+    dialog; an identical set returns without asking again. A different or
+    missing value still asks explicitly, so paid work never happens without
+    a fresh consent.
+    """
     approvals = expired_generation_retries(work_dir, settings, prompts, project_id=project_id)
     if not approvals:
         return ()
+    if pre_approved is not None and set(pre_approved) == set(approvals):
+        return approvals
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
     label = "AtlasCloud" if approvals[0].startswith("atlascloud:") else "PiAPI"

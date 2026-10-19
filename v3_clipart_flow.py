@@ -1215,6 +1215,9 @@ class ClipartFlowController(QObject):
             return None
         try:
             request = build_clipart_run_request(self.shell.state)
+            pre_approved = getattr(self, "_pre_approved_retries", None)
+            if pre_approved:
+                request.settings["gpt25_pre_approved_retries"] = tuple(pre_approved)
             worker = self.create_worker_for_request(request)
             self.shell.show_results()
         except (ClipartFlowError, OSError, RuntimeError, TypeError, ValueError) as error:

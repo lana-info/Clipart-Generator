@@ -149,6 +149,9 @@ class AppShell(QWidget):
                 mode, self._workflow_definitions[mode].page_steps
             )
         self._dirty = False
+        # Fill by v3_mode_selection on draft save/run; lets workflow dialogs
+        # disclose paid recovery items before the user confirms a launch.
+        self.project_id: str | None = None
         self._pending_mode: ProjectMode | None = None
         self._invalid_key: tuple[ProjectMode, StepId] | None = None
         self._run_request_key: tuple[ProjectMode, StepId] | None = None

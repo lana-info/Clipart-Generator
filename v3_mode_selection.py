@@ -1242,6 +1242,7 @@ class V3ApplicationView(QWidget):
                 )
         except (OSError, ValueError) as error:
             raise OSError("Не удалось сохранить проект. Запуск не начат") from error
+        shell.project_id = self._active_project_id
         return self._active_project_id
 
     def _create_raw_project_worker(self, shell: AppShell, **kwargs: Any) -> Any:
@@ -1300,6 +1301,7 @@ class V3ApplicationView(QWidget):
             shell = AutoClipartShell(state, tokens=self.tokens)
         else:
             shell = AppShell(state, tokens=self.tokens)
+        shell.project_id = self._active_project_id
         if isinstance(shell, AppShell):
             # The global Studio header already contains navigation and module name.
             shell._embedded_header = True

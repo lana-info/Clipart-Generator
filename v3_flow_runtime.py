@@ -9,6 +9,13 @@ from typing import Any
 from provider_error_messages import friendly_provider_error
 from security_redaction import redact_text
 
+PROVIDER_DISPLAY_LABELS = {
+    "piapi": "PiAPI",
+    "fal": "Fal.ai",
+    "kie": "KIE",
+    "atlascloud": "AtlasCloud",
+}
+
 
 @dataclass(frozen=True)
 class CostEstimate:
@@ -24,9 +31,18 @@ class CostEstimate:
 
     @property
     def summary(self) -> str:
+        composition = (
+            f"{self.request_count} запросов (генерация {self.generation_request_count}, "
+            f"обработка {self.processing_request_count})"
+        )
         if not self.complete:
-            return f"{self.request_count} запросов · стоимость не рассчитана полностью"
-        return f"{self.request_count} запросов · ориентировочно ${self.estimated_usd:.3f}"
+            unknown_providers = ", ".join(
+                PROVIDER_DISPLAY_LABELS.get(provider, provider)
+                for provider in self.incomplete_providers
+            ) or "у выбранных провайдеров"
+            return (f"{composition} · точную цену заранее не сообщает: {unknown_providers}; "
+                    "оплата по фактическому использованию текущего тарифа")
+        return f"{composition} · ориентировочно ${self.estimated_usd:.3f}"
 
 
 @dataclass

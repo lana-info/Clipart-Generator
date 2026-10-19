@@ -294,6 +294,31 @@ def test_regular_generation_never_opens_expired_task_dialog(tmp_path):
     assert not question.called
 
 
+def test_launch_dialog_pre_approval_skips_second_paid_question(tmp_path):
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance() or QApplication([])
+    previous = worker(tmp_path)
+    add_record(previous, "old")
+    approvals = expired_generation_retries(tmp_path, previous.settings, previous.generated_prompts)
+    assert len(approvals) == 1
+    with patch("PyQt6.QtWidgets.QMessageBox.question") as question:
+        confirmed = confirm_expired_generation_retries(
+            tmp_path, previous.settings, previous.generated_prompts, pre_approved=approvals,
+        )
+    assert confirmed == approvals
+    assert not question.called
+
+    response = QMessageBox.StandardButton.No
+    with patch("PyQt6.QtWidgets.QMessageBox.question", return_value=response) as question:
+        mismatched = confirm_expired_generation_retries(
+            tmp_path, previous.settings, previous.generated_prompts,
+            pre_approved=("piapi:other",),
+        )
+    assert mismatched is None
+    assert question.called
+
+
 @pytest.mark.parametrize("after_replace", [False, True])
 def test_crash_after_paid_post_never_submits_again_on_restart(tmp_path, after_replace):
     subject = worker(tmp_path)
