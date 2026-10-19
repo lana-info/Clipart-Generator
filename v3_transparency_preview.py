@@ -57,6 +57,7 @@ from background_mask import (
     apply_mask_to_image,
     mask_for_image,
     paint_mask_path,
+    stamp_path_coverage,
     save_mask_png,
 )
 from background_preview import PREVIEW_BACKGROUND_OPTIONS, composite_on_preview
@@ -113,6 +114,8 @@ class MaskEditDocument:
         self._redo: list[tuple[tuple[int, int, int, int], Image.Image, Image.Image]] = []
         self._edge_history_ids = set()
         self._stroke_before: Image.Image | None = None
+        self._stroke_cover: Image.Image | None = None
+        self._stroke_action: str | None = None
         self.mask_revision = 0
 
     @property
@@ -143,6 +146,8 @@ class MaskEditDocument:
     def begin_stroke(self) -> None:
         if self._stroke_before is None:
             self._stroke_before = self.mask.copy()
+            self._stroke_cover = Image.new("L", self.mask.size, 0)
+            self._stroke_action = None
 
     def extend_stroke(
         self,
@@ -155,13 +160,27 @@ class MaskEditDocument:
         if self._stroke_before is None:
             raise RuntimeError("Сначала начните штрих")
         self.mask_revision += 1
-        paint_mask_path(
-            self.mask,
-            points,
-            radius=radius,
-            action=action,
-            hardness=hardness,
-        )
+        if self._stroke_action not in (None, action):
+            # Modifier changed mid-stroke: continue from what is painted so far.
+            self._stroke_before = self.mask.copy()
+            self._stroke_cover = Image.new("L", self.mask.size, 0)
+        self._stroke_action = action
+        if points:
+            # Union of stamps over the whole stroke, composited once onto the
+            # pre-stroke mask: a soft brush keeps its feathered edge.
+            stamp_path_coverage(
+                self._stroke_cover, points, radius=radius, hardness=hardness)
+            area = (
+                max(0, min(p[0] for p in points) - radius - 1),
+                max(0, min(p[1] for p in points) - radius - 1),
+                min(self.mask.width, max(p[0] for p in points) + radius + 2),
+                min(self.mask.height, max(p[1] for p in points) + radius + 2),
+            )
+            if area[0] < area[2] and area[1] < area[3]:
+                merged = self._stroke_before.crop(area)
+                merged.paste(255 if action == "add" else 0,
+                             mask=self._stroke_cover.crop(area))
+                self.mask.paste(merged, area[:2])
         if not points:
             return None
         left = max(0, min(point[0] for point in points) - radius - 1)
@@ -173,6 +192,8 @@ class MaskEditDocument:
     def end_stroke(self) -> None:
         before = self._stroke_before
         self._stroke_before = None
+        self._stroke_cover = None
+        self._stroke_action = None
         if before is None:
             return
         bounds = ImageChops.difference(before, self.mask).getbbox()
@@ -2009,7 +2030,7 @@ class ClipartTransparencyEditorPage(QWidget):
         style_row = QHBoxLayout()
         self.brush_style_buttons = {}
         self.brush_style_group = QButtonGroup(self)
-        for style, label, hardness in (("hard", "Жёсткая", 100), ("soft", "Мягкая", 50)):
+        for style, label, hardness in (("hard", "Жёсткая", 100), ("soft", "Мягкая", 0)):
             button = QPushButton(label)
             button.setCheckable(True)
             button.setChecked(style == "hard")

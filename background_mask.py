@@ -64,17 +64,20 @@ def _brush_opacity(radius: int, hardness: int) -> Image.Image:
     shape = large.resize((diameter, diameter), Image.Resampling.LANCZOS)
     if hardness == 100:
         return shape
-    gradient = Image.radial_gradient("L").resize(
-        (diameter, diameter),
-        Image.Resampling.BILINEAR,
-    )
-    threshold = round(255 * hardness / 100)
-    span = max(1, 255 - threshold)
-    feather = gradient.point(
-        lambda value: 255
-        if value <= threshold
-        else max(0, round(255 * (255 - value) / span))
-    )
+    # Falloff measured against the brush radius itself: fully opaque inside
+    # ``hardness`` percent of the radius, fading linearly to 0 at the very edge.
+    core = hardness / 100
+    edge = radius + 0.5
+    data = []
+    for y in range(diameter):
+        for x in range(diameter):
+            ratio = hypot(x - radius, y - radius) / edge
+            if ratio <= core:
+                data.append(255)
+            else:
+                data.append(max(0, round(255 * (1 - ratio) / (1 - core))))
+    feather = Image.new("L", (diameter, diameter))
+    feather.putdata(data)
     return ImageChops.multiply(shape, feather)
 
 
@@ -116,26 +119,31 @@ def paint_mask_path(
     )
 
 
-def _paint_mask_path(
-    mask: Image.Image,
+def stamp_path_coverage(
+    cover: Image.Image,
     points: tuple[tuple[int, int], ...] | list[tuple[int, int]],
     *,
     radius: int,
-    action: str,
     hardness: int,
 ) -> None:
-    _validate_brush(mask, radius, action, hardness)
+    """Merge a brush path into ``cover`` taking the maximum, never accumulating.
+
+    Overlapping stamps of one stroke therefore keep the soft falloff of the
+    brush instead of adding up to a hard edge.
+    """
     if not points:
         return
     opacity = _brush_opacity(radius, hardness)
-    value = 255 if action == "add" else 0
 
     def stamp(x: int, y: int) -> None:
-        mask.paste(
-            value,
-            (x - radius, y - radius, x + radius + 1, y + radius + 1),
-            opacity,
-        )
+        box = (x - radius, y - radius, x + radius + 1, y + radius + 1)
+        clipped = (max(0, box[0]), max(0, box[1]),
+                   min(cover.width, box[2]), min(cover.height, box[3]))
+        if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
+            return
+        part = opacity.crop((clipped[0] - box[0], clipped[1] - box[1],
+                             clipped[2] - box[0], clipped[3] - box[1]))
+        cover.paste(ImageChops.lighter(cover.crop(clipped), part), clipped[:2])
 
     previous = (int(points[0][0]), int(points[0][1]))
     stamp(*previous)
@@ -150,6 +158,22 @@ def _paint_mask_path(
                 round(previous[1] + (current[1] - previous[1]) * step / steps),
             )
         previous = current
+
+
+def _paint_mask_path(
+    mask: Image.Image,
+    points: tuple[tuple[int, int], ...] | list[tuple[int, int]],
+    *,
+    radius: int,
+    action: str,
+    hardness: int,
+) -> None:
+    _validate_brush(mask, radius, action, hardness)
+    if not points:
+        return
+    cover = Image.new("L", mask.size, 0)
+    stamp_path_coverage(cover, points, radius=radius, hardness=hardness)
+    mask.paste(255 if action == "add" else 0, mask=cover)
 
 
 def apply_mask_to_image(image: Image.Image, mask: Image.Image) -> Image.Image:

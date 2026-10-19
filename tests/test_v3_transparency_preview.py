@@ -375,9 +375,9 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
         self.assertEqual(tuple(page.diameter_buttons), (1, 3, 6, 16, 32, 64))
         self.assertEqual(page.canvas.brush_hardness, 100)
         self.assertTrue(page.brush_style_buttons[100].isChecked())
-        page._hardness_changed(50)
-        self.assertEqual(page.canvas.brush_hardness, 50)
-        self.assertTrue(page.brush_style_buttons[50].isChecked())
+        page._hardness_changed(0)
+        self.assertEqual(page.canvas.brush_hardness, 0)
+        self.assertTrue(page.brush_style_buttons[0].isChecked())
         self.assertEqual(page.canvas.brush_action, "remove")
         page.deleteLater()
 
