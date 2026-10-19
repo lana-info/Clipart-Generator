@@ -491,7 +491,7 @@ def _refresh_style(widget: QWidget) -> None:
     widget.update()
 
 
-HEADER_ICON_KINDS = ("home", "key", "pulse", "folder")
+HEADER_ICON_KINDS = ("home", "key", "pulse", "folder", "update")
 
 
 def header_icon(kind: str, color: str = "#2dd4bf", size: int = 24) -> QIcon:
@@ -523,6 +523,9 @@ def header_icon(kind: str, color: str = "#2dd4bf", size: int = 24) -> QIcon:
         painter.drawPolyline(QPolygonF([
             QPointF(2.5, 12), QPointF(7, 12), QPointF(9.5, 5.5), QPointF(13, 18.5),
             QPointF(15.5, 12), QPointF(21.5, 12)]))
+    elif kind == "update":  # circular arrow: check for updates
+        painter.drawArc(QRectF(4.5, 4.5, 15, 15), 40 * 16, 280 * 16)
+        painter.drawPolyline(QPolygonF([QPointF(15.5, 2.8), QPointF(18.6, 6.2), QPointF(14.2, 7.6)]))
     else:  # folder with an arrow: continue saved work
         path = QPainterPath()
         path.moveTo(3, 18.5)
@@ -539,12 +542,14 @@ def header_icon(kind: str, color: str = "#2dd4bf", size: int = 24) -> QIcon:
     return QIcon(pixmap)
 
 
-def make_icon_button(button: "QPushButton", kind: str, label: str) -> None:
+def make_icon_button(
+    button: "QPushButton", kind: str, label: str, *, size: tuple[int, int] = (40, 36),
+) -> None:
     """Turn a text button into an icon button; the label stays as tooltip and accessible name."""
     button.setText("")
     button.setIcon(header_icon(kind))
-    button.setIconSize(QSize(22, 22))
-    button.setFixedSize(40, 36)
+    button.setIconSize(QSize(22, 22) if size[0] <= 40 else QSize(26, 26))
+    button.setFixedSize(*size)
     button.setToolTip(label)
     button.setAccessibleName(label)
     button.setProperty("iconLabel", label)

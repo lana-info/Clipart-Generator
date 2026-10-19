@@ -92,7 +92,7 @@ class EmptyProjectTests(unittest.TestCase):
                 self.assertEqual(button.toolTip(), "Продолжить")
                 view._handle_mode_selected(ProjectMode.CLIPART.value)
                 self.assertTrue(button.isVisible())
-                for name in ("studio_home_button", "api_settings_button", "diagnostics_button"):
+                for name in ("studio_home_button", "diagnostics_button", "module_updates_button", "license_button"):
                     icon_button = getattr(view.mode_selection, name)
                     self.assertEqual(icon_button.text(), "")
                     self.assertFalse(icon_button.icon().isNull())
@@ -142,3 +142,32 @@ class ShutdownWorkerTests(unittest.TestCase):
             self.assertEqual(view._stop_leftover_workers(wait_ms=1), 1)
             self.assertEqual((good.stop_calls, stuck.stop_calls), (1, 1))
             self.assertFalse(good.isRunning())
+
+
+class HeaderLayoutTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_header_order_title_and_removed_duplicates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            view = V3ApplicationView(draft_path=Path(temp) / "project_state.json")
+            view.show()
+            try:
+                screen = view.mode_selection
+                row = screen.account_card.layout()
+                order = [row.itemAt(i).widget() for i in range(row.count()) if row.itemAt(i).widget()]
+                right = [screen.studio_home_button, screen.header_continue_button, screen.api_settings_button,
+                         screen.diagnostics_button, screen.module_updates_button, screen.license_button]
+                self.assertEqual([w for w in order if w in right], right)
+                self.assertEqual(order[-1], screen.license_button)  # License last, in the corner
+                self.assertEqual(screen.api_settings_button.text(), "API")
+                self.assertTrue(screen.all_projects_button.isHidden())  # duplicate removed
+                self.assertEqual(screen.active_module_label.text(), "Модули")
+                view._handle_mode_selected(ProjectMode.CLIPART.value)
+                self.assertNotEqual(screen.active_module_label.text(), "Модули")
+                self.assertTrue(screen.studio_home_button.isVisible())
+                screen.set_brand_text("VIBIX Studio v3.2.32")
+                self.assertEqual(screen.brand_label.text(), "VIBIX Studio v3.2.32")
+            finally:
+                view.close()

@@ -420,7 +420,7 @@ def bundled_brand_icon_path():
 def configure_application_identity(app):
     """Apply the visible Windows identity before creating application windows."""
     app.setApplicationName(APP_STORAGE_NAME)
-    app.setApplicationDisplayName(APP_NAME)
+    app.setApplicationDisplayName(f"{APP_NAME} v{APP_VERSION}")
     app.setOrganizationName("Vibix")
     icon_path = bundled_brand_icon_path()
     if os.path.isfile(icon_path):
@@ -10650,7 +10650,8 @@ def create_v3_application_window():
         screen="mode_selection",
         outcome="success",
     )
-    window.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
+    window.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+    window.mode_selection.set_brand_text(f"{APP_NAME} v{APP_VERSION}")
     window.resize(*V3_WINDOW_DEFAULT_SIZE)
     if len(window.mode_selection.mode_cards) != len(MODE_CARD_SPECS):
         raise RuntimeError("V3 mode selection does not contain all mode cards")
@@ -10897,8 +10898,8 @@ def run_packaged_entrypoint_check(
                 evidence_is_saved = False
         controls_are_present = (
             packaged_view.mode_selection.license_status_label.text() == "Лицензия активна"
-            and packaged_view.mode_selection.license_button.text() == "Лицензия"
-            and packaged_view.mode_selection.module_updates_button.text() == "Обновления модулей"
+            and packaged_view.mode_selection.license_button.accessibleName() == "Лицензия"
+            and packaged_view.mode_selection.module_updates_button.accessibleName() == "Обновления модулей"
             and not packaged_view.mode_selection.module_updates_button.isHidden()
             and packaged_view.mode_selection.api_settings_button.accessibleName() == "Настройки API"
             and packaged_view.mode_selection.diagnostics_button.accessibleName() == "Диагностика"

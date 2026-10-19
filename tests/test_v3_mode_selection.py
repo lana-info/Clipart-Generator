@@ -94,14 +94,14 @@ class V3ModeSelectionTests(unittest.TestCase):
 
     def test_module_uses_one_shared_header_and_restores_home_header(self):
         view = V3ApplicationView()
-        self.assertEqual(view.mode_selection.active_module_label.text(), "")
+        self.assertEqual(view.mode_selection.active_module_label.text(), "Модули")
         self.assertFalse(view.mode_selection.studio_home_button.isVisible())
         view._handle_mode_selected(ProjectMode.PROCESSING.value)
         self.assertIsNotNone(view.shell)
         self.assertEqual(view.mode_selection.active_module_label.text(), "Обработка изображений")
         self.assertTrue(view.shell.top_bar.isHidden())
         view.show_mode_switcher()
-        self.assertEqual(view.mode_selection.active_module_label.text(), "")
+        self.assertEqual(view.mode_selection.active_module_label.text(), "Модули")
         view.close()
 
     def test_application_uses_one_default_and_minimum_window_size(self):
@@ -256,7 +256,7 @@ class V3ModeSelectionTests(unittest.TestCase):
             screen.license_verification_label.text(),
             "Проверено онлайн: 15.08.2026 10:30",
         )
-        self.assertEqual(screen.license_button.text(), "Лицензия")
+        self.assertEqual(screen.license_button.accessibleName(), "Лицензия")
         self.assertTrue(screen.license_status_label.isHidden())
         self.assertEqual(screen.api_settings_button.accessibleName(), "Настройки API")
         self.assertEqual(screen.api_settings_button.toolTip(), "Настройки API")

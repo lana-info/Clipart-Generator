@@ -59,8 +59,8 @@ def test_shared_header_routes_all_four_actions(app, monkeypatch):
             button.click()
         assert calls == ['_show_license', '_show_module_updates', '_show_api_settings', '_show_diagnostics']
         assert [button.accessibleName() for button in buttons] == ['Лицензия', 'Обновления модулей', 'Настройки API', 'Диагностика']
-        assert [button.text() for button in buttons[2:]] == ['', '']
-        assert [button.toolTip() for button in buttons[2:]] == ['Настройки API', 'Диагностика']
+        assert [button.text() for button in buttons] == ['', '', 'API', '']
+        assert [button.toolTip() for button in buttons] == ['Лицензия', 'Обновления модулей', 'Настройки API', 'Диагностика']
     finally:
         view.close()
         view.deleteLater()

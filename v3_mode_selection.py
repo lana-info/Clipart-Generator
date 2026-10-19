@@ -181,15 +181,17 @@ class ModeSelectionScreen(QWidget):
         self.license_verification_label.setParent(self)
         self.license_status_label.hide()
         self.license_verification_label.hide()
-        brand = QLabel("VIBIX Studio")
-        brand.setStyleSheet("font-size:24px;font-weight:600;color:#22c9c6;")
-        account_layout.addWidget(brand, 1)
-        self.active_module_label = QLabel("")
+        self.brand_label = QLabel("VIBIX Studio")
+        self.brand_label.setStyleSheet("font-size:24px;font-weight:600;color:#22c9c6;")
+        account_layout.addWidget(self.brand_label, 1)
+        # Title of the page we are on ("Модули" on the home page, else the module name).
+        self.active_module_label = QLabel("Модули")
         self.active_module_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.active_module_label.setStyleSheet("font-size:16px;font-weight:600;")
+        self.active_module_label.setStyleSheet("font-size:18px;font-weight:600;")
         account_layout.addWidget(self.active_module_label, 2)
-        self.studio_home_button = V3Button("Главная Studio", ButtonVariant.GHOST)
-        make_icon_button(self.studio_home_button, "home", "Главная Studio")
+        # Buttons, left to right: Home, Continue, API, Diagnostics, Updates, License (last, in the corner).
+        self.studio_home_button = V3Button("Главная Studio", ButtonVariant.SECONDARY)
+        make_icon_button(self.studio_home_button, "home", "Главная Studio", size=(48, 40))
         self.studio_home_button.hide()
         account_layout.addWidget(self.studio_home_button)
         # Always-visible "Продолжить": the host fills it with saved projects.
@@ -197,33 +199,35 @@ class ModeSelectionScreen(QWidget):
         make_icon_button(self.header_continue_button, "folder", "Продолжить")
         self.header_continue_button.clicked.connect(self.header_continue_requested.emit)
         account_layout.addWidget(self.header_continue_button)
-
-        self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
-        self.license_button.clicked.connect(self.license_requested.emit)
-        account_layout.addWidget(self.license_button)
-        self.module_updates_button = V3Button("Обновления модулей", ButtonVariant.GHOST)
-        self.module_updates_button.clicked.connect(self.module_updates_requested.emit)
-        account_layout.addWidget(self.module_updates_button)
-        self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
-        make_icon_button(self.api_settings_button, "key", "Настройки API")
+        self.api_settings_button = V3Button("API", ButtonVariant.GHOST)
+        self.api_settings_button.setToolTip("Настройки API")
+        self.api_settings_button.setAccessibleName("Настройки API")
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         account_layout.addWidget(self.api_settings_button)
         self.diagnostics_button = V3Button("Диагностика", ButtonVariant.GHOST)
         make_icon_button(self.diagnostics_button, "pulse", "Диагностика")
         self.diagnostics_button.clicked.connect(self.diagnostics_requested.emit)
         account_layout.addWidget(self.diagnostics_button)
+        self.module_updates_button = V3Button("Обновления модулей", ButtonVariant.GHOST)
+        make_icon_button(self.module_updates_button, "update", "Обновления модулей")
+        self.module_updates_button.clicked.connect(self.module_updates_requested.emit)
+        account_layout.addWidget(self.module_updates_button)
+        self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
+        make_icon_button(self.license_button, "key", "Лицензия")
+        self.license_button.clicked.connect(self.license_requested.emit)
+        account_layout.addWidget(self.license_button)
         layout.addWidget(self.account_card)
 
+        # The "Модули" title now lives in the header; "Продолжить работу" duplicated the
+        # header "Продолжить" button, so both stay out of the layout (objects kept for logic).
         title = QLabel("Модули")
-        title.setProperty("v3Title", True)
         title.setAccessibleName(title.text())
+        title.hide()
         catalog_heading = QHBoxLayout()
-        catalog_heading.addWidget(title)
-        catalog_heading.addStretch()
         self.all_projects_button = V3Button("Продолжить работу", ButtonVariant.SECONDARY)
         self.all_projects_button.clicked.connect(self.all_projects_requested.emit)
         self.all_projects_button.setEnabled(False)
-        catalog_heading.addWidget(self.all_projects_button)
+        self.all_projects_button.hide()
         self._has_saved_projects = False
         self._has_recent_draft = False
         layout.addLayout(catalog_heading)
@@ -353,6 +357,9 @@ class ModeSelectionScreen(QWidget):
                 del self.module_cards[module_id]
         self.module_cards.update(replacements)
         self._layout_module_cards()
+
+    def set_brand_text(self, text: str) -> None:
+        self.brand_label.setText(text)
 
     def set_saved_projects(self, projects: list) -> None:
         self._has_saved_projects = bool(projects)
@@ -854,7 +861,7 @@ class V3ApplicationView(QWidget):
         in_module = widget is not self.mode_selection
         self.mode_selection.active_module_label.setText(
             MODE_TITLES.get(widget.state.mode, "") if isinstance(widget, AppShell)
-            else ("Автоматический клипарт" if in_module else "")
+            else ("Автоматический клипарт" if in_module else "Модули")
         )
         self.mode_selection.studio_home_button.setVisible(in_module)
         focused = bool(getattr(widget, "_canvas_focus_active", False))
