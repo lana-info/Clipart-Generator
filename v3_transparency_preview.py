@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import ceil, floor, hypot
+
 from io import BytesIO
 from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor, CancelledError
@@ -171,10 +173,10 @@ class MaskEditDocument:
             stamp_path_coverage(
                 self._stroke_cover, points, radius=radius, hardness=hardness)
             area = (
-                max(0, min(p[0] for p in points) - radius - 1),
-                max(0, min(p[1] for p in points) - radius - 1),
-                min(self.mask.width, max(p[0] for p in points) + radius + 2),
-                min(self.mask.height, max(p[1] for p in points) + radius + 2),
+                max(0, floor(min(p[0] for p in points)) - radius - 2),
+                max(0, floor(min(p[1] for p in points)) - radius - 2),
+                min(self.mask.width, ceil(max(p[0] for p in points)) + radius + 3),
+                min(self.mask.height, ceil(max(p[1] for p in points)) + radius + 3),
             )
             if area[0] < area[2] and area[1] < area[3]:
                 merged = self._stroke_before.crop(area)
@@ -183,10 +185,10 @@ class MaskEditDocument:
                 self.mask.paste(merged, area[:2])
         if not points:
             return None
-        left = max(0, min(point[0] for point in points) - radius - 1)
-        top = max(0, min(point[1] for point in points) - radius - 1)
-        right = min(self.mask.width, max(point[0] for point in points) + radius + 2)
-        bottom = min(self.mask.height, max(point[1] for point in points) + radius + 2)
+        left = max(0, floor(min(point[0] for point in points)) - radius - 2)
+        top = max(0, floor(min(point[1] for point in points)) - radius - 2)
+        right = min(self.mask.width, ceil(max(point[0] for point in points)) + radius + 3)
+        bottom = min(self.mask.height, ceil(max(point[1] for point in points)) + radius + 3)
         return (left, top, right, bottom)
 
     def end_stroke(self) -> None:
@@ -1039,7 +1041,9 @@ class TransparencyCanvas(QGraphicsView):
         self._space_pressed = False
         self.space_pan_indicator_visible = False
         self._panning = False
-        self._last_image_point: tuple[int, int] | None = None
+        self._last_image_point: tuple[float, float] | None = None
+        self._smooth_prev: tuple[float, float] | None = None
+        self._smooth_mid: tuple[float, float] | None = None
         self._last_view_point = QPoint()
         self._brush_scene_point: QPointF | None = None
         self._scene = QGraphicsScene(self)
@@ -1155,6 +1159,22 @@ class TransparencyCanvas(QGraphicsView):
         if self._zoom is None and self.document is not None:
             self.set_zoom(None)
 
+    def _image_point_f(self, viewport_point: QPoint) -> tuple[float, float] | None:
+        """Like _image_point but keeps the sub-pixel position for smooth strokes."""
+        document = self.document
+        if document is None:
+            return None
+        scene_point = self.mapToScene(viewport_point)
+        self._brush_scene_point = scene_point
+        local = self._item.mapFromScene(scene_point)
+        width, height = document.image.size
+        if not (0 <= local.x() < width and 0 <= local.y() < height):
+            return None
+        return (
+            min(width - 1.0, max(0.0, local.x())),
+            min(height - 1.0, max(0.0, local.y())),
+        )
+
     def _image_point(self, viewport_point: QPoint) -> tuple[int, int] | None:
         document = self.document
         if document is None:
@@ -1211,13 +1231,16 @@ class TransparencyCanvas(QGraphicsView):
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self.document is not None:
+            # A click stamps on the pixel grid (exact footprint); only drags are sub-pixel.
             point = self._image_point(event.position().toPoint())
             if point is not None:
+                point = (float(point[0]), float(point[1]))
                 self._preview_alpha = None
                 self._preview_paths = None
                 self.refresh_image()
                 self._painting = True
                 self._last_image_point = point
+                self._smooth_prev = self._smooth_mid = point
                 self.document.begin_stroke()
                 bounds = self.document.extend_stroke(
                     (point,),
@@ -1262,32 +1285,71 @@ class TransparencyCanvas(QGraphicsView):
             return
         if self._painting and self.document is not None:
             self._stroke_action = self._effective_action(event.modifiers())
-            point = self._image_point(view_point)
+            point = self._image_point_f(view_point)
             self._extend_active_stroke(point)
             event.accept()
             return
         self.viewport().update()
         super().mouseMoveEvent(event)
 
-    def _extend_active_stroke(self, point: tuple[int, int] | None) -> None:
-        if self.document is None:
-            return
-        if point is None:
-            self._last_image_point = None
-            return
-        points = (
-            (point,)
-            if self._last_image_point is None
-            else (self._last_image_point, point)
-        )
+    @staticmethod
+    def _smooth_curve(start, control, end):
+        """Points of a quadratic curve start->end bent towards ``control``."""
+        length = math.hypot(control[0] - start[0], control[1] - start[1]) + math.hypot(
+            end[0] - control[0], end[1] - control[1])
+        steps = max(2, min(64, math.ceil(length / 1.5)))
+        points = []
+        for index in range(1, steps + 1):
+            t = index / steps
+            u = 1 - t
+            points.append((
+                u * u * start[0] + 2 * u * t * control[0] + t * t * end[0],
+                u * u * start[1] + 2 * u * t * control[1] + t * t * end[1],
+            ))
+        return points
+
+    def _paint_stroke_points(self, points) -> None:
         bounds = self.document.extend_stroke(
-            points,
+            tuple(points),
             radius=self.brush_radius,
             action=getattr(self, "_stroke_action", self.brush_action),
             hardness=self.brush_hardness,
         )
-        self._last_image_point = point
         self.refresh_region(bounds)
+
+    def _extend_active_stroke(self, point: tuple[float, float] | None) -> None:
+        """Extend the stroke along a smoothed curve through pointer midpoints.
+
+        Raw mouse samples are sparse and jittery; joining them with straight
+        segments gives a jagged outline. Curving through the midpoints removes
+        the corners while the stroke still follows the pointer.
+        """
+        if self.document is None:
+            return
+        if point is None:
+            self._last_image_point = None
+            self._smooth_prev = self._smooth_mid = None
+            return
+        if self._smooth_prev is None:
+            self._smooth_prev = self._smooth_mid = point
+            self._last_image_point = point
+            self._paint_stroke_points((point,))
+            return
+        previous = self._smooth_prev
+        start = self._smooth_mid
+        middle = ((previous[0] + point[0]) / 2, (previous[1] + point[1]) / 2)
+        curve = self._smooth_curve(start, previous, middle)
+        self._smooth_prev = point
+        self._smooth_mid = middle
+        self._last_image_point = point
+        self._paint_stroke_points([start] + curve)
+
+    def _finish_smooth_stroke(self) -> None:
+        """Run the stroke to the last pointer position before it ends."""
+        if (self.document is not None and self._smooth_prev is not None
+                and self._smooth_mid is not None and self._smooth_prev != self._smooth_mid):
+            self._paint_stroke_points([self._smooth_mid, self._smooth_prev])
+        self._smooth_prev = self._smooth_mid = None
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         dragged = self._contour_drag is not None and self._drag_checkpoint
@@ -1324,6 +1386,7 @@ class TransparencyCanvas(QGraphicsView):
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton and self._painting:
+            self._finish_smooth_stroke()
             self._painting = False
             self._last_image_point = None
             if self.document is not None:
@@ -1726,6 +1789,7 @@ class TransparencyCanvas(QGraphicsView):
         self._panning = False
         self._contour_drag = None
         if self._painting:
+            self._finish_smooth_stroke()
             self._painting = False
             self._last_image_point = None
             if self.document is not None:

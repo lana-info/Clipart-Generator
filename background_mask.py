@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from functools import lru_cache
-from math import ceil, hypot
+from math import ceil, floor, hypot
 from pathlib import Path
 
 from PIL import Image, ImageChops, ImageDraw
@@ -49,17 +49,26 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
         raise ValueError("Жёсткость кисти должна быть от 0 до 100")
 
 
-@lru_cache(maxsize=16)
-def _brush_opacity(radius: int, hardness: int) -> Image.Image:
+SUBPIXEL_STEPS = 4
+
+
+@lru_cache(maxsize=256)
+def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Image.Image:
+    """Brush stamp; ``qx``/``qy`` shift the disc by that many quarter pixels."""
     if radius == 0:
         # A single pixel has no feathered neighbours, regardless of hardness.
         return Image.new("L", (1, 1), 255)
-    diameter = radius * 2 + 1
+    fractional = bool(qx or qy)
+    diameter = radius * 2 + (2 if fractional else 1)
+    cx = radius + 0.5 + qx / SUBPIXEL_STEPS
+    cy = radius + 0.5 + qy / SUBPIXEL_STEPS
+    edge = radius + 0.5
     # Supersampling retains fractional pixel coverage even for a hard brush.
     scale = 4
     large = Image.new("L", (diameter * scale, diameter * scale), 0)
     ImageDraw.Draw(large).ellipse(
-        (0, 0, diameter * scale - 1, diameter * scale - 1), fill=255
+        ((cx - edge) * scale, (cy - edge) * scale,
+         (cx + edge) * scale - 1, (cy + edge) * scale - 1), fill=255
     )
     shape = large.resize((diameter, diameter), Image.Resampling.LANCZOS)
     if hardness == 100:
@@ -67,11 +76,10 @@ def _brush_opacity(radius: int, hardness: int) -> Image.Image:
     # Falloff measured against the brush radius itself: fully opaque inside
     # ``hardness`` percent of the radius, fading linearly to 0 at the very edge.
     core = hardness / 100
-    edge = radius + 0.5
     data = []
     for y in range(diameter):
         for x in range(diameter):
-            ratio = hypot(x - radius, y - radius) / edge
+            ratio = hypot(x + 0.5 - cx, y + 0.5 - cy) / edge
             if ratio <= core:
                 data.append(255)
             else:
@@ -121,7 +129,7 @@ def paint_mask_path(
 
 def stamp_path_coverage(
     cover: Image.Image,
-    points: tuple[tuple[int, int], ...] | list[tuple[int, int]],
+    points: tuple[tuple[float, float], ...] | list[tuple[float, float]],
     *,
     radius: int,
     hardness: int,
@@ -129,14 +137,26 @@ def stamp_path_coverage(
     """Merge a brush path into ``cover`` taking the maximum, never accumulating.
 
     Overlapping stamps of one stroke therefore keep the soft falloff of the
-    brush instead of adding up to a hard edge.
+    brush instead of adding up to a hard edge. Centres may be fractional:
+    stamps are placed with quarter-pixel precision so edges stay smooth.
     """
     if not points:
         return
-    opacity = _brush_opacity(radius, hardness)
 
-    def stamp(x: int, y: int) -> None:
-        box = (x - radius, y - radius, x + radius + 1, y + radius + 1)
+    def stamp(x: float, y: float) -> None:
+        if radius == 0:
+            ix, iy, qx, qy = round(x), round(y), 0, 0
+        else:
+            ix, iy = floor(x), floor(y)
+            qx = round((x - ix) * SUBPIXEL_STEPS)
+            qy = round((y - iy) * SUBPIXEL_STEPS)
+            if qx == SUBPIXEL_STEPS:
+                ix, qx = ix + 1, 0
+            if qy == SUBPIXEL_STEPS:
+                iy, qy = iy + 1, 0
+        opacity = _brush_opacity(radius, hardness, qx, qy)
+        box = (ix - radius, iy - radius,
+               ix - radius + opacity.width, iy - radius + opacity.height)
         clipped = (max(0, box[0]), max(0, box[1]),
                    min(cover.width, box[2]), min(cover.height, box[3]))
         if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
@@ -145,17 +165,17 @@ def stamp_path_coverage(
                              clipped[2] - box[0], clipped[3] - box[1]))
         cover.paste(ImageChops.lighter(cover.crop(clipped), part), clipped[:2])
 
-    previous = (int(points[0][0]), int(points[0][1]))
+    previous = (float(points[0][0]), float(points[0][1]))
     stamp(*previous)
-    spacing = max(1.0, radius / 3)
+    spacing = max(0.25, min(0.5, radius / 8))
     for raw_point in points[1:]:
-        current = (int(raw_point[0]), int(raw_point[1]))
+        current = (float(raw_point[0]), float(raw_point[1]))
         distance = hypot(current[0] - previous[0], current[1] - previous[1])
         steps = max(1, ceil(distance / spacing))
         for step in range(1, steps + 1):
             stamp(
-                round(previous[0] + (current[0] - previous[0]) * step / steps),
-                round(previous[1] + (current[1] - previous[1]) * step / steps),
+                previous[0] + (current[0] - previous[0]) * step / steps,
+                previous[1] + (current[1] - previous[1]) * step / steps,
             )
         previous = current
 

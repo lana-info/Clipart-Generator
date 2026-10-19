@@ -103,6 +103,29 @@ class ContourIntegrationTests(unittest.TestCase):
         self.assertEqual((xs.min(), ys.min(), xs.max(), ys.max()),
                          (point[0]-1, point[1]-1, point[0]+1, point[1]+1))
 
+    def test_drag_stroke_is_smoothed_and_reaches_last_pointer_position(self):
+        self.page.document.mask = Image.new("L", (128, 128), 255)
+        self.canvas.refresh_image()
+        self.page._set_zoom(300)
+        self.page.brush_action_buttons["remove"].click() if hasattr(self.page, "brush_action_buttons") else None
+        QTest.mouseClick(self.page.brush_style_buttons[100], Qt.MouseButton.LeftButton)
+        QTest.mouseClick(self.page.diameter_buttons[3], Qt.MouseButton.LeftButton)
+        self.app.processEvents()
+        start = self.canvas.mapFromScene(QPointF(30.5, 30.5))
+        end = self.canvas.mapFromScene(QPointF(60.5, 40.5))
+        QTest.mousePress(self.canvas.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        for step in range(1, 9):
+            pos = self.canvas.mapFromScene(QPointF(30.5 + 30 * step / 8, 30.5 + 10 * step / 8))
+            QTest.mouseMove(self.canvas.viewport(), pos)
+            self.app.processEvents()
+        QTest.mouseRelease(self.canvas.viewport(), Qt.MouseButton.LeftButton, pos=end)
+        changed = np.array(self.page.document.mask) != 255
+        ys, xs = np.where(changed)
+        self.assertTrue(changed.any())
+        last = self.canvas._image_point(end)
+        self.assertLessEqual(abs(int(xs.max()) - (last[0] + 1)), 2)
+        self.assertLessEqual(abs(int(ys.max()) - (last[1] + 1)), 2)
+
     def test_switch_preserves_canvas_zoom_draft_and_keyboard_diameters(self):
         document = self.page.document
         self.page._set_zoom(200)

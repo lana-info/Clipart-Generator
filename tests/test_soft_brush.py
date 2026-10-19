@@ -21,7 +21,7 @@ def test_soft_brush_has_wide_gradual_edge_unlike_hard():
     assert partial(hard) <= 2          # hard edge: nearly all-or-nothing
     assert partial(soft) >= 7          # soft edge: wide gradual transition
     # Overlapping stamps must not accumulate into a hard edge on the soft stroke.
-    assert soft[0] == 255 and soft[8] < 200
+    assert soft[0] >= 250 and soft[8] < 200
 
 
 def test_document_stroke_in_several_moves_matches_single_stroke():
@@ -36,3 +36,32 @@ def test_document_stroke_in_several_moves_matches_single_stroke():
     assert list(document.mask.getdata()) == list(single.getdata())
     document.undo()
     assert document.mask.getextrema() == (0, 0)
+
+
+def _edge_wobble(points, radius=10, size=(160, 80)):
+    """Largest deviation of the stroke's top edge from a straight/smooth line."""
+    mask = Image.new("L", size, 0)
+    paint_mask_path(mask, points, radius=radius, action="add", hardness=100)
+    tops = []
+    for x in range(30, size[0] - 30):
+        column = [mask.getpixel((x, y)) for y in range(size[1])]
+        coverage = sum(column) / 255.0
+        tops.append(coverage)
+    return max(tops) - min(tops)
+
+
+def test_subpixel_diagonal_stroke_has_even_thickness():
+    # Integer-rounded stamps wobble along a shallow diagonal; sub-pixel ones do not.
+    points = [(20 + i * 0.37, 20 + i * 0.11) for i in range(0, 330)]
+    assert _edge_wobble(points) < 0.6
+
+
+def test_smoothing_curve_rounds_a_sharp_corner_and_ends_at_midpoint():
+    from v3_transparency_preview import TransparencyCanvas
+
+    start, corner, end = (0.0, 0.0), (10.0, 0.0), (10.0, 10.0)
+    curve = TransparencyCanvas._smooth_curve(start, corner, end)
+    assert curve[-1] == end
+    # A straight polyline would pass through the corner; the curve cuts it.
+    assert min(((x - corner[0]) ** 2 + (y - corner[1]) ** 2) ** 0.5 for x, y in curve) > 2.0
+    assert len(curve) >= 7
