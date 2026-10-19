@@ -1,6 +1,22 @@
 # Official Module Releases
 
-## Stable Studio3.2.30 Windows-only, 2026-10-19
+## Stable Studio3.2.31 Windows-only, 2026-10-19
+
+Только Windows Core 3.2.31 (stable): release 2e2362fd-bd96-5928-1f9c-
+cc40bfeb1a97, VibixImages-Setup-3.2.31.exe, size 243080752, SHA-256
+12b4618a63722d881a08d6554f45dc7bf557573f5a68bcc76814034dbca9f316.
+Source 6f508f7: EDGE_SILHOUETTE_STANDARD отделён от базового хромакей-блока;
+прикрепление только в compile Auto Clipart (edge_quality), классический флоу
+без стандарта — по прямому уточнению владельца. Run 39313185371 SUCCESS.
+Публикация подтверждена владельцем в диалоге. Штатная PostgresLicenseService-
+цепочка: backup pre-studio3231-publication-20261019.dump (18 таблиц PASS),
+снапшоты 170 релизов и 47 файлов; после: health 200, discovery top1 3.2.31
+(3.2.30 → 3.2.29 остались), дифф +1/-0/0, stored SHA rescan PASS. 3.2.30
+остаётся published; клиенты stable получают 3.2.31. macOS не собиралась.
+Evidence: ../artifacts/studio-3.2.31-stable-20261019/. Rollback: withdraw
+2e2362fd.
+
+## Stable Studio3.2.30 Windows-only, 2026-10-19## Stable Studio3.2.30 Windows-only, 2026-10-19
 
 Опубликовано только Windows Core 3.2.30 (stable): release 821ae365-4200-
 1ab1-da7c-07c9c72ab746, installer VibixImages-Setup-3.2.30.exe, size 243071600,
