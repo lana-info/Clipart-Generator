@@ -100,6 +100,13 @@ class ModuleUpdatesDialog(QDialog):
         self.denied_authorization = None
         self._pending_download = None
         self._shutting_down = False
+        # One-at-a-time "update all" queue built by update_all(); only
+        # installed modules with a verified offer are ever enqueued.
+        self._queue: list[str] = []
+        self._queue_total = 0
+        self._queue_position = 0
+        self._queue_updated = 0
+        self._queue_failed: str | None = None
         self.setWindowTitle("Модули Studio")
         self.setObjectName("moduleUpdatesDialog")
         self.setStyleSheet(
@@ -120,6 +127,9 @@ class ModuleUpdatesDialog(QDialog):
         self.check_button = V3Button("Проверить обновления", ButtonVariant.SECONDARY)
         self.check_button.clicked.connect(self.check)
         heading.addWidget(self.check_button)
+        self.update_all_button = V3Button("Обновить все модули", ButtonVariant.PRIMARY)
+        self.update_all_button.clicked.connect(self.update_all)
+        heading.addWidget(self.update_all_button)
         layout.addLayout(heading)
         grid = QGridLayout()
         grid.setHorizontalSpacing(20)
@@ -169,6 +179,7 @@ class ModuleUpdatesDialog(QDialog):
         self._refresh_installed()
         if not delivery.store.trusted_keys:
             self.check_button.setEnabled(False)
+            self.update_all_button.setEnabled(False)
             self.status.setText("Обновления модулей пока недоступны в этой версии Studio.")
         QApplication.instance().aboutToQuit.connect(self._shutdown)
 
@@ -189,6 +200,7 @@ class ModuleUpdatesDialog(QDialog):
             return
         self.worker = ModuleUpdateWorker(self.delivery, release, self, authorization=self.authorization_provider())
         self.check_button.setEnabled(False)
+        self.update_all_button.setEnabled(False)
         self.close_button.setEnabled(False)
         self.cancel_button.setVisible(release is not None)
         self.cancel_button.setEnabled(True)
@@ -242,6 +254,74 @@ class ModuleUpdatesDialog(QDialog):
         self.rows[module][2].setText("Скачивание")
         self._start(self.releases[module])
 
+    def _module_installed(self, module):
+        try:
+            state = self.delivery.store.state(module)
+            return bool(state["enabled"] and state["active"])
+        except Exception:
+            return False
+
+    def update_all(self):
+        """Update installed modules with a verified offer, strictly one at a
+        time. New or uninstalled modules are never auto-added; a failed
+        module keeps its previous working version and stops the queue with
+        an honest partial summary."""
+        if self.busy:
+            return
+        queue = [module for module in self.rows
+                 if module in self.releases and self._module_installed(module)]
+        if not queue:
+            self.status.setText("Нет доступных обновлений для установленных модулей. "
+                                "Сначала нажмите «Проверить обновления».")
+            return
+        self._queue = list(queue)
+        self._queue_total = len(self._queue)
+        self._queue_position = 0
+        self._queue_updated = 0
+        self._queue_failed = None
+        self._advance_queue()
+
+    def _advance_queue(self):
+        while self._queue:
+            module = self._queue[0]
+            if module not in self.releases:
+                self._queue.pop(0)
+                continue
+            if self.busy_module(module):
+                self._queue_failed = module
+                self._queue = []
+                self._finish_queue()
+                return
+            self._queue_position += 1
+            self.status.setText(
+                f"Модуль {self._queue_position} из {self._queue_total} — "
+                f"{MODULE_TITLES[module]}: подготовка загрузки…")
+            self.rows[module][2].setText("Скачивание")
+            self._start(self.releases[module])
+            return
+        self._finish_queue()
+
+    def _finish_queue(self):
+        total, updated, failed = self._queue_total, self._queue_updated, self._queue_failed
+        self._queue = []
+        self._queue_total = 0
+        self._queue_position = 0
+        self._queue_updated = 0
+        self._queue_failed = None
+        if failed is None:
+            self.status.setText(f"Готово: обновлены все {total} модулей.")
+        else:
+            self.status.setText(
+                f"Обновлено {updated} из {total}. Остановка на «{MODULE_TITLES[failed]}»: "
+                "обновление не установлено, прежняя рабочая версия сохранена.")
+
+    def _stop_queue(self):
+        self._queue = []
+        self._queue_total = 0
+        self._queue_position = 0
+        self._queue_updated = 0
+        self._queue_failed = None
+
     def _progress(self, received, total):
         if not self.busy or self.worker.release is None or total <= 0:
             return
@@ -265,7 +345,11 @@ class ModuleUpdatesDialog(QDialog):
                 return
             if worker.cancelled:
                 self._pending_download = None
-                self.status.setText("Скачивание отменено. Установленные версии сохранены.")
+                waiting = bool(self._queue)
+                if waiting:
+                    self._stop_queue()
+                self.status.setText("Скачивание отменено. Установленные версии сохранены."
+                                    + (" Обновление остальных модулей остановлено." if waiting else ""))
             elif worker.failed:
                 self.checked_authorization = None
                 self.denied_authorization = worker.initial_authorization if worker.denied else None
@@ -278,6 +362,12 @@ class ModuleUpdatesDialog(QDialog):
                     for _installed, available, _button in self.rows.values():
                         available.setText("Ошибка проверки")
                 self.status.setText("Не удалось проверить или скачать обновление. Текущая версия сохранена.")
+                if self._queue:
+                    module = worker.release.module_id if worker.release is not None else self._queue[0]
+                    if module in self._queue:
+                        self._queue.remove(module)
+                    self._queue_failed = module
+                    self._finish_queue()
             elif worker.release is None:
                 self.denied_authorization = None
                 self.checked = dict(worker.result or {})
@@ -303,6 +393,11 @@ class ModuleUpdatesDialog(QDialog):
                 module = worker.release.module_id
                 if self.busy_module(module):
                     self.status.setText("Пакет проверен. Завершите работу и перезапустите Studio перед обновлением модуля.")
+                    if self._queue:
+                        if module in self._queue:
+                            self._queue.remove(module)
+                        self._queue_failed = module
+                        self._finish_queue()
                 else:
                     if isinstance(worker.release, WorkflowUpdate):
                         self.delivery.activate_update(worker.release)
@@ -312,8 +407,13 @@ class ModuleUpdatesDialog(QDialog):
                         for name, (_installed, available, _button) in self.rows.items():
                             if name != module:
                                 available.setText("Проверьте обновления")
+                        if self._queue:
+                            self._stop_queue()
                     else:
                         self.delivery.activate(module, worker.release.version)
+                        if self._queue and self._queue[0] == module:
+                            self._queue.remove(module)
+                            self._queue_updated += 1
                     self.releases.pop(module, None)
                     self.rows[module][2].setText("Установлено")
                     self.status.setText(f"{MODULE_TITLES[module]}: обновление установлено.")
@@ -326,18 +426,23 @@ class ModuleUpdatesDialog(QDialog):
             self.cancel_button.hide()
             self.close_button.setEnabled(True)
             self.check_button.setEnabled(bool(self.delivery.store.trusted_keys))
+            self.update_all_button.setEnabled(bool(self.delivery.store.trusted_keys))
             self._refresh_installed()
             for module, (_installed, _available, button) in self.rows.items():
-                button.setEnabled(module in self.releases)
+                button.setEnabled(module in self.releases and not self._queue)
                 from studio_catalog_ui import style_module_action
-                style_module_action(button, module in self.releases and button.isEnabled())
+                style_module_action(button, module in self.releases and not self._queue and button.isEnabled())
                 if module in self.releases:
                     installed = self.delivery.store.state(module)
                     button.setText("Обновить" if installed["enabled"] and installed["active"] else "Скачать")
             self.state_changed.emit()
             pending, self._pending_download = self._pending_download, None
-            if pending in self.releases:
+            if pending in self.releases and not self._queue:
                 QTimer.singleShot(0, lambda: self.download(pending))
+            elif self._queue:
+                QTimer.singleShot(0, self._advance_queue)
+            elif self._queue_total:
+                QTimer.singleShot(0, self._finish_queue)
 
 
     def reject(self):

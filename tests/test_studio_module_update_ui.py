@@ -279,3 +279,89 @@ def test_late_discovery_for_previous_account_cannot_restore_old_cards(app, tmp_p
         view.close()
         view.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def _queue_setup(dialog, delivery, base_release):
+    """Two installed modules with verified offers; pinterest second in row order."""
+    installed = {"processing": "1.5.0", "pinterest": "2.0.0"}
+    delivery.store.state.side_effect = lambda module: {
+        "enabled": module in installed, "active": installed.get(module)}
+    offers = {
+        "processing": ModuleRelease(
+            "1.6.0", "fixture-processing.zip", 20, "b" * 64, "https://fixture.invalid/downloads/p",
+            module_id="processing", studio_min="3.2.0", studio_max_exclusive="4.0.0"),
+        "pinterest": base_release,
+    }
+    delivery.check.side_effect = lambda module: offers.get(module)
+    dialog.releases.update(offers)
+    return installed
+
+
+def test_update_all_installs_each_module_sequentially(app, setup):
+    dialog, delivery, base_release = setup
+    installed = _queue_setup(dialog, delivery, base_release)
+    activated = []
+    delivery.activate.side_effect = lambda module, version: (
+        activated.append((module, version)), installed.__setitem__(module, version))
+
+    dialog.update_all_button.click()
+    wait_until(app, lambda: not dialog.busy and not dialog._queue)
+    app.processEvents()
+
+    # Row order is the queue order, never parallel workers.
+    assert activated == [("processing", "1.6.0"), ("pinterest", "1.1.0")]
+    assert installed["processing"] == "1.6.0"
+    assert dialog.status.text().startswith("Готово: обновлены все 2 модулей.")
+    assert dialog.update_all_button.isEnabled()
+
+
+def test_update_all_stops_on_failure_and_keeps_previous_version(app, setup):
+    dialog, delivery, base_release = setup
+    installed = _queue_setup(dialog, delivery, base_release)
+    activated = []
+    delivery.activate.side_effect = lambda module, version: activated.append((module, version))
+
+    original = delivery.install.side_effect
+
+    def install(selected, **callbacks):
+        if selected.module_id == "processing":
+            raise RuntimeError("broken staging")
+        return original(selected, **callbacks)
+
+    delivery.install.side_effect = install
+
+    dialog.update_all_button.click()
+    wait_until(app, lambda: not dialog.busy and not dialog._queue)
+    app.processEvents()
+
+    assert activated == []
+    assert installed["processing"] == "1.5.0"
+    assert "Обновлено 0 из 2" in dialog.status.text()
+    assert "Остановка на «Обработка изображений»" in dialog.status.text()
+
+
+def test_update_all_skips_modules_that_are_not_installed(app, setup):
+    dialog, delivery, base_release = setup
+    installed = {"processing": "1.5.0", "pinterest": None}
+    delivery.store.state.side_effect = lambda module: {
+        "enabled": module in installed and installed[module] is not None,
+        "active": installed.get(module),
+    }
+    offers = {
+        "processing": ModuleRelease(
+            "1.6.0", "fixture-processing.zip", 20, "b" * 64, "https://fixture.invalid/downloads/p",
+            module_id="processing", studio_min="3.2.0", studio_max_exclusive="4.0.0"),
+        "pinterest": base_release,
+    }
+    delivery.check.side_effect = lambda module: offers.get(module)
+    dialog.releases.update(offers)
+    activated = []
+    delivery.activate.side_effect = lambda module, version: (
+        activated.append((module, version)), installed.__setitem__(module, version))
+
+    dialog.update_all_button.click()
+    wait_until(app, lambda: not dialog.busy and not dialog._queue)
+    app.processEvents()
+
+    assert activated == [("processing", "1.6.0")]
+    assert dialog.status.text().startswith("Готово: обновлены все 1 модулей.")
