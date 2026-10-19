@@ -1050,6 +1050,7 @@ def test_launch_confirmation_discloses_expired_results_in_one_dialog(
     generation_page.model_combo.setCurrentIndex(option_index)
     app.processEvents()
     prepared = build_clipart_run_request(controller.shell.state)
+    assert "one continuous closed silhouette" in prepared.generated_prompts[0]["prompt"]
     model = prepared.settings["text_generation_model"]
     assert model == "piapi/gpt-image-2.5-flare"
     entry = prepared.generated_prompts[0]

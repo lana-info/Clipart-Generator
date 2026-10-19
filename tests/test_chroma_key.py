@@ -178,17 +178,25 @@ class ChromaKeyTests(unittest.TestCase):
         self.assertNotIn("genuinely semi-transparent", prompt)
         self.assertNotIn("Whatever lies behind them", prompt)
 
-    def test_prompt_block_sets_silhouette_quality_standard(self):
-        prompt = chroma_key_prompt_block("blue", watercolor=True)
+    def test_prompt_block_sets_silhouette_quality_standard_only_for_auto_clipart(self):
+        # Other generators must not receive the silhouette standard.
+        plain = chroma_key_prompt_block("blue", watercolor=True)
+        self.assertIn("fully opaque and solid", plain)
+        self.assertIn("no stray fragments", plain)
+        self.assertNotIn("Crisply resolved forms", plain)
+        self.assertNotIn("one continuous closed silhouette", plain)
+        self.assertNotIn("saw-tooth fringe", plain)
+        self.assertNotIn("Crisp hard edges", plain)
 
-        self.assertIn("Crisply resolved forms", prompt)
-        self.assertIn("individually recognisable", prompt)
-        self.assertIn("never merged into blotches or mush", prompt)
-        self.assertIn("one continuous closed silhouette", prompt)
-        self.assertIn("not a saw-tooth fringe", prompt)
-        self.assertIn("pale rim reaching into the background", prompt)
-        self.assertIn("no specks or dots detached from the subject", prompt)
-        self.assertNotIn("Crisp hard edges", prompt)
+        # Only the Auto Clipart module opts in via edge_quality.
+        standard = chroma_key_prompt_block("blue", watercolor=True, edge_quality=True)
+        self.assertIn("Crisply resolved forms", standard)
+        self.assertIn("individually recognisable", standard)
+        self.assertIn("never merged into blotches or mush", standard)
+        self.assertIn("one continuous closed silhouette", standard)
+        self.assertIn("not a saw-tooth fringe", standard)
+        self.assertIn("pale rim reaching into the background", standard)
+        self.assertIn("no specks or dots detached from the subject", standard)
 
     def test_invalid_color_is_rejected(self):
         with self.assertRaises(ValueError):

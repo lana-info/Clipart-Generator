@@ -92,7 +92,9 @@ def compile_objects(recipe, generator):
         if any(len(s) > 4000 for s in (fields['theme'], fields['composition'], *fields['variations'])):
             raise ValueError('Сократите объединённое описание объекта до 4000 символов')
         # Use the existing language/chroma pipeline, preserving its validation.
-        entry = generate_clipart_prompt_series(PromptGeneratorData(**fields))[0]
+        entry = generate_clipart_prompt_series(
+            PromptGeneratorData(**fields), edge_quality_standard=True,
+        )[0]
         if entry.chroma_key_color:
             from v3_project_state import MAX_TEXT_LENGTH
             hex_color = {"blue": "#0000FF", "green": "#00FF00", "red": "#FF0000"}[entry.chroma_key_color]

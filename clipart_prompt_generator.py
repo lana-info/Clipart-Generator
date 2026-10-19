@@ -40,6 +40,7 @@ def _prompt_language(data: PromptGeneratorData) -> str:
 def generate_clipart_prompt_series(
     data: PromptGeneratorData,
     *,
+    edge_quality_standard: bool = False,
     translation_backend: PromptTranslationBackend | None = None,
     provider_language: str | None = None,
 ) -> list[PromptEntry]:
@@ -102,6 +103,7 @@ def generate_clipart_prompt_series(
                             or "акварел" in " ".join((normalized.style, normalized.theme)).casefold()
                         ),
                         materials=normalized.chroma_key_materials,
+                        edge_quality=edge_quality_standard,
                     )
                 except ValueError as error:
                     raise PromptGeneratorError(str(error)) from error
