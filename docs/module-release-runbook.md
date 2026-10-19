@@ -1,6 +1,24 @@
 # Official Module Releases
 
-## Stable Studio3.2.29 Windows-only, 2026-10-19
+## Stable Studio3.2.30 Windows-only, 2026-10-19
+
+Опубликовано только Windows Core 3.2.30 (stable): release 821ae365-4200-
+1ab1-da7c-07c9c72ab746, installer VibixImages-Setup-3.2.30.exe, size 243071600,
+SHA-256 67f5e68b55f1396f94f45875d4c605c5c5c5361499b62a49541665fd8cca96e5.
+Source 3b9d9ac: Fal-апскейл через хранилище Fal (5131105), единый диалог
+запуска с честной стоимостью и раскрытием платной перегенерации (eb825cf,
+475e632), очередь «Обновить все модули» (6c2a8bc), универсальный стандарт
+силуэта в промпте (c0977f2). Run 39278189452 SUCCESS (предыдущий запуск
+39276838838 отменён владельцем-агентом из-за поздней микроправки текста).
+Публикация штатным PostgresLicenseService: backup
+pre-studio3230-publication-20261019.dump (pg_restore list PASS), снапшоты
+166 релизов и 46 файлов хранилища; после: health 200, discovery top1 3.2.30,
+дифф +1/-0/0, stored SHA rescan PASS. macOS не собиралась; модули/лицензии
+не тронуты. Живые платные операции и устройство владельца не проверены.
+Evidence: ../artifacts/studio-3.2.30-stable-20261019/. Rollback: withdraw
+821ae365.
+
+## Stable Studio3.2.29 Windows-only, 2026-10-19## Stable Studio3.2.29 Windows-only, 2026-10-19
 
 Опубликован только Windows Core 3.2.29 (stable, windows-x64, module_id null):
 release 74dc284f-f073-a471-c5e7-2e19cf4982bc, установщик VibixImages-Setup-3.2.29.exe,
