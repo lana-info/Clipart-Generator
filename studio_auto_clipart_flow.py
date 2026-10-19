@@ -633,8 +633,12 @@ class AutoClipartFlowController(ClipartFlowController):
                 except (OSError, ValueError):
                     expired_retries = ()
                 if expired_retries:
+                    from v3_flow_runtime import PROVIDER_DISPLAY_LABELS
+                    provider_names = ', '.join(sorted(
+                        PROVIDER_DISPLAY_LABELS.get(exhausted.split(':', 1)[0], exhausted.split(':', 1)[0])
+                        for exhausted in expired_retries))
                     message += (f"\n\nПрежние результаты больше недоступны для {len(expired_retries)} "
-                                f"объект(ов) ({', '.join(sorted(exhausted.split(':', 1)[0].capitalize() for exhausted in expired_retries))}).\n"
+                                f"объект(ов) ({provider_names}).\n"
                                 "Подтверждая запуск, вы соглашаетесь на их новую платную генерацию "
                                 "по текущему тарифу. Успешные изображения заново не создаются.")
                 if references:

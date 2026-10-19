@@ -1020,3 +1020,74 @@ def test_failed_generated_source_remains_local_after_reopening(workspace, monkey
     assert retry.selected_files == [str(raw.resolve())]
     assert not retry.generated_prompts
     worker.assert_not_called()
+
+
+
+
+import hashlib
+import json
+
+
+def test_launch_confirmation_discloses_expired_results_in_one_dialog(
+    app, workspace, monkeypatch,
+):
+    """The single launch dialog already names payable re-generation.
+
+    The rendered screenshot doubles as owner-facing UI evidence for 3.2.30;
+    answering No after the capture keeps the run unstarted."""
+    from PyQt6.QtWidgets import QMessageBox
+    from fal_provider import FalTaskJournal
+    from gpt25_provider import generation_payload
+    from v3_clipart_flow import build_clipart_run_request
+
+    evidence = Path(__file__).resolve().parents[1].parent / "artifacts" / "studio-3.2.30-stable-20261019"
+    evidence.mkdir(parents=True, exist_ok=True)
+    view, controller, _gate, _worker = workspace
+    prepare_launch(controller)
+    generation_page = controller.generation_page
+    option_index = generation_page.model_combo.findData("piapi/gpt-image-2.5-flare")
+    assert option_index >= 0, generation_page.model_combo.itemText(0)
+    generation_page.model_combo.setCurrentIndex(option_index)
+    app.processEvents()
+    prepared = build_clipart_run_request(controller.shell.state)
+    model = prepared.settings["text_generation_model"]
+    assert model == "piapi/gpt-image-2.5-flare"
+    entry = prepared.generated_prompts[0]
+    payload = generation_payload(
+        model, entry["prompt"],
+        prepared.settings.get("text_generation_ratio", "1:1"),
+        prepared.settings.get("text_generation_resolution", "1K"),
+    )
+    fingerprint = hashlib.sha256(json.dumps(
+        payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    journal = Path(prepared.work_dir) / ".vibix_piapi_tasks.json"
+    FalTaskJournal(journal).upsert(
+        "old", "generation", model, "expired", input_fingerprint=fingerprint,
+    )
+
+    captured = {}
+
+    def record_question(_parent, title, text, *args, **kwargs):
+        captured["title"], captured["text"] = title, text
+        box = QMessageBox(_parent)
+        box.setWindowTitle(title)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setText(text)
+        box.show()
+        app.processEvents()
+        box.grab().save(str(evidence / "ui-single-launch-confirmation.png"))
+        box.close()
+        box.deleteLater()
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", record_question)
+    controller.navigate(1)
+    app.processEvents()
+
+    assert captured["title"] == "Подтвердить запуск"
+    assert "точную цену заранее не сообщает" in captured["text"]
+    assert "генерация 1" in captured["text"]
+    assert "Прежние результаты больше недоступны для 1 объект(ов) (PiAPI)" in captured["text"]
+    assert "новую платную генерацию" in captured["text"]
+    assert controller.shell.state.current_step is StepId.REVIEW_RUN
