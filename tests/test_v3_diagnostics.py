@@ -33,7 +33,7 @@ class V3DiagnosticJournalTests(unittest.TestCase):
                 draft_path=root / "project_state.json",
                 diagnostic_journal=journal,
             )
-            self.assertEqual(view.mode_selection.diagnostics_button.text(), "Диагностика")
+            self.assertEqual(view.mode_selection.diagnostics_button.accessibleName(), "Диагностика")
             self.assertEqual(
                 view.mode_selection.receivers(view.mode_selection.diagnostics_requested),
                 1,

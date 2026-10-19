@@ -10900,8 +10900,8 @@ def run_packaged_entrypoint_check(
             and packaged_view.mode_selection.license_button.text() == "Лицензия"
             and packaged_view.mode_selection.module_updates_button.text() == "Обновления модулей"
             and not packaged_view.mode_selection.module_updates_button.isHidden()
-            and packaged_view.mode_selection.api_settings_button.text() == "Настройки API"
-            and packaged_view.mode_selection.diagnostics_button.text() == "Диагностика"
+            and packaged_view.mode_selection.api_settings_button.accessibleName() == "Настройки API"
+            and packaged_view.mode_selection.diagnostics_button.accessibleName() == "Диагностика"
         )
         controls_are_connected = (
             packaged_view.mode_selection.receivers(packaged_view.mode_selection.license_requested) == 1

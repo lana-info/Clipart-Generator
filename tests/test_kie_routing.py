@@ -806,7 +806,7 @@ class KieRoutingTests(unittest.TestCase):
             )
             operations = []
             worker._fal_source_url = types.MethodType(
-                lambda _self, _path, current_url: current_url
+                lambda _self, _path, current_url, **_kwargs: current_url
                 or "https://cdn.example/source.png",
                 worker,
             )

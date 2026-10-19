@@ -212,6 +212,8 @@ class PinterestPromptOnlyFlowTests(unittest.TestCase):
                 draft_path=Path(temp) / "draft.json", license_gate=gate
             )
             view._handle_mode_selected(ProjectMode.PINTEREST.value)
+            view.project_state.common.project_name = "Saved before run"
+            view.shell.mark_dirty()  # untouched projects are not stored; make it real
             controller = view.shell.workflow_controller("pinterest")
             request = PinterestPinRunRequest(
                 work_dir=temp,

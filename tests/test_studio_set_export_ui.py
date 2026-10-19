@@ -116,7 +116,7 @@ def test_renamed_set_title_is_used_for_zip_filename(images, tmp_path, monkeypatc
     dialog._rename_current_set()
     archives = export_clipart_sets(dialog.groups(), tmp_path)
     assert len(archives) == 1
-    assert archives[0].name == '001_зимние-персонажи.zip'
+    assert archives[0].name == '001_zimnie-personazhi.zip'
     dialog.reject()
 
 

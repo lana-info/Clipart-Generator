@@ -5,8 +5,8 @@ from enum import Enum
 from pathlib import Path
 import sys
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QPalette, QPixmap
+from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtWidgets import (
     QApplication,
@@ -489,6 +489,65 @@ def _refresh_style(widget: QWidget) -> None:
         style.unpolish(widget)
         style.polish(widget)
     widget.update()
+
+
+HEADER_ICON_KINDS = ("home", "key", "pulse", "folder")
+
+
+def header_icon(kind: str, color: str = "#2dd4bf", size: int = 24) -> QIcon:
+    """Simple line icon for the shared Studio header (no image files needed)."""
+    if kind not in HEADER_ICON_KINDS:
+        raise ValueError(f"unknown header icon: {kind}")
+    scale = 4
+    pixmap = QPixmap(size * scale, size * scale)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.scale(scale * size / 24, scale * size / 24)
+    pen = QPen(QColor(color), 1.8)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    if kind == "home":
+        painter.drawPolyline(QPolygonF([QPointF(3, 11.5), QPointF(12, 4), QPointF(21, 11.5)]))
+        painter.drawPolyline(QPolygonF([
+            QPointF(5.5, 10), QPointF(5.5, 20), QPointF(18.5, 20), QPointF(18.5, 10)]))
+        painter.drawPolyline(QPolygonF([QPointF(10, 20), QPointF(10, 14), QPointF(14, 14), QPointF(14, 20)]))
+    elif kind == "key":
+        painter.drawEllipse(QRectF(3.5, 7.5, 8, 8))
+        painter.drawLine(QPointF(11.5, 11.5), QPointF(21, 11.5))
+        painter.drawLine(QPointF(17, 11.5), QPointF(17, 15))
+        painter.drawLine(QPointF(20, 11.5), QPointF(20, 14))
+    elif kind == "pulse":
+        painter.drawPolyline(QPolygonF([
+            QPointF(2.5, 12), QPointF(7, 12), QPointF(9.5, 5.5), QPointF(13, 18.5),
+            QPointF(15.5, 12), QPointF(21.5, 12)]))
+    else:  # folder with an arrow: continue saved work
+        path = QPainterPath()
+        path.moveTo(3, 18.5)
+        path.lineTo(3, 6.5)
+        path.lineTo(9, 6.5)
+        path.lineTo(11, 9)
+        path.lineTo(19, 9)
+        path.lineTo(19, 11)
+        painter.drawPath(path)
+        painter.drawPolyline(QPolygonF([QPointF(3, 18.5), QPointF(6, 11), QPointF(21.5, 11), QPointF(18.5, 18.5), QPointF(3, 18.5)]))
+        painter.drawLine(QPointF(11, 14.8), QPointF(16.5, 14.8))
+        painter.drawPolyline(QPolygonF([QPointF(14.6, 12.9), QPointF(16.6, 14.8), QPointF(14.6, 16.7)]))
+    painter.end()
+    return QIcon(pixmap)
+
+
+def make_icon_button(button: "QPushButton", kind: str, label: str) -> None:
+    """Turn a text button into an icon button; the label stays as tooltip and accessible name."""
+    button.setText("")
+    button.setIcon(header_icon(kind))
+    button.setIconSize(QSize(22, 22))
+    button.setFixedSize(40, 36)
+    button.setToolTip(label)
+    button.setAccessibleName(label)
+    button.setProperty("iconLabel", label)
 
 
 class V3Button(QPushButton):

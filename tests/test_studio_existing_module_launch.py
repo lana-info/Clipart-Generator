@@ -148,6 +148,8 @@ def test_pinterest_local_worker_uses_its_own_right_and_saves_before_creation(app
     view = V3ApplicationView(draft_path=tmp_path / "draft.json", license_gate=gate, module_delivery=delivery)
     try:
         view.mode_selection.mode_cards[ProjectMode.PINTEREST].start_button.click()
+        view.project_state.common.project_name = "Saved before run"
+        view.shell.mark_dirty()  # untouched projects are not stored; make it real
         controller = view.shell.workflow_controller("pinterest")
         payload = sys.modules[type(controller).__module__]
         request = payload.PinterestPinRunRequest(work_dir=str(tmp_path), product_path="fixture.png",

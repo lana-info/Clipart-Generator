@@ -26,13 +26,34 @@ _WINDOWS_RESERVED = {
 }
 
 
+_RU_TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "kh", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}
+
+
+def transliterate_ru(text: str) -> str:
+    """Letter-by-letter Russian -> Latin (owner rule: transliterate, never translate)."""
+    result = []
+    for char in text:
+        mapped = _RU_TRANSLIT.get(char.lower())
+        if mapped is None:
+            result.append(char)
+        else:
+            result.append(mapped.capitalize() if char.isupper() else mapped)
+    return "".join(result)
+
+
 def slug_from_title(title: str, *, max_words: int = MAX_TITLE_WORDS) -> str:
     """Return a filesystem-safe, short slug from a user-facing short title."""
     if not isinstance(title, str):
         raise TypeError("title must be a string")
     if not 1 <= max_words <= 10:
         raise ValueError("max_words must be between 1 and 10")
-    normalized = unicodedata.normalize("NFKC", title).replace("_", " ")
+    normalized = transliterate_ru(unicodedata.normalize("NFKC", title)).replace("_", " ")
     words = _WORD_RE.findall(normalized)
     words = [word.casefold() for word in words[:max_words] if word.strip()]
     slug = "-".join(words)[:MAX_SLUG_LENGTH].strip("-.")
@@ -104,8 +125,12 @@ def create_contact_sheet_pdf(
     gap: float = 8.0,
     checkerboard: bool = False,
     overwrite: bool = False,
+    title: str | None = None,
 ) -> Path:
-    """Create a Letter contact sheet without retaining all decoded images in memory."""
+    """Create a Letter contact sheet without retaining all decoded images in memory.
+
+    With ``title`` every page gets a header "<title> — N шт." (N = whole set).
+    """
     from PIL import Image
     from PyQt6.QtCore import QRect, QRectF, QMarginsF, Qt
     from PyQt6.QtGui import QFont, QFontMetrics, QGuiApplication, QImage, QPainter, QPdfWriter, QPageSize, QTextOption
@@ -156,7 +181,9 @@ def create_contact_sheet_pdf(
         page_width, page_height = 612.0, 792.0
         cell_width = (page_width - 2 * margin - (columns - 1) * gap) / columns
         footer_height = 20.0
-        cell_height = (page_height - 2 * margin - footer_height - (rows - 1) * gap) / rows
+        header_text = f"{' '.join(title.split())} — {len(paths)} шт." if title and title.strip() else ""
+        header_height = 36.0 if header_text else 0.0
+        cell_height = (page_height - 2 * margin - header_height - footer_height - (rows - 1) * gap) / rows
         label_height = min(34.0, cell_height * 0.25)
         if cell_width < 24 or label_height < 8 or cell_height - label_height - 4 <= 0:
             raise ValueError("margin and gap leave no readable contact-sheet cells")
@@ -166,10 +193,26 @@ def create_contact_sheet_pdf(
             if page_number > 1:
                 if not writer.newPage():
                     raise RuntimeError("QPdfWriter could not start a new page")
+            if header_text:
+                header_font = QFont(font)
+                header_font.setPointSize(16)
+                header_font.setBold(True)
+                header_metrics = QFontMetrics(header_font)
+                title_part = header_text[: header_text.rfind(" — ")]
+                suffix = header_text[header_text.rfind(" — "):]
+                shown = header_text
+                while title_part and header_metrics.horizontalAdvance(shown) > page_width - 2 * margin:
+                    title_part = title_part[:-1].rstrip()
+                    shown = f"{title_part}…{suffix}"
+                painter.setFont(header_font)
+                painter.drawText(
+                    QRectF(margin, margin, page_width - 2 * margin, header_height - 6),
+                    int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter), shown)
+                painter.setFont(font)
             for index, path in enumerate(page_paths):
                 col, row = index % columns, index // columns
                 x = margin + col * (cell_width + gap)
-                y = margin + row * (cell_height + gap)
+                y = margin + header_height + row * (cell_height + gap)
                 image_box = (x, y, cell_width, cell_height - label_height - 4)
                 if image_box[2] <= 0 or image_box[3] <= 0:
                     raise ValueError("margin and gap leave no room for images")

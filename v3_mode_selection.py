@@ -33,6 +33,7 @@ from v3_components import (
     V3Button,
     V3DesignTokens,
     V3_WINDOW_DEFAULT_SIZE,
+    make_icon_button,
     V3_WINDOW_MINIMUM_SIZE,
     apply_v3_theme,
 )
@@ -40,7 +41,7 @@ from v3_project_state import ProjectMode, ProjectState
 from v3_project_state import (
     ProjectStateError, V3ProjectDocumentAdapter, load_project_draft, save_project_draft,
 )
-from studio_projects import ProjectStore
+from studio_projects import MAX_SAVED_PROJECTS, ProjectStore
 from studio_project_documents import ProjectDocumentService
 from studio_catalog import CatalogEntry, ModuleAvailability, card_action
 from studio_catalog_ui import BUILTIN_CATALOG, StudioCatalogCard, catalog_artwork
@@ -127,6 +128,7 @@ class ModeSelectionScreen(QWidget):
     diagnostics_requested = pyqtSignal()
     project_requested = pyqtSignal(str)
     all_projects_requested = pyqtSignal()
+    header_continue_requested = pyqtSignal()
     module_action_requested = pyqtSignal(str, str)
     module_updates_requested = pyqtSignal()
 
@@ -187,8 +189,14 @@ class ModeSelectionScreen(QWidget):
         self.active_module_label.setStyleSheet("font-size:16px;font-weight:600;")
         account_layout.addWidget(self.active_module_label, 2)
         self.studio_home_button = V3Button("Главная Studio", ButtonVariant.GHOST)
+        make_icon_button(self.studio_home_button, "home", "Главная Studio")
         self.studio_home_button.hide()
         account_layout.addWidget(self.studio_home_button)
+        # Always-visible "Продолжить": the host fills it with saved projects.
+        self.header_continue_button = V3Button("Продолжить", ButtonVariant.GHOST)
+        make_icon_button(self.header_continue_button, "folder", "Продолжить")
+        self.header_continue_button.clicked.connect(self.header_continue_requested.emit)
+        account_layout.addWidget(self.header_continue_button)
 
         self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
         self.license_button.clicked.connect(self.license_requested.emit)
@@ -197,9 +205,11 @@ class ModeSelectionScreen(QWidget):
         self.module_updates_button.clicked.connect(self.module_updates_requested.emit)
         account_layout.addWidget(self.module_updates_button)
         self.api_settings_button = V3Button("Настройки API", ButtonVariant.GHOST)
+        make_icon_button(self.api_settings_button, "key", "Настройки API")
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         account_layout.addWidget(self.api_settings_button)
         self.diagnostics_button = V3Button("Диагностика", ButtonVariant.GHOST)
+        make_icon_button(self.diagnostics_button, "pulse", "Диагностика")
         self.diagnostics_button.clicked.connect(self.diagnostics_requested.emit)
         account_layout.addWidget(self.diagnostics_button)
         layout.addWidget(self.account_card)
@@ -434,6 +444,10 @@ class V3ApplicationView(QWidget):
             except (OSError, ValueError):
                 self._project_store_unavailable = True
         self._active_project_id: str | None = None
+        # Snapshot of a freshly opened, still untouched project; None until the
+        # first save after the shell was created.
+        self._untouched_baseline: dict[str, Any] | None = None
+        self._new_project_has_content = False
         self._recent_saved_project_id: str | None = None
         self._preferences_path = (
             self._draft_path.with_name("preferences.json")
@@ -486,6 +500,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.diagnostics_requested.connect(self._show_diagnostics)
         self.mode_selection.project_requested.connect(self.continue_saved_project)
         self.mode_selection.all_projects_requested.connect(self._show_all_projects)
+        self.mode_selection.header_continue_requested.connect(self._show_header_continue)
         self.stack.addWidget(self.mode_selection)
         from studio_news import StudioNewsClient
         from studio_news_ui import StudioNewsController
@@ -1028,7 +1043,13 @@ class V3ApplicationView(QWidget):
             parts.append(record.updated_at[:16].replace("T", " "))
         return " · ".join(parts)
 
-    def _show_all_projects(self) -> None:
+    def _show_header_continue(self) -> None:
+        """Header "Продолжить": save the open project first, then pick another."""
+        if not self._save_before_leaving():
+            return
+        self._show_all_projects(anchor=self.mode_selection.header_continue_button)
+
+    def _show_all_projects(self, anchor: QWidget | None = None) -> None:
         menu = QMenu(self)
         try:
             records = self._project_store.recent(limit=None) if self._project_store else []
@@ -1053,7 +1074,7 @@ class V3ApplicationView(QWidget):
             action.triggered.connect(self.continue_last_project)
         elif not records:
             menu.addAction("Нет сохранённых проектов").setEnabled(False)
-        button = self.mode_selection.all_projects_button
+        button = anchor if isinstance(anchor, QWidget) else self.mode_selection.all_projects_button
         menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
         menu.deleteLater()
 
@@ -1176,6 +1197,25 @@ class V3ApplicationView(QWidget):
             return False
         return self._save_draft()
 
+    def _is_untouched_new_project(self, state: ProjectState) -> bool:
+        """True while a new project still equals its state right after opening."""
+        if self._new_project_has_content:
+            return False
+        current = state.to_dict()
+        if self._untouched_baseline is None:
+            self._untouched_baseline = current
+            return True
+        return current == self._untouched_baseline
+
+    def _prune_saved_projects(self) -> None:
+        """Keep at most MAX_SAVED_PROJECTS projects; the open one is never removed."""
+        if self._project_store is None:
+            return
+        try:
+            self._project_store.prune(MAX_SAVED_PROJECTS, keep=self._active_project_id)
+        except (OSError, ValueError):
+            pass
+
     def _save_draft(self) -> bool:
         path = self._draft_path
         if path is None or self.shell is None:
@@ -1192,10 +1232,14 @@ class V3ApplicationView(QWidget):
                 state = self.shell.state
                 name = state.common.project_name.strip() or "Без названия"
                 if self._active_project_id is None:
+                    # An untouched first step is not a project: nothing to remember.
+                    if self._is_untouched_new_project(state):
+                        return True
                     record = self._project_documents.create(
                         module_id, "project", name, state.to_dict()
                     )
                     self._active_project_id = record.project_id
+                    self._prune_saved_projects()
                 else:
                     self._project_documents.save(
                         self._active_project_id, name, state.to_dict()
@@ -1236,6 +1280,7 @@ class V3ApplicationView(QWidget):
                     getattr(shell, "module_id", state.mode.value), "project", name, state.to_dict()
                 )
                 self._active_project_id = record.project_id
+                self._prune_saved_projects()
             else:
                 self._project_documents.save(
                     self._active_project_id, name, state.to_dict()
@@ -1286,7 +1331,9 @@ class V3ApplicationView(QWidget):
             kwargs["project_id"] = project_id
         return self._create_prepared_project_worker(shell, **kwargs)
 
-    def _replace_shell(self, state: ProjectState, *, module_id: str | None = None) -> bool:
+    def _replace_shell(
+        self, state: ProjectState, *, module_id: str | None = None, has_content: bool = False,
+    ) -> bool:
         previous = self.shell
         if module_id == "auto-clipart":
             from license_client import LicenseError
@@ -1302,6 +1349,9 @@ class V3ApplicationView(QWidget):
         else:
             shell = AppShell(state, tokens=self.tokens)
         shell.project_id = self._active_project_id
+        self._untouched_baseline = None
+        # Pre-filled data (e.g. forwarded results) makes the project real at once.
+        self._new_project_has_content = has_content
         if isinstance(shell, AppShell):
             # The global Studio header already contains navigation and module name.
             shell._embedded_header = True
@@ -1444,7 +1494,7 @@ class V3ApplicationView(QWidget):
         state.processing.overwrite_existing = False
         previous_id = self._active_project_id
         self._active_project_id = None
-        if not self._replace_shell(state):
+        if not self._replace_shell(state, has_content=True):
             self._active_project_id = previous_id
             return False
         self.new_project_started.emit(ProjectMode.PROCESSING.value)
@@ -1491,14 +1541,40 @@ class V3ApplicationView(QWidget):
             self._news_controller.shutdown()
         if self._upcoming_controller is not None:
             self._upcoming_controller.shutdown()
+        leftover = self._stop_leftover_workers()
         self._diagnostic_event(
             "application_exit",
-            "Приложение закрыто штатно.",
-            outcome="success",
+            "Приложение закрыто штатно." if not leftover
+            else "Приложение закрыто, но рабочий поток не завершился вовремя.",
+            severity="info" if not leftover else "warning",
+            outcome="success" if not leftover else "worker_still_running",
+            details={"leftover_workers": leftover} if leftover else None,
         )
         if self._diagnostic_journal is not None:
             self._diagnostic_journal.close()
         super().closeEvent(event)
+
+    def _stop_leftover_workers(self, wait_ms: int = 3000) -> int:
+        """Ask any still-running worker thread to stop before exit; return how many did not."""
+        shell = self.shell
+        if shell is None:
+            return 0
+        stuck = 0
+        for controller in tuple(getattr(shell, "_workflow_controllers", {}).values()):
+            worker = getattr(controller, "worker", None)
+            is_running = getattr(worker, "isRunning", None)
+            try:
+                if worker is None or not callable(is_running) or not is_running():
+                    continue
+                stop = getattr(worker, "stop", None)
+                if callable(stop):
+                    stop()
+                wait = getattr(worker, "wait", None)
+                if callable(wait) and not wait(wait_ms):
+                    stuck += 1
+            except (RuntimeError, TypeError):
+                continue
+        return stuck
 
     def _finish_workflow(self, _mode: str) -> None:
         """Return to mode selection without reusing the completed shell."""

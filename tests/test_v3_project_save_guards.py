@@ -35,6 +35,9 @@ def signed_view(app, tmp_path, monkeypatch, request):
     view = V3ApplicationView(**options)
     view._handle_mode_selected(mode.value)
     assert view.shell.workflow_controller(mode.value) is not None
+    assert view._active_project_id is None  # untouched projects are not saved
+    view.project_state.common.project_name = "Initial content"
+    view.shell.mark_dirty()
     assert view._active_project_id is not None
     yield view, options, factory
     view.close()

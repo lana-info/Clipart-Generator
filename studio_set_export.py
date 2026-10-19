@@ -74,7 +74,7 @@ final PNGs and explicit membership.
                             raise ValueError('Экспорт принимает только PNG допустимого размера')
                         image.verify()
                     copied.append(target)
-                sheet = create_contact_sheet_pdf(copied, work / 'overview.pdf')
+                sheet = create_contact_sheet_pdf(copied, work / 'overview.pdf', title=title)
                 check_cancelled()
                 archive = bundles / f'{number:03d}_{slug_from_title(title)}.zip'
                 with ZipFile(archive, 'w', ZIP_DEFLATED) as zip_file:

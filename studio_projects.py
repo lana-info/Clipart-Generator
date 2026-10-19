@@ -23,6 +23,8 @@ LEGACY_SCHEMA_VERSION = 1
 # Keep the same per-file ceiling as the existing V3 draft boundary.
 MAX_PROJECT_BYTES = 2 * 1024 * 1024
 MAX_JSON_DEPTH = 64
+# Owner requirement 2026-10-19: the saved-project list holds at most 20 entries.
+MAX_SAVED_PROJECTS = 20
 MAX_NAME_LENGTH = 200
 _MODULE_ID = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 _DOCUMENT_TYPE = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
@@ -122,6 +124,29 @@ class ProjectStore:
                 continue
         records.sort(key=lambda record: (record.updated_at, record.project_id), reverse=True)
         return records if limit is None else records[:limit]
+
+    def prune(self, limit: int = MAX_SAVED_PROJECTS, *, keep: str | None = None) -> list[str]:
+        """Delete the oldest valid projects beyond ``limit``; never the ``keep`` project.
+
+        Damaged files are not counted and not deleted, so they stay recoverable.
+        """
+        if type(limit) is not int or limit < 1:
+            raise ProjectStoreError("Project limit must be a positive integer")
+        records = self.recent(limit=None)
+        removed: list[str] = []
+        excess = len(records) - limit
+        for record in reversed(records):
+            if excess <= 0:
+                break
+            if record.project_id == keep:
+                continue
+            try:
+                self._path_for(record.project_id).unlink()
+            except OSError:
+                continue
+            removed.append(record.project_id)
+            excess -= 1
+        return removed
 
     def _write(
         self, project_id: str, module_id: str, name: str, state: dict[str, Any], *,

@@ -258,7 +258,8 @@ class V3ModeSelectionTests(unittest.TestCase):
         )
         self.assertEqual(screen.license_button.text(), "Лицензия")
         self.assertTrue(screen.license_status_label.isHidden())
-        self.assertEqual(screen.api_settings_button.text(), "Настройки API")
+        self.assertEqual(screen.api_settings_button.accessibleName(), "Настройки API")
+        self.assertEqual(screen.api_settings_button.toolTip(), "Настройки API")
         self.assertEqual(license_requests, [True])
         self.assertEqual(api_requests, [True])
         screen.close()
@@ -494,11 +495,15 @@ class V3ModeSelectionTests(unittest.TestCase):
             draft_path = Path(temp) / "app-data" / "project_state.json"
             view = V3ApplicationView(draft_path=draft_path)
             view.mode_selection.mode_cards[ProjectMode.CLIPART].start_button.click()
+            # An untouched project is never saved, so give it real content first.
+            view.project_state.common.project_name = "Первое"
+            view.shell.mark_dirty()
 
             with patch(
                 "v3_mode_selection.save_project_draft",
                 side_effect=ProjectStateError("private path must not be shown"),
             ):
+                view.project_state.common.project_name = "Второе"
                 view.shell.mark_dirty()
 
             self.assertFalse(view.shell.save_error_label.isHidden())
@@ -546,6 +551,8 @@ class V3ModeSelectionTests(unittest.TestCase):
             path = Path(temp) / "project_state.json"
             view = V3ApplicationView(draft_path=path)
             view._handle_mode_selected(ProjectMode.CLIPART.value)
+            view.project_state.common.project_name = "Первое"
+            view.shell.mark_dirty()
             previous = path.read_bytes()
             view.project_state.common.project_name = "Несохранённые изменения"
             with patch.object(view._project_store, "save", side_effect=OSError("disk")):
@@ -626,6 +633,9 @@ class V3ModeSelectionTests(unittest.TestCase):
             factory = Mock(side_effect=AssertionError("resume must not create paid work"))
             view = V3ApplicationView(draft_path=path, worker_factory=factory)
             view._handle_mode_selected(ProjectMode.CLIPART.value)
+            self.assertIsNone(view._active_project_id)  # untouched: not saved yet
+            view.project_state.common.project_name = "Первое"
+            view.shell.mark_dirty()
             project_id = view._active_project_id
             self.assertIsNotNone(project_id)
             view.project_state.switch_mode(ProjectMode.PROCESSING)
