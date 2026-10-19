@@ -835,5 +835,130 @@ class FalProviderTests(unittest.TestCase):
             self.assertIsNotNone(journal.update_status("paid-new", "running"))
 
 
+class _ScriptedOpener:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.requests = []
+
+    def open(self, request, timeout):
+        self.requests.append(request)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+class FalStorageUploadTests(unittest.TestCase):
+    def _client_with_gate(self, gate):
+        return FalClient(
+            FalConfig(
+                api_key="fal-secret",
+                model_id="bria/increase-resolution",
+                before_paid_submit=gate,
+            )
+        )
+
+    def test_upload_storage_file_returns_https_file_url(self):
+        opener = _ScriptedOpener(
+            [
+                _Response(
+                    {
+                        "file_url": "https://v3b.fal.media/files/b/store/in.png",
+                        "upload_url": "https://storage.example/presigned",
+                    }
+                ),
+                _Response({}),
+            ]
+        )
+        paid_calls = []
+        client = self._client_with_gate(lambda: paid_calls.append(True))
+
+        with tempfile.NamedTemporaryFile(suffix=".png") as handle:
+            handle.write(b"png-bytes")
+            handle.flush()
+            with patch(
+                "fal_provider.urllib.request.build_opener", return_value=opener
+            ):
+                url = client.upload_storage_file(handle.name)
+
+        self.assertEqual(url, "https://v3b.fal.media/files/b/store/in.png")
+        initiate, put = opener.requests
+        self.assertEqual(initiate.full_url, "https://rest.fal.ai/storage/upload/initiate")
+        self.assertEqual(initiate.get_header("Authorization"), "Key fal-secret")
+        self.assertEqual(json.loads(initiate.data)["content_type"], "image/png")
+        self.assertEqual(put.get_method(), "PUT")
+        self.assertIsNone(put.get_header("Authorization"))
+        self.assertEqual(put.data, b"png-bytes")
+        self.assertEqual(paid_calls, [])
+
+    def test_upload_storage_file_failure_raises_before_any_paid_submit(self):
+        opener = _ScriptedOpener(
+            [
+                urllib.error.HTTPError(
+                    "https://rest.fal.ai/storage/upload/initiate",
+                    500,
+                    "storage unavailable",
+                    {},
+                    BytesIO(b'{"message":"boom"}'),
+                )
+            ]
+        )
+        paid_calls = []
+        client = self._client_with_gate(lambda: paid_calls.append(True))
+
+        with tempfile.NamedTemporaryFile(suffix=".png") as handle:
+            handle.write(b"png-bytes")
+            handle.flush()
+            with patch(
+                "fal_provider.urllib.request.build_opener", return_value=opener
+            ), self.assertRaisesRegex(FalProviderError, "HTTP 500"):
+                client.upload_storage_file(handle.name)
+
+        self.assertEqual(paid_calls, [])
+        self.assertEqual(len(opener.requests), 1)
+
+    def test_upload_storage_file_rejects_non_https_links(self):
+        opener = _ScriptedOpener(
+            [
+                _Response(
+                    {
+                        "file_url": "http://v3b.fal.media/files/b/store/in.png",
+                        "upload_url": "https://storage.example/presigned",
+                    }
+                )
+            ]
+        )
+        paid_calls = []
+        client = self._client_with_gate(lambda: paid_calls.append(True))
+
+        with tempfile.NamedTemporaryFile(suffix=".png") as handle:
+            handle.write(b"png-bytes")
+            handle.flush()
+            with patch(
+                "fal_provider.urllib.request.build_opener", return_value=opener
+            ), self.assertRaisesRegex(FalProviderError, "хранилища"):
+                client.upload_storage_file(handle.name)
+
+        self.assertEqual(paid_calls, [])
+
+    def test_upload_storage_file_rejects_oversize_file_without_requests(self):
+        opener = _ScriptedOpener([])
+        paid_calls = []
+        client = self._client_with_gate(lambda: paid_calls.append(True))
+
+        with tempfile.NamedTemporaryFile(suffix=".png") as handle:
+            handle.write(b"x" * 32)
+            handle.flush()
+            with patch(
+                "fal_provider.urllib.request.build_opener", return_value=opener
+            ), patch("fal_provider.FAL_FILE_INPUT_MAX_BYTES", 16), self.assertRaisesRegex(
+                FalProviderError, "слишком велико"
+            ):
+                client.upload_storage_file(handle.name)
+
+        self.assertEqual(opener.requests, [])
+        self.assertEqual(paid_calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

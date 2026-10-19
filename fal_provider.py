@@ -32,6 +32,8 @@ from provider_upscale_contract import normalize_fal_upscale_factor
 
 
 MAX_FAL_RESPONSE_BYTES = 2 * 1024 * 1024
+FAL_FILE_INPUT_MAX_BYTES = 8 * 1024 * 1024
+FAL_STORAGE_UPLOAD_INITIATE_URL = "https://rest.fal.ai/storage/upload/initiate"
 MAX_TASK_JOURNAL_RECORDS = 1000
 _JOURNAL_LOCKS_GUARD = threading.Lock()
 _JOURNAL_LOCKS: dict[str, threading.RLock] = {}
@@ -510,6 +512,7 @@ class FalClient:
         method: str = "GET",
         payload: Mapping[str, Any] | None = None,
         accepted_http_errors: tuple[int, ...] = (),
+        paid: bool = True,
     ) -> dict[str, Any]:
         body = None if payload is None else json.dumps(dict(payload)).encode("utf-8")
         if body is not None and len(body) > MAX_PROVIDER_PAYLOAD_BYTES:
@@ -528,6 +531,7 @@ class FalClient:
         for attempt in range(int(self.config.max_retries) + 1):
             if (
                 request.method.upper() == "POST"
+                and paid
                 and self.config.before_paid_submit is not None
             ):
                 self.config.before_paid_submit()
@@ -596,6 +600,57 @@ class FalClient:
         if not str(result.get("request_id") or "").strip():
             raise FalProviderError("Fal.ai не вернул request_id")
         return result
+
+    def upload_storage_file(self, path: str, *, content_type: str = "image/png") -> str:
+        """Upload one local file to Fal storage and return its public HTTPS URL.
+
+        Storage initiation is free, so the paid-submit gate is skipped here:
+        a failed upload raises before any paid request can exist. Presigned
+        upload URLs accepted below are HTTPS-only, and PUT carries no API key.
+        """
+        if content_type not in {"image/png", "image/jpeg", "image/webp"}:
+            raise FalProviderError("Fal.ai поддерживает для этой операции PNG, JPEG или WebP")
+        source = str(path or "").strip()
+        if not source:
+            raise FalProviderError("Не указан локальный файл для Fal.ai")
+        try:
+            size = os.path.getsize(source)
+            if size <= 0 or size > FAL_FILE_INPUT_MAX_BYTES:
+                raise FalProviderError("Локальное изображение слишком велико для Fal.ai")
+            with open(source, "rb") as handle:
+                data = handle.read(FAL_FILE_INPUT_MAX_BYTES + 1)
+        except OSError as error:
+            raise FalProviderError("Не удалось прочитать локальное изображение для Fal.ai") from error
+        if len(data) > FAL_FILE_INPUT_MAX_BYTES:
+            raise FalProviderError("Локальное изображение слишком велико для Fal.ai")
+        initiate = self._request(
+            FAL_STORAGE_UPLOAD_INITIATE_URL,
+            method="POST",
+            payload={
+                "content_type": content_type,
+                "file_name": os.path.basename(source),
+            },
+            paid=False,
+        )
+        file_url = str(initiate.get("file_url") or initiate.get("url") or "").strip()
+        upload_url = str(initiate.get("upload_url") or "").strip()
+        if not file_url.startswith("https://") or not upload_url.startswith("https://"):
+            raise FalProviderError("Fal.ai не вернул безопасные ссылки хранилища")
+        request = urllib.request.Request(
+            upload_url,
+            data=data,
+            headers={"Content-Type": content_type},
+            method="PUT",
+        )
+        try:
+            opener = urllib.request.build_opener(HttpsOnlyRedirectHandler())
+            with opener.open(request, timeout=self.config.timeout_seconds) as response:
+                response.read(MAX_FAL_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as error:
+            raise FalProviderError(f"Fal.ai хранилище HTTP {error.code}") from error
+        except (urllib.error.URLError, OSError, NetworkSecurityError) as error:
+            raise FalProviderError("Не удалось загрузить файл в хранилище Fal.ai") from error
+        return file_url
 
     def submit_task(self, request: ProviderTaskRequest) -> dict[str, Any]:
         """Submit through the shared contract, without creating a new fallback."""

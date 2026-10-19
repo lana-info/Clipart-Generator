@@ -3433,7 +3433,12 @@ class WorkerThread(QThread):
         )
         self.progress.emit(f"  Этап обработки: {stage}; status=running")
         if provider == "fal":
-            current_url = self._fal_source_url(current_path, current_url)
+            current_url = self._fal_source_url(
+                current_path,
+                current_url,
+                require_https=True,
+                fal_model_id=upscale_model,
+            )
             with self._provider_lease("fal"):
                 current_url = self._fal_process_image(
                     current_url,
@@ -3522,11 +3527,36 @@ class WorkerThread(QThread):
         )
         return current_path, current_url, False
 
-    def _fal_source_url(self, current_path, current_url):
+    def _fal_upload_https_url(self, path, model_id):
+        """Upload the local image to Fal storage for models rejecting data URIs.
+
+        Initiation and PUT are free; if either fails, the error surfaces
+        before any paid queue submission can be created.
+        """
+        client = FalClient(
+            FalConfig(
+                api_key=self.fal_api_key,
+                model_id=model_id,
+                timeout_seconds=max(10.0, float(self.timeout)),
+                before_paid_submit=lambda: self._admit_paid_submission(
+                    "fal", "POST"
+                ),
+            )
+        )
+        url = client.upload_storage_file(path)
+        if path and os.path.isfile(path):
+            self._remember_paid_image_input(url, path)
+        return url
+
+    def _fal_source_url(self, current_path, current_url, *, require_https=False, fal_model_id=None):
         if current_url and str(current_url).startswith("https://"):
             if current_path and os.path.isfile(current_path):
                 self._remember_paid_image_input(str(current_url), current_path)
             return str(current_url)
+        if require_https:
+            return self._fal_upload_https_url(
+                current_path, fal_model_id or self.fal_upscale_model
+            )
         data_uri = fal_image_data_uri(current_path)
         # Hash the serialized input, avoiding a second file read if an editor
         # replaces the source between encoding and fingerprint registration.
