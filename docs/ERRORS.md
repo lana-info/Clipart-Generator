@@ -1,3 +1,27 @@
+## Fal.ai upscale data-URI rejection, 2026-10-17 {#fal-upscale-data-uri-20261017}
+
+Платный запуск владельца 17.10 21:44 UTC: этап upscale_after, provider fal,
+модель bria/increase-resolution — HTTP 422 «Could not fetch image_url: URL
+scheme 'data' is not allowed». Причина: `_fal_source_url` не имел HTTPS-пути и
+передавал локальный PNG как data URI; страница модели не гарантирует приём
+data URI. Исправление 3.2.30 (5131105): `FalClient.upload_storage_file` грузит
+PNG в хранилище Fal (rest.fal.ai/storage/upload/initiate → presigned PUT) и
+передаёт HTTPS URL; утечки ключа в PUT нет; при неудаче загрузки платный POST
+не создаётся (шлюз before_paid_submit не задействован). 4 офлайн-теста
+(test_fal_provider) PASS; живой повтор владельцем не выполнялся.
+
+## Автосброс подтверждения запуска автосейвом, 2026-10-18 {#autoclipart-confirmation-autosave-20261018}
+
+Сценарий владельца: ошибка генерации, затем повторный переход к результатам —
+«Results can only follow an explicit review and run» (v3_wizard.py:722), дважды
+связан с висевшим процессом ~50% CPU. Причина подтверждена кодом и отловлена
+текстом: таймер автосохранения шёл в момент подтверждения запуска и сбрасывал
+_run_request_key до входа в navigate. Исправление 3.2.29 (58a31a2): автосейв
+останавливается на время подтверждения и возобновляется после; 4 регрессионных
+теста + существующие worker-тесты PASS; владелец обновился и подтвердил работу.
+Зависание CPU как причина НЕ установлено и не закрыто: см. STATE «Зависшие
+процессы...», наблюдение владельца 2026-10-19 — после 3.2.29 не повторяется.
+
 ## Desktop CI3.2.24 byte-baseline mismatch, 2026-10-13
 
 Run38504974478 наa5f60b1:1FAIL/3418PASS/57SKIP/21deselected/331subtests.
