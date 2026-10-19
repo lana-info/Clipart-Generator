@@ -1,5 +1,37 @@
 # Official Module Releases
 
+## Stable Studio3.2.29 Windows-only, 2026-10-19
+
+Опубликован только Windows Core 3.2.29 (stable, windows-x64, module_id null):
+release 74dc284f-f073-a471-c5e7-2e19cf4982bc, установщик VibixImages-Setup-3.2.29.exe,
+size 243086384, SHA-256 0ded202e57b10dd4b651ea6d92a239781c7197897958135914354e864703dd36.
+Source 58a31a2 (fix(autoclipart): pause autosave during run confirmation);
+native run 39183893974 SUCCESS (test run 39181846633 не использовался).
+Публикация штатным серверным слоем PostgresLicenseService внутри контейнера
+license-service-license-service-1: create_draft → attach → серверная сверка SHA/size
+→ published. Без прямого SQL и без админ-сессии.
+
+Перед публикацией: verified 0600 pg_dump
+/opt/bots-stack/backups/clipart-license-service/pre-studio3229-publication-20261019.dump
+(pg_restore --list PASS, 18 tables), снапшоты всех 166 релизов и SHA-список 45 файлов
+хранилища. После: health 200, stable/top1 discovery 3.2.29 (дальше 3.2.28, 3.1.4),
+дифф таблицы релизов +1/-0/изменено 0 — macOS 3.2.28, модули 1.5.9, лицензии
+не тронуты. Stored bytes rescan SHA PASS. manifest route жив: invalid-license probe
+403 UPDATE_NOT_ALLOWED.
+
+Evidence: ../artifacts/studio-3.2.29-stable-20261019/ (stable-release-receipt.json,
+server-prepublication-releases.json, server-postpublication-releases.json,
+backup-verification.json, backup-pg-restore-list.txt,
+prepublication-artifact-store-sha256.txt).
+
+Ограничения: macOS 3.2.29 не собиралась (по условию). Владелец обновил приложение
+на своём устройстве 2026-10-19 и подтверждает, что номер версии изменился (это
+первое фактически подтверждённое owner-device обновление в истории проекта);
+авторизованное скачивание по подписанному манифесту идёт через штатный клиент,
+машина владельца не проверялась инструментами. 3.1.4 upgrade fixture в workflow был
+skipped; пропущенные проверки не считать пройденными. Rollback: withdraw 74dc284f
+(release-файл не удалять до отдельного решения владельца).
+
 ## Stable Studio3.2.22 / все модули1.5.8, 2026-10-13
 
 По прямому поручению владельца опубликованы2Core и12module stable rows:
