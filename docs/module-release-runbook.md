@@ -1,5 +1,23 @@
 # Official Module Releases
 
+## Stable Studio3.2.32 Windows-only, 2026-10-19
+
+Только Windows Core 3.2.32 (stable): release a73b51ec-9707-7cf1-f3b3-
+4fb5f79dcd89, VibixImages-Setup-3.2.32.exe, size 243150812, SHA-256
+b036bfe3fe77c3e86eefcda716394809125c8c73470693bbbc40655afa6f0e20. Source
+d1d0cb8 (ветка codex/projects-export-hardening-20261019), run 39333551665
+SUCCESS. Состав: Projects (пустые не сохраняются, лимит 20, «Продолжить» в
+шапке, иконки), экспорт набора (транслитерация имён, PDF с заголовком),
+мягкая кисть прозрачности и сглаженный край, аккуратное закрытие. Публикация
+подтверждена владельцем; запись на сервер выполнена владельцем вручную
+скриптами publish-3.2.32.sh / publish-3.2.32-finish.sh (автоматика агента
+была отклонена классификатором). Штатная PostgresLicenseService-цепочка:
+backup pre-studio3232-publication-20261019.dump (pg_restore list 110 PASS),
+снапшот 169 → 170 релизов, дифф +1/-0/0, health ok, stored SHA совпал
+(повторный хеш файла на диске). 3.2.31 остаётся published; клиенты stable
+получают 3.2.32. macOS не собиралась. Evidence:
+../artifacts/studio-3.2.32-stable-20261019/. Rollback: withdraw a73b51ec.
+
 ## Stable Studio3.2.31 Windows-only, 2026-10-19
 
 Только Windows Core 3.2.31 (stable): release 2e2362fd-bd96-5928-1f9c-
