@@ -14,6 +14,8 @@ class ObjectEditor(QWidget):
         left, right = QVBoxLayout(), QVBoxLayout()
         root.addLayout(left, 1)
         root.addLayout(right, 2)
+        self.left = left
+        self.buttons = []
         self.list = QListWidget()
         self.list.setAccessibleName('Объекты набора')
         left.addWidget(self.list)
@@ -21,7 +23,9 @@ class ObjectEditor(QWidget):
             button = QPushButton(text)
             button.clicked.connect(handler)
             left.addWidget(button)
+            self.buttons.append(button)
         form = QFormLayout()
+        self.form = form
         self.role = QComboBox()
         for key, title in zip(OBJECT_ROLES, ('Главный объект', 'Композиция', 'Венок', 'Бордюр / рамка', 'Декор')):
             self.role.addItem(title, key)
@@ -38,6 +42,9 @@ class ObjectEditor(QWidget):
         self.pinned = QCheckBox('Сохранить эту идею при повторном подборе')
         self.pinned.toggled.connect(self._store)
         right.addWidget(self.pinned)
+        self.right = right
+        self.extra_actions = QHBoxLayout()
+        right.addLayout(self.extra_actions)
         self.role.currentIndexChanged.connect(self._store)
         self.status = QLabel('Заполните названия. Поля действий и деталей необязательны.')
         self.status.setTextFormat(Qt.TextFormat.PlainText)
@@ -46,6 +53,34 @@ class ObjectEditor(QWidget):
         right.addStretch()
         self.list.currentRowChanged.connect(self._select)
         self.refresh()
+
+    def set_compact_mode(self):
+        """Fit one screen: the three list buttons in one row, tighter spacing."""
+        from v3_components import make_icon_button
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        for button, kind in zip(self.buttons, ("plus", "copy", "trash")):
+            self.left.removeWidget(button)
+            make_icon_button(button, kind, button.text())  # icon only; text kept as tooltip/name
+            row.addWidget(button)
+        row.addStretch(1)
+        self.tool_row = row
+        self.left.addLayout(row)
+        self.form.setVerticalSpacing(6)
+        self.right.setSpacing(6)
+        self.list.setMinimumHeight(120)
+        # "Keep on re-pick" checkbox and the extra action button share one row.
+        self.right.removeWidget(self.pinned)
+        self.right.removeItem(self.extra_actions)
+        self.right.insertWidget(1, self.pinned)
+        self.status.hide()  # the hint under the fields is redundant on the compact page
+
+    def add_action(self, widget):
+        """Add an extra action (e.g. 'replace this idea') to the icon row under the list."""
+        if hasattr(self, "tool_row"):
+            self.tool_row.insertWidget(self.tool_row.count() - 1, widget)
+        else:
+            self.extra_actions.addWidget(widget)
 
     def refresh(self):
         index = min(max(self.selected, 0), len(self.items) - 1)

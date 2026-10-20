@@ -50,8 +50,7 @@ class PlanningPanel(QWidget):
 
     @staticmethod
     def automatic_ready_text(count):
-        return (f'Готово: подготовлено {count} идей. Нажмите «Далее», чтобы перейти к промптам. '
-                'Чтобы проверить или поправить идеи, откройте их список.')
+        return (f'Готово: подготовлено {count} идей. Нажмите «Далее» или поправьте идеи ниже.')
 
     def __init__(self, snapshot, editor, selection=None, parent=None, reference_images=None, clear_reference_images=None):
         super().__init__(parent)
@@ -112,6 +111,7 @@ class PlanningPanel(QWidget):
             actions.addWidget(button)
         self.selected_model_label = QLabel()
         self.selected_model_label.setWordWrap(True)
+        self.ideas_layout, self.actions = ideas_layout, actions
         ideas_layout.addWidget(self.selected_model_label)
         ideas_layout.addLayout(actions)
         self.status = QLabel('Подбор запускается только после подтверждения. По умолчанию изображения референсов не отправляются; передача возможна только по явному выбору пользователя.')
@@ -125,8 +125,30 @@ class PlanningPanel(QWidget):
         self.one_button.clicked.connect(lambda: self.start(True))
         self.cancel_button.clicked.connect(self.cancel)
 
+    def _compact_layout(self):
+        """One row: status/model text on the left, the single main button on the right."""
+        layout = self.ideas_layout
+        while layout.count():
+            layout.takeAt(0)
+        for button in (self.all_button, self.one_button, self.cancel_button):
+            self.actions.removeWidget(button)
+        top = QHBoxLayout()
+        layout.addLayout(top)
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        text.addWidget(self.selected_model_label)
+        text.addWidget(self.status)
+        top.addLayout(text, 1)
+        buttons = QVBoxLayout()
+        buttons.addWidget(self.all_button)
+        buttons.addWidget(self.cancel_button)
+        top.addLayout(buttons)
+        self.all_button.setMinimumWidth(220)
+        self.cancel_button.setMinimumWidth(220)
+
     def configure_automatic(self):
         self.automatic = True
+        self._compact_layout()
         self.all_button.setText('Подготовить набор')
         self.all_button.setStyleSheet('background:#20c9b7;color:#071d1a;min-height:36px;font-weight:600')
         self.one_button.setText('Перегенерировать эту идею')
@@ -137,6 +159,8 @@ class PlanningPanel(QWidget):
         total = len(self.editor.items)
         self.status.setText(self.automatic_ready_text(ready)
                             if total and ready == total else 'Набор ещё не подготовлен')
+        if total and ready == total:
+            self.all_button.setText('Подобрать заново')
 
     def _models(self):
         self.model.clear()
@@ -327,6 +351,8 @@ class PlanningPanel(QWidget):
                         self.editor.refresh()
                         self._finish(self.automatic_ready_text(len(items)) if getattr(self, 'automatic', False)
                                      else f'Подготовлено {len(items)} идей. Можно перейти к промптам.')
+                        if getattr(self, 'automatic', False):
+                            self.all_button.setText('Подобрать заново')
                     except ValueError as exc:
                         self._finish(f'{exc} Набор не изменён.')
                     return

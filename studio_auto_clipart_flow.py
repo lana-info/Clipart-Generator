@@ -90,19 +90,35 @@ class CollectionBrief(ClipartBuilderDialog):
             ref['path'] for ref in self.reference_editor.value() if ref.get('enabled', True)
         ) if self.planning.send_references.isChecked() else ()
         self.planning.clear_reference_images = lambda: self.planning.send_references.setChecked(False)
-        self.object_editor.hide()
-        edit_ideas = QPushButton("Посмотреть и изменить идеи")
-        edit_ideas.setCheckable(True)
-        edit_ideas.toggled.connect(self.object_editor.setVisible)
-        edit_ideas.toggled.connect(self.planning.one_button.setVisible)
-        edit_ideas.toggled.connect(lambda shown: edit_ideas.setText(
-            "Скрыть идеи" if shown else "Посмотреть и изменить идеи"))
-        def show_idea_controls(index):
-            edit_ideas.setVisible(index == 0)
-            self.object_editor.setVisible(index == 0 and edit_ideas.isChecked())
-        self.planning.tabs.currentChanged.connect(show_idea_controls)
-        self.pages.widget(4).widget().layout().addWidget(edit_ideas)
-        self.pages.widget(4).widget().layout().addStretch(1)
+        # One page, no scrolling: ideas list and fields are always visible (owner request 2026-10-20).
+        self.object_editor.set_compact_mode()
+        from v3_components import make_icon_button
+        make_icon_button(self.planning.one_button, 'update', 'Заменить эту идею')
+        self.object_editor.add_action(self.planning.one_button)
+        self.planning.one_button.show()
+
+        def fit_tabs(index):
+            # The taller "Модель текста" page must not stretch the ideas page.
+            tabs = self.planning.tabs
+            for number in range(tabs.count()):
+                # QTabWidget sizes itself to its tallest page; clamp the hidden pages to 0.
+                tabs.widget(number).setMaximumHeight(16777215 if number == index else 0)
+            tabs.updateGeometry()
+            # Ideas tab: only as tall as its content (+ room for a wrapped status line).
+            tabs.setMaximumHeight(
+                tabs.tabBar().sizeHint().height() + tabs.widget(0).sizeHint().height() + 10
+                if index == 0 else 16777215)
+            self.object_editor.setVisible(index == 0)
+
+        self.planning.tabs.currentChanged.connect(fit_tabs)
+        fit_tabs(0)
+        page_layout = self.pages.widget(4).widget().layout()
+        page_layout.setSpacing(8)
+        page_layout.setContentsMargins(2, 2, 2, 2)
+        self.planning.layout().setContentsMargins(0, 0, 0, 0)
+        self.planning.ideas_layout.setContentsMargins(6, 4, 6, 4)
+        self.object_editor.layout().setContentsMargins(0, 0, 0, 0)
+        self.pages.widget(4).setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.planning.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         skip_references = QPushButton("Пропустить референсы")
         skip_references.clicked.connect(self._skip_references)

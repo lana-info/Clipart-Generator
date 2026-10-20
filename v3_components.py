@@ -491,7 +491,7 @@ def _refresh_style(widget: QWidget) -> None:
     widget.update()
 
 
-HEADER_ICON_KINDS = ("home", "key", "pulse", "folder", "update")
+HEADER_ICON_KINDS = ("home", "key", "pulse", "folder", "update", "plus", "copy", "trash")
 
 
 def header_icon(kind: str, color: str = "#2dd4bf", size: int = 24) -> QIcon:
@@ -523,6 +523,18 @@ def header_icon(kind: str, color: str = "#2dd4bf", size: int = 24) -> QIcon:
         painter.drawPolyline(QPolygonF([
             QPointF(2.5, 12), QPointF(7, 12), QPointF(9.5, 5.5), QPointF(13, 18.5),
             QPointF(15.5, 12), QPointF(21.5, 12)]))
+    elif kind == "plus":
+        painter.drawLine(QPointF(12, 5), QPointF(12, 19))
+        painter.drawLine(QPointF(5, 12), QPointF(19, 12))
+    elif kind == "copy":
+        painter.drawRoundedRect(QRectF(8.5, 8.5, 11, 11), 2, 2)
+        painter.drawPolyline(QPolygonF([QPointF(15.5, 5.5), QPointF(5.5, 5.5), QPointF(5.5, 15.5)]))
+    elif kind == "trash":
+        painter.drawLine(QPointF(4.5, 7), QPointF(19.5, 7))
+        painter.drawPolyline(QPolygonF([QPointF(9.5, 7), QPointF(9.5, 4.5), QPointF(14.5, 4.5), QPointF(14.5, 7)]))
+        painter.drawPolyline(QPolygonF([QPointF(6.5, 7), QPointF(7.5, 19.5), QPointF(16.5, 19.5), QPointF(17.5, 7)]))
+        painter.drawLine(QPointF(10.5, 10.5), QPointF(10.5, 16.5))
+        painter.drawLine(QPointF(13.5, 10.5), QPointF(13.5, 16.5))
     elif kind == "update":  # circular arrow: check for updates
         painter.drawArc(QRectF(4.5, 4.5, 15, 15), 40 * 16, 280 * 16)
         painter.drawPolyline(QPolygonF([QPointF(15.5, 2.8), QPointF(18.6, 6.2), QPointF(14.2, 7.6)]))
