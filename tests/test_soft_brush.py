@@ -65,3 +65,20 @@ def test_smoothing_curve_rounds_a_sharp_corner_and_ends_at_midpoint():
     # A straight polyline would pass through the corner; the curve cuts it.
     assert min(((x - corner[0]) ** 2 + (y - corner[1]) ** 2) ** 0.5 for x, y in curve) > 2.0
     assert len(curve) >= 7
+
+
+def test_small_brushes_stay_hard_and_wide_soft_fades_gradually():
+    from background_mask import MIN_SOFT_RADIUS
+    for radius in range(0, MIN_SOFT_RADIUS):  # diameters 1, 3, 6 and below
+        soft = Image.new("L", (60, 40), 0)
+        hard = Image.new("L", (60, 40), 0)
+        paint_mask_path(soft, [(20, 20), (40, 20)], radius=radius, action="add", hardness=0)
+        paint_mask_path(hard, [(20, 20), (40, 20)], radius=radius, action="add", hardness=100)
+        assert list(soft.getdata()) == list(hard.getdata())
+    wide = Image.new("L", (160, 100), 0)
+    paint_mask_path(wide, [(40, 50), (120, 50)], radius=32, action="add", hardness=0)
+    profile = [wide.getpixel((80, 50 - d)) for d in range(0, 33)]
+    assert all(a >= b for a, b in zip(profile, profile[1:]))      # monotonic, no bumps
+    steps = [a - b for a, b in zip(profile, profile[1:])]
+    assert max(steps) < 20                                         # gradual: no hard step
+    assert profile[0] >= 250 and profile[16] < 170 and profile[-1] <= 2

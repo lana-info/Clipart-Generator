@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from functools import lru_cache
+import math
 from math import ceil, floor, hypot
 from pathlib import Path
 
@@ -50,6 +51,9 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
 
 
 SUBPIXEL_STEPS = 4
+# Owner acceptance 2026-10-19: a soft edge on a tiny brush only looks ragged, so
+# brushes up to 6 px across (radius <= 3) stay hard whatever hardness is chosen.
+MIN_SOFT_RADIUS = 4
 
 
 @lru_cache(maxsize=256)
@@ -58,6 +62,8 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
     if radius == 0:
         # A single pixel has no feathered neighbours, regardless of hardness.
         return Image.new("L", (1, 1), 255)
+    if radius < MIN_SOFT_RADIUS:
+        hardness = 100
     fractional = bool(qx or qy)
     diameter = radius * 2 + (2 if fractional else 1)
     cx = radius + 0.5 + qx / SUBPIXEL_STEPS
@@ -74,8 +80,11 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
     if hardness == 100:
         return shape
     # Falloff measured against the brush radius itself: fully opaque inside
-    # ``hardness`` percent of the radius, fading linearly to 0 at the very edge.
+    # ``hardness`` percent of the radius, then a gaussian-like fade that reaches
+    # exactly 0 at the edge (gradual, no flat "stripe" and no hard step).
     core = hardness / 100
+    edge = radius + 0.5
+    floor_value = math.exp(-4.5)
     data = []
     for y in range(diameter):
         for x in range(diameter):
@@ -83,7 +92,9 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
             if ratio <= core:
                 data.append(255)
             else:
-                data.append(max(0, round(255 * (1 - ratio) / (1 - core))))
+                t = min(1.0, (ratio - core) / (1 - core))
+                value = (math.exp(-4.5 * t * t) - floor_value) / (1 - floor_value)
+                data.append(max(0, round(255 * value)))
     feather = Image.new("L", (diameter, diameter))
     feather.putdata(data)
     return ImageChops.multiply(shape, feather)
