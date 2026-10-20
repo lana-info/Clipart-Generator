@@ -941,8 +941,11 @@ class V3ApplicationView(QWidget):
 
     def _stop_busy_work_for_leaving(self) -> bool:
         """Ask before leaving a module with unfinished work; stop it on request."""
-        if self._busy_reason() is None:
+        reason = self._busy_reason()
+        if reason is None:
             return True
+        if reason == "export":
+            return True  # _save_before_leaving reports and blocks it
         answer = QMessageBox.question(
             self, "Перейти на главную?",
             "Задание ещё выполняется или не завершилось. Остановить его и перейти на главную? "
@@ -1266,6 +1269,9 @@ class V3ApplicationView(QWidget):
             return None
         module_id = getattr(self.shell, "module_id", self.shell.state.mode.value)
         controller = self.shell.workflow_controller(module_id)
+        panel = getattr(controller, "export_panel", None)
+        if panel is not None and getattr(panel, "worker", None) is not None:
+            return "export"  # short, deliberate protection: never interrupted by close/Home
         if self.shell.active_run_controller() is not None:
             return "active_run"
         if callable(getattr(controller, "is_busy", None)) and controller.is_busy():
@@ -1637,7 +1643,9 @@ class V3ApplicationView(QWidget):
             self._diagnostic_event(
                 "close_blocked_by_busy", "Закрытие запросило подтверждение: задание не завершено.",
                 severity="warning", details={"reason": busy})
-            if not self._confirm_close_while_busy():
+            if busy == "export" or not self._confirm_close_while_busy():
+                if busy == "export":
+                    self.shell.set_save_error("Дождитесь завершения экспорта набора.")
                 event.ignore()
                 return
             try:
