@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 import weakref
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -10,7 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QEvent, QEventLoop, QStandardPaths, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QEventLoop, QStandardPaths, QThread, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -387,6 +389,29 @@ class ModeSelectionScreen(QWidget):
         self.cancel_button.setVisible(bool(enabled))
 
 
+class _ModuleVerifyThread(QThread):
+    """Full signature/file verification of installed modules, off the GUI thread."""
+
+    verified = pyqtSignal()
+
+    def __init__(self, store, module_ids, parent=None) -> None:
+        super().__init__(parent)
+        self.store, self.module_ids = store, list(module_ids)
+        self.durations_ms: dict[str, int] = {}
+
+    def run(self) -> None:
+        for module_id in self.module_ids:
+            if self.isInterruptionRequested():
+                break
+            started = time.monotonic()
+            try:
+                self.store.verify_for_display(module_id)
+            except Exception:
+                pass
+            self.durations_ms[module_id] = int((time.monotonic() - started) * 1000)
+        self.verified.emit()
+
+
 class V3ApplicationView(QWidget):
     screen_changed = pyqtSignal(str)
     new_project_started = pyqtSignal(str)
@@ -407,9 +432,12 @@ class V3ApplicationView(QWidget):
         legacy_project: ProjectState | None = None,
         workflow_registry: WorkflowRegistry | None = None,
         module_delivery: Any | None = None,
+        exit_watchdog_seconds: float | None = None,
     ) -> None:
         super().__init__(parent)
         self.tokens = tokens
+        self._exit_watchdog_seconds = exit_watchdog_seconds
+        self._module_verifier: _ModuleVerifyThread | None = None
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self._recent_project: ProjectState | None = None
         self._runtime_settings_provider = runtime_settings_provider
@@ -668,6 +696,7 @@ class V3ApplicationView(QWidget):
             deadline = authorization.grace_expires_at if authorization.is_offline_grace else authorization.expires_at
             if deadline is None or datetime.now(timezone.utc) >= deadline:
                 authorization = None
+        unverified: list[str] = []
         for module_id, card in self.mode_selection.module_cards.items():
             if not card.entry.released:
                 continue
@@ -677,7 +706,14 @@ class V3ApplicationView(QWidget):
                 try:
                     installed = self._module_delivery.has_active_workflow(module_id)
                     if installed:
-                        self._module_delivery.store.verified_active_path(module_id)
+                        # Full verification hashes every file: never on the GUI thread (hung
+                        # startups, owner diagnostics 2026-10-20). Use the cached verdict and
+                        # verify unknown modules in the background.
+                        verdict = self._module_delivery.store.cached_verification(module_id)
+                        if verdict is False:
+                            installed, compatible = False, False
+                        elif verdict is None:
+                            unverified.append(module_id)
                 except (OSError, ValueError):
                     installed, compatible = False, False
             checked = self._module_updates_dialog.checked.get(module_id) if self._module_updates_dialog else None
@@ -695,6 +731,8 @@ class V3ApplicationView(QWidget):
                 release_available=bool(checked and checked[1] is not None),
             ))
         self.mode_selection.refresh_module_update_indicator()
+        if unverified:
+            self._start_module_verification(unverified)
 
     def _module_state_changed(self):
         from license_client import LicenseAuthorization
@@ -1557,9 +1595,44 @@ class V3ApplicationView(QWidget):
             outcome="success" if not leftover else "worker_still_running",
             details={"leftover_workers": leftover} if leftover else None,
         )
+        if self._module_verifier is not None:
+            self._module_verifier.requestInterruption()
         if self._diagnostic_journal is not None:
             self._diagnostic_journal.close()
+        self._arm_exit_watchdog()
         super().closeEvent(event)
+
+    def _start_module_verification(self, module_ids) -> None:
+        if self._module_verifier is not None and self._module_verifier.isRunning():
+            return
+        thread = _ModuleVerifyThread(self._module_delivery.store, module_ids, self)
+        thread.verified.connect(self._module_verification_done)
+        self._module_verifier = thread
+        thread.start()
+
+    def _module_verification_done(self) -> None:
+        thread = self._module_verifier
+        if thread is None:
+            return
+        self._diagnostic_event(
+            "module_verification_finished",
+            "Фоновая проверка модулей завершена.",
+            details={"duration_ms": dict(thread.durations_ms)},
+        )
+        self.refresh_license_status()
+
+    def _arm_exit_watchdog(self) -> None:
+        """Last resort: end the process if it still lingers after the window closed."""
+        if not self._exit_watchdog_seconds:
+            return
+        self._diagnostic_event(
+            "exit_watchdog_armed",
+            "Включена страховка принудительного завершения процесса.",
+            details={"seconds": self._exit_watchdog_seconds},
+        )
+        timer = threading.Timer(self._exit_watchdog_seconds, os._exit, args=(0,))
+        timer.daemon = True
+        timer.start()
 
     def _stop_leftover_workers(self, wait_ms: int = 3000) -> int:
         """Ask any still-running worker thread to stop before exit; return how many did not."""

@@ -131,6 +131,7 @@ class ModuleStore:
         self.version = _version(studio_version)
         self.platform = platform
         self.trusted_keys = dict(trusted_keys)
+        self._display_verdicts: dict[tuple[str, str], tuple[str, bool]] = {}
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _module_dir(self, module_id: str) -> Path:
@@ -332,6 +333,46 @@ class ModuleStore:
         if not state["enabled"]:
             return None
         return self._verified_version(module_id, state["active"])
+
+    def _tree_signature(self, path: Path) -> str:
+        """Cheap fingerprint (names, sizes, mtimes; no file reads) of an installed version."""
+        digest = hashlib.sha256()
+        for root, dirs, files in os.walk(path):
+            dirs.sort()
+            for name in sorted(files):
+                item = Path(root) / name
+                info = item.stat()
+                digest.update(f"{item.relative_to(path)}|{info.st_size}|{info.st_mtime_ns}\n".encode())
+        return digest.hexdigest()
+
+    def cached_verification(self, module_id: str) -> bool | None:
+        """Last full-verification verdict for the active version, or None if unknown/changed.
+
+        For DISPLAY only. Loading code still calls verified_active_path() (full check).
+        """
+        state = self.state(module_id)
+        if not state["enabled"] or not state["active"]:
+            return True
+        version = state["active"]
+        entry = self._display_verdicts.get((module_id, version))
+        signature = self._tree_signature(self._module_dir(module_id) / version)
+        return entry[1] if entry is not None and entry[0] == signature else None
+
+    def verify_for_display(self, module_id: str) -> bool:
+        """Run the full verification (slow; call off the GUI thread) and remember the verdict."""
+        state = self.state(module_id)
+        if not state["enabled"] or not state["active"]:
+            return True
+        version = state["active"]
+        path = self._module_dir(module_id) / version
+        signature = self._tree_signature(path)
+        try:
+            self.verified_active_path(module_id)
+            verdict = True
+        except (OSError, ValueError):
+            verdict = False
+        self._display_verdicts[(module_id, version)] = (signature, verdict)
+        return verdict
 
     def _write_state(self, module_id: str, state: dict) -> None:
         parent = self._module_dir(module_id)

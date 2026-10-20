@@ -2845,3 +2845,16 @@ test_build_retains_shared_imports_used_by_signed_workflows — ожидает `g
 результат по размерам/mtime; добавить принудительное завершение процесса через 5 с после закрытия
 окна; писать в журнал длительность этапов запуска, чтобы подтвердить причину.
 
+Исправление (2026-10-20, ветка codex/projects-export-hardening-20261019, не собрано/не опубликовано):
+1) refresh_license_status больше не хеширует модули в главном потоке: ModuleStore.cached_verification
+   (кэш вердикта по отпечатку имён/размеров/mtime) + ModuleStore.verify_for_display в фоновом
+   QThread (_ModuleVerifyThread); загрузчик кода по-прежнему делает ПОЛНУЮ проверку
+   (studio_module_runtime → verified_active_path) — безопасность не ослаблена;
+2) страховка: через 5 с после закрытия окна процесс завершается os._exit(0), но только в
+   установленном (frozen) приложении — иначе она убивала pytest (поймано при проверке);
+3) журнал: события startup_status_refreshed (refresh_ms), module_verification_finished
+   (длительность по модулям), application_ui_ready.details.build_ms, exit_watchdog_armed —
+   по ним при повторе будет видно, какой этап был долгим.
+Тесты: tests/test_startup_hang_fixes.py; полный набор 3501 PASS, 10 прежних падений (Fal/packaging).
+Причина зависания всё ещё не доказана; если повторится — прислать журнал диагностики.
+

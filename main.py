@@ -10608,6 +10608,7 @@ def create_v3_application_window():
     app_data = QStandardPaths.writableLocation(
         QStandardPaths.StandardLocation.AppDataLocation
     )
+    _startup_clock = time.monotonic()
     diagnostic_journal = DiagnosticJournal(app_data, app_version=APP_VERSION)
     diagnostic_journal.record(
         "application_started",
@@ -10643,12 +10644,15 @@ def create_v3_application_window():
         diagnostic_journal=diagnostic_journal,
         update_client=update_client,
         legacy_project=migrate_v2_config(config) if config else None,
+        # Safety net only in the installed (frozen) app; never inside tests/dev runs.
+        exit_watchdog_seconds=5.0 if getattr(sys, "frozen", False) else None,
     )
     diagnostic_journal.record(
         "application_ui_ready",
         "Основной интерфейс подготовлен.",
         screen="mode_selection",
         outcome="success",
+        details={"build_ms": int((time.monotonic() - _startup_clock) * 1000)},
     )
     window.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
     window.mode_selection.set_brand_text(f"{APP_NAME} v{APP_VERSION}")
@@ -10720,7 +10724,14 @@ def create_authorized_v3_application_window(
             )
         refresh = getattr(window, "refresh_license_status", None)
         if callable(refresh):
+            _refresh_started = time.monotonic()
             refresh()
+            if journal is not None:
+                journal.record(
+                    "startup_status_refreshed",
+                    "Статус лицензии и модулей обновлён.",
+                    details={"refresh_ms": int((time.monotonic() - _refresh_started) * 1000)},
+                )
         return window
 
 
