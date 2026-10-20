@@ -36,6 +36,14 @@ def _clipart_data(state: Any):
             raise TypeError("state must expose Clipart workflow data") from exc
 
 
+def _name_translator():
+    try:
+        from studio_name_translation import build_name_translator
+        return build_name_translator()
+    except Exception:
+        return None
+
+
 class ClipartRunResultsExtension:
     export_action_label = "Экспорт наборов ZIP"
 
@@ -235,6 +243,8 @@ class ClipartRunResultsExtension:
             membership=_clipart_data(state).export_membership,
             review_issues=review_issues, quality_reports=quality_reports,
             workspace=workspace, embedded=embedded,
+            project_name=str(getattr(getattr(state, 'common', None), 'project_name', '') or ''),
+            name_translator=_name_translator(),
         )
         view.membership_saved.connect(on_membership_saved)
         view.fix_requested.connect(on_fix_requested)

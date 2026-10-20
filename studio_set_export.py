@@ -7,19 +7,40 @@ from uuid import uuid4
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from PIL import Image
-from studio_delivery import create_contact_sheet_pdf, output_filename, slug_from_title
+from studio_delivery import (
+    create_contact_sheet_pdf, output_filename, slug_from_title, transliterate_ru,
+)
 
 
 class ExportCancelled(RuntimeError):
     pass
 
 
-def export_clipart_sets(sets, destination, *, cancelled=lambda: False, exported_hashes=None):
+def archive_basename(project_name, set_title, names=None):
+    """'<project> set <set>' as a safe English file name (no extension)."""
+    names = names or {}
+    def english(text):
+        return names.get(text, text)
+    project = slug_from_title(english(project_name), max_words=10) if project_name.strip() else ''
+    set_slug = slug_from_title(english(set_title), max_words=10)
+    if set_slug.split('-')[0] == 'set' and len(set_slug) > 4:
+        set_slug = set_slug[4:]
+    project, set_slug = project[:70].strip('-'), set_slug[:45].strip('-')
+    base = f'{project}_set-{set_slug}' if project else f'set-{set_slug}'
+    return base.strip('-_.')
+
+
+def export_clipart_sets(sets, destination, *, cancelled=lambda: False, exported_hashes=None,
+                        project_name='', names=None):
     """Publish a fresh folder only after all ZIPs are complete.
 
 sets is a list of {title: str, images: list[path]}. Caller supplies reviewed
-final PNGs and explicit membership.
+final PNGs and explicit membership. ``names`` maps original names (project,
+sets, image stems) to English; unmapped Cyrillic is transliterated.
 """
+    names = dict(names or {})
+    project_name = str(project_name or '')
+    used_archives = set()
     destination = Path(destination)
     def check_cancelled():
         if cancelled():
@@ -61,7 +82,7 @@ final PNGs and explicit membership.
                         data = handle.read(64 * 1024 * 1024 + 1)
                     if len(data) > 64 * 1024 * 1024:
                         raise ValueError('PNG превышает 64 МБ')
-                    name = output_filename(ordinal, source.stem)
+                    name = output_filename(ordinal, names.get(source.stem, source.stem))
                     target = work / name
                     target.write_bytes(data)
                     source_key = str(source.resolve())
@@ -74,9 +95,18 @@ final PNGs and explicit membership.
                             raise ValueError('Экспорт принимает только PNG допустимого размера')
                         image.verify()
                     copied.append(target)
-                sheet = create_contact_sheet_pdf(copied, work / 'overview.pdf', title=title)
+                set_english = transliterate_ru(names.get(title, title))
+                header = (f"{transliterate_ru(names.get(project_name, project_name))} — Set {set_english}"
+                          if project_name.strip() else f"Set {set_english}")
+                sheet = create_contact_sheet_pdf(copied, work / 'overview.pdf', title=header)
                 check_cancelled()
-                archive = bundles / f'{number:03d}_{slug_from_title(title)}.zip'
+                base = archive_basename(project_name, title, names)
+                candidate, suffix = base, 2
+                while candidate.casefold() in used_archives:
+                    candidate = f'{base}-{suffix}'
+                    suffix += 1
+                used_archives.add(candidate.casefold())
+                archive = bundles / f'{candidate}.zip'
                 with ZipFile(archive, 'w', ZIP_DEFLATED) as zip_file:
                     for path in copied:
                         zip_file.write(path, f'png/{path.name}')

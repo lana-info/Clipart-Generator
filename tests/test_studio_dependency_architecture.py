@@ -26,6 +26,7 @@ LEGACY_LAYER_MODULES = {
         "studio_export_membership",
         "studio_holiday_profiles",
         "studio_object_editor",
+        "studio_name_translation",
         "studio_palette_library",
         "studio_planning_ui",
         "studio_reference_editor",
@@ -79,6 +80,8 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('studio_clipart_objects', 'v3_project_state'),
     ('studio_planning_ui', 'studio_text_pricing'),
     ('studio_planning_ui', 'v3_api_settings'),
+    ('studio_name_translation', 'studio_text_errors'),
+    ('studio_name_translation', 'v3_api_settings'),
     ('studio_set_export', 'studio_delivery'),
     # Export invokes the shared, hash-bound rough-file ownership service only
     # after verified publication. Core owns files; Clipart owns the opt-in UI.

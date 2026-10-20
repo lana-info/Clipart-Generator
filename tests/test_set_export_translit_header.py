@@ -34,7 +34,7 @@ def test_export_uses_latin_file_and_archive_names_and_titled_pdf(tmp_path):
     destination = tmp_path / "out"
     destination.mkdir()
     archives = export_clipart_sets([{"title": "Зимние птицы", "images": sources}], destination)
-    assert [a.name for a in archives] == ["001_zimnie-ptitsy.zip"]
+    assert [a.name for a in archives] == ["set-zimnie-ptitsy.zip"]
     with ZipFile(archives[0]) as zf:
         names = zf.namelist()
         assert "overview.pdf" in names

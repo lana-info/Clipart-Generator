@@ -116,7 +116,7 @@ def test_renamed_set_title_is_used_for_zip_filename(images, tmp_path, monkeypatc
     dialog._rename_current_set()
     archives = export_clipart_sets(dialog.groups(), tmp_path)
     assert len(archives) == 1
-    assert archives[0].name == '001_zimnie-personazhi.zip'
+    assert archives[0].name == 'set-zimnie-personazhi.zip'
     dialog.reject()
 
 
@@ -781,3 +781,33 @@ def test_empty_export_table_and_column_selection_are_reachable(images):
     assert dialog.rename_set_button.isEnabled()
     assert dialog._editing_set_id == dialog._set_columns[1][0]
     dialog.close()
+
+
+def test_translation_choice_skips_latin_names_and_falls_back_without_key(images):
+    dialog = SetExportDialog(images, project_name='Little Goose', name_translator=None)
+    latin = [{'title': 'Characters', 'images': [images[0]]}]
+    assert dialog._choose_translation(latin) is None
+    cyrillic = [{'title': 'Персонажи', 'images': [images[0]]}]
+    assert dialog._choose_translation(cyrillic) is None  # no key: transliteration, not blocked
+    assert 'транслит' in dialog._translation_notice
+    dialog.reject()
+
+
+def test_translation_choice_asks_once_and_honours_buttons(images, monkeypatch):
+    class Translator:
+        label = 'KIE · Test'
+        def __call__(self, names):
+            return {}
+    translator = Translator()
+    dialog = SetExportDialog(images, project_name='Гуси', name_translator=translator)
+    groups = [{'title': 'Персонажи', 'images': [images[0]]}]
+    from PyQt6.QtWidgets import QMessageBox
+    for button_text, expected in (('Перевести', translator), ('Без перевода (транслит)', None), ('Отмена', False)):
+        def fake_exec(box, text=button_text):
+            for button in box.buttons():
+                if button.text() == text:
+                    box._clicked = button
+        monkeypatch.setattr(QMessageBox, 'exec', fake_exec)
+        monkeypatch.setattr(QMessageBox, 'clickedButton', lambda box: getattr(box, '_clicked', None))
+        assert dialog._choose_translation(groups) is expected
+    dialog.reject()

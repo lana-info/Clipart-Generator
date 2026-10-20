@@ -129,7 +129,7 @@ def create_contact_sheet_pdf(
 ) -> Path:
     """Create a Letter contact sheet without retaining all decoded images in memory.
 
-    With ``title`` every page gets a header "<title> — N шт." (N = whole set).
+    With ``title`` every page gets a header "<title> — N images" (N = whole set).
     """
     from PIL import Image
     from PyQt6.QtCore import QRect, QRectF, QMarginsF, Qt
@@ -181,7 +181,8 @@ def create_contact_sheet_pdf(
         page_width, page_height = 612.0, 792.0
         cell_width = (page_width - 2 * margin - (columns - 1) * gap) / columns
         footer_height = 20.0
-        header_text = f"{' '.join(title.split())} — {len(paths)} шт." if title and title.strip() else ""
+        count_label = f"{len(paths)} image" if len(paths) == 1 else f"{len(paths)} images"
+        header_text = f"{' '.join(title.split())} — {count_label}" if title and title.strip() else ""
         header_height = 36.0 if header_text else 0.0
         cell_height = (page_height - 2 * margin - header_height - footer_height - (rows - 1) * gap) / rows
         label_height = min(34.0, cell_height * 0.25)

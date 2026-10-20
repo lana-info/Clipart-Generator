@@ -119,6 +119,8 @@ class PlanningPanel(QWidget):
         ideas_layout.addWidget(self.status)
         self._model_changed()
         self.tabs.currentChanged.connect(lambda _index: self._model_changed())
+        self.provider.activated.connect(self._remember_choice)
+        self.model.activated.connect(self._remember_choice)
         self.all_button.clicked.connect(lambda: self.start(False))
         self.one_button.clicked.connect(lambda: self.start(True))
         self.cancel_button.clicked.connect(self.cancel)
@@ -167,6 +169,12 @@ class PlanningPanel(QWidget):
     def selection(self):
         return dict(provider=self.provider.currentData(), model=self.model.currentData())
 
+    def _remember_choice(self, *_args):
+        """Persist only user-driven choices; export translates names with this model."""
+        if self.provider.currentData() and self.model.currentData():
+            from studio_name_translation import save_text_choice
+            save_text_choice(self.provider.currentData(), self.model.currentData())
+
     def _busy(self, busy):
         for widget in (self.provider, self.model, self.all_button, self.one_button, self.send_references):
             widget.setEnabled(not busy)
@@ -191,6 +199,7 @@ class PlanningPanel(QWidget):
         if self.pending is not None:
             return
         selection = self.selection()
+        self._remember_choice()
         try:
             recipe, palette = self.snapshot()
             ids = None

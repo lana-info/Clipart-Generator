@@ -19,9 +19,12 @@ from v3_components import apply_v3_theme
 
 class ExportWorker(QThread):
     def __init__(self, groups, destination, parent=None, *, workspace=None,
-                 delete_intermediates=False, delete_originals=False):
+                 delete_intermediates=False, delete_originals=False,
+                 project_name='', translator=None):
         super().__init__(parent)
         self.groups, self.destination = groups, destination
+        self.project_name, self.translator = project_name, translator
+        self.translation_note = ''
         self.cancelled = Event()
         self.paths, self.error = [], ''
         self.workspace = workspace
@@ -32,9 +35,22 @@ class ExportWorker(QThread):
     def run(self):
         try:
             exported_hashes = {}
+            names = {}
+            if self.translator is not None:
+                # ONE request for every name of the export; any failure falls back to transliteration.
+                from studio_name_translation import collect_export_names, has_cyrillic
+                wanted = [n for n in collect_export_names(self.project_name, self.groups) if has_cyrillic(n)]
+                if wanted:
+                    try:
+                        names = self.translator(wanted, cancelled=self.cancelled.is_set)
+                        self.translation_note = ' Названия переведены на английский.'
+                    except Exception:
+                        names = {}
+                        self.translation_note = (' Перевод не удался — имена даны транслитом; '
+                                                 'платный запрос мог быть отправлен.')
             self.paths = export_clipart_sets(
                 self.groups, self.destination, cancelled=self.cancelled.is_set,
-                exported_hashes=exported_hashes,
+                exported_hashes=exported_hashes, project_name=self.project_name, names=names,
             )
         except ExportCancelled:
             self.error = 'Экспорт отменён. Наборы не опубликованы.'
@@ -77,8 +93,10 @@ class SetExportDialog(QDialog):
         return QPixmap.fromImage(reader.read())
 
     def __init__(self, paths, parent=None, *, membership=None, review_issues=None, quality_reports=None,
-                 workspace=None, embedded=False):
+                 workspace=None, embedded=False, project_name='', name_translator=None):
         super().__init__(parent)
+        self.project_name = str(project_name or '')
+        self.name_translator = name_translator
         self.embedded = embedded
         self.workspace = workspace
         from studio_export_membership import validate_export_membership
@@ -864,6 +882,10 @@ class SetExportDialog(QDialog):
         except ValueError as exc:
             self.status.setText(str(exc))
             return
+        self._translation_notice = ''
+        translator = self._choose_translation(groups)
+        if translator is False:
+            return
         folder = QFileDialog.getExistingDirectory(self, 'Папка для наборов')
         if not folder:
             return
@@ -871,6 +893,7 @@ class SetExportDialog(QDialog):
             groups, folder, self, workspace=self.workspace,
             delete_intermediates=self.delete_intermediates.isChecked(),
             delete_originals=self.delete_originals.isChecked(),
+            project_name=self.project_name, translator=translator,
         )
         self.table.setEnabled(False)
         self.ready_only.setEnabled(False)
@@ -887,10 +910,36 @@ class SetExportDialog(QDialog):
         self.quality_fix_button.setEnabled(False)
         self.quality_exclude_button.setEnabled(False)
         self.status.setText(
-            f'Создаю наборы: {len(groups)}. Не закрывайте приложение до завершения.'
+            f'Создаю наборы: {len(groups)}. Не закрывайте приложение до завершения. '
+            + (self._translation_notice or '')
         )
         self.busy_changed.emit()
         self.worker.start()
+
+    def _choose_translation(self, groups):
+        """Ask once before the only paid step. Returns a translator, None (transliterate) or False (cancel)."""
+        from studio_name_translation import collect_export_names, has_cyrillic
+        if not any(has_cyrillic(name) for name in collect_export_names(self.project_name, groups)):
+            return None
+        if self.name_translator is None:
+            self._translation_notice = ('Ключ текстовой модели не найден: имена даны транслитом. '
+                                        'Добавьте ключ в настройках API, чтобы переводить на английский.')
+            return None
+        box = QMessageBox(self)
+        box.setWindowTitle('Названия на английском')
+        box.setText(
+            'Названия проекта, наборов и изображений будут переведены на английский '
+            f'одним коротким запросом к выбранной текстовой модели ({self.name_translator.label}). '
+            'Обычно это доли цента; точная сумма зависит от тарифа сервиса.')
+        translate = box.addButton('Перевести', QMessageBox.ButtonRole.AcceptRole)
+        translit = box.addButton('Без перевода (транслит)', QMessageBox.ButtonRole.ActionRole)
+        box.addButton('Отмена', QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is translate:
+            return self.name_translator
+        if box.clickedButton() is translit:
+            return None
+        return False
 
     def _finished(self):
         worker = self.worker
@@ -900,7 +949,7 @@ class SetExportDialog(QDialog):
         elif worker.paths:
             self.status.setText(
                 f'Наборы созданы: {len(worker.paths)}. Папка: {worker.paths[0].parent}'
-                + worker.cleanup_message
+                + worker.translation_note + worker.cleanup_message
             )
         else:
             self.status.setText('Наборы не созданы.')
