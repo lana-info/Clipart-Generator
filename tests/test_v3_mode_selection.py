@@ -158,7 +158,9 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertIs(shell.workflow_controller("text-probe"), controller)
         self.assertIs(shell.active_run_controller(), controller)
         self.assertFalse(hasattr(shell, "text_probe_flow_controller"))
-        view.close()
+        from PyQt6.QtWidgets import QMessageBox
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+            view.close()
         view.deleteLater()
 
     def test_mode_switch_is_blocked_while_any_run_is_active(self):
@@ -169,13 +171,20 @@ class V3ModeSelectionTests(unittest.TestCase):
         controller.worker = Mock()
         controller.worker.isRunning = Mock(return_value=True)
 
-        view.show_mode_switcher()
-        self.app.processEvents()
-
-        self.assertIs(view.stack.currentWidget(), view.shell)
-        self.assertFalse(view.shell.save_error_label.isHidden())
-        self.assertIn("текущее задание", view.shell.save_error_label.text())
-        view.close()
+        from PyQt6.QtWidgets import QMessageBox
+        yes, no = QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No
+        with patch.object(QMessageBox, "question", side_effect=[no, yes, yes]) as ask:
+            view.show_mode_switcher()  # user declines: stays in the module
+            self.app.processEvents()
+            self.assertIs(view.stack.currentWidget(), view.shell)
+            # user agrees but the worker still will not stop: still blocked, with a message
+            view.show_mode_switcher()
+            self.app.processEvents()
+            self.assertIs(view.stack.currentWidget(), view.shell)
+            self.assertIn("текущее задание", view.shell.save_error_label.text())
+            controller.worker.stop.assert_called()
+            view.close()  # the window cross asks instead of silently refusing
+            self.assertEqual(ask.call_count, 3)
         view.deleteLater()
 
     def test_window_size_is_stable_across_every_mode_route(self):
