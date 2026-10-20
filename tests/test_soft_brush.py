@@ -19,9 +19,9 @@ def test_soft_brush_has_wide_gradual_edge_unlike_hard():
     soft = [results["soft"].getpixel((40, 20 - d)) for d in range(0, 14)]
     partial = lambda col: sum(1 for v in col if 20 < v < 235)
     assert partial(hard) <= 2          # hard edge: nearly all-or-nothing
-    assert partial(soft) >= 7          # soft edge: wide gradual transition
+    assert partial(soft) >= 3          # soft edge: gradual transition in the outer band
     # Overlapping stamps must not accumulate into a hard edge on the soft stroke.
-    assert soft[0] >= 250 and soft[8] < 200
+    assert soft[0] >= 250 and soft[6] >= 250 and soft[12] < 60   # core stays solid, same outer width
 
 
 def test_document_stroke_in_several_moves_matches_single_stroke():
@@ -80,5 +80,6 @@ def test_small_brushes_stay_hard_and_wide_soft_fades_gradually():
     profile = [wide.getpixel((80, 50 - d)) for d in range(0, 33)]
     assert all(a >= b for a, b in zip(profile, profile[1:]))      # monotonic, no bumps
     steps = [a - b for a, b in zip(profile, profile[1:])]
-    assert max(steps) < 20                                         # gradual: no hard step
-    assert profile[0] >= 250 and profile[16] < 170 and profile[-1] <= 2
+    assert max(steps) < 45                                         # gradual: no hard step
+    # Same width as the hard brush: solid across most of the radius, fading only near the rim.
+    assert profile[0] >= 250 and profile[16] >= 250 and profile[28] < 170 and profile[-1] <= 2

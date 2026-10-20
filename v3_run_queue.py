@@ -1780,6 +1780,14 @@ class RunResultsPage(QWidget):
         self.check_transparency_button.clicked.connect(
             self._request_selected_transparency
         )
+        self.check_transparency_button.setToolTip(
+            "Проверить прозрачность выбранного изображения и при необходимости исправить фон")
+        self.retry_button.setToolTip(
+            "Запустить только то, что не получилось или было отменено; готовые файлы не трогаются")
+        self.process_more_button.setToolTip(
+            "Сбросить результаты этого запуска и начать весь набор заново")
+        self.send_to_processing_button.setToolTip(
+            "Отправить выбранные готовые изображения в модуль «Обработка изображений»")
         self.check_transparency_button.hide()
         self.save_corrected_button = V3Button(
             "Сохранить исправленный PNG",
@@ -2182,6 +2190,13 @@ class RunResultsPage(QWidget):
             and not self.session.running
             and bool(self._transparency_paths)
         )
+        # Transparency check is the key next step: it is the highlighted button while
+        # shown; "Открыть папку" is then an ordinary one.
+        important = self.check_transparency_button.isVisibleTo(self)
+        self.check_transparency_button.set_variant(
+            ButtonVariant.PRIMARY if important else ButtonVariant.SECONDARY)
+        self.open_folder_button.set_variant(
+            ButtonVariant.SECONDARY if important else ButtonVariant.PRIMARY)
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),

@@ -202,6 +202,10 @@ class ModeSelectionScreen(QWidget):
         self.header_continue_button.clicked.connect(self.header_continue_requested.emit)
         account_layout.addWidget(self.header_continue_button)
         self.api_settings_button = V3Button("API", ButtonVariant.GHOST)
+        # Same teal as the header icons; header buttons never show a focus frame.
+        self.api_settings_button.setStyleSheet(
+            f"QPushButton {{color:{self.tokens.accent};font-weight:600;}}"
+            f"QPushButton:pressed {{color:{self.tokens.accent};}}")
         self.api_settings_button.setToolTip("Настройки API")
         self.api_settings_button.setAccessibleName("Настройки API")
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
@@ -218,6 +222,10 @@ class ModeSelectionScreen(QWidget):
         make_icon_button(self.license_button, "key", "Лицензия")
         self.license_button.clicked.connect(self.license_requested.emit)
         account_layout.addWidget(self.license_button)
+        for header_button in (self.studio_home_button, self.header_continue_button,
+                              self.api_settings_button, self.diagnostics_button,
+                              self.module_updates_button, self.license_button):
+            header_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         layout.addWidget(self.account_card)
 
         # The "Модули" title now lives in the header; "Продолжить работу" duplicated the

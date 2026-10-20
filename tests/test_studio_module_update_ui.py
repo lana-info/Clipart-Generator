@@ -365,3 +365,14 @@ def test_update_all_skips_modules_that_are_not_installed(app, setup):
 
     assert activated == [("processing", "1.6.0")]
     assert dialog.status.text().startswith("Готово: обновлены все 1 модулей.")
+
+
+def test_update_all_button_replaces_check_only_when_updates_found(app, setup):
+    dialog, _delivery, _release = setup
+    assert dialog.update_all_button.isHidden() and not dialog.check_button.isHidden()
+    dialog.check_button.click()
+    wait_until(app, lambda: not dialog.busy)
+    # Updates exist only for a module that is installed; otherwise no "update all".
+    has_updates = dialog._has_updates()
+    assert dialog.update_all_button.isHidden() == (not has_updates)
+    assert dialog.check_button.isHidden() == has_updates
