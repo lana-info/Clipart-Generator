@@ -104,6 +104,15 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertEqual(view.mode_selection.active_module_label.text(), "Модули")
         view.close()
 
+    def test_auto_clipart_header_names_the_module_not_the_generation_mode(self):
+        from studio_auto_clipart_shell import AutoClipartShell
+        view = V3ApplicationView()
+        shell = AutoClipartShell(ProjectState())
+        view.stack.addWidget(shell)
+        view._set_application_screen(shell, "wizard", "module_open")
+        self.assertEqual(view.mode_selection.active_module_label.text(), "Автоматический клипарт")
+        view.close()
+
     def test_application_uses_one_default_and_minimum_window_size(self):
         view = V3ApplicationView()
 

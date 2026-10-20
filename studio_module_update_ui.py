@@ -86,6 +86,7 @@ class ModuleUpdateWorker(QThread):
 
 
 class ModuleUpdatesDialog(QDialog):
+    _recheck_after_shared_update = False
     news_changed = pyqtSignal(str)
     state_changed = pyqtSignal()
     def __init__(self, delivery, *, busy_module=lambda _module: False, authorization_provider=lambda: None, parent=None):
@@ -422,6 +423,7 @@ class ModuleUpdatesDialog(QDialog):
                                 available.setText("Проверьте обновления")
                         if self._queue:
                             self._stop_queue()
+                        self._recheck_after_shared_update = True
                     else:
                         self.delivery.activate(module, worker.release.version)
                         if self._queue and self._queue[0] == module:
@@ -457,6 +459,10 @@ class ModuleUpdatesDialog(QDialog):
                 QTimer.singleShot(0, self._advance_queue)
             elif self._queue_total:
                 QTimer.singleShot(0, self._finish_queue)
+            if self._recheck_after_shared_update:
+                # Offers cleared after a shared update: refresh them without a manual click.
+                self._recheck_after_shared_update = False
+                QTimer.singleShot(0, self.check)
 
 
     def reject(self):

@@ -912,7 +912,8 @@ class V3ApplicationView(QWidget):
         self.stack.setCurrentWidget(widget)
         in_module = widget is not self.mode_selection
         self.mode_selection.active_module_label.setText(
-            MODE_TITLES.get(widget.state.mode, "") if isinstance(widget, AppShell)
+            ({"auto-clipart": "Автоматический клипарт"}.get(getattr(widget, "module_id", None))
+             or MODE_TITLES.get(widget.state.mode, "")) if isinstance(widget, AppShell)
             else ("Автоматический клипарт" if in_module else "Модули")
         )
         self.mode_selection.studio_home_button.setVisible(in_module)

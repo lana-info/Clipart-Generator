@@ -120,6 +120,8 @@ class CollectionBrief(ClipartBuilderDialog):
         self.object_editor.layout().setContentsMargins(0, 0, 0, 0)
         self.pages.widget(4).setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.planning.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        # With the ideas list hidden ("Модель текста" tab) a bounded panel would be centred in the free height.
+        page_layout.setAlignment(self.planning, Qt.AlignmentFlag.AlignTop)
         skip_references = QPushButton("Пропустить референсы")
         skip_references.clicked.connect(self._skip_references)
         reference_layout = self.pages.widget(2).widget().layout()

@@ -376,3 +376,40 @@ def test_update_all_button_replaces_check_only_when_updates_found(app, setup):
     has_updates = dialog._has_updates()
     assert dialog.update_all_button.isHidden() == (not has_updates)
     assert dialog.check_button.isHidden() == has_updates
+
+
+def test_shared_update_rechecks_automatically_so_other_modules_stay_updatable(app, setup):
+    from studio_module_updates import WorkflowUpdate
+    from studio_processing_api import PROCESSING_COMPONENT_ID
+
+    dialog, delivery, pinterest_release = setup
+    delivery.updates.license_client.validate.return_value = SimpleNamespace(allows_module=lambda module: True)
+    installed = {"clipart": "1.0.0", "pinterest": "2.0.0"}
+    delivery.store.state.side_effect = lambda module: {
+        "enabled": module in installed, "active": installed.get(module)}
+    processing = ModuleRelease(
+        "1.6.0", "fixture-processing.zip", 20, "b" * 64, "https://fixture.invalid/downloads/p",
+        module_id=PROCESSING_COMPONENT_ID, studio_min="3.2.0", studio_max_exclusive="4.0.0")
+    shared_offer = WorkflowUpdate("clipart", None, processing)
+    shared_installed = {"done": False}
+
+    def check(module):
+        if module == "clipart":
+            return None if shared_installed["done"] else shared_offer
+        return pinterest_release if module == "pinterest" else None
+
+    delivery.check.side_effect = check
+    delivery.install.side_effect = lambda selected, **_callbacks: {
+        "module_id": selected.module_id, "version": selected.version}
+    delivery.activate_update.side_effect = lambda _selected: shared_installed.__setitem__("done", True)
+
+    dialog.check_button.click()
+    wait_until(app, lambda: not dialog.busy)
+    assert dialog.rows["clipart"][2].isEnabled() and dialog.rows["pinterest"][2].isEnabled()
+
+    dialog.rows["clipart"][2].click()
+    wait_until(app, lambda: shared_installed["done"])
+    # No manual "check" click: the other module's offer comes back on its own.
+    wait_until(app, lambda: not dialog.busy and dialog.rows["pinterest"][2].isEnabled())
+    assert set(dialog.releases) == {"pinterest"}
+    assert dialog.rows["pinterest"][1].text() == "1.1.0"
