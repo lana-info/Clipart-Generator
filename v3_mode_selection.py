@@ -389,6 +389,11 @@ class ModeSelectionScreen(QWidget):
         self.cancel_button.setVisible(bool(enabled))
 
 
+# Verification threads are parentless and kept alive here until they finish: destroying a running
+# QThread aborts the process (found in review when the window is closed during verification).
+_RUNNING_VERIFY_THREADS: set = set()
+
+
 class _ModuleVerifyThread(QThread):
     """Full signature/file verification of installed modules, off the GUI thread."""
 
@@ -438,6 +443,7 @@ class V3ApplicationView(QWidget):
         self.tokens = tokens
         self._exit_watchdog_seconds = exit_watchdog_seconds
         self._module_verifier: _ModuleVerifyThread | None = None
+        self._verification_attempted: set[str] = set()
         self._selection_intent = SelectionIntent.NEW_PROJECT
         self._recent_project: ProjectState | None = None
         self._runtime_settings_provider = runtime_settings_provider
@@ -1597,16 +1603,23 @@ class V3ApplicationView(QWidget):
         )
         if self._module_verifier is not None:
             self._module_verifier.requestInterruption()
+            self._module_verifier.wait(1500)  # a still-running thread is kept alive by the module set
+        self._arm_exit_watchdog()  # journal it before the journal is closed
         if self._diagnostic_journal is not None:
             self._diagnostic_journal.close()
-        self._arm_exit_watchdog()
         super().closeEvent(event)
 
     def _start_module_verification(self, module_ids) -> None:
         if self._module_verifier is not None and self._module_verifier.isRunning():
             return
-        thread = _ModuleVerifyThread(self._module_delivery.store, module_ids, self)
+        module_ids = [m for m in module_ids if m not in self._verification_attempted]
+        if not module_ids:
+            return  # each module is verified once per session; no endless re-hash loop
+        self._verification_attempted.update(module_ids)
+        thread = _ModuleVerifyThread(self._module_delivery.store, module_ids)
         thread.verified.connect(self._module_verification_done)
+        _RUNNING_VERIFY_THREADS.add(thread)
+        thread.finished.connect(lambda t=thread: _RUNNING_VERIFY_THREADS.discard(t))
         self._module_verifier = thread
         thread.start()
 

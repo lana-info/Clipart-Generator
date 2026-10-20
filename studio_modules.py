@@ -360,19 +360,21 @@ class ModuleStore:
 
     def verify_for_display(self, module_id: str) -> bool:
         """Run the full verification (slow; call off the GUI thread) and remember the verdict."""
-        state = self.state(module_id)
-        if not state["enabled"] or not state["active"]:
-            return True
-        version = state["active"]
-        path = self._module_dir(module_id) / version
-        signature = self._tree_signature(path)
         try:
-            self.verified_active_path(module_id)
-            verdict = True
-        except (OSError, ValueError):
-            verdict = False
-        self._display_verdicts[(module_id, version)] = (signature, verdict)
-        return verdict
+            state = self.state(module_id)
+            if not state["enabled"] or not state["active"]:
+                return True
+            version = state["active"]
+            signature = self._tree_signature(self._module_dir(module_id) / version)
+            try:
+                self.verified_active_path(module_id)
+                verdict = True
+            except Exception:
+                verdict = False
+            self._display_verdicts[(module_id, version)] = (signature, verdict)
+            return verdict
+        except Exception:
+            return False  # unreadable store: treat as not verified, never raise into the thread
 
     def _write_state(self, module_id: str, state: dict) -> None:
         parent = self._module_dir(module_id)

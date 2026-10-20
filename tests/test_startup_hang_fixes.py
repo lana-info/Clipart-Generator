@@ -94,3 +94,33 @@ def test_main_arms_watchdog_only_when_frozen():
     import main
     source = inspect.getsource(main.create_v3_application_window)
     assert 'exit_watchdog_seconds=5.0 if getattr(sys, "frozen", False) else None' in source
+
+
+def test_verification_runs_once_per_session_and_never_raises(tmp_path, monkeypatch):
+    store = _store(tmp_path)
+    (store.root / "clipart").mkdir()
+    (store.root / "clipart" / "active.json").write_text(
+        '{"active": "1.0.0", "previous": null, "enabled": true}')
+    monkeypatch.setattr(store, "_tree_signature", lambda path: (_ for _ in ()).throw(OSError("locked")))
+    assert store.verify_for_display("clipart") is False           # no exception escapes the thread
+
+    app = QApplication.instance() or QApplication([])
+    started = []
+
+    class FakeThread:
+        def __init__(self, *a, **k):
+            started.append(a)
+            self.verified = Mock()
+            self.finished = Mock()
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(vms, "_ModuleVerifyThread", FakeThread)
+    with tempfile.TemporaryDirectory() as temp:
+        view = vms.V3ApplicationView(draft_path=Path(temp) / "a.json", module_delivery=Mock())
+        view._start_module_verification(["clipart"])
+        view._module_verifier = None
+        view._start_module_verification(["clipart"])               # same module again: skipped
+        view.close()
+    assert len(started) == 1
