@@ -802,3 +802,21 @@ class V3ModeSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_busy_reason_reports_why_leaving_is_blocked():
+    from types import SimpleNamespace
+    from v3_mode_selection import V3ApplicationView
+
+    def fake(active, busy):
+        controller = SimpleNamespace(is_busy=lambda: busy)
+        shell = SimpleNamespace(
+            state=SimpleNamespace(mode=SimpleNamespace(value="clipart")), module_id="clipart",
+            active_run_controller=lambda: controller if active else None,
+            workflow_controller=lambda _module: controller)
+        return SimpleNamespace(shell=shell)
+
+    assert V3ApplicationView._busy_reason(fake(True, False)) == "active_run"
+    assert V3ApplicationView._busy_reason(fake(False, True)) == "controller_busy"
+    assert V3ApplicationView._busy_reason(fake(False, False)) is None
+    assert V3ApplicationView._busy_reason(SimpleNamespace(shell=None)) is None
