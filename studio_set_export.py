@@ -31,7 +31,7 @@ def archive_basename(project_name, set_title, names=None):
 
 
 def export_clipart_sets(sets, destination, *, cancelled=lambda: False, exported_hashes=None,
-                        project_name='', names=None):
+                        project_name='', names=None, progress=None):
     """Publish a fresh folder only after all ZIPs are complete.
 
 sets is a list of {title: str, images: list[path]}. Caller supplies reviewed
@@ -70,6 +70,8 @@ sets, image stems) to English; unmapped Cyrillic is transliterated.
         bundles.mkdir()
         for number, (title, paths) in enumerate(prepared, 1):
             check_cancelled()
+            if progress is not None:
+                progress(number - 1, len(prepared), f'Создаю набор {number} из {len(prepared)}')
             with tempfile.TemporaryDirectory(prefix='set-', dir=staging) as set_temp:
                 work = Path(set_temp)
                 copied = []
@@ -115,6 +117,8 @@ sets, image stems) to English; unmapped Cyrillic is transliterated.
                     if zip_file.testzip() is not None:
                         raise ValueError('Не удалось проверить архив')
         check_cancelled()
+        if progress is not None:
+            progress(len(prepared), len(prepared), 'Завершаю экспорт')
         os.rename(bundles, output)
     if exported_hashes is not None:
         exported_hashes.update(snapshots)

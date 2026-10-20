@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, UnidentifiedImageError
-from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QEventLoop, QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QImageReader, QPixmap
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QRadioButton,
     QSpinBox,
     QStyle,
@@ -546,6 +548,18 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.error_label = QLabel()
         self.error_label.setWordWrap(True)
         self.add_widget(self.error_label)
+        # Visible progress while many files are checked and shown (owner request 2026-10-19).
+        self.add_status = QLabel()
+        self.add_status.setProperty("v3Title", True)
+        self.add_status.hide()
+        self.add_widget(self.add_status)
+        self.add_progress = QProgressBar()
+        self.add_progress.setTextVisible(True)
+        self.add_progress.setMinimumHeight(22)
+        self.add_progress.setAccessibleName("Ход добавления файлов")
+        self.add_progress.hide()
+        self.add_widget(self.add_progress)
+        self._progress_depth = 0
         self.add_widget(self.files_container)
         self.refresh_from_state()
 
@@ -575,14 +589,50 @@ class ProcessingFilesPage(_ScrollableStepPage):
         if paths:
             self.add_files(paths)
 
+    PROGRESS_THRESHOLD = 3
+
+    def _progress_start(self, total: int) -> bool:
+        """Show the bar only for batches big enough to be noticeable."""
+        self._progress_depth += 1
+        if total < self.PROGRESS_THRESHOLD:
+            return False
+        self.add_progress.setRange(0, total)
+        self.add_progress.setValue(0)
+        self.add_status.show()
+        self.add_progress.show()
+        return True
+
+    def _progress_step(self, shown: bool, done: int, total: int, text: str) -> None:
+        if not shown:
+            return
+        self.add_status.setText(f"{text}: {done} из {total}")
+        self.add_progress.setValue(done)
+        self.add_progress.setFormat(f"{done} / {total}")
+        QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents)
+
+    def _progress_end(self, shown: bool) -> None:
+        self._progress_depth = max(0, self._progress_depth - 1)
+        if self._progress_depth == 0:  # only the outermost operation hides the shared bar
+            self.add_status.hide()
+            self.add_progress.hide()
+
     def add_files(self, paths: Sequence[str]) -> tuple[LocalImageInfo, ...]:
+        paths = list(paths)
+        shown = self._progress_start(len(paths))
+        try:
+            return self._add_files(paths, shown)
+        finally:
+            self._progress_end(shown)
+
+    def _add_files(self, paths: Sequence[str], shown: bool) -> tuple[LocalImageInfo, ...]:
         accepted: list[LocalImageInfo] = []
         existing = {
             os.path.normcase(os.path.abspath(path))
             for path in _processing_data(self.state).selected_files
         }
         errors: list[str] = []
-        for raw_path in paths:
+        for position, raw_path in enumerate(paths, 1):
+            self._progress_step(shown, position - 1, len(paths), "Проверяю файлы")
             if len(existing) >= MAX_PROCESSING_FILES:
                 errors.append(f"Максимум {MAX_PROCESSING_FILES} файлов")
                 break
@@ -667,7 +717,16 @@ class ProcessingFilesPage(_ScrollableStepPage):
         self.overwrite_checkbox.blockSignals(False)
         infos: list[LocalImageInfo] = []
         errors: list[str] = []
-        for path in _processing_data(self.state).selected_files:
+        selected = list(_processing_data(self.state).selected_files)
+        shown = self._progress_start(len(selected))
+        try:
+            self._rebuild_cards(selected, infos, errors, shown)
+        finally:
+            self._progress_end(shown)
+
+    def _rebuild_cards(self, selected, infos, errors, shown) -> None:
+        for position, path in enumerate(selected, 1):
+            self._progress_step(shown, position - 1, len(selected), "Читаю файлы")
             try:
                 infos.append(inspect_local_image(path))
             except ProcessingFlowError:
@@ -680,7 +739,8 @@ class ProcessingFilesPage(_ScrollableStepPage):
                 widget.deleteLater()
         self.thumbnail_labels = []
         if infos:
-            for info in infos:
+            for position, info in enumerate(infos, 1):
+                self._progress_step(shown, position - 1, len(infos), "Показываю изображения")
                 card = QGroupBox()
                 row = QHBoxLayout(card)
                 thumbnail = QLabel()

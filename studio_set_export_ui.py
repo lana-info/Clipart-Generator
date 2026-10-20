@@ -9,7 +9,7 @@ from PyQt6.QtGui import QCursor, QIcon, QImageReader, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QFrame,
     QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMessageBox, QPushButton, QStackedWidget,
+    QMessageBox, QProgressBar, QPushButton, QStackedWidget,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -18,6 +18,8 @@ from v3_components import apply_v3_theme
 
 
 class ExportWorker(QThread):
+    progress = pyqtSignal(int, int, str)  # done, total (0 = unknown), text
+
     def __init__(self, groups, destination, parent=None, *, workspace=None,
                  delete_intermediates=False, delete_originals=False,
                  project_name='', translator=None):
@@ -41,6 +43,7 @@ class ExportWorker(QThread):
                 from studio_name_translation import collect_export_names, has_cyrillic
                 wanted = [n for n in collect_export_names(self.project_name, self.groups) if has_cyrillic(n)]
                 if wanted:
+                    self.progress.emit(0, 0, 'Перевожу названия на английский…')
                     try:
                         names = self.translator(wanted, cancelled=self.cancelled.is_set)
                         self.translation_note = ' Названия переведены на английский.'
@@ -51,6 +54,7 @@ class ExportWorker(QThread):
             self.paths = export_clipart_sets(
                 self.groups, self.destination, cancelled=self.cancelled.is_set,
                 exported_hashes=exported_hashes, project_name=self.project_name, names=names,
+                progress=lambda done, total, text: self.progress.emit(done, total, text),
             )
         except ExportCancelled:
             self.error = 'Экспорт отменён. Наборы не опубликованы.'
@@ -157,6 +161,12 @@ class SetExportDialog(QDialog):
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
         root.addWidget(self.status)
+        # Large, obvious progress for long exports (owner request 2026-10-19).
+        self.export_progress = QProgressBar()
+        self.export_progress.setMinimumHeight(24)
+        self.export_progress.setAccessibleName('Ход экспорта')
+        self.export_progress.hide()
+        root.addWidget(self.export_progress)
 
         self.preview_popup = QLabel(None, Qt.WindowType.ToolTip)
         self.preview_popup.setObjectName('setExportPreviewPopup')
@@ -900,6 +910,9 @@ class SetExportDialog(QDialog):
         self.delete_intermediates.setEnabled(False)
         self.delete_originals.setEnabled(False)
         self.worker.finished.connect(self._finished)
+        self.worker.progress.connect(self._export_progress)
+        self.export_progress.setRange(0, 0)  # moving bar until the first real step
+        self.export_progress.show()
         self.export_button.setEnabled(False)
         self.quality_export_button.setEnabled(False)
         self.new_set_button.setEnabled(False)
@@ -941,8 +954,20 @@ class SetExportDialog(QDialog):
             return None
         return False
 
+    def _export_progress(self, done, total, text):
+        if total <= 0:
+            self.export_progress.setRange(0, 0)
+        else:
+            self.export_progress.setRange(0, total)
+            self.export_progress.setValue(done)
+            self.export_progress.setFormat(f'{done} / {total}')
+        self.status.setText(text + '. Не закрывайте приложение до завершения.')
+        self.status.setStyleSheet('font-size:15px;font-weight:600;')
+
     def _finished(self):
         worker = self.worker
+        self.export_progress.hide()
+        self.status.setStyleSheet('')
         self.exported = worker.paths
         if worker.error:
             self.status.setText(worker.error)
