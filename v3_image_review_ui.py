@@ -64,9 +64,11 @@ class ImageReviewRunPage(ScrollableStepPage):
         self.run_status_label.setWordWrap(True)
         self.run_status_label.setProperty("v3Small", True)
         self.fal_cost_refresh_button = V3Button(
-            "Обновить оценку Fal.ai", ButtonVariant.SECONDARY
+            "Обновить расчёт", ButtonVariant.SECONDARY
         )
-        self.fal_cost_refresh_button.clicked.connect(self.refresh_fal_cost)
+        self.fal_cost_refresh_button.setToolTip(
+            "Пересчитать ориентировочный расход по текущим настройкам; для Fal.ai запрашивается актуальная цена")
+        self.fal_cost_refresh_button.clicked.connect(self.refresh_cost)
         self.cost_row = QWidget()
         cost_layout = QHBoxLayout(self.cost_row)
         cost_layout.setContentsMargins(0, 0, 0, 0)
@@ -151,8 +153,7 @@ class ImageReviewRunPage(ScrollableStepPage):
                 image_generation_pipeline_steps(self.data.operations)
             )
         )
-        has_fal = self._fal_selected()
-        self.fal_cost_refresh_button.setVisible(has_fal)
+        self.fal_cost_refresh_button.setVisible(True)
 
     def _render_cost_breakdown(self, estimate: CostEstimate) -> None:
         labels = {
@@ -197,7 +198,19 @@ class ImageReviewRunPage(ScrollableStepPage):
         else:
             lines.append("Итого — не рассчитано полностью")
         lines.append("Фактическая сумма может отличаться.")
+        updated = getattr(self, "_cost_updated_at", "")
+        if updated:
+            lines.append(f"Расчёт обновлён в {updated}.")
         self.cost_breakdown_label.setText("\n".join(lines))
+
+    def refresh_cost(self) -> None:
+        """Recalculate from the current settings; Fal.ai also asks for its live price."""
+        import time
+        self._cost_updated_at = time.strftime("%H:%M")
+        if self._fal_selected():
+            self.refresh_fal_cost()
+        else:
+            self.refresh_from_state()
 
     def refresh_fal_cost(self) -> None:
         current_signature = tuple(

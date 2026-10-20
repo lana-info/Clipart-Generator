@@ -357,9 +357,27 @@ def duplicate_output_names(paths: Sequence[str]) -> tuple[str, ...]:
     return tuple(duplicates)
 
 
+def processing_fal_quantities(operations: ImageOperationData, file_count: int) -> dict[str, int]:
+    """Paid Fal.ai call counts for this processing run, per endpoint."""
+    quantities: dict[str, int] = {}
+    chosen = (
+        (operations.upscale_before and operations.upscale_before_provider == "fal",
+         operations.fal_upscale_model),
+        (operations.remove_background and operations.remove_background_provider == "fal",
+         operations.fal_remove_bg_model),
+        (operations.upscale_after and operations.upscale_after_provider == "fal",
+         operations.fal_upscale_after_model),
+    )
+    for enabled, model in chosen:
+        if enabled and model and file_count > 0:
+            quantities[model] = quantities.get(model, 0) + file_count
+    return quantities
+
+
 def estimate_processing_cost(
     operations: ImageOperationData,
     file_count: int,
+    fal_total: Decimal | None = None,
 ) -> str:
     prices = {
         "topaz/image-upscale": Decimal("0.20"),
@@ -390,8 +408,10 @@ def estimate_processing_cost(
             fal_selected = True
     if not uses_external_processing(operations):
         return "локально, без оплаты API"
+    if fal_selected and fal_total is None:
+        return "Fal.ai: стоимость не рассчитана, нажмите «Обновить расчёт»"
     if fal_selected:
-        return "Fal.ai: стоимость не рассчитана"
+        total += fal_total
     if not complete:
         return "стоимость рассчитана не полностью"
     return f"ориентировочно ${total:.3f}"
@@ -1105,6 +1125,7 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         pipeline_page: ProcessingPipelinePage,
         *,
         tokens: V3DesignTokens = DEFAULT_TOKENS,
+        fal_cost_refresh=None,
     ) -> None:
         super().__init__(
             "Проверка и запуск",
@@ -1127,8 +1148,22 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         self.requirements_label.setWordWrap(True)
         self.run_status_label = QLabel()
         self.run_status_label.setWordWrap(True)
+        self.fal_cost_refresh = fal_cost_refresh
+        self._fal_total = None
+        self._fal_signature = None
+        self._cost_note = ""
+        self.cost_refresh_button = V3Button("Обновить расчёт", ButtonVariant.SECONDARY)
+        self.cost_refresh_button.setToolTip(
+            "Пересчитать ориентировочный расход по текущим настройкам; для Fal.ai запрашивается актуальная цена")
+        self.cost_refresh_button.clicked.connect(self.refresh_cost)
+        cost_row = QWidget()
+        cost_layout = QHBoxLayout(cost_row)
+        cost_layout.setContentsMargins(0, 0, 0, 0)
+        cost_layout.addWidget(self.cost_refresh_button)
+        cost_layout.addStretch(1)
         for widget in (
             self.summary_label,
+            cost_row,
             self.pipeline_label,
             self.output_label,
             self.warning_label,
@@ -1150,7 +1185,13 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
             output_dir = "не выбрана"
         steps = processing_pipeline_steps(operations)
         removed, preserved = processing_change_summary(operations)
-        cost = estimate_processing_cost(operations, len(files))
+        signature = tuple(sorted(processing_fal_quantities(operations, len(files)).items()))
+        if signature != self._fal_signature:
+            self._fal_total = None  # settings changed: an earlier Fal quote no longer applies
+            self._cost_note = ""
+        cost = estimate_processing_cost(operations, len(files), self._fal_total)
+        if self._cost_note:
+            cost += f" ({self._cost_note})"
         recipe = PROCESSING_RECIPES.get(
             _processing_data(self.state).recipe,
             PROCESSING_RECIPES["custom"],
@@ -1179,6 +1220,28 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         else:
             warnings.append("Сетевая передача не требуется.")
         self.warning_label.setText(" ".join(warnings))
+
+    def refresh_cost(self) -> None:
+        """Recalculate from the current settings; Fal.ai also asks for its live price."""
+        import time
+        operations = _processing_data(self.state).operations
+        files = _processing_data(self.state).selected_files
+        quantities = processing_fal_quantities(operations, len(files))
+        self._fal_signature = tuple(sorted(quantities.items()))
+        self._fal_total = None
+        note = f"обновлено в {time.strftime('%H:%M')}"
+        if quantities:
+            try:
+                if self.fal_cost_refresh is None:
+                    raise RuntimeError("добавьте API-ключ Fal.ai в настройках")
+                amount, currency = self.fal_cost_refresh(quantities)
+                if str(currency or "USD").upper() != "USD":
+                    raise ValueError(f"валюта {currency}")
+                self._fal_total = Decimal(str(amount))
+            except (RuntimeError, ValueError, TypeError) as error:
+                note = f"Fal.ai: не удалось обновить — {error}"
+        self._cost_note = note
+        self.refresh_from_state()
 
     def validation_issues(self) -> tuple[str, ...]:
         issues = list(self.files_page.validation_issues())
@@ -1455,6 +1518,7 @@ class ProcessingFlowController(QObject):
                 self.files_page,
                 self.pipeline_page,
                 tokens=self.shell.tokens,
+                fal_cost_refresh=self.shell.image_run_estimate_fal_cost,
             ),
         )
         self.pages.register_instance(StepId.RESULTS, self.run_queue.page)

@@ -1874,8 +1874,11 @@ class V3ClipartFlowTests(unittest.TestCase):
         review = ClipartReviewRunPage(state, fal_cost_refresh=lambda: (0.01, "USD"))
 
         self.assertEqual(fal_endpoint_quantities(state), {})
-        self.assertTrue(review.fal_cost_refresh_button.isHidden())
+        self.assertEqual(review.fal_cost_refresh_button.text(), "Обновить расчёт")
+        self.assertFalse(review.fal_cost_refresh_button.isHidden())  # always offered, Fal or not
+        review.refresh_cost()  # no Fal: recomputes locally, never calls the Fal quote
         self.assertNotIn("Fal.ai", review.cost_breakdown_label.text())
+        self.assertIn("Расчёт обновлён", review.cost_breakdown_label.text())
 
     def test_upscale_after_is_available_without_affecting_upscale_before(self):
         state = ProjectState(mode=ProjectMode.CLIPART)
