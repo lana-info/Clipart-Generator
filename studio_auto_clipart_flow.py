@@ -751,7 +751,22 @@ class AutoClipartFlowController(ClipartFlowController):
             directory.cleanup()
             raise
 
-    def confirm_retry_request(self, request):
+    def _request_cost_line(self, request):
+        """Estimate for exactly the prompts of this request, never the whole set."""
+        fallback = 'Стоимость не рассчитана; запросы оплачиваются отдельно.'
+        try:
+            import copy
+            ids = {entry.get('object_id') for entry in request.generated_prompts}
+            data = copy.copy(self.shell.state.data)
+            data.prompts = [entry for entry in self.shell.state.data.prompts if entry.object_id in ids]
+            if not ids or None in ids or not data.prompts:
+                return fallback
+            from v3_image_generation_runtime import estimate_image_generation_cost
+            return estimate_image_generation_cost(data).summary
+        except Exception:
+            return fallback
+
+    def confirm_retry_request(self, request, *, regenerate=False):
         self._reference_consent = None
         approved = deepcopy(request)
         if approved.mode == "mode2_process" and approved.selected_files:
@@ -780,10 +795,13 @@ class AutoClipartFlowController(ClipartFlowController):
         session = self.run_queue.session
         continuing = bool(session and any(item.status.value == 'cancelled' for item in session.items))
         action = 'Продолжить незавершённые запросы' if continuing else 'Повторить неудачные запросы'
+        if regenerate:
+            action = 'Сгенерировать заново выбранные изображения'
         message = (
             f'{action}: {len(approved.generated_prompts)}?\n'
-            'Успешные изображения не будут созданы заново.\n'
-            'Стоимость повтора не рассчитана; запросы оплачиваются отдельно.\n'
+            + ('Текущие версии выбранных изображений будут заменены новыми.\n' if regenerate
+               else 'Успешные изображения не будут созданы заново.\n')
+            + self._request_cost_line(approved) + '\n'
             'Модель: ' + ', '.join(sorted(models))
         )
         if references:

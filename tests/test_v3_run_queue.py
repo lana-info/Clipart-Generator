@@ -822,6 +822,43 @@ class V3RunQueueTests(unittest.TestCase):
             retry = session.prepare_retry()
             self.assertEqual(retry.generated_prompts[0]['object_id'], 'object-2')
 
+    def test_regenerate_selected_builds_request_only_for_chosen_items(self):
+        with tempfile.TemporaryDirectory(prefix="v3-regenerate-") as temp:
+            request = generation_request(temp, 4)
+            request.generated_prompts[2]["object_id"] = "object-3"
+            session = RunQueueSession(request, ProjectMode.CLIPART)
+            session.running = False
+            for item in session.items:
+                item.status = RunItemStatus.SUCCEEDED
+                item.output_path = str(Path(temp) / f"{item.index}.png")
+            session.items[3].status = RunItemStatus.RUNNING
+            self.assertEqual(session.regenerable_indices([0, 2, 3, 9]), [0, 2])
+            preview = session.preview_regenerate([2, 0])
+            self.assertEqual([entry["prompt"] for entry in preview.generated_prompts],
+                             [f"{SECRET_PROMPT} 1", f"{SECRET_PROMPT} 3"])
+            self.assertEqual(preview.generated_prompts[1]["object_id"], "object-3")
+            self.assertEqual(preview.settings["task_item_indices"], [1, 3])
+            self.assertTrue(preview.settings["overwrite_existing"])
+            self.assertEqual(session.items[0].status, RunItemStatus.SUCCEEDED)  # preview changes nothing
+            prepared = session.prepare_regenerate([2, 0])
+            self.assertEqual(prepared, preview)
+            self.assertTrue(session.running)
+            self.assertEqual(session.items[0].status, RunItemStatus.PENDING)
+            self.assertEqual(session.items[1].status, RunItemStatus.SUCCEEDED)  # untouched
+            self.assertEqual(session.items[0].attempts, 2)
+
+    def test_regenerate_is_not_offered_for_file_queues_or_running_sessions(self):
+        with tempfile.TemporaryDirectory(prefix="v3-regenerate-off-") as temp:
+            running = RunQueueSession(generation_request(temp, 2), ProjectMode.CLIPART)
+            self.assertEqual(running.regenerable_indices([0, 1]), [])  # still running
+            source = Path(temp) / "a.png"
+            Image.new("RGB", (4, 4), "white").save(source)
+            files = RunQueueSession(processing_request(temp, [source]), ProjectMode.PROCESSING)
+            files.running = False
+            files.items[0].status = RunItemStatus.SUCCEEDED
+            self.assertEqual(files.regenerable_indices([0]), [])
+            self.assertIsNone(files.preview_regenerate([0]))
+
     def test_retry_request_contains_only_failed_private_payloads(self):
         with tempfile.TemporaryDirectory(prefix="v3-queue-retry-") as temp:
             request = generation_request(temp)
@@ -2173,3 +2210,22 @@ def test_raw_generated_source_does_not_inherit_intermediate_upscale(tmp_path):
     assert request.settings['upscale_after'] is True
     assert request.selected_files == [str(raw.resolve())]
     assert not request.generated_prompts
+
+
+def test_regeneration_cost_line_covers_only_requested_objects(monkeypatch):
+    from types import SimpleNamespace
+    import v3_image_generation_runtime as runtime
+    from studio_auto_clipart_flow import AutoClipartFlowController
+
+    seen = []
+    monkeypatch.setattr(runtime, "estimate_image_generation_cost",
+                        lambda data: seen.append([p.object_id for p in data.prompts])
+                        or SimpleNamespace(summary="цена-подмножества"))
+    prompts = [SimpleNamespace(object_id=f"o{i}") for i in range(1, 5)]
+    fake = SimpleNamespace(shell=SimpleNamespace(state=SimpleNamespace(
+        data=SimpleNamespace(prompts=prompts))))
+    request = SimpleNamespace(generated_prompts=[{"object_id": "o2"}, {"object_id": "o4"}])
+    assert AutoClipartFlowController._request_cost_line(fake, request) == "цена-подмножества"
+    assert seen == [["o2", "o4"]]
+    unknown = SimpleNamespace(generated_prompts=[{"prompt": "x"}])  # no object ids: honest fallback
+    assert "не рассчитана" in AutoClipartFlowController._request_cost_line(fake, unknown)
