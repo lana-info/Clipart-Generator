@@ -1528,7 +1528,7 @@ class V3ApplicationView(QWidget):
         if mode is ProjectMode.CLIPART:
             page = getattr(getattr(controller, "run_queue", None), "page", None)
             if page is not None and hasattr(page, "processing_requested"):
-                page.send_to_processing_button.show()
+                # Hidden by owner decision 2026-10-20 (not needed for now); wiring kept so it can return.
                 page.processing_requested.connect(
                     lambda paths, source=shell: self._open_results_in_processing(source, paths)
                 )

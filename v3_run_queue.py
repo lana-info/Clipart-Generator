@@ -1785,7 +1785,7 @@ class RunResultsPage(QWidget):
         self.retry_button.setToolTip(
             "Запустить только то, что не получилось или было отменено; готовые файлы не трогаются")
         self.process_more_button.setToolTip(
-            "Сбросить результаты этого запуска и начать весь набор заново")
+            "Очистить экран выполнения и вернуться к запуску нового прогона; файлы на диске остаются")
         self.send_to_processing_button.setToolTip(
             "Отправить выбранные готовые изображения в модуль «Обработка изображений»")
         self.check_transparency_button.hide()
@@ -1902,12 +1902,14 @@ class RunResultsPage(QWidget):
         stop_visible = session.running and not session.stop_after_current_requested
         immediate_stop_visible = session.running
         retry_visible = not session.running and bool(session.retry_indices)
+        remaining = len(session.retry_indices)
         self.retry_button.setText(
-            'Продолжить незавершённые'
+            f'Доделать оставшиеся ({remaining})'
             if any(item.status is RunItemStatus.CANCELLED for item in session.items)
-            else 'Повторить ошибки'
+            else f'Повторить ошибки ({remaining})'
         )
-        process_more_visible = not session.running
+        # Clipart: a new set starts from the project step / home, so "start again" is not offered.
+        process_more_visible = not session.running and self.state.mode is not ProjectMode.CLIPART
         finish_visible = False
         self.stop_button.setVisible(stop_visible)
         self.immediate_stop_button.setVisible(immediate_stop_visible)
@@ -2192,11 +2194,14 @@ class RunResultsPage(QWidget):
         )
         # Transparency check is the key next step: it is the highlighted button while
         # shown; "Открыть папку" is then an ordinary one.
-        important = self.check_transparency_button.isVisibleTo(self)
+        # One main button by situation: unfinished work first, then the transparency check.
+        retry_main = self.retry_button.isVisibleTo(self)
+        check_main = self.check_transparency_button.isVisibleTo(self) and not retry_main
+        self.retry_button.set_variant(ButtonVariant.PRIMARY if retry_main else ButtonVariant.SECONDARY)
         self.check_transparency_button.set_variant(
-            ButtonVariant.PRIMARY if important else ButtonVariant.SECONDARY)
+            ButtonVariant.PRIMARY if check_main else ButtonVariant.SECONDARY)
         self.open_folder_button.set_variant(
-            ButtonVariant.SECONDARY if important else ButtonVariant.PRIMARY)
+            ButtonVariant.SECONDARY if retry_main or check_main else ButtonVariant.PRIMARY)
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),

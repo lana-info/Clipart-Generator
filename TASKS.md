@@ -3787,3 +3787,9 @@ Evidence and remaining limitations: `docs/ui/3.2/style-reference-ux/README.md`.
 Evidence: `docs/ui/3.2/export-workspace/README.md`.
 
 Remaining-edge blocker: disk full; owner answer pending for cleaning only /tmp/vibix-size-audit/extracted. No product adoption before stable disk, permanent RED/GREEN and negatives.
+
+## Приёмка 3.2.34: правки 2026-10-20 (ветка codex/projects-export-hardening-20261019)
+- [x] Шапка/кнопки/«Обновить все модули»/мягкая кисть/шаг «Проверка» (см. docs/ERRORS.md) — в коде, не собрано.
+- [ ] Собрать и подписать пакеты модулей auto-clipart и processing (значки «Идеи», шкала импорта, кнопки «Проверки») — ключ подписи у владельца; агент предлагает сборку сам.
+- [ ] «Сгенерировать выбранные заново» (платная) — отдельная задача.
+- [ ] Проверить: «Доделать оставшиеся» при ошибке начинает с шага ошибки, если есть исходник предыдущего шага.

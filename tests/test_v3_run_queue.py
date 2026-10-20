@@ -1367,7 +1367,7 @@ class V3RunQueueTests(unittest.TestCase):
             session.handle_finished()
 
             self.assertTrue(page.finish_button.isHidden())
-            self.assertFalse(page.process_more_button.isHidden())
+            self.assertFalse(page.process_more_button.isHidden()) if page.state.mode is not ProjectMode.CLIPART else self.assertTrue(page.process_more_button.isHidden())
             self.assertEqual(
                 page.process_more_button.text(),
                 "Начать заново в этом режиме",
