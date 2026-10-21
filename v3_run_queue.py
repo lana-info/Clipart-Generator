@@ -14,6 +14,7 @@ from typing import Any, Callable
 from PyQt6.QtCore import QEvent, QObject, QSize, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices, QImageReader, QPixmap
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QDialog,
     QApplication,
     QFileDialog,
@@ -1318,6 +1319,66 @@ class RunQueueSession(QObject):
             retry_request = replace(retry_request, settings=settings)
         return retry_request
 
+    def regenerable_indices(self, indices) -> list[int]:
+        """Items that can be generated again from their saved prompt (not running, not file queues)."""
+        if (self.running or getattr(self.request, "queue_items", None)
+                or not getattr(self.request, "generated_prompts", None)):
+            return []
+        return sorted({
+            index for index in indices
+            if 0 <= index < len(self.items)
+            and self.items[index].status in {
+                RunItemStatus.SUCCEEDED, RunItemStatus.FAILED, RunItemStatus.CANCELLED}
+            and isinstance(self.items[index].payload, dict)
+            and str(self.items[index].payload.get("prompt") or "").strip()
+        })
+
+    def preview_regenerate(self, indices) -> Any | None:
+        chosen = self.regenerable_indices(indices)
+        if not chosen:
+            return None
+        entries = []
+        for index in chosen:
+            payload = self.items[index].payload
+            entries.append({
+                "prompt": str(payload.get("prompt") or ""),
+                "references": list(payload.get("references") or []),
+                "chroma_key_color": str(payload.get("chroma_key_color") or ""),
+                "result_kind": payload.get("result_kind", "legacy"),
+                **({"object_id": str(payload.get("object_id") or "")}
+                   if str(payload.get("object_id") or "") else {}),
+            })
+        settings = dict(self.request.settings)
+        settings["task_item_indices"] = self._retry_task_indices(chosen)
+        settings["overwrite_existing"] = True  # the new picture replaces the chosen one
+        return replace(self.request, generated_prompts=entries, selected_files=[], settings=settings)
+
+    def prepare_regenerate(self, indices) -> Any | None:
+        request = self.preview_regenerate(indices)
+        if request is None:
+            return None
+        chosen = self.regenerable_indices(indices)
+        self.active_order = list(chosen)
+        for index in chosen:
+            item = self.items[index]
+            item.status = RunItemStatus.PENDING
+            item.short_message = "Ожидает повторной генерации."
+            item.output_path = ""
+            item.editor_output_path = ""
+            item.stage_statuses.clear()
+            item.paid_completed_stages = ()
+            item.recovery_input_stages = None
+            item.attempts += 1
+        self.current_index = None
+        self._item_progress.clear()
+        self._last_progress = 0
+        self.running = True
+        self.stop_after_current_requested = False
+        self._deferred_stop = None
+        self._event("regenerate_started", count=len(chosen))
+        self.changed.emit()
+        return request
+
     def prepare_retry(self) -> Any | None:
         retry_request = self.preview_retry()
         if retry_request is None:
@@ -1451,9 +1512,14 @@ class RunQueue(QListWidget):
     def __init__(self, *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
         super().__init__()
         self.tokens = tokens
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+
+    def selected_rows(self) -> list[int]:
+        return sorted({self.row(row) for row in self.selectedItems()})
 
     def refresh_items(self, items: list[RunItem]) -> None:
         selected = self.currentRow()
+        chosen = self.selected_rows()
         self.clear()
         for item in items:
             label = (
@@ -1477,6 +1543,9 @@ class RunQueue(QListWidget):
             self.setCurrentRow(
                 selected if 0 <= selected < len(items) else 0
             )
+            for row in chosen:
+                if 0 <= row < len(items):
+                    self.item(row).setSelected(True)
 
 
 class BeforeAfterViewer(QFrame):
@@ -1620,11 +1689,14 @@ class RunResultsPage(QWidget):
     # stable client release. It will return in the dedicated image-processing
     # version after a separate product review.
     SHOW_TRANSPARENCY_EDITOR = False
+    # Set by RunQueueSupport when the owning controller can confirm a paid regeneration.
+    regenerate_supported = False
 
     stop_requested = pyqtSignal()
     immediate_stop_requested = pyqtSignal()
     retry_requested = pyqtSignal()
     process_more_requested = pyqtSignal()
+    regenerate_requested = pyqtSignal(object)
     finish_requested = pyqtSignal()
     transparency_requested = pyqtSignal(int)
     membership_changed = pyqtSignal()
@@ -1671,6 +1743,7 @@ class RunResultsPage(QWidget):
         self.queue.setAccessibleName("Очередь выполнения")
         self.queue.setMinimumHeight(360)
         self.queue.currentRowChanged.connect(self._selection_changed)
+        self.queue.itemSelectionChanged.connect(self._update_regenerate_button)
         self.queue.itemDoubleClicked.connect(self._open_transparency_item)
         self.viewer = BeforeAfterViewer()
         self.viewer.hide()
@@ -1751,6 +1824,15 @@ class RunResultsPage(QWidget):
             ButtonVariant.SECONDARY,
         )
         self.process_more_button.clicked.connect(self.process_more_requested.emit)
+        self.regenerate_button = V3Button(
+            "Сгенерировать выбранные заново", ButtonVariant.SECONDARY,
+        )
+        self.regenerate_button.setToolTip(
+            "Создать новые изображения для выбранных строк списка (Ctrl или Shift для нескольких). "
+            "Платная операция: цена и подтверждение покажутся перед запуском")
+        self.regenerate_button.hide()
+        self.regenerate_button.clicked.connect(
+            lambda: self.regenerate_requested.emit(self.queue.selected_rows()))
         self.send_to_processing_button = V3Button(
             "Обработать выбранное", ButtonVariant.SECONDARY,
         )
@@ -1780,6 +1862,14 @@ class RunResultsPage(QWidget):
         self.check_transparency_button.clicked.connect(
             self._request_selected_transparency
         )
+        self.check_transparency_button.setToolTip(
+            "Проверить прозрачность выбранного изображения и при необходимости исправить фон")
+        self.retry_button.setToolTip(
+            "Запустить только то, что не получилось или было отменено; готовые файлы не трогаются")
+        self.process_more_button.setToolTip(
+            "Очистить экран выполнения и вернуться к запуску нового прогона; файлы на диске остаются")
+        self.send_to_processing_button.setToolTip(
+            "Отправить выбранные готовые изображения в модуль «Обработка изображений»")
         self.check_transparency_button.hide()
         self.save_corrected_button = V3Button(
             "Сохранить исправленный PNG",
@@ -1798,6 +1888,7 @@ class RunResultsPage(QWidget):
             self.immediate_stop_button,
             self.retry_button,
             self.process_more_button,
+            self.regenerate_button,
             self.send_to_processing_button,
         ):
             workflow_layout.addWidget(button)
@@ -1894,12 +1985,14 @@ class RunResultsPage(QWidget):
         stop_visible = session.running and not session.stop_after_current_requested
         immediate_stop_visible = session.running
         retry_visible = not session.running and bool(session.retry_indices)
+        remaining = len(session.retry_indices)
         self.retry_button.setText(
-            'Продолжить незавершённые'
+            f'Доделать оставшиеся ({remaining})'
             if any(item.status is RunItemStatus.CANCELLED for item in session.items)
-            else 'Повторить ошибки'
+            else f'Повторить ошибки ({remaining})'
         )
-        process_more_visible = not session.running
+        # Clipart: a new set starts from the project step / home, so "start again" is not offered.
+        process_more_visible = not session.running and self.state.mode is not ProjectMode.CLIPART
         finish_visible = False
         self.stop_button.setVisible(stop_visible)
         self.immediate_stop_button.setVisible(immediate_stop_visible)
@@ -2137,7 +2230,21 @@ class RunResultsPage(QWidget):
         if paths:
             self.processing_requested.emit(paths)
 
+    def _update_regenerate_button(self) -> None:
+        session = self.session
+        visible = bool(
+            session is not None and self.regenerate_supported
+            and self.state.mode is ProjectMode.CLIPART
+            and session.regenerable_indices(self.queue.selected_rows()))
+        self.regenerate_button.setVisible(visible)
+        self.regenerate_button.setEnabled(visible)
+        self.workflow_actions.setVisible(
+            visible or any(button.isVisibleTo(self.workflow_actions) for button in (
+                self.stop_button, self.immediate_stop_button, self.retry_button,
+                self.process_more_button)))
+
     def _selection_changed(self, row: int) -> None:
+        self._update_regenerate_button()
         self.send_to_processing_button.setEnabled(bool(self.processing_selection()))
         item = self._selected_item(row)
         if item is None:
@@ -2182,6 +2289,16 @@ class RunResultsPage(QWidget):
             and not self.session.running
             and bool(self._transparency_paths)
         )
+        # Transparency check is the key next step: it is the highlighted button while
+        # shown; "Открыть папку" is then an ordinary one.
+        # One main button by situation: unfinished work first, then the transparency check.
+        retry_main = self.retry_button.isVisibleTo(self)
+        check_main = self.check_transparency_button.isVisibleTo(self) and not retry_main
+        self.retry_button.set_variant(ButtonVariant.PRIMARY if retry_main else ButtonVariant.SECONDARY)
+        self.check_transparency_button.set_variant(
+            ButtonVariant.PRIMARY if check_main else ButtonVariant.SECONDARY)
+        self.open_folder_button.set_variant(
+            ButtonVariant.SECONDARY if retry_main or check_main else ButtonVariant.PRIMARY)
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
@@ -2431,6 +2548,8 @@ class RunQueueSupport:
         self.page.immediate_stop_requested.connect(self.stop_now)
         self.page.retry_requested.connect(self.retry_failed)
         self.page.process_more_requested.connect(self.process_more)
+        self.page.regenerate_supported = callable(getattr(controller, 'confirm_retry_request', None))
+        self.page.regenerate_requested.connect(self.regenerate_selected)
         self.page.finish_requested.connect(self.finish_workflow)
         self.page.membership_changed.connect(controller.shell.state_changed.emit)
 
@@ -2667,6 +2786,41 @@ class RunQueueSupport:
         if not callable(immediate):
             return False
         return self.session.request_immediate_stop(immediate_stop=immediate)
+
+    def regenerate_selected(self, indices) -> Any | None:
+        """Generate the chosen items again: paid, so only after cost and confirmation."""
+        if self.session is None:
+            return None
+        busy = getattr(self.controller, "is_busy", None)
+        if callable(busy) and busy():
+            return None
+        worker = getattr(self.controller, "worker", None)
+        if worker is not None and bool(worker.isRunning()):
+            return None
+        preview = self.session.preview_regenerate(indices)
+        if preview is None:
+            return None
+        confirm = getattr(self.controller, "confirm_retry_request", None)
+        if not callable(confirm) or not confirm(preview, regenerate=True):
+            return None
+        if self.session.preview_regenerate(indices) != preview:
+            return None
+        request = self.session.prepare_regenerate(indices)
+        if request is None:
+            return None
+        try:
+            create_worker = getattr(self.controller, "create_worker_for_request", None)
+            if not callable(create_worker):
+                raise RunQueueError("Core retry service is unavailable")
+            worker = create_worker(request)
+        except Exception as error:
+            self.controller._error(str(error))
+            return None
+        self.controller.worker = worker
+        self.connect_worker(worker)
+        worker.start()
+        self.controller.started.emit(request)
+        return request
 
     def retry_failed(self) -> Any | None:
         if self.session is None:

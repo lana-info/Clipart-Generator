@@ -528,7 +528,7 @@ class V3ProcessingFlowTests(unittest.TestCase):
 
         text = estimate_processing_cost(operations, 3)
 
-        self.assertEqual(text, "Fal.ai: стоимость не рассчитана")
+        self.assertEqual(text, "Fal.ai: стоимость не рассчитана, нажмите «Обновить расчёт»")
         self.assertNotIn("$0.000", text)
 
     def test_visible_mark_cleanup_is_local_but_requires_full_image_opt_in(self):
@@ -702,3 +702,20 @@ class V3ProcessingFlowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_processing_cost_refresh_uses_live_fal_quote_and_resets_on_change():
+    from decimal import Decimal
+    from v3_processing_flow import (ProcessingReviewRunPage, estimate_processing_cost,
+                                    processing_fal_quantities)
+    from v3_project_state import ImageOperationData
+
+    ops = ImageOperationData()
+    ops.upscale_before, ops.upscale_before_provider = True, "fal"
+    ops.remove_background, ops.remove_background_provider = True, "fal"
+    quantities = processing_fal_quantities(ops, 3)
+    assert quantities == {ops.fal_upscale_model: 3, ops.fal_remove_bg_model: 3} or \
+        sum(quantities.values()) == 6
+    assert "Обновить расчёт" in estimate_processing_cost(ops, 3)
+    assert estimate_processing_cost(ops, 3, Decimal("0.150")) == "ориентировочно $0.150"
+    assert processing_fal_quantities(ops, 0) == {}

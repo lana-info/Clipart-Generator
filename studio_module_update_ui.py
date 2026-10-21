@@ -86,6 +86,7 @@ class ModuleUpdateWorker(QThread):
 
 
 class ModuleUpdatesDialog(QDialog):
+    _recheck_after_shared_update = False
     news_changed = pyqtSignal(str)
     state_changed = pyqtSignal()
     def __init__(self, delivery, *, busy_module=lambda _module: False, authorization_provider=lambda: None, parent=None):
@@ -124,12 +125,13 @@ class ModuleUpdatesDialog(QDialog):
         title.setStyleSheet("font-size:24px;font-weight:600;")
         heading.addWidget(title)
         heading.addStretch()
-        self.check_button = V3Button("Проверить обновления", ButtonVariant.SECONDARY)
+        self.check_button = V3Button("Проверить обновления модулей", ButtonVariant.SECONDARY)
         self.check_button.clicked.connect(self.check)
         heading.addWidget(self.check_button)
         self.update_all_button = V3Button("Обновить все модули", ButtonVariant.PRIMARY)
         self.update_all_button.clicked.connect(self.update_all)
         heading.addWidget(self.update_all_button)
+        self.update_all_button.hide()
         layout.addLayout(heading)
         grid = QGridLayout()
         grid.setHorizontalSpacing(20)
@@ -183,6 +185,16 @@ class ModuleUpdatesDialog(QDialog):
             self.status.setText("Обновления модулей пока недоступны в этой версии Studio.")
         QApplication.instance().aboutToQuit.connect(self._shutdown)
 
+    def _has_updates(self):
+        return any(module in self.releases and self._module_installed(module) for module in self.rows)
+
+    def _sync_heading_buttons(self):
+        """"Обновить все модули" replaces the check button only after a finished
+        check found updates for installed modules; no updates, no such button."""
+        show_update_all = self._has_updates()
+        self.update_all_button.setVisible(show_update_all)
+        self.check_button.setVisible(not show_update_all)
+
     @property
     def busy(self):
         return self.worker is not None
@@ -209,6 +221,7 @@ class ModuleUpdatesDialog(QDialog):
         self.progress.setRange(0, 0)
         self.progress.setTextVisible(False)
         self.progress.show()
+        self._sync_heading_buttons()
         self.worker.progress.connect(self._progress)
         self.worker.phase.connect(self._phase)
         self.worker.finished.connect(self._finished)
@@ -236,6 +249,7 @@ class ModuleUpdatesDialog(QDialog):
         for _installed, available, button in self.rows.values():
             available.setText("Проверьте доступ")
             button.setEnabled(False)
+        self._sync_heading_buttons()
 
     def cancel_transfer(self):
         self._pending_download = None
@@ -409,6 +423,7 @@ class ModuleUpdatesDialog(QDialog):
                                 available.setText("Проверьте обновления")
                         if self._queue:
                             self._stop_queue()
+                        self._recheck_after_shared_update = True
                     else:
                         self.delivery.activate(module, worker.release.version)
                         if self._queue and self._queue[0] == module:
@@ -428,6 +443,7 @@ class ModuleUpdatesDialog(QDialog):
             self.check_button.setEnabled(bool(self.delivery.store.trusted_keys))
             self.update_all_button.setEnabled(bool(self.delivery.store.trusted_keys))
             self._refresh_installed()
+            self._sync_heading_buttons()
             for module, (_installed, _available, button) in self.rows.items():
                 button.setEnabled(module in self.releases and not self._queue)
                 from studio_catalog_ui import style_module_action
@@ -443,6 +459,10 @@ class ModuleUpdatesDialog(QDialog):
                 QTimer.singleShot(0, self._advance_queue)
             elif self._queue_total:
                 QTimer.singleShot(0, self._finish_queue)
+            if self._recheck_after_shared_update:
+                # Offers cleared after a shared update: refresh them without a manual click.
+                self._recheck_after_shared_update = False
+                QTimer.singleShot(0, self.check)
 
 
     def reject(self):

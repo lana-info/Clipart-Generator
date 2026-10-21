@@ -81,3 +81,27 @@ def test_model_tab_still_reachable_and_ideas_return(workspace):
     QApplication.processEvents()
     assert brief.object_editor.isVisible() and planning.all_button.isVisible()
     brief.close()
+
+
+def test_model_tab_stays_at_top_of_the_page(workspace):
+    _view, controller, _gate, _worker = workspace
+    brief = _prepare(controller, 3)
+    brief.pages.setCurrentIndex(4)
+    brief.setParent(None)
+    brief.resize(940, 600)
+    brief.show()
+    QApplication.processEvents()
+    planning = brief.planning
+
+    def tab_bar_top():
+        QApplication.processEvents()
+        bar = planning.tabs.tabBar()
+        return bar.mapTo(brief, bar.rect().topLeft()).y()
+
+    ideas_top = tab_bar_top()
+    planning.tabs.setCurrentIndex(1)
+    # The shorter model page must not be centred in the free space of the step.
+    assert abs(tab_bar_top() - ideas_top) <= 2
+    planning.tabs.setCurrentIndex(0)
+    assert abs(tab_bar_top() - ideas_top) <= 2
+    brief.close()

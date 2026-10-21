@@ -83,6 +83,7 @@ Write-Host "==> Build app with PyInstaller"
     --hidden-import "clipart_run_results" `
     --hidden-import "config_schema" `
     --hidden-import "fal_model_catalog" `
+    --hidden-import "gpt25_recovery" `
     --hidden-import "license_client" `
     --hidden-import "model_catalog" `
     --hidden-import "output_naming" `
@@ -91,6 +92,7 @@ Write-Host "==> Build app with PyInstaller"
     --hidden-import "provider_error_messages" `
     --hidden-import "security_redaction" `
     --hidden-import "studio_bundle_planner" `
+    --hidden-import "studio_name_translation" `
     --hidden-import "studio_object_editor" `
     --hidden-import "studio_prompt_composer_host" `
     --hidden-import "studio_text_errors" `

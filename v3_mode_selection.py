@@ -202,6 +202,10 @@ class ModeSelectionScreen(QWidget):
         self.header_continue_button.clicked.connect(self.header_continue_requested.emit)
         account_layout.addWidget(self.header_continue_button)
         self.api_settings_button = V3Button("API", ButtonVariant.GHOST)
+        # Same teal as the header icons; header buttons never show a focus frame.
+        self.api_settings_button.setStyleSheet(
+            f"QPushButton {{color:{self.tokens.accent};font-weight:600;}}"
+            f"QPushButton:pressed {{color:{self.tokens.accent};}}")
         self.api_settings_button.setToolTip("Настройки API")
         self.api_settings_button.setAccessibleName("Настройки API")
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
@@ -218,6 +222,10 @@ class ModeSelectionScreen(QWidget):
         make_icon_button(self.license_button, "key", "Лицензия")
         self.license_button.clicked.connect(self.license_requested.emit)
         account_layout.addWidget(self.license_button)
+        for header_button in (self.studio_home_button, self.header_continue_button,
+                              self.api_settings_button, self.diagnostics_button,
+                              self.module_updates_button, self.license_button):
+            header_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         layout.addWidget(self.account_card)
 
         # The "Модули" title now lives in the header; "Продолжить работу" duplicated the
@@ -904,7 +912,8 @@ class V3ApplicationView(QWidget):
         self.stack.setCurrentWidget(widget)
         in_module = widget is not self.mode_selection
         self.mode_selection.active_module_label.setText(
-            MODE_TITLES.get(widget.state.mode, "") if isinstance(widget, AppShell)
+            ({"auto-clipart": "Автоматический клипарт"}.get(getattr(widget, "module_id", None))
+             or MODE_TITLES.get(widget.state.mode, "")) if isinstance(widget, AppShell)
             else ("Автоматический клипарт" if in_module else "Модули")
         )
         self.mode_selection.studio_home_button.setVisible(in_module)
@@ -931,7 +940,27 @@ class V3ApplicationView(QWidget):
         self.refresh_license_status()
         self._set_application_screen(self.mode_selection, "mode_selection", trigger)
 
+    def _stop_busy_work_for_leaving(self) -> bool:
+        """Ask before leaving a module with unfinished work; stop it on request."""
+        reason = self._busy_reason()
+        if reason is None:
+            return True
+        if reason == "export":
+            return True  # _save_before_leaving reports and blocks it
+        answer = QMessageBox.question(
+            self, "Перейти на главную?",
+            "Задание ещё выполняется или не завершилось. Остановить его и перейти на главную? "
+            "Уже готовые файлы сохранятся.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return False
+        self._stop_leftover_workers()
+        return True
+
     def show_mode_switcher(self) -> None:
+        if not self._stop_busy_work_for_leaving():
+            return
         if not self._save_before_leaving():
             return
         if self.shell is None:
@@ -1236,6 +1265,29 @@ class V3ApplicationView(QWidget):
             return False
         return True
 
+    def _busy_reason(self) -> str | None:
+        if self.shell is None:
+            return None
+        module_id = getattr(self.shell, "module_id", self.shell.state.mode.value)
+        controller = self.shell.workflow_controller(module_id)
+        panel = getattr(controller, "export_panel", None)
+        if panel is not None and getattr(panel, "worker", None) is not None:
+            return "export"  # short, deliberate protection: never interrupted by close/Home
+        if self.shell.active_run_controller() is not None:
+            return "active_run"
+        if callable(getattr(controller, "is_busy", None)) and controller.is_busy():
+            return "controller_busy"
+        return None
+
+    def _confirm_close_while_busy(self) -> bool:
+        answer = QMessageBox.question(
+            self, "Закрыть Studio?",
+            "Задание ещё выполняется или не завершилось. Если закрыть сейчас, оно будет "
+            "остановлено; уже готовые файлы сохранятся. Закрыть Studio?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        return answer == QMessageBox.StandardButton.Yes
+
     def _save_before_leaving(self) -> bool:
         """Keep the current workflow alive until it is idle and safely saved."""
         if self.shell is None:
@@ -1245,6 +1297,9 @@ class V3ApplicationView(QWidget):
         if (self.shell.active_run_controller() is not None
                 or (callable(getattr(controller, "is_busy", None)) and controller.is_busy())):
             self.shell.set_save_error("Сначала остановите текущее задание или дождитесь его завершения.")
+            self._diagnostic_event(
+                "leave_blocked_by_busy", "Переход заблокирован: задание не завершено.",
+                severity="warning", details={"reason": self._busy_reason() or "unknown"})
             return False
         return self._save_draft()
 
@@ -1520,7 +1575,7 @@ class V3ApplicationView(QWidget):
         if mode is ProjectMode.CLIPART:
             page = getattr(getattr(controller, "run_queue", None), "page", None)
             if page is not None and hasattr(page, "processing_requested"):
-                page.send_to_processing_button.show()
+                # Hidden by owner decision 2026-10-20 (not needed for now); wiring kept so it can return.
                 page.processing_requested.connect(
                     lambda paths, source=shell: self._open_results_in_processing(source, paths)
                 )
@@ -1582,7 +1637,23 @@ class V3ApplicationView(QWidget):
                 event.ignore()
                 return
             self._close_composer()
-        if not self._save_before_leaving():
+        busy = self._busy_reason()
+        if busy is not None:
+            # The window cross must never trap the user: a running or stuck job is
+            # stopped on request instead of silently refusing to close.
+            self._diagnostic_event(
+                "close_blocked_by_busy", "Закрытие запросило подтверждение: задание не завершено.",
+                severity="warning", details={"reason": busy})
+            if busy == "export" or not self._confirm_close_while_busy():
+                if busy == "export":
+                    self.shell.set_save_error("Дождитесь завершения экспорта набора.")
+                event.ignore()
+                return
+            try:
+                self._save_draft()
+            except Exception:
+                pass
+        elif not self._save_before_leaving():
             event.ignore()
             return
         if self._module_updates_dialog is not None and self._module_updates_dialog.busy:

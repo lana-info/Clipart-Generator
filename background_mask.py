@@ -54,6 +54,7 @@ SUBPIXEL_STEPS = 4
 # Owner acceptance 2026-10-19: a soft edge on a tiny brush only looks ragged, so
 # brushes up to 6 px across (radius <= 3) stay hard whatever hardness is chosen.
 MIN_SOFT_RADIUS = 4
+SOFT_MIN_CORE = 0.55
 
 
 @lru_cache(maxsize=256)
@@ -79,12 +80,12 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
     shape = large.resize((diameter, diameter), Image.Resampling.LANCZOS)
     if hardness == 100:
         return shape
-    # Falloff measured against the brush radius itself: fully opaque inside
-    # ``hardness`` percent of the radius, then a gaussian-like fade that reaches
-    # exactly 0 at the edge (gradual, no flat "stripe" and no hard step).
-    core = hardness / 100
+    # Same outer width as the hard brush: the opaque core covers at least the inner
+    # ``SOFT_MIN_CORE`` of the radius (more with higher hardness) and only the outer
+    # band fades, smoothly, to exactly 0 at the brush edge. The old gaussian started
+    # fading at the centre, so a soft stroke looked far thinner than a hard one.
+    core = SOFT_MIN_CORE + (1 - SOFT_MIN_CORE) * hardness / 100
     edge = radius + 0.5
-    floor_value = math.exp(-4.5)
     data = []
     for y in range(diameter):
         for x in range(diameter):
@@ -93,8 +94,7 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
                 data.append(255)
             else:
                 t = min(1.0, (ratio - core) / (1 - core))
-                value = (math.exp(-4.5 * t * t) - floor_value) / (1 - floor_value)
-                data.append(max(0, round(255 * value)))
+                data.append(max(0, round(255 * (1 - t * t * (3 - 2 * t)))))
     feather = Image.new("L", (diameter, diameter))
     feather.putdata(data)
     return ImageChops.multiply(shape, feather)

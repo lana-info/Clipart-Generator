@@ -104,6 +104,15 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertEqual(view.mode_selection.active_module_label.text(), "Модули")
         view.close()
 
+    def test_auto_clipart_header_names_the_module_not_the_generation_mode(self):
+        from studio_auto_clipart_shell import AutoClipartShell
+        view = V3ApplicationView()
+        shell = AutoClipartShell(ProjectState())
+        view.stack.addWidget(shell)
+        view._set_application_screen(shell, "wizard", "module_open")
+        self.assertEqual(view.mode_selection.active_module_label.text(), "Автоматический клипарт")
+        view.close()
+
     def test_application_uses_one_default_and_minimum_window_size(self):
         view = V3ApplicationView()
 
@@ -158,7 +167,9 @@ class V3ModeSelectionTests(unittest.TestCase):
         self.assertIs(shell.workflow_controller("text-probe"), controller)
         self.assertIs(shell.active_run_controller(), controller)
         self.assertFalse(hasattr(shell, "text_probe_flow_controller"))
-        view.close()
+        from PyQt6.QtWidgets import QMessageBox
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+            view.close()
         view.deleteLater()
 
     def test_mode_switch_is_blocked_while_any_run_is_active(self):
@@ -169,13 +180,20 @@ class V3ModeSelectionTests(unittest.TestCase):
         controller.worker = Mock()
         controller.worker.isRunning = Mock(return_value=True)
 
-        view.show_mode_switcher()
-        self.app.processEvents()
-
-        self.assertIs(view.stack.currentWidget(), view.shell)
-        self.assertFalse(view.shell.save_error_label.isHidden())
-        self.assertIn("текущее задание", view.shell.save_error_label.text())
-        view.close()
+        from PyQt6.QtWidgets import QMessageBox
+        yes, no = QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No
+        with patch.object(QMessageBox, "question", side_effect=[no, yes, yes]) as ask:
+            view.show_mode_switcher()  # user declines: stays in the module
+            self.app.processEvents()
+            self.assertIs(view.stack.currentWidget(), view.shell)
+            # user agrees but the worker still will not stop: still blocked, with a message
+            view.show_mode_switcher()
+            self.app.processEvents()
+            self.assertIs(view.stack.currentWidget(), view.shell)
+            self.assertIn("текущее задание", view.shell.save_error_label.text())
+            controller.worker.stop.assert_called()
+            view.close()  # the window cross asks instead of silently refusing
+            self.assertEqual(ask.call_count, 3)
         view.deleteLater()
 
     def test_window_size_is_stable_across_every_mode_route(self):
@@ -802,3 +820,21 @@ class V3ModeSelectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_busy_reason_reports_why_leaving_is_blocked():
+    from types import SimpleNamespace
+    from v3_mode_selection import V3ApplicationView
+
+    def fake(active, busy):
+        controller = SimpleNamespace(is_busy=lambda: busy)
+        shell = SimpleNamespace(
+            state=SimpleNamespace(mode=SimpleNamespace(value="clipart")), module_id="clipart",
+            active_run_controller=lambda: controller if active else None,
+            workflow_controller=lambda _module: controller)
+        return SimpleNamespace(shell=shell)
+
+    assert V3ApplicationView._busy_reason(fake(True, False)) == "active_run"
+    assert V3ApplicationView._busy_reason(fake(False, True)) == "controller_busy"
+    assert V3ApplicationView._busy_reason(fake(False, False)) is None
+    assert V3ApplicationView._busy_reason(SimpleNamespace(shell=None)) is None

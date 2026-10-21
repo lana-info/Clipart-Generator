@@ -383,10 +383,21 @@ QPushButton[v3Button="true"]:focus {{
     border: {tokens.focus_width}px solid {tokens.focus};
     padding: 0 {max(tokens.space_4 - tokens.focus_width, 0)}px;
 }}
+QPushButton[v3Button="true"][variant="primary"]:pressed {{
+    color: white;
+    background: {tokens.accent_hover};
+    border-color: {tokens.accent_hover};
+}}
+QPushButton[v3Button="true"][variant="secondary"]:pressed,
+QPushButton[v3Button="true"][variant="ghost"]:pressed {{
+    color: {tokens.text};
+    background: {tokens.accent_soft};
+    border-color: {tokens.accent};
+}}
 QPushButton[v3Button="true"]:disabled {{
-    color: {tokens.disabled};
+    color: #aebccb;
     background: {tokens.disabled_soft};
-    border: 2px dashed {tokens.disabled};
+    border: 1px solid {tokens.border};
 }}
 QPushButton[v3SourceChoice="true"] {{
     min-height: 68px;

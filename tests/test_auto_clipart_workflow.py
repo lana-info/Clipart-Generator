@@ -524,7 +524,7 @@ def test_increased_reused_plan_resumes_only_19_unsubmitted_items_with_explicit_c
     assert len([item for item in resumed.items if item.status is RunItemStatus.CANCELLED and item.attempts == 0]) == 19
     factory.assert_not_called()
     assert controller.run_queue.page.retry_button.isEnabled()
-    assert controller.run_queue.page.retry_button.text() == 'Продолжить незавершённые'
+    assert controller.run_queue.page.retry_button.text() == 'Доделать оставшиеся (19)'
     preview = resumed.preview_retry()
     assert len(preview.generated_prompts) == 19
     assert retained_id not in {item['object_id'] for item in preview.generated_prompts}

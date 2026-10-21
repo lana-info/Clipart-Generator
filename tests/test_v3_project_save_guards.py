@@ -106,8 +106,11 @@ def test_busy_workflow_blocks_close_and_new_project(signed_view, busy_kind):
     controller = source.workflow_controller(source.state.mode.value)
     busy = (patch.object(source, "active_run_controller", return_value=controller)
             if busy_kind == "run" else patch.object(controller, "is_busy", return_value=True, create=True))
-    with busy, patch.object(view._project_store, "save") as save:
-        assert not view.close()
+    from PyQt6.QtWidgets import QMessageBox
+    with busy, patch.object(view._project_store, "save") as save, \
+            patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as ask:
+        assert not view.close()  # the user is asked and declines: nothing is closed or saved
+        ask.assert_called_once()
         view.show_new_project()
         view._handle_mode_selected(source.state.mode.value)
         assert not view.continue_saved_project(project_id)
