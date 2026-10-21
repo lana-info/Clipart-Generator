@@ -51,37 +51,44 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
 
 
 SUBPIXEL_STEPS = 4
-# Owner decision 2026-10-21: small brushes (3 and 6 px) may be soft too, so a soft
-# edge has a fixed pixel width that grows with the brush instead of a share of the
-# radius: a quarter of the diameter, at least 1 px and at most SOFT_MAX_FEATHER_PX,
-# scaled by (100 - hardness) / 100. Only the single-pixel brush stays hard.
+# Owner decision 2026-10-21: a soft brush keeps the solid core of the nominal size
+# and fades OUTWARD from it, so it paints as thick as the hard brush instead of
+# looking thinner. The fade has a fixed pixel width that grows with the brush: 40 %
+# of the diameter, at least 1 px and at most SOFT_MAX_FEATHER_PX, scaled
+# by (100 - hardness) / 100. Only the single-pixel brush stays hard.
 MIN_SOFT_RADIUS = 1
-SOFT_FEATHER_FRACTION = 0.25
+SOFT_FEATHER_FRACTION = 0.4
 SOFT_MIN_FEATHER_PX = 1.0
-SOFT_MAX_FEATHER_PX = 10.0
-SOFT_MAX_FEATHER_SHARE = 0.5  # the opaque core always keeps at least half the radius
+SOFT_MAX_FEATHER_PX = 16.0
 
 
 def soft_feather_width(radius: int, hardness: int) -> float:
-    """Width in pixels of the fading outer band of a soft brush of this radius."""
+    """Width in pixels of the fading band added outside a soft brush's solid core."""
     diameter = radius * 2 + 1
     full = min(SOFT_MAX_FEATHER_PX, max(SOFT_MIN_FEATHER_PX, SOFT_FEATHER_FRACTION * diameter))
-    full = min(full, SOFT_MAX_FEATHER_SHARE * (radius + 0.5))
     return full * (100 - hardness) / 100
+
+
+def brush_pad(radius: int, hardness: int) -> int:
+    """Whole pixels a stamp extends beyond ``radius`` on every side (0 for a hard brush)."""
+    if radius < MIN_SOFT_RADIUS or hardness >= 100:
+        return 0
+    return ceil(soft_feather_width(radius, hardness)) + 1
 
 
 @lru_cache(maxsize=256)
 def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Image.Image:
-    """Brush stamp; ``qx``/``qy`` shift the disc by that many quarter pixels."""
+    """Brush stamp, anchored ``brush_pad`` px beyond ``radius``; ``qx``/``qy`` shift
+    the disc by that many quarter pixels."""
     if radius == 0:
         # A single pixel has no feathered neighbours, regardless of hardness.
         return Image.new("L", (1, 1), 255)
-    if radius < MIN_SOFT_RADIUS:
-        hardness = 100
+    pad = brush_pad(radius, hardness)
     fractional = bool(qx or qy)
-    diameter = radius * 2 + (2 if fractional else 1)
-    cx = radius + 0.5 + qx / SUBPIXEL_STEPS
-    cy = radius + 0.5 + qy / SUBPIXEL_STEPS
+    reach = radius + pad
+    diameter = reach * 2 + (2 if fractional else 1)
+    cx = reach + 0.5 + qx / SUBPIXEL_STEPS
+    cy = reach + 0.5 + qy / SUBPIXEL_STEPS
     edge = radius + 0.5
     # Supersampling retains fractional pixel coverage even for a hard brush.
     scale = 4
@@ -91,27 +98,22 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
          (cx + edge) * scale - 1, (cy + edge) * scale - 1), fill=255
     )
     shape = large.resize((diameter, diameter), Image.Resampling.LANCZOS)
-    if hardness == 100:
+    if pad == 0:
         return shape
-    # Same outer width as the hard brush: the opaque core reaches to ``feather`` px
-    # short of the edge and only the outer band fades, smoothly, to exactly 0 at the
-    # brush edge. The old gaussian started fading at the centre, so a soft stroke
-    # looked far thinner than a hard one.
+    # Solid core to the nominal edge, then a smooth fade to exactly 0 over ``width`` px.
     width = soft_feather_width(radius, hardness)
-    edge = radius + 0.5
-    core = max(0.0, 1.0 - width / edge)
     data = []
     for y in range(diameter):
         for x in range(diameter):
-            ratio = hypot(x + 0.5 - cx, y + 0.5 - cy) / edge
-            if ratio <= core:
+            distance = hypot(x + 0.5 - cx, y + 0.5 - cy)
+            if distance <= edge:
                 data.append(255)
             else:
-                t = min(1.0, (ratio - core) / (1 - core))
+                t = min(1.0, (distance - edge) / width)
                 data.append(max(0, round(255 * (1 - t * t * (3 - 2 * t)))))
-    feather = Image.new("L", (diameter, diameter))
-    feather.putdata(data)
-    return ImageChops.multiply(shape, feather)
+    fade = Image.new("L", (diameter, diameter))
+    fade.putdata(data)
+    return ImageChops.lighter(shape, fade)
 
 
 def apply_mask_path(
@@ -180,8 +182,9 @@ def stamp_path_coverage(
             if qy == SUBPIXEL_STEPS:
                 iy, qy = iy + 1, 0
         opacity = _brush_opacity(radius, hardness, qx, qy)
-        box = (ix - radius, iy - radius,
-               ix - radius + opacity.width, iy - radius + opacity.height)
+        reach = radius + brush_pad(radius, hardness)
+        box = (ix - reach, iy - reach,
+               ix - reach + opacity.width, iy - reach + opacity.height)
         clipped = (max(0, box[0]), max(0, box[1]),
                    min(cover.width, box[2]), min(cover.height, box[3]))
         if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:

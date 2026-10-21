@@ -57,9 +57,10 @@ class BackgroundMaskTests(unittest.TestCase):
         )
 
         self.assertEqual(removed.getpixel((20, 20)), 0)
-        self.assertGreater(removed.getpixel((29, 20)), 0)
-        self.assertLess(removed.getpixel((29, 20)), 255)
-        self.assertEqual(removed.getpixel((31, 20)), 255)
+        self.assertEqual(removed.getpixel((29, 20)), 0)          # solid core reaches the nominal radius
+        self.assertGreater(removed.getpixel((31, 20)), 0)        # the fade lies outside the core
+        self.assertLess(removed.getpixel((31, 20)), 255)
+        self.assertEqual(removed.getpixel((36, 20)), 255)        # and ends a few pixels beyond it
 
     def test_hard_brush_has_antialiased_alpha_on_a_diagonal_edge(self):
         before = Image.new("L", (61, 61), 255)

@@ -11,17 +11,19 @@ def _row(mask, y):
 def test_soft_brush_has_wide_gradual_edge_unlike_hard():
     results = {}
     for name, hardness in (("hard", 100), ("soft", 0)):
-        mask = Image.new("L", (80, 40), 0)
-        paint_mask_path(mask, [(20, 20), (60, 20)], radius=12, action="add", hardness=hardness)
+        mask = Image.new("L", (100, 80), 0)
+        paint_mask_path(mask, [(30, 40), (70, 40)], radius=12, action="add", hardness=hardness)
         results[name] = mask
     # Cross-section through the stroke middle (x = 40), walking up from the centre.
-    hard = [results["hard"].getpixel((40, 20 - d)) for d in range(0, 14)]
-    soft = [results["soft"].getpixel((40, 20 - d)) for d in range(0, 14)]
+    hard = [results["hard"].getpixel((50, 40 - d)) for d in range(0, 26)]
+    soft = [results["soft"].getpixel((50, 40 - d)) for d in range(0, 26)]
     partial = lambda col: sum(1 for v in col if 20 < v < 235)
     assert partial(hard) <= 2          # hard edge: nearly all-or-nothing
     assert partial(soft) >= 3          # soft edge: gradual transition in the outer band
     # Overlapping stamps must not accumulate into a hard edge on the soft stroke.
-    assert soft[0] >= 250 and soft[6] >= 250 and soft[12] < 60   # core stays solid, same outer width
+    # The solid core is as thick as the hard brush; the fade lies outside it.
+    assert soft[0] >= 250 and soft[12] >= 250 and soft[24] < 30
+    assert all(a >= b for a, b in zip(soft, soft[1:]))
 
 
 def test_document_stroke_in_several_moves_matches_single_stroke():
@@ -68,7 +70,7 @@ def test_smoothing_curve_rounds_a_sharp_corner_and_ends_at_midpoint():
 
 
 def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
-    from background_mask import soft_feather_width
+    from background_mask import brush_pad, soft_feather_width
     def stroke(radius, hardness):
         mask = Image.new("L", (80, 40), 0)
         paint_mask_path(mask, [(20, 20), (60, 20)], radius=radius, action="add", hardness=hardness)
@@ -78,14 +80,17 @@ def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
         soft, hard = stroke(radius, 0), stroke(radius, 100)
         assert list(soft.getdata()) != list(hard.getdata())
         assert soft.getpixel((40, 20)) == 255                      # core stays solid
-        assert all(abs(a - b) <= 1 for a, b in zip(soft.getbbox(), hard.getbbox()))  # same outer width (rim pixel may fade out)
+        hx0, hy0, hx1, hy1 = hard.getbbox()
+        sx0, sy0, sx1, sy1 = soft.getbbox()
+        assert sx0 <= hx0 and sy0 <= hy0 and sx1 >= hx1 and sy1 >= hy1   # fade lies outside the solid core
+        assert hx0 - sx0 <= brush_pad(radius, 0) and hy0 - sy0 <= brush_pad(radius, 0)
         assert 0 < sum(1 for v in soft.getdata() if 0 < v < 255)    # a real soft transition
-    # Feather width: a quarter of the diameter, 1 px minimum, 10 px maximum, none at hardness 100.
+    # Feather width: 40 % of the diameter, 1 px minimum, 16 px maximum, none at hardness 100.
     assert soft_feather_width(3, 100) == 0
-    assert 1.0 <= soft_feather_width(3, 0) <= 1.75
-    assert soft_feather_width(8, 0) == 4.25 and soft_feather_width(32, 0) == 10.0
-    assert soft_feather_width(100, 0) == 10.0
-    assert soft_feather_width(32, 50) == 5.0
+    assert 1.0 <= soft_feather_width(3, 0) <= 3.0
+    assert abs(soft_feather_width(8, 0) - 6.8) < 1e-9 and soft_feather_width(32, 0) == 16.0
+    assert soft_feather_width(100, 0) == 16.0
+    assert soft_feather_width(32, 50) == 8.0
     wide = Image.new("L", (160, 100), 0)
     paint_mask_path(wide, [(40, 50), (120, 50)], radius=32, action="add", hardness=0)
     profile = [wide.getpixel((80, 50 - d)) for d in range(0, 33)]
@@ -93,4 +98,4 @@ def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
     steps = [a - b for a, b in zip(profile, profile[1:])]
     assert max(steps) < 45                                         # gradual: no hard step
     # Same width as the hard brush: solid across most of the radius, fading only near the rim.
-    assert profile[0] >= 250 and profile[16] >= 250 and profile[28] < 170 and profile[-1] <= 2
+    assert profile[0] >= 250 and profile[16] >= 250 and profile[28] >= 250   # solid core up to the nominal radius
