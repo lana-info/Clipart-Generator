@@ -24,6 +24,12 @@ _COLOUR_WORDS: dict[str, frozenset[str]] = {
         "green", "lime", "olive", "emerald", "mint", "leaf", "leaves",
         "plant", "plants", "foliage", "grass", "forest", "зелён", "салатов",
         "оливк", "изумруд", "мят", "лист", "листь", "растен", "трава", "лес",
+        # Flowers and wreaths almost always come with green leaves, even when
+        # the author never writes "leaf".
+        "flower", "flowers", "floral", "daisy", "daisies", "bouquet", "wreath",
+        "garland", "blossom", "bloom", "tulip", "peony", "lavender", "botanical",
+        "branch", "цвет", "ромашк", "букет", "венок", "венк", "гирлянд",
+        "тюльпан", "пион", "лаванд", "ветк", "ветв",
     )),
     "red": frozenset((
         "red", "pink", "rose", "roses", "coral", "crimson", "scarlet",
@@ -31,7 +37,8 @@ _COLOUR_WORDS: dict[str, frozenset[str]] = {
         "роза", "цвет", "мак",
     )),
 }
-_PREFERENCE = ("blue", "green", "red")
+# Green is the last resort: foliage in the subject merges with a green key.
+_PREFERENCE = ("blue", "red", "green")
 
 
 @dataclass(frozen=True)
