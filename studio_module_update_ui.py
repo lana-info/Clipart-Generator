@@ -87,6 +87,9 @@ class ModuleUpdateWorker(QThread):
 
 class ModuleUpdatesDialog(QDialog):
     _recheck_after_shared_update = False
+    _resume_update_all = False  # a shared update interrupted "Обновить все"; continue after the re-check
+    _resume_budget = 0          # bounds automatic continuations so a stuck offer cannot loop forever
+    _carried_updates = 0        # modules already updated before the interruption
     news_changed = pyqtSignal(str)
     state_changed = pyqtSignal()
     def __init__(self, delivery, *, busy_module=lambda _module: False, authorization_provider=lambda: None, parent=None):
@@ -275,23 +278,32 @@ class ModuleUpdatesDialog(QDialog):
         except Exception:
             return False
 
-    def update_all(self):
+    def update_all(self, *, resumed=False):
         """Update installed modules with a verified offer, strictly one at a
         time. New or uninstalled modules are never auto-added; a failed
         module keeps its previous working version and stops the queue with
-        an honest partial summary."""
+        an honest partial summary. A shared update re-checks the offers and
+        the queue then continues by itself (``resumed``)."""
         if self.busy:
             return
+        if not resumed:
+            self._resume_budget = len(self.rows)
+            self._carried_updates = 0
         queue = [module for module in self.rows
                  if module in self.releases and self._module_installed(module)]
+        if not queue and resumed:
+            self.status.setText(f"Готово: обновлены все {self._carried_updates} модулей.")
+            self._carried_updates = 0
+            return
         if not queue:
             self.status.setText("Нет доступных обновлений для установленных модулей. "
                                 "Сначала нажмите «Проверить обновления».")
             return
+        carried = self._carried_updates if resumed else 0
         self._queue = list(queue)
-        self._queue_total = len(self._queue)
-        self._queue_position = 0
-        self._queue_updated = 0
+        self._queue_total = carried + len(self._queue)
+        self._queue_position = carried
+        self._queue_updated = carried
         self._queue_failed = None
         self._advance_queue()
 
@@ -365,6 +377,7 @@ class ModuleUpdatesDialog(QDialog):
                 self.status.setText("Скачивание отменено. Установленные версии сохранены."
                                     + (" Обновление остальных модулей остановлено." if waiting else ""))
             elif worker.failed:
+                self._resume_update_all = False
                 self.checked_authorization = None
                 self.denied_authorization = worker.initial_authorization if worker.denied else None
                 if worker.denied:
@@ -403,6 +416,12 @@ class ModuleUpdatesDialog(QDialog):
                         self.releases[module] = release
                 self.status.setText("Не все модули удалось проверить. Повторите проверку." if any(
                     state == "error" for state, _release in (worker.result or {}).values()) else "Проверено только что")
+                if self._resume_update_all:
+                    self._resume_update_all = False
+                    self._resume_budget -= 1
+                    if self._resume_budget >= 0 and not any(
+                            state == "error" for state, _release in (worker.result or {}).values()):
+                        QTimer.singleShot(0, lambda: self.update_all(resumed=True))
             else:
                 module = worker.release.module_id
                 if self.busy_module(module):
@@ -422,6 +441,9 @@ class ModuleUpdatesDialog(QDialog):
                             if name != module:
                                 available.setText("Проверьте обновления")
                         if self._queue:
+                            # Keep going after the re-check instead of making the user click again.
+                            self._carried_updates = self._queue_updated + 1
+                            self._resume_update_all = True
                             self._stop_queue()
                         self._recheck_after_shared_update = True
                     else:

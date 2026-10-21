@@ -85,10 +85,16 @@ def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
     return a
 
 
-def clean_alpha(image: Image.Image, **options) -> Image.Image:
-    """Return an RGBA copy of ``image`` with cleaned alpha; RGB is unchanged."""
+def clean_alpha(image: Image.Image, *, clear_hidden_rgb: bool = False, **options) -> Image.Image:
+    """Return an RGBA copy of ``image`` with cleaned alpha.
+
+    RGB is unchanged, except that ``clear_hidden_rgb`` blanks the colour of pixels whose
+    alpha is now zero (no stray tint under fully transparent pixels).
+    """
     rgba = image.convert("RGBA")
     pixels = np.array(rgba)
     cleaned = clean_alpha_array(pixels[..., 3].astype(np.float32) / 255.0, **options)
     pixels[..., 3] = np.rint(cleaned * 255.0).astype(np.uint8)
+    if clear_hidden_rgb:
+        pixels[pixels[..., 3] == 0] = 0
     return Image.fromarray(pixels, mode="RGBA")

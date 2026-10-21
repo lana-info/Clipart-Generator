@@ -3,6 +3,7 @@ from copy import deepcopy
 import hashlib
 import json
 from datetime import datetime
+from html import escape
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
@@ -42,6 +43,43 @@ def _run_settings_fingerprint(request):
         sort_keys=True, ensure_ascii=False,
     ).encode('utf-8')).hexdigest()
 
+
+
+def _plural_ru(count, one, few, many):
+    count = abs(int(count))
+    if count % 100 in range(11, 15):
+        return many
+    return one if count % 10 == 1 else few if count % 10 in (2, 3, 4) else many
+
+
+def launch_confirmation_html(*, object_count, models, cost, references=(), reference_model="",
+                             expired_count=0, expired_providers=""):
+    """Short, scannable confirmation text: one fact per line, key words in bold."""
+    unit = _plural_ru(object_count, "объект", "объекта", "объектов")
+    lines = [f"<b>Создать изображения: {object_count} {unit}?</b>", ""]
+    lines.append(f"<b>{'Модель' if len(models) == 1 else 'Модели'}:</b> {escape(', '.join(models))}")
+    requests = getattr(cost, "request_count", 0)
+    lines.append(f"<b>Запросов:</b> {requests} (генерация {getattr(cost, 'generation_request_count', 0)}"
+                 f", обработка {getattr(cost, 'processing_request_count', 0)})")
+    if getattr(cost, "complete", False):
+        lines.append(f"<b>Цена:</b> ориентировочно ${cost.estimated_usd:.3f}")
+    else:
+        from v3_flow_runtime import PROVIDER_DISPLAY_LABELS
+        providers = ", ".join(PROVIDER_DISPLAY_LABELS.get(name, name)
+                              for name in getattr(cost, "incomplete_providers", ())) or "выбранные провайдеры"
+        lines.append(f"<b>Цена:</b> заранее неизвестна, платите по факту использования ({escape(providers)})")
+    if references:
+        lines.append("")
+        lines.append(f"<b>Референсы ({len(references)}):</b> получит модель {escape(reference_model)}")
+        lines.extend("• " + escape(Path(path).name) for path in sorted(references))
+    if expired_count:
+        lines.append("")
+        lines.append(f"<b>Внимание:</b> прежние результаты для {expired_count} "
+                     f"{_plural_ru(expired_count, 'объекта', 'объектов', 'объектов')} ({escape(expired_providers)}) "
+                     "больше недоступны.")
+        lines.append("Запуск = согласие на новую платную генерацию по текущему тарифу. "
+                     "Успешные изображения заново не создаются.")
+    return "<br>".join(lines)
 
 class AutoClipartGenerationPage(ClipartGenerationPage):
     """Show only model controls that affect the current collection prompts."""
@@ -639,9 +677,6 @@ class AutoClipartFlowController(ClipartFlowController):
                 models = sorted({prepared.settings.get(
                     'reference_generation_model' if entry['references'] else 'text_generation_model', ''
                 ) for entry in prepared.generated_prompts})
-                model_label = 'Модель' if len(models) == 1 else 'Модели'
-                message = (f"Создать изображения для {len(self.shell.state.data.prompts)} объектов?\n"
-                           f"{model_label}: {', '.join(models)}\n{cost.summary}")
                 expired_retries: tuple[str, ...] = ()
                 try:
                     expired_retries = expired_generation_retries(
@@ -650,18 +685,16 @@ class AutoClipartFlowController(ClipartFlowController):
                     )
                 except (OSError, ValueError):
                     expired_retries = ()
+                provider_names = ''
                 if expired_retries:
                     from v3_flow_runtime import PROVIDER_DISPLAY_LABELS
                     provider_names = ', '.join(sorted(
                         PROVIDER_DISPLAY_LABELS.get(exhausted.split(':', 1)[0], exhausted.split(':', 1)[0])
                         for exhausted in expired_retries))
-                    message += (f"\n\nПрежние результаты больше недоступны для {len(expired_retries)} "
-                                f"объект(ов) ({provider_names}).\n"
-                                "Подтверждая запуск, вы соглашаетесь на их новую платную генерацию "
-                                "по текущему тарифу. Успешные изображения заново не создаются.")
-                if references:
-                    message += '\nРеференсы будут переданы модели ' + self.shell.state.data.generation.reference_model
-                    message += ':\n' + '\n'.join(Path(path).name for path in sorted(references))
+                message = launch_confirmation_html(
+                    object_count=len(self.shell.state.data.prompts), models=models, cost=cost,
+                    references=references, reference_model=self.shell.state.data.generation.reference_model,
+                    expired_count=len(expired_retries), expired_providers=provider_names)
                 if QMessageBox.question(self.launch_page, "Подтвердить запуск", message,
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:

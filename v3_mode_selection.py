@@ -1360,7 +1360,14 @@ class V3ApplicationView(QWidget):
                 self._recent_project = ProjectState.from_dict(self.shell.state.to_dict())
             else:
                 preferences_saved = True
-        except (OSError, ValueError):
+        except (OSError, ValueError) as error:
+            # Only exception classes go to the journal: messages may carry private paths.
+            cause = error.__cause__
+            self._diagnostic_event(
+                "save_failed", "Не удалось сохранить проект.", severity="warning",
+                details={"error": type(error).__name__,
+                         "cause": type(cause).__name__ if cause is not None else "",
+                         "module": str(getattr(self.shell, "module_id", ""))})
             self.shell.set_save_error("Не удалось сохранить изменения")
             return False
         self.shell.set_save_error(
