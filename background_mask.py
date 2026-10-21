@@ -51,10 +51,23 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
 
 
 SUBPIXEL_STEPS = 4
-# Owner acceptance 2026-10-19: a soft edge on a tiny brush only looks ragged, so
-# brushes up to 6 px across (radius <= 3) stay hard whatever hardness is chosen.
-MIN_SOFT_RADIUS = 4
-SOFT_MIN_CORE = 0.55
+# Owner decision 2026-10-21: small brushes (3 and 6 px) may be soft too, so a soft
+# edge has a fixed pixel width that grows with the brush instead of a share of the
+# radius: a quarter of the diameter, at least 1 px and at most SOFT_MAX_FEATHER_PX,
+# scaled by (100 - hardness) / 100. Only the single-pixel brush stays hard.
+MIN_SOFT_RADIUS = 1
+SOFT_FEATHER_FRACTION = 0.25
+SOFT_MIN_FEATHER_PX = 1.0
+SOFT_MAX_FEATHER_PX = 10.0
+SOFT_MAX_FEATHER_SHARE = 0.5  # the opaque core always keeps at least half the radius
+
+
+def soft_feather_width(radius: int, hardness: int) -> float:
+    """Width in pixels of the fading outer band of a soft brush of this radius."""
+    diameter = radius * 2 + 1
+    full = min(SOFT_MAX_FEATHER_PX, max(SOFT_MIN_FEATHER_PX, SOFT_FEATHER_FRACTION * diameter))
+    full = min(full, SOFT_MAX_FEATHER_SHARE * (radius + 0.5))
+    return full * (100 - hardness) / 100
 
 
 @lru_cache(maxsize=256)
@@ -80,12 +93,13 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
     shape = large.resize((diameter, diameter), Image.Resampling.LANCZOS)
     if hardness == 100:
         return shape
-    # Same outer width as the hard brush: the opaque core covers at least the inner
-    # ``SOFT_MIN_CORE`` of the radius (more with higher hardness) and only the outer
-    # band fades, smoothly, to exactly 0 at the brush edge. The old gaussian started
-    # fading at the centre, so a soft stroke looked far thinner than a hard one.
-    core = SOFT_MIN_CORE + (1 - SOFT_MIN_CORE) * hardness / 100
+    # Same outer width as the hard brush: the opaque core reaches to ``feather`` px
+    # short of the edge and only the outer band fades, smoothly, to exactly 0 at the
+    # brush edge. The old gaussian started fading at the centre, so a soft stroke
+    # looked far thinner than a hard one.
+    width = soft_feather_width(radius, hardness)
     edge = radius + 0.5
+    core = max(0.0, 1.0 - width / edge)
     data = []
     for y in range(diameter):
         for x in range(diameter):
