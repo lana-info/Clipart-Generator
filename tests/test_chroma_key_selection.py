@@ -24,6 +24,15 @@ class ChromaKeySelectionTests(unittest.TestCase):
                      "утёнок в розовой шапке с ромашками и голубым бантом"):
             self.assertNotEqual(select_chroma_key_color(text).color, "green", text)
 
+    def test_trees_and_greenery_imply_green_so_it_is_avoided(self):
+        for text in ("pink gnome with a small christmas tree", "блестящая ёлка с розовым бантом",
+                     "owl on a pine branch with a blue scarf", "котик в кустах и розовой шапке"):
+            self.assertNotEqual(select_chroma_key_color(text).color, "green", text)
+
+    def test_unrelated_words_with_similar_stems_do_not_count_as_greenery(self):
+        for text in ("fluffy duckling", "мохнатый утёнок", "a fire truck"):
+            self.assertEqual(select_chroma_key_color(text).color, "blue", text)
+
     def test_russian_word_stems_are_considered(self):
         choice = select_chroma_key_color("зелёные листья и голубая лента")
         self.assertEqual(choice.color, "red")

@@ -30,6 +30,14 @@ _COLOUR_WORDS: dict[str, frozenset[str]] = {
         "garland", "blossom", "bloom", "tulip", "peony", "lavender", "botanical",
         "branch", "цвет", "ромашк", "букет", "венок", "венк", "гирлянд",
         "тюльпан", "пион", "лаванд", "ветк", "ветв",
+        # Trees and other greenery (stems chosen so "fire", "fluffy", "мохнатый" do not match).
+        "tree", "trees", "pine", "spruce", "evergreen", "conifer", "bush", "bushes",
+        "shrub", "fern", "ferns", "moss", "ivy", "holly", "mistletoe", "clover",
+        "shamrock", "cactus", "cacti", "herb", "herbs", "vine", "vines", "palm",
+        "bamboo", "jungle", "garden", "fir-tree",
+        "дерев", "ёлк", "елк", "ель", "ели", "сосн", "хвой", "куст", "папоротник",
+        "плющ", "омел", "падуб", "клевер", "кактус", "лиан", "пальм", "бамбук",
+        "джунгл", "садов",
     )),
     "red": frozenset((
         "red", "pink", "rose", "roses", "coral", "crimson", "scarlet",
