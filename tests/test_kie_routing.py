@@ -655,6 +655,10 @@ class KieRoutingTests(unittest.TestCase):
                 temp,
                 kie_settings(fal_api_key="fal-test-secret", fal_concurrency=1),
             )
+            worker._fal_upload_https_url = types.MethodType(
+                lambda _self, _path, _model_id: "https://cdn.example/uploaded-source.png",
+                worker,
+            )
             calls = {}
             worker._fal_process_image = types.MethodType(
                 lambda _self, image_url, **kwargs: calls.update(
@@ -705,6 +709,10 @@ class KieRoutingTests(unittest.TestCase):
                     fal_upscale_model="fal-ai/recraft/upscale/crisp",
                     fal_upscale_scale=2,
                 ),
+            )
+            worker._fal_upload_https_url = types.MethodType(
+                lambda _self, _path, _model_id: "https://cdn.example/uploaded-source.png",
+                worker,
             )
             calls = {}
             worker._fal_process_image = types.MethodType(
@@ -849,6 +857,10 @@ class KieRoutingTests(unittest.TestCase):
                     fal_upscale_model="topaz/upscale/image/precision",
                     fal_upscale_scale=4,
                 ),
+            )
+            worker._fal_upload_https_url = types.MethodType(
+                lambda _self, _path, _model_id: "https://cdn.example/uploaded-source.png",
+                worker,
             )
             calls = {}
             worker._fal_process_image = types.MethodType(

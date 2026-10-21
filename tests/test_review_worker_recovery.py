@@ -242,6 +242,9 @@ def test_accepted_paid_upscale_resumes_when_generated_url_becomes_local_input(tm
         def __init__(self, _config):
             pass
 
+        def upload_storage_file(self, _path):
+            return "https://fixture.invalid/fal-storage-input.png"
+
         def run_image_operation(self, _operation, image_url, **kwargs):
             task = f"upscale-{len(creates)+1}"
             creates.append(image_url)
