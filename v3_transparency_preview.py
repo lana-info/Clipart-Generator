@@ -58,6 +58,7 @@ from background_mask import (
     apply_mask_stroke,
     apply_mask_to_image,
     mask_for_image,
+    brush_pad,
     paint_mask_path,
     stamp_path_coverage,
     save_mask_png,
@@ -167,16 +168,17 @@ class MaskEditDocument:
             self._stroke_before = self.mask.copy()
             self._stroke_cover = Image.new("L", self.mask.size, 0)
         self._stroke_action = action
+        reach = radius + brush_pad(radius, hardness)   # a soft brush fades beyond its radius
         if points:
             # Union of stamps over the whole stroke, composited once onto the
             # pre-stroke mask: a soft brush keeps its feathered edge.
             stamp_path_coverage(
                 self._stroke_cover, points, radius=radius, hardness=hardness)
             area = (
-                max(0, floor(min(p[0] for p in points)) - radius - 2),
-                max(0, floor(min(p[1] for p in points)) - radius - 2),
-                min(self.mask.width, ceil(max(p[0] for p in points)) + radius + 3),
-                min(self.mask.height, ceil(max(p[1] for p in points)) + radius + 3),
+                max(0, floor(min(p[0] for p in points)) - reach - 2),
+                max(0, floor(min(p[1] for p in points)) - reach - 2),
+                min(self.mask.width, ceil(max(p[0] for p in points)) + reach + 3),
+                min(self.mask.height, ceil(max(p[1] for p in points)) + reach + 3),
             )
             if area[0] < area[2] and area[1] < area[3]:
                 merged = self._stroke_before.crop(area)
@@ -185,10 +187,10 @@ class MaskEditDocument:
                 self.mask.paste(merged, area[:2])
         if not points:
             return None
-        left = max(0, floor(min(point[0] for point in points)) - radius - 2)
-        top = max(0, floor(min(point[1] for point in points)) - radius - 2)
-        right = min(self.mask.width, ceil(max(point[0] for point in points)) + radius + 3)
-        bottom = min(self.mask.height, ceil(max(point[1] for point in points)) + radius + 3)
+        left = max(0, floor(min(point[0] for point in points)) - reach - 2)
+        top = max(0, floor(min(point[1] for point in points)) - reach - 2)
+        right = min(self.mask.width, ceil(max(point[0] for point in points)) + reach + 3)
+        bottom = min(self.mask.height, ceil(max(point[1] for point in points)) + reach + 3)
         return (left, top, right, bottom)
 
     def end_stroke(self) -> None:

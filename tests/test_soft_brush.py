@@ -15,13 +15,15 @@ def test_soft_brush_has_wide_gradual_edge_unlike_hard():
         paint_mask_path(mask, [(20, 20), (60, 20)], radius=12, action="add", hardness=hardness)
         results[name] = mask
     # Cross-section through the stroke middle (x = 40), walking up from the centre.
-    hard = [results["hard"].getpixel((40, 20 - d)) for d in range(0, 14)]
-    soft = [results["soft"].getpixel((40, 20 - d)) for d in range(0, 14)]
+    hard = [results["hard"].getpixel((40, 20 - d)) for d in range(0, 20)]
+    soft = [results["soft"].getpixel((40, 20 - d)) for d in range(0, 20)]
     partial = lambda col: sum(1 for v in col if 20 < v < 235)
     assert partial(hard) <= 2          # hard edge: nearly all-or-nothing
     assert partial(soft) >= 3          # soft edge: gradual transition in the outer band
     # Overlapping stamps must not accumulate into a hard edge on the soft stroke.
-    assert soft[0] >= 250 and soft[6] >= 250 and soft[12] < 60   # core stays solid, same outer width
+    # The solid core is as thick as the hard brush; the fade lies outside it.
+    assert soft[0] >= 250 and soft[12] >= 250 and soft[19] < 60
+    assert all(a >= b for a, b in zip(soft, soft[1:]))
 
 
 def test_document_stroke_in_several_moves_matches_single_stroke():
@@ -68,7 +70,7 @@ def test_smoothing_curve_rounds_a_sharp_corner_and_ends_at_midpoint():
 
 
 def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
-    from background_mask import soft_feather_width
+    from background_mask import brush_pad, soft_feather_width
     def stroke(radius, hardness):
         mask = Image.new("L", (80, 40), 0)
         paint_mask_path(mask, [(20, 20), (60, 20)], radius=radius, action="add", hardness=hardness)
@@ -78,7 +80,10 @@ def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
         soft, hard = stroke(radius, 0), stroke(radius, 100)
         assert list(soft.getdata()) != list(hard.getdata())
         assert soft.getpixel((40, 20)) == 255                      # core stays solid
-        assert all(abs(a - b) <= 1 for a, b in zip(soft.getbbox(), hard.getbbox()))  # same outer width (rim pixel may fade out)
+        hx0, hy0, hx1, hy1 = hard.getbbox()
+        sx0, sy0, sx1, sy1 = soft.getbbox()
+        assert sx0 <= hx0 and sy0 <= hy0 and sx1 >= hx1 and sy1 >= hy1   # fade lies outside the solid core
+        assert hx0 - sx0 <= brush_pad(radius, 0) and hy0 - sy0 <= brush_pad(radius, 0)
         assert 0 < sum(1 for v in soft.getdata() if 0 < v < 255)    # a real soft transition
     # Feather width: a quarter of the diameter, 1 px minimum, 10 px maximum, none at hardness 100.
     assert soft_feather_width(3, 100) == 0
@@ -93,4 +98,4 @@ def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
     steps = [a - b for a, b in zip(profile, profile[1:])]
     assert max(steps) < 45                                         # gradual: no hard step
     # Same width as the hard brush: solid across most of the radius, fading only near the rim.
-    assert profile[0] >= 250 and profile[16] >= 250 and profile[28] < 170 and profile[-1] <= 2
+    assert profile[0] >= 250 and profile[16] >= 250 and profile[28] >= 250   # solid core up to the nominal radius
