@@ -413,3 +413,46 @@ def test_shared_update_rechecks_automatically_so_other_modules_stay_updatable(ap
     wait_until(app, lambda: not dialog.busy and dialog.rows["pinterest"][2].isEnabled())
     assert set(dialog.releases) == {"pinterest"}
     assert dialog.rows["pinterest"][1].text() == "1.1.0"
+
+
+def test_update_all_continues_by_itself_after_a_shared_update(app, setup):
+    """Regression: "Обновить все" stopped after a shared update and needed a second click."""
+    from studio_module_updates import WorkflowUpdate
+    from studio_processing_api import PROCESSING_COMPONENT_ID
+
+    dialog, delivery, pinterest_release = setup
+    delivery.updates.license_client.validate.return_value = SimpleNamespace(allows_module=lambda module: True)
+    installed = {"clipart": "1.0.0", "pinterest": "2.0.0"}
+    delivery.store.state.side_effect = lambda module: {
+        "enabled": module in installed, "active": installed.get(module)}
+    processing = ModuleRelease(
+        "1.6.0", "fixture-processing.zip", 20, "b" * 64, "https://fixture.invalid/downloads/p",
+        module_id=PROCESSING_COMPONENT_ID, studio_min="3.2.0", studio_max_exclusive="4.0.0")
+    shared_offer = WorkflowUpdate("clipart", None, processing)
+    state = {"shared_done": False}
+    activated = []
+
+    def check(module):
+        if module == "clipart":
+            return None if state["shared_done"] else shared_offer
+        if module == "pinterest":
+            return None if installed["pinterest"] == pinterest_release.version else pinterest_release
+        return None
+
+    delivery.check.side_effect = check
+    delivery.install.side_effect = lambda selected, **_callbacks: {
+        "module_id": selected.module_id, "version": selected.version}
+    delivery.activate_update.side_effect = lambda _selected: state.__setitem__("shared_done", True)
+    delivery.activate.side_effect = lambda module, version: (
+        activated.append((module, version)), installed.__setitem__(module, version))
+
+    dialog.check_button.click()
+    wait_until(app, lambda: not dialog.busy)
+    dialog.update_all_button.click()          # one click only
+    wait_until(app, lambda: not dialog.busy and not dialog._queue and not dialog._resume_update_all
+               and state["shared_done"] and activated)
+    app.processEvents()
+
+    assert state["shared_done"]
+    assert activated == [("pinterest", pinterest_release.version)]
+    assert dialog.status.text().startswith("Готово: обновлены все 2 модулей.")
