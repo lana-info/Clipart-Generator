@@ -198,7 +198,7 @@ def test_launch_uses_selected_reference_model_and_current_quote(workspace, monke
     assert view.project_state.current_step is StepId.REVIEW_RUN
     assert len(quote) == 1
     assert 'nano-banana-2' in quote[0]
-    assert banana_cost.summary in quote[0]
+    assert f'ориентировочно ${banana_cost.estimated_usd:.3f}' in quote[0]
     factory.assert_not_called()
 
 
