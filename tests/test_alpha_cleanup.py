@@ -58,3 +58,13 @@ def test_rgb_is_never_modified():
     result = clean_alpha(source)
     assert np.array_equal(np.array(result)[..., :3], pixels[..., :3])
     assert result.size == source.size and result.mode == "RGBA"
+
+
+def test_small_detached_island_is_removed_but_second_large_object_stays():
+    alpha = np.zeros((300, 300), np.float32)
+    alpha[20:140, 20:140] = 1.0        # large object
+    alpha[160:280, 160:280] = 1.0      # second large object (a set of items)
+    alpha[10:16, 280:286] = 1.0        # 6x6 debris, far from both
+    cleaned = clean_alpha_array(alpha)
+    assert cleaned[10:16, 280:286].max() == 0.0
+    assert cleaned[30, 30] == 1.0 and cleaned[200, 200] == 1.0

@@ -18,6 +18,8 @@ from PIL import Image
 HAZE_FLOOR = 0.16          # alpha below this is "faint"
 HAZE_DISTANCE = 3.0        # px from the solid core before faint alpha counts as haze
 MIN_SPECK_PIXELS = 48      # weak connected blobs smaller than this are dropped
+MIN_ISLAND_PIXELS = 64     # detached solid islands smaller than this (or the fraction below) are debris
+MIN_ISLAND_FRACTION = 1e-4 # of the canvas area
 HARD_EDGE_MAX_WIDTH = 9.0  # px, 2 %-98 % band width up to which an edge is "smooth"
 EDGE_GAIN = 2.0            # steepening around 50 % alpha
 OPAQUE_CEILING = 0.985
@@ -51,6 +53,20 @@ def clean_alpha_array(alpha: np.ndarray, *, haze_floor: float = HAZE_FLOOR,
             solid_labels = np.unique(labels[a >= 0.5])
             weak &= ~np.isin(labels, solid_labels)
             a[weak] = 0.0
+
+    # 1b. stray solid islands (generation debris): drop them with a thin ring around them.
+    solid = (a >= 0.5).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(solid, connectivity=4)
+    if count > 2:
+        min_island = max(MIN_ISLAND_PIXELS, int(MIN_ISLAND_FRACTION * a.size))
+        small = np.flatnonzero(stats[1:, cv2.CC_STAT_AREA] < min_island) + 1
+        # The largest component is always the subject; never treat it as debris.
+        small = small[small != 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))]
+        if small.size:
+            removed = np.isin(labels, small)
+            ring = cv2.dilate(removed.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+            kept_solid = (solid > 0) & ~removed
+            a[ring & ~kept_solid] = 0.0
 
     # 2. smooth edges: steepen narrow bands only.
     partial = (a > 0.02) & (a < 0.98)
