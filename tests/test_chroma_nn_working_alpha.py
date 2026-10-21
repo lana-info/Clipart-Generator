@@ -4,6 +4,7 @@ import pytest
 from PIL import Image
 
 import main
+from alpha_cleanup import clean_alpha
 from studio_processing_api import ProcessingEngine
 
 
@@ -115,7 +116,8 @@ def test_chroma_hint_is_consumed_even_without_upscale(tmp_path):
     result_path = worker._run_processing_pipeline(str(source), None, str(tmp_path), 1, 'native',
                                                   result_kind='clipart')
     with Image.open(result_path) as saved:
-        assert saved.convert('RGBA').tobytes() == delivery.tobytes()
+        # The final alpha clean-up is applied to the engine's delivery mask; colours are untouched.
+        assert saved.convert('RGBA').tobytes() == clean_alpha(delivery).tobytes()
     assert 'vibix:precleanup_alpha' not in returned[0].info
 
 

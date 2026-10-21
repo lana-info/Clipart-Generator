@@ -5,7 +5,7 @@ parameters:
   - name: appVersion
     displayName: App version
     type: string
-    default: '3.2.36'
+    default: '3.2.37'
 
 pool:
   vmImage: windows-latest

@@ -49,6 +49,7 @@ ensure_gui_standard_streams()
 
 from PIL import Image, ImageChops, ImageFilter, PngImagePlugin, UnidentifiedImageError
 from background_mask import has_usable_alpha
+from alpha_cleanup import clean_alpha
 from chroma_key import (
     KEY_COLORS,
     ChromaKeyAmbiguousError,
@@ -3020,6 +3021,16 @@ class WorkerThread(QThread):
                                         raise ValueError("Очистка края вернула пустое изображение")
                                     chroma_working_alpha = working_alpha.copy()
                                     chroma_delivery_alpha = delivery_alpha
+                                if chroma_working_alpha is None and not self._uses_local_upscale_after():
+                                    # Local Real-ESRGAN after the cut-out takes this exact alpha as its
+                                    # input (byte-exact contract), so it is left alone. Otherwise drop
+                                    # faint haze and debris and tighten smooth edges; never fail the cut-out.
+                                    try:
+                                        cleaned = clean_alpha(result)
+                                        cleaned.info.update(result.info)
+                                        result = cleaned
+                                    except Exception:
+                                        self.progress.emit("  Зачистка прозрачности пропущена.")
                                 self._save_image_object_as_png(result, nobg_path)
                                 try:
                                     self._item_context.chroma_receipt = {

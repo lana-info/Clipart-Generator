@@ -67,14 +67,25 @@ def test_smoothing_curve_rounds_a_sharp_corner_and_ends_at_midpoint():
     assert len(curve) >= 7
 
 
-def test_small_brushes_stay_hard_and_wide_soft_fades_gradually():
-    from background_mask import MIN_SOFT_RADIUS
-    for radius in range(0, MIN_SOFT_RADIUS):  # diameters 1, 3, 6 and below
-        soft = Image.new("L", (60, 40), 0)
-        hard = Image.new("L", (60, 40), 0)
-        paint_mask_path(soft, [(20, 20), (40, 20)], radius=radius, action="add", hardness=0)
-        paint_mask_path(hard, [(20, 20), (40, 20)], radius=radius, action="add", hardness=100)
-        assert list(soft.getdata()) == list(hard.getdata())
+def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
+    from background_mask import soft_feather_width
+    def stroke(radius, hardness):
+        mask = Image.new("L", (80, 40), 0)
+        paint_mask_path(mask, [(20, 20), (60, 20)], radius=radius, action="add", hardness=hardness)
+        return mask
+    assert list(stroke(0, 0).getdata()) == list(stroke(0, 100).getdata())
+    for radius in (1, 3):  # 3 px and 6 px brushes (owner decision 2026-10-21)
+        soft, hard = stroke(radius, 0), stroke(radius, 100)
+        assert list(soft.getdata()) != list(hard.getdata())
+        assert soft.getpixel((40, 20)) == 255                      # core stays solid
+        assert all(abs(a - b) <= 1 for a, b in zip(soft.getbbox(), hard.getbbox()))  # same outer width (rim pixel may fade out)
+        assert 0 < sum(1 for v in soft.getdata() if 0 < v < 255)    # a real soft transition
+    # Feather width: a quarter of the diameter, 1 px minimum, 10 px maximum, none at hardness 100.
+    assert soft_feather_width(3, 100) == 0
+    assert 1.0 <= soft_feather_width(3, 0) <= 1.75
+    assert soft_feather_width(8, 0) == 4.25 and soft_feather_width(32, 0) == 10.0
+    assert soft_feather_width(100, 0) == 10.0
+    assert soft_feather_width(32, 50) == 5.0
     wide = Image.new("L", (160, 100), 0)
     paint_mask_path(wide, [(40, 50), (120, 50)], radius=32, action="add", hardness=0)
     profile = [wide.getpixel((80, 50 - d)) for d in range(0, 33)]
