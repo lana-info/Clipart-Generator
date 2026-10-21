@@ -203,9 +203,31 @@ def main(argv=None):
     upload.add_argument("--platform", required=True)
     upload.add_argument("--studio-version", required=True)
     upload.add_argument("--username", default="admin")
+    upload_set = commands.add_parser("upload-set")
+    upload_set.add_argument("set_dir", type=Path)
+    upload_set.add_argument("--service-url", required=True)
+    upload_set.add_argument("--product", default="clipart-generator")
+    upload_set.add_argument("--studio-version", required=True)
+    upload_set.add_argument("--username", default="admin")
     args = parser.parse_args(argv)
     try:
-        if args.command == "init-key":
+        if args.command == "upload-set":
+            if not sys.stdin.isatty():
+                raise ValueError("Draft upload requires an interactive secure terminal")
+            releases = json.loads((args.set_dir / "release-set.json").read_text(encoding="utf-8"))
+            if isinstance(releases, dict):
+                releases = releases.get("releases")
+            uploader = AdminDraftUploader(args.service_url)
+            try:
+                uploader.login(args.username, getpass.getpass("Admin password: "), getpass.getpass("TOTP: "))
+                for item in releases:
+                    for platform in item["platforms"]:
+                        print(json.dumps(uploader.upload(
+                            args.set_dir / item["filename"], product_id=args.product,
+                            platform=platform, studio_version=args.studio_version)), flush=True)
+            finally:
+                uploader.close()
+        elif args.command == "init-key":
             print(json.dumps({"public_key_base64": base64.b64encode(initialize_key(args.key_file)).decode()}))
         elif args.command == "prepare":
             print(json.dumps(prepare_release_set(
