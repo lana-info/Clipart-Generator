@@ -676,7 +676,7 @@ def test_launch_quote_updates_for_model_without_references(workspace, monkeypatc
     assert view.project_state.current_step is StepId.REVIEW_RUN
     assert len(quote) == 1
     assert 'nano-banana-2' in quote[0]
-    assert banana_cost.summary in quote[0]
+    assert f'ориентировочно ${banana_cost.estimated_usd:.3f}' in quote[0]
     worker.assert_not_called()
 
 
@@ -1087,8 +1087,35 @@ def test_launch_confirmation_discloses_expired_results_in_one_dialog(
     app.processEvents()
 
     assert captured["title"] == "Подтвердить запуск"
-    assert "точную цену заранее не сообщает" in captured["text"]
+    assert "заранее неизвестна" in captured["text"]
     assert "генерация 1" in captured["text"]
-    assert "Прежние результаты больше недоступны для 1 объект(ов) (PiAPI)" in captured["text"]
+    assert "прежние результаты для 1 объекта (PiAPI) больше недоступны" in captured["text"]
     assert "новую платную генерацию" in captured["text"]
     assert controller.shell.state.current_step is StepId.REVIEW_RUN
+
+
+def test_launch_confirmation_is_short_structured_and_readable():
+    from types import SimpleNamespace
+    from studio_auto_clipart_flow import launch_confirmation_html
+
+    cost = SimpleNamespace(request_count=2, generation_request_count=1, processing_request_count=1,
+                           complete=False, incomplete_providers=("fal", "piapi"), estimated_usd=0)
+    text = launch_confirmation_html(
+        object_count=1, models=["piapi/gpt-image-2.5"], cost=cost,
+        references=["C:/refs/24_gosling_reading_in_garden.png"], reference_model="piapi/gpt-image-2.5")
+    lines = text.split("<br>")
+    assert lines[0] == "<b>Создать изображения: 1 объект?</b>"
+    assert "<b>Модель:</b> piapi/gpt-image-2.5" in lines
+    assert "<b>Запросов:</b> 2 (генерация 1, обработка 1)" in lines
+    assert any(line.startswith("<b>Цена:</b> заранее неизвестна") for line in lines)
+    assert "<b>Референсы (1):</b> получит модель piapi/gpt-image-2.5" in lines
+    assert "• 24_gosling_reading_in_garden.png" in lines
+    assert max(len(line) for line in lines) < 90        # no wall of text
+
+    known = SimpleNamespace(request_count=3, generation_request_count=3, processing_request_count=0,
+                            complete=True, incomplete_providers=(), estimated_usd=0.5)
+    assert "<b>Цена:</b> ориентировочно $0.500" in launch_confirmation_html(
+        object_count=5, models=["a", "b"], cost=known).split("<br>")
+    assert "Создать изображения: 5 объектов?" in launch_confirmation_html(object_count=5, models=["a"], cost=known)
+    assert "Создать изображения: 22 объекта?" in launch_confirmation_html(object_count=22, models=["a"], cost=known)
+    assert "<b>Модели:</b> a, b" in launch_confirmation_html(object_count=2, models=["a", "b"], cost=known)
