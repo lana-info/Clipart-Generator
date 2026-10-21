@@ -53,13 +53,13 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
 SUBPIXEL_STEPS = 4
 # Owner decision 2026-10-21: a soft brush keeps the solid core of the nominal size
 # and fades OUTWARD from it, so it paints as thick as the hard brush instead of
-# looking thinner. The fade has a fixed pixel width that grows with the brush: a
-# quarter of the diameter, at least 1 px and at most SOFT_MAX_FEATHER_PX, scaled
+# looking thinner. The fade has a fixed pixel width that grows with the brush: 40 %
+# of the diameter, at least 1 px and at most SOFT_MAX_FEATHER_PX, scaled
 # by (100 - hardness) / 100. Only the single-pixel brush stays hard.
 MIN_SOFT_RADIUS = 1
-SOFT_FEATHER_FRACTION = 0.25
+SOFT_FEATHER_FRACTION = 0.4
 SOFT_MIN_FEATHER_PX = 1.0
-SOFT_MAX_FEATHER_PX = 10.0
+SOFT_MAX_FEATHER_PX = 16.0
 
 
 def soft_feather_width(radius: int, hardness: int) -> float:
