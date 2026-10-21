@@ -3,10 +3,10 @@
 - [x] Решение владельца 2026-10-21: основная линия — develop/3.2; выпускать новую версию (3.2.36); падения тестов чинить (решает агент).
 - [x] Правки интерфейса (обновление модулей, заголовок «Автоматический клипарт», вкладка «Модель текста») + 3 регрессионных теста, ветка codex/fix-studio-ui-defects-on-3.2.35-20261020 (отправлена в origin).
 - [x] Исправлены 10 падений полного прогона: build.ps1 не включал hidden-import gpt25_recovery и studio_name_translation (реальный дефект сборки); тесты kie_routing/review_worker_recovery не знали про загрузку в хранилище Fal (коммит 5131105). Версия исходников 3.2.36.
-- [ ] develop/3.2: локально перемотана на ветку правок (fast-forward), push в origin заблокирован защитой ветки — нужен PR или разрешение владельца.
-- [ ] Ключ подписи модулей: /root/.local/share/vibix-studio-signing/publisher-v1.pem (key-id vibix-publisher-v1). Команда: studio_module_release.py prepare --version 1.6.2 --studio-min 3.2.36 --studio-max-exclusive 3.3.0 --platform windows-x64. Нужна, т.к. studio_auto_clipart_flow.py входит в подписанный модуль auto-clipart. Не выполнено: заблокировано разрешениями.
-- [ ] Сборка установщика 3.2.36: gh workflow run release-multi-platform.yml --ref codex/fix-studio-ui-defects-on-3.2.35-20261020 -f app_version=3.2.36. Не запущено: заблокировано разрешениями.
-- [ ] Публикация (только владелец): publish-3.2.36.sh и upload-modules-1.6.2.sh по образцу 3.2.35; удаление старых Windows 3.2.28–3.2.32 — только по прямой команде.
+- [x] develop/3.2: PR lana-info/Clipart-Generator#3 влит владельцем 2026-10-21.
+- [x] Модули 1.6.2 (windows-x64 + macos-arm64, studio_min 3.2.36) подписаны: ../artifacts/official-modules-1.6.2-20261021/.
+- [x] Сборка 3.2.36 готова (GitHub run 39537087289): Windows installer SHA256 51d1058c229ddfbf3234800ed8c6d7d0f90c18fe9058121537baec32644cef8f; macOS arm64 zip SHA256 e073345411b19d5f60be5b5518a3b099d84ec4993af026209620ebe5cd69b72f; файлы в ../artifacts/studio-3.2.36-build-20261021/.
+- [ ] Публикация (только владелец): в ../artifacts/studio-3.2.36-stable-20261021/ по порядку publish-3.2.36.sh -> upload-modules-1.6.2.sh (+ публикация черновиков модулей в админ-панели) -> cleanup-old-3.2-windows.sh (удаляет Windows 3.2.28–3.2.32, macOS 3.2.28 не трогает).
 - [ ] Вкладка «Модель текста» проверена только тестом без экрана — владельцу посмотреть вживую.
 
 ## Studio 3.2.34 сборка для проверки, 2026-10-20
