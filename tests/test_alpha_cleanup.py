@@ -68,3 +68,12 @@ def test_small_detached_island_is_removed_but_second_large_object_stays():
     cleaned = clean_alpha_array(alpha)
     assert cleaned[10:16, 280:286].max() == 0.0
     assert cleaned[30, 30] == 1.0 and cleaned[200, 200] == 1.0
+
+
+def test_hidden_rgb_is_cleared_only_when_asked():
+    pixels = np.zeros((40, 40, 4), np.uint8)
+    pixels[10:30, 10:30] = (200, 100, 50, 255)
+    pixels[2, 2] = (80, 60, 190, 1)           # isolated faint pixel becomes fully transparent
+    source = Image.fromarray(pixels, "RGBA")
+    assert tuple(np.array(clean_alpha(source))[2, 2]) == (80, 60, 190, 0)
+    assert tuple(np.array(clean_alpha(source, clear_hidden_rgb=True))[2, 2]) == (0, 0, 0, 0)

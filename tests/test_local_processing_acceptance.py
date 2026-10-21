@@ -617,9 +617,13 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
             with patch.object(main, "remove_chroma_key_automatic", side_effect=AssertionError("unexpected keyer")):
                 result_path = worker._run_processing_pipeline(str(source_path), None, str(raw), 1, "file")
             with Image.open(result_path) as result:
-                self.assertEqual(result.getchannel("A").tobytes(), source.getchannel("A").tobytes())
-                self.assertEqual(result.getpixel((7, 12)), source.getpixel((7, 12)))
-                self.assertEqual(result.getpixel((7, 13)), source.getpixel((7, 13)))
+                # The model's own matte is cleaned (2026-10-21): the opaque subject keeps its
+                # exact coverage and colour, an isolated faint pixel (haze) is dropped, and an
+                # edge pixel next to the subject stays a real partial edge.
+                self.assertEqual(result.crop((8, 8, 24, 24)).tobytes(), source.crop((8, 8, 24, 24)).tobytes())
+                self.assertEqual(result.getpixel((7, 12)), (0, 0, 0, 0))
+                self.assertTrue(120 <= result.getpixel((7, 13))[3] <= 140)
+                self.assertEqual(result.getpixel((7, 13))[:3], source.getpixel((7, 13))[:3])
                 self.assertEqual(result.getpixel((0, 0)), (0, 0, 0, 0))
             self.assertEqual(source_path.read_bytes(), original)
 

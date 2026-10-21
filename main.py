@@ -2945,6 +2945,15 @@ class WorkerThread(QThread):
                     from native_alpha import preserve_native_alpha
                     with Image.open(current_path) as source_image:
                         preserved = preserve_native_alpha(source_image)
+                        # The model's own matte carries faint haze and debris; drop them and
+                        # tighten smooth edges. Never fails the stage.
+                        try:
+                            cleaned = clean_alpha(preserved, clear_hidden_rgb=True)
+                            if cleaned.getchannel("A").getextrema()[1] > 0:
+                                cleaned.info.update(preserved.info)
+                                preserved = cleaned
+                        except Exception:
+                            self.progress.emit("  Зачистка прозрачности пропущена.")
                         self._save_image_object_as_png(preserved, nobg_path)
                     self.progress.emit(
                         "  Использована сохранённая alpha-маска; remover не вызывается"
