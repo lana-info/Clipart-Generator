@@ -244,8 +244,12 @@ def main(argv=None):
                     platform=args.platform, studio_version=args.studio_version)))
             finally:
                 uploader.close()
-    except Exception:
+    except Exception as exc:
         print("Release operation failed. No release was published; inspect any reported draft in admin.", file=sys.stderr)
+        # Non-secret hint only: exception class and HTTP status (401/403 = wrong or reused
+        # password/TOTP, 429 = rate limited), never the message, which could echo input.
+        status = getattr(exc, "code", None)
+        print("Reason:", type(exc).__name__ + (f" (HTTP {status})" if isinstance(status, int) else ""), file=sys.stderr)
         return 1
     return 0
 
