@@ -22,4 +22,4 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           echo "CPUINFO $(grep -m1 'model name' /proc/cpuinfo)"
-          python -m pytest -s -q -p no:cacheprovider tests/diag_chroma_tmp.py
+          python -m pytest -q -p no:cacheprovider tests/test_chroma*.py && echo "RESULT pass" || echo "RESULT fail"

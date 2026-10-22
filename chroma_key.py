@@ -24,6 +24,7 @@ _MIN_AMBIGUOUS_COMPONENT_LIMIT: Final[int] = 64
 _MAX_AMBIGUOUS_KEY_DISTANCE: Final[float] = 230.0
 _MIN_OPAQUE_REFERENCE_DISTANCE: Final[float] = 96.0
 _MAX_ENCLOSED_TRANSITION_ROI_WORK_MULTIPLIER: Final[int] = 4
+_ALPHA_NOISE_FLOOR: Final[float] = 1e-6
 _SUBJECT_PROFILES: Final[frozenset[str]] = frozenset(("legacy", "opaque_clipart"))
 
 MATERIAL_PROMPT_CLAUSES: Final[dict[str, str]] = {
@@ -1716,7 +1717,9 @@ def _remove_chroma_key_staged(
         del key_edge_rgb, key_edge_alpha
         del original_rgb, opaque, recovered_alpha, changed
 
-    globals().setdefault('_DIAG', {})['alpha'] = alpha.copy()  # DIAG-TEMP
+    # Float noise (~1e-8) differs between CPU SIMD paths; without snapping it flips the
+    # exact `alpha > 0.0` edge test and the whole result changes from machine to machine.
+    alpha[alpha < _ALPHA_NOISE_FLOOR] = 0.0
     soft_edge = (alpha > 0.0) & (alpha < 0.999)
     edge_ring = cv2.dilate(
         soft_edge.astype(np.uint8),
