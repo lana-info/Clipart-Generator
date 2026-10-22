@@ -1420,7 +1420,7 @@ class TransparencyCanvas(QGraphicsView):
             self.setCursor(
                 Qt.CursorShape.OpenHandCursor
                 if self._space_pressed
-                else Qt.CursorShape.ArrowCursor
+                else self.tool_cursor()
             )
             event.accept()
             return
@@ -1467,8 +1467,25 @@ class TransparencyCanvas(QGraphicsView):
             return
         self.lasso_enabled = bool(enabled)
         self._lasso_points = []
-        self.setCursor(Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor)
+        self.setCursor(self.tool_cursor())
         self.setFocus()
+
+    def tool_cursor(self):
+        """System cursor of the current tool; the brush draws its own ring."""
+        if self.tool == "pen" and self.lasso_enabled:
+            return Qt.CursorShape.CrossCursor
+        return Qt.CursorShape.ArrowCursor
+
+    def clear_selection(self) -> bool:
+        """Drop the lasso and the selected points; False when nothing was selected."""
+        if self.contour.local_active or not (self.contour.selection or self._lasso_points or self._lasso_outline):
+            return False
+        self.contour.select([])
+        self._lasso_points = []
+        self._lasso_outline = []
+        self.document_changed.emit()
+        self.viewport().update()
+        return True
 
     def _show_after_for_edit(self):
         if self.contour.local_active and not self.contour.preview_after:
@@ -1772,6 +1789,10 @@ class TransparencyCanvas(QGraphicsView):
             event.accept()
             return
         if self.tool == "pen":
+            # Esc first drops the selection, so it never resets the contour or leaves the editor.
+            if key == Qt.Key.Key_Escape and self.clear_selection():
+                event.accept()
+                return
             if key == Qt.Key.Key_Escape and self.contour.dirty:
                 self.contour.checkpoint()
                 self.contour.points = []
@@ -1848,7 +1869,7 @@ class TransparencyCanvas(QGraphicsView):
             self.setCursor(
                 Qt.CursorShape.OpenHandCursor
                 if active
-                else Qt.CursorShape.ArrowCursor
+                else self.tool_cursor()
             )
         self.viewport().update()
 
@@ -2631,6 +2652,10 @@ class ClipartTransparencyEditorPage(QWidget):
         if self.canvas._painting or self.canvas.contour_busy:
             return
         self.canvas.tool = tool
+        if tool != 'pen' and self.lasso_button.isChecked():
+            self.lasso_button.setChecked(False)
+        self.canvas._lasso_points = []
+        self.canvas.setCursor(self.canvas.tool_cursor())
         self.canvas.setToolTip('Перо' if tool == 'pen' else 'Кисть')
         for key, button in self.tool_buttons.items():
             button.setChecked(key == tool)
@@ -2755,7 +2780,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self.simplify_button.setEnabled(valid and not busy and simplify_possible)
         self.simplify_button.setToolTip('Упростить участок')
         label = ('Точки не выделены' if not count else
-                 f'Предпросмотр: {len(contour.local_before[1])} → {count} точек' if active else f'Выделено точек: {count}')
+                 f'Предпросмотр: {len(contour.local_before[1])} → {count} точек' if active else f'Выделено точек: {count} · Esc — снять выделение')
         if count and not simplify_possible:
             label += ' · Достигнут предел'
         self.local_selection_label.setText(label)
