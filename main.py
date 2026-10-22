@@ -78,6 +78,7 @@ from v3_api_settings import check_photoroom_balance as check_photoroom_balance_a
 from output_naming import (
     BatchOutputNameReservation,
     generated_output_path,
+    generated_subject,
     processed_output_path,
 )
 from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
@@ -1855,6 +1856,18 @@ class WorkerThread(QThread):
         )
         return out_path
 
+    def _english_file_subjects(self, entries):
+        """Translate Russian subjects once so file names are English, not transliterated."""
+        try:
+            from studio_name_translation import build_name_translator, has_cyrillic
+            subjects = [generated_subject(entry.get("prompt", "")) for entry in entries]
+            subjects = [item for item in dict.fromkeys(subjects) if item and has_cyrillic(item)]
+            translator = build_name_translator() if subjects else None
+            return translator(subjects) if translator else {}
+        except Exception as exc:
+            self.progress.emit(f"Имена файлов: перевод недоступен, используется транслитерация ({type(exc).__name__})")
+            return {}
+
     def _mode1_generate_parallel(self, process_generated=False, emit_final=True):
         raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
@@ -1870,11 +1883,12 @@ class WorkerThread(QThread):
         done_count = 0
         self._next_generation_launch_at = 0.0
         output_names = BatchOutputNameReservation(output_dir)
+        english_subjects = self._english_file_subjects(entries)
         planned_entries = [
             (
                 idx,
                 entry,
-                str(output_names.reserve_generated(idx, entry.get("prompt", ""))),
+                str(output_names.reserve_generated(idx, entry.get("prompt", ""), english_subjects)),
             )
             for idx, entry in enumerate(entries, start=1)
         ]

@@ -1,3 +1,23 @@
+## Auto Clipart: имена файлов транслитерировались вместо перевода, 2026-10-22 {#autoclipart-filenames-translit-20261022}
+
+Симптом (тест владельца): готовые файлы Auto Clipart названы латиницей по звучанию
+(`gusenok_...`), а нужен английский перевод — продукт для англоязычных покупателей.
+
+Причина: `output_naming._translate_common_subject` знает ~10 русских слов
+(лиса, мишка…), всё остальное шло в `_CYRILLIC_TRANSLITERATION`. Имя строится
+синхронно из «Объект: …» в `reserve_generated` (main.py, `_mode1_generate_parallel`),
+переводчик из ручного экспорта (`studio_name_translation`) там не использовался.
+
+Решение: `WorkerThread._english_file_subjects` один раз переводит уникальные
+русские объекты одним запросом выбранной текстовой модели; результат передаётся
+в `reserve_generated(..., english_subjects)`. Нет ключа/сбой — прежнее поведение
+(словарь → транслитерация), запуск не блокируется. Ребро main → studio_name_translation
+добавлено в allowlist архитектурного теста с пояснением.
+
+Проверка: tests/test_output_naming.py, tests/test_autoclipart_english_file_names.py,
+test_studio_dependency_architecture.py, test_export_names_translation.py — проходят.
+Живой запрос к текстовой модели не выполнялся.
+
 ## Auto Clipart: один сбой файла останавливал весь пакет, 2026-10-22 {#autoclipart-one-failure-stops-batch-20261022}
 
 Сценарий владельца (диагностика 3.2.38, воспроизведено дважды): пакет из 50
