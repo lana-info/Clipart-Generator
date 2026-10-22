@@ -30,6 +30,7 @@ BUILTIN_CATALOG = (
     CatalogEntry("processing", "Обработка изображений", "Фон, качество и прозрачность", "processing", released=True),
     CatalogEntry("pinterest", "Pinterest", "Пины по промптам, без публикации", "pinterest", released=True),
     CatalogEntry("prompt-composer", "Конструктор промптов", "7 вариантов: изображения и Reels", "prompt-composer", released=True),
+    CatalogEntry("patterns", "Паттерны", "Бесшовные узоры и цифровая бумага", "patterns", released=True),
 )
 
 

@@ -1,15 +1,14 @@
 """Signed Patterns entrypoint. Installed only inside a verified package.
 
-The package payload is ``entry.py`` (this file), ``studio_patterns.py`` and
-``studio_patterns_tools.py`` (see ``studio_patterns_package``).  Core never
-imports the engine; it reaches it only through the ``kernel`` command.  No page
-is declared yet: the Patterns screens arrive with the UI stage, and this module
-must not be published to customers before then.
+The package payload is ``entry.py`` (this file), the engine
+(``studio_patterns.py``, ``studio_patterns_tools.py``) and the page
+(``studio_patterns_page.py``); see ``studio_patterns_package``.  Core never
+imports the engine; it reaches it only through the ``kernel`` command.
 """
 from importlib import import_module
 from types import SimpleNamespace
 
-from studio_module_api import CommandDeclaration, DocumentTypeDeclaration, ModuleRegistration
+from studio_module_api import CommandDeclaration, DocumentTypeDeclaration, ModuleRegistration, PageDeclaration
 
 PROJECT_MIME = "application/vnd.vibix.patterns-project+json"
 # Stored in every project so a later release can reproduce older layouts.
@@ -35,9 +34,14 @@ def kernel():
     )
 
 
+def create_page(host):
+    return import_module(".studio_patterns_page", __package__).PatternsPage(host)
+
+
 def register(context):
     return ModuleRegistration(
         context.module_id, context.version,
+        pages=(PageDeclaration("main", create_page),),
         commands=(CommandDeclaration("kernel", kernel),),
         document_types=(DocumentTypeDeclaration("project", PROJECT_MIME, 1),),
     )

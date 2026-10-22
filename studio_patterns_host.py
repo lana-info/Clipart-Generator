@@ -91,6 +91,10 @@ class PatternsHost:
         self._jobs = set()
         self._closed = False
 
+    @property
+    def algorithm_version(self):
+        return self._kernel.ALGORITHM_VERSION
+
     def _check(self):
         if self._closed:
             raise ValueError("Модуль закрыт")
@@ -168,6 +172,50 @@ class PatternsHost:
         except k.PatternValidationError as error:
             raise ValueError(str(error)) from error
         return {"image": image, "seam": self._seam(image)}
+
+    def asset_info(self, handle):
+        """Size and alpha of an owned image, e.g. to restore a saved project."""
+        self._check()
+        from PIL import Image
+        with Image.open(self._library.asset_path(handle)) as image:
+            return {"width": image.width, "height": image.height,
+                    "has_alpha": "A" in image.getbands() or "transparency" in image.info}
+
+    def thumbnail(self, handle, size=96):
+        """A small RGBA copy of an owned image for lists; the stored file is never altered."""
+        self._check()
+        from PIL import Image
+        if type(size) is not int or not 16 <= size <= 512:
+            raise ValueError("Недопустимый размер миниатюры")
+        with Image.open(self._library.asset_path(handle)) as source:
+            source.draft("RGB", (size * 2, size * 2))
+            image = source.convert("RGBA")
+        image.thumbnail((size, size))
+        return image
+
+    def layout_elements(self, payload, *, count, min_gap, scale_range, angle_range, seed):
+        """Place new elements (locked ones stay) and return them with any warnings."""
+        self._check()
+        k = self._kernel
+        self._library._check_payload(payload)
+        scene = self._scene(payload)
+        scene = k.PatternScene(scene.width, scene.height, scene.assets, scene.elements,
+                               scene.repeat_mode, seed, scene.background, scene.schema_version)
+        try:
+            laid_out, warnings = k.layout_scene(scene, count=count, min_gap=min_gap,
+                                                scale_range=tuple(scale_range), angle_range=tuple(angle_range))
+        except k.PatternValidationError as error:
+            raise ValueError(str(error)) from error
+        return [element.to_dict() for element in laid_out.elements], list(warnings)
+
+    def preview_image(self, image, copies=3, max_pixels=4_000_000):
+        """3x3 or 5x5 repeat of a rendered sheet, bounded in size, seam in the centre."""
+        self._check()
+        k = self._kernel
+        try:
+            return k.tile_preview(image, copies, max_pixels)
+        except k.PatternValidationError as error:
+            raise ValueError(str(error)) from error
 
     def _job(self, work, on_done, on_error, on_progress=None):
         self._check()

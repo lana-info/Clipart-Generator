@@ -106,7 +106,7 @@ def test_verified_package_loads_and_serves_the_kernel(runtime, kernel):
     registration = host.registration("patterns")
     assert registration is not None
     assert {d.mime_type for d in registration.document_types} == {"application/vnd.vibix.patterns-project+json"}
-    assert registration.pages == ()
+    assert [page.name for page in registration.pages] == ["main"]
     assert kernel.MAX_DIMENSION == studio_patterns.MAX_DIMENSION
     assert kernel.ALGORITHM_VERSION == 1
 

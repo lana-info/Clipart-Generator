@@ -18,13 +18,13 @@ class CatalogUiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_default_home_has_five_equal_module_cards_and_preserves_artwork_size(self):
+    def test_default_home_has_six_equal_module_cards_and_preserves_artwork_size(self):
         screen = ModeSelectionScreen()
         screen.resize(1120, 780)
         screen.show()
         self.app.processEvents()
         cards = list(screen.module_cards.values())
-        self.assertEqual(len(cards), 5)
+        self.assertEqual(len(cards), 6)
         self.assertEqual({card.height() for card in cards}, {248})
         self.assertLessEqual(max(card.width() for card in cards) - min(card.width() for card in cards), 1)
         self.assertEqual({card.illustration.height() for card in cards}, {112})
@@ -37,7 +37,7 @@ class CatalogUiTests(unittest.TestCase):
         scroll = screen.catalog_scroll
         scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
         self.app.processEvents()
-        last = screen.module_cards["prompt-composer"].start_button
+        last = screen.module_cards["patterns"].start_button
         position = last.mapTo(scroll.viewport(), last.rect().bottomRight())
         self.assertLessEqual(position.y(), scroll.viewport().height())
         screen.close()

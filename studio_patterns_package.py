@@ -7,7 +7,7 @@ from studio_modules import MAX_PACKAGE_BYTES, ModulePackageError
 
 # Engine sources stay at the repository root (and keep their tests); the signed
 # package gets copies whose sibling imports are rewritten to relative imports.
-PATTERNS_ENGINE = ("studio_patterns.py", "studio_patterns_tools.py")
+PATTERNS_ENGINE = ("studio_patterns.py", "studio_patterns_tools.py", "studio_patterns_page.py")
 PATTERNS_ENTRY = "studio_patterns_entry.py"
 
 
