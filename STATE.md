@@ -29,6 +29,11 @@ studio_patterns_entry.py, studio_patterns_package.py (без страниц и �
 
 ## Текущая стадия (для параллельных агентов) — обновляется при каждой работе
 
+Auto Clipart, пометки картинок (2026-10-22): ветка `codex/autoclipart-image-marks-20261022`, PR в develop/3.2.
+Метки (Ок / Брак генерации / Брак вырезания / Удалить), заметки, версии, «Пересоздать помеченные», корзина.
+Код: studio_clipart_versions.py, studio_clipart_review_ui.py, хуки в v3_run_queue.py и v3_transparency_preview.py.
+Подробности и что не проверено — TASKS.md, раздел «Auto Clipart: пометки…».
+
 Рабочая ветка: develop/3.2 (на 2026-10-22; прежняя строка про codex/projects-export-hardening-20261019 устарела — она на 32 коммита позади релиза 3.2.38). Последняя задача: codex/fix-upscale-edge-halo (PR 10, слита 2026-10-22: тёмная кайма по краю светлых клипартов после апскейла Real-ESRGAN — причина и решение в docs/ERRORS.md; НЕ проверено на реальной Real-ESRGAN, KIE/fal не проверены). Перед ней: codex/autoclipart-english-filenames-20261022 — имена файлов Auto Clipart переводятся на английский вместо транслитерации (PR в develop/3.2; develop/3.2 защищена, прямой push запрещён). ПРАВИЛО: перед
 началом работы всегда `git fetch` и работать от ветки, указанной в этой
 строке; если строка устарела — обновить её при первом коммите. Владелец git
