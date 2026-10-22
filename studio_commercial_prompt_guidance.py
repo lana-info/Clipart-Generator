@@ -22,7 +22,11 @@ _PLANNING = {
         "over dense micro-detail: distinct petals, coherent "
         "flower centres, continuous stems and intentional branch junctions. Do not "
         "invent fused, melted or floating parts. Gentle or watercolor styling means "
-        "colour and painted texture, not defocus, blurred boundaries or translucent petals."
+        "colour and painted texture, not defocus, blurred boundaries or translucent petals. "
+        "Clean quality outranks lushness: for wreaths and borders plan five to eight large "
+        "clearly formed flowers with a few leaves and berries, never wildflower or meadow-grass "
+        "wording, clusters of tiny blossoms or filler sprigs; near-white palette tones belong "
+        "to petals, never to a backing or surface behind the subject."
     ),
     "principles": [
         "commercial_purpose",
@@ -68,8 +72,10 @@ _PROMPT_GUIDANCE = {
             "каждый лепесток и лист различим, центры цветов оформлены, стебли непрерывны, "
             "соединения ветвей естественны; сохранять заданное количество элементов, "
             "иначе предпочитать меньше ясно прорисованных деталей вместо скопления "
-            "микродеталей; мягкость стиля относится к цвету и фактуре, "
-            "не к резкости контура"
+            "микродеталей; для венков и рамок 5-8 крупных ясно прорисованных цветков, "
+            "без россыпи мелких цветов, полевых трав и заполняющих веточек; "
+            "почти белые тона палитры только для лепестков, не для подложки; "
+            "мягкость стиля относится к цвету и фактуре, не к резкости контура"
         ),
         "common_restrictions": (
             "без обрезания",
@@ -79,6 +85,8 @@ _PROMPT_GUIDANCE = {
             "бесформенных цветов и оборванных стеблей",
             "без стекла, просвечивающих лепестков, полупрозрачных материалов, "
             "тюля, вуалей, дыма, тумана и свечения; фон не просвечивает сквозь объект",
+            "без белой или кремовой подложки, ореола, контура-наклейки и белых пятен "
+            "за цветами, листьями и между веточками; фон между элементами чистый",
         ),
         "composition": {
             "hero": "ясный главный объект с читаемой позой или действием",
@@ -105,8 +113,10 @@ _PROMPT_GUIDANCE = {
             "small decorative use does not mean a tiny image on the canvas; "
             "distinct petals and leaves, coherent flower centres, continuous stems "
             "and natural branch junctions; preserve requested counts, otherwise prefer "
-            "fewer clearly formed details over crowded micro-detail; softness describes "
-            "colour and texture, not edge focus"
+            "fewer clearly formed details over crowded micro-detail; for wreaths and borders "
+            "use 5-8 large clearly formed flowers, no clusters of tiny flowers, wildflower "
+            "grass or filler sprigs; near-white palette tones only for petals, never for "
+            "a backing; softness describes colour and texture, not edge focus"
         ),
         "common_restrictions": (
             "no cropping",
@@ -115,6 +125,8 @@ _PROMPT_GUIDANCE = {
             "no blur, defocus, smeared or fused petals and leaves, malformed flowers or broken stems",
             "no glass, see-through petals, translucent or semi-transparent materials, "
             "tulle, veils, smoke, mist or glow; background never shows through the subject",
+            "no white or cream backing, halo, sticker outline or white patches behind "
+            "flowers, leaves or between twigs; the background between elements stays clean",
         ),
         "composition": {
             "hero": "clear main subject with a readable pose or action",

@@ -2243,7 +2243,9 @@ def chroma_key_prompt_block(
         f"({hex_color}) digital chroma-key background. The background fills "
         "the image edge to edge with no gradient and stays fully bright inside "
         "every gap and opening. No reflection, tint, shadow, glow, haze or "
-        "color spill on the subject. The subject is fully opaque and solid: "
+        "color spill on the subject. No white or cream backing, halo, sticker "
+        "outline or white patches behind or between flowers, leaves and twigs. "
+        "The subject is fully opaque and solid: "
         "no transparency, translucency, semi-transparent materials, glass, "
         "tulle, lace mesh, veil, smoke, mist, haze or see-through parts. "
     )
