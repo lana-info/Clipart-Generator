@@ -1,3 +1,11 @@
+## Patterns (бесшовные паттерны), 2026-10-22
+
+Ветка codex/feature-patterns-engine-20261022 (от 3d98344). Этап 1 движка готов
+(`studio_patterns_tools.py`, mirror в `studio_patterns.py`), PRD v0.3 и задачи:
+docs/seamless-pattern/. module_id = patterns. Макеты 5 экранов на согласовании:
+docs/ui/3.2/patterns-module-proposal/. Код UI не писать до approval владельца.
+Пороги seam_report временные; нужны реальные хорошие/плохие плитки владельца.
+
 ## Текущая стадия (для параллельных агентов) — обновляется при каждой работе
 
 Рабочая ветка: codex/projects-export-hardening-20261019
