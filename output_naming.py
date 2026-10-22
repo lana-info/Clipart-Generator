@@ -125,8 +125,13 @@ class BatchOutputNameReservation:
                     return self._reserve(candidate)
                 suffix += 1
 
-    def reserve_generated(self, row_index: int, prompt: str = "") -> Path:
-        prompt_stem = _generated_prompt_stem(prompt)
+    def reserve_generated(
+        self,
+        row_index: int,
+        prompt: str = "",
+        english_subjects: dict[str, str] | None = None,
+    ) -> Path:
+        prompt_stem = _generated_prompt_stem(prompt, english_subjects)
         base = f"{prompt_stem}_{max(1, int(row_index)):02d}_ready"
         destination = self.output_dir / _budgeted_filename(base, ".png")
         with self._lock:
@@ -190,8 +195,16 @@ def _translate_common_subject(subject: str) -> str:
     return normalized.translate(_CYRILLIC_TRANSLITERATION)
 
 
-def _generated_prompt_stem(prompt: str) -> str:
-    subject = _translate_common_subject(_subject_text(prompt))
+def generated_subject(prompt: str) -> str:
+    """The authored subject of a generation prompt (the text the file name is built from)."""
+    return _subject_text(prompt)
+
+
+def _generated_prompt_stem(prompt: str, english_subjects: dict[str, str] | None = None) -> str:
+    subject = _subject_text(prompt)
+    translated = (english_subjects or {}).get(subject)
+    # A real translation wins; only without one fall back to the word list / transliteration.
+    subject = translated if translated else _translate_common_subject(subject)
     words = re.findall(r"[a-z0-9]+", subject.casefold())[:3]
     return "_".join(words)[:48].strip("_") or "clipart"
 
@@ -200,8 +213,9 @@ def generated_output_path(
     output_dir: str | Path,
     row_index: int,
     prompt: str = "",
+    english_subjects: dict[str, str] | None = None,
 ) -> Path:
-    prompt_stem = _generated_prompt_stem(prompt)
+    prompt_stem = _generated_prompt_stem(prompt, english_subjects)
     base = f"{prompt_stem}_{max(1, int(row_index)):02d}_ready"
     destination = Path(output_dir) / _budgeted_filename(base, ".png")
     suffix = 2

@@ -1288,6 +1288,18 @@ class V3ApplicationView(QWidget):
             QMessageBox.StandardButton.No)
         return answer == QMessageBox.StandardButton.Yes
 
+    def _confirm_close_without_saving(self) -> bool:
+        self._diagnostic_event(
+            "close_blocked_by_save", "Закрытие запросило подтверждение: проект не сохранён.",
+            severity="warning")
+        answer = QMessageBox.question(
+            self, "Закрыть без сохранения?",
+            "Не удалось сохранить проект. Если закрыть сейчас, последние изменения "
+            "могут быть потеряны. Закрыть Studio?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        return answer == QMessageBox.StandardButton.Yes
+
     def _save_before_leaving(self) -> bool:
         """Keep the current workflow alive until it is idle and safely saved."""
         if self.shell is None:
@@ -1361,13 +1373,19 @@ class V3ApplicationView(QWidget):
             else:
                 preferences_saved = True
         except (OSError, ValueError) as error:
-            # Only exception classes go to the journal: messages may carry private paths.
-            cause = error.__cause__
+            # Class names and the innermost message go to the journal (the sanitiser
+            # redacts paths); without them a rejected save cannot be diagnosed.
+            chain, root = [], error
+            while root is not None and len(chain) < 4:
+                chain.append(type(root).__name__)
+                if root.__cause__ is None:
+                    break
+                root = root.__cause__
             self._diagnostic_event(
                 "save_failed", "Не удалось сохранить проект.", severity="warning",
-                details={"error": type(error).__name__,
-                         "cause": type(cause).__name__ if cause is not None else "",
-                         "module": str(getattr(self.shell, "module_id", ""))})
+                details={"error_code": " < ".join(chain),
+                         "error_message": str(root)[:200],
+                         "mode": str(getattr(self.shell, "module_id", ""))})
             self.shell.set_save_error("Не удалось сохранить изменения")
             return False
         self.shell.set_save_error(
@@ -1661,8 +1679,10 @@ class V3ApplicationView(QWidget):
             except Exception:
                 pass
         elif not self._save_before_leaving():
-            event.ignore()
-            return
+            # A save that keeps failing must not trap the user in the window.
+            if not self._confirm_close_without_saving():
+                event.ignore()
+                return
         if self._module_updates_dialog is not None and self._module_updates_dialog.busy:
             event.ignore()
             return

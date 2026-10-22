@@ -78,6 +78,7 @@ from v3_api_settings import check_photoroom_balance as check_photoroom_balance_a
 from output_naming import (
     BatchOutputNameReservation,
     generated_output_path,
+    generated_subject,
     processed_output_path,
 )
 from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
@@ -219,6 +220,10 @@ LICENSE_PRODUCT_ID = "clipart-generator"
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 PHOTOROOM_LAUNCH_INTERVAL_SECONDS = 1.0
 MAX_REMOTE_CONCURRENCY = 6
+# Платный пакет останавливается только после стольких ошибок провайдера подряд:
+# единичная ошибка пропускает свой файл, остальные продолжают обработку.
+PROVIDER_FAILURE_STOP_THRESHOLD = 3
+PROVIDER_FAILURE_STOP_PROVIDERS = frozenset({"piapi", "atlascloud"})
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
 MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
 MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -1049,6 +1054,7 @@ class WorkerThread(QThread):
         self.is_running = True
         self.stop_after_current_requested = False
         self._paid_submission_open = True
+        self._consecutive_provider_failures = 0
         self._publish_lock = threading.Lock()
         self._local_operation_lock = threading.Lock()
         self._shared_state_lock = threading.Lock()
@@ -1452,15 +1458,15 @@ class WorkerThread(QThread):
         )
 
     def _execute_item_entry(self, operation, *args):
+        self._item_context.provider_failure_counted = False
         try:
-            return operation(*args)
+            result = operation(*args)
         except ProcessingCancelled:
             raise
         except ItemExecutionError:
             raise
         except Exception as error:
-            if getattr(self._diagnostic_context, "provider", "") in {"piapi", "atlascloud"}:
-                self.request_stop_after_current()
+            self._note_provider_failure()
             known_paths = _item_error_known_paths(error, args)
             raise ItemExecutionError(
                 sanitize_item_error_paths(
@@ -1472,6 +1478,27 @@ class WorkerThread(QThread):
                 provider=getattr(self._diagnostic_context, "provider", ""),
                 model=getattr(self._diagnostic_context, "model", ""),
             ) from error
+        with self._shared_state_lock:
+            self._consecutive_provider_failures = 0
+        return result
+
+    def _note_provider_failure(self):
+        """Count a provider failure; stop the paid batch only after a streak."""
+        if getattr(self._diagnostic_context, "provider", "") not in PROVIDER_FAILURE_STOP_PROVIDERS:
+            return
+        if getattr(self._item_context, "provider_failure_counted", False):
+            return
+        self._item_context.provider_failure_counted = True
+        with self._shared_state_lock:
+            self._consecutive_provider_failures += 1
+            reached = self._consecutive_provider_failures == PROVIDER_FAILURE_STOP_THRESHOLD
+        if reached:
+            self.request_stop_after_current()
+            self.progress.emit(
+                f"Остановлено после текущего файла: {PROVIDER_FAILURE_STOP_THRESHOLD} ошибки "
+                "провайдера подряд. Оставшиеся файлы не запускались, чтобы не тратить деньги "
+                "впустую. Когда сервис восстановится, повторите запуск: готовые файлы сохранятся."
+            )
 
     def _item_failure_details(self, error, fallback_stage):
         if isinstance(error, ItemExecutionError):
@@ -1829,6 +1856,18 @@ class WorkerThread(QThread):
         )
         return out_path
 
+    def _english_file_subjects(self, entries):
+        """Translate Russian subjects once so file names are English, not transliterated."""
+        try:
+            from studio_name_translation import build_name_translator, has_cyrillic
+            subjects = [generated_subject(entry.get("prompt", "")) for entry in entries]
+            subjects = [item for item in dict.fromkeys(subjects) if item and has_cyrillic(item)]
+            translator = build_name_translator() if subjects else None
+            return translator(subjects) if translator else {}
+        except Exception as exc:
+            self.progress.emit(f"Имена файлов: перевод недоступен, используется транслитерация ({type(exc).__name__})")
+            return {}
+
     def _mode1_generate_parallel(self, process_generated=False, emit_final=True):
         raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
@@ -1844,11 +1883,12 @@ class WorkerThread(QThread):
         done_count = 0
         self._next_generation_launch_at = 0.0
         output_names = BatchOutputNameReservation(output_dir)
+        english_subjects = self._english_file_subjects(entries)
         planned_entries = [
             (
                 idx,
                 entry,
-                str(output_names.reserve_generated(idx, entry.get("prompt", ""))),
+                str(output_names.reserve_generated(idx, entry.get("prompt", ""), english_subjects)),
             )
             for idx, entry in enumerate(entries, start=1)
         ]
@@ -5812,7 +5852,9 @@ class WorkerThread(QThread):
             except ProcessingCancelled:
                 raise
             except Exception:
-                self.request_stop_after_current()
+                # Серия ошибок подряд закрывает платный приём до освобождения
+                # слота провайдера; одиночная ошибка пакет не останавливает.
+                self._note_provider_failure()
                 raise
 
     def _fal_generate_image(self, prompt, model_id):

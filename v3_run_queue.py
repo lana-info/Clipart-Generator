@@ -1169,8 +1169,10 @@ class RunQueueSession(QObject):
     def handle_finished(self) -> None:
         if not self.running and self.finished_at is not None:
             return
+        missing_completion = False
         for item in self.items:
             if item.status in {RunItemStatus.PENDING, RunItemStatus.RUNNING}:
+                missing_completion = True
                 self._close_running_stages(item, "failed")
                 item.status = RunItemStatus.FAILED
                 item.short_message = "Worker не подтвердил сохранение результата."
@@ -1180,13 +1182,16 @@ class RunQueueSession(QObject):
                     reason="missing_completion",
                 )
         incomplete = any(item.status is RunItemStatus.FAILED for item in self.items)
-        self.lifecycle.finish(error_code="missing_completion" if incomplete else "")
+        # Skipped (failed) files are a normal outcome; only unfinished items
+        # mean the worker never reported completion.
+        reason = "missing_completion" if missing_completion else "item_failures" if incomplete else ""
+        self.lifecycle.finish(error_code=reason)
         self.current_index = None
         self.running = False
         self.finished_at = time.monotonic()
         self._event(
             "run_failed" if incomplete else "run_finished",
-            reason="missing_completion" if incomplete else "",
+            reason=reason,
             counts=self.counts(),
             elapsed_ms=round((self.finished_at - self.started_at) * 1000),
         )
