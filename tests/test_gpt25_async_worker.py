@@ -69,6 +69,9 @@ class OfflineWorker:
     _claim_pending_task = namespace["_claim_pending_task"]
     _task_operation_key = namespace["_task_operation_key"]
 
+    def _note_provider_failure(self):
+        """Streak accounting is covered in test_auto_clipart_skip_failed_file."""
+
     def __init__(self, directory, provider):
         self.settings = {"gpt25_cost_confirmed": True}
         self.atlascloud_api_key = "TEST_ATLAS_KEY"
