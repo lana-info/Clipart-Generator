@@ -67,6 +67,8 @@ def workspace(tmp_path, monkeypatch):
     controller.brief.theme.setText("Winter flowers")
     controller.brief.total.setValue(1)
     yield view, controller, gate, worker
+    # A test may leave saving broken; closing then asks, and nobody answers offscreen.
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
     if not sip.isdeleted(controller.save_timer):
         controller.save_timer.stop()
     if controller.run_queue.session:
@@ -808,7 +810,10 @@ def test_failed_save_blocks_window_close(workspace, monkeypatch):
     event = Mock()
     with monkeypatch.context() as patch:
         patch.setattr(view, "_save_draft", lambda: False)
+        ask = Mock(return_value=QMessageBox.StandardButton.No)  # the user declines to close
+        patch.setattr(QMessageBox, "question", ask)
         view.closeEvent(event)
+    ask.assert_called_once()
     event.ignore.assert_called_once()
 
 
