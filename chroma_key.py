@@ -1716,6 +1716,7 @@ def _remove_chroma_key_staged(
         del key_edge_rgb, key_edge_alpha
         del original_rgb, opaque, recovered_alpha, changed
 
+    globals().setdefault('_DIAG', {})['alpha'] = alpha.copy()  # DIAG-TEMP
     soft_edge = (alpha > 0.0) & (alpha < 0.999)
     edge_ring = cv2.dilate(
         soft_edge.astype(np.uint8),
