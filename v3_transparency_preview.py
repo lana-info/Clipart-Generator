@@ -59,6 +59,8 @@ from background_mask import (
     apply_mask_to_image,
     mask_for_image,
     diameter_radius,
+    MIN_SOFT_RADIUS,
+    soft_feather_width,
     stamp_reach,
     paint_mask_path,
     stamp_path_coverage,
@@ -1978,12 +1980,26 @@ class TransparencyCanvas(QGraphicsView):
             painter.setBrush(QColor("#ffffff"))
             dot = 3 / max(0.01, self.transform().m11())
             painter.drawEllipse(anchor, dot, dot)
-        pen = QPen(QColor("#ffffff"), 2)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
+        for radius, color, width, style in self.brush_rings():
+            pen = QPen(color, width, style)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.drawEllipse(self._brush_scene_point, radius, radius)
+
+    def brush_rings(self):
+        """Cursor rings in drawing order: dark under light, so the ring shows on any background.
+
+        The solid pair sits exactly on the brush diameter; a soft brush adds a dotted pair where its edge fades out.
+        """
         radius = self.brush_radius + 0.5
-        painter.drawEllipse(self._brush_scene_point, radius, radius)
+        rings = [(radius, QColor(0, 0, 0, 210), 3.0, Qt.PenStyle.SolidLine),
+                 (radius, QColor("#ffffff"), 1.5, Qt.PenStyle.SolidLine)]
+        if self.brush_radius >= MIN_SOFT_RADIUS and self.brush_hardness < 100:
+            outer = radius + soft_feather_width(self.brush_radius, self.brush_hardness)
+            rings += [(outer, QColor(0, 0, 0, 170), 2.5, Qt.PenStyle.DotLine),
+                      (outer, QColor("#ffffff"), 1.0, Qt.PenStyle.DotLine)]
+        return rings
 
 
 class ClipartTransparencyEditorPage(QWidget):
