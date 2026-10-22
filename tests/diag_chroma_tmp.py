@@ -1,8 +1,23 @@
-import base64, hashlib, json, zlib
+import hashlib, json
+import cv2, numpy as np
 from tests.test_chroma_material_causality import _automatic, _petal_source
 
-def test_dump():
-    r, stages = _automatic(_petal_source((0, 1, 2)), 'blue', 'legacy')
-    out = {k: base64.b64encode(zlib.compress(v.tobytes(), 9)).decode() for k, v in stages.items()}
-    out["final"] = base64.b64encode(zlib.compress(r.tobytes(), 9)).decode()
-    print("DIAG json", json.dumps(out))
+def _h(x):
+    if isinstance(x, np.ndarray):
+        return hashlib.sha1(np.ascontiguousarray(x).tobytes()).hexdigest()[:10]
+    if isinstance(x, (tuple, list)):
+        return [_h(i) for i in x]
+    return str(x)[:30]
+
+def test_dump(monkeypatch):
+    log = []
+    for name in ("distanceTransformWithLabels", "distanceTransform", "floodFill", "connectedComponents",
+                 "connectedComponentsWithStats", "erode", "dilate"):
+        orig = getattr(cv2, name)
+        def wrap(*a, _o=orig, _n=name, **k):
+            r = _o(*a, **k)
+            log.append([_n, _h(r)])
+            return r
+        monkeypatch.setattr(cv2, name, wrap)
+    _automatic(_petal_source((0, 1, 2)), 'blue', 'legacy')
+    print("DIAG json", json.dumps(log))
