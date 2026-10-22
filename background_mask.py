@@ -44,6 +44,8 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
         raise ValueError("Маска должна быть в режиме L")
     if radius < 0:
         raise ValueError("Радиус кисти не может быть отрицательным")
+    if radius * 2 != int(radius * 2):
+        raise ValueError("Радиус кисти должен быть целым или половинным")
     if action not in {"add", "remove"}:
         raise ValueError("Действие кисти должно быть add или remove")
     if not 0 <= hardness <= 100:
@@ -51,33 +53,50 @@ def _validate_brush(mask: Image.Image, radius: int, action: str, hardness: int) 
 
 
 SUBPIXEL_STEPS = 4
+# A brush of diameter d px has radius (d - 1) / 2; a half radius (even diameter)
+# centres the disc on a pixel corner, so every diameter paints exactly d px.
 # Owner decision 2026-10-21: a soft brush keeps the solid core of the nominal size
 # and fades OUTWARD from it, so it paints as thick as the hard brush instead of
 # looking thinner. The fade has a fixed pixel width that grows with the brush: 40 %
 # of the diameter, at least 1 px and at most SOFT_MAX_FEATHER_PX, scaled
-# by (100 - hardness) / 100. Only the single-pixel brush stays hard.
-MIN_SOFT_RADIUS = 1
+# by (100 - hardness) / 100. Owner decision 2026-10-22: brushes up to 3 px stay
+# hard, and the fade is at most 12 px so large brushes do not look blurred.
+MIN_SOFT_RADIUS = 1.5
 SOFT_FEATHER_FRACTION = 0.4
 SOFT_MIN_FEATHER_PX = 1.0
-SOFT_MAX_FEATHER_PX = 16.0
+SOFT_MAX_FEATHER_PX = 12.0
 
 
-def soft_feather_width(radius: int, hardness: int) -> float:
+def diameter_radius(diameter: int) -> float:
+    """Brush radius for a diameter in whole pixels."""
+    return (diameter - 1) / 2
+
+
+def _half(radius: float) -> bool:
+    return radius != int(radius)
+
+
+def soft_feather_width(radius: float, hardness: int) -> float:
     """Width in pixels of the fading band added outside a soft brush's solid core."""
     diameter = radius * 2 + 1
     full = min(SOFT_MAX_FEATHER_PX, max(SOFT_MIN_FEATHER_PX, SOFT_FEATHER_FRACTION * diameter))
     return full * (100 - hardness) / 100
 
 
-def brush_pad(radius: int, hardness: int) -> int:
+def brush_pad(radius: float, hardness: int) -> int:
     """Whole pixels a stamp extends beyond ``radius`` on every side (0 for a hard brush)."""
     if radius < MIN_SOFT_RADIUS or hardness >= 100:
         return 0
     return ceil(soft_feather_width(radius, hardness)) + 1
 
 
+def stamp_reach(radius: float, hardness: int) -> int:
+    """Whole pixels a stamp may reach from its path point on every side."""
+    return ceil(radius) + int(_half(radius)) + brush_pad(radius, hardness)
+
+
 @lru_cache(maxsize=256)
-def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Image.Image:
+def _brush_opacity(radius: float, hardness: int, qx: int = 0, qy: int = 0) -> Image.Image:
     """Brush stamp, anchored ``brush_pad`` px beyond ``radius``; ``qx``/``qy`` shift
     the disc by that many quarter pixels."""
     if radius == 0:
@@ -85,7 +104,7 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
         return Image.new("L", (1, 1), 255)
     pad = brush_pad(radius, hardness)
     fractional = bool(qx or qy)
-    reach = radius + pad
+    reach = ceil(radius) + pad
     diameter = reach * 2 + (2 if fractional else 1)
     cx = reach + 0.5 + qx / SUBPIXEL_STEPS
     cy = reach + 0.5 + qy / SUBPIXEL_STEPS
@@ -97,7 +116,10 @@ def _brush_opacity(radius: int, hardness: int, qx: int = 0, qy: int = 0) -> Imag
         ((cx - edge) * scale, (cy - edge) * scale,
          (cx + edge) * scale - 1, (cy + edge) * scale - 1), fill=255
     )
-    shape = large.resize((diameter, diameter), Image.Resampling.LANCZOS)
+    shape = large.resize((diameter, diameter), Image.Resampling.BOX)
+    if radius == 0.5:
+        # The 2 px brush is a solid 2x2 square, as hard as the 1 px brush.
+        shape = shape.point(lambda value: 255 if value >= 128 else 0)
     if pad == 0:
         return shape
     # Solid core to the nominal edge, then a smooth fade to exactly 0 over ``width`` px.
@@ -174,6 +196,8 @@ def stamp_path_coverage(
         if radius == 0:
             ix, iy, qx, qy = round(x), round(y), 0, 0
         else:
+            if _half(radius):
+                x, y = x + 0.5, y + 0.5
             ix, iy = floor(x), floor(y)
             qx = round((x - ix) * SUBPIXEL_STEPS)
             qy = round((y - iy) * SUBPIXEL_STEPS)
@@ -182,7 +206,7 @@ def stamp_path_coverage(
             if qy == SUBPIXEL_STEPS:
                 iy, qy = iy + 1, 0
         opacity = _brush_opacity(radius, hardness, qx, qy)
-        reach = radius + brush_pad(radius, hardness)
+        reach = ceil(radius) + brush_pad(radius, hardness)
         box = (ix - reach, iy - reach,
                ix - reach + opacity.width, iy - reach + opacity.height)
         clipped = (max(0, box[0]), max(0, box[1]),
