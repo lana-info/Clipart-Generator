@@ -129,6 +129,16 @@ def shoot(root, label, item, out):
             editor.toggle_focus_mode()
             QTest.keyClick(editor.canvas, Qt.Key.Key_Escape)
             save(dialog, editor, f"1b-esc-with-selection-{key}")
+        if item == 2:
+            # The brush ring at the petal edge, 200 %, hard 16 px and soft 40 px.
+            for hard, size in ((True, 16), (False, 40)):
+                dialog, editor = window(background)
+                editor._set_zoom(200)
+                editor._set_diameter(size)
+                editor._hardness_changed(100 if hard else 0)
+                editor.canvas.centerOn(editor.canvas._item.mapToScene(QPointF(640, 560)))
+                hover(editor.canvas, 664, 590)
+                save(dialog, editor, f"2-cursor-{'hard16' if hard else 'soft40'}-{key}")
 
 
 def compose(out, item, target, left="before", right="after",
