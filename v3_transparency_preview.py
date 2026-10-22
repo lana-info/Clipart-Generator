@@ -49,6 +49,7 @@ from PyQt6.QtWidgets import (
     QSlider,
     QSpinBox,
     QToolButton,
+    QSizePolicy,
     QProgressBar,
     QVBoxLayout,
     QWidget,
@@ -1044,9 +1045,9 @@ class TransparencyCanvas(QGraphicsView):
         self.tool = "brush"
         self.contour = InlineContour()
         self._contour_drag = None
-        self.lasso_enabled = False
         self._lasso_points = []
-        self._lasso_outline = []
+        # Lasso area in image coordinates: polygons added with Shift, used by the edge actions.
+        self.lasso_area: list[list[tuple[float, float]]] = []
         self._lasso_additive = False
         self._preview_alpha = None
         self._preview_paths = None
@@ -1104,7 +1105,7 @@ class TransparencyCanvas(QGraphicsView):
         self.document = document
         self.status_changed.emit("")
         self._lasso_points = []
-        self._lasso_outline = []
+        self.lasso_area = []
         self._contour_drag = None
         self._preview_alpha = None
         self._preview_paths = None
@@ -1236,17 +1237,19 @@ class TransparencyCanvas(QGraphicsView):
         if self.contour_busy:
             event.accept()
             return
+        if self.tool == "lasso" and self.document is not None:
+            if event.button() == Qt.MouseButton.LeftButton:
+                self._lasso_points = [self.mapToScene(event.position().toPoint())]
+                self._lasso_additive = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            event.accept()
+            return
         if self.tool == "pen" and self.document is not None:
             if event.button() == Qt.MouseButton.LeftButton:
                 self._show_after_for_edit()
                 point = self._image_point(event.position().toPoint())
                 hit = self.contour.hit(point, 7 / self.transform().m11()) if point and self.contour.paths else None
                 shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
-                if self.contour.paths and self.lasso_enabled and not (hit and event.modifiers() & Qt.KeyboardModifier.AltModifier):
-                    self._lasso_points = [self.mapToScene(event.position().toPoint())]
-                    self._lasso_additive = shift
-                    self._lasso_outline = []
-                elif point and not self.contour.paths:
+                if point and not self.contour.paths:
                     if len(self.contour.points) >= 3 and math.dist(point, self.contour.points[0]) <= 7 / self.transform().m11():
                         self.close_manual_contour()
                     else:
@@ -1254,7 +1257,6 @@ class TransparencyCanvas(QGraphicsView):
                         self.document_changed.emit()
                 elif point:
                     self.contour.select([hit[:2]] if hit else [], additive=shift)
-                    self._lasso_outline = []
                     if hit and event.modifiers() & Qt.KeyboardModifier.AltModifier:
                         self.contour.toggle()
                         self.refresh_local_preview()
@@ -1397,18 +1399,26 @@ class TransparencyCanvas(QGraphicsView):
         self._contour_drag = None
         if event.button() == Qt.MouseButton.LeftButton and self._lasso_points:
             self._lasso_points.append(self.mapToScene(event.position().toPoint()))
-            polygon = QPainterPath(self._lasso_points[0])
-            for point in self._lasso_points[1:]:
+            outline = [self._item.mapFromScene(point) for point in self._lasso_points]
+            polygon = QPainterPath(outline[0])
+            for point in outline[1:]:
                 polygon.lineTo(point)
             polygon.closeSubpath()
-            pairs = {(pi, ni) for pi, path in enumerate(self.contour.paths)
-                     for ni, node in enumerate(path.nodes) if polygon.contains(QPointF(*node.point))}
-            if len(self._lasso_points) <= 2:
+            selectable = not self.contour.points and not self.contour.local_active
+            if len(outline) > 2:
+                pairs = {(pi, ni) for pi, path in enumerate(self.contour.paths)
+                         for ni, node in enumerate(path.nodes) if polygon.contains(QPointF(*node.point))}
+                area = [(point.x(), point.y()) for point in outline]
+                self.lasso_area = self.lasso_area + [area] if self._lasso_additive else [area]
+            else:
+                # A plain click picks one contour point, or clears the lasso; Shift+click keeps it.
                 point = self._image_point(event.position().toPoint())
-                hit = self.contour.hit(point, 7 / self.transform().m11()) if point else None
+                hit = self.contour.hit(point, 7 / self.transform().m11()) if point and self.contour.paths else None
                 pairs = {hit[:2]} if hit else set()
-            self.contour.select(pairs, self._lasso_additive)
-            self._lasso_outline = self._lasso_points if len(self._lasso_points) > 2 else []
+                if not self._lasso_additive:
+                    self.lasso_area = []
+            if selectable:
+                self.contour.select(pairs, self._lasso_additive)
             self._lasso_points = []
             self.document_changed.emit()
             self.viewport().update()
@@ -1464,27 +1474,19 @@ class TransparencyCanvas(QGraphicsView):
             return
         super().mouseDoubleClickEvent(event)
 
-    def set_lasso_enabled(self, enabled):
-        if self.contour_busy:
-            return
-        self.lasso_enabled = bool(enabled)
-        self._lasso_points = []
-        self.setCursor(self.tool_cursor())
-        self.setFocus()
-
     def tool_cursor(self):
         """System cursor of the current tool; the brush draws its own ring."""
-        if self.tool == "pen" and self.lasso_enabled:
+        if self.tool == "lasso":
             return Qt.CursorShape.CrossCursor
         return Qt.CursorShape.ArrowCursor
 
     def clear_selection(self) -> bool:
         """Drop the lasso and the selected points; False when nothing was selected."""
-        if self.contour.local_active or not (self.contour.selection or self._lasso_points or self._lasso_outline):
+        if self.contour.local_active or not (self.contour.selection or self._lasso_points or self.lasso_area):
             return False
         self.contour.select([])
         self._lasso_points = []
-        self._lasso_outline = []
+        self.lasso_area = []
         self.document_changed.emit()
         self.viewport().update()
         return True
@@ -1530,7 +1532,6 @@ class TransparencyCanvas(QGraphicsView):
         self.contour.preview_after = True
         self._preview_alpha = None
         self._preview_paths = None
-        self._lasso_outline = []
         self.refresh_image()
         self.document_changed.emit()
         self.viewport().update()
@@ -1617,7 +1618,6 @@ class TransparencyCanvas(QGraphicsView):
                     self.contour.paths = list(result.paths)
                     self.contour.select(result.selection)
                     self.contour.preview_after = True
-                    self._lasso_outline = []
                     self._preview_alpha = None
                     self._preview_paths = None
                     self.refresh_image()
@@ -1782,19 +1782,20 @@ class TransparencyCanvas(QGraphicsView):
                 self.diameter_requested.emit(step)
             event.accept()
             return
-        if not ctrl and event.text().lower() in ('b', 'и', 'p', 'з'):
-            self.tool_requested.emit('brush' if event.text().lower() in ('b', 'и') else 'pen')
+        tools = {'b': 'brush', 'и': 'brush', 'p': 'pen', 'з': 'pen', 'l': 'lasso', 'д': 'lasso'}
+        if not ctrl and event.text().lower() in tools:
+            self.tool_requested.emit(tools[event.text().lower()])
             event.accept()
             return
         if ctrl and key in (Qt.Key.Key_Z, Qt.Key.Key_Y):
             self.history_requested.emit(key == Qt.Key.Key_Y or bool(mods & Qt.KeyboardModifier.ShiftModifier))
             event.accept()
             return
+        # Esc first drops the selection, so it never resets the contour or leaves the editor.
+        if key == Qt.Key.Key_Escape and self.clear_selection():
+            event.accept()
+            return
         if self.tool == "pen":
-            # Esc first drops the selection, so it never resets the contour or leaves the editor.
-            if key == Qt.Key.Key_Escape and self.clear_selection():
-                event.accept()
-                return
             if key == Qt.Key.Key_Escape and self.contour.dirty:
                 self.contour.checkpoint()
                 self.contour.points = []
@@ -1910,7 +1911,7 @@ class TransparencyCanvas(QGraphicsView):
             painter.drawLine(33, 28, 33, 21)
             painter.restore()
             return
-        if self.tool == "pen":
+        if self.tool in ("pen", "lasso"):
             self.contour.sanitize_selection()
             primary_selected = self.contour._selected
             display_paths, display_selection = self.contour.paths, self.contour.selection
@@ -1948,18 +1949,9 @@ class TransparencyCanvas(QGraphicsView):
                                 painter.drawEllipse(QPointF(*handle), r*.7, r*.7)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
                 painter.setPen(pen)
-            outline = self._lasso_points or self._lasso_outline
-            if outline:
-                lasso = QPainterPath(outline[0])
-                for point in outline[1:]:
-                    lasso.lineTo(point)
-                lasso.closeSubpath()
-                lasso_pen = QPen(QColor('#ff38bb'), 1.5, Qt.PenStyle.DashLine)
-                lasso_pen.setCosmetic(True)
-                painter.setPen(lasso_pen)
-                painter.setBrush(QColor(255, 56, 187, 20))
-                painter.drawPath(lasso)
+            self._draw_lasso(painter)
             return
+        self._draw_lasso(painter)
         if self.document is not None and self._size_flash:
             painter.save()
             painter.resetTransform()
@@ -1986,6 +1978,24 @@ class TransparencyCanvas(QGraphicsView):
             pen.setCosmetic(True)
             painter.setPen(pen)
             painter.drawEllipse(self._brush_scene_point, radius, radius)
+
+    def _draw_lasso(self, painter):
+        """Lasso area (all tools) and the stroke being drawn: pink dashes over a dark line."""
+        outlines = [[self._item.mapToScene(QPointF(*point)) for point in area] for area in self.lasso_area]
+        if self._lasso_points:
+            outlines.append(self._lasso_points)
+        for outline in outlines:
+            lasso = QPainterPath(outline[0])
+            for point in outline[1:]:
+                lasso.lineTo(point)
+            lasso.closeSubpath()
+            for color, width, style, fill in ((QColor(0, 0, 0, 200), 2.5, Qt.PenStyle.SolidLine, None),
+                                              (QColor('#ff38bb'), 1.5, Qt.PenStyle.DashLine, QColor(255, 56, 187, 26))):
+                lasso_pen = QPen(color, width, style)
+                lasso_pen.setCosmetic(True)
+                painter.setPen(lasso_pen)
+                painter.setBrush(fill if fill is not None else Qt.BrushStyle.NoBrush)
+                painter.drawPath(lasso)
 
     def brush_rings(self):
         """Cursor rings in drawing order: dark under light, so the ring shows on any background.
@@ -2161,11 +2171,16 @@ class ClipartTransparencyEditorPage(QWidget):
         tools_layout.addWidget(self.edge_scope_label)
         tools_layout.addWidget(self._small_label('Инструмент'))
         tool_row = QHBoxLayout()
+        tool_row.setSpacing(4)
         self.tool_buttons = {}
-        for key, label, shortcut in (("brush", "Кисть", "B / И"), ("pen", "Перо", "P / З")):
-            button = QPushButton()
-            button.setIcon(self._tool_icon(key))
+        for key, label in (("brush", "Кисть"), ("pen", "Перо"), ("lasso", "Лассо")):
+            button = QToolButton()
+            button.setIcon(self._thin_icon('lasso') if key == 'lasso' else self._tool_icon(key))
             button.setIconSize(QSize(24, 24))
+            button.setText(label)
+            button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            button.setMinimumHeight(52)
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             button.setCheckable(True)
             button.setChecked(key == "brush")
             button.setAccessibleName(label)
@@ -2173,6 +2188,7 @@ class ClipartTransparencyEditorPage(QWidget):
             button.clicked.connect(lambda checked=False, value=key: self._set_tool(value))
             self.tool_buttons[key] = button
             tool_row.addWidget(button)
+        self.lasso_button = self.tool_buttons['lasso']
         tools_layout.addLayout(tool_row)
         self.brush_controls = QWidget()
         brush_layout = QVBoxLayout(self.brush_controls)
@@ -2259,14 +2275,6 @@ class ClipartTransparencyEditorPage(QWidget):
         local_layout = QVBoxLayout(self.local_contour_controls)
         local_layout.setContentsMargins(0, 0, 0, 0)
         local_layout.setSpacing(5)
-        self.lasso_button = QPushButton()
-        self.lasso_button.setIcon(self._thin_icon('lasso'))
-        self.lasso_button.setIconSize(QSize(28, 24))
-        self.lasso_button.setAccessibleName('Выделить точки лассо')
-        self.lasso_button.setCheckable(True)
-        self.lasso_button.setToolTip('Лассо')
-        self.lasso_button.toggled.connect(self.canvas.set_lasso_enabled)
-        local_layout.addWidget(self.lasso_button)
         self.local_selection_label = QLabel('Точки не выделены')
         self.local_selection_label.setWordWrap(True)
         self.local_selection_label.setStyleSheet('color:#93a4b8;font-size:12px;')
@@ -2310,6 +2318,24 @@ class ClipartTransparencyEditorPage(QWidget):
         pen_layout.addLayout(contour_actions)
         tools_layout.addWidget(self.pen_controls)
         self.pen_controls.hide()
+        self.lasso_controls = QWidget()
+        lasso_layout = QVBoxLayout(self.lasso_controls)
+        lasso_layout.setContentsMargins(0, 0, 0, 0)
+        lasso_layout.setSpacing(5)
+        lasso_layout.addWidget(self._small_label('Лассо'))
+        lasso_hint = self._small_label('Обведите область на картинке.\nShift — добавить к области.\nEsc — снять выделение.')
+        lasso_hint.setStyleSheet("color: #7f90a6; font-size: 9pt;")
+        lasso_layout.addWidget(lasso_hint)
+        self.lasso_status_label = QLabel('Область не выделена')
+        self.lasso_status_label.setWordWrap(True)
+        self.lasso_status_label.setStyleSheet('color:#93a4b8;font-size:12px;')
+        lasso_layout.addWidget(self.lasso_status_label)
+        self.clear_lasso_button = QPushButton('Снять выделение')
+        self.clear_lasso_button.setToolTip('Esc')
+        self.clear_lasso_button.clicked.connect(self._clear_lasso)
+        lasso_layout.addWidget(self.clear_lasso_button)
+        tools_layout.addWidget(self.lasso_controls)
+        self.lasso_controls.hide()
         self.contour_status = QLabel()
         self.contour_status.setWordWrap(True)
         self.contour_status.hide()
@@ -2668,15 +2694,14 @@ class ClipartTransparencyEditorPage(QWidget):
         if self.canvas._painting or self.canvas.contour_busy:
             return
         self.canvas.tool = tool
-        if tool != 'pen' and self.lasso_button.isChecked():
-            self.lasso_button.setChecked(False)
         self.canvas._lasso_points = []
         self.canvas.setCursor(self.canvas.tool_cursor())
-        self.canvas.setToolTip('Перо' if tool == 'pen' else 'Кисть')
+        self.canvas.setToolTip({'pen': 'Перо', 'lasso': 'Лассо'}.get(tool, 'Кисть'))
         for key, button in self.tool_buttons.items():
             button.setChecked(key == tool)
         self.brush_controls.setVisible(tool == "brush")
         self.pen_controls.setVisible(tool == "pen")
+        self.lasso_controls.setVisible(tool == "lasso")
         self.canvas.viewport().update()
         self.canvas.setFocus()
         self._refresh_history_buttons()
@@ -2778,13 +2803,22 @@ class ClipartTransparencyEditorPage(QWidget):
             self._draft_contours[self.current_path] = self.canvas.contour
         self._refresh_history_buttons()
 
+    def _clear_lasso(self):
+        self.canvas.clear_selection()
+        self.canvas.setFocus()
+
     def _refresh_local_buttons(self):
         contour = self.canvas.contour
         count = len(contour.selection)
+        area = bool(self.canvas.lasso_area)
+        self.lasso_status_label.setText(
+            ('Область выделена' + (f' · точек контура в ней: {count}' if count else '')) if area
+            else (f'Выделено точек контура: {count}' if count else 'Область не выделена'))
+        self.clear_lasso_button.setEnabled((area or bool(count)) and not self.canvas.contour_busy
+                                           and not contour.local_active)
         active = contour.local_active
         busy = self.canvas.contour_busy
         valid = self.canvas.document is not None and bool(contour.paths) and not contour.points
-        self.lasso_button.setEnabled(valid and not busy)
         self.local_comparison.setVisible(active)
         self.cancel_local_button.setVisible(active)
         self.cancel_local_button.setEnabled(active and not busy)

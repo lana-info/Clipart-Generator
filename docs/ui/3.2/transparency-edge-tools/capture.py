@@ -129,6 +129,20 @@ def shoot(root, label, item, out):
             editor.toggle_focus_mode()
             QTest.keyClick(editor.canvas, Qt.Key.Key_Escape)
             save(dialog, editor, f"1b-esc-with-selection-{key}")
+        if item == 3:
+            # Right panel per tool; Lasso: an area drawn over the top of the flower with the contour on.
+            for tool in ("brush", "pen", "lasso"):
+                dialog, editor = window(background)
+                if tool != "brush":
+                    flower_contour(editor)
+                if tool == "lasso":
+                    if "lasso" in editor.tool_buttons:
+                        editor._set_tool("lasso")
+                    else:
+                        editor.lasso_button.click()       # before: lasso was a pen mode
+                    lasso(editor.canvas, [(120, 60), (420, 30), (700, 120), (720, 300), (560, 260),
+                                          (400, 200), (230, 240), (90, 250), (120, 60)])
+                save(dialog, editor, f"3-panel-{tool}-{key}")
         if item == 2:
             # The brush ring at the petal edge, 200 %, hard 16 px and soft 40 px.
             for hard, size in ((True, 16), (False, 40)):

@@ -138,7 +138,6 @@ def test_same_actual_selection_scope_preserved_for_repeated_alpha_steps(page, op
     paths, selection = tuple(canvas.contour.paths), frozenset(canvas.contour.selection)
     page._refresh_history_buttons()
     assert page.edge_scope_label.text() == 'Выделенный участок'
-    canvas.lasso_enabled = False
     before = np.array(doc.mask)
     expected = edge_proposal(doc.mask, operation, paths=paths, selection=selection)
     page._edge_operation(operation)
@@ -162,7 +161,6 @@ def test_same_actual_selection_scope_preserved_for_repeated_alpha_steps(page, op
     assert tuple(canvas.contour.paths) == paths and frozenset(canvas.contour.selection) == selection
     assert len(doc._undo) in (history, history + 1)
     canvas.contour.select(set())
-    canvas.lasso_enabled = True
     page._refresh_history_buttons()
     assert page.edge_scope_label.text() == 'Весь край'
 
