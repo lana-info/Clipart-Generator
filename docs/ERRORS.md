@@ -1,3 +1,32 @@
+## CI и локальные тесты зависают, PR нельзя проверить, 2026-10-22 {#ci-hanging-tests-20261022}
+
+Симптом: проверка `fast-and-offscreen` на GitHub висит до лимита 6 часов и падает (PR #6, #7 и
+запуски на `develop/3.2`, `codex/fix-upscale-edge-halo`). Тесты ни на чём не падают, они просто не заканчиваются.
+
+Причина (проверено локально, не Patterns): три тестовых файла зависают на чистой `develop/3.2`
+без каких-либо правок Patterns: `tests/test_v3_project_save_guards.py`,
+`tests/test_auto_clipart_export_table.py`, `tests/test_auto_clipart_workflow.py`
+(последний ждёт в фикстуре `workspace`, строка ~74). Все три, судя по именам, работают с окнами/диалогами
+Qt в режиме offscreen; точная точка блокировки не найдена. Скорее всего, где-то вызывается модальный
+диалог или `exec()` без подмены, и в среде без человека он ждёт вечно.
+Кроме того, `tests/test_auto_clipart_reference_upgrade.py::test_removing_references_during_confirmation_cannot_bypass_consent`
+падает на чистой `develop/3.2`.
+
+Неверный путь: ждать результата CI. Он не придёт; полный `pytest` без исключений тоже зависнет.
+Рабочий способ проверки: гнать файлы по одному с `timeout 120` и сравнивать падения с чистой `develop/3.2`
+(`git worktree add --detach <папка> origin/develop/3.2`). В `pytest` нет плагина `pytest-timeout`
+(`--timeout` даёт ошибку).
+
+Совет для агента, который будет чинить (мнение, не проверено):
+1. Запустить каждый зависший файл отдельно с `-o faulthandler_timeout=60` — трассировка покажет точку блокировки.
+2. Искать немодальные вызовы `QMessageBox.exec/warning/question`, `QFileDialog`, `QDialog.exec` без monkeypatch.
+3. Добавить в CI `pytest-timeout` (`timeout = 120` в `pyproject.toml`) и `timeout-minutes: 30` в job,
+   чтобы зависание падало за минуты, а не за 6 часов, и называло тест.
+4. Отдельным маленьким PR; не смешивать с задачами модулей.
+
+Что сделано в этой же задаче: поломка от Patterns (проверка запуска ждала 5 карточек, стало 6) исправлена в `main.py`
+и `tests/test_release_entrypoint.py`, PR #7.
+
 ## Апскейл: тёмная кайма по краю светлых клипартов, 2026-10-22 {#upscale-dark-edge-halo-20261022}
 
 Симптом (тест владельца, пчела с кремовыми крыльями): на светлом или белом фоне
