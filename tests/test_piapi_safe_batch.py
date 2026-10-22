@@ -46,7 +46,10 @@ class SafeBatchTests(unittest.TestCase):
             def lease(_):
                 try: yield
                 finally: self.assertFalse(w._paid_submission_open)
-            w._provider_lease=lease; w.responses=[{"task_id":"accepted_123"},{"status":"failed","error":{"message":"Our servers are currently overloaded"}}]
+            w._provider_lease=lease; w._item_context=threading.local(); w._shared_state_lock=threading.Lock(); w._consecutive_provider_failures=0; w.progress=Mock()
+            w._diagnostic_context=SimpleNamespace(provider="piapi",last_http_status=None)
+            w._note_provider_failure=types.MethodType(extract("main.py","WorkerThread","_note_provider_failure",{"PROVIDER_FAILURE_STOP_THRESHOLD":1,"PROVIDER_FAILURE_STOP_PROVIDERS":frozenset({"piapi"})}),w)
+            w.responses=[{"task_id":"accepted_123"},{"status":"failed","error":{"message":"Our servers are currently overloaded"}}]
             with self.assertRaisesRegex(RuntimeError,"overloaded"): w._gpt25_generate_image("cup","piapi/gpt-image-2.5-flare")
             self.assertTrue(w.stop_after_current_requested); self.assertTrue(w.is_running)
             with self.assertRaises(namespace["ProcessingCancelled"]): w._gpt25_generate_image("next cup","piapi/gpt-image-2.5-flare")

@@ -219,6 +219,10 @@ LICENSE_PRODUCT_ID = "clipart-generator"
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 PHOTOROOM_LAUNCH_INTERVAL_SECONDS = 1.0
 MAX_REMOTE_CONCURRENCY = 6
+# Платный пакет останавливается только после стольких ошибок провайдера подряд:
+# единичная ошибка пропускает свой файл, остальные продолжают обработку.
+PROVIDER_FAILURE_STOP_THRESHOLD = 3
+PROVIDER_FAILURE_STOP_PROVIDERS = frozenset({"piapi", "atlascloud"})
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
 MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
 MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -1049,6 +1053,7 @@ class WorkerThread(QThread):
         self.is_running = True
         self.stop_after_current_requested = False
         self._paid_submission_open = True
+        self._consecutive_provider_failures = 0
         self._publish_lock = threading.Lock()
         self._local_operation_lock = threading.Lock()
         self._shared_state_lock = threading.Lock()
@@ -1452,15 +1457,15 @@ class WorkerThread(QThread):
         )
 
     def _execute_item_entry(self, operation, *args):
+        self._item_context.provider_failure_counted = False
         try:
-            return operation(*args)
+            result = operation(*args)
         except ProcessingCancelled:
             raise
         except ItemExecutionError:
             raise
         except Exception as error:
-            if getattr(self._diagnostic_context, "provider", "") in {"piapi", "atlascloud"}:
-                self.request_stop_after_current()
+            self._note_provider_failure()
             known_paths = _item_error_known_paths(error, args)
             raise ItemExecutionError(
                 sanitize_item_error_paths(
@@ -1472,6 +1477,27 @@ class WorkerThread(QThread):
                 provider=getattr(self._diagnostic_context, "provider", ""),
                 model=getattr(self._diagnostic_context, "model", ""),
             ) from error
+        with self._shared_state_lock:
+            self._consecutive_provider_failures = 0
+        return result
+
+    def _note_provider_failure(self):
+        """Count a provider failure; stop the paid batch only after a streak."""
+        if getattr(self._diagnostic_context, "provider", "") not in PROVIDER_FAILURE_STOP_PROVIDERS:
+            return
+        if getattr(self._item_context, "provider_failure_counted", False):
+            return
+        self._item_context.provider_failure_counted = True
+        with self._shared_state_lock:
+            self._consecutive_provider_failures += 1
+            reached = self._consecutive_provider_failures == PROVIDER_FAILURE_STOP_THRESHOLD
+        if reached:
+            self.request_stop_after_current()
+            self.progress.emit(
+                f"Остановлено после текущего файла: {PROVIDER_FAILURE_STOP_THRESHOLD} ошибки "
+                "провайдера подряд. Оставшиеся файлы не запускались, чтобы не тратить деньги "
+                "впустую. Когда сервис восстановится, повторите запуск: готовые файлы сохранятся."
+            )
 
     def _item_failure_details(self, error, fallback_stage):
         if isinstance(error, ItemExecutionError):
@@ -5812,7 +5838,9 @@ class WorkerThread(QThread):
             except ProcessingCancelled:
                 raise
             except Exception:
-                self.request_stop_after_current()
+                # Серия ошибок подряд закрывает платный приём до освобождения
+                # слота провайдера; одиночная ошибка пакет не останавливает.
+                self._note_provider_failure()
                 raise
 
     def _fal_generate_image(self, prompt, model_id):
