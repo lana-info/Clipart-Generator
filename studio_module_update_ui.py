@@ -13,6 +13,7 @@ MODULE_TITLES = {
     "pinterest": "Pinterest",
     "auto-clipart": "Автоматический клипарт",
     "prompt-composer": "Конструктор промптов",
+    "patterns": "Паттерны",
 }
 
 

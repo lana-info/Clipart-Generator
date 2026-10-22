@@ -64,6 +64,10 @@ def prepare_official_workflow_release(*, source_root: Path, module_id: str, **me
         from studio_prompt_composer_package import composer_payload
         return prepare_module_release(module_id=module_id, entrypoint="entry.py",
                                       files=composer_payload(source_root), **metadata)
+    if module_id == "patterns":
+        from studio_patterns_package import patterns_payload
+        return prepare_module_release(module_id=module_id, entrypoint="entry.py",
+                                      files=patterns_payload(source_root), **metadata)
     try:
         inventory = {**OFFICIAL_WORKFLOW_FILES, **OFFICIAL_COMPONENT_FILES}[module_id]
     except KeyError as exc:
