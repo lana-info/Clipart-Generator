@@ -6,6 +6,7 @@ from output_naming import (
     BatchOutputNameReservation,
     MAX_OUTPUT_FILENAME_UTF16_UNITS,
     generated_output_path,
+    generated_subject,
     processed_output_path,
     workspace_layout,
 )
@@ -117,3 +118,12 @@ def test_processed_names_keep_suffix_and_fit_the_windows_component_budget(tmp_pa
     assert utf16_units(second.name) <= MAX_OUTPUT_FILENAME_UTF16_UNITS
     assert len(first.name.encode("utf-8")) <= MAX_OUTPUT_FILENAME_UTF16_UNITS
     assert len(second.name.encode("utf-8")) <= MAX_OUTPUT_FILENAME_UTF16_UNITS
+
+
+def test_generated_output_prefers_real_translation_over_transliteration(tmp_path):
+    prompt = "Объект: Гусёнок в шарфе. Сцена: зима."
+    assert generated_output_path(tmp_path, 1, prompt) == tmp_path / "gusenok_v_sharfe_01_ready.png"
+    translated = {generated_subject(prompt): "Little Goose In A Scarf"}
+    assert generated_output_path(tmp_path, 1, prompt, translated) == tmp_path / "little_goose_in_01_ready.png"
+    reservation = BatchOutputNameReservation(tmp_path)
+    assert reservation.reserve_generated(2, prompt, translated) == tmp_path / "little_goose_in_02_ready.png"

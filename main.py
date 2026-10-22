@@ -78,6 +78,7 @@ from v3_api_settings import check_photoroom_balance as check_photoroom_balance_a
 from output_naming import (
     BatchOutputNameReservation,
     generated_output_path,
+    generated_subject,
     processed_output_path,
 )
 from api_credentials import EnvCredentialStore, ProviderCredentialStore, SECRET_CONFIG_KEYS
@@ -219,6 +220,10 @@ LICENSE_PRODUCT_ID = "clipart-generator"
 PHOTOROOM_SEGMENT_URL = "https://sdk.photoroom.com/v1/segment"
 PHOTOROOM_LAUNCH_INTERVAL_SECONDS = 1.0
 MAX_REMOTE_CONCURRENCY = 6
+# Платный пакет останавливается только после стольких ошибок провайдера подряд:
+# единичная ошибка пропускает свой файл, остальные продолжают обработку.
+PROVIDER_FAILURE_STOP_THRESHOLD = 3
+PROVIDER_FAILURE_STOP_PROVIDERS = frozenset({"piapi", "atlascloud"})
 MODEL_PROBE_SAMPLE_IMAGE_URL = "https://picsum.photos/768/768"
 MAX_API_RESPONSE_BYTES = 128 * 1024 * 1024
 MAX_API_JSON_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -242,6 +247,7 @@ MAX_UPDATE_DOWNLOAD_RETRIES = 3
 UPDATE_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 UPDATE_DOWNLOAD_TIMEOUT_SECONDS = 300
 LOCAL_REALESRGAN_TIMEOUT_SECONDS = 600
+UPSCALE_ALPHA_RIM_PIXELS = 3
 
 
 class ProcessingCancelled(RuntimeError):
@@ -1049,6 +1055,7 @@ class WorkerThread(QThread):
         self.is_running = True
         self.stop_after_current_requested = False
         self._paid_submission_open = True
+        self._consecutive_provider_failures = 0
         self._publish_lock = threading.Lock()
         self._local_operation_lock = threading.Lock()
         self._shared_state_lock = threading.Lock()
@@ -1452,15 +1459,15 @@ class WorkerThread(QThread):
         )
 
     def _execute_item_entry(self, operation, *args):
+        self._item_context.provider_failure_counted = False
         try:
-            return operation(*args)
+            result = operation(*args)
         except ProcessingCancelled:
             raise
         except ItemExecutionError:
             raise
         except Exception as error:
-            if getattr(self._diagnostic_context, "provider", "") in {"piapi", "atlascloud"}:
-                self.request_stop_after_current()
+            self._note_provider_failure()
             known_paths = _item_error_known_paths(error, args)
             raise ItemExecutionError(
                 sanitize_item_error_paths(
@@ -1472,6 +1479,27 @@ class WorkerThread(QThread):
                 provider=getattr(self._diagnostic_context, "provider", ""),
                 model=getattr(self._diagnostic_context, "model", ""),
             ) from error
+        with self._shared_state_lock:
+            self._consecutive_provider_failures = 0
+        return result
+
+    def _note_provider_failure(self):
+        """Count a provider failure; stop the paid batch only after a streak."""
+        if getattr(self._diagnostic_context, "provider", "") not in PROVIDER_FAILURE_STOP_PROVIDERS:
+            return
+        if getattr(self._item_context, "provider_failure_counted", False):
+            return
+        self._item_context.provider_failure_counted = True
+        with self._shared_state_lock:
+            self._consecutive_provider_failures += 1
+            reached = self._consecutive_provider_failures == PROVIDER_FAILURE_STOP_THRESHOLD
+        if reached:
+            self.request_stop_after_current()
+            self.progress.emit(
+                f"Остановлено после текущего файла: {PROVIDER_FAILURE_STOP_THRESHOLD} ошибки "
+                "провайдера подряд. Оставшиеся файлы не запускались, чтобы не тратить деньги "
+                "впустую. Когда сервис восстановится, повторите запуск: готовые файлы сохранятся."
+            )
 
     def _item_failure_details(self, error, fallback_stage):
         if isinstance(error, ItemExecutionError):
@@ -1829,6 +1857,18 @@ class WorkerThread(QThread):
         )
         return out_path
 
+    def _english_file_subjects(self, entries):
+        """Translate Russian subjects once so file names are English, not transliterated."""
+        try:
+            from studio_name_translation import build_name_translator, has_cyrillic
+            subjects = [generated_subject(entry.get("prompt", "")) for entry in entries]
+            subjects = [item for item in dict.fromkeys(subjects) if item and has_cyrillic(item)]
+            translator = build_name_translator() if subjects else None
+            return translator(subjects) if translator else {}
+        except Exception as exc:
+            self.progress.emit(f"Имена файлов: перевод недоступен, используется транслитерация ({type(exc).__name__})")
+            return {}
+
     def _mode1_generate_parallel(self, process_generated=False, emit_final=True):
         raw_dir = self._create_run_raw_dir()
         output_dir = self.output_dir
@@ -1844,11 +1884,12 @@ class WorkerThread(QThread):
         done_count = 0
         self._next_generation_launch_at = 0.0
         output_names = BatchOutputNameReservation(output_dir)
+        english_subjects = self._english_file_subjects(entries)
         planned_entries = [
             (
                 idx,
                 entry,
-                str(output_names.reserve_generated(idx, entry.get("prompt", ""))),
+                str(output_names.reserve_generated(idx, entry.get("prompt", ""), english_subjects)),
             )
             for idx, entry in enumerate(entries, start=1)
         ]
@@ -4235,7 +4276,13 @@ class WorkerThread(QThread):
 
     @staticmethod
     def _prepare_upscale_rgb(source_rgba):
-        """Extend foreground RGB beneath alpha zero without altering visible pixels."""
+        """Extend foreground RGB beneath alpha zero and the soft alpha rim.
+
+        The rim keeps near-transparent pixels whose RGB is black or white junk;
+        upscaling would blend it into the edge as a dark halo on light art, so
+        its colour is replaced by the nearest opaque pixel. Alpha is restored
+        from the original afterwards, so the rim shape is unchanged.
+        """
         import cv2
         import numpy as np
 
@@ -4245,8 +4292,15 @@ class WorkerThread(QThread):
         if not np.any(transparent) or not np.any(alpha):
             return source_rgba.convert("RGB")
         trusted = alpha == 255
+        refill = transparent
         if not np.any(trusted):
             trusted = alpha > 0
+        else:
+            distance_to_transparent = cv2.distanceTransform(
+                (~transparent).astype(np.uint8), cv2.DIST_L2, 3
+            )
+            rim = (~trusted) & (distance_to_transparent <= UPSCALE_ALPHA_RIM_PIXELS)
+            refill = transparent | rim
         _, labels = cv2.distanceTransformWithLabels(
             (~trusted).astype(np.uint8), cv2.DIST_L2, 5,
             labelType=cv2.DIST_LABEL_PIXEL,
@@ -4254,7 +4308,7 @@ class WorkerThread(QThread):
         rgb = rgba[:, :, :3].copy()
         palette = np.empty((int(labels.max()) + 1, 3), dtype=np.uint8)
         palette[labels[trusted]] = rgb[trusted]
-        rgb[transparent] = palette[labels[transparent]]
+        rgb[refill] = palette[labels[refill]]
         return Image.fromarray(rgb, mode="RGB")
 
     def _restore_upscaled_alpha(self, output_path, alpha_channel):
@@ -5812,7 +5866,9 @@ class WorkerThread(QThread):
             except ProcessingCancelled:
                 raise
             except Exception:
-                self.request_stop_after_current()
+                # Серия ошибок подряд закрывает платный приём до освобождения
+                # слота провайдера; одиночная ошибка пакет не останавливает.
+                self._note_provider_failure()
                 raise
 
     def _fal_generate_image(self, prompt, model_id):

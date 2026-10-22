@@ -362,7 +362,14 @@ class AutoClipartFlowController(ClipartFlowController):
             self._start_errors.append(message)
 
     def _autosave(self):
-        if not self.shell.state.is_active or self.is_busy():
+        try:
+            active = self.shell.state.is_active
+        except RuntimeError:
+            # The workflow capability is gone (host shell released): nothing
+            # left to save, and a live timer would raise on every tick.
+            self.save_timer.stop()
+            return
+        if not active or self.is_busy():
             return
         try:
             before = self._last_snapshot

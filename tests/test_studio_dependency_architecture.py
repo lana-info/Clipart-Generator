@@ -54,6 +54,9 @@ LEGACY_LAYER_MODULES = {
 # Exact reviewed legacy debt at baseline 8ff2c54. Remove entries as those
 # dependencies disappear; any new edge requires explicit architectural review.
 LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
+    # The generation worker names files in English with the same one-request
+    # translator as set export; imported lazily, falls back to transliteration.
+    ('main', 'studio_name_translation'),
     # The Auto Clipart extension validates active/inactive ideas with the same
     # object schema as its editor, rather than duplicating validation rules.
     ('studio_auto_clipart_state', 'studio_clipart_objects'),
