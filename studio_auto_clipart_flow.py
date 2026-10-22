@@ -52,6 +52,9 @@ def _plural_ru(count, one, few, many):
     return one if count % 10 == 1 else few if count % 10 in (2, 3, 4) else many
 
 
+PREVIOUS_RUNS_MAX_BYTES = 1024 * 1024
+
+
 def launch_confirmation_html(*, object_count, models, cost, references=(), reference_model="",
                              expired_count=0, expired_providers=""):
     """Short, scannable confirmation text: one fact per line, key words in bold."""
@@ -337,6 +340,8 @@ class AutoClipartFlowController(ClipartFlowController):
         self.save_timer.setInterval(800)
         self.save_timer.timeout.connect(self._autosave)
         self.save_timer.start()
+        self._start_errors = None
+        self.error.connect(self._collect_start_error)
         self._last_snapshot = None
         self._restore_prompt_references()
         self._restore_run()
@@ -351,6 +356,10 @@ class AutoClipartFlowController(ClipartFlowController):
         session = self.run_queue.session
         return bool((session and session.running) or self.brief.planning.pending is not None
                     or (self.export_panel is not None and self.export_panel.worker is not None))
+
+    def _collect_start_error(self, message):
+        if self._start_errors is not None:
+            self._start_errors.append(message)
 
     def _autosave(self):
         if not self.shell.state.is_active or self.is_busy():
@@ -700,11 +709,18 @@ class AutoClipartFlowController(ClipartFlowController):
                     QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
                     self._reference_consent = (deepcopy(prepared), snapshots)
                     self._pre_approved_retries = expired_retries
+                    self._start_errors = []
                     try:
-                        self.start()
+                        request = self.start()
                     finally:
                         self._reference_consent = None
                         self._pre_approved_retries = None
+                        failures, self._start_errors = self._start_errors, None
+                    if request is None:
+                        # The launch status label lives on a hidden page, so a refused
+                        # start must be reported here or it looks like nothing happened.
+                        QMessageBox.warning(self.launch_page, "Запуск не выполнен",
+                            (failures[-1] if failures else "Запуск не начался. Проверьте настройки и повторите.")[:500])
                 return
             if index == 7:
                 if self.export_panel is not None:
@@ -892,9 +908,14 @@ class AutoClipartFlowController(ClipartFlowController):
             entry['settings_fingerprint'] = data.automatic['run_settings_fingerprint']
         if history and history[-1] == entry:
             return
-        if len(history) >= 100:
-            raise ValueError('История запусков заполнена; сохраните текущий проект отдельно')
         history.append(entry)
+        # The history is write-only evidence inside a size-limited project file: the
+        # oldest archives yield first, otherwise every later save would be refused.
+        while len(history) > 1 and (
+                len(history) > 100
+                or len(json.dumps(history, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+                > PREVIOUS_RUNS_MAX_BYTES):
+            history.pop(0)
         data.automatic['previous_runs'] = history
 
     def _reuse_completed_run(self, previous):

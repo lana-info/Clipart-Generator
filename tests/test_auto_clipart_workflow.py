@@ -953,6 +953,63 @@ def test_zip_export_blocks_close_and_project_switch_until_finished(workspace, mo
     assert busy == [True, False]
 
 
+def test_run_history_is_trimmed_so_the_project_stays_savable(workspace, monkeypatch):
+    import json
+    import studio_auto_clipart_flow
+    monkeypatch.setattr(studio_auto_clipart_flow, 'PREVIOUS_RUNS_MAX_BYTES', 20000)
+    PREVIOUS_RUNS_MAX_BYTES = 20000
+    _view, controller, _gate, _worker = workspace
+    prepare_launch(controller)
+    data = controller.shell.state.data
+    controller.run_queue.session = RunQueueSession(
+        build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    for index in range(40):
+        for item in controller.run_queue.session.items:
+            item.payload['prompt'] = f'prompt {index} ' + 'x' * 40000
+        data.automatic['run'] = [
+            {'status': 'failed', 'output_path': '', 'attempts': index}
+            for _ in controller.run_queue.session.items]
+        controller._archive_run()
+    history = data.automatic['previous_runs']
+    assert 1 <= len(history) < 40
+    assert len(json.dumps(history, ensure_ascii=False).encode()) <= PREVIOUS_RUNS_MAX_BYTES * 1.1
+    assert history[-1]['run'][0]['attempts'] == 39
+
+
+def test_failing_save_does_not_trap_the_close_button(workspace, monkeypatch):
+    from PyQt6.QtGui import QCloseEvent
+    view, controller, _, _ = workspace
+    monkeypatch.setattr(view, "_save_before_leaving", lambda: False)
+    answers = [QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes]
+    monkeypatch.setattr(QMessageBox, "question",
+                        lambda *a: answers.pop(0) if answers else QMessageBox.StandardButton.Yes)
+    refused = QCloseEvent()
+    view.closeEvent(refused)
+    assert not refused.isAccepted()
+    # The second answer lets the close proceed instead of silently refusing it.
+    assert view._confirm_close_without_saving() is True
+    assert not answers
+
+
+def test_save_failure_journal_keeps_error_chain(workspace):
+    view, controller, _, _ = workspace
+    events = []
+    prepare_launch(controller)
+
+    def broken(*args, **kwargs):
+        raise ValueError("Неверная история запусков набора")
+
+    # A scoped patch: the fixture teardown closes the window and must save normally.
+    with pytest.MonkeyPatch.context() as local:
+        local.setattr(view, "_diagnostic_event", lambda event, summary, **kw: events.append((event, kw)))
+        local.setattr(view._project_documents, "save", broken)
+        local.setattr(view._project_documents, "create", broken)
+        assert view._save_draft() is False
+    saved = [kw for name, kw in events if name == "save_failed"][0]["details"]
+    assert saved["error_code"] == "ValueError"
+    assert saved["error_message"] == "Неверная история запусков набора"
+
+
 def test_saved_recovery_preserves_upscale_completion_and_uses_no_prompt(workspace, tmp_path):
     from pathlib import Path
     view, controller, _, worker = workspace
@@ -1092,6 +1149,27 @@ def test_launch_confirmation_discloses_expired_results_in_one_dialog(
     assert "прежние результаты для 1 объекта (PiAPI) больше недоступны" in captured["text"]
     assert "новую платную генерацию" in captured["text"]
     assert controller.shell.state.current_step is StepId.REVIEW_RUN
+
+
+def test_refused_launch_after_confirmation_is_reported_visibly(app, workspace, monkeypatch):
+    """A start refused after "Yes" must not look like nothing happened."""
+    from PyQt6.QtWidgets import QMessageBox
+
+    view, controller, _gate, _worker = workspace
+    prepare_launch(controller)
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "warning", lambda _p, title, text, *a, **k: warnings.append((title, text)))
+
+    def refuse():
+        controller.error.emit("Причина отказа")
+        return None
+
+    monkeypatch.setattr(controller, "start", refuse)
+    controller.navigate(1)
+
+    assert warnings == [("Запуск не выполнен", "Причина отказа")]
+    assert controller._start_errors is None
 
 
 def test_launch_confirmation_is_short_structured_and_readable():
