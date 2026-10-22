@@ -469,6 +469,7 @@ class V3ApplicationView(QWidget):
             else WorkflowRegistry())
         self._project_state_extensions = core_project_state_extensions()
         self._composer_page_handle = None
+        self._patterns_page_handle = None
         self._legacy_source_mode = module_delivery is None and license_gate is None and bool(self._workflow_registry.module_ids)
         self._update_controller = None
         self._initialization_overlay: InitializationProgressOverlay | None = None
@@ -592,6 +593,7 @@ class V3ApplicationView(QWidget):
                 self._module_delivery, parent=self,
                 authorization_provider=lambda: getattr(self._license_gate, "current_authorization", None),
                 busy_module=lambda module: ((module == "prompt-composer" and self._composer_page_handle is not None)
+                    or (module == "patterns" and self._patterns_page_handle is not None)
                     or (self.shell is not None and self.shell.workflow_controller(module) is not None)),
             )
             self._module_updates_dialog.finished.connect(self.refresh_license_status)
@@ -801,6 +803,9 @@ class V3ApplicationView(QWidget):
         if module_id == "prompt-composer":
             self._open_composer()
             return
+        if module_id == "patterns":
+            self._open_patterns()
+            return
         if module_id != "auto-clipart":
             self._handle_mode_selected(module_id)
             return
@@ -875,6 +880,59 @@ class V3ApplicationView(QWidget):
             if host is not None and self._composer_page_handle is None:
                 host.close()
             QMessageBox.warning(self, "Конструктор промптов", "Не удалось открыть модуль. Проверьте доступ и установленную версию.")
+
+    def _patterns_allowed(self):
+        from license_client import LicenseAuthorization
+        authorization = getattr(self._license_gate, "current_authorization", None)
+        return isinstance(authorization, LicenseAuthorization) and authorization.allows_module("patterns")
+
+    def _open_patterns(self):
+        if self.shell is not None and self.shell.active_run_controller() is not None:
+            return
+        if not self._save_before_leaving():
+            return
+        host = None
+        try:
+            if self._license_gate is None or self._module_delivery is None:
+                raise ValueError("Модуль ещё не установлен")
+            authorize_module_run(self._license_gate, "patterns")
+            if self._patterns_page_handle is not None:
+                self._set_application_screen(self._patterns_page_handle.value, "patterns", "module_open")
+                return
+            runtime = self._module_delivery.host
+            if runtime.registration("patterns") is None:
+                runtime.load_active("patterns")
+            kernel = runtime.invoke_command("patterns", "kernel")
+            from studio_patterns_host import PatternsHost
+            root = (self._draft_path.parent if self._draft_path else
+                    Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)))
+            host = PatternsHost(root / "patterns", authorize=self._patterns_allowed, runtime=runtime, kernel=kernel)
+            handle = runtime.create_page("patterns", "main", host)
+            self._patterns_page_handle = handle
+            page = handle.value
+            page.back_requested.connect(self._close_patterns)
+            page.settings_requested.connect(self._show_api_settings)
+            page.diagnostics_requested.connect(self._show_diagnostics)
+            self.stack.addWidget(page)
+            self._set_application_screen(page, "patterns", "module_open")
+        except Exception:
+            if host is not None and self._patterns_page_handle is None:
+                host.close()
+            QMessageBox.warning(self, "Паттерны", "Не удалось открыть модуль. Проверьте доступ и установленную версию.")
+
+    def _close_patterns(self):
+        handle = self._patterns_page_handle
+        if handle is None:
+            return
+        page = handle.value
+        if not page.confirm_close():
+            return
+        self._patterns_page_handle = None
+        page.host.close()
+        self.stack.removeWidget(page)
+        handle.close()
+        page.deleteLater()
+        self.show_new_project(trigger="module_closed")
 
     def _close_composer(self):
         handle = self._composer_page_handle
@@ -1657,6 +1715,11 @@ class V3ApplicationView(QWidget):
 
 
     def closeEvent(self, event) -> None:
+        if self._patterns_page_handle is not None:
+            if not self._patterns_page_handle.value.confirm_close():
+                event.ignore()
+                return
+            self._close_patterns()
         if self._composer_page_handle is not None:
             if not self._composer_page_handle.value.confirm_close():
                 event.ignore()

@@ -43,7 +43,7 @@ LEGACY_LAYER_MODULES = {
         "pinterest_prompt_schema",
         "v3_pinterest_flow",
     }),
-    "patterns": frozenset({"studio_patterns"}),
+    "patterns": frozenset({"studio_patterns", "studio_patterns_tools"}),
     "processing": frozenset({
         "v3_evidence_center",
         "v3_processing_editor",

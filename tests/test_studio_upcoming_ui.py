@@ -97,7 +97,7 @@ def test_maximum_catalog_scroll_and_invalid_refresh_leave_real_cards_intact():
     builtins = dict(screen.module_cards)
     screen.set_upcoming_cards([card(id=f'{i:032x}', sort_order=i) for i in range(12)])
     app.processEvents()
-    assert len(screen.module_cards) == 17
+    assert len(screen.module_cards) == 18
     scroll = screen.catalog_scroll
     # Qt posts the QScrollArea layout/range update after the new cards are shown.
     for _ in range(50):

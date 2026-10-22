@@ -351,7 +351,7 @@ def test_composer_download_from_existing_server_then_generate_seven_and_revoke(d
     view.show()
     try:
         cards = view.mode_selection.module_cards
-        assert len(cards) == 5
+        assert len(cards) == 6
         assert all(not bridge.has_active_workflow(module) for module in cards)
         assert cards['prompt-composer'].start_button.text() == 'Скачать'
         cards['prompt-composer'].start_button.click()

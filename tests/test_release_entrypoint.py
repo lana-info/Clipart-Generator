@@ -37,7 +37,7 @@ class ReleaseEntrypointTests(unittest.TestCase):
         self.assertEqual(window.windowTitle(), f"Vibix Studio v{APP_VERSION}")
         cards = list(window.mode_selection.module_cards.values())
         self.assertEqual(set(window.mode_selection.module_cards), {entry.module_id for entry in BUILTIN_CATALOG})
-        self.assertEqual(len(cards), 5)
+        self.assertEqual(len(cards), 6)
         self.assertTrue(all(isinstance(card, ModeCard) for card in cards))
         self.assertTrue(all(card.accessibleName() for card in cards))
         self.assertIsNotNone(window._module_delivery)

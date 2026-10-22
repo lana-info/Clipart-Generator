@@ -72,7 +72,7 @@ def test_card_sizes_stay_constant_and_columns_follow_window(app):
     screen.resize(1920,1080);pump(app)
     assert [(c.width(),c.height(),c.illustration.width(),c.illustration.height()) for c in cards]==initial
     assert screen.cards_layout.getItemPosition(4)[:2]==(0,4)
-    left=cards[0].x();right=screen.catalog_scroll.viewport().width()-cards[-1].geometry().right()-1
+    left=cards[0].x();right=screen.catalog_scroll.viewport().width()-cards[4].geometry().right()-1
     assert abs(left-right)<=1
     screen.resize(980,700);pump(app)
     assert screen.cards_layout.getItemPosition(4)[:2]==(2,0)

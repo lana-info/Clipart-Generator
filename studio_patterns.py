@@ -41,6 +41,7 @@ class RepeatMode(str, Enum):
     STRAIGHT = "straight"
     HALF_ROW = "half_row"
     HALF_COLUMN = "half_column"
+    MIRROR = "mirror"
 
 
 @dataclass(frozen=True)
@@ -224,6 +225,8 @@ def supertile_size(scene: PatternScene) -> tuple[int, int]:
         return scene.width, scene.height * 2
     if scene.repeat_mode is RepeatMode.HALF_COLUMN:
         return scene.width * 2, scene.height
+    if scene.repeat_mode is RepeatMode.MIRROR:
+        return scene.width * 2, scene.height * 2
     return scene.width, scene.height
 
 
@@ -232,6 +235,8 @@ def render_supertile(scene: PatternScene) -> Image.Image:
     width, height = supertile_size(scene)
     if width * height > MAX_RENDER_PIXELS:
         raise PatternValidationError("supertile exceeds safe render size")
+    if scene.repeat_mode is RepeatMode.MIRROR:
+        return _mirror_supertile(scene)
     assets = _inspect_referenced_assets(scene)
     plans = [(element, _transform_size(assets[element.asset_id][1], element))
              for element in sorted(scene.elements, key=lambda item: (item.z_index, item.id))]
@@ -251,6 +256,19 @@ def render_supertile(scene: PatternScene) -> Image.Image:
         # the next one; scenes may contain many distinct scales/rotations.
         del image
     return canvas
+
+
+def _mirror_supertile(scene: PatternScene) -> Image.Image:
+    """Mirror one rendered cell into a 2x2 period; opposite edges meet by reflection."""
+    cell = render_supertile(PatternScene(
+        scene.width, scene.height, scene.assets, scene.elements, RepeatMode.STRAIGHT,
+        scene.seed, scene.background, scene.schema_version))
+    output = Image.new("RGBA", (cell.width * 2, cell.height * 2))
+    output.paste(cell, (0, 0))
+    output.paste(cell.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell.width, 0))
+    output.paste(cell.transpose(Image.Transpose.FLIP_TOP_BOTTOM), (0, cell.height))
+    output.paste(cell.transpose(Image.Transpose.ROTATE_180), (cell.width, cell.height))
+    return output
 
 
 def render_preview(scene: PatternScene, copies: int = 3, max_pixels: int = MAX_PREVIEW_PIXELS) -> Image.Image:

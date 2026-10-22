@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from PIL import Image, ImageChops
+from PIL import Image
 
 from studio_patterns import (
     AssetRef, MAX_JSON_BYTES, MAX_PREVIEW_PIXELS, PatternElement, PatternScene,
@@ -58,10 +58,10 @@ def test_supertile_is_pixel_equivalent_to_direct_repeat(tmp_path, mode):
     supertile = render_supertile(scene)
     reference = _lattice_viewport(scene, asset.path, (0, 0), supertile.size)
     next_period = _lattice_viewport(scene, asset.path, supertile.size, supertile.size)
-    assert ImageChops.difference(supertile, reference).getbbox() is None
+    assert supertile.tobytes() == reference.tobytes()
     # A rectangular supertile must repeat as a straight lattice even for odd
     # source periods and the half-period offsets.
-    assert ImageChops.difference(supertile, next_period).getbbox() is None
+    assert supertile.tobytes() == next_period.tobytes()
     assert supertile.size == supertile_size(scene)
 
 

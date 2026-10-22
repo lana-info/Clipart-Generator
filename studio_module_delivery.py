@@ -19,7 +19,7 @@ OFFICIAL_PUBLISHER_KEYS: dict[str, bytes] = {
     "vibix-publisher-v1": base64.b64decode("sUMfFDeHQIpSFmUCNbZJb+Ts4jMkiWy4CUcNhVO19v0="),
 }
 EXISTING_WORKFLOW_IDS = frozenset({"clipart", "processing", "pinterest", "auto-clipart"})
-DELIVERABLE_IDS = EXISTING_WORKFLOW_IDS | {PROCESSING_COMPONENT_ID, "prompt-composer"}
+DELIVERABLE_IDS = EXISTING_WORKFLOW_IDS | {PROCESSING_COMPONENT_ID, "prompt-composer", "patterns"}
 
 
 class StudioModuleDelivery:
