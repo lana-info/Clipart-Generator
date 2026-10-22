@@ -247,6 +247,7 @@ MAX_UPDATE_DOWNLOAD_RETRIES = 3
 UPDATE_DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 UPDATE_DOWNLOAD_TIMEOUT_SECONDS = 300
 LOCAL_REALESRGAN_TIMEOUT_SECONDS = 600
+UPSCALE_ALPHA_RIM_PIXELS = 3
 
 
 class ProcessingCancelled(RuntimeError):
@@ -4275,7 +4276,13 @@ class WorkerThread(QThread):
 
     @staticmethod
     def _prepare_upscale_rgb(source_rgba):
-        """Extend foreground RGB beneath alpha zero without altering visible pixels."""
+        """Extend foreground RGB beneath alpha zero and the soft alpha rim.
+
+        The rim keeps near-transparent pixels whose RGB is black or white junk;
+        upscaling would blend it into the edge as a dark halo on light art, so
+        its colour is replaced by the nearest opaque pixel. Alpha is restored
+        from the original afterwards, so the rim shape is unchanged.
+        """
         import cv2
         import numpy as np
 
@@ -4285,8 +4292,15 @@ class WorkerThread(QThread):
         if not np.any(transparent) or not np.any(alpha):
             return source_rgba.convert("RGB")
         trusted = alpha == 255
+        refill = transparent
         if not np.any(trusted):
             trusted = alpha > 0
+        else:
+            distance_to_transparent = cv2.distanceTransform(
+                (~transparent).astype(np.uint8), cv2.DIST_L2, 3
+            )
+            rim = (~trusted) & (distance_to_transparent <= UPSCALE_ALPHA_RIM_PIXELS)
+            refill = transparent | rim
         _, labels = cv2.distanceTransformWithLabels(
             (~trusted).astype(np.uint8), cv2.DIST_L2, 5,
             labelType=cv2.DIST_LABEL_PIXEL,
@@ -4294,7 +4308,7 @@ class WorkerThread(QThread):
         rgb = rgba[:, :, :3].copy()
         palette = np.empty((int(labels.max()) + 1, 3), dtype=np.uint8)
         palette[labels[trusted]] = rgb[trusted]
-        rgb[transparent] = palette[labels[transparent]]
+        rgb[refill] = palette[labels[refill]]
         return Image.fromarray(rgb, mode="RGB")
 
     def _restore_upscaled_alpha(self, output_path, alpha_channel):

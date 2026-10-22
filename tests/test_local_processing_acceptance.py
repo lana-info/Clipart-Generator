@@ -7,6 +7,8 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
+import cv2
+import numpy as np
 from PIL import Image, ImageChops, ImageDraw
 
 import main
@@ -1092,7 +1094,9 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
                 worker._run_local_realesrgan(str(source_path), str(output_path), scale=2)
             self.assertEqual(captured["input"].getpixel((0, 0)), (230, 190, 130))
             self.assertEqual(captured["input"].getpixel((3, 3)), (230, 190, 130))
-            self.assertEqual(captured["input"].getpixel((4, 3)), (150, 100, 170))
+            # A soft-alpha pixel within the rim of transparency takes the colour
+            # of the nearest opaque pixel so edge junk is not upscaled into a halo.
+            self.assertEqual(captured["input"].getpixel((4, 3)), (230, 190, 130))
             self.assertEqual(source_path.read_bytes(), original)
 
     def test_upscale_input_preparation_failure_cleans_temporary_directory(self):
@@ -1124,6 +1128,37 @@ class LocalProcessingAcceptanceTests(unittest.TestCase):
         self.assertEqual(result.getpixel((0, 0)), (170, 120, 100))
         self.assertEqual(result.getpixel((2, 2)), (170, 120, 100))
         self.assertEqual(image.getpixel((0, 0)), (0, 15, 255, 0))
+
+    def test_upscale_rgb_replaces_dark_junk_in_soft_alpha_rim(self):
+        size = 64
+        yy, xx = np.mgrid[:size, :size]
+        radius = np.hypot(xx - size / 2, yy - size / 2)
+        alpha = np.clip((28 - radius) / 3.0, 0.0, 1.0)
+        cream = np.array((250, 225, 170), dtype=float)
+        rgba = np.zeros((size, size, 4), dtype=np.uint8)
+        rgba[..., :3] = np.where(alpha[..., None] >= 1.0, cream, cream * alpha[..., None])
+        rgba[..., 3] = np.rint(alpha * 255).astype(np.uint8)
+        image = Image.fromarray(rgba, mode="RGBA")
+        self.assertTrue(((rgba[..., 3] > 0) & (rgba[..., 3] < 255)).any())
+
+        def rim_darkening(rgb):
+            upscaled = np.asarray(rgb.resize((size * 3, size * 3), Image.Resampling.LANCZOS), dtype=float)
+            big_alpha = np.asarray(image.getchannel("A").resize((size * 3, size * 3), Image.Resampling.BILINEAR))
+            opaque = big_alpha >= 128
+            kernel = np.ones((3, 3), dtype=np.uint8)
+
+            def erode(mask, iterations):
+                return cv2.erode(mask.astype(np.uint8), kernel, iterations=iterations).astype(bool)
+
+            edge = opaque & ~erode(opaque, 1)
+            inner = erode(opaque, 4) & ~erode(opaque, 8)
+            return upscaled[inner].mean() - upscaled[edge].mean()
+
+        self.assertGreater(rim_darkening(image.convert("RGB")), 8)
+        prepared = main.WorkerThread._prepare_upscale_rgb(image)
+        self.assertLess(rim_darkening(prepared), 3)
+        opaque = rgba[..., 3] == 255
+        np.testing.assert_array_equal(np.asarray(prepared)[opaque], rgba[..., :3][opaque])
 
     def test_restored_hard_alpha_stays_binary(self):
         with tempfile.TemporaryDirectory(prefix="clipart-hard-alpha-") as temp_dir:
