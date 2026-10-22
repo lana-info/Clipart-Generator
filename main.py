@@ -10857,7 +10857,7 @@ def run_release_entrypoint_smoke(app) -> int:
     app.processEvents()
     cards = list(window.mode_selection.module_cards.values())
     valid = (
-        len(cards) == len(BUILTIN_CATALOG) == 5
+        len(cards) == len(BUILTIN_CATALOG) == 6
         and all(isinstance(card, ModeCard) for card in cards)
         and all(card.accessibleName() for card in cards)
         and set(window.mode_selection.module_cards) == {entry.module_id for entry in BUILTIN_CATALOG}
@@ -10933,7 +10933,7 @@ def run_packaged_entrypoint_check(
         catalog_ids = {entry.module_id for entry in BUILTIN_CATALOG}
         cards = packaged_view.mode_selection.module_cards
         clean_catalog = (
-            len(BUILTIN_CATALOG) == len(cards) == 5
+            len(BUILTIN_CATALOG) == len(cards) == 6
             and set(cards) == catalog_ids
             and packaged_view.shell is None
             and not packaged_view._legacy_source_mode
