@@ -142,13 +142,13 @@ def compose(out, item, target, left="before", right="after",
     for before in sorted(out.glob(f"{left}-{item}*.png")):
         name = before.name[len(left) + 1:]
         after = out / f"{right}-{name}"
-        left, right = Image.open(before).convert("RGB"), Image.open(after).convert("RGB")
-        board = Image.new("RGB", (left.width + right.width + 12, left.height + 34), (11, 22, 38))
-        board.paste(left, (0, 34))
-        board.paste(right, (left.width + 12, 34))
+        old, new = Image.open(before).convert("RGB"), Image.open(after).convert("RGB")
+        board = Image.new("RGB", (old.width + new.width + 12, old.height + 34), (11, 22, 38))
+        board.paste(old, (0, 34))
+        board.paste(new, (old.width + 12, 34))
         d = ImageDraw.Draw(board)
         d.text((12, 10), titles[0], fill=(232, 238, 246), font=font)
-        d.text((left.width + 24, 10), titles[1], fill=(36, 216, 197), font=font)
+        d.text((old.width + 24, 10), titles[1], fill=(36, 216, 197), font=font)
         board.save(target / name)
 
 
