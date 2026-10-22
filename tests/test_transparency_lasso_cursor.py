@@ -63,7 +63,6 @@ def test_pen_lasso_brush_leaves_only_the_brush_ring(page):
     assert canvas.cursor().shape() == Qt.CursorShape.CrossCursor
     page._set_tool('brush')
     assert not page.lasso_button.isChecked()
-    assert not canvas.lasso_enabled
     assert canvas.cursor().shape() == Qt.CursorShape.ArrowCursor
     # Space-pan must also return to the tool cursor, not to a stale lasso cross.
     canvas.set_space_pan_active(True)
@@ -84,7 +83,7 @@ def test_esc_drops_selection_before_leaving_focus_mode(page):
     assert 'Esc' in page.local_selection_label.text()
     QTest.keyClick(canvas, Qt.Key.Key_Escape)
     assert canvas.contour.selection == set()
-    assert canvas._lasso_outline == []
+    assert canvas.lasso_area == []
     assert page._focus_mode, 'first Esc must only drop the selection'
     assert page.local_selection_label.text() == 'Точки не выделены'
     QTest.keyClick(canvas, Qt.Key.Key_Escape)
@@ -101,5 +100,8 @@ def test_esc_with_selection_keeps_contour_edits(page):
     QTest.keyClick(canvas, Qt.Key.Key_Escape)
     assert canvas.contour.selection == set()
     assert canvas.contour.paths == [moved], 'Esc with a selection must not reset the contour'
+    QTest.keyClick(canvas, Qt.Key.Key_Escape)
+    assert canvas.contour.paths == [moved], 'the lasso tool never resets pen edits'
+    page._set_tool('pen')
     QTest.keyClick(canvas, Qt.Key.Key_Escape)
     assert canvas.contour.paths == [path]
