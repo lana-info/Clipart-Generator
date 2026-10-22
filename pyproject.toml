@@ -1,5 +1,7 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+timeout = 180
+timeout_method = "thread"
 addopts = "-ra -m 'not network and not paid'"
 markers = [
     "network: requires a real network socket or service",

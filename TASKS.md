@@ -9,8 +9,8 @@
 
 ## Зависающие тесты и CI, 2026-10-22
 
-- [ ] Починить зависание `test_v3_project_save_guards.py`, `test_auto_clipart_export_table.py`, `test_auto_clipart_workflow.py` и падение `test_auto_clipart_reference_upgrade.py` (описание и план: docs/ERRORS.md #ci-hanging-tests-20261022). Отдельная ветка, не в задачах модулей.
-- [ ] Добавить в CI лимит времени (pytest-timeout и timeout-minutes), чтобы зависание не занимало 6 часов.
+- [x] Починить зависание `test_v3_project_save_guards.py`, `test_auto_clipart_export_table.py`, `test_auto_clipart_workflow.py` и падение `test_auto_clipart_reference_upgrade.py` (описание и план: docs/ERRORS.md #ci-hanging-tests-20261022). Отдельная ветка, не в задачах модулей.
+- [x] Добавить в CI лимит времени (pytest-timeout и timeout-minutes), чтобы зависание не занимало 6 часов.
 
 ## Patterns, 2026-10-22
 

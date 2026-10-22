@@ -77,9 +77,12 @@ def test_persistent_failure_blocks_close_and_every_project_transition(signed_vie
         "draft": patch("v3_mode_selection.save_project_draft", side_effect=OSError("disk")),
         "preferences": patch("v3_mode_selection.save_preferences_atomic", side_effect=OSError("disk")),
     }[failure]
-    with target:
+    from PyQt6.QtWidgets import QMessageBox
+    with target, patch.object(QMessageBox, "question",
+                              return_value=QMessageBox.StandardButton.No) as ask:
         source.mark_dirty()
-        assert not view.close()
+        assert not view.close()  # the user is asked and declines to lose the edit
+        ask.assert_called_once()
         view.show_new_project()
         assert view.stack.currentWidget() is source
         view.show_mode_switcher()
