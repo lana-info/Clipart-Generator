@@ -75,8 +75,10 @@ def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
         mask = Image.new("L", (80, 40), 0)
         paint_mask_path(mask, [(20, 20), (60, 20)], radius=radius, action="add", hardness=hardness)
         return mask
-    assert list(stroke(0, 0).getdata()) == list(stroke(0, 100).getdata())
-    for radius in (1, 3):  # 3 px and 6 px brushes (owner decision 2026-10-21)
+    # Brushes up to 3 px stay hard (owner decision 2026-10-22); 4 px and 7 px can be soft.
+    for radius in (0, 0.5, 1):
+        assert list(stroke(radius, 0).getdata()) == list(stroke(radius, 100).getdata())
+    for radius in (1.5, 3):
         soft, hard = stroke(radius, 0), stroke(radius, 100)
         assert list(soft.getdata()) != list(hard.getdata())
         assert soft.getpixel((40, 20)) == 255                      # core stays solid
@@ -85,12 +87,13 @@ def test_single_pixel_brush_stays_hard_and_small_brushes_can_be_soft():
         assert sx0 <= hx0 and sy0 <= hy0 and sx1 >= hx1 and sy1 >= hy1   # fade lies outside the solid core
         assert hx0 - sx0 <= brush_pad(radius, 0) and hy0 - sy0 <= brush_pad(radius, 0)
         assert 0 < sum(1 for v in soft.getdata() if 0 < v < 255)    # a real soft transition
-    # Feather width: 40 % of the diameter, 1 px minimum, 16 px maximum, none at hardness 100.
+    # Feather width: 40 % of the diameter, 1 px minimum, 12 px maximum, none at hardness 100.
     assert soft_feather_width(3, 100) == 0
     assert 1.0 <= soft_feather_width(3, 0) <= 3.0
-    assert abs(soft_feather_width(8, 0) - 6.8) < 1e-9 and soft_feather_width(32, 0) == 16.0
-    assert soft_feather_width(100, 0) == 16.0
-    assert soft_feather_width(32, 50) == 8.0
+    assert abs(soft_feather_width(8, 0) - 6.8) < 1e-9 and soft_feather_width(32, 0) == 12.0
+    assert abs(soft_feather_width(14.5, 0) - 12.0) < 1e-9          # 30 px brush reaches the cap
+    assert soft_feather_width(31.5, 0) == 12.0                    # 64 px brush
+    assert soft_feather_width(32, 50) == 6.0
     wide = Image.new("L", (160, 100), 0)
     paint_mask_path(wide, [(40, 50), (120, 50)], radius=32, action="add", hardness=0)
     profile = [wide.getpixel((80, 50 - d)) for d in range(0, 33)]

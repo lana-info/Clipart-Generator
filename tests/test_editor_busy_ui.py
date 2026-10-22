@@ -216,8 +216,8 @@ def test_short_tooltips_icons_and_busy_row_belongs_to_canvas_only(page):
                    page.remove_button, page.new_contour_button, page.contour_button, page.lasso_button):
         assert not button.icon().isNull() and button.accessibleName()
     assert page.save_button.text() == 'Сохранить PNG'
-    assert tuple(page.diameter_buttons) == (1,3,6,16,32,64)
-    assert page.diameter_buttons[16].isChecked()
+    assert page.brush_diameter == 16 and page.diameter_value.text() == '16 px'
+    assert page.canvas.brush_radius == 7.5
     assert page.busy_bar.parent() is page.canvas.parent()
     layout = page.busy_bar.parent().layout()
     assert layout.getItemPosition(layout.indexOf(page.busy_bar))[:2] == (1,0)

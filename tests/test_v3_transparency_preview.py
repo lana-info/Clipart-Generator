@@ -372,7 +372,7 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             Qt.ScrollBarPolicy.ScrollBarAsNeeded,
         )
         self.assertTrue(page.canvas.space_pan_enabled)
-        self.assertEqual(tuple(page.diameter_buttons), (1, 3, 6, 16, 32, 64))
+        self.assertEqual(page.brush_diameter, 16)
         self.assertEqual(page.canvas.brush_hardness, 100)
         self.assertTrue(page.brush_style_buttons[100].isChecked())
         page._hardness_changed(0)
@@ -385,13 +385,13 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
         page = ClipartTransparencyEditorPage()
 
         QApplication.sendEvent(
-            page.diameter_buttons[16],
+            page.diameter_slider,
             QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier),
         )
         self.assertTrue(page.canvas.space_pan_indicator_visible)
 
         QApplication.sendEvent(
-            page.diameter_buttons[16],
+            page.diameter_slider,
             QKeyEvent(QEvent.Type.KeyRelease, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier),
         )
         self.assertFalse(page.canvas.space_pan_indicator_visible)

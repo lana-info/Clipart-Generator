@@ -31,7 +31,7 @@ def _check_shared_edge_actions(page, source, evidence_dir):
     original = source.read_bytes()
     page.set_files([source])
     page.tool_buttons['brush'].click()
-    if tuple(page.diameter_buttons) != (1, 3, 6, 16, 32, 64):
+    if page.diameter_value.text() != f"{page.brush_diameter} px":
         return False
     page.smooth_edge_button.click()
     if not page.canvas.contour_busy or not page.busy_bar.isVisible():
@@ -104,7 +104,7 @@ def check_contour_editing(evidence_dir=None):
                 return False
             page.tool_buttons["brush"].click()
             QTest.keyClick(canvas, Qt.Key.Key_Minus)
-            if (canvas.brush_radius != 3 or not page.diameter_buttons[6].isChecked()
+            if (canvas.brush_radius != 7 or page.diameter_value.text() != "15 px"
                     or source.read_bytes() != original):
                 return False
             output, mask = page.save_current()

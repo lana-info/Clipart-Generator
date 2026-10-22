@@ -58,7 +58,8 @@ from background_mask import (
     apply_mask_stroke,
     apply_mask_to_image,
     mask_for_image,
-    brush_pad,
+    diameter_radius,
+    stamp_reach,
     paint_mask_path,
     stamp_path_coverage,
     save_mask_png,
@@ -74,7 +75,29 @@ from studio_edge_operations import edge_proposal
 
 _CONTOUR_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vibix-contour")
 
-BRUSH_DIAMETERS = (1, 3, 6, 16, 32, 64)
+MIN_BRUSH_DIAMETER, MAX_BRUSH_DIAMETER, DEFAULT_BRUSH_DIAMETER = 1, 64, 16
+# The size slider is quadratic so its first half covers 1..16 px.
+BRUSH_SLIDER_STEPS = 1000
+
+
+def slider_diameter(position: int) -> int:
+    t = max(0, min(BRUSH_SLIDER_STEPS, position)) / BRUSH_SLIDER_STEPS
+    return round(MIN_BRUSH_DIAMETER + (MAX_BRUSH_DIAMETER - MIN_BRUSH_DIAMETER) * t * t)
+
+
+def diameter_slider_position(diameter: int) -> int:
+    span = MAX_BRUSH_DIAMETER - MIN_BRUSH_DIAMETER
+    return round(BRUSH_SLIDER_STEPS * math.sqrt(max(0, diameter - MIN_BRUSH_DIAMETER) / span))
+
+
+def step_diameter(diameter: int, step: int) -> int:
+    """Alt+wheel and +/- step: 1 px up to 16, 2 px up to 32, 4 px above."""
+    if step > 0:
+        change = 1 if diameter < 16 else 2 if diameter < 32 else 4
+    else:
+        change = -(1 if diameter <= 16 else 2 if diameter <= 32 else 4)
+    return max(MIN_BRUSH_DIAMETER, min(MAX_BRUSH_DIAMETER, diameter + change))
+
 _EDGE_SHARPEN_LUT = tuple(round(max(0, min(255, 2 * value - 127.5))) for value in range(256))
 
 MAX_EDITOR_IMAGE_PIXELS = 40_000_000
@@ -168,7 +191,7 @@ class MaskEditDocument:
             self._stroke_before = self.mask.copy()
             self._stroke_cover = Image.new("L", self.mask.size, 0)
         self._stroke_action = action
-        reach = radius + brush_pad(radius, hardness)   # a soft brush fades beyond its radius
+        reach = stamp_reach(radius, hardness)   # a soft brush fades beyond its radius
         if points:
             # Union of stamps over the whole stroke, composited once onto the
             # pre-stroke mask: a soft brush keeps its feathered edge.
@@ -1034,8 +1057,15 @@ class TransparencyCanvas(QGraphicsView):
         self._contour_timer.timeout.connect(self._poll_contour)
         self._drag_checkpoint = False
         self.brush_action = "remove"
-        self.brush_radius = 8
+        self.brush_radius = diameter_radius(DEFAULT_BRUSH_DIAMETER)
         self.brush_hardness = 85
+        self._line_anchor: tuple[float, float] | None = None
+        self._size_flash = ""
+        self._size_flash_timer = QTimer(self)
+        self._size_flash_timer.setSingleShot(True)
+        self._size_flash_timer.setInterval(900)
+        self._size_flash_timer.timeout.connect(self._clear_size_flash)
+        self._size_wheel_delta = 0
         self._background_label = "Шахматный"
         self._zoom: int | None = None
         self._zoom_wheel_delta = 0
@@ -1081,6 +1111,7 @@ class TransparencyCanvas(QGraphicsView):
         if document is not None:
             document.pending_contour = self.contour
         self._brush_scene_point = None
+        self._line_anchor = None
         self.refresh_image()
         self.set_zoom(self._zoom)
         if document is not None and self.contour.local_active and not self.contour.manual and not self.contour_busy:
@@ -1243,9 +1274,13 @@ class TransparencyCanvas(QGraphicsView):
                 self._painting = True
                 self._last_image_point = point
                 self._smooth_prev = self._smooth_mid = point
+                # Shift + click: a straight line from where the last stroke ended.
+                shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+                path = (self._line_anchor, point) if shift and self._line_anchor else (point,)
                 self.document.begin_stroke()
+                self._line_anchor = point
                 bounds = self.document.extend_stroke(
-                    (point,),
+                    path,
                     radius=self.brush_radius,
                     action=self._effective_action(event.modifiers()),
                     hardness=self.brush_hardness,
@@ -1311,6 +1346,8 @@ class TransparencyCanvas(QGraphicsView):
         return points
 
     def _paint_stroke_points(self, points) -> None:
+        if points:
+            self._line_anchor = tuple(points[-1])
         bounds = self.document.extend_stroke(
             tuple(points),
             radius=self.brush_radius,
@@ -1673,7 +1710,22 @@ class TransparencyCanvas(QGraphicsView):
             self._start_contour(kind)
 
     def wheelEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if not event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+        mods = event.modifiers()
+        if (mods & Qt.KeyboardModifier.AltModifier and not mods & Qt.KeyboardModifier.ControlModifier
+                and self.tool == "brush"):
+            # Some platforms report Alt+wheel as horizontal scrolling.
+            delta = event.angleDelta().y() or event.angleDelta().x()
+            if delta * self._size_wheel_delta < 0:
+                self._size_wheel_delta = 0
+            self._size_wheel_delta += delta
+            while abs(self._size_wheel_delta) >= 120:
+                step = 1 if self._size_wheel_delta > 0 else -1
+                self._size_wheel_delta -= step * 120
+                self.diameter_requested.emit(step)
+                self.flash_size()
+            event.accept()
+            return
+        if not mods & Qt.KeyboardModifier.ControlModifier:
             self._zoom_wheel_delta = 0
             super().wheelEvent(event)
             return
@@ -1694,6 +1746,8 @@ class TransparencyCanvas(QGraphicsView):
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         key, mods = event.key(), event.modifiers()
         ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
+        if key == Qt.Key.Key_Shift:
+            self.viewport().update()   # show or hide the straight-line guide
         if self.contour_busy and key == Qt.Key.Key_Escape:
             self.cancel_contour()
             event.accept()
@@ -1764,11 +1818,23 @@ class TransparencyCanvas(QGraphicsView):
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if event.key() == Qt.Key.Key_Shift:
+            self.viewport().update()
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             self.set_space_pan_active(False)
             event.accept()
             return
         super().keyReleaseEvent(event)
+
+    def flash_size(self) -> None:
+        """Show the new brush diameter briefly over the picture."""
+        self._size_flash = f"Alt + колесо: {round(self.brush_radius * 2 + 1)} px"
+        self._size_flash_timer.start()
+        self.viewport().update()
+
+    def _clear_size_flash(self) -> None:
+        self._size_flash = ""
+        self.viewport().update()
 
     def set_space_pan_active(self, active: bool) -> None:
         """Temporarily switch the canvas from brush to hand-pan mode."""
@@ -1871,13 +1937,31 @@ class TransparencyCanvas(QGraphicsView):
                 painter.setBrush(QColor(255, 56, 187, 20))
                 painter.drawPath(lasso)
             return
+        if self.document is not None and self._size_flash:
+            painter.save()
+            painter.resetTransform()
+            painter.setPen(QPen(QColor("#dce7f4")))
+            painter.setBrush(QColor(22, 40, 63, 230))
+            painter.drawRoundedRect(14, 14, 250, 34, 8, 8)
+            painter.drawText(26, 36, self._size_flash)
+            painter.restore()
         if self.document is None or self._brush_scene_point is None:
             return
+        if (self._line_anchor is not None and not self._painting
+                and QApplication.keyboardModifiers() & Qt.KeyboardModifier.ShiftModifier):
+            guide = QPen(QColor("#ffffff"), 1.5, Qt.PenStyle.DashLine)
+            guide.setCosmetic(True)
+            painter.setPen(guide)
+            anchor = self._item.mapToScene(QPointF(*self._line_anchor))
+            painter.drawLine(anchor, self._brush_scene_point)
+            painter.setBrush(QColor("#ffffff"))
+            dot = 3 / max(0.01, self.transform().m11())
+            painter.drawEllipse(anchor, dot, dot)
         pen = QPen(QColor("#ffffff"), 2)
         pen.setCosmetic(True)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        radius = max(0.5, self.brush_radius)
+        radius = self.brush_radius + 0.5
         painter.drawEllipse(self._brush_scene_point, radius, radius)
 
 
@@ -2078,20 +2162,23 @@ class ClipartTransparencyEditorPage(QWidget):
             button.setToolTip(label)
             button.setAccessibleName(label + ' область')
         brush_layout.addLayout(action_row)
-        brush_layout.addWidget(self._small_label("Диаметр кисти, px"))
+        brush_layout.addWidget(self._small_label("Диаметр кисти"))
         diameter_row = QHBoxLayout()
-        diameter_row.setSpacing(4)
-        self.diameter_buttons = {}
-        for diameter in BRUSH_DIAMETERS:
-            button = QPushButton(str(diameter))
-            button.setCheckable(True)
-            button.setChecked(diameter == 16)
-            button.setStyleSheet("padding: 4px 1px;")
-            button.setToolTip(f"{diameter} px")
-            button.setAccessibleName(f"Диаметр кисти {diameter} пикселей")
-            button.clicked.connect(lambda checked=False, value=diameter: self._set_diameter(value))
-            diameter_row.addWidget(button)
-            self.diameter_buttons[diameter] = button
+        self.brush_diameter = DEFAULT_BRUSH_DIAMETER
+        self.diameter_slider = QSlider(Qt.Orientation.Horizontal)
+        self.diameter_slider.setRange(0, BRUSH_SLIDER_STEPS)
+        self.diameter_slider.setPageStep(50)
+        self.diameter_slider.setValue(diameter_slider_position(DEFAULT_BRUSH_DIAMETER))
+        self.diameter_slider.setToolTip("Диаметр кисти")
+        self.diameter_slider.setAccessibleName("Диаметр кисти")
+        self.diameter_slider.valueChanged.connect(
+            lambda position: self._set_diameter(slider_diameter(position), from_slider=True))
+        self.diameter_value = QLabel(f"{DEFAULT_BRUSH_DIAMETER} px")
+        self.diameter_value.setStyleSheet("color: #e8eef6; font-weight: 600; font-size: 11pt;")
+        self.diameter_value.setMinimumWidth(48)
+        self.diameter_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        diameter_row.addWidget(self.diameter_slider, 1)
+        diameter_row.addWidget(self.diameter_value)
         brush_layout.addLayout(diameter_row)
         style_row = QHBoxLayout()
         self.brush_style_buttons = {}
@@ -2105,6 +2192,9 @@ class ClipartTransparencyEditorPage(QWidget):
             self.brush_style_buttons[hardness] = button
             style_row.addWidget(button)
         brush_layout.addLayout(style_row)
+        brush_hint = self._small_label("Alt + колесо — размер\nShift + щелчок — прямая линия")
+        brush_hint.setStyleSheet("color: #7f90a6; font-size: 9pt;")
+        brush_layout.addWidget(brush_hint)
         self.canvas.brush_hardness = 100
         tools_layout.addWidget(self.brush_controls)
         self.pen_controls = QWidget()
@@ -2550,17 +2640,21 @@ class ClipartTransparencyEditorPage(QWidget):
         self.canvas.setFocus()
         self._refresh_history_buttons()
 
-    def _set_diameter(self, diameter):
-        self.canvas.brush_radius = diameter // 2
-        for value, button in self.diameter_buttons.items():
-            button.setChecked(value == diameter)
+    def _set_diameter(self, diameter, *, from_slider=False):
+        diameter = max(MIN_BRUSH_DIAMETER, min(MAX_BRUSH_DIAMETER, int(diameter)))
+        self.brush_diameter = diameter
+        self.canvas.brush_radius = diameter_radius(diameter)
+        self.diameter_value.setText(f"{diameter} px")
+        if not from_slider:
+            self.diameter_slider.blockSignals(True)
+            self.diameter_slider.setValue(diameter_slider_position(diameter))
+            self.diameter_slider.blockSignals(False)
         self.canvas.viewport().update()
-        self.canvas.setFocus()
+        if not from_slider:
+            self.canvas.setFocus()
 
     def _cycle_diameter(self, step):
-        current = next(value for value, button in self.diameter_buttons.items() if button.isChecked())
-        index = BRUSH_DIAMETERS.index(current)
-        self._set_diameter(BRUSH_DIAMETERS[max(0, min(len(BRUSH_DIAMETERS)-1, index+step))])
+        self._set_diameter(step_diameter(self.brush_diameter, step))
 
     def _cycle_zoom(self, step):
         current = self.canvas.transform().m11() * 100
