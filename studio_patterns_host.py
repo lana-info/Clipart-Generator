@@ -107,6 +107,10 @@ class PatternsHost:
         self._check()
         return self._library.import_png(path)
 
+    def import_png_downscaled(self, path):
+        self._check()
+        return self._library.import_png_downscaled(path)
+
     def asset_available(self, handle):
         self._check()
         return self._library.asset_available(handle)
