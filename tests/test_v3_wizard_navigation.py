@@ -58,6 +58,23 @@ class V3WizardNavigationTests(unittest.TestCase):
     def tearDown(self):
         self.app.processEvents()
 
+    def test_transparency_file_list_moves_below_steps_and_restores(self):
+        from v3_transparency_preview import ClipartTransparencyEditorPage
+        state = complete_state(ProjectMode.PROCESSING)
+        shell = AppShell(state)
+        editor = ClipartTransparencyEditorPage()
+        shell.set_step_page(ProjectMode.PROCESSING, StepId.TRANSPARENCY, editor)
+        state.set_step(StepId.TRANSPARENCY)
+        shell.refresh()
+        self.assertIs(shell._sidebar_files_page, editor)
+        self.assertIs(editor.files_frame.parentWidget(), shell.sidebar_files_host)
+        state.set_step(StepId.RESULTS)
+        shell.refresh()
+        self.assertIsNone(shell._sidebar_files_page)
+        self.assertIs(editor.files_frame.parentWidget(), editor.right_panel)
+        shell.close()
+        shell.deleteLater()
+
     def test_all_three_routes_move_forward_and_back_through_project_state(self):
         for mode in ProjectMode:
             with self.subTest(mode=mode):

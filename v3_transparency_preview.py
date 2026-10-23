@@ -113,6 +113,7 @@ class MaskEditDocument:
         self._redo: list[tuple[tuple[int, int, int, int], Image.Image, Image.Image]] = []
         self._edge_history_ids = set()
         self._stroke_before: Image.Image | None = None
+        self._stroke_coverage: Image.Image | None = None
         self.mask_revision = 0
 
     @property
@@ -143,6 +144,7 @@ class MaskEditDocument:
     def begin_stroke(self) -> None:
         if self._stroke_before is None:
             self._stroke_before = self.mask.copy()
+            self._stroke_coverage = Image.new("L", self.mask.size, 0)
 
     def extend_stroke(
         self,
@@ -161,6 +163,8 @@ class MaskEditDocument:
             radius=radius,
             action=action,
             hardness=hardness,
+            coverage_mask=self._stroke_coverage,
+            stroke_base=self._stroke_before,
         )
         if not points:
             return None
@@ -173,6 +177,7 @@ class MaskEditDocument:
     def end_stroke(self) -> None:
         before = self._stroke_before
         self._stroke_before = None
+        self._stroke_coverage = None
         if before is None:
             return
         bounds = ImageChops.difference(before, self.mask).getbbox()
@@ -1863,7 +1868,7 @@ class ClipartTransparencyEditorPage(QWidget):
         busy_layout.addWidget(self.busy_status)
         busy_layout.addWidget(self.busy_progress, 1)
         busy_layout.addWidget(self.cancel_job_button)
-        canvas_layout.addWidget(self.busy_bar, 1, 0)
+        canvas_layout.addWidget(self.busy_bar, 2, 0)
         self.busy_bar.hide()
         body.addWidget(canvas_frame, 1)
 
@@ -1906,8 +1911,9 @@ class ClipartTransparencyEditorPage(QWidget):
         tools_layout.setContentsMargins(10, 8, 10, 8)
         tools_layout.setSpacing(6)
 
-        tools_layout.addWidget(self._small_label("Масштаб"))
-        zoom_grid = QGridLayout()
+        zoom_bar = QWidget()
+        zoom_grid = QHBoxLayout(zoom_bar)
+        zoom_grid.setContentsMargins(8, 2, 8, 2)
         zoom_grid.setSpacing(4)
         self.zoom_buttons: dict[str | int, QPushButton] = {}
         for index, (key, text) in enumerate(
@@ -1932,9 +1938,10 @@ class ClipartTransparencyEditorPage(QWidget):
                 lambda checked=False, value=key: self._set_zoom(value)
             )
             self.zoom_buttons[key] = button
-            zoom_grid.addWidget(button, index // 6, index % 6)
+            zoom_grid.addWidget(button)
         self.zoom_buttons["fit"].setChecked(True)
-        tools_layout.addLayout(zoom_grid)
+        zoom_grid.addStretch(1)
+        canvas_layout.addWidget(zoom_bar, 1, 0)
 
         tools_layout.addWidget(self._small_label('Край'))
         edge_row = QHBoxLayout()

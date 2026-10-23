@@ -67,6 +67,24 @@ class BackgroundMaskTests(unittest.TestCase):
         self.assertEqual(after.getpixel((30, 30)), 0)
         self.assertTrue(any(0 < pixel < 255 for pixel in after.getdata()))
 
+    def test_soft_stroke_overlap_does_not_harden_edge(self):
+        from v3_transparency_preview import MaskEditDocument
+        original = Image.new("RGBA", (120, 100), (100, 80, 50, 255))
+        doc = MaskEditDocument(original)
+        doc.begin_stroke()
+        doc.extend_stroke([(20, 40)], radius=14, action="remove", hardness=50)
+        doc.extend_stroke([(20, 40), (60, 40)], radius=14, action="remove", hardness=50)
+        doc.extend_stroke([(60, 40), (100, 40)], radius=14, action="remove", hardness=50)
+        doc.end_stroke()
+        middle = doc.mask.getpixel((60, 52))
+        fresh = apply_mask_stroke(Image.new("L", (120, 100), 255),
+                                  (60, 40), radius=14, action="remove", hardness=50)
+        self.assertEqual(middle, fresh.getpixel((60, 52)))
+        doc.undo()
+        self.assertEqual(doc.mask.getpixel((60, 52)), 255)
+        doc.redo()
+        self.assertEqual(doc.mask.getpixel((60, 52)), middle)
+
     def test_soft_brush_fades_more_than_hard_brush(self):
         before = Image.new("L", (61, 61), 255)
         hard = apply_mask_stroke(before, (30, 30), radius=13, action="remove", hardness=100)

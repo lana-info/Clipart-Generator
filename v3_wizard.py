@@ -337,7 +337,13 @@ class AppShell(QWidget):
         self.steps_layout.setContentsMargins(0, 0, 0, 0)
         self.steps_layout.setSpacing(self.tokens.space_2)
         layout.addWidget(self.steps_container)
+        self.sidebar_files_host = QWidget()
+        self.sidebar_files_layout = QVBoxLayout(self.sidebar_files_host)
+        self.sidebar_files_layout.setContentsMargins(0, 0, 0, 0)
+        self.sidebar_files_host.hide()
+        layout.addWidget(self.sidebar_files_host, 1)
         layout.addStretch()
+        self._sidebar_files_page = None
         return frame
 
     def _build_footer(self) -> QFrame:
@@ -530,6 +536,7 @@ class AppShell(QWidget):
         self.mode_label.setAccessibleName(self.mode_label.text())
         self._refresh_stepper()
         self.page_stack.setCurrentWidget(self.current_page)
+        self._sync_sidebar_files()
         self._refresh_footer()
 
     def _refresh_stepper(self) -> None:
@@ -585,6 +592,30 @@ class AppShell(QWidget):
             label.show()
             self.step_labels.append(label)
         self.steps_layout.addStretch()
+
+    def _sync_sidebar_files(self) -> None:
+        """Show the editor's existing file list below steps without duplicating it."""
+        page = self.current_page
+        active = (
+            self.state.current_step is StepId.TRANSPARENCY
+            and hasattr(page, "files_frame")
+            and hasattr(page, "right_panel")
+        )
+        old_page = self._sidebar_files_page
+        if old_page is not None and (not active or old_page is not page):
+            self.sidebar_files_layout.removeWidget(old_page.files_frame)
+            old_page.right_panel.layout().insertWidget(0, old_page.files_frame, 2)
+            old_page.files_frame.show()
+            self._sidebar_files_page = None
+        if active:
+            if self._sidebar_files_page is not page:
+                page.right_panel.layout().removeWidget(page.files_frame)
+                self.sidebar_files_layout.addWidget(page.files_frame)
+                self._sidebar_files_page = page
+            self.sidebar_files_host.show()
+            page.files_frame.show()
+        else:
+            self.sidebar_files_host.hide()
 
     def _open_processing_transparency(self) -> None:
         controller = self.workflow_controller("processing")

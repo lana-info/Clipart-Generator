@@ -105,14 +105,13 @@ def paint_mask_path(
     radius: int,
     action: str,
     hardness: int = 100,
+    coverage_mask: Image.Image | None = None,
+    stroke_base: Image.Image | None = None,
 ) -> None:
-    """Paint a continuous stroke directly into an owned writable mask."""
+    """Paint a stroke; optional cumulative coverage avoids repeated feathering."""
     _paint_mask_path(
-        mask,
-        points,
-        radius=radius,
-        action=action,
-        hardness=hardness,
+        mask, points, radius=radius, action=action, hardness=hardness,
+        coverage_mask=coverage_mask, stroke_base=stroke_base,
     )
 
 
@@ -123,19 +122,37 @@ def _paint_mask_path(
     radius: int,
     action: str,
     hardness: int,
+    coverage_mask: Image.Image | None = None,
+    stroke_base: Image.Image | None = None,
 ) -> None:
     _validate_brush(mask, radius, action, hardness)
     if not points:
         return
+    if (coverage_mask is None) != (stroke_base is None):
+        raise ValueError("Coverage and baseline must be provided together")
+    if coverage_mask is not None and (coverage_mask.size != mask.size or stroke_base.size != mask.size):
+        raise ValueError("Stroke buffers must match the mask")
     opacity = _brush_opacity(radius, hardness)
     value = 255 if action == "add" else 0
+    coverage = coverage_mask if coverage_mask is not None else Image.new("L", mask.size, 0)
+    original = stroke_base if stroke_base is not None else mask.copy()
+    affected = None
 
     def stamp(x: int, y: int) -> None:
-        mask.paste(
-            value,
-            (x - radius, y - radius, x + radius + 1, y + radius + 1),
-            opacity,
-        )
+        nonlocal affected
+        left, top = max(0, x-radius), max(0, y-radius)
+        right, bottom = min(mask.width, x+radius+1), min(mask.height, y+radius+1)
+        if right <= left or bottom <= top:
+            return
+        region = (left, top, right, bottom)
+        brush = opacity.crop((left-(x-radius), top-(y-radius),
+                              right-(x-radius), bottom-(y-radius)))
+        coverage.paste(ImageChops.lighter(coverage.crop(region), brush), (left, top))
+        if affected is None:
+            affected = region
+        else:
+            affected = (min(affected[0], left), min(affected[1], top),
+                        max(affected[2], right), max(affected[3], bottom))
 
     previous = (int(points[0][0]), int(points[0][1]))
     stamp(*previous)
@@ -150,6 +167,10 @@ def _paint_mask_path(
                 round(previous[1] + (current[1] - previous[1]) * step / steps),
             )
         previous = current
+    if affected is not None:
+        # Composite against the stroke's original alpha, not the previous dab.
+        mask.paste(Image.composite(Image.new("L", (affected[2]-affected[0], affected[3]-affected[1]), value),
+                                   original.crop(affected), coverage.crop(affected)), affected[:2])
 
 
 def apply_mask_to_image(image: Image.Image, mask: Image.Image) -> Image.Image:
