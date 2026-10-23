@@ -4333,14 +4333,31 @@ class WorkerThread(QThread):
 
     def _apply_unsharp_mask_file(self, input_path, output_path):
         with Image.open(input_path) as img:
-            image = img.convert("RGBA") if "A" in img.getbands() else img.convert("RGB")
-            sharpened = image.filter(
-                ImageFilter.UnsharpMask(
-                    radius=self.unsharp_radius,
-                    percent=self.unsharp_amount,
-                    threshold=self.unsharp_threshold,
-                )
+            unsharp = ImageFilter.UnsharpMask(
+                radius=self.unsharp_radius,
+                percent=self.unsharp_amount,
+                threshold=self.unsharp_threshold,
             )
+            if "A" not in img.getbands():
+                sharpened = img.convert("RGB").filter(unsharp)
+            else:
+                import numpy as np
+
+                # Sharpen premultiplied colour only: alpha stays byte-for-byte, and the
+                # colour hidden under transparent pixels cannot bleed in as a halo.
+                rgba = np.asarray(img.convert("RGBA"), dtype=np.uint8)
+                alpha_bytes = rgba[:, :, 3].copy()
+                alpha = alpha_bytes.astype(np.float32) / 255.0
+                premultiplied = np.rint(rgba[:, :, :3].astype(np.float32) * alpha[:, :, None]).astype(np.uint8)
+                sharpened_premultiplied = np.asarray(
+                    Image.fromarray(premultiplied, mode="RGB").filter(unsharp), dtype=np.float32
+                )
+                restored = np.zeros_like(sharpened_premultiplied)
+                visible = alpha > 0
+                restored[visible] = sharpened_premultiplied[visible] / alpha[visible, None]
+                restored = np.clip(np.rint(restored), 0, 255).astype(np.uint8)
+                sharpened = Image.fromarray(np.dstack((restored, alpha_bytes)), mode="RGBA")
+            sharpened.info.update(dict(getattr(img, "info", {}) or {}))
             self._save_image_object_as_png(sharpened, output_path)
         return output_path
 
