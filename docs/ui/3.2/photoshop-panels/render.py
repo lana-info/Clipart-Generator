@@ -78,6 +78,31 @@ win, editor, docks, panels = window()
 win.resizeDocks([docks["files"], docks["tools"]], [200, 520], Qt.Orientation.Vertical)
 win.resizeDocks([docks["tools"]], [290], Qt.Orientation.Horizontal)
 save(win, "01-default-docked-right.png")
+# 1b. Owner idea 2026-10-23: zoom moves from the tools panel onto the picture (bottom-left, like Photoshop).
+for w in editor.tools_scroll.widget().findChildren(QLabel):
+    if w.text() == "Масштаб":
+        w.hide()
+for b in editor.zoom_buttons.values():
+    b.hide()
+bar = QFrame(); bar.setStyleSheet("QFrame{background:rgba(22,32,46,235);border:1px solid #2b3a4e;border-radius:8px}"
+                                  "QToolButton{color:#e4edf6;padding:3px 8px;font-weight:bold}")
+bl = QHBoxLayout(bar); bl.setContentsMargins(6, 3, 6, 3); bl.setSpacing(2)
+for text in ("−", "100 % ▾", "+", "По размеру"):
+    b = QToolButton(); b.setText(text); b.setAutoRaise(True); bl.addWidget(b)
+hint = QLabel("Ctrl + колесо"); hint.setStyleSheet("color:#74869a;border:none;padding-left:6px"); bl.addWidget(hint)
+editor.canvas.parentWidget().layout().addWidget(bar, 0, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+bar.raise_()
+save(win, "04-zoom-on-picture.png")
+menu_img = Image.new("RGB", (130, 165), (27, 38, 54)); mdz = ImageDraw.Draw(menu_img)
+from PIL import ImageFont as _F
+_f = _F.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+mdz.rectangle((0, 0, 129, 164), outline=(43, 58, 78))
+for k, t in enumerate(("По размеру", "50 %", "100 %", "150 %", "200 %", "300 %")):
+    mdz.text((14, 8 + k * 25), ("✓ " if t == "100 %" else "   ") + t, font=_f, fill=(228, 237, 246))
+base4 = Image.open(OUT / "04-zoom-on-picture.png").convert("RGB")
+pos = bar.mapTo(win, bar.rect().topLeft())
+base4.paste(menu_img, (pos.x() + 40, pos.y() - 169))
+base4.save(OUT / "04b-zoom-menu-open.png")
 # 2. «Файлы» dragged to the left edge, «Инструменты» widened.
 win.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, docks["files"])
 win.resizeDocks([docks["files"], docks["tools"]], [210, 360], Qt.Orientation.Horizontal)
