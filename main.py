@@ -1446,6 +1446,7 @@ class WorkerThread(QThread):
             "indeterminate",
             "source_path",
             "output_path",
+            "recovery_attempts",
         ):
             if key in values and values[key] not in (None, ""):
                 event[key] = values[key]
@@ -4616,8 +4617,43 @@ class WorkerThread(QThread):
             self._ensure_running()
             if self.export_300_dpi:
                 self._verify_png_dpi(stage_path, dpi=300)
-            self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
-            self._validate_published_png(output_path)
+            self._validate_published_png(stage_path)
+            for attempt in range(1, 4):
+                self._ensure_running()
+                target_existed = os.path.exists(output_path)
+                try:
+                    self._publish_final_output(stage_path, output_path, source_inspection=source_inspection)
+                    self._validate_published_png(output_path, expected_path=stage_path)
+                    break
+                except ProcessingCancelled:
+                    raise
+                except (OSError, RuntimeError) as error:
+                    if attempt >= 3 or not self._is_recoverable_output_error(error):
+                        raise
+                    if not target_existed:
+                        try:
+                            os.remove(output_path)
+                        except OSError:
+                            pass
+                    self.progress.emit(f"  Сохранение не удалось, автоматический повтор {attempt + 1}/3")
+                    self._emit_diagnostic(
+                        "output_recovery_retry",
+                        provider="local",
+                        attempt=attempt,
+                        error_message=self._safe_error_text(error),
+                        outcome="retrying",
+                    )
+                    self._wait_before_output_recovery(attempt)
+            if attempt > 1:
+                self.progress.emit(f"  Файл автоматически восстановлен и сохранён с {attempt}-й попытки")
+                self._emit_item_progress(
+                    idx,
+                    int(getattr(self._diagnostic_context, "item_total", 1) or 1),
+                    "export",
+                    "auto_recovered",
+                    recovery_attempts=attempt,
+                )
+                self._emit_diagnostic("output_recovered", provider="local", attempt=attempt, outcome="succeeded")
             try:
                 from studio_working_files import digest
                 with self._shared_state_lock:
@@ -4699,8 +4735,35 @@ class WorkerThread(QThread):
                 except (OSError, ValueError):
                     self._item_context.chroma_published_digest = None
 
-    def _validate_published_png(self, output_path):
+    @staticmethod
+    def _is_recoverable_output_error(error):
+        if isinstance(error, OSError):
+            return True
+        return str(error) in {
+            "Итоговый PNG не сохранён",
+            "Итоговый PNG недоступен для проверки",
+            "Итоговый PNG повреждён",
+            "Итоговый PNG повреждён: файл пуст",
+            "Итоговый PNG имеет неверный размер",
+            "Итоговый PNG потерял прозрачность",
+        }
+
+    @staticmethod
+    def _wait_before_output_recovery(attempt):
+        time.sleep(0.15 * max(1, int(attempt)))
+
+    def _validate_published_png(self, output_path, *, expected_path=None):
         """A file counts as done only when the published result is a non-empty readable PNG."""
+        expected_size = None
+        expected_alpha = False
+        if expected_path:
+            try:
+                with Image.open(expected_path) as expected_image:
+                    expected_size = expected_image.size
+                    expected_alpha = has_usable_alpha(expected_image)
+                    expected_image.load()
+            except (OSError, UnidentifiedImageError, ValueError) as error:
+                raise RuntimeError("Итоговый PNG повреждён") from error
         try:
             if os.path.getsize(output_path) <= 0:
                 raise RuntimeError("Итоговый PNG повреждён: файл пуст")
@@ -4712,6 +4775,10 @@ class WorkerThread(QThread):
             with Image.open(output_path) as image:
                 if image.format != "PNG" or image.width <= 0 or image.height <= 0:
                     raise RuntimeError("Итоговый PNG повреждён")
+                if expected_size is not None and image.size != expected_size:
+                    raise RuntimeError("Итоговый PNG имеет неверный размер")
+                if expected_alpha and not has_usable_alpha(image):
+                    raise RuntimeError("Итоговый PNG потерял прозрачность")
                 image.load()
         except RuntimeError:
             raise
@@ -4755,6 +4822,8 @@ class WorkerThread(QThread):
             message = str(error).strip() or "неизвестная ошибка проверки"
             self.progress.emit(f"  Очистка файла: ошибка — {message}; итог не опубликован")
             raise RuntimeError(f"Очистка файла не выполнена: {message}") from error
+        except OSError:
+            raise
         except Exception as error:
             self.progress.emit("  Очистка файла: непредвиденная ошибка; итог не опубликован")
             raise RuntimeError("Очистка файла не выполнена; итог не опубликован") from error
