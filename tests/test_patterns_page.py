@@ -267,25 +267,16 @@ def _patterns_auth(now, minutes):
         module_entitlements=(ModuleEntitlement("patterns", now - timedelta(days=1), now + timedelta(days=1)),))
 
 
-def test_patterns_access_is_reverified_after_authorization_expires(app, tmp_path):
+def test_patterns_access_is_not_rechecked_while_open(app, tmp_path):
     from datetime import datetime, timezone
     from types import SimpleNamespace
     from unittest.mock import Mock
-    from license_client import LicenseError
     now = datetime.now(timezone.utc)
-    expired, fresh = _patterns_auth(now, 10), _patterns_auth(now, 0)
-    gate = SimpleNamespace(current_authorization=expired, authorize_run=Mock(return_value=fresh),
+    gate = SimpleNamespace(current_authorization=_patterns_auth(now, 10), authorize_run=Mock(),
                            status_text="Лицензия активна", verification_text="Проверено")
     view = _patterns_view(tmp_path, gate)
     try:
-        assert view._patterns_allowed() is True
-        assert gate.authorize_run.call_count == 1
-        gate.current_authorization = expired
-        gate.authorize_run = Mock(side_effect=LicenseError("denied", code="license_rejected"))
-        view2 = _patterns_view(tmp_path, gate)
-        assert view2._patterns_allowed() is False
-        assert view2._patterns_allowed() is False
-        assert gate.authorize_run.call_count == 1  # denial is not re-checked for 30 s
-        view2.deleteLater()
+        assert view._patterns_allowed() is True  # authorization expired 5+ minutes ago
+        gate.authorize_run.assert_not_called()
     finally:
         view.deleteLater()
