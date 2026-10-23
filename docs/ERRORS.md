@@ -3116,3 +3116,18 @@ test_build_retains_shared_imports_used_by_signed_workflows — ожидает `g
 - Проверка: tests/test_transparency_lasso_cursor.py (3 теста; на старом коде все 3 падают, на новом проходят) и
   полный набор тестов; скриншоты до/после на белом, тёмном и клетчатом фоне:
   docs/ui/3.2/transparency-edge-tools/01-lasso-cursor-esc/. Ручная проверка владельцем на Windows — после сборки.
+
+## Patterns нельзя было подписать и загрузить штатной цепочкой (#patterns-not-in-official-modules-20261023)
+
+- Статус: исправлено 2026-10-23, ветка `codex/release-patterns-module-20261023`.
+- Симптом: после выпуска Core 3.2.39 карточка «Паттерны» в приложении показывалась как «недоступен»: пакета модуля
+  не было ни в наборе 1.6.4, ни на сервере.
+- Причина (установлена по коду): `studio_module_packaging.OFFICIAL_WORKFLOW_FILES` не содержал `patterns`.
+  `prepare_release_set` берёт модули из этого словаря, а `AdminDraftUploader.upload` отвергает пакеты с неизвестным
+  `module_id`. Ветка `patterns` в `prepare_official_workflow_release` существовала, поэтому прямой вызов собирал пакет,
+  но выпуск набором и загрузка `upload-set` не работали.
+- Неправильная попытка: нет (найдено до загрузки).
+- Решение: `"patterns": ()` добавлен в `OFFICIAL_WORKFLOW_FILES` (как у prompt-composer, файлы берёт `patterns_payload`).
+- Проверка: `tests/test_studio_module_release.py` теперь ожидает 7 модулей в наборе, включая patterns; 51 тест
+  релиза/упаковки/Patterns проходят; пакет patterns-1.6.4.zip установщиком Core принят на 3.2.39 и отвергнут на 3.2.38 и 3.3.0.
+  Загрузка на сервер ещё не выполнялась.

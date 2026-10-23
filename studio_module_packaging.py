@@ -25,6 +25,7 @@ from studio_modules import (
 
 OFFICIAL_WORKFLOW_FILES = {
     "prompt-composer": (),
+    "patterns": (),
     "auto-clipart": (
         "studio_auto_clipart_flow.py", "v3_clipart_flow.py",
         "studio_clipart_recipe.py", "studio_clipart_references.py", "studio_reference_editor.py",
