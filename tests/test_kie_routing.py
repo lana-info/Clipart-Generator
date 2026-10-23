@@ -2235,5 +2235,43 @@ class FalLocalResultTests(unittest.TestCase):
             self.assertEqual(Path(result_path).parent, raw_dir)
 
 
+class CorruptSourceTests(unittest.TestCase):
+    """Ported from 3.1.1 db247bf."""
+
+    def test_processing_worker_decodes_corrupt_source_before_paid_fal_call(self):
+        with tempfile.TemporaryDirectory(prefix="processing-corrupt-worker-") as temp:
+            root = Path(temp)
+            source = root / "source.jpg"
+            Image.new("RGB", (40, 40), "purple").save(source, quality=90)
+            source.write_bytes(source.read_bytes()[:-20])
+            output = root / "output" / "source_ready.png"
+            output.parent.mkdir()
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    upscale=True,
+                    upscale_provider="fal",
+                ),
+                selected_files=[str(source)],
+            )
+            worker._fal_process_image = types.MethodType(
+                lambda *_args, **_kwargs: self.fail("paid Fal call must not start"),
+                worker,
+            )
+
+            with self.assertRaisesRegex(ValueError, "Файл повреждён"):
+                worker._process_file_entry(
+                    1,
+                    1,
+                    str(source),
+                    str(raw_dir),
+                    str(output),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

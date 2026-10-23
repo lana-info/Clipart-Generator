@@ -769,7 +769,7 @@ def validate_https_url(url, label):
     return parsed_url
 
 
-def validate_local_image_input(image_path):
+def validate_local_image_input(image_path, *, decode_pixels=False):
     try:
         with Image.open(image_path) as image:
             if getattr(image, "n_frames", 1) != 1:
@@ -778,6 +778,13 @@ def validate_local_image_input(image_path):
                 raise ValueError("Local input image exceeds dimension limit")
             if image.width * image.height > MAX_PROVIDER_IMAGE_PIXELS:
                 raise ValueError("Local input image exceeds pixel limit")
+            if decode_pixels:
+                try:
+                    image.load()
+                except (OSError, UnidentifiedImageError) as exc:
+                    raise ValueError(
+                        f"Файл повреждён, изображение не читается: {os.path.basename(image_path)}"
+                    ) from exc
     except ValueError:
         raise
     except (OSError, UnidentifiedImageError) as exc:
@@ -2209,6 +2216,9 @@ class WorkerThread(QThread):
         self._emit_file_progress(idx, total, 4)
         if not os.path.isfile(file_path):
             raise FileNotFoundError(f"Файл не найден: {file_path}")
+        # The files page reads only image headers; every pixel is decoded here, before any paid step.
+        with self._local_operation_lock:
+            validate_local_image_input(file_path, decode_pixels=True)
 
         source_path = file_path
         generation_intent = None
