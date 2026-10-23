@@ -32,6 +32,17 @@
   at a time and verify after each merge.
 - Update `release/3.x` only after the candidate is stable and explicitly approved.
 
+## Build composition and "done" status (owner decision 2026-10-23, mandatory)
+
+- Current integration branch is `develop/3.2`; branch, merge and cleanup rules in STATE.md
+  («Правила веток») take precedence over the 3.1-era Branches section above.
+- Before EVERY Studio or module build, show the owner three lists and wait for her
+  confirmation of the composition: (1) ready but not merged into `develop/3.2`;
+  (2) merged into `develop/3.2` but not in any build; (3) built but not published to
+  the licence server. Start the build only after her explicit yes.
+- Whenever the agent reports something as «сделано», add one line with where it is now:
+  `ветка <name> · слито в develop/3.2: да/нет · в сборке: <version>/нет · опубликовано: да/нет`.
+
 ## Mandatory visual approval gate
 
 - Before coding any new or materially redesigned user-visible page, section,
