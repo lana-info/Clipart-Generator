@@ -882,9 +882,11 @@ class V3ApplicationView(QWidget):
             QMessageBox.warning(self, "Конструктор промптов", "Не удалось открыть модуль. Проверьте доступ и установленную версию.")
 
     def _patterns_allowed(self):
-        from license_client import LicenseAuthorization
-        authorization = getattr(self._license_gate, "current_authorization", None)
-        return isinstance(authorization, LicenseAuthorization) and authorization.allows_module("patterns")
+        # Owner decision 2026-10-23: the licence is verified once, when the module is opened
+        # (authorize_module_run in _open_patterns); it is not re-checked while the page is
+        # open. The signed authorization lives only ~5 minutes, so re-checking per action
+        # showed "no access" in the middle of work. Patterns makes no paid requests.
+        return True
 
     def _open_patterns(self):
         if self.shell is not None and self.shell.active_run_controller() is not None:
