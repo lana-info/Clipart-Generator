@@ -96,7 +96,7 @@ def test_vector_simplification_limits_cached_availability_and_new_edge_controls(
     assert not page.simplify_button.isEnabled()
     assert page.smooth_edge_button.isEnabled()
     assert not hasattr(page, 'smooth_button')
-    assert page.local_selection_label.text() == 'Точки не выделены'
+    assert page.local_selection_label.text() == 'Ctrl+щелчок по линии — добавить точку'
     assert page.edge_scope_label.text() == 'Всё изображение'
     assert not page.pen_controls.findChildren(QComboBox)
     select(page)
@@ -235,8 +235,11 @@ def test_late_preview_cancel_file_switch_and_selection_reindex(page, tmp_path):
     assert canvas._preview_alpha is None
     select(page, [(0,2),(0,5)])
     canvas.contour._selected = (0,2)
+    nodes_before = len(canvas.contour.paths[0].nodes)
     QTest.keyClick(canvas, Qt.Key.Key_Delete)
-    assert canvas.contour.selection == {(0,4)}
+    # Delete removes every selected point (owner-approved mockup 07-pen-point-edit-mockup).
+    assert len(canvas.contour.paths[0].nodes) == nodes_before - 2
+    assert canvas.contour.selection == set()
     page.undo()
     assert canvas.contour.selection == {(0,2),(0,5)}
     second = tmp_path / 'second.png'

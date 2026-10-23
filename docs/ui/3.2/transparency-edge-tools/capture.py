@@ -81,7 +81,10 @@ def shoot(root, label, item, out):
             p = QPointF(canvas.viewport().mapTo(dialog, cursor_at))
             painter = QPainter(image)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            if canvas.cursor().shape() == Qt.CursorShape.CrossCursor:
+            if canvas.cursor().shape() == Qt.CursorShape.BitmapCursor:
+                hot = canvas.cursor().hotSpot()
+                painter.drawPixmap(p - QPointF(hot), canvas.cursor().pixmap())
+            elif canvas.cursor().shape() == Qt.CursorShape.CrossCursor:
                 for color, width in (("#000000", 3), ("#ffffff", 1)):
                     painter.setPen(QPen(QColor(color), width))
                     painter.drawLine(p + QPointF(-11, 0), p + QPointF(11, 0))
@@ -179,6 +182,35 @@ def shoot(root, label, item, out):
                         QTest.mouseClick(editor.canvas.viewport(), Qt.MouseButton.LeftButton,
                                          Qt.KeyboardModifier.NoModifier, view_point(editor.canvas, *ring[0]))
                     save(dialog, editor, f"6-pen-{name}-{'closed' if closed else 'open'}-{key}")
+        if item == 7 and key == "dark":
+            # Pen point editing (approved mockup 07-pen-point-edit-mockup): Ctrl hover add / delete, group drag.
+            ring = [(400 + 330 * math.cos(k * math.pi / 3), 400 + 330 * math.sin(k * math.pi / 3)) for k in range(6)]
+            ctrl = Qt.KeyboardModifier.ControlModifier
+            for name in ("add", "remove", "group"):
+                dialog, editor = window(background)
+                editor._set_tool("pen")
+                canvas = editor.canvas
+                for point, button in zip(ring, [Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton] * 3):
+                    QTest.mouseClick(canvas.viewport(), button, Qt.KeyboardModifier.NoModifier, view_point(canvas, *point))
+                    QTest.qWait(1)
+                QTest.mouseClick(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                                 view_point(canvas, *ring[0]))
+                if name == "add":
+                    spot = canvas.contour.nearest_segment((400, 70), 200)[-1]
+                    at = view_point(canvas, *spot)
+                    canvas._update_point_hover(at, ctrl)
+                elif name == "remove":
+                    at = view_point(canvas, *ring[5])
+                    canvas._update_point_hover(at, ctrl)
+                else:
+                    canvas.contour.select([(0, 5), (0, 0), (0, 1)])
+                    start = view_point(canvas, *ring[0])
+                    QTest.mousePress(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+                    at = view_point(canvas, ring[0][0] + 40, ring[0][1])
+                    QTest.mouseMove(canvas.viewport(), at)
+                    QTest.mouseRelease(canvas.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, at)
+                    editor._refresh_local_buttons()
+                save(dialog, editor, f"7-pen-{name}-{key}", cursor_at=at)
         if item == 2:
             # The brush ring at the petal edge, 200 %, hard 16 px and soft 40 px.
             for hard, size in ((True, 16), (False, 40)):
