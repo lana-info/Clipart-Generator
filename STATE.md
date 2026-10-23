@@ -34,7 +34,7 @@
 docs/seamless-pattern/. module_id = patterns. Макеты одобрены владельцем (2026-10-22): docs/ui/3.2/patterns-module-proposal/.
 Этап 3 готов (страницы Patterns, карточка в каталоге, открытие из главного окна; тесты
 tests/test_patterns_page.py; отличия от макетов в docs/ui/3.2/patterns-module-proposal/README.md).
-Не публиковать клиентам без T5.1/T5.2. Этап 2 готов: studio_patterns_host.py, studio_patterns_storage.py,
+Patterns 1.6.4 ОПУБЛИКОВАН на сервере лицензий, право есть у лицензии владельца (со слов владельца 2026-10-23; TASKS.md, «Выпуск Patterns 1.6.4»). Исправления П1–П8 и пожелания — только по её команде и после макета. Этап 2 готов: studio_patterns_host.py, studio_patterns_storage.py,
 studio_patterns_entry.py, studio_patterns_package.py (без страниц и без карточки в
 каталоге; не публиковать до этапа 3 — UI).
 Пороги seam_report временные; нужны реальные хорошие/плохие плитки владельца.
