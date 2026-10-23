@@ -544,3 +544,25 @@ version or perform a separately authorized support recovery.
 Native Windows acceptance of the shell and downloaded packages is required before
 production publication. Source tests and preparation/signature inspection alone
 are not installed Windows acceptance.
+
+## Agent-operated releases on the VPS (ops/release-tool.sh)
+
+The license service runs on the same VPS, so releases can be managed without the
+admin HTTPS API (no password/TOTP). The tool lives outside git at
+`/root/projects/Clipart Generator/ops/` (with `release_inspect.py` and its own
+`.venv` holding cryptography, rfc8785, pillow, numpy) and calls
+`PostgresLicenseService` inside `license-service-license-service-1`:
+
+- `release-tool.sh list [substring]` — read-only listing;
+- `release-tool.sh upload-module <zip> <studio_version> --yes` — verifies the
+  signature/compatibility locally (`ModuleStore.inspect_package`, source from
+  `VIBIX_SRC`), refuses duplicates, creates a draft, streams the ZIP and checks
+  server SHA/size;
+- `release-tool.sh upload-studio <exe> <version> --yes` — installer draft;
+- `release-tool.sh publish|withdraw <id> --yes`.
+
+Writes are logged to `ops/release-tool.log`. The agent runs writes only on the
+owner's explicit command; drafts are invisible to users. Claude Code allows the
+tool through the rule `Bash(bash "/root/projects/Clipart Generator/ops/release-tool.sh" *)`
+in `~/.claude/settings.json` (the quoted form is required: the unquoted rule did
+not match and the auto-mode classifier blocked the call).
