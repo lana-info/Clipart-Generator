@@ -227,8 +227,12 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
     for i in range(tile_page.checks.count()):
         w = tile_page.checks.itemAt(i).widget()
         if w is not None and "прозрачным" in w.text():
-            w.setText("Плитка 600 × 600 px. Прозрачный фон для готовой плитки не нужен.")
+            w.setText("Прозрачный фон для готовой плитки не нужен.")
             _set_state(w, "ok")
+        elif w is not None and "Шов проверим" in w.text():
+            # The size is only information about the chosen file, not a requirement.
+            w.setText("Выбран файл tile.png · 600 × 600 px. Подойдёт файл до 8192 px по стороне; шов проверим на следующем шаге.")
+    tile_page.pick_tile.setText("Выбрать другой файл")   # owner 2026-10-23: a file is chosen, not a «плитка»
     prop = with_header(grab(tile_page), "Паттерны")
     pair(cur, prop, "P4-tile-source-texts.png")
     tile_page.host.close()
