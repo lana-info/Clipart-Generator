@@ -1847,11 +1847,6 @@ class ProblemFilesDialog(QDialog):
         title = QLabel(f"Проблемные файлы — {len(rows)} из {total}")
         title.setStyleSheet("font-size:18px;font-weight:bold")
         layout.addWidget(title)
-        hint = QLabel("Готовые файлы уже в папке результатов. Ниже — что не получилось и почему. «Доделать "
-                      "оставшиеся» повторит только эти файлы; уже оплаченные этапы повторно не оплачиваются.")
-        hint.setWordWrap(True)
-        hint.setProperty("v3Description", True)
-        layout.addWidget(hint)
         self.table = QTableWidget(len(rows), 5)
         self.table.setHorizontalHeaderLabels(["Итог", "Файл", "Этап", "Причина", "Попыток"])
         self.table.verticalHeader().hide()
@@ -1867,9 +1862,6 @@ class ProblemFilesDialog(QDialog):
         for column in (0, 1, 2, 4):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.table, 1)
-        note = QLabel("В список не попадают полные пути к файлам. Сохраняется в текстовый файл UTF-8.")
-        note.setProperty("v3Description", True)
-        layout.addWidget(note)
         buttons = QHBoxLayout()
         self.copy_button = V3Button("Скопировать список", ButtonVariant.SECONDARY)
         self.copy_button.clicked.connect(self.copy_report)

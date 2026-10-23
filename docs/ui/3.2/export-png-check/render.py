@@ -51,9 +51,7 @@ def window(proposed):
         panel.quality_export_button.hide()
         panel.quality_back_button.setText("← К наборам")
         page.layout().itemAt(0).widget().setText("Проверка PNG перед экспортом")
-        page.layout().itemAt(1).widget().setText(
-            "Программа сама проверила края и прозрачность всех PNG, файлы не менялись. "
-            "Посмотрите отмеченные: исправьте или исключите из наборов — остальные готовы.")
+        page.layout().itemAt(1).widget().hide()   # owner 2026-10-23: no explanatory captions
         panel.quality_page_summary_label.setText("Нужно посмотреть: 1 из 12. Остальные 11 — готовы.")
         # filter: problems first, auto-selected
         chips = QHBoxLayout()
