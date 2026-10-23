@@ -386,7 +386,7 @@ class PatternsPage(QWidget):
         self.background_swatch = QLabel()
         self.background_swatch.setFixedSize(44, 34)
         self.background_swatch.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.background_swatch.setToolTip("Выбрать цвет фона")
+        self.background_swatch.setToolTip("Выбрать цвет фона. Фон попадёт в итоговый файл; «Прозрачный» — только для PNG")
         self.background_swatch.mousePressEvent = lambda _event: self._pick_background()
         row.addWidget(self.background_swatch)
         self.background_name = _text("Тёплый белый")
@@ -395,7 +395,6 @@ class PatternsPage(QWidget):
         self.transparent_button.clicked.connect(self._toggle_transparent)
         row.addWidget(self.transparent_button)
         left_layout.addLayout(row)
-        left_layout.addWidget(_text("Фон попадёт в итоговый файл. «Прозрачный» — только для PNG.", "v3Small"))
         left_layout.addStretch()
         columns.addWidget(left, 1)
         right, right_layout = _card()
@@ -955,8 +954,7 @@ class PatternsPage(QWidget):
         elif records:
             # A ready tile is a whole picture: transparency is not expected, the size is information only.
             self.checks.addWidget(_status("Прозрачный фон для готовой плитки не нужен.", "ok"))
-            self.checks.addWidget(_text(f"Выбран файл {records[0]['name']} · {records[0]['width']} × {records[0]['height']} px. "
-                                        "Подойдёт файл до 8192 px по стороне; шов проверим на следующем шаге.", "v3Small"))
+            self.checks.addWidget(_text(f"{records[0]['name']} · {records[0]['width']} × {records[0]['height']} px", "v3Small"))
 
     def _refresh_settings(self):
         s, tile = self._settings, self._mode == "tile"
@@ -974,7 +972,7 @@ class PatternsPage(QWidget):
         self.background_swatch.setStyleSheet(f"background:{color}; border:1px solid {self.tokens.border};")
         default = list(s["background"][:3]) == list(DEFAULTS["background"][:3])
         name = "Тёплый белый" if default else "Свой цвет #{:02X}{:02X}{:02X}".format(*s["background"][:3])
-        self.background_name.setText("Прозрачный" if s["transparent"] else f"{name} — нажмите на образец, чтобы выбрать цвет")
+        self.background_name.setText("Прозрачный" if s["transparent"] else name)
         self.transparent_button.set_variant(ButtonVariant.PRIMARY if s["transparent"] else ButtonVariant.SECONDARY)
         locked = sum(1 for e in self._elements if e.get("locked"))
         shortage = getattr(self, "_layout_shortage", None)

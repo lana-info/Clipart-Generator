@@ -193,9 +193,7 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
     reset.setToolTip("Вернуть автоматическую расстановку: ручные правки элементов отменяются")
     reset_row = QHBoxLayout(); reset_row.addStretch(); reset_row.addWidget(reset)
     pl.insertLayout(pl.count() - 1, reset_row)
-    pl.itemAt(pl.count() - 1).widget().setText(
-        "Щелчок по элементу — выделить: тянуть — двигать, углы рамки — размер, кружок сверху — поворот, "
-        "корзина или Delete — удалить. «Сбросить правки» возвращает автоматическую расстановку.")
+    pl.itemAt(pl.count() - 1).widget().setText("Delete — удалить выделенный элемент")  # owner: only hotkeys
     pic.setPixmap(_qpixmap(sheet, 300, 300))
     img = grab(page); d = ImageDraw.Draw(img)
     org = pic.mapTo(page, pic.rect().topLeft()); pm = pic.pixmap()
@@ -226,7 +224,7 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
         view_bar.addWidget(V3Button(f"{n}×{n}", ButtonVariant.PRIMARY if n == 5 else ButtonVariant.SECONDARY))
     grid_box = QCheckBox("Сетка"); grid_box.setChecked(True); view_bar.addWidget(grid_box)
     prev_card.layout().insertLayout(0, view_bar)
-    prev_card.layout().addWidget(_text("Щелчок по картинке или значок в углу — на весь экран (Esc — выйти).", "v3Small"))
+
     # hide the old «Увеличить шов / Линии границ» row
     for w in prev_card.findChildren(QWidget):
         if isinstance(w, QLabel) and w.text().startswith("Линии границ"):
@@ -246,19 +244,14 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
         if t == "Оценка шва":
             w.setText("Проверка стыка")
         elif t.startswith("Оценка: скачок"):
-            w.setText("Проверяет программа, автоматически: сравнивает переход через край листа с обычными "
-                      "переходами внутри рисунка. «Готово» — стык при повторе не заметен.\n\n"
-                      "Из ваших PNG программа ничего не исправляет: элемент у края переносится на "
-                      "противоположную сторону, поэтому лист бесшовный сразу.\n"
-                      "Для готовой плитки программа смешивает полосу у краёв (ширина — на шаге 2).")
+            w.hide()   # owner: no explanatory captions; the explanation is in the tooltip of the status
         elif t.startswith("По горизонтали"):
-            w.setText("Стык слева-справа: 0.07 · сверху-снизу: 0.01 (норма — до 1.5)")
+            w.hide()
     page.seam_status.setText("Готово: стык не заметен")
-    page.preview_subtitle.setText("Лист повторён рядом сам с собой, как на бумаге. Выберите, сколько плиток показать.")
+    page.preview_subtitle.hide()
     page.primary_action.setText("Сохранить в набор")
     page.secondary_action.hide()
-    right.layout().addWidget(_text("Лист попадёт в набор (шаг 4). Там можно добавить ещё варианты и выгрузить "
-                                   "все листы сразу. Другую расстановку делайте на шаге 2.", "v3Small"))
+
     img3 = grab(page); d3 = ImageDraw.Draw(img3)
     pr = page.preview_picture; o = pr.mapTo(page, pr.rect().topLeft()); pm = pr.pixmap()
     x1 = o.x() + (pr.width() + pm.width()) // 2; y0 = o.y() + (pr.height() - pm.height()) // 2

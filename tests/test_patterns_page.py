@@ -308,7 +308,7 @@ def test_ready_tile_texts_name_the_file_and_need_no_transparency(runtime, app, t
     page._refresh(); app.processEvents()
     texts = [page.checks.itemAt(i).widget().text() for i in range(page.checks.count())]
     assert texts[0] == "Прозрачный фон для готовой плитки не нужен."
-    assert "Выбран файл tile.png · 600 × 400 px" in texts[1]
+    assert texts[1] == "tile.png · 600 × 400 px"
     assert not any("прозрачным фоном" in t for t in texts)
     assert page.pick_tile.text() == "Выбрать другой файл"
     close_page(app, handle, page, host)
@@ -339,7 +339,7 @@ def test_background_colour_can_be_picked(runtime, app, tmp_path, monkeypatch):
     monkeypatch.setattr(QColorDialog, "getColor", staticmethod(lambda *a, **k: QColor(10, 120, 200)))
     page._pick_background()
     assert page._settings["background"] == [10, 120, 200, 255] and not page._settings["transparent"]
-    assert page.background_name.text().startswith("Свой цвет #0A78C8")
+    assert page.background_name.text() == "Свой цвет #0A78C8"
     close_page(app, handle, page, host)
 
 
