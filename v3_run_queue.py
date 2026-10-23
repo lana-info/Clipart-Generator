@@ -20,11 +20,14 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QProgressBar,
     QScrollArea,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -1796,6 +1799,114 @@ def transparency_candidate_paths(session: RunQueueSession) -> list[Path]:
     return candidates
 
 
+PROBLEM_STAGE_NAMES = {
+    "processing": "Обработка",
+    "background_removal": "Удаление фона",
+    "upscale": "Апскейл",
+    "unsharp": "Резкость",
+    "edge_cleanup": "Очистка края",
+    "metadata_cleanup": "Очистка метаданных",
+    "export_300_dpi": "Сохранение PNG",
+    "generation": "Генерация",
+    "export": "Сохранение результата",
+    "trim": "Подготовка",
+}
+
+
+def problem_file_rows(session: "RunQueueSession") -> list[tuple[str, str, str, str, int]]:
+    """Failed and stopped files: (outcome, display name, stage, reason, attempts) — no paths (port of 3.1.1)."""
+    rows = []
+    for item in session.items:
+        if item.status not in {RunItemStatus.FAILED, RunItemStatus.CANCELLED}:
+            continue
+        failed = [stage for stage, state in item.stage_statuses.items() if state == "failed"]
+        stage = PROBLEM_STAGE_NAMES.get(failed[-1], failed[-1]) if failed else "—"
+        outcome = "Ошибка" if item.status is RunItemStatus.FAILED else "Остановлен"
+        rows.append((outcome, Path(item.display_name).name, stage,
+                     redact_text(item.short_message, limit=300), int(item.attempts)))
+    return rows
+
+
+def problem_file_report_text(rows, total: int) -> str:
+    lines = [f"Проблемные файлы — {len(rows)} из {total}", ""]
+    for outcome, name, stage, reason, attempts in rows:
+        lines.append(f"{outcome}\t{name}\t{stage}\t{reason}\tпопыток: {attempts}")
+    return "\n".join(lines) + "\n"
+
+
+class ProblemFilesDialog(QDialog):
+    """Plain list of what did not work and why; copy or save as UTF-8 text (approved mockup C2)."""
+
+    def __init__(self, rows, total: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Проблемные файлы")
+        self.report = problem_file_report_text(rows, total)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
+        title = QLabel(f"Проблемные файлы — {len(rows)} из {total}")
+        title.setStyleSheet("font-size:18px;font-weight:bold")
+        layout.addWidget(title)
+        hint = QLabel("Готовые файлы уже в папке результатов. Ниже — что не получилось и почему. «Доделать "
+                      "оставшиеся» повторит только эти файлы; уже оплаченные этапы повторно не оплачиваются.")
+        hint.setWordWrap(True)
+        hint.setProperty("v3Description", True)
+        layout.addWidget(hint)
+        self.table = QTableWidget(len(rows), 5)
+        self.table.setHorizontalHeaderLabels(["Итог", "Файл", "Этап", "Причина", "Попыток"])
+        self.table.verticalHeader().hide()
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        for row, values in enumerate(rows):
+            for column, value in enumerate(values):
+                cell = QTableWidgetItem(str(value))
+                if column == 0:
+                    cell.setForeground(QColor("#f06e6e" if value == "Ошибка" else "#f5b45a"))
+                self.table.setItem(row, column, cell)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        for column in (0, 1, 2, 4):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.table, 1)
+        note = QLabel("В список не попадают полные пути к файлам. Сохраняется в текстовый файл UTF-8.")
+        note.setProperty("v3Description", True)
+        layout.addWidget(note)
+        buttons = QHBoxLayout()
+        self.copy_button = V3Button("Скопировать список", ButtonVariant.SECONDARY)
+        self.copy_button.clicked.connect(self.copy_report)
+        self.save_button = V3Button("Сохранить как .txt…", ButtonVariant.SECONDARY)
+        self.save_button.clicked.connect(self.save_report)
+        close = V3Button("Закрыть", ButtonVariant.PRIMARY)
+        close.clicked.connect(self.accept)
+        buttons.addWidget(self.copy_button)
+        buttons.addWidget(self.save_button)
+        buttons.addStretch(1)
+        buttons.addWidget(close)
+        layout.addLayout(buttons)
+        self.resize(820, 420)
+
+    def copy_report(self) -> None:
+        QApplication.clipboard().setText(self.report)
+
+    def save_report(self, path: str | None = None) -> bool:
+        if not path:
+            path, _ = QFileDialog.getSaveFileName(self, "Сохранить список", "проблемные-файлы.txt", "Текст (*.txt)")
+        if not path:
+            return False
+        target = Path(path)
+        handle, temp = tempfile.mkstemp(prefix=".problems-", suffix=".txt", dir=str(target.parent))
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(self.report)
+            os.replace(temp, target)
+        except OSError:
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
+            raise
+        return True
+
+
 class RunResultsPage(QWidget):
     # The alpha/brush editor is implemented but intentionally hidden in the
     # stable client release. It will return in the dedicated image-processing
@@ -1974,6 +2085,9 @@ class RunResultsPage(QWidget):
         self.check_transparency_button.clicked.connect(
             self._request_selected_transparency
         )
+        self.problem_files_button = V3Button("Проблемные файлы", ButtonVariant.SECONDARY)
+        self.problem_files_button.clicked.connect(self.show_problem_files)
+        self.problem_files_button.hide()
         self.check_transparency_button.setToolTip(
             "Проверить прозрачность выбранного изображения и при необходимости исправить фон")
         self.retry_button.setToolTip(
@@ -2009,6 +2123,7 @@ class RunResultsPage(QWidget):
         utility_primary_layout.addWidget(self.open_folder_button)
         utility_primary_layout.addWidget(self.export_sets_button)
         utility_primary_layout.addWidget(self.check_transparency_button)
+        utility_primary_layout.addWidget(self.problem_files_button)
         utility_primary_layout.addWidget(self.save_corrected_button)
         utility_primary_layout.addWidget(self.save_mask_button)
         utility_primary_layout.addStretch()
@@ -2262,6 +2377,13 @@ class RunResultsPage(QWidget):
         self.results_extension.save_membership(self.state, membership)
         self.membership_changed.emit()
 
+    def show_problem_files(self) -> None:
+        if self.session is None:
+            return
+        rows = problem_file_rows(self.session)
+        if rows:
+            ProblemFilesDialog(rows, len(self.session.items), self).exec()
+
     @staticmethod
     def _stage_label(stage: str) -> str:
         return {
@@ -2409,6 +2531,9 @@ class RunResultsPage(QWidget):
             and not self.session.running
             and bool(self._transparency_paths)
         )
+        problems = problem_file_rows(self.session) if self.session is not None and not self.session.running else []
+        self.problem_files_button.setText(f"Проблемные файлы ({len(problems)})")
+        self.problem_files_button.setVisible(bool(problems))
         # Transparency check is the key next step: it is the highlighted button while
         # shown; "Открыть папку" is then an ordinary one.
         # One main button by situation: unfinished work first, then the transparency check.
