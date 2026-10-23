@@ -179,18 +179,11 @@ class PatternsPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(*(self.tokens.space_6,) * 4)
         root.setSpacing(self.tokens.space_4)
-        top, top_layout = _card()
-        row = QHBoxLayout()
+        # П1 (owner 2026-10-23): no plaque with «Главная Studio / Настройки API / Диагностика» — the Studio header
+        # already has them. The set name stays available to the code, but is not shown here.
         self.title = _text("Patterns", "v3Title", wrap=False)
-        row.addWidget(self.title)
-        row.addStretch()
-        for text, signal in (("Главная Studio", self.back_requested), ("Настройки API", self.settings_requested),
-                             ("Диагностика", self.diagnostics_requested)):
-            button = V3Button(text, ButtonVariant.GHOST)
-            button.clicked.connect(signal.emit)
-            row.addWidget(button)
-        top_layout.addLayout(row)
-        root.addWidget(top)
+        self.title.setParent(self)
+        self.title.hide()
         body = QHBoxLayout()
         body.setSpacing(self.tokens.space_4)
         side, side_layout = _card("Шаги")
@@ -281,7 +274,7 @@ class PatternsPage(QWidget):
         self.add_files.clicked.connect(self._pick_files)
         self.add_folder = V3Button("Добавить папку", ButtonVariant.SECONDARY)
         self.add_folder.clicked.connect(self._pick_folder)
-        self.pick_tile = V3Button("Выбрать плитку", ButtonVariant.SECONDARY)
+        self.pick_tile = V3Button("Выбрать файл", ButtonVariant.SECONDARY)
         self.pick_tile.clicked.connect(self._pick_tile)
         for button in (self.add_files, self.add_folder, self.pick_tile):
             row.addWidget(button)
@@ -305,14 +298,41 @@ class PatternsPage(QWidget):
             for path in paths:
                 try:
                     records.append({**self.host.import_png(path), "name": Path(path).name})
-                except (ValueError, OSError):
-                    problems.append(Path(path).name)
+                except (ValueError, OSError) as error:
+                    if hasattr(error, "width") and self._offer_smaller_copy(path, error):
+                        try:
+                            records.append({**self.host.import_png_downscaled(path), "name": Path(path).name})
+                            continue
+                        except (ValueError, OSError) as second:
+                            error = second
+                    elif hasattr(error, "width"):
+                        continue  # the user chose to skip it
+                    problems.append(f"{Path(path).name} — {error}")
         finally:
             QApplication.restoreOverrideCursor()
         if problems:
-            QMessageBox.warning(self, "Patterns", "Не удалось добавить файлы: " + ", ".join(problems[:5])
-                                + ("…" if len(problems) > 5 else "") + "\nНужен PNG не больше 8192 px.")
+            QMessageBox.warning(self, "Паттерны", "Не удалось добавить файлы:\n" + "\n".join(problems[:5])
+                                + ("\n…" if len(problems) > 5 else ""))
         return records
+
+    def _offer_smaller_copy(self, path, error):
+        """П8: the PNG is too large — show its size and offer a smaller copy (the source file is not changed)."""
+        if not hasattr(self.host, "import_png_downscaled"):
+            return False  # an older Studio without the smaller-copy import
+        QApplication.restoreOverrideCursor()
+        try:
+            box = QMessageBox(self)
+            box.setWindowTitle("Паттерны")
+            box.setText("Файл слишком большой для узора")
+            box.setInformativeText(f"{Path(path).name} — {error.width} × {error.height} px.\n{error}.\n\n"
+                                   "Можно добавить уменьшенную копию — её хватит для листа 12 × 12 дюймов при 300 DPI. "
+                                   "Исходный файл не меняется.")
+            add = box.addButton("Добавить уменьшенную копию", QMessageBox.ButtonRole.AcceptRole)
+            box.addButton("Пропустить файл", QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            return box.clickedButton() is add
+        finally:
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
     def _pick_files(self):
         paths, _ = QFileDialog.getOpenFileNames(self, "Добавить PNG", "", "PNG (*.png)")
@@ -365,6 +385,9 @@ class PatternsPage(QWidget):
         row = QHBoxLayout()
         self.background_swatch = QLabel()
         self.background_swatch.setFixedSize(44, 34)
+        self.background_swatch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.background_swatch.setToolTip("Выбрать цвет фона")
+        self.background_swatch.mousePressEvent = lambda _event: self._pick_background()
         row.addWidget(self.background_swatch)
         self.background_name = _text("Тёплый белый")
         row.addWidget(self.background_name, 1)
@@ -372,6 +395,7 @@ class PatternsPage(QWidget):
         self.transparent_button.clicked.connect(self._toggle_transparent)
         row.addWidget(self.transparent_button)
         left_layout.addLayout(row)
+        left_layout.addWidget(_text("Фон попадёт в итоговый файл. «Прозрачный» — только для PNG.", "v3Small"))
         left_layout.addStretch()
         columns.addWidget(left, 1)
         right, right_layout = _card()
@@ -442,6 +466,16 @@ class PatternsPage(QWidget):
                               for e in self._elements]
         self._invalidate(layout=True)
         self._refresh()
+
+    def _pick_background(self):
+        from PyQt6.QtGui import QColor
+        from PyQt6.QtWidgets import QColorDialog
+        colour = QColorDialog.getColor(QColor(*self._settings["background"][:3]), self, "Цвет фона")
+        if colour.isValid():
+            self._settings["background"] = [colour.red(), colour.green(), colour.blue(), 255]
+            self._settings["transparent"] = False
+            self._invalidate()
+            self._refresh()
 
     def _toggle_transparent(self):
         self._settings["transparent"] = not self._settings["transparent"]
@@ -777,6 +811,8 @@ class PatternsPage(QWidget):
             payload, count=s["count"], min_gap=float(s["gap"]), scale_range=(centre * 0.75, centre * 1.25),
             angle_range=(-float(s["angle"]), float(s["angle"])), seed=payload["scene"]["seed"])
         self._layout_warnings = warnings
+        placed = len(elements) - len(payload["scene"]["elements"])
+        self._layout_shortage = (placed, s["count"]) if warnings and placed < s["count"] else None
         return elements
 
     def _invalidate(self, layout=False):
@@ -784,6 +820,7 @@ class PatternsPage(QWidget):
         self._current = None
         if layout:
             self._layout_dirty = True
+            self._layout_shortage = None  # П5: a message about the previous slider values must not stay
         self._generation += 1
         if hasattr(self, "stack"):
             self._refresh_light()
@@ -896,9 +933,12 @@ class PatternsPage(QWidget):
         self.source_title.setText((f"Ваши PNG: {len(records)}" if pngs else "Готовая плитка"))
         self.source_empty.setVisible(not records)
         self.add_files.setVisible(pngs)
-        self.add_folder.setVisible(pngs)
+        self.add_folder.setVisible(False)  # owner 2026-10-23: the file dialog takes many PNG at once
         self.pick_tile.setVisible(not pngs)
-        self.pick_tile.setText("Выбрать другую" if self._tile else "Выбрать плитку")
+        self.pick_tile.setText("Выбрать другой файл" if self._tile else "Выбрать файл")
+        self.source_empty.setText(
+            "Пока нет файлов. Добавьте PNG с прозрачным фоном: цветы, листья, любые элементы." if pngs else
+            "Файл ещё не выбран. Выберите картинку, которую нужно сделать бесшовной плиткой.")
         for index, record in enumerate(records[:24]):
             thumb = QLabel()
             thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -909,11 +949,14 @@ class PatternsPage(QWidget):
                 thumb.setText("?")
             self.source_grid.addWidget(thumb, index // 8, index % 8)
         _clear(self.checks)
-        if records:
+        if records and pngs:
             transparent = sum(1 for r in records if r["has_alpha"])
             self.checks.addWidget(_status(f"{transparent} из {len(records)} файлов с прозрачным фоном", "warning" if transparent < len(records) else "ok"))
-            if self._mode == "tile":
-                self.checks.addWidget(_text(f"{records[0]['width']} × {records[0]['height']} px. Шов проверим на следующем шаге.", "v3Small"))
+        elif records:
+            # A ready tile is a whole picture: transparency is not expected, the size is information only.
+            self.checks.addWidget(_status("Прозрачный фон для готовой плитки не нужен.", "ok"))
+            self.checks.addWidget(_text(f"Выбран файл {records[0]['name']} · {records[0]['width']} × {records[0]['height']} px. "
+                                        "Подойдёт файл до 8192 px по стороне; шов проверим на следующем шаге.", "v3Small"))
 
     def _refresh_settings(self):
         s, tile = self._settings, self._mode == "tile"
@@ -929,12 +972,20 @@ class PatternsPage(QWidget):
         self.size_hint.setText(f"12 × 12 = 3600 × 3600 px при {DPI} DPI. Сейчас: {self._canvas()} × {self._canvas()} px")
         color = "transparent" if s["transparent"] else "rgb({},{},{})".format(*s["background"][:3])
         self.background_swatch.setStyleSheet(f"background:{color}; border:1px solid {self.tokens.border};")
-        self.background_name.setText("Прозрачный" if s["transparent"] else "Тёплый белый")
+        default = list(s["background"][:3]) == list(DEFAULTS["background"][:3])
+        name = "Тёплый белый" if default else "Свой цвет #{:02X}{:02X}{:02X}".format(*s["background"][:3])
+        self.background_name.setText("Прозрачный" if s["transparent"] else f"{name} — нажмите на образец, чтобы выбрать цвет")
         self.transparent_button.set_variant(ButtonVariant.PRIMARY if s["transparent"] else ButtonVariant.SECONDARY)
         locked = sum(1 for e in self._elements if e.get("locked"))
-        warnings = getattr(self, "_layout_warnings", [])
-        self.layout_note.setText((warnings[0] if warnings else "Если места не хватает, покажем, сколько элементов поставлено из запрошенных.")
-                                 + (f" Закреплено: {locked}." if locked else ""))
+        shortage = getattr(self, "_layout_shortage", None)
+        if shortage:
+            placed, requested = shortage
+            text = (f"Поставлено {placed} из {requested} элементов: при зазоре {s['gap']} px на листе нет места. "
+                    "Уменьшите зазор или размер элементов, либо количество.")
+        else:
+            text = "Если места не хватает, покажем, сколько элементов поставлено из запрошенных."
+        self.layout_note.setText(text + (f" Закреплено: {locked}." if locked else ""))
+        self.layout_note.setStyleSheet("color:#f5b45a;font-weight:bold" if shortage else "")
 
     def _refresh_preview(self):
         result = self._current

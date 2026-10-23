@@ -282,3 +282,83 @@ def test_patterns_access_is_not_rechecked_while_open(app, tmp_path):
         gate.authorize_run.assert_not_called()
     finally:
         view.deleteLater()
+
+
+# ---- Owner remarks П1, П4, П5, П6, П8 (approved mockups docs/ui/3.2/patterns-owner-remarks/, 2026-10-23)
+
+def test_no_plaque_and_only_add_png_button(runtime, app, tmp_path):
+    from PyQt6.QtWidgets import QPushButton
+    handle, page, host = open_page(runtime, tmp_path)
+    page.show(); app.processEvents()
+    visible = {b.text() for b in page.findChildren(QPushButton) if b.isVisible()}
+    assert not visible & {"Главная Studio", "Настройки API", "Диагностика"}   # П1: the Studio header has them
+    assert page.add_files.isVisible() and not page.add_folder.isVisible()       # owner edit: no «Добавить папку»
+    close_page(app, handle, page, host)
+
+
+def test_ready_tile_texts_name_the_file_and_need_no_transparency(runtime, app, tmp_path):
+    handle, page, host = open_page(runtime, tmp_path)
+    page.show()
+    page._set_mode("tile")
+    assert page.pick_tile.text() == "Выбрать файл"
+    assert "Выберите картинку" in page.source_empty.text()
+    tile = tmp_path / "tile.png"
+    Image.new("RGB", (600, 400), (120, 80, 40)).save(tile)
+    page._tile = {**host.import_png(str(tile)), "name": "tile.png"}
+    page._refresh(); app.processEvents()
+    texts = [page.checks.itemAt(i).widget().text() for i in range(page.checks.count())]
+    assert texts[0] == "Прозрачный фон для готовой плитки не нужен."
+    assert "Выбран файл tile.png · 600 × 400 px" in texts[1]
+    assert not any("прозрачным фоном" in t for t in texts)
+    assert page.pick_tile.text() == "Выбрать другой файл"
+    close_page(app, handle, page, host)
+
+
+def test_not_enough_room_message_is_russian_and_follows_the_slider(runtime, app, tmp_path):
+    handle, page, host = open_page(runtime, tmp_path)
+    page._add_assets(make_pngs(tmp_path))
+    page._settings.update(inches=2.0, count=60, gap=300)
+    page._go_next()
+    page._elements = page._relayout()
+    page._refresh()
+    note = page.layout_note.text()
+    assert note.startswith("Поставлено ") and "из 60 элементов" in note and "при зазоре 300 px" in note
+    assert "placed" not in note
+    page._settings["count"] = 6
+    page._invalidate(layout=True)
+    page._refresh()
+    assert "из 60" not in page.layout_note.text()   # no stale message after the slider moved
+    close_page(app, handle, page, host)
+
+
+def test_background_colour_can_be_picked(runtime, app, tmp_path, monkeypatch):
+    from PyQt6.QtGui import QColor
+    from PyQt6.QtWidgets import QColorDialog
+    handle, page, host = open_page(runtime, tmp_path)
+    page._settings["transparent"] = True
+    monkeypatch.setattr(QColorDialog, "getColor", staticmethod(lambda *a, **k: QColor(10, 120, 200)))
+    page._pick_background()
+    assert page._settings["background"] == [10, 120, 200, 255] and not page._settings["transparent"]
+    assert page.background_name.text().startswith("Свой цвет #0A78C8")
+    close_page(app, handle, page, host)
+
+
+def test_too_large_png_offers_a_smaller_copy(runtime, app, tmp_path, dialogs):
+    from studio_patterns_storage import PatternsImageTooLarge
+    big = tmp_path / "rough_03_upscaled-after.png"
+    Image.new("RGBA", (9000, 600), (200, 100, 100, 255)).save(big)
+    handle, page, host = open_page(runtime, tmp_path)
+    with pytest.raises(PatternsImageTooLarge) as caught:
+        host.import_png(str(big))
+    assert (caught.value.width, caught.value.height) == (9000, 600) and "9000 × 600 px" in str(caught.value)
+    offered = []
+    page._offer_smaller_copy = lambda path, error: offered.append((Path(path).name, error.width)) or True
+    page._add_assets([str(big)])
+    assert offered == [("rough_03_upscaled-after.png", 9000)]
+    assert len(page._assets) == 1 and page._assets[0]["width"] == 4000 and dialogs == []
+    assert Image.open(big).size == (9000, 600)          # the source file is not changed
+    page._offer_smaller_copy = lambda path, error: False  # «Пропустить файл»
+    page._assets.clear()
+    page._add_assets([str(big)])
+    assert page._assets == [] and dialogs == []
+    close_page(app, handle, page, host)
