@@ -252,3 +252,31 @@ def test_main_window_opens_and_closes_patterns_from_the_signed_package(app, tmp_
         view.close()
         view.deleteLater()
         app.processEvents()
+
+
+def _patterns_view(tmp_path, gate):
+    from v3_mode_selection import V3ApplicationView
+    return V3ApplicationView(draft_path=tmp_path / "draft.json", license_gate=gate, module_delivery=None)
+
+
+def _patterns_auth(now, minutes):
+    from datetime import timedelta
+    from license_client import LicenseAuthorization, ModuleEntitlement
+    return LicenseAuthorization("fixture", "clipart-generator", "device", now - timedelta(minutes=minutes + 1),
+        now - timedelta(minutes=minutes) + timedelta(minutes=5),
+        module_entitlements=(ModuleEntitlement("patterns", now - timedelta(days=1), now + timedelta(days=1)),))
+
+
+def test_patterns_access_is_not_rechecked_while_open(app, tmp_path):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    now = datetime.now(timezone.utc)
+    gate = SimpleNamespace(current_authorization=_patterns_auth(now, 10), authorize_run=Mock(),
+                           status_text="Лицензия активна", verification_text="Проверено")
+    view = _patterns_view(tmp_path, gate)
+    try:
+        assert view._patterns_allowed() is True  # authorization expired 5+ minutes ago
+        gate.authorize_run.assert_not_called()
+    finally:
+        view.deleteLater()
