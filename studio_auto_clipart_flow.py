@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
+from studio_clipart_versions import restore_review, review_fields
 from studio_clipart_objects import attach_reference_guidance, compile_objects, fill_recipe, validate_objects
 from studio_clipart_recipe import ClipartRecipe, ROLES
 from studio_bundle_planner import propose_bundle_plan
@@ -325,6 +326,10 @@ class AutoClipartFlowController(ClipartFlowController):
         self.launch_page.refresh_from_state = self._refresh_launch
         self.pages.register_instance(StepId.REVIEW_RUN, self.launch_page)
         self.pages.register_instance(StepId.RESULTS, self.run_queue.page)
+        from studio_clipart_review_ui import ImageReview, review_supported
+        self.review = ImageReview(self) if review_supported() else None
+        if self.review is not None:
+            self.review.install_results_page()
         # The separate export step owns collection delivery, not the result toolbar.
         self.run_queue.page.results_extension.export_action_label = ""
         self.run_queue.page.refresh_from_state()
@@ -765,10 +770,21 @@ class AutoClipartFlowController(ClipartFlowController):
             if path in paths:
                 selected = paths.index(path)
         editor.set_files(paths, selected_index=selected)
+        if self.review is not None:
+            self.review.attach_editor(editor, paths)
         editor.copy_saved.connect(self.run_queue.page.use_edited_output)
         editor.back_requested.connect(dialog.accept)
-        dialog.exec()
-        dialog.deleteLater()
+        try:
+            dialog.exec()
+        finally:
+            if self.review is not None:
+                self.review.detach_editor()
+            dialog.deleteLater()
+
+    def before_replace_outputs(self, indices, kind):
+        """Run queue hook: keep current pictures as versions before re-creation."""
+        if self.review is not None:
+            self.review.before_replace_outputs(indices, kind)
 
     def start_processing_again(self):
         self.shell.state.data.automatic.pop("run", None)
@@ -824,7 +840,7 @@ class AutoClipartFlowController(ClipartFlowController):
         except Exception:
             return fallback
 
-    def confirm_retry_request(self, request, *, regenerate=False):
+    def confirm_retry_request(self, request, *, regenerate=False, summary=None):
         self._reference_consent = None
         approved = deepcopy(request)
         if approved.mode == "mode2_process" and approved.selected_files:
@@ -855,13 +871,19 @@ class AutoClipartFlowController(ClipartFlowController):
         action = 'Продолжить незавершённые запросы' if continuing else 'Повторить неудачные запросы'
         if regenerate:
             action = 'Сгенерировать заново выбранные изображения'
+        replaced = ('Текущие версии выбранных изображений сохранятся в истории версий.\n'
+                    if callable(getattr(self, 'before_replace_outputs', None))
+                    else 'Текущие версии выбранных изображений будут заменены новыми.\n')
         message = (
             f'{action}: {len(approved.generated_prompts)}?\n'
-            + ('Текущие версии выбранных изображений будут заменены новыми.\n' if regenerate
-               else 'Успешные изображения не будут созданы заново.\n')
+            + (replaced if regenerate else 'Успешные изображения не будут созданы заново.\n')
             + self._request_cost_line(approved) + '\n'
             'Модель: ' + ', '.join(sorted(models))
         )
+        if summary is not None:
+            message = (f'Пересоздать помеченные. Брак генерации — {len(approved.generated_prompts)}: '
+                       'новая генерация, платно.\n' + self._request_cost_line(approved) + '\n'
+                       'Модель: ' + ', '.join(sorted(models)) + '\n' + '\n'.join(summary))
         if references:
             message += '\nМодели будут переданы референсы:\n' + '\n'.join(
                 Path(path).name for path in sorted(references))
@@ -985,7 +1007,8 @@ class AutoClipartFlowController(ClipartFlowController):
             {"status": item.status.value, "output_path": item.output_path or "", "attempts": item.attempts,
              "editor_output_path": item.editor_output_path or "",
              "paid_completed_stages": list(item.paid_history_stages()),
-             "stage_statuses": item.saved_stages(), "source_path": item.source_path or ""}
+             "stage_statuses": item.saved_stages(), "source_path": item.source_path or "",
+             **review_fields(item)}
             for item in session.items
         ]
         self.shell.state_changed.emit()
@@ -1012,6 +1035,7 @@ class AutoClipartFlowController(ClipartFlowController):
             item.attempts = row["attempts"]
             item.stage_statuses = dict(row.get("stage_statuses", {}))
             item.paid_completed_stages = tuple(row.get("paid_completed_stages", ()))
+            restore_review(item, row)
             if item.status is RunItemStatus.FAILED:
                 item.short_message = (
                     "Файл сохранён для коррекции. Обработка не завершена; файл не готов к экспорту."
