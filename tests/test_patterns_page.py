@@ -252,3 +252,40 @@ def test_main_window_opens_and_closes_patterns_from_the_signed_package(app, tmp_
         view.close()
         view.deleteLater()
         app.processEvents()
+
+
+def _patterns_view(tmp_path, gate):
+    from v3_mode_selection import V3ApplicationView
+    return V3ApplicationView(draft_path=tmp_path / "draft.json", license_gate=gate, module_delivery=None)
+
+
+def _patterns_auth(now, minutes):
+    from datetime import timedelta
+    from license_client import LicenseAuthorization, ModuleEntitlement
+    return LicenseAuthorization("fixture", "clipart-generator", "device", now - timedelta(minutes=minutes + 1),
+        now - timedelta(minutes=minutes) + timedelta(minutes=5),
+        module_entitlements=(ModuleEntitlement("patterns", now - timedelta(days=1), now + timedelta(days=1)),))
+
+
+def test_patterns_access_is_reverified_after_authorization_expires(app, tmp_path):
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from license_client import LicenseError
+    now = datetime.now(timezone.utc)
+    expired, fresh = _patterns_auth(now, 10), _patterns_auth(now, 0)
+    gate = SimpleNamespace(current_authorization=expired, authorize_run=Mock(return_value=fresh),
+                           status_text="Лицензия активна", verification_text="Проверено")
+    view = _patterns_view(tmp_path, gate)
+    try:
+        assert view._patterns_allowed() is True
+        assert gate.authorize_run.call_count == 1
+        gate.current_authorization = expired
+        gate.authorize_run = Mock(side_effect=LicenseError("denied", code="license_rejected"))
+        view2 = _patterns_view(tmp_path, gate)
+        assert view2._patterns_allowed() is False
+        assert view2._patterns_allowed() is False
+        assert gate.authorize_run.call_count == 1  # denial is not re-checked for 30 s
+        view2.deleteLater()
+    finally:
+        view.deleteLater()

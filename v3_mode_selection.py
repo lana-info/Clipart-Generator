@@ -884,7 +884,20 @@ class V3ApplicationView(QWidget):
     def _patterns_allowed(self):
         from license_client import LicenseAuthorization
         authorization = getattr(self._license_gate, "current_authorization", None)
-        return isinstance(authorization, LicenseAuthorization) and authorization.allows_module("patterns")
+        if isinstance(authorization, LicenseAuthorization) and authorization.allows_module("patterns"):
+            return True
+        # The signed authorization lives about five minutes; a long editing session outlives it.
+        # Re-verify (existing online check with its signed outage fallback) instead of reporting
+        # "no access", and do not hammer the server after a denial.
+        now = time.monotonic()
+        if now - getattr(self, "_patterns_denied_at", -1e9) < 30:
+            return False
+        try:
+            authorize_module_run(self._license_gate, "patterns")
+        except Exception:
+            self._patterns_denied_at = now
+            return False
+        return True
 
     def _open_patterns(self):
         if self.shell is not None and self.shell.active_run_controller() is not None:
