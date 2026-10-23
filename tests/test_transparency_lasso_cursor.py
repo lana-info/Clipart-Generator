@@ -85,7 +85,7 @@ def test_esc_drops_selection_before_leaving_focus_mode(page):
     assert canvas.contour.selection == set()
     assert canvas.lasso_area == []
     assert page._focus_mode, 'first Esc must only drop the selection'
-    assert page.local_selection_label.text() == 'Точки не выделены'
+    assert page.local_selection_label.text() == 'Ctrl+щелчок по линии — добавить точку'
     QTest.keyClick(canvas, Qt.Key.Key_Escape)
     assert not page._focus_mode
 

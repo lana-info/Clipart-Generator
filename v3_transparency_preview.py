@@ -23,6 +23,7 @@ from PyQt6.QtCore import QEvent, QEventLoop, QPoint, QPointF, QSize, Qt, QTimer,
 from PyQt6.QtGui import (
     QBrush,
     QColor,
+    QCursor,
     QIcon,
     QImage,
     QPainter,
@@ -1010,20 +1011,38 @@ class InlineContour:
             self.points.pop()
             self.smooth_points = self.smooth_points - {len(self.points)}
             return
-        if self.selected is None:
-            return
-        pi, ni = self.selected
-        path = self.paths[pi]
-        if len(path.nodes) <= 3:
+        # Delete removes every selected point; a path keeps at least 3 points.
+        self.sanitize_selection()
+        by_path = {}
+        for pi, ni in self.selection:
+            by_path.setdefault(pi, set()).add(ni)
+        removable = {pi: gone for pi, gone in by_path.items() if len(self.paths[pi].nodes) - len(gone) >= 3}
+        if not removable:
             return
         self.checkpoint()
-        self.paths[pi] = replace(path, nodes=path.nodes[:ni]+path.nodes[ni+1:])
-        self.selection = {(p, i - (p == pi and i > ni)) for p, i in self.selection if (p, i) != (pi, ni)}
+        for pi, gone in removable.items():
+            path = self.paths[pi]
+            self.paths[pi] = replace(path, nodes=tuple(n for i, n in enumerate(path.nodes) if i not in gone))
+        self.selection = {(pi, ni) for pi, ni in self.selection if pi not in removable}
         self._selected = None
         self.sanitize_selection()
 
-    def insert(self, point, tolerance):
-        # De Casteljau splitting preserves the curve, including its handles.
+    def delete_node(self, pi, ni):
+        """Ctrl + click on a point: delete just that point."""
+        self.select([(pi, ni)])
+        self.delete()
+
+    def move_selection(self, origin, dx, dy):
+        """Shift every selected point (with its handles) from ``origin`` paths by dx, dy."""
+        for pi, ni in self.selection:
+            node = origin[pi].nodes[ni]
+            h, w = origin[pi].source_shape
+            shift = lambda p: (min(w-1, max(0, p[0]+dx)), min(h-1, max(0, p[1]+dy))) if p else None
+            self.update_node(pi, ni, replace(node, point=shift(node.point), in_handle=shift(node.in_handle),
+                                             out_handle=shift(node.out_handle)))
+
+    def nearest_segment(self, point, tolerance):
+        """Closest spot on the contour within ``tolerance``: (distance, pi, ni, t, a, b, c, d, q) or None."""
         best = None
         for pi, path in enumerate(self.paths):
             for ni, node in enumerate(path.nodes):
@@ -1034,10 +1053,16 @@ class InlineContour:
                     q = (1-t)**3*a+3*(1-t)**2*t*b+3*(1-t)*t*t*c+t**3*d
                     distance = np.linalg.norm(q-point)
                     if distance <= tolerance and (best is None or distance < best[0]):
-                        best = distance, pi, ni, t, a, b, c, d
+                        best = distance, pi, ni, t, a, b, c, d, tuple(q)
+        return best
+
+    def insert(self, point, tolerance, smooth=True):
+        # De Casteljau splitting preserves the curve, including its handles;
+        # a corner point keeps the same handles but they move independently.
+        best = self.nearest_segment(point, tolerance)
         if best is None:
             return
-        _, pi, ni, t, a, b, c, d = best
+        _, pi, ni, t, a, b, c, d, _ = best
         ab, bc, cd = (1-t)*a+t*b, (1-t)*b+t*c, (1-t)*c+t*d
         abc, bcd = (1-t)*ab+t*bc, (1-t)*bc+t*cd
         q = (1-t)*abc+t*bcd
@@ -1049,7 +1074,7 @@ class InlineContour:
         nodes[ni] = replace(nodes[ni], out_handle=tuple(ab))
         j = (ni+1) % len(nodes)
         nodes[j] = replace(nodes[j], in_handle=tuple(cd))
-        nodes.insert(ni+1, BezierNode(tuple(q), 'smooth', tuple(abc), tuple(bcd)))
+        nodes.insert(ni+1, BezierNode(tuple(q), 'smooth' if smooth else 'corner', tuple(abc), tuple(bcd)))
         self.paths[pi] = replace(path, nodes=tuple(nodes))
         self.selected = pi, ni+1
 
@@ -1058,6 +1083,8 @@ class TransparencyCanvas(QGraphicsView):
     """Large alpha-mask canvas with a brush and Space-to-pan behavior."""
 
     document_changed = pyqtSignal()
+    # Ctrl + hover over the pen contour changed: ('add', point), ('remove', point) or None.
+    point_hint_changed = pyqtSignal()
     tool_requested = pyqtSignal(str)
     diameter_requested = pyqtSignal(int)
     zoom_requested = pyqtSignal(int)
@@ -1072,6 +1099,8 @@ class TransparencyCanvas(QGraphicsView):
         self.tool = "brush"
         self.contour = InlineContour()
         self._contour_drag = None
+        self._group_drag = None
+        self._point_hover = None
         self._lasso_points = []
         # Lasso area in image coordinates: polygons added with Shift, used by the edge actions.
         self.lasso_area: list[list[tuple[float, float]]] = []
@@ -1134,6 +1163,8 @@ class TransparencyCanvas(QGraphicsView):
         self._lasso_points = []
         self.lasso_area = []
         self._contour_drag = None
+        self._group_drag = None
+        self._point_hover = None
         self._preview_alpha = None
         self._preview_paths = None
         self.contour = getattr(document, "pending_contour", InlineContour())
@@ -1271,6 +1302,14 @@ class TransparencyCanvas(QGraphicsView):
             event.accept()
             return
         if (self.tool == "pen" and self.document is not None and event.button() == Qt.MouseButton.RightButton
+                and self.contour.paths and not self.contour.points
+                and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            point = self._image_point(event.position().toPoint())
+            if point:
+                self._edit_point_with_ctrl(point, smooth=True)
+            event.accept()
+            return
+        if (self.tool == "pen" and self.document is not None and event.button() == Qt.MouseButton.RightButton
                 and not self.contour.paths):
             # Manual outline: right button places a smooth curve point (left button: a corner).
             point = self._image_point(event.position().toPoint())
@@ -1295,6 +1334,14 @@ class TransparencyCanvas(QGraphicsView):
                     else:
                         self.contour.add_point(point)
                         self.document_changed.emit()
+                elif point and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                    self._edit_point_with_ctrl(point, smooth=False)
+                elif (point and hit and hit[2] == 'point' and not shift and len(self.contour.selection) > 1
+                      and hit[:2] in self.contour.selection
+                      and not event.modifiers() & Qt.KeyboardModifier.AltModifier):
+                    # Dragging any selected point moves the whole selected group.
+                    self._group_drag = (point, list(self.contour.paths))
+                    self._drag_checkpoint = False
                 elif point:
                     self.contour.select([hit[:2]] if hit else [], additive=shift)
                     if hit and event.modifiers() & Qt.KeyboardModifier.AltModifier:
@@ -1353,6 +1400,18 @@ class TransparencyCanvas(QGraphicsView):
             self.viewport().update()
             event.accept()
             return
+        if self._group_drag and event.buttons() & Qt.MouseButton.LeftButton:
+            point = self._image_point(view_point)
+            if point:
+                if not self._drag_checkpoint:
+                    self.contour.checkpoint()
+                    self._drag_checkpoint = True
+                start, origin = self._group_drag
+                self.contour.move_selection(origin, point[0] - start[0], point[1] - start[1])
+                self.viewport().update()
+                self.document_changed.emit()
+            event.accept()
+            return
         if self._contour_drag and event.buttons() & Qt.MouseButton.LeftButton:
             point = self._image_point(view_point)
             if point:
@@ -1370,6 +1429,7 @@ class TransparencyCanvas(QGraphicsView):
             self._extend_active_stroke(point)
             event.accept()
             return
+        self._update_point_hover(view_point, event.modifiers())
         self.viewport().update()
         super().mouseMoveEvent(event)
 
@@ -1435,8 +1495,9 @@ class TransparencyCanvas(QGraphicsView):
         self._smooth_prev = self._smooth_mid = None
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        dragged = self._contour_drag is not None and self._drag_checkpoint
+        dragged = (self._contour_drag is not None or self._group_drag is not None) and self._drag_checkpoint
         self._contour_drag = None
+        self._group_drag = None
         if event.button() == Qt.MouseButton.LeftButton and self._lasso_points:
             self._lasso_points.append(self.mapToScene(event.position().toPoint()))
             outline = [self._item.mapFromScene(point) for point in self._lasso_points]
@@ -1525,7 +1586,73 @@ class TransparencyCanvas(QGraphicsView):
         """System cursor of the current tool; the brush draws its own ring."""
         if self.tool == "lasso":
             return Qt.CursorShape.CrossCursor
+        if self.tool == "pen" and self._point_hover:
+            return self._point_cursor(self._point_hover[0])
         return Qt.CursorShape.ArrowCursor
+
+    @staticmethod
+    def _point_cursor(kind):
+        """Arrow tip with a "+" (add point) or "−" (delete point) badge."""
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#0a101c"), 4))
+        painter.drawLine(1, 1, 13, 13)
+        painter.setPen(QPen(QColor("#e4edf6"), 2))
+        painter.drawLine(1, 1, 13, 13)
+        painter.setPen(QPen(QColor("#0a101c"), 1))
+        painter.setBrush(QColor("#2dd4bf" if kind == "add" else "#f06e6e"))
+        painter.drawEllipse(12, 8, 18, 18)
+        painter.setPen(QPen(QColor("#0a101c"), 2.5))
+        painter.drawLine(16, 17, 26, 17)
+        if kind == "add":
+            painter.drawLine(21, 12, 21, 22)
+        painter.end()
+        return QCursor(pixmap, 1, 1)
+
+    def _update_point_hover(self, view_point=None, modifiers=None) -> None:
+        """With Ctrl held over the pen contour, show where a click adds or deletes a point."""
+        hover = None
+        if modifiers is None:
+            modifiers = QApplication.keyboardModifiers()
+        if view_point is None:
+            view_point = self.viewport().mapFromGlobal(QCursor.pos())
+        if (self.tool == "pen" and self.document is not None and self.contour.paths and not self.contour.points
+                and not self.contour_busy and not self.contour.local_active and not self._space_pressed
+                and modifiers & Qt.KeyboardModifier.ControlModifier):
+            point = self._image_point(view_point)
+            if point:
+                scale = self.transform().m11()
+                hit = self.contour.hit(point, 7 / scale)
+                if hit and hit[2] == 'point':
+                    hover = ('remove', self.contour.paths[hit[0]].nodes[hit[1]].point)
+                else:
+                    best = self.contour.nearest_segment(point, 8 / scale)
+                    if best is not None:
+                        hover = ('add', best[-1])
+        if hover != self._point_hover:
+            changed_kind = (hover or (None,))[0] != (self._point_hover or (None,))[0]
+            self._point_hover = hover
+            if changed_kind and not self._panning:
+                self.setCursor(self.tool_cursor())
+            self.point_hint_changed.emit()
+            self.viewport().update()
+
+    def _edit_point_with_ctrl(self, point, *, smooth) -> None:
+        """Ctrl + click: on a point deletes it, on the line adds a corner (left) or curve (right) point."""
+        self._show_after_for_edit()
+        scale = self.transform().m11()
+        hit = self.contour.hit(point, 7 / scale)
+        if hit and hit[2] == 'point':
+            self.contour.delete_node(*hit[:2])
+        else:
+            self.contour.insert(point, 8 / scale, smooth=smooth)
+        self._point_hover = None
+        self._update_point_hover()
+        self.refresh_local_preview()
+        self.document_changed.emit()
+        self.viewport().update()
 
     def clear_selection(self) -> bool:
         """Drop the lasso and the selected points; False when nothing was selected."""
@@ -1820,6 +1947,8 @@ class TransparencyCanvas(QGraphicsView):
         ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier)
         if key == Qt.Key.Key_Shift:
             self.viewport().update()   # show or hide the straight-line guide
+        if key == Qt.Key.Key_Control:
+            self._update_point_hover(modifiers=mods | Qt.KeyboardModifier.ControlModifier)
         if self.contour_busy and key == Qt.Key.Key_Escape:
             self.cancel_contour()
             event.accept()
@@ -1878,12 +2007,10 @@ class TransparencyCanvas(QGraphicsView):
             offsets = {Qt.Key.Key_Left: (-1,0), Qt.Key.Key_Right: (1,0), Qt.Key.Key_Up: (0,-1), Qt.Key.Key_Down: (0,1)}
             if key in offsets and self.contour.selected:
                 self._show_after_for_edit()
-                pi, ni = self.contour.selected
-                point = self.contour.paths[pi].nodes[ni].point
                 dx, dy = offsets[key]
                 step = 10 if mods & Qt.KeyboardModifier.ShiftModifier else 1
                 self.contour.checkpoint()
-                self.contour.move((pi,ni,'point'), (point[0]+dx*step, point[1]+dy*step))
+                self.contour.move_selection(list(self.contour.paths), dx*step, dy*step)
                 self.refresh_local_preview()
                 self.document_changed.emit()
                 self.viewport().update()
@@ -1898,6 +2025,8 @@ class TransparencyCanvas(QGraphicsView):
     def keyReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         if event.key() == Qt.Key.Key_Shift:
             self.viewport().update()
+        if event.key() == Qt.Key.Key_Control:
+            self._update_point_hover(modifiers=event.modifiers() & ~Qt.KeyboardModifier.ControlModifier)
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             self.set_space_pan_active(False)
             event.accept()
@@ -1934,6 +2063,7 @@ class TransparencyCanvas(QGraphicsView):
         self.set_space_pan_active(False)
         self._panning = False
         self._contour_drag = None
+        self._group_drag = None
         if self._painting:
             self._finish_smooth_stroke()
             self._painting = False
@@ -2004,6 +2134,14 @@ class TransparencyCanvas(QGraphicsView):
                                 painter.drawLine(QPointF(*node.point), QPointF(*handle))
                                 painter.drawEllipse(QPointF(*handle), r*.7, r*.7)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(pen)
+            if self._point_hover:
+                kind, spot = self._point_hover
+                marker = QPen(QColor("#f5b45a" if kind == "add" else "#f06e6e"), 2.5)
+                marker.setCosmetic(True)
+                painter.setPen(marker)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawEllipse(QPointF(*spot), r * 2, r * 2)
                 painter.setPen(pen)
             self._draw_lasso(painter)
             return
@@ -2477,6 +2615,7 @@ class ClipartTransparencyEditorPage(QWidget):
         right.addWidget(self.tools_scroll, 3)
 
         self.canvas.document_changed.connect(self._refresh_history_buttons)
+        self.canvas.point_hint_changed.connect(self._refresh_local_buttons)
         self.canvas.tool_requested.connect(self._set_tool)
         self.canvas.diameter_requested.connect(self._cycle_diameter)
         self.canvas.zoom_requested.connect(self._cycle_zoom)
@@ -2958,8 +3097,11 @@ class ClipartTransparencyEditorPage(QWidget):
         simplify_possible = count >= 3 and ('local-transform-simplify', tuple(contour.paths), frozenset(contour.selection)) not in self.canvas.local_noops
         self.simplify_button.setEnabled(valid and not busy and simplify_possible)
         self.simplify_button.setToolTip('Упростить участок')
-        label = ('Точки не выделены' if not count else
-                 f'Предпросмотр: {len(contour.local_before[1])} → {count} точек' if active else f'Выделено точек: {count} · Esc — снять выделение')
+        hover = self.canvas._point_hover
+        label = (('Ctrl+щелчок по точке — удалить' if hover and hover[0] == 'remove'
+                  else 'Ctrl+щелчок по линии — добавить точку') if not count else
+                 f'Предпросмотр: {len(contour.local_before[1])} → {count} точек' if active
+                 else f'Выделено точек: {count} · Delete — удалить · Esc — снять')
         if count and not simplify_possible:
             label += ' · Достигнут предел'
         self.local_selection_label.setText(label)
