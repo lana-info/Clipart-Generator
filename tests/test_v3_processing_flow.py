@@ -817,13 +817,81 @@ class LargeImportTests(unittest.TestCase):
                 lambda: None,
             )
 
-            page.add_files(sources)
-            self.assertTrue(
-                all(label.text() == "Загрузка…" for label in page.thumbnail_labels)
-            )
-
-            QTest.qWait(400)
-
+            # The page pumps events for its progress bar, so timing must not decide the test:
+            # check that every thumbnail is queued instead of read on the spot, then that all arrive.
+            with patch.object(ProcessingFilesPage, "_load_thumbnail", wraps=ProcessingFilesPage._load_thumbnail) as direct, \
+                    patch("v3_processing_flow.QTimer.singleShot") as queued:
+                page.add_files(sources)
+            self.assertEqual(direct.call_count, 0)
+            self.assertEqual(queued.call_count, 21)
+            for _delay, callback in (call.args for call in queued.call_args_list):
+                callback()
             self.assertTrue(
                 all(not label.pixmap().isNull() for label in page.thumbnail_labels)
             )
+
+
+class FalInputSizeTests(unittest.TestCase):
+    """Approved mockup D: sources over the Fal.ai 8 MB limit stop the batch before anything is paid."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _big(self, folder, name, alpha=False):
+        path = Path(folder) / name
+        mode = "RGBA" if alpha else "RGB"
+        image = Image.frombytes(mode, (1800, 1800), os.urandom(1800 * 1800 * len(mode)))
+        if alpha:
+            image.putalpha(Image.new("L", (1800, 1800), 0).point(lambda _v: 0))
+            image.paste((10, 20, 30, 255), (600, 600, 1200, 1200))
+        image.save(path, compress_level=0)
+        self.assertGreater(path.stat().st_size, 8 * 1024 * 1024)
+        return str(path)
+
+    def test_oversized_sources_for_fal_remover_are_named(self):
+        from v3_processing_flow import FalInputTooLarge, validate_fal_input_sizes
+        from v3_project_state import ImageOperationData
+        with tempfile.TemporaryDirectory(prefix="fal-size-") as temp:
+            small = Path(temp) / "small.png"
+            Image.new("RGB", (8, 8)).save(small)
+            big = self._big(temp, "teddy_bear_upscaled.png")
+            ready = self._big(temp, "already_transparent.png", alpha=True)
+            ops = ImageOperationData(upscale_before=False, remove_background=True, remove_background_provider="fal")
+            with self.assertRaises(FalInputTooLarge) as caught:
+                validate_fal_input_sizes(ops, [str(small), big, ready])
+            text = str(caught.exception)
+            self.assertIn("1 файл больше 8 МБ", text)
+            self.assertIn("teddy_bear_upscaled.png", text)
+            self.assertNotIn("already_transparent.png", text)   # transparency already there: remover skipped
+            validate_fal_input_sizes(ImageOperationData(upscale_before=False, remove_background=True,
+                                                        remove_background_provider="kie"), [big])
+            validate_fal_input_sizes(ImageOperationData(remove_background=True, remove_background_provider="fal",
+                                                        upscale_before=True, upscale_before_provider="kie"), [big])
+            with self.assertRaises(FalInputTooLarge):
+                validate_fal_input_sizes(ImageOperationData(upscale_before=True, upscale_before_provider="fal"), [ready])
+
+    def test_review_disables_run_while_files_are_too_large(self):
+        with tempfile.TemporaryDirectory(prefix="fal-size-review-") as temp:
+            state = ProjectState(mode=ProjectMode.PROCESSING)
+            state.common.work_dir = temp
+            big = self._big(temp, "big.png")
+            state.processing.selected_files = [big]
+            apply_processing_recipe(state, "basic_enhancement")
+            state.processing.operations.upscale_before = False
+            state.processing.operations.remove_background = True
+            state.processing.operations.remove_background_provider = "fal"
+            state.current_step_by_mode[ProjectMode.PROCESSING] = StepId.REVIEW_RUN
+            shell = AppShell(state)
+            controller = install_processing_flow(WorkflowHost(
+                shell, "processing", runtime_settings_provider=lambda: {"fal_api_key": "x"},
+                worker_factory=WorkerFactory()))
+            controller._refresh_preflight()
+            page = controller.review_page
+            self.assertIn("больше 8 МБ", page.requirements_label.text())
+            self.assertFalse(shell.next_button.isEnabled())
+            state.processing.selected_files = [str(Path(temp) / "small.png")]
+            Image.new("RGB", (8, 8)).save(state.processing.selected_files[0])
+            controller._refresh_preflight()
+            self.assertTrue(shell.next_button.isEnabled())
+            shell.close()
