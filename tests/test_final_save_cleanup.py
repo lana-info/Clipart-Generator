@@ -475,5 +475,63 @@ class FinalSaveCleanupTests(unittest.TestCase):
                 self.app.processEvents()
 
 
+class FinalOutputIntegrityTests(unittest.TestCase):
+    """Ported from the 3.1.1 hotfix 87286c8 (output integrity)."""
+
+    def test_final_save_rejects_destination_removed_after_publish(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-final-missing-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+            real_publish = worker._publish_final_output
+
+            def publish_then_remove(stage_path, output_path, source_inspection=None):
+                result = real_publish(stage_path, output_path, source_inspection)
+                Path(output_path).unlink()
+                return result
+
+            worker._publish_final_output = publish_then_remove
+
+            with self.assertRaisesRegex(RuntimeError, "Итоговый PNG не сохранён"):
+                worker._save_final_output(
+                    None,
+                    str(source),
+                    str(output),
+                    str(raw_dir),
+                    1,
+                    "file",
+                )
+
+    def test_final_save_rejects_zero_byte_destination(self):
+        with tempfile.TemporaryDirectory(prefix="clipart-final-empty-") as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source.png"
+            output = root / "output.png"
+            raw_dir = root / "raw"
+            raw_dir.mkdir()
+            create_source(source)
+            worker = main.WorkerThread("mode2_process", temp_dir, worker_settings())
+
+            def publish_empty(_stage_path, output_path, source_inspection=None):
+                Path(output_path).write_bytes(b"")
+                return None
+
+            worker._publish_final_output = publish_empty
+
+            with self.assertRaisesRegex(RuntimeError, "Итоговый PNG повреждён"):
+                worker._save_final_output(
+                    None,
+                    str(source),
+                    str(output),
+                    str(raw_dir),
+                    1,
+                    "file",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

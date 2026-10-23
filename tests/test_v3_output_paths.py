@@ -236,5 +236,33 @@ class V3OutputPathsTests(unittest.TestCase):
             self.assertEqual(Path(request.settings["output_dir"]), output_dir / "output")
 
 
+class RoughUpscaleClassificationTests(unittest.TestCase):
+    """Ported from the 3.1.1 hotfix 87286c8 (output integrity)."""
+
+    def test_rough_upscale_excludes_recraft_preparation_copy(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="rough-upscale-classification-") as temp:
+            workspace = Path(temp) / "workspace"
+            output = workspace / "output"
+            output.mkdir(parents=True)
+            worker = WorkerThread(
+                "mode2_process",
+                str(workspace),
+                {"workspace_root": str(workspace), "output_dir": str(output)},
+            )
+            raw_dir = Path(worker._create_run_raw_dir())
+            stamp = worker.run_stamp
+            prepared = raw_dir / f"file_upscaled_before_recraft_input_001_{stamp}.png"
+            provider_result = raw_dir / f"file_upscaled_before_fal_001_{stamp}.png"
+            Image.new("RGB", (4, 4), "red").save(prepared)
+            Image.new("RGB", (8, 8), "blue").save(provider_result)
+
+            worker._persist_rough_outputs(raw_dir)
+
+            published = sorted((workspace / "rough").glob("*.png"))
+            self.assertEqual([path.name for path in published], ["rough_01_upscaled-before.png"])
+            with Image.open(published[0]) as image:
+                self.assertEqual(image.size, (8, 8))
+
+
 if __name__ == "__main__":
     unittest.main()

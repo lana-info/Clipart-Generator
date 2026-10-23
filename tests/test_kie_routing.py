@@ -694,7 +694,8 @@ class KieRoutingTests(unittest.TestCase):
         self.assertEqual(diagnostics[0][1]["parameters"]["scale"], 2)
         self.assertTrue(output_path.endswith(".png"))
         self.assertEqual(output_url, "https://cdn.example/upscaled.png")
-        self.assertFalse(local_result)
+        # The downloaded Fal result is exported as is, never downloaded a second time.
+        self.assertTrue(local_result)
 
     def test_fal_recraft_crisp_routes_fixed_four_x_without_scale_payload(self):
         with tempfile.TemporaryDirectory(prefix="fal-recraft-upscale-") as temp:
@@ -2186,6 +2187,52 @@ class KieRoutingTests(unittest.TestCase):
 
             self.assertEqual(output_path.read_bytes(), previous_output)
             self.assertFalse(list(temp_path.glob(".clipart-publish-*.png")))
+
+
+class FalLocalResultTests(unittest.TestCase):
+    """Ported from the 3.1.1 hotfix 87286c8 (output integrity)."""
+
+    def test_fal_background_removal_returns_downloaded_local_result(self):
+        with tempfile.TemporaryDirectory(prefix="fal-remove-bg-local-result-") as temp:
+            source = Path(temp) / "source.png"
+            raw_dir = Path(temp) / "raw"
+            raw_dir.mkdir()
+            create_rgb_source(source)
+            worker = main.WorkerThread(
+                "mode2_process",
+                temp,
+                kie_settings(
+                    fal_api_key="fal-test-secret",
+                    remove_bg=True,
+                    remove_bg_provider="fal",
+                    fal_remove_bg_model="fal-ai/birefnet/v2",
+                ),
+            )
+            downloads = []
+            worker._fal_process_image = types.MethodType(
+                lambda _self, _url, **_kwargs: "https://cdn.example/no-bg.png",
+                worker,
+            )
+
+            def download_alpha(_self, url, output_path):
+                downloads.append(url)
+                image = Image.new("RGBA", (16, 12), (0, 0, 0, 0))
+                ImageDraw.Draw(image).rectangle((3, 2, 12, 9), fill=(180, 70, 100, 255))
+                image.save(output_path, format="PNG")
+
+            worker._download_file = types.MethodType(download_alpha, worker)
+
+            result_path = worker._run_processing_pipeline(
+                str(source),
+                None,
+                str(raw_dir),
+                1,
+                "file",
+            )
+
+            self.assertEqual(downloads, ["https://cdn.example/no-bg.png"])
+            self.assertTrue(Path(result_path).is_file())
+            self.assertEqual(Path(result_path).parent, raw_dir)
 
 
 if __name__ == "__main__":
