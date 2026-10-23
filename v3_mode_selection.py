@@ -425,6 +425,10 @@ class _ModuleVerifyThread(QThread):
         self.verified.emit()
 
 
+# Header title of module pages that are not step shells (the screen name is the module id).
+MODULE_SCREEN_TITLES = {"patterns": "Паттерны", "prompt-composer": "Конструктор промптов"}
+
+
 class V3ApplicationView(QWidget):
     screen_changed = pyqtSignal(str)
     new_project_started = pyqtSignal(str)
@@ -974,7 +978,7 @@ class V3ApplicationView(QWidget):
         self.mode_selection.active_module_label.setText(
             ({"auto-clipart": "Автоматический клипарт"}.get(getattr(widget, "module_id", None))
              or MODE_TITLES.get(widget.state.mode, "")) if isinstance(widget, AppShell)
-            else ("Автоматический клипарт" if in_module else "Модули")
+            else (MODULE_SCREEN_TITLES.get(screen) or ("Автоматический клипарт" if in_module else "Модули"))
         )
         self.mode_selection.studio_home_button.setVisible(in_module)
         focused = bool(getattr(widget, "_canvas_focus_active", False))
