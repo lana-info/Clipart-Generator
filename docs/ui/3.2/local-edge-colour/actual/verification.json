@@ -1,0 +1,81 @@
+{
+  "safe_synthetic_content_only": true,
+  "production_ui": true,
+  "environment": "Linux Qt offscreen, 100% scale",
+  "states": [
+    {
+      "state": "ready",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    },
+    {
+      "state": "selecting",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    },
+    {
+      "state": "busy",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    },
+    {
+      "state": "preview-before",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    },
+    {
+      "state": "preview-after",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    },
+    {
+      "state": "preview-dark",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    },
+    {
+      "state": "empty",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    },
+    {
+      "state": "no-op",
+      "size": [
+        1120,
+        780
+      ],
+      "controls_reachable_without_scroll": true,
+      "source_unchanged": true
+    }
+  ],
+  "busy_note": "Real integrated job state captured with a held Future; other effect previews ran production RGB worker.",
+  "approved_reference": "../proposal/notes.json"
+}

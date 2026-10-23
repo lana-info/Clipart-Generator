@@ -9,8 +9,14 @@ one optional «Сделать край чётче» action below zoom, with Befo
 Cancel/Apply and a single undo step per application. It changes only alpha and
 does not run automatically, recolour the image or add a strength control.
 Contrast×2 can remove very thin geometry; mandatory preview is a deliberate
-editing choice, not a guarantee of automatic preservation. Colour-rim correction
-remains unresolved. No new colour controls are approved. Bound proposal
+editing choice, not a guarantee of automatic preservation. The owner additionally
+authorized a manual local «Убрать цветную кайму» action in the transparency editor:
+explicitly selected edge only, Before/After, Cancel/Apply and Undo, with white/dark
+inspection. It may deliberately correct selected RGB; alpha, geometry, untouched
+areas and source files remain exact. Automatic processing must not call it.
+The owner answered «Продолжай» after the shown full-context mockup, authorizing
+UI integration. Verify the accepted manual retouch through the actual editor.
+Colour-rim correction in automatic processing remains unresolved. Bound proposal
 geometry and background jobs, preserve raw alpha outside local edits and keep
 cancel/Undo/Redo/separate-copy save. The opaque-clipart ambiguity policy prefers
 source paint over unsupported neighbouring-material fits. A supplied already

@@ -1,5 +1,77 @@
 # Ошибки проекта
 
+## local-edge-colour-editor
+
+После historical/reference расследования владелец разрешил отдельное ручное
+RGB действие на выбранном краю с явным preview/Apply/Cancel/Undo. Это новая
+согласованная область: automatic policy сохранения неоднозначной краски остаётся
+прежней, а явно выбранная ручная коррекция может менять оттенок. Alpha/геометрия
+и незатронутые области остаются exact; новый tool не обещает восстановить unknownF.
+
+Обязательные риски хранения выявлены read-only audit: MaskEditDocument сейчас
+учитывает толькоmask в dirty/history/reset/saved baseline; draft A→B→A хранит
+толькоalpha; RGB-onlydiff вRGBA ImageChops.getbbox может быть скрыт неизменнойalpha.
+Undo bytes нужно считать с количеством channels. Существующая atomic
+PNG+mask+provenance транзакция пригодна; RGB saved baseline обновляется только
+после успешной публикации. Async proof должен учитывать doc identity/revision.
+
+Прежние nearest4/native-fill варианты дали крап/цветные линии; их нельзя
+внедрять в новый tool без нового actual proof. Следующий bounded candidate:
+непрерывное локальное продолжение цвета из глубокой opaque опоры в выбранную
+краевую полосу, толькоRGB и безприменения кglobalarea. Кандидат реализован
+самостоятельно с existingNumPy/OpenCV/PIL;31 tests PASS. Actual duck5620,
+flower6831 RGB changes; alpha/core>4/hidden/outsideROI/source exact.
+У duck полоса слабее без прежнего крапа, но pink/dark кончики остаются и часть
+штрихов обрывается; flower настоящая внешняя обводка тоже смягчается. 8px вариант
+стирает больше рисунка и отвергнут. Это явная ретушь с preview, не truth recovery.
+4px означает inward отopaque core плюс supportedpartial переход до12 шагов,
+не строго4px отвнешнего alpha support; UI не обещает точнуюpxширину.
+
+Document расширен RGB proposal/history/dirty/reset/saved baseline и cropped
+RGB draft export/restore. До реализации11 model testsFAIL отсутствующим API;
+первыйslice8PASS, затем50 relatedPASS, далее146 related+5subtestsPASS;
+добавленный RGB-only generation provenance/sourcecopy case вместе с15 document
+testsPASS. Модель reset/Undo/Redo учитывает количество channels, RGBA diff
+сравнивается вRGB, memory budget отказ атомарный. RGB draft сохраняет корректные
+file baselines; reset послеrestore undoable. Page draft lifecycle подключён и Qt roundtrip проверен.
+
+Главный агент отдельно проверил synthetic5016²: локальный effect/Apply/Undo/Redo/
+PNG+mask copy, exact sourceSHA/RGBA/alpha,300DPI. peakRSS753612KiB,save1,090s.
+Private proof: `../artifacts/local-edge-colour-editor-20261003/`.
+UI gate требует отдельного показанного макета перед новымиcontrols; task approval
+сам по себе не является visual approval. 9 mockup states готовы иvisual approval
+запрошено; владелец ответил «Продолжай» после показанного макета.
+ProductionUI подключён,8 actual screens1120×780 сняты и comparisonPASS.
+UI integration после ответа владельца «Продолжай»: подключены rectangle-selection,
+bounded immutable worker context, shared Before/After/Apply/Cancel, stale revision
+checks и page RGB draft lifecycle. Первые147 related+5subtests и20 новых Qt testsPASS.
+Независимый lifecycle probe выявил три concrete defects: focusOut оставлял RGB drag;
+прямойCanvas.set_document оставлял page mode active; unexpected worker error выходил
+изQt timer slot. Regression RED3/3 → clear drag onfocusOut, preview cancellation
+signal before document replace, generic worker exception recovery → GREEN38 tests.
+Independent backend/state oracle1728 transitionsPASS; production effect неизменён.
+Actual Qt duck/flower flow: preview→cancel→preview→Apply приBefore→Undo/Redo→
+A→B→A draft→Save As;5620/6831 RGB changes, alpha/hidden/deep>4/outsideROI/source
+exact, copyRGBA/mask/300DPI roundtripPASS. Selected genuine outline changes as
+expected; residual junction tips остаются. Synthetic5016² fullQt flowPASS:
+preview0,850s,apply1,097s,save1,063s,peakRSS1173108KiB; неWindows/sourceowner truth.
+Широкий single pytest interruptedSIGTERM143 безsummary, как ранее при baseline
+numeric investigation; неfailure/pass. Bounded independent groups завершены,47/47filesPASS.
+Final independent UI review выявил P2: page.reset скрывал новыйRGB-reset
+historybudget отказ. Две малые далёкиеRGB правки могут дать union3000²×8bytes
+>64MiB; enabled «Сброс» не делает ничего и не объясняет причину. Private probe
+подтвердил, regression RED1/1 → existing contour status показываетValueError,
+пиксели/history/dirty при отказе остаются exact → GREEN176tests+5subtests;
+сильный reviewer подтвердил исправление прежним private probe.
+Wide bounded suite47/47files,17processes,815tests+58subtestsPASS за126,489s;
+это проверка до последнего P2 catch и двух regression additions, неwholepytest.
+Финальная проверка aftercatch:176 affectedtests+5subtestsPASS11,75s,
+включая29 новых Qt cases; nonzeroorigin/currentmask и oldnonemptyfuture regressions
+PASS. Дополнительно24 component/runtime+10 mainUIacceptancePASS. Actual fullcontext
+8screens1120×780 просмотрены и соответствуют показанному макету, controlsreachable.
+Open review findings нет; Windows/build/globalautomaticrim unresolved.
+Current status/results вSTATE.md.
+
 ## low-coverage-colour-20261003
 
 Новые данные после ранее отвергнутых B-field/тоновых/neighbor-fill вариантов:

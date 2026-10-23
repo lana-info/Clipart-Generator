@@ -16,7 +16,7 @@ import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageChops, UnidentifiedImageError
-from PyQt6.QtCore import QEvent, QEventLoop, QPoint, QPointF, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QEventLoop, QPoint, QPointF, QRectF, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -59,6 +59,7 @@ from background_mask import (
 )
 from background_preview import PREVIEW_BACKGROUND_OPTIONS, composite_on_preview
 from v3_components import ButtonVariant, V3Button
+from edge_colour_correction import propose_edge_colour, MAX_EDGE_COLOUR_CONTEXT_PIXELS
 
 
 from studio_contour import BezierNode, BezierPath, ContourDocument, extract_contours, rasterize_path, MAX_NODES_PER_PATH, MAX_AUTO_CONTOUR_SIDE, MAX_IMAGE_PIXELS as MAX_CONTOUR_IMAGE_PIXELS, changed_path_roi, _auto_handles
@@ -66,6 +67,17 @@ from studio_contour import BezierNode, BezierPath, ContourDocument, extract_cont
 from studio_contour_local import simplify_selected, smooth_selected, local_changed_path_rois
 
 _CONTOUR_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vibix-contour")
+
+def _edge_colour_region(image, mask, bounds, origin, cancel):
+    """Worker owns bounded immutable crops; translate its proposal to the canvas."""
+    selection = Image.new('L', (bounds[2] - bounds[0], bounds[3] - bounds[1]), 255)
+    proposal = propose_edge_colour(image, selection, bounds, alpha_mask=mask, cancel_check=cancel.is_set)
+    if proposal is None:
+        return None
+    x, y = origin
+    l, t, r, b = proposal.bounds
+    return replace(proposal, bounds=(l + x, t + y, r + x, b + y))
+
 
 BRUSH_DIAMETERS = (2, 6, 10, 16, 32, 64)
 _EDGE_SHARPEN_LUT = tuple(round(max(0, min(255, 2 * value - 127.5))) for value in range(256))
@@ -103,6 +115,11 @@ class MaskEditDocument:
             if key in image.info and image.info[key] is not None
         }
         self.image = image.convert("RGBA")
+        # Keep immutable baselines by sharing until the first colour edit.
+        self._original_image = self.image
+        self._saved_image = self.image
+        self._rgb_edit_bounds: tuple[int, int, int, int] | None = None
+        self.rgb_revision = 0
         self._original_mask = mask_for_image(self.image)
         self.mask = self._original_mask.copy()
         self._saved_mask = self.mask.copy()
@@ -122,13 +139,52 @@ class MaskEditDocument:
     @property
     def history_bytes(self) -> int:
         return sum(
-            before.width * before.height + after.width * after.height
+            before.width * before.height * len(before.getbands())
+            + after.width * after.height * len(after.getbands())
             for _, before, after in (*self._undo, *self._redo)
         )
 
     @property
     def is_dirty(self) -> bool:
-        return ImageChops.difference(self.mask, self._saved_mask).getbbox() is not None
+        return (ImageChops.difference(self.mask, self._saved_mask).getbbox() is not None
+                or self.is_rgb_dirty)
+
+    @property
+    def is_rgb_dirty(self) -> bool:
+        return self._rgb_difference_bounds(self._saved_image) is not None
+
+    def _rgb_difference_bounds(self, baseline: Image.Image):
+        if self.image is baseline or self._rgb_edit_bounds is None:
+            return None
+        bounds = self._rgb_edit_bounds
+        difference = ImageChops.difference(
+            self.image.crop(bounds).convert('RGB'), baseline.crop(bounds).convert('RGB'),
+        ).getbbox()
+        if difference is None:
+            return None
+        return (difference[0] + bounds[0], difference[1] + bounds[1],
+                difference[2] + bounds[0], difference[3] + bounds[1])
+
+    def _paste_rgb(self, patch: Image.Image, bounds) -> None:
+        if self.image is self._original_image or self.image is self._saved_image:
+            self.image = self.image.copy()
+        region = patch.convert('RGBA')
+        region.putalpha(self.image.crop(bounds).getchannel('A'))
+        self.image.paste(region, bounds[:2])
+        previous = self._rgb_edit_bounds
+        self._rgb_edit_bounds = bounds if previous is None else (
+            min(previous[0], bounds[0]), min(previous[1], bounds[1]),
+            max(previous[2], bounds[2]), max(previous[3], bounds[3]),
+        )
+        self.rgb_revision += 1
+
+    def _paste_history_patch(self, patch: Image.Image, bounds) -> None:
+        if patch.mode == 'L':
+            self.mask.paste(patch, bounds[:2])
+        else:
+            self._paste_rgb(patch.convert('RGB'), bounds)
+            if patch.mode == 'RGBA':
+                self.mask.paste(patch.getchannel('A'), bounds[:2])
 
     def _trim_history(self) -> None:
         del self._undo[:-self.HISTORY_LIMIT]
@@ -182,7 +238,7 @@ class MaskEditDocument:
             return
         entry = self._undo.pop()
         bounds, before, _ = entry
-        self.mask.paste(before, bounds[:2])
+        self._paste_history_patch(before, bounds)
         self.mask_revision += 1
         self._redo.append(entry)
 
@@ -191,11 +247,30 @@ class MaskEditDocument:
             return
         entry = self._redo.pop()
         bounds, _, after = entry
-        self.mask.paste(after, bounds[:2])
+        self._paste_history_patch(after, bounds)
         self.mask_revision += 1
         self._undo.append(entry)
 
     def reset(self) -> None:
+        rgb_bounds = self._rgb_difference_bounds(self._original_image)
+        if rgb_bounds is not None:
+            if self._stroke_before is not None:
+                raise ValueError('Сначала завершите штрих')
+            mask_bounds = ImageChops.difference(self.mask, self._original_mask).getbbox()
+            bounds = rgb_bounds if mask_bounds is None else (
+                min(rgb_bounds[0], mask_bounds[0]), min(rgb_bounds[1], mask_bounds[1]),
+                max(rgb_bounds[2], mask_bounds[2]), max(rgb_bounds[3], mask_bounds[3]),
+            )
+            if (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]) * 8 > self.HISTORY_MEMORY_LIMIT:
+                raise ValueError('Не хватает памяти истории для отмены сброса. Изображение не изменено.')
+            before = self.corrected_region(bounds)
+            after = self._original_image.crop(bounds)
+            self._undo.append((bounds, before, after))
+            self._redo.clear()
+            self._trim_history()
+            self._paste_history_patch(after, bounds)
+            self.mask_revision += 1
+            return
         if self.mask.tobytes() == self._original_mask.tobytes():
             return
         bounds = ImageChops.difference(self.mask, self._original_mask).getbbox()
@@ -225,6 +300,60 @@ class MaskEditDocument:
         self._redo.clear()
         self._trim_history()
         self.mask.paste(after, bounds[:2])
+        self.mask_revision += 1
+
+    def apply_rgb_proposal(self, patch: Image.Image, bounds: tuple[int, int, int, int]) -> None:
+        """Accept a visible RGB patch, with alpha unchanged and one undo step."""
+        if (not isinstance(bounds, tuple) or len(bounds) != 4
+                or any(type(value) is not int for value in bounds)
+                or not 0 <= bounds[0] < bounds[2] <= self.image.width
+                or not 0 <= bounds[1] < bounds[3] <= self.image.height
+                or not isinstance(patch, Image.Image) or patch.mode != 'RGB'
+                or patch.size != (bounds[2] - bounds[0], bounds[3] - bounds[1])):
+            raise ValueError('Предложение цвета не соответствует изображению')
+        if self._stroke_before is not None:
+            raise ValueError('Сначала завершите штрих')
+        before = self.image.crop(bounds).convert('RGB')
+        difference = ImageChops.difference(before, patch)
+        local = difference.getbbox()
+        if local is None:
+            return
+        invisible = np.asarray(self.mask.crop(bounds)) == 0
+        if np.any(np.any(np.asarray(difference) != 0, axis=2) & invisible):
+            raise ValueError('Полностью прозрачные пиксели не должны менять цвет')
+        changed_bounds = (bounds[0] + local[0], bounds[1] + local[1],
+                          bounds[0] + local[2], bounds[1] + local[3])
+        if (local[2] - local[0]) * (local[3] - local[1]) * 6 > self.HISTORY_MEMORY_LIMIT:
+            raise ValueError('Не хватает памяти истории для отмены этого шага. Цвет не изменён.')
+        before, after = before.crop(local), patch.crop(local)
+        self._undo.append((changed_bounds, before, after))
+        self._redo.clear()
+        self._trim_history()
+        self._paste_rgb(after, changed_bounds)
+        self.mask_revision += 1
+
+    def export_rgb_draft(self) -> tuple[tuple[int, int, int, int], bytes] | None:
+        """Preserve accepted unsaved RGB alongside the existing alpha draft."""
+        bounds = self._rgb_difference_bounds(self._saved_image)
+        if bounds is None:
+            return None
+        buffer = BytesIO()
+        self.image.crop(bounds).convert('RGB').save(buffer, format='PNG')
+        return bounds, buffer.getvalue()
+
+    def restore_rgb_draft(self, draft: tuple[tuple[int, int, int, int], bytes]) -> None:
+        """Restore a draft into a fresh document, keeping its file baselines."""
+        bounds, encoded = draft
+        if (not isinstance(bounds, tuple) or len(bounds) != 4
+                or any(type(value) is not int for value in bounds)
+                or not 0 <= bounds[0] < bounds[2] <= self.image.width
+                or not 0 <= bounds[1] < bounds[3] <= self.image.height
+                or self._undo or self._redo or self._stroke_before is not None):
+            raise ValueError('Черновик цвета не соответствует изображению')
+        with Image.open(BytesIO(encoded), formats=['PNG']) as patch:
+            if patch.mode != 'RGB' or patch.size != (bounds[2] - bounds[0], bounds[3] - bounds[1]):
+                raise ValueError('Черновик цвета не соответствует изображению')
+            self._paste_rgb(patch, bounds)
         self.mask_revision += 1
 
     def corrected_image(self) -> Image.Image:
@@ -288,6 +417,7 @@ class MaskEditDocument:
                 if sidecar_temporary is not None:
                     sidecar_temporary.unlink(missing_ok=True)
         self._saved_mask = self.mask.copy()
+        self._saved_image = self.image
 
     @staticmethod
     def _stage_png(
@@ -978,6 +1108,7 @@ class TransparencyCanvas(QGraphicsView):
     zoom_requested = pyqtSignal(int)
     history_requested = pyqtSignal(bool)
     preview_cancel_requested = pyqtSignal()
+    colour_selection_requested = pyqtSignal(tuple)
     status_changed = pyqtSignal(str)
     contour_finished = pyqtSignal(str, bool)
 
@@ -997,6 +1128,10 @@ class TransparencyCanvas(QGraphicsView):
         self._preview_mask_revision = -1
         self.edge_preview_active = False
         self.edge_preview_mask: Image.Image | None = None
+        self.colour_selection_enabled = False
+        self.colour_selection_bounds = None
+        self._colour_drag_start = None
+        self.colour_preview_patch = None
         self._contour_job = None
         self._contour_timer = QTimer(self)
         self._contour_timer.setInterval(20)
@@ -1035,9 +1170,15 @@ class TransparencyCanvas(QGraphicsView):
         return self._zoom
 
     def set_document(self, document: MaskEditDocument | None) -> None:
+        if self.edge_preview_active:
+            self.preview_cancel_requested.emit()
         self.cancel_contour()
         self.edge_preview_active = False
         self.edge_preview_mask = None
+        self.colour_selection_enabled = False
+        self.colour_selection_bounds = None
+        self._colour_drag_start = None
+        self.colour_preview_patch = None
         self.document = document
         self.status_changed.emit("")
         self._lasso_points = []
@@ -1107,6 +1248,11 @@ class TransparencyCanvas(QGraphicsView):
                 and self._preview_alpha is not None and self._preview_paths == tuple(self.contour.paths)
                 and self._preview_mask_revision == document.mask_revision):
             rendered.putalpha(Image.fromarray(self._preview_alpha))
+        if self.edge_preview_active and self.colour_preview_patch is not None:
+            bounds, patch = self.colour_preview_patch
+            rgba = patch.convert('RGBA')
+            rgba.putalpha(document.mask.crop(bounds))
+            rendered.paste(rgba, bounds)
         pixmap = _pixmap_for_pil(rendered)
         self._item.setPixmap(pixmap)
         self._scene.setSceneRect(self._item.boundingRect())
@@ -1147,12 +1293,28 @@ class TransparencyCanvas(QGraphicsView):
             min(height - 1, max(0, round(local.y()))),
         )
 
+    def _colour_point(self, position):
+        point = self._item.mapFromScene(self.mapToScene(position))
+        w, h = self.document.image.size
+        return (min(w, max(0, math.floor(point.x()))), min(h, max(0, math.floor(point.y()))))
+
+    def _update_colour_rectangle(self, position):
+        x0, y0 = self._colour_drag_start
+        x1, y1 = self._colour_point(position)
+        self.colour_selection_bounds = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+        self.viewport().update()
+
     def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         self.setFocus(Qt.FocusReason.MouseFocusReason)
         if event.button() == Qt.MouseButton.LeftButton and self._space_pressed:
             self._panning = True
             self._last_view_point = event.position().toPoint()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+        if self.colour_selection_enabled and self.document is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._colour_drag_start = self._colour_point(event.position().toPoint())
+            self._update_colour_rectangle(event.position().toPoint())
             event.accept()
             return
         if self.contour_busy or self.edge_preview_active:
@@ -1221,6 +1383,13 @@ class TransparencyCanvas(QGraphicsView):
             )
             event.accept()
             return
+        if self._colour_drag_start is not None:
+            self._update_colour_rectangle(view_point)
+            event.accept()
+            return
+        if self.edge_preview_active:
+            event.accept()
+            return
         if self._lasso_points and event.buttons() & Qt.MouseButton.LeftButton:
             self._lasso_points.append(self.mapToScene(view_point))
             self.viewport().update()
@@ -1267,6 +1436,14 @@ class TransparencyCanvas(QGraphicsView):
         self.refresh_region(bounds)
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        if event.button() == Qt.MouseButton.LeftButton and self._colour_drag_start is not None:
+            self._update_colour_rectangle(event.position().toPoint())
+            self._colour_drag_start = None
+            bounds = self.colour_selection_bounds
+            if bounds[2] > bounds[0] and bounds[3] > bounds[1]:
+                self.colour_selection_requested.emit(bounds)
+            event.accept()
+            return
         dragged = self._contour_drag is not None and self._drag_checkpoint
         self._contour_drag = None
         if event.button() == Qt.MouseButton.LeftButton and self._lasso_points:
@@ -1659,6 +1836,7 @@ class TransparencyCanvas(QGraphicsView):
         self.viewport().update()
 
     def focusOutEvent(self, event):
+        self._colour_drag_start = None
         self.set_space_pan_active(False)
         self._panning = False
         self._contour_drag = None
@@ -1691,6 +1869,15 @@ class TransparencyCanvas(QGraphicsView):
             painter.drawLine(29, 26, 29, 18)
             painter.drawLine(33, 28, 33, 21)
             painter.restore()
+            return
+        if self.edge_preview_active:
+            if self.colour_selection_bounds is not None:
+                l, t, r, b = self.colour_selection_bounds
+                pen = QPen(QColor('#28cbbb'), 1.5, Qt.PenStyle.DashLine)
+                pen.setCosmetic(True)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawRect(QRectF(l, t, r - l, b - t))
             return
         if self.tool == "pen":
             self.contour.sanitize_selection()
@@ -1769,10 +1956,17 @@ class ClipartTransparencyEditorPage(QWidget):
         self._document: MaskEditDocument | None = None
         self._loaded_path: Path | None = None
         self._draft_masks: dict[Path, bytes] = {}
+        self._draft_rgb = {}
         self._draft_contours = {}
         self._save_after_contour = False
         self._focus_mode = False
         self._edge_preview: tuple[MaskEditDocument, int, Image.Image] | None = None
+        self._colour_active = False
+        self._colour_preview = None
+        self._colour_job = None
+        self._colour_timer = QTimer(self)
+        self._colour_timer.setInterval(20)
+        self._colour_timer.timeout.connect(self._poll_colour)
         self._edge_sharpen_check_key = None
         self._edge_sharpen_possible = False
 
@@ -1817,6 +2011,7 @@ class ClipartTransparencyEditorPage(QWidget):
 
         files_frame = self.files_frame = QFrame()
         files_frame.setProperty("v3Card", True)
+        files_frame.setMaximumHeight(238)
         files_layout = QVBoxLayout(files_frame)
         files_layout.setContentsMargins(10, 8, 10, 8)
         files_layout.setSpacing(6)
@@ -1880,6 +2075,16 @@ class ClipartTransparencyEditorPage(QWidget):
         self.sharpen_edge_button = QPushButton('Сделать край чётче')
         self.sharpen_edge_button.clicked.connect(self.preview_sharper_edge)
         tools_layout.addWidget(self.sharpen_edge_button)
+        self.colour_edge_button = QPushButton('Убрать цветную кайму')
+        self.colour_edge_button.setCheckable(True)
+        self.colour_edge_button.setToolTip('Выделите край рамкой и проверьте цвет перед применением. Обводка тоже может изменить цвет.')
+        self.colour_edge_button.clicked.connect(self.start_colour_correction)
+        tools_layout.addWidget(self.colour_edge_button)
+        self.colour_note = QLabel()
+        self.colour_note.setWordWrap(True)
+        self.colour_note.setStyleSheet('font-size:11px;color:#b7c6d7;')
+        tools_layout.addWidget(self.colour_note)
+        self.colour_note.hide()
         self.edge_comparison = QWidget()
         edge_layout = QVBoxLayout(self.edge_comparison)
         edge_layout.setContentsMargins(0, 0, 0, 0)
@@ -1903,13 +2108,14 @@ class ClipartTransparencyEditorPage(QWidget):
         edge_actions.addWidget(self.cancel_edge_button)
         edge_actions.addWidget(self.apply_edge_button)
         edge_layout.addLayout(edge_actions)
-        edge_note = QLabel('Проверьте тонкие детали перед применением')
+        edge_note = self.edge_note = QLabel('Проверьте тонкие детали перед применением')
         edge_note.setWordWrap(True)
         edge_note.setStyleSheet('font-size:11px;color:#93a4b8;')
         edge_layout.addWidget(edge_note)
         tools_layout.addWidget(self.edge_comparison)
         self.edge_comparison.hide()
         self.canvas.preview_cancel_requested.connect(self.cancel_edge_preview)
+        self.canvas.colour_selection_requested.connect(self._start_colour_region)
 
         tool_row = QHBoxLayout()
         self.tool_buttons = {}
@@ -2176,10 +2382,16 @@ class ClipartTransparencyEditorPage(QWidget):
         self._draft_contours[self._loaded_path] = self.canvas.contour
         if not self._document.is_dirty:
             self._draft_masks.pop(self._loaded_path, None)
+            self._draft_rgb.pop(self._loaded_path, None)
             return
         buffer = BytesIO()
         self._document.mask.save(buffer, format="PNG", optimize=True)
         self._draft_masks[self._loaded_path] = buffer.getvalue()
+        draft = self._document.export_rgb_draft()
+        if draft is None:
+            self._draft_rgb.pop(self._loaded_path, None)
+        else:
+            self._draft_rgb[self._loaded_path] = draft
 
     def set_files(
         self,
@@ -2219,6 +2431,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._draft_masks = {
             path: data for path, data in self._draft_masks.items() if path in allowed
         }
+        self._draft_rgb = {path: draft for path, draft in self._draft_rgb.items() if path in allowed}
         self._document = None
         self._loaded_path = None
         self.file_list.blockSignals(True)
@@ -2275,6 +2488,9 @@ class ClipartTransparencyEditorPage(QWidget):
             if draft is not None:
                 with Image.open(BytesIO(draft)) as mask:
                     document.mask = mask.convert("L").copy()
+            rgb_draft = self._draft_rgb.get(path)
+            if rgb_draft is not None:
+                document.restore_rgb_draft(rgb_draft)
         except EditorImageTooLargeError as error:
             self.canvas.set_document(None)
             QMessageBox.warning(
@@ -2359,6 +2575,8 @@ class ClipartTransparencyEditorPage(QWidget):
         self.contour_status.setVisible(bool(message))
 
     def _set_tool(self, tool):
+        if self._colour_active:
+            return
         if self.canvas._painting or self.canvas.contour_busy:
             return
         self.canvas.tool = tool
@@ -2376,7 +2594,7 @@ class ClipartTransparencyEditorPage(QWidget):
             self.files_frame.setFixedHeight(90)
         else:
             self.files_frame.setMinimumHeight(0)
-            self.files_frame.setMaximumHeight(16777215)
+            self.files_frame.setMaximumHeight(238)
         self.canvas.viewport().update()
         self.canvas.setFocus()
         self._refresh_history_buttons()
@@ -2403,10 +2621,132 @@ class ClipartTransparencyEditorPage(QWidget):
     def _set_background(self, label: str) -> None:
         self.canvas.set_background(label)
 
+    def start_colour_correction(self) -> None:
+        canvas = self.canvas
+        if self._colour_active:
+            self.cancel_edge_preview()
+            return
+        if (self._edge_preview is not None or canvas.document is None or canvas.contour_busy
+                or canvas.contour.dirty or canvas.contour.local_active or canvas.contour.points or canvas._painting):
+            self._refresh_history_buttons()
+            return
+        self._colour_active = True
+        canvas.edge_preview_active = True
+        canvas.colour_selection_enabled = True
+        self.colour_note.setText('Обведите проблемный край рамкой.')
+        self._refresh_history_buttons()
+        canvas.setFocus()
+
+    def _start_colour_region(self, bounds) -> None:
+        if not self._colour_active or self._colour_job is not None or self._colour_preview is not None:
+            return
+        document = self.canvas.document
+        if document is None or document is not self._document:
+            self.cancel_edge_preview()
+            return
+        if (not isinstance(bounds, tuple) or len(bounds) != 4
+                or any(type(v) is not int for v in bounds)):
+            return
+        l, t, r, b = bounds
+        w, h = document.image.size
+        if not (0 <= l < r <= w and 0 <= t < b <= h):
+            return
+        halo = 22
+        context = (max(0, l - halo), max(0, t - halo), min(w, r + halo), min(h, b + halo))
+        x, y, x1, y1 = context
+        if (x1 - x) * (y1 - y) > MAX_EDGE_COLOUR_CONTEXT_PIXELS:
+            self.colour_note.setText('Выберите меньший участок края для коррекции.')
+            return
+        # Copy only bounded context on the UI thread. Workers never read a live document.
+        image, mask = document.image.crop(context), document.mask.crop(context)
+        cancel = Event()
+        future = _CONTOUR_EXECUTOR.submit(_edge_colour_region, image, mask,
+                                          (l - x, t - y, r - x, b - y), (x, y), cancel)
+        self._colour_job = dict(document=document, revision=document.mask_revision,
+                                rgb_revision=document.rgb_revision, future=future, cancel=cancel)
+        self.canvas.colour_selection_enabled = False
+        self.colour_note.setText('Корректирую выбранный край… Можно отменить.')
+        self._colour_timer.start()
+        self._refresh_history_buttons()
+
+    def _colour_result_is_current(self, document, revision, rgb_revision) -> bool:
+        return (self._colour_active and document is self._document and document is self.canvas.document
+                and document.mask_revision == revision and document.rgb_revision == rgb_revision
+                and not self.canvas.contour_busy and not self.canvas.contour.dirty and not self.canvas._painting)
+
+    def _poll_colour(self) -> None:
+        job = self._colour_job
+        if job is None or not job['future'].done():
+            return
+        self._colour_timer.stop()
+        self._colour_job = None
+        if not self._colour_result_is_current(job['document'], job['revision'], job['rgb_revision']):
+            self.cancel_edge_preview()
+            self._show_contour_status('Изображение изменилось. Повторите коррекцию края.')
+            return
+        try:
+            proposal = job['future'].result()
+        except CancelledError:
+            self.cancel_edge_preview()
+            return
+        except Exception as error:
+            # Future exceptions must not escape a Qt timer slot. Validation is user-facing.
+            self.canvas.colour_selection_enabled = True
+            self.colour_note.setText(str(error) if isinstance(error, ValueError) else
+                                     'Не удалось рассчитать коррекцию. Выделите меньший участок.')
+            self._refresh_history_buttons()
+            return
+        if proposal is None:
+            self.canvas.colour_selection_enabled = True
+            self.colour_note.setText('В этом участке нет подходящей опоры цвета. Выделите другой участок.')
+        else:
+            self._colour_preview = (job['document'], job['revision'], job['rgb_revision'], proposal)
+            self.colour_note.setText('Проверьте выбранный край на белом и тёмном фоне.')
+            self.show_edge_preview(True)
+        self._refresh_history_buttons()
+
+    def _cancel_colour_correction(self) -> None:
+        if self._colour_job is not None:
+            self._colour_job['cancel'].set()
+            self._colour_job['future'].cancel()
+            self._colour_job = None
+        self._colour_timer.stop()
+        self._colour_active = False
+        self._colour_preview = None
+        canvas = self.canvas
+        canvas.edge_preview_active = False
+        canvas.colour_selection_enabled = False
+        canvas.colour_selection_bounds = None
+        canvas._colour_drag_start = None
+        canvas.colour_preview_patch = None
+        canvas.refresh_image()
+        self._refresh_history_buttons()
+
+    def _apply_colour_correction(self) -> None:
+        if self._colour_preview is None:
+            return
+        document, revision, rgb_revision, proposal = self._colour_preview
+        if not self._colour_result_is_current(document, revision, rgb_revision):
+            self.cancel_edge_preview()
+            self._show_contour_status('Изображение изменилось. Повторите коррекцию края.')
+            return
+        try:
+            document.apply_rgb_proposal(proposal.image_patch, proposal.bounds)
+        except ValueError as error:
+            self.cancel_edge_preview()
+            self._show_contour_status(str(error))
+            return
+        self.cancel_edge_preview()
+        document.pending_contour = InlineContour()
+        self.canvas.set_document(document)
+        if self.current_path is not None:
+            self._draft_contours[self.current_path] = self.canvas.contour
+        self._refresh_history_buttons()
+
     def preview_sharper_edge(self) -> None:
         """Offer one deliberate contrast step; never alter RGB or auto-apply it."""
         canvas = self.canvas
-        if (self._edge_preview is not None or canvas.contour_busy or canvas.contour.dirty or canvas.contour.local_active
+        if (self._colour_active or self._edge_preview is not None or canvas.contour_busy or canvas.contour.dirty or canvas.contour.local_active
                 or canvas.contour.points or canvas._painting or canvas.document is None):
             return
         document = self.document
@@ -2420,6 +2760,15 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def show_edge_preview(self, after: bool) -> None:
+        if self._colour_active:
+            if self._colour_preview is None:
+                return
+            proposal = self._colour_preview[3]
+            self.canvas.colour_preview_patch = (proposal.bounds, proposal.image_patch) if after else None
+            self.edge_before_button.setChecked(not after)
+            self.edge_after_button.setChecked(after)
+            self.canvas.refresh_image()
+            return
         if self._edge_preview is None:
             return
         self.canvas.edge_preview_mask = self._edge_preview[2] if after else None
@@ -2428,6 +2777,9 @@ class ClipartTransparencyEditorPage(QWidget):
         self.canvas.refresh_image()
 
     def cancel_edge_preview(self) -> None:
+        if self._colour_active:
+            self._cancel_colour_correction()
+            return
         if self._edge_preview is None:
             return
         self._edge_preview = None
@@ -2437,6 +2789,9 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def apply_edge_preview(self) -> None:
+        if self._colour_active:
+            self._apply_colour_correction()
+            return
         if self._edge_preview is None:
             return
         document, revision, proposal = self._edge_preview
@@ -2462,7 +2817,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def undo(self) -> None:
-        if self._edge_preview is not None:
+        if self._colour_active or self._edge_preview is not None:
             self.cancel_edge_preview()
             return
         if self.canvas.contour_busy:
@@ -2485,7 +2840,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def redo(self) -> None:
-        if self._edge_preview is not None:
+        if self._colour_active or self._edge_preview is not None:
             return
         if self.canvas.contour_busy:
             return
@@ -2507,7 +2862,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self._refresh_history_buttons()
 
     def reset(self) -> None:
-        if self._edge_preview is not None:
+        if self._colour_active or self._edge_preview is not None:
             return
         if self.canvas.contour_busy:
             return
@@ -2515,7 +2870,8 @@ class ClipartTransparencyEditorPage(QWidget):
             self.document.reset()
             self.canvas.contour = InlineContour()
             self.document.pending_contour = self.canvas.contour
-        except ValueError:
+        except ValueError as error:
+            self._show_contour_status(str(error))
             return
         self.canvas.refresh_local_preview()
         if self.current_path is not None:
@@ -2552,7 +2908,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self.local_selection_label.setText(label)
 
     def _refresh_history_buttons(self) -> None:
-        edge_active = self._edge_preview is not None
+        edge_active = self._colour_active or self._edge_preview is not None
         document = self.canvas.document
         key = (document, document.mask_revision, document.mask) if document is not None else None
         if key != self._edge_sharpen_check_key:
@@ -2566,6 +2922,20 @@ class ClipartTransparencyEditorPage(QWidget):
         self.sharpen_edge_button.setToolTip(
             'Предпросмотр одного шага без изменения цвета. Тонкие детали могут ослабнуть.'
             if self._edge_sharpen_possible else 'Следующий шаг не изменит край или изображение не выбрано')
+        self.colour_edge_button.setEnabled(self._colour_active or (
+            document is not None and not edge_active and not self.canvas.contour_busy
+            and not self.canvas.contour.dirty and not self.canvas.contour.local_active
+            and not self.canvas.contour.points and not self.canvas._painting))
+        self.colour_edge_button.setChecked(self._colour_active)
+        self.colour_note.setVisible(self._colour_active)
+        self.brush_controls.setVisible(not self._colour_active and self.canvas.tool == 'brush')
+        self.pen_controls.setVisible(not self._colour_active and self.canvas.tool == 'pen')
+        self.edge_note.setText('Цвет меняется, форма края сохраняется' if self._colour_active
+                              else 'Проверьте тонкие детали перед применением')
+        ready = not self._colour_active or self._colour_preview is not None
+        self.edge_before_button.setEnabled(ready)
+        self.edge_after_button.setEnabled(ready)
+        self.apply_edge_button.setEnabled(ready)
         self.edge_comparison.setVisible(edge_active)
         self.pen_controls.setEnabled(not edge_active)
         self.canvas.contour.sanitize_selection()
@@ -2631,7 +3001,7 @@ class ClipartTransparencyEditorPage(QWidget):
             self._save_clicked()
 
     def save_current(self) -> tuple[Path, Path]:
-        if self._edge_preview is not None:
+        if self._colour_active or self._edge_preview is not None:
             raise ValueError('Сначала примените или отмените предпросмотр края')
         if self.canvas.contour_busy and self.canvas._contour_job['kind'] in ('apply', 'local-apply', 'manual-remove', 'manual-keep'):
             job = self.canvas._contour_job
@@ -2654,6 +3024,7 @@ class ClipartTransparencyEditorPage(QWidget):
             output_path, mask_path = self._save_new_copy(source_path)
             self._saved_copies[source_path] = output_path
             self._draft_masks.pop(source_path, None)
+            self._draft_rgb.pop(source_path, None)
             self.copy_saved.emit(source_path, output_path)
             self.saved.emit(output_path.name)
             return output_path, mask_path
@@ -2661,6 +3032,7 @@ class ClipartTransparencyEditorPage(QWidget):
         mask_path = rough_dir / f"{output_path.stem}_alpha-mask.png"
         self.document.save(output_path, mask_path)
         self._draft_masks.pop(output_path, None)
+        self._draft_rgb.pop(output_path, None)
         self.copy_saved.emit(output_path, output_path)
         self.saved.emit(output_path.name)
         return output_path, mask_path
@@ -2706,7 +3078,7 @@ class ClipartTransparencyEditorPage(QWidget):
         raise ValueError("Не удалось выбрать свободное имя для копии PNG")
 
     def _save_clicked(self) -> None:
-        if self._edge_preview is not None:
+        if self._colour_active or self._edge_preview is not None:
             self._show_contour_status('Сначала примените или отмените предпросмотр края.')
             return
         if self.canvas.contour_busy:
@@ -2734,7 +3106,7 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def _has_unsaved_changes(self) -> bool:
         current_dirty = self._document is not None and self._document.is_dirty
-        return current_dirty or bool(self._draft_masks) or self.canvas.contour.dirty or any(c.dirty for c in self._draft_contours.values())
+        return current_dirty or bool(self._draft_masks) or bool(self._draft_rgb) or self.canvas.contour.dirty or any(c.dirty for c in self._draft_contours.values())
 
     def _back_clicked(self) -> None:
         self.cancel_edge_preview()
@@ -2745,8 +3117,8 @@ class ClipartTransparencyEditorPage(QWidget):
             answer = QMessageBox.warning(
                 self,
                 "Есть несохранённые изменения",
-                ("Вернуться к файлам и отменить изменения маски?" if self._save_dir is not None
-                 else "Вернуться к результатам и отменить изменения маски?"),
+                ("Вернуться к файлам и отменить изменения изображения?" if self._save_dir is not None
+                 else "Вернуться к результатам и отменить изменения изображения?"),
                 QMessageBox.StandardButton.Discard
                 | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel,
@@ -2754,6 +3126,7 @@ class ClipartTransparencyEditorPage(QWidget):
             if answer != QMessageBox.StandardButton.Discard:
                 return
             self._draft_masks.clear()
+            self._draft_rgb.clear()
             self._draft_contours.clear()
             self._document = None
             self._loaded_path = None
@@ -2788,7 +3161,7 @@ class ClipartTransparencyEditorPage(QWidget):
             self.toggle_focus_mode()
 
     def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
-        if self._edge_preview is not None and event.key() == Qt.Key.Key_Escape:
+        if (self._colour_active or self._edge_preview is not None) and event.key() == Qt.Key.Key_Escape:
             self.cancel_edge_preview()
             event.accept()
             return

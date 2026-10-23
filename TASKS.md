@@ -1,4 +1,18 @@
 # TASKS
+## Локальная ручная коррекция цветной каймы
+
+- [x] Подтвердить полезный локальный RGB эффект на actual post-NN duck/flower; оговорить оставшиеся кончики/изменение настоящей выбранной обводки.
+- [x] Реализовать undoable RGB proposal, dirty/reset/save и document draft export/restore;31 effect+15 document tests PASS, финальные176+5subtests PASS; synthetic5016² model+Qt/PNG/source verification PASS.
+- [x] Подготовить9 full-context mockup states, показать и запросить обязательное visual approval.
+- [x] Получить продолжение после показанного макета: владелец ответил «Продолжай».
+- [x] Подключить RGB drafts к page file-switch/save/discard lifecycle.
+- [x] Подключить выбор участка, Before/After/Apply/Cancel и блокировку stale proposals.
+- [x] Проверить Qt сценарии, копию PNG/alpha/provenance/source и5016²; actual flows и1120×780 comparison PASS.
+- [x] Закрыть4 подтверждённых UI lifecycle/review замечания;815 related+58subtests, финальные176+5subtests, component/runtime24 иmain UI10 PASS.
+- [ ] Installed Windows/сборка/публикация: не выполнялись, требуют отдельного поручения.
+
+Требования/проверки: `STATE.md`; история: `docs/ERRORS.md#local-edge-colour-editor`.
+
 ## Слабый край и порядок операций, 2026-10-03
 
 - [x] Подтвердить ошибку затемнения при делении на floor 0,05 вместо valid coverage.

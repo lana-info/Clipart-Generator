@@ -1,5 +1,38 @@
 # Project state
 
+## Локальная ручная коррекция цветной каймы
+
+Владелец поручил действие «Убрать цветную кайму» в редакторе прозрачности,
+затем ответил «Продолжай» после показанного макета. Реализация в отдельной
+ветке `codex/feature-local-edge-colour-20261003`, база `fd34e79`, worktree
+`edge-colour-editor-worktree`. Незакоммиченная precision/v13 работа в
+`edge-precision-worktree` сохранена отдельно и в эту ветку не включалась.
+Сборка, network, paid, download и новые зависимости не использовались.
+
+| Требование и источник | Как проверяем | Что реализовано | Что проверено и результат |
+| --- | --- | --- | --- |
+| Уменьшать паразитный оттенок выбранного края; предложение и «Делай» владельца | Actual post-NN duck/flower в редакторе на белом и тёмном фоне, RGB diff | Ручное локальное продолжение внутреннего цвета, обязательный предпросмотр | Реализовано и проверено: duck5620/flower6831 RGB changes; длинная полоса уточки слабее, отдельные кончики остаются; настоящая выбранная обводка цветка смягчается |
+| Сохранить alpha, форму, глубокую краску, неизбранный участок и исходник | Exact pixel tests, source SHA, actual PNG copies, synthetic5016² | Только выбранные видимые RGB; ограниченная опора цвета изнутри, bounded worker crops | Реализовано и проверено: actual alpha/hidden/core>4/outsideROI/source exact;31 effect tests PASS;5016²/300DPI/сохранённый RGBA exact |
+| До/После, отмена/применение, Undo/Redo, сброс и сохранение копии | Qt flow и document tests, stale/cancel/budget failures, provenance | Предпросмотр без изменения документа; одно применение в общей RGB/alpha истории; сохранение существующей атомарной транзакцией | Реализовано и проверено на Linux/offscreen:29 Qt cases +15 model cases PASS; actual cancel→Apply изДо→Undo/Redo→Save As PASS; отказ сброса показывает причину |
+| Ясное выделение рамкой и доступность на1120×780; показанный макет и «Продолжай» | Mouse drag/zoom/clipping,8 actual screenshots и сравнение с макетом | Новая кнопка под чёткостью края, рамка, До/После/Отмена/Применить; фон и масштаб доступны | Реализовано и проверено:8 состояний просмотрены, controls/footer доступны без прокрутки; safe dummy comparison в docs/ui/3.2/local-edge-colour/README.md |
+| Сохранить применённые RGB/alpha при смене файлов и прежнюю политику истории | A→B→A, Save As/reopen, failed save, discard, скрытые после кисти RGB | Lossless cropped RGB drafts по исходному пути списка, восстановление без повышения до saved baseline | Реализовано и проверено: Qt switch/reload/save/error/discard PASS; текущая Undo/Redo история работает; как прежде, после смены файла история не переносится |
+| Сохранить automatic/chroma/profile/receipts/component behavior; исходное ревью владельца |47-file related suite и component/runtime/UI acceptance | Автоматический процесс не вызывает новый ручной tool; chroma/profile/schema/release versions не менялись | Реализовано и проверено:815 related tests +58subtests PASS до финального UI catch; после него176 affected tests +5subtests PASS;24 component/runtime и10 main UI acceptance PASS |
+
+Текущий результат: ручной инструмент реализован и проверен в исходной ветке
+на Linux Qt/offscreen. Он улучшает явно выбранную полосу и может менять настоящую
+обводку. Вся автоматическая кайма не устранена. Installed Windows и сборка не
+проверялись; установленное приложение ещё не обновлено. Коммит/push не выполнялись.
+История ошибок и исправлений: `docs/ERRORS.md#local-edge-colour-editor`.
+
+Доказательства в `../artifacts/local-edge-colour-editor-20261003/`:
+`root-verification-summary.json`, `offline-suite/summary.json`,
+`ui-flow/verification.json`, `ui-5016/verification.json`, `review/UI-REPORT.ru.md`.
+Для synthetic5016² в полном редакторе: preview0,850s,apply1,097s,save1,063s,
+peakRSS1173108KiB. Source/alpha/RGBA/300DPI точны; это синтетический size scenario,
+не доказательство цвета всех owner5016² изображений. Actual768² duck/flower
+предпросмотр занимает0,154/0,072s. Независимое сильное review gpt-6-astra/xhigh
+и lifecycle audit gpt-6.1-sol/low: найденные замечания исправлены и проверены.
+
 ## Слабый край: исправление цвета, 2026-10-03
 
 Продолжение по поручению владельца: улучшать край, коммиты/push разрешены,

@@ -1,0 +1,19 @@
+{
+  "approval": "owner said Продолжай after shown full-context mockup",
+  "target": "1120x780, 100% scaling, Qt offscreen",
+  "states": [
+    "current",
+    "ready",
+    "selecting",
+    "busy",
+    "preview-before",
+    "preview-after",
+    "preview-dark",
+    "empty",
+    "no-op"
+  ],
+  "safe_synthetic_content_only": true,
+  "production_ui_changed": false,
+  "interaction": "Click correction, draw rectangle over edge, preview Before/After, Cancel or Apply. White/dark/checker background and zoom stay available. RGB changes only in selected edge; alpha/shape/source unchanged. No strength slider. No-op leaves image/history untouched.",
+  "approved_on": "2026-10-03"
+}
