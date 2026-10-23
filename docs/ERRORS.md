@@ -3290,4 +3290,8 @@ test_build_retains_shared_imports_used_by_signed_workflows — ожидает `g
   готовой прозрачностью для удаления фона не проверяются.
 - Попутно: тест миниатюр из #40 зависел от скорости машины (во время параллельного прогона падал) — переписан на
   проверку механизма (миниатюры ставятся в очередь, а не читаются сразу).
-- Проверка: FalInputSizeTests (2 теста), tests/test_v3_processing_flow.py 38 passed, полный прогон.
+- Неправильная попытка: сначала проверка импортировала `fal_provider` и `background_mask` из ядра — защита
+  архитектуры (test_legacy_dependency_edges_match_exact_allowlist, test_build_retains_shared_imports…) это запрещает
+  для подписанного модуля «Обработка». Решение: свой предел `FAL_LOCAL_FILE_MAX_BYTES` (тест сверяет его с ядром) и
+  проверка прозрачности через Pillow.
+- Проверка: FalInputSizeTests (2 теста) + сверка предела, tests/test_v3_processing_flow.py, полный прогон.

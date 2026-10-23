@@ -1345,15 +1345,28 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         self.run_status_label.style().polish(self.run_status_label)
 
 
+# Same limit as the Fal.ai upload in Core (fal_provider.FAL_FILE_INPUT_MAX_BYTES); kept here so the
+# processing module needs no new Core import (dependency allowlist).
+FAL_LOCAL_FILE_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _has_transparency(path) -> bool:
+    try:
+        with Image.open(path) as image:
+            if "A" not in image.getbands():
+                return False
+            low, _high = image.getchannel("A").getextrema()
+            return low < 255
+    except (OSError, UnidentifiedImageError, ValueError):
+        return False
+
+
 class FalInputTooLarge(ProcessingFlowError):
     """Some sources are over the Fal.ai upload limit; the whole batch must not start (approved mockup D)."""
 
 
 def validate_fal_input_sizes(operations: ImageOperationData, paths: Sequence[str]) -> None:
     """Fal.ai takes local files up to 8 MB. Check the sources it would receive before anything is paid."""
-    from background_mask import has_usable_alpha
-    from fal_provider import FAL_FILE_INPUT_MAX_BYTES
-
     if operations.upscale_before:
         if operations.upscale_before_provider != "fal":
             return  # the next stages get the upscaler's result, not the source file
@@ -1368,15 +1381,10 @@ def validate_fal_input_sizes(operations: ImageOperationData, paths: Sequence[str
             size = Path(path).stat().st_size
         except OSError as error:
             raise ProcessingFlowError(f"Файл недоступен: {Path(path).name or 'неизвестный файл'}") from error
-        if size <= FAL_FILE_INPUT_MAX_BYTES:
+        if size <= FAL_LOCAL_FILE_MAX_BYTES:
             continue
-        if alpha_exempt:
-            try:
-                with Image.open(path) as image:
-                    if has_usable_alpha(image):
-                        continue
-            except (OSError, UnidentifiedImageError):
-                pass
+        if alpha_exempt and _has_transparency(path):
+            continue
         oversized.append((Path(path).name or "неизвестный файл", size))
     if not oversized:
         return

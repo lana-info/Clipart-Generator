@@ -895,3 +895,9 @@ class FalInputSizeTests(unittest.TestCase):
             controller._refresh_preflight()
             self.assertTrue(shell.next_button.isEnabled())
             shell.close()
+
+
+def test_processing_fal_limit_matches_core_upload_limit():
+    from fal_provider import FAL_FILE_INPUT_MAX_BYTES
+    from v3_processing_flow import FAL_LOCAL_FILE_MAX_BYTES
+    assert FAL_LOCAL_FILE_MAX_BYTES == FAL_FILE_INPUT_MAX_BYTES
