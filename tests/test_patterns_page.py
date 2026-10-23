@@ -232,6 +232,8 @@ def test_main_window_opens_and_closes_patterns_from_the_signed_package(app, tmp_
         app.processEvents()
         assert page.__class__.__module__.startswith("_studio_module_patterns_")
         assert view.stack.currentWidget() is page
+        # П2 (owner 2026-10-23): the Studio header names the open module, not «Автоматический клипарт».
+        assert view.mode_selection.active_module_label.text() == "Паттерны"
         with patch("v3_mode_selection.authorize_module_run"), patch.object(view, "_patterns_allowed", return_value=True):
             view._open_patterns()  # a second open reuses the live page
         assert view._patterns_page_handle.value is page
