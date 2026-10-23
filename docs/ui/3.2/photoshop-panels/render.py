@@ -53,7 +53,7 @@ def window():
     t = QLabel("Проверка и корректировка прозрачности"); t.setStyleSheet("font-size:17px;font-weight:bold;color:#e4edf6")
     tl.addWidget(t, 1)
     panels = V3Button("Панели ▾", ButtonVariant.GHOST); tl.addWidget(panels)
-    tl.addWidget(V3Button("Сбросить расположение", ButtonVariant.GHOST))
+    # owner 2026-10-23: no separate reset button — «Сбросить расположение» lives in the «Панели» menu
     central = QWidget(); cl = QVBoxLayout(central); cl.setContentsMargins(8, 0, 4, 8)
     cl.addWidget(top); cl.addWidget(editor.canvas.parentWidget(), 1)
     win.setCentralWidget(central)
