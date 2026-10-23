@@ -186,34 +186,84 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
     scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
     with_header(grab(page), "Паттерны").save(OUT / "P6-settings-background-scrolled.png")
     scroll.verticalScrollBar().setValue(0)
-
-    # ---- П7: manual placement on step 3
-    page._go_next(); pump(lambda: page._current is not None)
-    top_card.show(); cur = with_header(grab(page), "Автоматический клипарт"); top_card.hide()
-    prev_card = page.preview_picture.parentWidget()
-    bar = QHBoxLayout()
+    pl.itemAt(2).widget().setText("Поставлено 14 из 14 элементов."); _set_state(pl.itemAt(2).widget(), "ok")
+    edit_bar = QHBoxLayout()
     for text, variant in (("Двигать", ButtonVariant.PRIMARY), ("Поворот", ButtonVariant.SECONDARY),
                           ("Размер", ButtonVariant.SECONDARY), ("Убрать", ButtonVariant.SECONDARY)):
-        bar.addWidget(V3Button(text, variant))
-    prev_card.layout().insertLayout(0, bar)
-    back_auto = V3Button("Вернуть автоматическую расстановку", ButtonVariant.GHOST)
-    prev_card.layout().insertWidget(1, back_auto)
-    prev_card.layout().addWidget(_text("Щелчок по элементу — выбрать; тянуть — двигать; угол рамки — размер, "
-                                       "кружок сверху — поворот. Элемент у края появится и с другой стороны листа.", "v3Small"))
-    app.processEvents()
-    img = grab(page)
-    d = ImageDraw.Draw(img)
-    pr = page.preview_picture
-    origin = pr.mapTo(page, pr.rect().topLeft())
-    pm = pr.pixmap(); ox = origin.x() + (pr.width() - pm.width()) // 2; oy = origin.y() + (pr.height() - pm.height()) // 2
-    cx, cy, r = ox + pm.width() // 2 + 30, oy + pm.height() // 2 - 20, 26
+        edit_bar.addWidget(V3Button(text, variant))
+    pl.insertLayout(1, edit_bar)
+    pl.insertWidget(2, V3Button("Вернуть автоматическую расстановку", ButtonVariant.GHOST))
+    pl.itemAt(pl.count() - 1).widget().setText(
+        "Щелчок по элементу — выбрать; тянуть — двигать; угол рамки — размер; кружок сверху — поворот. "
+        "Элемент у края появится и с другой стороны листа. Ручные правки «Другая расстановка» не трогает.")
+    pic.setPixmap(_qpixmap(sheet, 300, 300))
+    img = grab(page); d = ImageDraw.Draw(img)
+    org = pic.mapTo(page, pic.rect().topLeft()); pm = pic.pixmap()
+    ox = org.x() + (pic.width() - pm.width()) // 2; oy = org.y() + (pic.height() - pm.height()) // 2
+    cx, cy, r = ox + int(pm.width() * 0.53), oy + int(pm.height() * 0.30), 22
     d.rectangle((cx - r, cy - r, cx + r, cy + r), outline=(45, 212, 191), width=2)
     for hx, hy in ((cx - r, cy - r), (cx + r, cy - r), (cx - r, cy + r), (cx + r, cy + r)):
         d.rectangle((hx - 4, hy - 4, hx + 4, hy + 4), fill=(45, 212, 191))
-    d.line((cx, cy - r, cx, cy - r - 16), fill=(45, 212, 191), width=2)
-    d.ellipse((cx - 5, cy - r - 22, cx + 5, cy - r - 12), outline=(45, 212, 191), width=2)
-    prop = with_header(img, "Паттерны")
-    pair(cur, prop, "P7-manual-placement.png")
+    d.line((cx, cy - r, cx, cy - r - 14), fill=(45, 212, 191), width=2)
+    d.ellipse((cx - 5, cy - r - 20, cx + 5, cy - r - 10), outline=(45, 212, 191), width=2)
+    with_header(img, "Паттерны").save(OUT / "P7-manual-placement-step2.png")
+
+    # ---- Step 3: repeat check only (owner 2026-10-23)
+    page._go_next(); pump(lambda: page._current is not None)
+    top_card.show(); cur = with_header(grab(page), "Автоматический клипарт"); top_card.hide()
+    prev_card = page.preview_picture.parentWidget()
+    view_bar = QHBoxLayout()
+    view_bar.addWidget(_text("Показать плиток:", None))
+    for n in range(3, 8):
+        view_bar.addWidget(V3Button(f"{n}×{n}", ButtonVariant.PRIMARY if n == 5 else ButtonVariant.SECONDARY))
+    prev_card.layout().insertLayout(0, view_bar)
+    tools = QHBoxLayout()
+    tools.addWidget(V3Button("☑ Сетка", ButtonVariant.SECONDARY))
+    tools.addWidget(V3Button("На весь экран", ButtonVariant.SECONDARY))
+    tools.addStretch()
+    prev_card.layout().insertLayout(1, tools)
+    # hide the old «Увеличить шов / Линии границ» row
+    for w in prev_card.findChildren(QWidget):
+        if isinstance(w, QLabel) and w.text().startswith("Линии границ"):
+            w.hide()
+    page.zoom_button.hide()
+    tiled = page.host.preview_image(page._current["image"], 5, 2_000_000)
+    gd = ImageDraw.Draw(tiled); step = tiled.width / 5
+    for k in range(1, 5):
+        gd.line((k * step, 0, k * step, tiled.height), fill=(45, 212, 191), width=3)
+        gd.line((0, k * step, tiled.width, k * step), fill=(45, 212, 191), width=3)
+    page.preview_picture.setPixmap(_qpixmap(tiled, 360, 360))
+    # Right card: plain words
+    right = page.primary_action.parentWidget()
+    for w in right.findChildren(QLabel):
+        t = w.text()
+        if t == "Оценка шва":
+            w.setText("Проверка стыка")
+        elif t.startswith("Оценка: скачок"):
+            w.setText("Проверяет программа, автоматически: сравнивает переход через край листа с обычными "
+                      "переходами внутри рисунка. «Готово» — стык при повторе не заметен.\n\n"
+                      "Из ваших PNG программа ничего не исправляет: элемент у края переносится на "
+                      "противоположную сторону, поэтому лист бесшовный сразу.\n"
+                      "Для готовой плитки программа смешивает полосу у краёв (ширина — на шаге 2).")
+        elif t.startswith("По горизонтали"):
+            w.setText("Стык слева-справа: 0.07 · сверху-снизу: 0.01 (норма — до 1.5)")
+    page.seam_status.setText("Готово: стык не заметен")
+    page.preview_subtitle.setText("Лист повторён рядом сам с собой, как на бумаге. Выберите, сколько плиток показать.")
+    page.primary_action.setText("Сохранить в набор")
+    page.secondary_action.hide()
+    right.layout().addWidget(_text("Лист попадёт в набор (шаг 4). Там можно добавить ещё варианты и выгрузить "
+                                   "все листы сразу. Другую расстановку делайте на шаге 2.", "v3Small"))
+    prop = with_header(grab(page), "Паттерны")
+    pair(cur, prop, "P9-step3-repeat-check.png")
+    # Full screen view: only the repeated picture, with a small bar
+    full = page.host.preview_image(page._current["image"], 5, 6_000_000).resize((1120, 1120)).crop((0, 170, 1120, 950))
+    fd = ImageDraw.Draw(full); st = 1120 / 5
+    for k in range(1, 5):
+        fd.line((k * st, 0, k * st, 780), fill=(45, 212, 191), width=2)
+        fd.line((0, k * st - 170, 1120, k * st - 170), fill=(45, 212, 191), width=2)
+    fd.rounded_rectangle((330, 14, 790, 58), 10, fill=(22, 32, 46))
+    fd.text((350, 26), "Плиток: 5×5   ☑ Сетка   Esc — выйти", font=ImageFont.truetype(BOLD, 17), fill=(228, 237, 246))
+    full.save(OUT / "P10-fullscreen-repeat.png")
     page.host.close()
 
     # ---- П4: tile mode, step 1
