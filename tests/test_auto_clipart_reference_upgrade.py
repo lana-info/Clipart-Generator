@@ -306,8 +306,11 @@ def test_removing_references_during_confirmation_cannot_bypass_consent(workspace
             prompt.references = []
         return QMessageBox.StandardButton.Yes
 
+    warned = Mock()
     monkeypatch.setattr(QMessageBox, 'question', remove_references)
+    monkeypatch.setattr(QMessageBox, 'warning', warned)  # the launch is refused with a notice
     view.shell.go_next()
+    warned.assert_called_once()
     factory.assert_not_called()
     assert controller.run_queue.session is None
     assert controller._reference_consent is None

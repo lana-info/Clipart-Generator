@@ -74,7 +74,7 @@ def test_actual_editor_save_rechecks_blocked_and_accepted_export(tmp_path, monke
     QVBoxLayout(export_page)
     empty = QLabel("empty")
     export_page.layout().addWidget(empty)
-    controller = SimpleNamespace(run_queue=SimpleNamespace(page=page, session=session),
+    controller = SimpleNamespace(run_queue=SimpleNamespace(page=page, session=session), review=None,
         shell=SimpleNamespace(state=SimpleNamespace(data=state.clipart), refresh=lambda: None),
         export_panel=None, export_page=export_page, export_empty=empty)
     refresh = lambda: AutoClipartFlowController._refresh_export(controller)
