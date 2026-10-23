@@ -66,7 +66,7 @@ def delayed_job():
     return started, release, calculate
 
 
-@pytest.mark.parametrize('operation', ['sharpen', 'smooth'])
+@pytest.mark.parametrize('operation', ['harder', 'smooth', 'shrink'])
 def test_busy_paints_before_copy_worker_ignores_repeat_and_explicit_cancel(page, operation):
     canvas, doc = page.canvas, page.document
     before = doc.mask.tobytes()
@@ -106,13 +106,13 @@ def test_busy_paints_before_copy_worker_ignores_repeat_and_explicit_cancel(page,
     assert 'отменён' in page.contour_status.text()
 
 
-@pytest.mark.parametrize('mutation', ['revision', 'selection', 'paths', 'document', 'escape'])
+@pytest.mark.parametrize('mutation', ['revision', 'selection', 'paths', 'document', 'escape', 'area'])
 def test_stale_or_cancelled_edge_result_never_publishes(page, mutation):
     canvas, doc = page.canvas, page.document
     before = doc.mask.tobytes()
     started, release, calculate = delayed_job()
     with patch('v3_transparency_preview.edge_proposal', side_effect=calculate):
-        page.sharpen_edge()
+        page._edge_operation('harder')
         until(started.is_set)
         if mutation == 'revision':
             doc.mask_revision += 1
@@ -123,6 +123,8 @@ def test_stale_or_cancelled_edge_result_never_publishes(page, mutation):
             canvas.contour.paths[0] = replace(path, nodes=(replace(path.nodes[0], point=(11,10)), *path.nodes[1:]))
         elif mutation == 'document':
             canvas.set_document(MaskEditDocument(Image.new('RGBA',(80,80),(2,3,4,255))))
+        elif mutation == 'area':
+            canvas.lasso_area = [[(0, 0), (20, 0), (20, 20)]]
         else:
             QTest.keyClick(canvas, Qt.Key.Key_Escape)
         release.set()
@@ -131,7 +133,7 @@ def test_stale_or_cancelled_edge_result_never_publishes(page, mutation):
     assert not page.busy_bar.isVisible()
 
 
-@pytest.mark.parametrize('operation', ['sharpen', 'smooth'])
+@pytest.mark.parametrize('operation', ['harder', 'smooth', 'shrink'])
 def test_same_actual_selection_scope_preserved_for_repeated_alpha_steps(page, operation):
     canvas, doc = page.canvas, page.document
     canvas.contour.select({(0,0),(0,1)})
@@ -162,7 +164,7 @@ def test_same_actual_selection_scope_preserved_for_repeated_alpha_steps(page, op
     assert len(doc._undo) in (history, history + 1)
     canvas.contour.select(set())
     page._refresh_history_buttons()
-    assert page.edge_scope_label.text() == 'Весь край'
+    assert page.edge_scope_label.text() == 'Всё изображение'
 
 
 def test_noop_cache_uses_revision_and_selection_without_calculation_on_refresh(page):
@@ -199,7 +201,7 @@ def test_worker_error_and_memory_error_leave_history_mask_and_rgb_unchanged(page
             raise MemoryError('history')
         return real_crop(image, box)
     with patch.object(Image.Image, 'crop', allocation_error):
-        page.sharpen_edge()
+        page._edge_operation('harder')
         wait(page.canvas)
     assert before == (doc.mask.tobytes(), doc.mask_revision, doc._undo, doc._redo, doc.image.tobytes())
     assert 'history' in page.contour_status.text()
@@ -210,9 +212,11 @@ def test_short_tooltips_icons_and_busy_row_belongs_to_canvas_only(page):
     assert not hasattr(page, 'smooth_button')
     for widget in page.findChildren(QWidget):
         assert len(widget.toolTip().split()) <= 2, widget.toolTip()
-    for button in (page.sharpen_edge_button, page.smooth_edge_button, page.add_button,
-                   page.remove_button, page.new_contour_button, page.contour_button, page.lasso_button):
+    for button in (page.add_button, page.remove_button, page.new_contour_button, page.contour_button, page.lasso_button):
         assert not button.icon().isNull() and button.accessibleName()
+    assert [b.text() for b in page.edge_buttons.values()] == ['Жёстче', 'Мягче', 'Сгладить', 'Сузить', 'Расширить']
+    assert all(b.accessibleName() for b in page.edge_buttons.values())
+    assert not hasattr(page, 'sharpen_edge_button')
     assert page.save_button.text() == 'Сохранить PNG'
     assert page.brush_diameter == 16 and page.diameter_value.text() == '16 px'
     assert page.canvas.brush_radius == 7.5
@@ -259,7 +263,7 @@ def test_invalid_selected_scope_rejects_without_global_fallback(page):
     doc = page.document
     initial = doc.mask.tobytes()
     page.canvas.contour.selection = {(99,99)}
-    page.sharpen_edge()
+    page._edge_operation('harder')
     wait(page.canvas)
     assert doc.mask.tobytes() == initial and not doc.can_undo
     assert page.contour_status.text()

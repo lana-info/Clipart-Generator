@@ -52,11 +52,14 @@ def _check_shared_edge_actions(page, source, evidence_dir):
         page.tools_scroll.ensureWidgetVisible(page.smooth_edge_button)
         QApplication.instance().processEvents()
         page.grab().save(str(Path(evidence_dir) / 'edge-editor.png'))
-    page.sharpen_edge_button.click()
+    page.edge_buttons['shrink'].click()
     _wait_for_contour(page.canvas)
-    if not np.array_equal(np.array(page.document.mask), alpha):
+    shrunk = np.array(page.document.mask)
+    if not (shrunk.astype(int).sum() < smoothed.astype(int).sum() and np.all(shrunk <= smoothed)):
         return False
     page.undo_button.click()
+    if not np.array_equal(np.array(page.document.mask), smoothed):
+        return False
     output, mask = page.save_current()
     with Image.open(output) as saved, Image.open(mask) as saved_mask:
         result = np.array(saved.convert('RGBA'))

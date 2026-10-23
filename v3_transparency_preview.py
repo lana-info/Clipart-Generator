@@ -1474,6 +1474,10 @@ class TransparencyCanvas(QGraphicsView):
             return
         super().mouseDoubleClickEvent(event)
 
+    def lasso_area_key(self):
+        """Immutable copy of the lasso area for worker jobs and no-op caches."""
+        return tuple(tuple(area) for area in self.lasso_area)
+
     def tool_cursor(self):
         """System cursor of the current tool; the brush draws its own ring."""
         if self.tool == "lasso":
@@ -1557,10 +1561,13 @@ class TransparencyCanvas(QGraphicsView):
         job = dict(future=None, cancelled=Event(), document=self.document,
                    mask_revision=self.document.mask_revision, contour=self.contour,
                    kind=kind, paths=tuple(self.contour.paths), originals=tuple(self.contour.original),
-                   selection=frozenset(self.contour.selection), mask=self.document.mask)
+                   selection=frozenset(self.contour.selection), area=self.lasso_area_key(),
+                   mask=self.document.mask)
         self._contour_job = job
         self.status_changed.emit({'extract': 'Строим контур…', 'edge-sharpen': 'Уточняем край…',
-                                  'edge-smooth': 'Сглаживаем край…',
+                                  'edge-smooth': 'Сглаживаем край…', 'edge-harder': 'Делаем край жёстче…',
+                                  'edge-softer': 'Делаем край мягче…', 'edge-shrink': 'Сужаем край…',
+                                  'edge-grow': 'Расширяем край…',
                                   'local-preview': 'Обрабатываем участок…'}.get(kind, 'Применяем контур…'))
         # Publish busy before the worker copies the full-size mask.
         self.document_changed.emit()
@@ -1579,7 +1586,8 @@ class TransparencyCanvas(QGraphicsView):
             mask = job['mask'].copy()
             if job['kind'].startswith('edge-'):
                 return edge_proposal(mask, job['kind'][5:], paths=job['paths'],
-                                     selection=job['selection'], cancelled=job['cancelled'])
+                                     selection=job['selection'], cancelled=job['cancelled'],
+                                     area=job['area'])
             return _calculate_contour(job['kind'], np.array(mask), job['originals'],
                                       job['paths'], job['cancelled'])
         try:
@@ -1602,7 +1610,8 @@ class TransparencyCanvas(QGraphicsView):
                     or job["mask_revision"] != self.document.mask_revision
                     or job['contour'] is not self.contour
                     or job['paths'] != tuple(self.contour.paths)
-                    or job['selection'] != frozenset(self.contour.selection)):
+                    or job['selection'] != frozenset(self.contour.selection)
+                    or job['area'] != self.lasso_area_key()):
                 raise CancelledError()
             if job["kind"] == "extract":
                 self.contour = InlineContour()
@@ -1629,7 +1638,8 @@ class TransparencyCanvas(QGraphicsView):
                 revision = self.document.mask_revision
                 self.document.apply_mask_proposal(result)
                 if revision == self.document.mask_revision:
-                    self.edge_noops.add((self.document, revision, job['kind'], job['paths'], job['selection']))
+                    self.edge_noops.add((self.document, revision, job['kind'], job['paths'], job['selection'],
+                                         job['area']))
                 else:
                     # Keep clean geometry as a stable guide for repeated local alpha actions.
                     self.document._edge_history_ids.add(id(self.document._undo[-1]))
@@ -2033,8 +2043,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self._save_after_contour = False
         self._saving = False
         self._focus_mode = False
-        self._edge_sharpen_check_key = None
-        self._edge_sharpen_possible = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -2155,19 +2163,25 @@ class ClipartTransparencyEditorPage(QWidget):
         tools_layout.addLayout(zoom_grid)
 
         tools_layout.addWidget(self._small_label('Край'))
-        edge_row = QHBoxLayout()
-        self.sharpen_edge_button = QPushButton()
-        self.smooth_edge_button = QPushButton()
-        for button, icon, label, action in ((self.sharpen_edge_button, 'sharpen', 'Чётче', self.sharpen_edge),
-                                           (self.smooth_edge_button, 'smooth', 'Сгладить', self.smooth_edge)):
-            button.setIcon(self._thin_icon(icon))
-            button.setIconSize(QSize(32, 24))
-            button.setAccessibleName(label + ' край')
-            button.setToolTip(label)
-            button.clicked.connect(action)
-            edge_row.addWidget(button)
-        tools_layout.addLayout(edge_row)
-        self.edge_scope_label = self._small_label('Весь край')
+        edge_grid = QGridLayout()
+        edge_grid.setSpacing(4)
+        self.edge_buttons = {}
+        for index, (operation, text, tip, accessible) in enumerate((
+                ('harder', 'Жёстче', 'Края жёстче', 'Сделать переход края уже'),
+                ('softer', 'Мягче', 'Края мягче', 'Сделать переход края шире'),
+                ('smooth', 'Сгладить', 'Сгладить', 'Сгладить углы края'),
+                ('shrink', 'Сузить', 'Сузить край', 'Сузить край на 1 пиксель'),
+                ('grow', 'Расширить', 'Расширить край', 'Расширить край на 1 пиксель'))):
+            button = QPushButton(text)
+            button.setStyleSheet("font-size:11px;padding:5px 2px;")
+            button.setToolTip(tip)
+            button.setAccessibleName(accessible)
+            button.clicked.connect(lambda checked=False, value=operation: self._edge_operation(value))
+            self.edge_buttons[operation] = button
+            edge_grid.addWidget(button, index // 3, index % 3)
+        self.smooth_edge_button = self.edge_buttons['smooth']
+        tools_layout.addLayout(edge_grid)
+        self.edge_scope_label = self._small_label('Всё изображение')
         tools_layout.addWidget(self.edge_scope_label)
         tools_layout.addWidget(self._small_label('Инструмент'))
         tool_row = QHBoxLayout()
@@ -2733,9 +2747,6 @@ class ClipartTransparencyEditorPage(QWidget):
     def _set_background(self, label: str) -> None:
         self.canvas.set_background(label)
 
-    def sharpen_edge(self) -> None:
-        self._edge_operation('sharpen')
-
     def smooth_edge(self) -> None:
         self._edge_operation('smooth')
 
@@ -2839,17 +2850,19 @@ class ClipartTransparencyEditorPage(QWidget):
         document, contour = self.canvas.document, self.canvas.contour
         contour.sanitize_selection()
         busy = self.canvas.contour_busy
-        self.edge_scope_label.setText('Выделенный участок' if contour.selection else 'Весь край')
+        area = self.canvas.lasso_area_key()
+        self.edge_scope_label.setText('Область лассо' if area else
+                                      'Выделенный участок' if contour.selection else 'Всё изображение')
         paths, selection = tuple(contour.paths), frozenset(contour.selection)
         self.canvas.edge_noops = {key for key in self.canvas.edge_noops
                                   if key[0] is document and document is not None
-                                  and key[1] == document.mask_revision and key[3:] == (paths, selection)}
+                                  and key[1] == document.mask_revision and key[3:] == (paths, selection, area)}
         self.canvas.local_noops = {key for key in self.canvas.local_noops if key[1:] == (paths, selection)}
         valid = (document is not None and not busy and not contour.dirty
                  and not contour.local_active and not contour.points and not self.canvas._painting)
-        for button, kind in ((self.sharpen_edge_button, 'edge-sharpen'), (self.smooth_edge_button, 'edge-smooth')):
-            key = (document, document.mask_revision if document else -1, kind,
-                   tuple(contour.paths), frozenset(contour.selection))
+        for operation, button in self.edge_buttons.items():
+            key = (document, document.mask_revision if document else -1, 'edge-' + operation,
+                   tuple(contour.paths), frozenset(contour.selection), area)
             button.setEnabled(valid and key not in self.canvas.edge_noops)
         self._refresh_local_buttons()
         self.busy_bar.setVisible(busy)
