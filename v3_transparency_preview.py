@@ -843,6 +843,8 @@ class InlineContour:
         self.undo_stack = []
         self.redo_stack = []
         self.points = []
+        # Indices of manual points placed with the right mouse button: smooth (curve) points.
+        self.smooth_points = frozenset()
         self.manual = False
 
     @property
@@ -879,7 +881,7 @@ class InlineContour:
 
     def snapshot(self):
         return (list(self.paths), self._selected, frozenset(self.selection),
-                list(self.points), self.manual, self.local_before, self.preview_after)
+                list(self.points), self.manual, self.local_before, self.preview_after, self.smooth_points)
 
     @property
     def dirty(self):
@@ -897,17 +899,35 @@ class InlineContour:
             return False
         target.append(self.snapshot())
         (self.paths, self._selected, selection, self.points, self.manual,
-         self.local_before, self.preview_after) = source.pop()
+         self.local_before, self.preview_after, self.smooth_points) = source.pop()
         self.selection = set(selection)
         self.sanitize_selection()
         return True
 
-    def add_point(self, point):
+    def add_point(self, point, smooth=False):
+        """Add a manual point: a corner (left button) or a smooth curve point (right button)."""
         if len(self.points) >= MAX_NODES_PER_PATH or (self.points and point == self.points[-1]):
             return
         self.checkpoint()
         self.manual = True
         self.points.append(point)
+        if smooth:
+            self.smooth_points = self.smooth_points | {len(self.points) - 1}
+
+    def manual_nodes(self, closed):
+        """Nodes of the manual points; smooth points get handles along their neighbours."""
+        points, smooth = self.points, self.smooth_points
+        nodes = []
+        for index, point in enumerate(points):
+            ends = not closed and index in (0, len(points) - 1)
+            if index not in smooth or ends or len(points) < 3:
+                nodes.append(BezierNode(point))
+                continue
+            prev, nxt = points[index - 1], points[(index + 1) % len(points)]
+            tangent = ((nxt[0] - prev[0]) / 6, (nxt[1] - prev[1]) / 6)
+            nodes.append(BezierNode(point, 'smooth', (point[0] - tangent[0], point[1] - tangent[1]),
+                                    (point[0] + tangent[0], point[1] + tangent[1])))
+        return nodes
 
     def close_path(self, shape):
         if len(self.points) < 3:
@@ -918,8 +938,13 @@ class InlineContour:
                    for b, c in zip(self.points[1:], self.points[2:])):
             return False
         self.checkpoint()
-        self.paths = [BezierPath(tuple(BezierNode(p) for p in self.points), 0, shape)]
+        h, w = shape
+        clip = lambda p: (min(w - 1, max(0, p[0])), min(h - 1, max(0, p[1]))) if p else p
+        nodes = [replace(node, in_handle=clip(node.in_handle), out_handle=clip(node.out_handle))
+                 for node in self.manual_nodes(closed=True)]
+        self.paths = [BezierPath(tuple(nodes), 0, shape)]
         self.points = []
+        self.smooth_points = frozenset()
         self.selected = None
         return True
 
@@ -982,6 +1007,7 @@ class InlineContour:
         if self.points:
             self.checkpoint()
             self.points.pop()
+            self.smooth_points = self.smooth_points - {len(self.points)}
             return
         if self.selected is None:
             return
@@ -1243,6 +1269,19 @@ class TransparencyCanvas(QGraphicsView):
                 self._lasso_additive = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
             event.accept()
             return
+        if (self.tool == "pen" and self.document is not None and event.button() == Qt.MouseButton.RightButton
+                and not self.contour.paths):
+            # Manual outline: right button places a smooth curve point (left button: a corner).
+            point = self._image_point(event.position().toPoint())
+            if point:
+                if len(self.contour.points) >= 3 and math.dist(point, self.contour.points[0]) <= 7 / self.transform().m11():
+                    self.close_manual_contour()
+                else:
+                    self.contour.add_point(point, smooth=True)
+                    self.document_changed.emit()
+                self.viewport().update()
+            event.accept()
+            return
         if self.tool == "pen" and self.document is not None:
             if event.button() == Qt.MouseButton.LeftButton:
                 self._show_after_for_edit()
@@ -1456,6 +1495,9 @@ class TransparencyCanvas(QGraphicsView):
     def mouseDoubleClickEvent(self, event):
         if self.contour_busy:
             event.accept()
+            return
+        if event.button() == Qt.MouseButton.RightButton:
+            self.mousePressEvent(event)      # a quick second right click is one more curve point
             return
         if self.tool == "pen" and self.document is not None and event.button() == Qt.MouseButton.LeftButton:
             point = self._image_point(event.position().toPoint())
@@ -1809,6 +1851,7 @@ class TransparencyCanvas(QGraphicsView):
             if key == Qt.Key.Key_Escape and self.contour.dirty:
                 self.contour.checkpoint()
                 self.contour.points = []
+                self.contour.smooth_points = frozenset()
                 self.contour.paths = list(self.contour.original)
                 self.contour.selected = None
                 self.contour.local_before = None
@@ -1933,9 +1976,11 @@ class TransparencyCanvas(QGraphicsView):
             painter.setBrush(Qt.BrushStyle.NoBrush)
             r = 3.5 / self.transform().m11()
             if self.contour.points:
-                curve = QPainterPath(QPointF(*self.contour.points[0]))
-                for point in self.contour.points[1:]:
-                    curve.lineTo(QPointF(*point))
+                nodes = self.contour.manual_nodes(closed=False)
+                curve = QPainterPath(QPointF(*nodes[0].point))
+                for node, nxt in zip(nodes, nodes[1:]):
+                    curve.cubicTo(QPointF(*(node.out_handle or node.point)), QPointF(*(nxt.in_handle or nxt.point)),
+                                  QPointF(*nxt.point))
                 painter.drawPath(curve)
                 for point in self.contour.points:
                     painter.drawEllipse(QPointF(*point), r, r)
