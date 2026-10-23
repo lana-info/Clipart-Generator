@@ -187,15 +187,15 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
     with_header(grab(page), "Паттерны").save(OUT / "P6-settings-background-scrolled.png")
     scroll.verticalScrollBar().setValue(0)
     pl.itemAt(2).widget().setText("Поставлено 14 из 14 элементов."); _set_state(pl.itemAt(2).widget(), "ok")
-    edit_bar = QHBoxLayout()
-    for text, variant in (("Двигать", ButtonVariant.PRIMARY), ("Поворот", ButtonVariant.SECONDARY),
-                          ("Размер", ButtonVariant.SECONDARY), ("Убрать", ButtonVariant.SECONDARY)):
-        edit_bar.addWidget(V3Button(text, variant))
-    pl.insertLayout(1, edit_bar)
-    pl.insertWidget(2, V3Button("Вернуть автоматическую расстановку", ButtonVariant.GHOST))
+    # owner 2026-10-23: no mode buttons — select with the mouse; one clear reset button; title «Предпросмотр»
+    pl.itemAt(0).widget().setText("Предпросмотр")
+    reset = V3Button("Сбросить правки", ButtonVariant.SECONDARY)
+    reset.setToolTip("Вернуть автоматическую расстановку: ручные правки элементов отменяются")
+    reset_row = QHBoxLayout(); reset_row.addStretch(); reset_row.addWidget(reset)
+    pl.insertLayout(pl.count() - 1, reset_row)
     pl.itemAt(pl.count() - 1).widget().setText(
-        "Щелчок по элементу — выбрать; тянуть — двигать; угол рамки — размер; кружок сверху — поворот. "
-        "Элемент у края появится и с другой стороны листа. Ручные правки «Другая расстановка» не трогает.")
+        "Щелчок по элементу — выделить: тянуть — двигать, углы рамки — размер, кружок сверху — поворот, "
+        "корзина или Delete — удалить. «Сбросить правки» возвращает автоматическую расстановку.")
     pic.setPixmap(_qpixmap(sheet, 300, 300))
     img = grab(page); d = ImageDraw.Draw(img)
     org = pic.mapTo(page, pic.rect().topLeft()); pm = pic.pixmap()
@@ -206,22 +206,27 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
         d.rectangle((hx - 4, hy - 4, hx + 4, hy + 4), fill=(45, 212, 191))
     d.line((cx, cy - r, cx, cy - r - 14), fill=(45, 212, 191), width=2)
     d.ellipse((cx - 5, cy - r - 20, cx + 5, cy - r - 10), outline=(45, 212, 191), width=2)
+    # trash icon next to the selection
+    tx, ty = cx + r + 8, cy - r - 4
+    d.rounded_rectangle((tx, ty, tx + 22, ty + 22), 5, fill=(31, 42, 56), outline=(240, 110, 110))
+    d.rectangle((tx + 7, ty + 8, tx + 15, ty + 17), outline=(240, 110, 110), width=2)
+    d.line((tx + 5, ty + 6, tx + 17, ty + 6), fill=(240, 110, 110), width=2)
+    d.line((tx + 9, ty + 4, tx + 13, ty + 4), fill=(240, 110, 110), width=2)
     with_header(img, "Паттерны").save(OUT / "P7-manual-placement-step2.png")
 
     # ---- Step 3: repeat check only (owner 2026-10-23)
     page._go_next(); pump(lambda: page._current is not None)
     top_card.show(); cur = with_header(grab(page), "Автоматический клипарт"); top_card.hide()
     prev_card = page.preview_picture.parentWidget()
+    # owner 2026-10-23: one row — tile count + «Сетка» checkbox; full screen = icon in the picture corner or a click
+    from PyQt6.QtWidgets import QCheckBox
     view_bar = QHBoxLayout()
-    view_bar.addWidget(_text("Показать плиток:", None))
+    view_bar.addWidget(_text("Плиток:", None, wrap=False))
     for n in range(3, 8):
         view_bar.addWidget(V3Button(f"{n}×{n}", ButtonVariant.PRIMARY if n == 5 else ButtonVariant.SECONDARY))
+    grid_box = QCheckBox("Сетка"); grid_box.setChecked(True); view_bar.addWidget(grid_box)
     prev_card.layout().insertLayout(0, view_bar)
-    tools = QHBoxLayout()
-    tools.addWidget(V3Button("☑ Сетка", ButtonVariant.SECONDARY))
-    tools.addWidget(V3Button("На весь экран", ButtonVariant.SECONDARY))
-    tools.addStretch()
-    prev_card.layout().insertLayout(1, tools)
+    prev_card.layout().addWidget(_text("Щелчок по картинке или значок в углу — на весь экран (Esc — выйти).", "v3Small"))
     # hide the old «Увеличить шов / Линии границ» row
     for w in prev_card.findChildren(QWidget):
         if isinstance(w, QLabel) and w.text().startswith("Линии границ"):
@@ -233,6 +238,7 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
         gd.line((k * step, 0, k * step, tiled.height), fill=(45, 212, 191), width=3)
         gd.line((0, k * step, tiled.width, k * step), fill=(45, 212, 191), width=3)
     page.preview_picture.setPixmap(_qpixmap(tiled, 360, 360))
+    app.processEvents()
     # Right card: plain words
     right = page.primary_action.parentWidget()
     for w in right.findChildren(QLabel):
@@ -253,7 +259,15 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
     page.secondary_action.hide()
     right.layout().addWidget(_text("Лист попадёт в набор (шаг 4). Там можно добавить ещё варианты и выгрузить "
                                    "все листы сразу. Другую расстановку делайте на шаге 2.", "v3Small"))
-    prop = with_header(grab(page), "Паттерны")
+    img3 = grab(page); d3 = ImageDraw.Draw(img3)
+    pr = page.preview_picture; o = pr.mapTo(page, pr.rect().topLeft()); pm = pr.pixmap()
+    x1 = o.x() + (pr.width() + pm.width()) // 2; y0 = o.y() + (pr.height() - pm.height()) // 2
+    bx, by = x1 - 36, y0 + 6
+    d3.rounded_rectangle((bx, by, bx + 30, by + 30), 6, fill=(22, 32, 46), outline=(43, 58, 78))
+    for (ax, ay, dx, dy) in ((bx + 7, by + 7, 1, 1), (bx + 23, by + 7, -1, 1), (bx + 7, by + 23, 1, -1), (bx + 23, by + 23, -1, -1)):
+        d3.line((ax, ay, ax + 6 * dx, ay), fill=(228, 237, 246), width=2)
+        d3.line((ax, ay, ax, ay + 6 * dy), fill=(228, 237, 246), width=2)
+    prop = with_header(img3, "Паттерны")
     pair(cur, prop, "P9-step3-repeat-check.png")
     # Full screen view: only the repeated picture, with a small bar
     full = page.host.preview_image(page._current["image"], 5, 6_000_000).resize((1120, 1120)).crop((0, 170, 1120, 950))
