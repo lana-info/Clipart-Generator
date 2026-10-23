@@ -73,11 +73,9 @@ class OnlineLicenseGateTests(unittest.TestCase):
         self.assertNotIn(result.license_id, gate.verification_text)
         self.assertNotIn("CG-TEST", gate.verification_text)
 
-    def test_failed_online_check_clears_previous_verified_status(self):
-        client = FakeClient()
+    def test_failed_startup_check_is_rejected_and_leaves_no_verified_status(self):
+        client = FakeClient(activated=True, failure=LicenseError("Сервер отклонил лицензию"))
         gate = OnlineLicenseGate(client)
-        gate.activate("CG-TEST")
-        client.failure = LicenseError("Сервер отклонил лицензию")
 
         with self.assertRaises(LicenseError):
             gate.authorize_run()
@@ -85,12 +83,22 @@ class OnlineLicenseGateTests(unittest.TestCase):
         self.assertIsNone(gate.current_authorization)
         self.assertEqual(gate.verification_text, "Онлайн-проверка не выполнена")
 
+    def test_running_session_is_not_rechecked_after_a_server_change(self):
+        client = FakeClient()
+        gate = OnlineLicenseGate(client)
+        first = gate.activate("CG-TEST")
+        client.failure = LicenseError("Сервер отклонил лицензию")  # would reject a new launch
+
+        self.assertIs(gate.authorize_run(), first)
+        self.assertIs(gate.current_authorization, first)
+        self.assertEqual(client.validation_calls, 0)
+
     def test_run_requires_prior_activation(self):
         gate = OnlineLicenseGate(FakeClient())
         with self.assertRaisesRegex(LicenseError, "Активируйте лицензию"):
             gate.authorize_run()
 
-    def test_activation_and_every_run_use_the_online_client(self):
+    def test_activation_verifies_online_once_and_runs_reuse_the_session(self):
         client = FakeClient()
         gate = OnlineLicenseGate(client)
 
@@ -102,7 +110,8 @@ class OnlineLicenseGateTests(unittest.TestCase):
         self.assertEqual(first.license_id, "license-id")
         self.assertEqual(second.license_id, "license-id")
         self.assertEqual(client.activation_keys, ["CG-TEST"])
-        self.assertEqual(client.validation_calls, 2)
+        self.assertEqual(client.validation_calls, 0)  # activation is the one online check
+        self.assertIs(second, first)
         self.assertEqual(gate.status_text, "Лицензия активна")
 
     def test_temporary_server_outage_uses_bounded_offline_grace(self):
