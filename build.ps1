@@ -80,6 +80,7 @@ Write-Host "==> Build app with PyInstaller"
     --exclude-module "prompt_composer" `
     --hidden-import "chroma_key" `
     --hidden-import "chroma_key_selection" `
+    --hidden-import "chroma_provenance" `
     --hidden-import "clipart_run_results" `
     --hidden-import "config_schema" `
     --hidden-import "fal_model_catalog" `

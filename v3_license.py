@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Protocol
 
 from PyQt6.QtWidgets import (
@@ -39,6 +40,7 @@ class OnlineLicenseGate:
     def __init__(self, client: LicenseClientProtocol) -> None:
         self.client = client
         self.current_authorization: LicenseAuthorization | None = None
+        self._session_authorization: LicenseAuthorization | None = None
         self.status_text = "Лицензия не активирована"
         try:
             if client.has_activation():
@@ -83,11 +85,31 @@ class OnlineLicenseGate:
             self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
             raise LicenseUnavailableError("Не удалось проверить лицензию") from None
-        self.current_authorization = authorization
+        self._session_authorization = self._for_session(authorization)
+        self.current_authorization = self._session_authorization
         self.status_text = "Лицензия активна"
-        return authorization
+        return self._session_authorization
+
+    @staticmethod
+    def _for_session(authorization: LicenseAuthorization) -> LicenseAuthorization:
+        """Hold a verified online authorization until its module grants end.
+
+        Owner decision 2026-10-23: the licence is verified online once (startup or
+        activation), not again while the application works. The server signs each
+        authorization for only ~5 minutes, so the in-memory copy is valid for the
+        longest module grant it carries. The signature was verified on receipt.
+        """
+        ends = [grant.expires_at for grant in authorization.module_entitlements]
+        if authorization.is_offline_grace or not ends or max(ends) <= authorization.expires_at:
+            return authorization
+        return replace(authorization, expires_at=max(ends))
 
     def authorize_run(self) -> LicenseAuthorization:
+        session = self._session_authorization
+        if session is not None and self.has_activation():
+            self.current_authorization = session
+            return session
+        self._session_authorization = None
         if not self.has_activation():
             self.current_authorization = None
             self.status_text = "Лицензия не активирована"
@@ -109,6 +131,9 @@ class OnlineLicenseGate:
             self.current_authorization = None
             self.status_text = "Лицензия не подтверждена"
             raise LicenseUnavailableError("Не удалось проверить лицензию") from None
+        if not authorization.is_offline_grace:
+            authorization = self._for_session(authorization)
+            self._session_authorization = authorization
         self.current_authorization = authorization
         self.status_text = (
             "Временный автономный доступ"
