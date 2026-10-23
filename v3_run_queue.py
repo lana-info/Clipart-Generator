@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PyQt6.QtCore import QEvent, QObject, QSize, Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QColor, QDesktopServices, QImageReader, QPixmap
+from PyQt6.QtGui import QColor, QDesktopServices, QIcon, QImageReader, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -134,6 +134,10 @@ class RunItem:
     # Stages embodied by the retained input while a recovery attempt is active.
     recovery_input_stages: dict[str, str] | None = field(default=None, repr=False)
     paid_completed_stages: tuple[str, ...] = field(default=(), repr=False)
+    # Owner review (Auto Clipart): mark, note and earlier replaced pictures.
+    review_mark: str = field(default="ok", repr=False)
+    review_note: str = field(default="", repr=False)
+    versions: list[dict[str, str]] = field(default_factory=list, repr=False)
 
     def paid_history_stages(self) -> tuple[str, ...]:
         stages = {"upscale_before", "upscale_after", "background_removal"}
@@ -1384,6 +1388,67 @@ class RunQueueSession(QObject):
         self.changed.emit()
         return request
 
+    def reprocessable_indices(self, indices) -> list[int]:
+        """Finished items whose raw generated picture is still on disk."""
+        if (self.running or getattr(self.request, "queue_items", None)
+                or not getattr(self.request, "generated_prompts", None)):
+            return []
+        chosen = []
+        for index in sorted(set(indices)):
+            if not 0 <= index < len(self.items):
+                continue
+            item = self.items[index]
+            source = Path(item.source_path) if item.source_path else None
+            if (item.status in {RunItemStatus.SUCCEEDED, RunItemStatus.FAILED}
+                    and source is not None and _is_within(source, self.transient_dir)
+                    and not source.is_symlink() and source.is_file()):
+                chosen.append(index)
+        return chosen
+
+    def preview_reprocess(self, indices, overrides=None) -> Any | None:
+        """Cut out again from the raw generated pictures; no new generation."""
+        chosen = self.reprocessable_indices(indices)
+        if not chosen:
+            return None
+        settings = dict(self.request.settings)
+        settings.update(overrides or {})
+        settings["skip_remover_for_alpha"] = False
+        settings["overwrite_existing"] = True  # the previous picture is kept as a version first
+        # Restores the per-item key colour recorded with the raw generation.
+        settings["publish_recovered_source"] = True
+        settings["recovery_completed_stages"] = []
+        settings["task_item_indices"] = self._retry_task_indices(chosen)
+        return replace(self.request, mode="mode2_process", generated_prompts=[],
+                       selected_files=[str(Path(self.items[index].source_path).resolve())
+                                       for index in chosen],
+                       settings=settings)
+
+    def prepare_reprocess(self, indices, overrides=None) -> Any | None:
+        request = self.preview_reprocess(indices, overrides)
+        if request is None:
+            return None
+        chosen = self.reprocessable_indices(indices)
+        self.active_order = list(chosen)
+        for index in chosen:
+            item = self.items[index]
+            item.status = RunItemStatus.PENDING
+            item.short_message = "Ожидает повторного вырезания."
+            item.output_path = ""
+            item.editor_output_path = ""
+            item.stage_statuses = {"generation": "complete"}
+            item.paid_completed_stages = ()
+            item.recovery_input_stages = None
+            item.attempts += 1
+        self.current_index = None
+        self._item_progress.clear()
+        self._last_progress = 0
+        self.running = True
+        self.stop_after_current_requested = False
+        self._deferred_stop = None
+        self._event("reprocess_started", count=len(chosen))
+        self.changed.emit()
+        return request
+
     def prepare_retry(self) -> Any | None:
         retry_request = self.preview_retry()
         if retry_request is None:
@@ -1513,11 +1578,27 @@ def export_safe_run_report(
     return path
 
 
+def _dot_icon(color: str, size: int = 12) -> QIcon:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(QColor(color))
+    painter.drawEllipse(1, 1, size - 2, size - 2)
+    painter.end()
+    return QIcon(pixmap)
+
+
 class RunQueue(QListWidget):
     def __init__(self, *, tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
         super().__init__()
         self.tokens = tokens
         self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        # Optional module hooks: annotate(item) -> (colour, suffix, dimmed) | None,
+        # row_visible(item) -> bool. Without them rows look as before.
+        self.annotate = None
+        self.row_visible = None
 
     def selected_rows(self) -> list[int]:
         return sorted({self.row(row) for row in self.selectedItems()})
@@ -1531,7 +1612,14 @@ class RunQueue(QListWidget):
                 f"{item.index}. {item.display_name} — "
                 f"{STATUS_LABELS[item.status]}"
             )
+            note = self.annotate(item) if callable(self.annotate) else None
+            if note is not None:
+                label += f" · {note[1]}"
             row = QListWidgetItem(label)
+            if note is not None:
+                row.setIcon(_dot_icon(note[0]))
+                if note[2]:
+                    row.setForeground(QColor(self.tokens.text_muted))
             row.setData(Qt.ItemDataRole.UserRole, item.index - 1)
             row.setToolTip(item.short_message)
             status_colors = {
@@ -1544,6 +1632,8 @@ class RunQueue(QListWidget):
             if color:
                 row.setBackground(QColor(color))
             self.addItem(row)
+            if callable(self.row_visible) and not self.row_visible(item):
+                row.setHidden(True)
         if items:
             self.setCurrentRow(
                 selected if 0 <= selected < len(items) else 0
@@ -1959,6 +2049,7 @@ class RunResultsPage(QWidget):
             self.save_corrected_button.hide()
             self.save_mask_button.hide()
             self._selection_changed(-1)
+            self._refresh_review()
             return
         self._transparency_paths = (
             transparency_candidate_paths(session) if not session.running else []
@@ -2018,7 +2109,13 @@ class RunResultsPage(QWidget):
         self.finish_button.setEnabled(finish_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
         self._selection_changed(self.queue.currentRow())
+        self._refresh_review()
         self._show_completion_if_needed(session)
+
+    def _refresh_review(self) -> None:
+        hook = getattr(self, "review_refresh", None)
+        if callable(hook):
+            hook()
 
     def _export_paths(self):
         """Only final outputs recorded by this session, never a folder scan."""
@@ -2026,7 +2123,8 @@ class RunResultsPage(QWidget):
             return []
         paths, seen = [], set()
         for item in self.session.items:
-            if item.status is not RunItemStatus.SUCCEEDED or not item.output_path:
+            if (item.status is not RunItemStatus.SUCCEEDED or not item.output_path
+                    or item.review_mark == "deleted"):
                 continue
             path = Path(item.output_path)
             if (path.suffix.lower() != '.png' or path.is_symlink()
@@ -2792,7 +2890,7 @@ class RunQueueSupport:
             return False
         return self.session.request_immediate_stop(immediate_stop=immediate)
 
-    def regenerate_selected(self, indices) -> Any | None:
+    def regenerate_selected(self, indices, summary=None) -> Any | None:
         """Generate the chosen items again: paid, so only after cost and confirmation."""
         if self.session is None:
             return None
@@ -2806,13 +2904,56 @@ class RunQueueSupport:
         if preview is None:
             return None
         confirm = getattr(self.controller, "confirm_retry_request", None)
-        if not callable(confirm) or not confirm(preview, regenerate=True):
+        approved = (confirm(preview, regenerate=True, summary=summary) if summary is not None and callable(confirm)
+                    else callable(confirm) and confirm(preview, regenerate=True))
+        if not approved:
             return None
         if self.session.preview_regenerate(indices) != preview:
+            return None
+        if not self._keep_previous_outputs(self.session.regenerable_indices(indices), "regenerate"):
             return None
         request = self.session.prepare_regenerate(indices)
         if request is None:
             return None
+        return self._start_prepared(request)
+
+    def reprocess_selected(self, indices, overrides=None, *, confirm=None) -> Any | None:
+        """Cut out again from saved raw pictures; confirm only when a stage is paid."""
+        if self.session is None:
+            return None
+        busy = getattr(self.controller, "is_busy", None)
+        if callable(busy) and busy():
+            return None
+        worker = getattr(self.controller, "worker", None)
+        if worker is not None and bool(worker.isRunning()):
+            return None
+        preview = self.session.preview_reprocess(indices, overrides)
+        if preview is None:
+            return None
+        if callable(confirm) and not confirm(preview):
+            return None
+        if self.session.preview_reprocess(indices, overrides) != preview:
+            return None
+        if not self._keep_previous_outputs(self.session.reprocessable_indices(indices), "reprocess"):
+            return None
+        request = self.session.prepare_reprocess(indices, overrides)
+        if request is None:
+            return None
+        return self._start_prepared(request)
+
+    def _keep_previous_outputs(self, indices, kind) -> bool:
+        """Let the module keep the current pictures as versions before they are replaced."""
+        keep = getattr(self.controller, "before_replace_outputs", None)
+        if not callable(keep):
+            return True
+        try:
+            keep(list(indices), kind)
+        except (OSError, ValueError) as error:
+            self.controller._error(str(error))
+            return False
+        return True
+
+    def _start_prepared(self, request) -> Any | None:
         try:
             create_worker = getattr(self.controller, "create_worker_for_request", None)
             if not callable(create_worker):

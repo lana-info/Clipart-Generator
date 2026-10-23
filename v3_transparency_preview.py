@@ -3,6 +3,7 @@ from __future__ import annotations
 from math import ceil, floor, hypot
 
 from io import BytesIO
+from html import escape
 from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor, CancelledError
 from threading import Event
@@ -2597,6 +2598,78 @@ class ClipartTransparencyEditorPage(QWidget):
     def refresh_from_state(self) -> None:
         """Keep the shared page-controller refresh contract."""
         self._refresh_history_buttons()
+
+    # --- optional module hooks (Auto Clipart review); unused elsewhere ---------
+
+    def add_canvas_footer(self, widget: QWidget) -> None:
+        self.canvas.parentWidget().layout().addWidget(widget, 2, 0)
+
+    def insert_file_filter(self, widget: QWidget) -> None:
+        self.files_frame.layout().insertWidget(1, widget)
+
+    def set_file_annotations(self, rows) -> None:
+        """rows[i] = (colour, text, dimmed, hidden) or None for file i."""
+        for index, row in enumerate(rows):
+            item = self.file_list.item(index)
+            if item is None or index >= len(self._paths):
+                continue
+            name = self._paths[index].name
+            if row is None:
+                item.setText(name)
+                item.setHidden(False)
+                continue
+            colour, text, dimmed, hidden = row
+            item.setText(f"{name}\n   {text}")
+            pixmap = QPixmap(12, 12)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(colour))
+            painter.drawEllipse(1, 1, 10, 10)
+            painter.end()
+            item.setIcon(QIcon(pixmap))
+            item.setForeground(QColor("#74869a" if dimmed else "#e4edf6"))
+            item.setHidden(bool(hidden) and index != self.file_list.currentRow())
+
+    def set_canvas_notice(self, title: str | None, text: str = "") -> None:
+        notice = getattr(self, "_canvas_notice", None)
+        if title is None:
+            if notice is not None:
+                notice.hide()
+            return
+        if notice is None:
+            notice = self._canvas_notice = QLabel()
+            notice.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            notice.setWordWrap(True)
+            notice.setTextFormat(Qt.TextFormat.RichText)
+            notice.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            notice.setStyleSheet("QLabel {background: rgba(16,24,39,190); color: #a6b5c8;"
+                                 " font-size: 14px; padding: 24px;}")
+            self.canvas.parentWidget().layout().addWidget(notice, 0, 0)
+        notice.setText(f"<div style='color:#e4edf6; font-size:20px; font-weight:bold'>"
+                       f"{escape(title)}</div><div>{escape(text)}</div>")
+        notice.show()
+        notice.raise_()
+        self.focus_button.raise_()
+
+    def reload_file(self, path: str | Path, new_path: str | Path | None = None) -> None:
+        """Forget unsaved drafts of a file replaced on disk and show its new pixels."""
+        old = Path(path)
+        if self._loaded_path == old:
+            self._document = None
+            self._loaded_path = None
+        self._draft_masks.pop(old, None)
+        self._draft_contours.pop(old, None)
+        self._saved_copies.pop(old, None)
+        if new_path is not None and old in self._paths:
+            index = self._paths.index(old)
+            self._paths[index] = Path(new_path)
+            item = self.file_list.item(index)
+            if item is not None:
+                item.setText(Path(new_path).name)
+        if self.current_path in (old, Path(new_path) if new_path is not None else old):
+            self._select_file(self.file_list.currentRow())
 
     def _select_file(self, row: int) -> None:
         self._stash_current_document()

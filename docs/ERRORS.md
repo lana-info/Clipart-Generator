@@ -3116,3 +3116,16 @@ test_build_retains_shared_imports_used_by_signed_workflows — ожидает `g
 - Проверка: tests/test_transparency_lasso_cursor.py (3 теста; на старом коде все 3 падают, на новом проходят) и
   полный набор тестов; скриншоты до/после на белом, тёмном и клетчатом фоне:
   docs/ui/3.2/transparency-edge-tools/01-lasso-cursor-esc/. Ручная проверка владельцем на Windows — после сборки.
+
+## PR #13 (пометки Auto Clipart): два дефекта, найденные полным прогоном при слиянии (#image-marks-merge-20261023)
+
+- Статус: исправлено 2026-10-23 в слиянии PR #13 с develop/3.2, до слияния в develop/3.2.
+- 1) Модуль auto-clipart (`studio_clipart_review_ui.py`) импортирует `chroma_provenance`, а сборка Studio
+  (`build.ps1`) не объявляла его скрытым импортом для подписанных модулей. Причина: новый общий импорт модуля не
+  добавлен в список `--hidden-import`; тест `test_build_retains_shared_imports_used_by_signed_workflows` это ловит.
+  Решение: `--hidden-import "chroma_provenance"` в build.ps1.
+- 2) `test_actual_editor_save_rechecks_blocked_and_accepted_export` падал: `_open_transparency_editor` теперь читает
+  `self.review`, а подставной контроллер теста его не имел. Код верен (у настоящего контроллера `review` есть всегда);
+  в подставной контроллер добавлено `review=None`.
+- Урок: PR, сделанный в отдельном worktree, перед слиянием прогонять полным набором тестов, а не только своими.
+- Проверка: оба теста проходят; полный локальный прогон после исправления (результат — STATE.md).
