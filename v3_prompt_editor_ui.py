@@ -1011,11 +1011,13 @@ class PromptInputPage(ScrollableStepPage):
         data = self._generator_data()
         self.data.prompt_generator = data
         if data.chroma_key_enabled:
+            self.data.operations.remove_background = True
             self.data.operations.remove_background_provider = "local_chroma_key"
             self.data.operations.chroma_key_color = data.chroma_key_color
         elif self.data.operations.remove_background_provider == "local_chroma_key":
             # Turning off chroma-key generation must not leave the pipeline
             # silently removing an ordinary generated background by color.
+            self.data.operations.remove_background = False
             self.data.operations.remove_background_provider = "kie"
         self._preview()
         self.changed()
@@ -1076,6 +1078,9 @@ class PromptInputPage(ScrollableStepPage):
         self.data.prompts = normalize_prompt_entries(
             normalized, deduplicate=deduplicate
         )
+        if self.supports_prompt_chroma and any(entry.chroma_key_color for entry in entries):
+            self.data.operations.remove_background = True
+            self.data.operations.remove_background_provider = "local_chroma_key"
         self.card.set_state("default")
         self.refresh_from_state()
         self.changed()
