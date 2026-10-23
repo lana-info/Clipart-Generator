@@ -23,8 +23,27 @@ MODES = ("pngs", "tile")
 MAX_ASSET_SIDE = 8_192
 MAX_ASSET_PIXELS = 16_000_000
 MAX_ASSET_BYTES = 40 * 1024 * 1024
+# A smaller copy is made only from sources Pillow decodes without its bomb warning turning into an error.
+MAX_DOWNSCALE_SOURCE_BYTES = 300 * 1024 * 1024
+MAX_DOWNSCALE_SOURCE_PIXELS = 178_000_000
 MAX_PROJECT_BYTES = 1_000_000
 MAX_PROJECT_ASSETS = 500
+
+
+class PatternsImageTooLarge(ValueError):
+    """The PNG is larger than the pattern limits; carries its size so the page can offer a smaller copy."""
+
+    def __init__(self, width, height, *, too_heavy=False):
+        self.width, self.height, self.too_heavy = int(width), int(height), bool(too_heavy)
+        limit = (f"файл до {MAX_ASSET_BYTES // (1024 * 1024)} МБ" if too_heavy else
+                 f"до {MAX_ASSET_SIDE} px по стороне и до {MAX_ASSET_PIXELS // 1_000_000} млн пикселей")
+        super().__init__(f"Изображение {self.width} × {self.height} px больше допустимого: {limit}")
+
+
+def downscaled_size(width, height, side=4000):
+    """Largest size within ``side`` and the pixel limit that keeps the aspect ratio."""
+    scale = min(1.0, side / max(width, height), (MAX_ASSET_PIXELS * 0.99 / (width * height)) ** 0.5)
+    return max(1, int(width * scale)), max(1, int(height * scale))
 
 
 class PatternsConflict(ValueError):
@@ -68,7 +87,8 @@ class PatternsLibrary:
         if source.suffix.lower() != ".png":
             raise ValueError("Нужен файл PNG")
         if source.stat().st_size > MAX_ASSET_BYTES:
-            raise ValueError("Файл больше 40 МБ")
+            with Image.open(source) as header:  # header only: offer a smaller copy instead of a bare refusal
+                raise PatternsImageTooLarge(header.width, header.height, too_heavy=True)
 
         def verify(filename):
             with Image.open(filename) as image:
@@ -76,7 +96,7 @@ class PatternsLibrary:
                     raise ValueError("Файл не является PNG")
                 if (image.width > MAX_ASSET_SIDE or image.height > MAX_ASSET_SIDE
                         or image.width * image.height > MAX_ASSET_PIXELS):
-                    raise ValueError("Изображение больше 8192 px по стороне или 16 млн пикселей")
+                    raise PatternsImageTooLarge(image.width, image.height)
                 size, has_alpha = image.size, "A" in image.getbands() or "transparency" in image.info
                 image.verify()
                 return size, has_alpha
@@ -88,6 +108,28 @@ class PatternsLibrary:
         with self._connect() as db:
             db.execute("INSERT OR IGNORE INTO owned_assets VALUES (?)", (handle.asset_id,))
         return {"handle": handle.to_dict(), "width": size[0], "height": size[1], "has_alpha": has_alpha}
+
+    def import_png_downscaled(self, path):
+        """Import a smaller copy of an oversized PNG (owner remark П8); the source file is not changed."""
+        import tempfile
+        from PIL import Image
+        source = Path(path)
+        if source.suffix.lower() != ".png":
+            raise ValueError("Нужен файл PNG")
+        if source.stat().st_size > MAX_DOWNSCALE_SOURCE_BYTES:
+            raise ValueError("Файл больше 300 МБ — уменьшите его в графическом редакторе")
+        with Image.open(source) as image:  # Pillow's decompression-bomb guard stays on
+            if image.format != "PNG":
+                raise ValueError("Файл не является PNG")
+            if image.width * image.height > MAX_DOWNSCALE_SOURCE_PIXELS:
+                raise ValueError("Изображение слишком большое даже для уменьшенной копии")
+            size = downscaled_size(image.width, image.height)
+            copy = image.convert("RGBA" if ("A" in image.getbands() or "transparency" in image.info) else "RGB")
+            copy = copy.resize(size, Image.Resampling.LANCZOS)
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / (source.stem + f"_{size[0]}px.png")
+            copy.save(target, format="PNG")
+            return self.import_png(target)
 
     def asset_path(self, handle):
         """Resolve an owned handle to its stored file (for Core-run jobs only)."""
