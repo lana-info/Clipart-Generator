@@ -163,6 +163,22 @@ def shoot(root, label, item, out):
                 editor._set_zoom(300)
                 editor.canvas.centerOn(editor.canvas._item.mapToScene(QPointF(770, 400)))
                 save(dialog, editor, f"4b-{operation}-x3-{key}")
+        if item == 6:
+            # Pen outline around the flower: right clicks (curve points), then mixed left/right clicks.
+            ring = [(400 + 330 * math.cos(k * math.pi / 3), 400 + 330 * math.sin(k * math.pi / 3)) for k in range(6)]
+            for name, buttons in (("right", [Qt.MouseButton.RightButton] * 6),
+                                  ("mixed", [Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton] * 3)):
+                for closed in (False, True):
+                    dialog, editor = window(background)
+                    editor._set_tool("pen")
+                    for point, button in zip(ring, buttons):
+                        QTest.mouseClick(editor.canvas.viewport(), button, Qt.KeyboardModifier.NoModifier,
+                                         view_point(editor.canvas, *point))
+                        QTest.qWait(1)
+                    if closed:
+                        QTest.mouseClick(editor.canvas.viewport(), Qt.MouseButton.LeftButton,
+                                         Qt.KeyboardModifier.NoModifier, view_point(editor.canvas, *ring[0]))
+                    save(dialog, editor, f"6-pen-{name}-{'closed' if closed else 'open'}-{key}")
         if item == 2:
             # The brush ring at the petal edge, 200 %, hard 16 px and soft 40 px.
             for hard, size in ((True, 16), (False, 40)):
