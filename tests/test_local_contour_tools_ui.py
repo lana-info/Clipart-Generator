@@ -97,7 +97,7 @@ def test_vector_simplification_limits_cached_availability_and_new_edge_controls(
     assert page.smooth_edge_button.isEnabled()
     assert not hasattr(page, 'smooth_button')
     assert page.local_selection_label.text() == 'Точки не выделены'
-    assert page.edge_scope_label.text() == 'Весь край'
+    assert page.edge_scope_label.text() == 'Всё изображение'
     assert not page.pen_controls.findChildren(QComboBox)
     select(page)
     assert page.edge_scope_label.text() == 'Выделенный участок'

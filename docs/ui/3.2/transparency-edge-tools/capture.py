@@ -143,6 +143,26 @@ def shoot(root, label, item, out):
                     lasso(editor.canvas, [(120, 60), (420, 30), (700, 120), (720, 300), (560, 260),
                                           (400, 200), (230, 240), (90, 250), (120, 60)])
                 save(dialog, editor, f"3-panel-{tool}-{key}")
+        if item == 4:
+            # Lasso around the right petal; then each edge button once, at 300 % on the petal edge.
+            petal = [(560, 250), (800, 250), (800, 560), (560, 560), (560, 250)]
+            dialog, editor = window(background)
+            editor._set_tool("lasso")
+            lasso(editor.canvas, petal)
+            save(dialog, editor, f"4a-panel-area-{key}")
+            for operation in ("harder", "softer", "shrink", "grow"):
+                dialog, editor = window(background)
+                editor._set_tool("lasso")
+                lasso(editor.canvas, petal)
+                if hasattr(editor, "edge_buttons"):
+                    editor._edge_operation(operation)
+                    for _ in range(300):
+                        if not editor.canvas.contour_busy:
+                            break
+                        QTest.qWait(10)
+                editor._set_zoom(300)
+                editor.canvas.centerOn(editor.canvas._item.mapToScene(QPointF(770, 400)))
+                save(dialog, editor, f"4b-{operation}-x3-{key}")
         if item == 2:
             # The brush ring at the petal edge, 200 %, hard 16 px and soft 40 px.
             for hard, size in ((True, 16), (False, 40)):
