@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-ROOT = Path(sys.argv[1])  # repo root
+ROOT = Path(sys.argv[1])
 OUT = Path(sys.argv[2])
 OUT.mkdir(exist_ok=True)
 sys.path.insert(0, str(ROOT))
@@ -139,6 +139,7 @@ with tempfile.TemporaryDirectory(prefix="vibix-patterns-mock-") as temp:
     page._add_assets(motifs(folder))
     cur = with_header(grab(page), "Автоматический клипарт")
     top_card.hide()
+    page.add_folder.hide()   # owner 2026-10-23: only «Добавить PNG» (the dialog takes many files at once)
     prop = with_header(grab(page), "Паттерны")
     pair(cur, prop, "P1-P2-header-and-plaque.png")
 
