@@ -15,6 +15,7 @@ from studio_module_packaging import prepare_official_workflow_release
 from studio_module_runtime import ModuleRuntimeHost
 from studio_modules import ModuleStore
 from studio_patterns_host import PatternsHost
+from studio_patterns_page import SheetEditor
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -101,12 +102,13 @@ def test_full_flow_from_pngs_to_exported_files(runtime, app, tmp_path, dialogs):
     page._add_assets(make_pngs(tmp_path))  # the same files again are not duplicated
     assert len(page._assets) == 3
     page._go_next()
+    pump(app, lambda: not page._busy)
     page._settings["inches"] = 2.0  # keep the sheet small and the test fast
     page._invalidate(layout=True)
     page._go_next()
     pump(app, lambda: page._current is not None)
     assert page._current["seam"]["status"] == "ready" and page._current["image"].size == (600, 600)
-    assert page.primary_action.text() == "Добавить лист в набор" and page.next_button.isEnabled()
+    assert page.primary_action.text() == "Сохранить в набор" and page.next_button.isEnabled()
     page._settings["sheet_count"] = 3
     page._go_next()
     pump(app, lambda: len(page._sheets) == 3 and not page._busy)
@@ -167,6 +169,7 @@ def test_tile_mode_hides_unsupported_choices_and_fails_visibly(runtime, app, tmp
     page._tile = {**host.import_png(path), "name": "tile.png"}
     page._refresh()
     page._go_next()
+    pump(app, lambda: not page._busy)
     assert page._step == 1 and page.tile_controls.isVisibleTo(page) and not page.png_controls.isVisibleTo(page)
     page._go_next()
     pump(app, lambda: page._current is not None)
@@ -197,21 +200,156 @@ def test_bad_files_are_reported_and_closing_while_busy_asks(runtime, app, tmp_pa
     close_page(app, handle, page, host)
 
 
-def test_preview_buttons_add_the_sheet_or_reroll_it(runtime, app, tmp_path, dialogs):
+def test_step3_saves_the_sheet_and_offers_no_reroll(runtime, app, tmp_path, dialogs):
     handle, page, host = open_page(runtime, tmp_path)
     page._add_assets(make_pngs(tmp_path))
     page._settings["inches"] = 2.0
     page._go_next()
+    pump(app, lambda: not page._busy)
     page._go_next()
     pump(app, lambda: page._current is not None)
+    assert page.primary_action.text() == "Сохранить в набор" and not page.secondary_action.isVisibleTo(page)
     seed = page._settings["seed"]
-    page.secondary_action.click()  # a new seed gives a new render
-    pump(app, lambda: page._current is not None and not page._busy)
-    assert page._settings["seed"] == seed + 1
     page.primary_action.click()
-    assert page._step == 3
+    assert page._step == 3 and page._settings["seed"] == seed
     pump(app, lambda: len(page._sheets) == page._settings['sheet_count'] and not page._busy)
     close_page(app, handle, page, host)
+
+
+def test_step3_repeat_choice_grid_and_fullscreen(runtime, app, tmp_path, dialogs):
+    handle, page, host = open_page(runtime, tmp_path)
+    page._add_assets(make_pngs(tmp_path))
+    page._settings["inches"] = 2.0
+    page._go_next()
+    pump(app, lambda: not page._busy)
+    page._go_next()
+    pump(app, lambda: page._current is not None)
+    page.show()
+    assert page._repeat == 5 and not page._grid
+    import sys
+    module = sys.modules[type(page).__module__]
+    repeat_image = module.repeat_image
+    flat = repeat_image(page._current["image"], 3)
+    gridded = repeat_image(page._current["image"], 3, grid=True)
+    assert flat.size == gridded.size and flat.tobytes() != gridded.tobytes()
+    for count in (3, 4, 5, 6, 7):
+        page.repeat_chips.changed.emit(str(count))
+        assert page._repeat == count and repeat_image(page._current["image"], count).width % count == 0
+    page.grid_box.setChecked(True)
+    assert page._grid
+    from unittest.mock import patch
+    with patch.object(module.RepeatFullscreen, "exec", return_value=0) as opened:
+        page.fullscreen_button.click()
+        page.preview_picture.clicked.emit()
+    assert opened.call_count == 2
+    close_page(app, handle, page, host)
+
+
+def test_step2_shows_a_live_sheet_that_follows_the_settings(runtime, app, tmp_path, dialogs):
+    handle, page, host = open_page(runtime, tmp_path)
+    page._add_assets(make_pngs(tmp_path))
+    page._settings["inches"] = 2.0
+    page._go_next()
+    page.show()
+    pump(app, lambda: page._current is not None and not page._busy)
+    assert page.sheet_editor._pixmap is not None and page.sheet_editor.isVisibleTo(page)
+    first = page._current["image"].tobytes()
+    page._settings["gap"] = 120
+    page._invalidate(layout=True)
+    assert page._live_timer.isActive()  # the sheet redraws by itself shortly after a change
+    page._live_timer.stop()
+    page._live_render()
+    pump(app, lambda: page._current is not None and not page._busy)
+    assert page._current["image"].tobytes() != first
+    close_page(app, handle, page, host)
+
+
+def test_manual_edits_are_kept_on_reroll_and_can_be_reset(runtime, app, tmp_path, dialogs):
+    handle, page, host = open_page(runtime, tmp_path)
+    page._add_assets(make_pngs(tmp_path))
+    page._settings.update(inches=2.0, count=6)
+    page._go_next()
+    pump(app, lambda: page._current is not None and not page._busy)
+    first = page._elements[0]
+    moved_to = {"x": 111.0, "y": 222.0, "scale": first["scale"], "angle": 15.0}
+    page._element_edited(first["id"], moved_to)
+    pump(app, lambda: page._current is not None and not page._busy)
+    edited = next(e for e in page._elements if e["id"] == first["id"])
+    assert edited["locked"] and (edited["x"], edited["y"]) == (111.0, 222.0)
+    assert len(page._elements) == 6 and page.reset_edits.isEnabled()
+    page._reroll()  # a new random layout leaves the hand-placed element where it is
+    page._render_current()
+    pump(app, lambda: page._current is not None and not page._busy)
+    assert any(e["id"] == first["id"] and e["x"] == 111.0 for e in page._elements)
+    count = len(page._elements)
+    victim = next(e for e in page._elements if e["id"] != first["id"])
+    page._element_deleted(victim["id"])
+    pump(app, lambda: page._current is not None and not page._busy)
+    assert len(page._elements) == count - 1
+    page._reset_edits()
+    pump(app, lambda: page._current is not None and not page._busy)
+    assert not any(e.get("locked") for e in page._elements) and len(page._elements) == 6
+    assert not page.reset_edits.isEnabled()
+    close_page(app, handle, page, host)
+
+
+def test_sheet_editor_picks_moves_resizes_rotates_and_deletes_with_the_mouse(app):
+    from PyQt6.QtCore import QPointF, Qt
+    from PyQt6.QtGui import QMouseEvent
+    editor = SheetEditor()
+    editor.resize(408, 408)
+    editor.show()
+    editor.set_sheet(Image.new("RGBA", (400, 400), (255, 255, 255, 255)),
+                     [{"id": "a", "asset_id": "x", "x": 200.0, "y": 200.0, "scale": 1.0, "angle": 0.0, "locked": False, "z_index": 0}],
+                     {"x": (100, 100)}, editable=True)
+    seen = []
+    editor.element_edited.connect(lambda i, v: seen.append(("edit", v)))
+    editor.element_deleted.connect(lambda i: seen.append(("delete", i)))
+
+    def mouse(kind, x, y):
+        point = QPointF(x, y)
+        event = QMouseEvent(kind, point, point, Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        {QMouseEvent.Type.MouseButtonPress: editor.mousePressEvent, QMouseEvent.Type.MouseMove: editor.mouseMoveEvent,
+         QMouseEvent.Type.MouseButtonRelease: editor.mouseReleaseEvent}[kind](event)
+
+    press, move, release = QMouseEvent.Type.MouseButtonPress, QMouseEvent.Type.MouseMove, QMouseEvent.Type.MouseButtonRelease
+    mouse(press, 10, 10)
+    assert editor.selected_id is None
+    mouse(press, 204, 204)
+    assert editor.selected_id == "a"
+    mouse(move, 254, 224)
+    mouse(release, 254, 224)
+    assert seen[-1][0] == "edit" and abs(seen[-1][1]["x"] - 250.0) < 1.5 and abs(seen[-1][1]["y"] - 220.0) < 1.5
+    editor.set_sheet(Image.new("RGBA", (400, 400)), [{"id": "a", "asset_id": "x", "x": 200.0, "y": 200.0, "scale": 1.0, "angle": 0.0, "locked": False, "z_index": 0}],
+                     {"x": (100, 100)}, editable=True)
+    editor.select("a")
+    corner = editor._to_view(250.0, 250.0)
+    mouse(press, corner.x(), corner.y())
+    far = editor._to_view(300.0, 300.0)
+    mouse(move, far.x(), far.y())
+    mouse(release, far.x(), far.y())
+    assert seen[-1][1]["scale"] > 1.5
+    editor.set_sheet(Image.new("RGBA", (400, 400)), [{"id": "a", "asset_id": "x", "x": 200.0, "y": 200.0, "scale": 1.0, "angle": 0.0, "locked": False, "z_index": 0}],
+                     {"x": (100, 100)}, editable=True)
+    editor.select("a")
+    handle = editor._to_view(*editor._rotate_handle(editor._element("a")))
+    mouse(press, handle.x(), handle.y())
+    right = editor._to_view(300.0, 200.0)
+    mouse(move, right.x(), right.y())
+    mouse(release, right.x(), right.y())
+    assert abs(seen[-1][1]["angle"] - 90.0) < 1.0
+    editor.set_sheet(Image.new("RGBA", (400, 400)), [{"id": "a", "asset_id": "x", "x": 200.0, "y": 200.0, "scale": 1.0, "angle": 0.0, "locked": False, "z_index": 0}],
+                     {"x": (100, 100)}, editable=True)
+    editor.select("a")
+    bin_centre = editor._bin_rect(editor._element("a")).center()
+    mouse(press, bin_centre.x(), bin_centre.y())
+    assert seen[-1] == ("delete", "a")
+    editor.select("a")
+    from PyQt6.QtTest import QTest
+    QTest.keyClick(editor, Qt.Key.Key_Delete)
+    assert seen[-1] == ("delete", "a")
+    editor.set_sheet(Image.new("RGBA", (400, 400)), [], {}, editable=False)
+    editor.close()
 
 
 def test_main_window_opens_and_closes_patterns_from_the_signed_package(app, tmp_path, runtime, dialogs):
@@ -319,6 +457,7 @@ def test_not_enough_room_message_is_russian_and_follows_the_slider(runtime, app,
     page._add_assets(make_pngs(tmp_path))
     page._settings.update(inches=2.0, count=60, gap=300)
     page._go_next()
+    pump(app, lambda: not page._busy)
     page._elements = page._relayout()
     page._refresh()
     note = page.layout_note.text()
