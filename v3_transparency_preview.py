@@ -3408,23 +3408,27 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def _has_unsaved_changes(self) -> bool:
         current_dirty = self._document is not None and self._document.is_dirty
-        return current_dirty or bool(self._draft_masks) or self.canvas.contour.dirty or any(c.dirty for c in self._draft_contours.values())
+        # The loaded file's draft can be a stale object replaced by apply/save; its live contour is canvas.contour.
+        other_drafts = (c for path, c in self._draft_contours.items() if path != self._loaded_path)
+        return current_dirty or bool(self._draft_masks) or self.canvas.contour.dirty or any(c.dirty for c in other_drafts)
 
     def _back_clicked(self) -> None:
         if self.canvas.contour_busy:
             self.canvas.cancel_contour()
             return
         if self._has_unsaved_changes():
-            answer = QMessageBox.warning(
-                self,
+            box = QMessageBox(
+                QMessageBox.Icon.Warning,
                 "Есть несохранённые изменения",
                 ("Вернуться к файлам и отменить изменения маски?" if self._save_dir is not None
                  else "Вернуться к результатам и отменить изменения маски?"),
-                QMessageBox.StandardButton.Discard
-                | QMessageBox.StandardButton.Cancel,
-                QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                self,
             )
-            if answer != QMessageBox.StandardButton.Discard:
+            box.button(QMessageBox.StandardButton.Discard).setText("Не сохранять")
+            box.button(QMessageBox.StandardButton.Cancel).setText("Остаться")
+            box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            if box.exec() != QMessageBox.StandardButton.Discard:
                 return
             self._draft_masks.clear()
             self._draft_contours.clear()
