@@ -17,6 +17,10 @@ from PyQt6.QtWidgets import (
     QLineEdit, QMessageBox, QScrollArea, QSlider, QSpinBox, QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, apply_v3_theme
+try:  # the module can run in a Studio whose core predates V3StepLabel
+    from v3_components import V3StepLabel
+except ImportError:  # pragma: no cover - exercised only with an older core
+    V3StepLabel = None
 
 STEPS = ("Источник", "Настройки", "Предпросмотр", "Набор", "Экспорт")
 LAYOUTS = (("Обычная", "straight"), ("Half-drop", "half_column"), ("Brick", "half_row"), ("Зеркало", "mirror"))
@@ -162,9 +166,16 @@ def repeat_image(image, copies, max_pixels=REPEAT_PIXELS, grid=False):
     if grid:
         from PIL import ImageDraw
         draw = ImageDraw.Draw(output)
+        # The preview is shown scaled down, so the line width follows the sheet size; a dark casing under the
+        # bright line keeps it visible on light and on dark patterns alike.
+        inner = max(2, output.width // 400)
+        outer = inner + 2
         for index in range(copies + 1):
-            draw.line((index * tile.width - shift_x, 0, index * tile.width - shift_x, output.height), fill=(45, 212, 191, 255))
-            draw.line((0, index * tile.height - shift_y, output.width, index * tile.height - shift_y), fill=(45, 212, 191, 255))
+            x = index * tile.width - shift_x
+            y = index * tile.height - shift_y
+            for width, fill in ((outer, (15, 23, 42, 235)), (inner, (45, 212, 191, 255))):
+                draw.line((x, 0, x, output.height), fill=fill, width=width)
+                draw.line((0, y, output.width, y), fill=fill, width=width)
     return output
 
 
@@ -446,7 +457,7 @@ class PatternsPage(QWidget):
         side.setFixedWidth(240)
         self.step_labels = []
         for _ in STEPS:
-            label = _text("")
+            label = V3StepLabel("") if V3StepLabel is not None else _text("")
             self.step_labels.append(label)
             side_layout.addWidget(label)
         side_layout.addStretch()
