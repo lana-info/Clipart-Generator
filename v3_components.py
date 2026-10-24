@@ -223,7 +223,7 @@ class V3StepLabel(QLabel):
         text_rect = QRect(text_left, self._PAD_Y, self._title_width(self.width()), self.height() - 2 * self._PAD_Y)
         painter.drawText(
             text_rect,
-            int(Qt.AlignmentFlag.AlignLeft) | int(Qt.AlignmentFlag.AlignTop) | int(Qt.TextFlag.TextWordWrap),
+            int(Qt.AlignmentFlag.AlignLeft) | int(Qt.AlignmentFlag.AlignVCenter) | int(Qt.TextFlag.TextWordWrap),
             title,
         )
         painter.end()
@@ -497,8 +497,8 @@ QComboBox QAbstractItemView {{
     background: {tokens.surface};
     color: {tokens.text};
     border: 1px solid {tokens.border};
-    selection-background-color: {tokens.accent};
-    selection-color: white;
+    selection-background-color: {tokens.accent_soft};
+    selection-color: {tokens.text};
 }}
 {dropdown_indicator_stylesheet("QComboBox", tokens)}
 QTableWidget,
@@ -515,10 +515,19 @@ QTableWidget::item,
 QListWidget::item {{
     color: {tokens.text};
 }}
+QListWidget::item {{
+    border-left: 3px solid transparent;
+}}
 QTableWidget::item:selected,
-QListWidget::item:selected {{
-    background: {tokens.accent};
-    color: white;
+QListWidget::item:selected,
+QTableWidget::item:selected:!active,
+QListWidget::item:selected:!active {{
+    background: {tokens.accent_soft};
+    color: {tokens.text};
+}}
+QListWidget::item:selected,
+QListWidget::item:selected:!active {{
+    border-left: 3px solid {tokens.accent};
 }}
 QHeaderView::section {{
     color: {tokens.text};
