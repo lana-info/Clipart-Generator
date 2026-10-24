@@ -825,10 +825,31 @@ def test_png_check_screen_filter_picture_and_single_export_button(images):
     dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[ok, review])
     dialog._show_quality_review()
     assert dialog.quality_filter_problems.text() == 'Нужно посмотреть (1)' and dialog.quality_filter_all.text() == 'Все (2)'
-    assert dialog.quality_list.count() == 1 and dialog.quality_list.currentRow() == 0  # the problem file is selected at once
+    # every PNG must be looked at before publishing, so the default view is «Все»; problems are only a filter
+    assert dialog.quality_list.count() == 2 and dialog.quality_list.currentRow() == 0
     assert not dialog.quality_picture.pixmap().isNull()
     assert dialog.quality_fix_button.text() == 'Открыть в проверке прозрачности'
+    assert dialog.quality_fix_button.isEnabled()  # also for a file the automatic check found fine
     assert dialog.quality_export_button.isHidden()
-    dialog.quality_filter_all.click()
-    assert dialog.quality_list.count() == 2
+    dialog.quality_filter_problems.click()
+    assert dialog.quality_list.count() == 1
+    dialog.reject()
+
+
+def test_png_check_screen_counts_viewed_files_and_asks_before_exporting_unviewed(images, monkeypatch):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog._show_quality_review()
+    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 1 из 3.')  # the first file is open at once
+    assert not dialog.quality_list.item(0).icon().isNull()
+    dialog.quality_list.setCurrentRow(1)
+    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 2 из 3.')
+    asked = []
+    monkeypatch.setattr(dialog, '_confirm_unviewed', lambda viewed, total: asked.append((viewed, total)) or False)
+    dialog._export()
+    assert asked == [(2, 3)] and dialog.stack.currentWidget() is dialog.quality_page
+    assert dialog.quality_list.currentRow() == 2  # sent to the first file not yet looked at
+    assert dialog.worker is None
     dialog.reject()
