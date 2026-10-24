@@ -83,6 +83,7 @@ VALIDATION_MESSAGES: dict[str, str] = {
     "duplicate_output_names": "Файлы с одинаковыми именами создадут один путь результата. Переименуйте их.",
     "processing_operation_required": "Включите хотя бы одну операцию обработки.",
     "white_background_unavailable": "Белый фон с чётким контуром недоступен: нужны локальная модель U2Net и установленные rembg/onnxruntime.",
+    "fal_input_too_large": "Есть файлы больше 8 МБ — Fal.ai их не примет.",
     "deep_watermark_consent_required": "Разрешите обработку скрытых водяных знаков только для этой операции.",
     "confirmed_area_unavailable": "Ручная область метки пока недоступна в этом интерфейсе.",
     "full_image_change_consent_required": "Подтвердите операцию, меняющую всё изображение.",
@@ -611,11 +612,11 @@ class AppShell(QWidget):
             text = "Далее"
         self.next_button.setText(text)
         self.next_button.setAccessibleName(text)
-        white_unavailable = "white_background_unavailable" in self._page_validation_issues()
-        self.next_button.setEnabled(not white_unavailable)
-        self.next_button.setToolTip(
-            VALIDATION_MESSAGES["white_background_unavailable"] if white_unavailable else ""
-        )
+        # Issues that make «Далее/Запустить» unavailable instead of explaining after a click.
+        blocking = [issue for issue in self._page_validation_issues()
+                    if issue in {"white_background_unavailable", "fal_input_too_large"}]
+        self.next_button.setEnabled(not blocking)
+        self.next_button.setToolTip(VALIDATION_MESSAGES[blocking[0]] if blocking else "")
 
     def mark_dirty(self) -> None:
         self._run_request_key = None
