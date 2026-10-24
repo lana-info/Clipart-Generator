@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QPainter, QPixmap
+from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QComboBox, QDialog, QTabWidget, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QAbstractSpinBox, QStackedWidget,
@@ -29,32 +29,6 @@ def style_preview_path(key):
         return local
     root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
     return root / 'assets' / 'style_previews' / f'{key}.jpg'
-
-
-class PalettePreview(QWidget):
-    """A small, repeatable motif shows the five colors together beyond swatches."""
-    def __init__(self, colors, parent=None):
-        super().__init__(parent)
-        self.colors = tuple(QColor(color) for color in colors)
-        self.setFixedSize(104, 48)
-        self.setAccessibleName('Пример сочетания цветов: ' + ', '.join(colors))
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(self.colors[4])
-        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 5, 5)
-        painter.setBrush(self.colors[1])
-        painter.drawEllipse(20, 25, 25, 12)
-        painter.setBrush(self.colors[2])
-        painter.drawEllipse(59, 27, 25, 11)
-        painter.setBrush(self.colors[0])
-        for x, y in ((38, 7), (51, 7), (32, 18), (57, 18), (43, 27)):
-            painter.drawEllipse(x, y, 17, 15)
-        painter.setBrush(self.colors[3])
-        painter.drawEllipse(46, 17, 15, 15)
-        painter.end()
 
 
 class PlainNumberSpinBox(QSpinBox):
@@ -86,6 +60,7 @@ class ClipartBuilderDialog(QDialog):
         self.data = data
         self._reference_palette_cache = {}
         self._card_columns = 3
+        self._palette_columns = 3
         self.recipe = (ClipartRecipe.from_dict(data.recipe)
                        if data.recipe is not None else ClipartRecipe())
         self.setWindowTitle("Clipart · Настройка набора")
@@ -198,7 +173,7 @@ class ClipartBuilderDialog(QDialog):
             if not field.currentText():
                 field.setCurrentIndex(-1)
 
-        style_library_group = self._section("Библиотека базовых стилей")
+        style_library_group = self._section("")
         style_library_layout = QVBoxLayout(style_library_group.body)
         style_library_layout.setContentsMargins(0, 0, 0, 0)
         self.style_category = QComboBox()
@@ -250,19 +225,12 @@ class ClipartBuilderDialog(QDialog):
         self.palette.setAccessibleName("Своя палитра")
         self.palette.setPlaceholderText("HEX-коды или выберите палитру выше")
 
-        recommended_title = QLabel("Рекомендуем палитру для вашей темы")
-        recommended_title.setStyleSheet("font-size:16px;font-weight:600")
-        palette_layout.addWidget(recommended_title)
-        palette_hint = QLabel("Подбор по словам в теме и поводе. Измените их на шаге 1, чтобы увидеть другие варианты.")
-        palette_hint.setWordWrap(True)
-        palette_hint.setProperty('v3Small', True)
-        palette_layout.addWidget(palette_hint)
-        recommended_group = QFrame()
-        recommended_group.setProperty('v3Card', True)
-        self.recommended_palette_grid = QGridLayout(recommended_group)
+        recommended_group = self._section("Рекомендуем")
+        self.recommended_palette_grid = QGridLayout(recommended_group.body)
+        self.recommended_palette_grid.setContentsMargins(0, 0, 0, 0)
         palette_layout.addWidget(recommended_group)
 
-        library_group = self._section("Библиотека палитр")
+        library_group = self._section("")
         library_layout = QVBoxLayout(library_group.body)
         library_layout.setContentsMargins(0, 0, 0, 0)
         self.palette_category = QComboBox()
@@ -339,18 +307,20 @@ class ClipartBuilderDialog(QDialog):
         outer = QVBoxLayout(box)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(8)
-        head = QHBoxLayout()
-        label = QLabel(title)
-        label.setProperty('v3Section', True)
-        head.addWidget(label)
-        if hint:
-            note = QLabel(hint)
-            note.setProperty('v3Small', True)
-            head.addWidget(note)
-        head.addStretch()
-        outer.addLayout(head)
+        if title:
+            head = QHBoxLayout()
+            label = QLabel(title)
+            label.setProperty('v3Section', True)
+            head.addWidget(label)
+            if hint:
+                note = QLabel(hint)
+                note.setProperty('v3Small', True)
+                head.addWidget(note)
+            head.addStretch()
+            outer.addLayout(head)
         box.body = QWidget()
-        box.body.setAccessibleName(title)
+        if title:
+            box.body.setAccessibleName(title)
         outer.addWidget(box.body)
         return box
 
@@ -413,19 +383,25 @@ class ClipartBuilderDialog(QDialog):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        columns = 2 if self.width() < 950 else 3
-        if columns == self._card_columns:
-            return
-        self._card_columns = columns
-        for cards, grid in (
-                (getattr(self, 'style_cards', []), getattr(self, 'style_library_grid', None)),
-                (getattr(self, 'recommended_palette_cards', []), getattr(self, 'recommended_palette_grid', None)),
-                (getattr(self, 'palette_cards', []), getattr(self, 'palette_library_grid', None))):
+        self._card_columns = self._regrid(
+            2 if self.width() < 950 else 3, self._card_columns,
+            ((getattr(self, 'style_cards', []), getattr(self, 'style_library_grid', None)),))
+        self._palette_columns = self._regrid(
+            2 if self.width() < 700 else 3, self._palette_columns,
+            ((getattr(self, 'recommended_palette_cards', []), getattr(self, 'recommended_palette_grid', None)),
+             (getattr(self, 'palette_cards', []), getattr(self, 'palette_library_grid', None))))
+
+    @staticmethod
+    def _regrid(columns, current, targets):
+        if columns == current:
+            return current
+        for cards, grid in targets:
             if grid is None:
                 continue
             for index, card in enumerate(cards):
                 grid.removeWidget(card['widget'])
                 grid.addWidget(card['widget'], index // columns, index % columns)
+        return columns
 
     def _select_style_profile(self, key):
         profile = get_style_profile(key)
@@ -478,50 +454,37 @@ class ClipartBuilderDialog(QDialog):
             card['button'].setChecked(current == ' '.join(card['colors']).casefold())
 
     def _palette_card(self, preset, grid, index, target):
-        card = QFrame()
-        card.setProperty('v3Card', True)
-        card_layout = QVBoxLayout(card)
-        top = QVBoxLayout()
-        button = QPushButton(preset.title)
+        button = QPushButton()
         button.setCheckable(True)
-        button.setMinimumHeight(42)
-        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        title = QLabel(preset.title, button)
-        title.setWordWrap(True)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        button.setText("")
-        button_layout = QVBoxLayout(button)
-        button_layout.setContentsMargins(4, 2, 4, 2)
-        button_layout.addWidget(title)
+        button.setProperty('v3PaletteCard', True)
         button.setAccessibleName(preset.title)
-        button.setToolTip(preset.title)
-        button.clicked.connect(lambda checked=False, colors=preset.colors: self._select_palette(colors))
-        top.addWidget(button, 1)
+        button.setToolTip(preset.character)
+        button.setFixedHeight(88)
+        content = QVBoxLayout(button)
+        content.setContentsMargins(12, 10, 12, 10)
+        content.setSpacing(4)
+        title = QLabel(preset.title)
+        title.setProperty('v3CardTitle', True)
         character = QLabel(preset.character)
         character.setProperty('v3Small', True)
-        character.setWordWrap(True)
-        character.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-        character.setToolTip(preset.character)
-        top.addWidget(character, 1)
-        card_layout.addLayout(top)
         swatches = QHBoxLayout()
+        swatches.setSpacing(4)
         for color in preset.colors:
             swatch = QLabel()
-            swatch.setFixedHeight(26)
-            swatch.setMinimumWidth(34)
+            swatch.setFixedHeight(22)
+            swatch.setMinimumWidth(24)
             swatch.setToolTip(color)
             swatch.setStyleSheet(f'background:{color};border-radius:4px')
             swatches.addWidget(swatch, 1)
-        card_layout.addLayout(swatches)
-        example = QHBoxLayout()
-        example.addWidget(QLabel("Пример сочетания"))
-        example.addStretch()
-        example.addWidget(PalettePreview(preset.colors))
-        card_layout.addLayout(example)
-        grid.addWidget(card, index // self._card_columns, index % self._card_columns)
+        for label in (title, character):
+            content.addWidget(label)
+        content.addLayout(swatches)
+        for child in button.findChildren(QLabel):
+            child.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        button.clicked.connect(lambda checked=False, colors=preset.colors: self._select_palette(colors))
+        grid.addWidget(button, index // self._palette_columns, index % self._palette_columns)
         target.append(dict(key=preset.key, title=preset.title, category=preset.category,
-                           character=preset.character, colors=list(preset.colors), widget=card, button=button))
+                           character=preset.character, colors=list(preset.colors), widget=button, button=button))
         button.setChecked(self.palette.text().strip().casefold() == ' '.join(preset.colors).casefold())
 
     def _refresh_palette_recommendations(self, *_):

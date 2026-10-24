@@ -147,9 +147,12 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(dialog.recommended_palette_cards[0]['key'], 'holiday-christmas')
         self.assertTrue(dialog.palette_cards)
         self.assertTrue(all(len(card['colors']) == 5 for card in dialog.palette_cards))
-        from studio_clipart_builder_ui import PalettePreview
-        self.assertTrue(all(card['widget'].findChild(PalettePreview) is not None
-                            for card in dialog.palette_cards + dialog.recommended_palette_cards))
+        from PyQt6.QtWidgets import QLabel
+        for card in dialog.palette_cards + dialog.recommended_palette_cards:
+            texts = [label.text() for label in card['widget'].findChildren(QLabel)]
+            self.assertNotIn("Пример сочетания", texts)
+            swatches = [label.toolTip() for label in card['widget'].findChildren(QLabel) if label.toolTip().startswith('#')]
+            self.assertEqual(swatches, card['colors'])
         self.assertEqual(dialog.palette_reference_button.text(), 'Взять из референса')
         dialog.close()
 

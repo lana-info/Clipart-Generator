@@ -384,22 +384,27 @@ QLabel[v3StylePreview="true"] {{
     background: #ffffff;
     border-radius: 6px;
 }}
-QPushButton[v3StyleCard="true"] {{
+QPushButton[v3StyleCard="true"], QPushButton[v3PaletteCard="true"] {{
     background: {tokens.surface};
     border: 1px solid {tokens.border};
     border-radius: {tokens.radius_card + 2}px;
     text-align: left;
     padding: 0;
-    min-height: 0;
 }}
-QPushButton[v3StyleCard="true"]:hover {{
+QPushButton[v3StyleCard="true"] {{
+    min-height: 104px;
+}}
+QPushButton[v3PaletteCard="true"] {{
+    min-height: 88px;
+}}
+QPushButton[v3StyleCard="true"]:hover, QPushButton[v3PaletteCard="true"]:hover {{
     border-color: {tokens.text_muted};
 }}
-QPushButton[v3StyleCard="true"]:checked {{
+QPushButton[v3StyleCard="true"]:checked, QPushButton[v3PaletteCard="true"]:checked {{
     background: {tokens.accent_soft};
     border: 2px solid {tokens.accent};
 }}
-QPushButton[v3StyleCard="true"]:focus {{
+QPushButton[v3StyleCard="true"]:focus, QPushButton[v3PaletteCard="true"]:focus {{
     border: 2px solid {tokens.focus};
 }}
 QPushButton[v3Chip="true"] {{
