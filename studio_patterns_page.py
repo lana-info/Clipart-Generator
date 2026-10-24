@@ -7,13 +7,14 @@ engine is never imported here.  Layout follows docs/ui/3.2/patterns-module-propo
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor, QImage, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PyQt6.QtWidgets import (
-    QApplication, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
-    QLineEdit, QMessageBox, QSlider, QSpinBox, QStackedWidget, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
+    QLineEdit, QMessageBox, QScrollArea, QSlider, QSpinBox, QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, apply_v3_theme
 
@@ -24,6 +25,9 @@ DPI = 300
 MAX_FOLDER_FILES = 200
 MAX_SHEETS = 12
 STATUS_TEXT = {"ready": "Ready", "review": "Review", "fail": "Fail"}
+SEAM_TEXT = {"ready": "Готово: стык не заметен", "review": "Стык слабо заметен", "fail": "Стык заметен"}
+REPEAT_COUNTS = (3, 4, 5, 6, 7)
+REPEAT_PIXELS = 4_000_000
 DEFAULTS = {
     "layout": "straight", "inches": 12.0, "background": [250, 244, 232, 255], "transparent": False,
     "count": 14, "gap": 40, "size_percent": 12, "angle": 30, "seed": 4, "band": 20,
@@ -143,6 +147,255 @@ class SheetTile(QFrame):
         super().mousePressEvent(event)
 
 
+def repeat_image(image, copies, max_pixels=REPEAT_PIXELS, grid=False):
+    """``copies`` x ``copies`` repeat of a sheet with the seam in the middle, bounded in size."""
+    from PIL import Image
+    side = max(image.width, image.height)
+    limit = max(1, int(math.sqrt(max_pixels) / copies))
+    tile = image if side <= limit else image.resize(
+        (max(1, image.width * limit // side), max(1, image.height * limit // side)), Image.Resampling.BILINEAR)
+    output = Image.new("RGBA", (tile.width * copies, tile.height * copies))
+    shift_x, shift_y = tile.width // 2, tile.height // 2
+    for row in range(copies + 1):
+        for column in range(copies + 1):
+            output.paste(tile, (column * tile.width - shift_x, row * tile.height - shift_y))
+    if grid:
+        from PIL import ImageDraw
+        draw = ImageDraw.Draw(output)
+        for index in range(copies + 1):
+            draw.line((index * tile.width - shift_x, 0, index * tile.width - shift_x, output.height), fill=(45, 212, 191, 255))
+            draw.line((0, index * tile.height - shift_y, output.width, index * tile.height - shift_y), fill=(45, 212, 191, 255))
+    return output
+
+
+class SheetEditor(QWidget):
+    """The sheet preview of step 2.  In «Из ваших PNG» an element is picked with the mouse:
+    drag to move, a corner to resize, the circle to rotate, the bin icon or Delete to remove it."""
+
+    element_edited = pyqtSignal(str, dict)
+    element_deleted = pyqtSignal(str)
+    HANDLE = 6
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(300, 300)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setMouseTracking(True)
+        self._pixmap = None
+        self._image_size = (1, 1)
+        self._elements = []
+        self._sizes = {}
+        self._editable = False
+        self._selected = None
+        self._drag = None
+        self._text = ""
+
+    def set_text(self, text):
+        self._text = text
+        self.update()
+
+    def set_sheet(self, image, elements, sizes, editable):
+        self._pixmap = _qpixmap(image, min(image.width, 1600), min(image.height, 1600)) if image is not None else None
+        self._image_size = image.size if image is not None else (1, 1)
+        self._elements, self._sizes, self._editable = list(elements), dict(sizes), editable
+        if self._selected not in {e["id"] for e in self._elements}:
+            self._selected = None
+        self.update()
+
+    @property
+    def selected_id(self):
+        return self._selected
+
+    def select(self, element_id):
+        self._selected = element_id
+        self.update()
+
+    def _fit(self):
+        width, height = self._image_size
+        scale = min((self.width() - 8) / width, (self.height() - 8) / height)
+        return scale, (self.width() - width * scale) / 2, (self.height() - height * scale) / 2
+
+    def _to_view(self, x, y):
+        scale, left, top = self._fit()
+        return QPointF(left + x * scale, top + y * scale)
+
+    def _to_image(self, point):
+        scale, left, top = self._fit()
+        return (point.x() - left) / scale, (point.y() - top) / scale
+
+    def _element(self, element_id):
+        return next((e for e in self._elements if e["id"] == element_id), None)
+
+    def _box(self, element):
+        width, height = self._sizes.get(element["asset_id"], (40, 40))
+        return width * element["scale"], height * element["scale"]
+
+    def _corners(self, element):
+        width, height = self._box(element)
+        radians = math.radians(element["angle"])
+        cos, sin = math.cos(radians), math.sin(radians)
+        return [(element["x"] + dx * cos - dy * sin, element["y"] + dx * sin + dy * cos)
+                for dx, dy in ((-width / 2, -height / 2), (width / 2, -height / 2),
+                               (width / 2, height / 2), (-width / 2, height / 2))]
+
+    def _rotate_handle(self, element):
+        _, height = self._box(element)
+        radians = math.radians(element["angle"])
+        reach = height / 2 + 26 / self._fit()[0]
+        return (element["x"] + reach * math.sin(radians), element["y"] - reach * math.cos(radians))
+
+    def _bin_rect(self, element):
+        corner = self._to_view(*self._corners(element)[1])
+        return QRectF(corner.x() + 8, corner.y() - 22, 22, 22)
+
+    def _hit(self, x, y):
+        """The topmost element under an image point (inside its rotated box)."""
+        for element in sorted(self._elements, key=lambda e: e.get("z_index", 0), reverse=True):
+            width, height = self._box(element)
+            radians = math.radians(-element["angle"])
+            dx, dy = x - element["x"], y - element["y"]
+            local_x = dx * math.cos(radians) - dy * math.sin(radians)
+            local_y = dx * math.sin(radians) + dy * math.cos(radians)
+            if abs(local_x) <= width / 2 and abs(local_y) <= height / 2:
+                return element
+        return None
+
+    def _near(self, point, image_point, radius=11):
+        view = self._to_view(*image_point)
+        return math.hypot(view.x() - point.x(), view.y() - point.y()) <= radius
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        if self._pixmap is None:
+            painter.setPen(QColor("#74869a"))
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._text)
+            return
+        scale, left, top = self._fit()
+        target = QRectF(left, top, self._image_size[0] * scale, self._image_size[1] * scale)
+        painter.drawPixmap(target, self._pixmap, QRectF(self._pixmap.rect()))
+        element = self._element(self._selected) if self._editable else None
+        if element is None:
+            return
+        accent = QColor("#2dd4bf")
+        painter.setPen(QPen(accent, 1.6))
+        corners = [self._to_view(*c) for c in self._corners(element)]
+        painter.drawPolygon(QPolygonF(corners))
+        painter.setBrush(accent)
+        for corner in corners:
+            painter.drawRect(QRectF(corner.x() - 4, corner.y() - 4, 8, 8))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        top_middle = QPointF((corners[0].x() + corners[1].x()) / 2, (corners[0].y() + corners[1].y()) / 2)
+        handle = self._to_view(*self._rotate_handle(element))
+        painter.drawLine(top_middle, handle)
+        painter.drawEllipse(handle, 5, 5)
+        box = self._bin_rect(element)
+        painter.setPen(QPen(QColor("#2b3a4e"), 1))
+        painter.setBrush(QColor("#161f2c"))
+        painter.drawRoundedRect(box, 4, 4)
+        painter.setPen(QPen(QColor("#f87171"), 1.6))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(QRectF(box.x() + 6, box.y() + 7, 10, 10))
+        painter.drawLine(QPointF(box.x() + 5, box.y() + 6), QPointF(box.x() + 17, box.y() + 6))
+
+    def mousePressEvent(self, event):
+        if not self._editable or event.button() != Qt.MouseButton.LeftButton or self._pixmap is None:
+            return
+        self.setFocus()
+        point = event.position()
+        element = self._element(self._selected)
+        if element is not None:
+            if self._bin_rect(element).contains(point):
+                self.element_deleted.emit(element["id"])
+                return
+            if self._near(point, self._rotate_handle(element)):
+                self._drag = ("rotate", element["id"], dict(element))
+                return
+            for corner in self._corners(element):
+                if self._near(point, corner):
+                    self._drag = ("resize", element["id"], dict(element))
+                    return
+        hit = self._hit(*self._to_image(point))
+        self._selected = hit["id"] if hit else None
+        if hit:
+            x, y = self._to_image(point)
+            self._drag = ("move", hit["id"], dict(hit), (x - hit["x"], y - hit["y"]))
+        self.update()
+
+    def mouseMoveEvent(self, event):
+        if not self._editable:
+            return
+        if self._drag is None:
+            element = self._element(self._selected)
+            over = element is not None and (self._near(event.position(), self._rotate_handle(element))
+                                            or any(self._near(event.position(), c) for c in self._corners(element)))
+            self.setCursor(Qt.CursorShape.CrossCursor if over else Qt.CursorShape.ArrowCursor)
+            return
+        kind, element_id, start = self._drag[:3]
+        element = self._element(element_id)
+        if element is None:
+            return
+        x, y = self._to_image(event.position())
+        if kind == "move":
+            element["x"], element["y"] = x - self._drag[3][0], y - self._drag[3][1]
+        elif kind == "rotate":
+            element["angle"] = math.degrees(math.atan2(x - element["x"], -(y - element["y"]))) % 360
+        else:
+            base = math.hypot(*(a / 2 for a in self._box({**start, "scale": 1.0}))) or 1.0
+            element["scale"] = max(0.02, math.hypot(x - element["x"], y - element["y"]) / base)
+        self.update()
+
+    def mouseReleaseEvent(self, event):
+        if self._drag is None:
+            return
+        _kind, element_id, _start = self._drag[:3]
+        self._drag = None
+        element = self._element(element_id)
+        if element is not None and element != _start:
+            self.element_edited.emit(element_id, {key: element[key] for key in ("x", "y", "scale", "angle")})
+
+    def keyPressEvent(self, event):
+        if self._editable and event.key() == Qt.Key.Key_Delete and self._selected:
+            self.element_deleted.emit(self._selected)
+            return
+        super().keyPressEvent(event)
+
+
+class RepeatPicture(QLabel):
+    """The tiled repeat of step 3: a click or the corner icon opens it full screen."""
+
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class RepeatFullscreen(QDialog):
+    def __init__(self, image, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Проверка повтора")
+        self.setStyleSheet("background:#0f1722")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.label = QLabel()
+        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.label)
+        self._image = image
+        self.showFullScreen()
+        QTimer.singleShot(0, self._fill)
+
+    def _fill(self):
+        self.label.setPixmap(_qpixmap(self._image, max(self.width(), 200), max(self.height(), 200)))
+
+    def mousePressEvent(self, event):
+        self.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.accept()
+
+
 class PatternsPage(QWidget):
     back_requested = pyqtSignal()
     settings_requested = pyqtSignal()
@@ -164,6 +417,9 @@ class PatternsPage(QWidget):
         self._current = None
         self._render_key = None
         self._layout_dirty = True
+        self._manual = False
+        self._repeat = 5
+        self._grid = False
         self._busy = False
         self._export_folder = None
         self._project_id = self._revision = None
@@ -368,36 +624,15 @@ class PatternsPage(QWidget):
     def _build_settings(self):
         page, layout = self._page("Настройте узор", "Измените параметры и пересоберите лист. Результат воспроизводим по seed.")
         columns = QHBoxLayout()
-        left, left_layout = _card()
-        left_layout.addWidget(_text("Раскладка", "v3Title"))
-        self.layout_chips = Chips(LAYOUTS, columns=2)
-        self.layout_chips.changed.connect(self._set_layout)
-        left_layout.addWidget(self.layout_chips)
-        self.layout_hint = _text("Half-drop и Brick сдвигают соседние ряды на половину листа, как кирпичная кладка.", "v3Small")
-        left_layout.addWidget(self.layout_hint)
-        left_layout.addWidget(_text("Размер листа (дюймы)", "v3Title"))
-        self.size_chips = Chips([(label, label) for label, _ in SIZES], columns=2)
-        self.size_chips.changed.connect(self._set_size)
-        left_layout.addWidget(self.size_chips)
-        self.size_hint = _text("", "v3Small")
-        left_layout.addWidget(self.size_hint)
-        left_layout.addWidget(_text("Фон", "v3Title"))
-        row = QHBoxLayout()
-        self.background_swatch = QLabel()
-        self.background_swatch.setFixedSize(44, 34)
-        self.background_swatch.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.background_swatch.setToolTip("Выбрать цвет фона. Фон попадёт в итоговый файл; «Прозрачный» — только для PNG")
-        self.background_swatch.mousePressEvent = lambda _event: self._pick_background()
-        row.addWidget(self.background_swatch)
-        self.background_name = _text("Тёплый белый")
-        row.addWidget(self.background_name, 1)
-        self.transparent_button = V3Button("Прозрачный", ButtonVariant.SECONDARY)
-        self.transparent_button.clicked.connect(self._toggle_transparent)
-        row.addWidget(self.transparent_button)
-        left_layout.addLayout(row)
-        left_layout.addStretch()
-        columns.addWidget(left, 1)
-        right, right_layout = _card()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        column = QWidget()
+        column_layout = QVBoxLayout(column)
+        column_layout.setContentsMargins(0, 0, 0, 0)
+        scroll.setWidget(column)
+        arrangement, right_layout = _card()
         self.right_title = _text("Расстановка", "v3Title")
         right_layout.addWidget(self.right_title)
         self.png_controls = QWidget()
@@ -426,23 +661,64 @@ class PatternsPage(QWidget):
         buttons.addWidget(self.pin_button)
         buttons.addWidget(self.reroll_button)
         pc.addLayout(buttons)
-        self.layout_note = _text("Если места не хватает, покажем, сколько элементов поставлено из запрошенных.", "v3Small")
-        pc.addWidget(self.layout_note)
         right_layout.addWidget(self.png_controls)
         self.tile_controls = QWidget()
         tc = QVBoxLayout(self.tile_controls)
         tc.setContentsMargins(0, 0, 0, 0)
         box, self.band_slider = self._slider("band", 5, 50, "Ширина полосы смешивания", lambda v: f"{v} %")
         tc.addLayout(box)
-        tc.addWidget(_text("Шире полоса: шов мягче, но на детальном рисунке возможно двоение. Уже полоса: детали сохраняются.", "v3Small"))
-        self.apply_button = V3Button("Применить и проверить шов", ButtonVariant.PRIMARY)
-        self.apply_button.clicked.connect(self._go_next)
-        tc.addWidget(self.apply_button)
-        tc.addWidget(_text("Результат получит оценку Ready, Review или Fail. Идеальный шов для любого рисунка мы не обещаем.", "v3Small"))
         right_layout.addWidget(self.tile_controls)
-        right_layout.addStretch()
+        column_layout.addWidget(arrangement)
+        left, left_layout = _card()
+        left_layout.addWidget(_text("Раскладка", "v3Title"))
+        self.layout_chips = Chips(LAYOUTS, columns=2)
+        self.layout_chips.changed.connect(self._set_layout)
+        left_layout.addWidget(self.layout_chips)
+        self.layout_hint = _text("Half-drop и Brick сдвигают соседние ряды на половину листа, как кирпичная кладка.", "v3Small")
+        left_layout.addWidget(self.layout_hint)
+        left_layout.addWidget(_text("Размер листа (дюймы)", "v3Title"))
+        self.size_chips = Chips([(label, label) for label, _ in SIZES], columns=2)
+        self.size_chips.changed.connect(self._set_size)
+        left_layout.addWidget(self.size_chips)
+        self.size_hint = _text("", "v3Small")
+        left_layout.addWidget(self.size_hint)
+        left_layout.addWidget(_text("Фон", "v3Title"))
+        row = QHBoxLayout()
+        self.background_swatch = QLabel()
+        self.background_swatch.setFixedSize(44, 34)
+        self.background_swatch.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.background_swatch.setToolTip("Выбрать цвет фона. Фон попадёт в итоговый файл; «Прозрачный» — только для PNG")
+        self.background_swatch.mousePressEvent = lambda _event: self._pick_background()
+        row.addWidget(self.background_swatch)
+        self.background_name = _text("Тёплый белый")
+        row.addWidget(self.background_name, 1)
+        self.transparent_button = V3Button("Прозрачный", ButtonVariant.SECONDARY)
+        self.transparent_button.clicked.connect(self._toggle_transparent)
+        row.addWidget(self.transparent_button)
+        left_layout.addLayout(row)
+        column_layout.addWidget(left)
+        column_layout.addStretch()
+        columns.addWidget(scroll, 1)
+        right, preview_layout = _card("Предпросмотр")
+        self.sheet_editor = SheetEditor()
+        self.sheet_editor.element_edited.connect(self._element_edited)
+        self.sheet_editor.element_deleted.connect(self._element_deleted)
+        preview_layout.addWidget(self.sheet_editor, 1)
+        self.layout_note = _status("", "ok")
+        preview_layout.addWidget(self.layout_note)
+        controls = QHBoxLayout()
+        controls.addWidget(_text("Delete — удалить выделенный элемент", "v3Small"), 1)
+        self.reset_edits = V3Button("Сбросить правки", ButtonVariant.SECONDARY)
+        self.reset_edits.setToolTip("Вернуть автоматическую расстановку")
+        self.reset_edits.clicked.connect(self._reset_edits)
+        controls.addWidget(self.reset_edits)
+        preview_layout.addLayout(controls)
         columns.addWidget(right, 1)
         layout.addLayout(columns, 1)
+        self._live_timer = QTimer(self)
+        self._live_timer.setSingleShot(True)
+        self._live_timer.setInterval(500)
+        self._live_timer.timeout.connect(self._live_render)
         return page
 
     def _set_layout(self, key):
@@ -495,75 +771,88 @@ class PatternsPage(QWidget):
     # ------------------------------------------------------------ step 3
 
     def _build_preview(self):
-        page, layout = self._page("Проверьте повтор", "Узор показан 3 × 3. Стык листов находится в центре картинки.")
+        page, layout = self._page("Проверьте повтор", "")
         self.preview_title, self.preview_subtitle = layout.itemAt(0).widget(), layout.itemAt(1).widget()
+        self.preview_subtitle.hide()
         columns = QHBoxLayout()
         left, left_layout = _card()
-        self.preview_picture = QLabel()
+        row = QHBoxLayout()
+        row.addWidget(_text("Плиток:", "v3Small"))
+        self.repeat_chips = Chips([(f"{n}×{n}", str(n)) for n in REPEAT_COUNTS], columns=len(REPEAT_COUNTS))
+        self.repeat_chips.changed.connect(self._set_repeat)
+        row.addWidget(self.repeat_chips)
+        self.grid_box = QCheckBox("Сетка")
+        self.grid_box.toggled.connect(self._set_grid)
+        row.addWidget(self.grid_box)
+        row.addStretch()
+        left_layout.addLayout(row)
+        stage = QGridLayout()
+        self.preview_picture = RepeatPicture()
         self.preview_picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_picture.setMinimumSize(380, 380)
-        left_layout.addWidget(self.preview_picture, 1)
-        row = QHBoxLayout()
-        self.zoom_button = V3Button("Увеличить шов", ButtonVariant.SECONDARY)
-        self.zoom_button.clicked.connect(self._zoom_seam)
-        row.addWidget(self.zoom_button)
-        row.addWidget(_text("Линии границ: выключены", "v3Small"), 1)
-        left_layout.addLayout(row)
+        self.preview_picture.clicked.connect(self._fullscreen)
+        stage.addWidget(self.preview_picture, 0, 0)
+        self.fullscreen_button = QToolButton()
+        self.fullscreen_button.setText("⛶")
+        self.fullscreen_button.setToolTip("На весь экран")
+        self.fullscreen_button.clicked.connect(self._fullscreen)
+        stage.addWidget(self.fullscreen_button, 0, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
+        left_layout.addLayout(stage, 1)
         columns.addWidget(left, 3)
-        right, right_layout = _card("Оценка шва")
+        right, right_layout = _card("Проверка стыка")
         self.seam_status = _status("", "warning")
         right_layout.addWidget(self.seam_status)
-        self.seam_numbers = _text("")
-        right_layout.addWidget(self.seam_numbers)
-        right_layout.addWidget(_text("Оценка: скачок на стыке относительно обычных переходов внутри рисунка. Меньше — лучше.", "v3Small"))
         right_layout.addStretch()
-        self.primary_action = V3Button("Добавить лист в набор", ButtonVariant.PRIMARY)
+        self.primary_action = V3Button("Сохранить в набор", ButtonVariant.PRIMARY)
         self.primary_action.clicked.connect(self._primary)
-        self.secondary_action = V3Button("Пересобрать с другим seed", ButtonVariant.SECONDARY)
+        self.secondary_action = V3Button("Оставить как есть (Review)", ButtonVariant.SECONDARY)
         self.secondary_action.clicked.connect(self._secondary)
         right_layout.addWidget(self.primary_action)
         right_layout.addWidget(self.secondary_action)
         columns.addWidget(right, 2)
         layout.addLayout(columns, 1)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self.preview_picture, self._close_fullscreen)
         return page
 
-    def _zoom_seam(self):
+    def _set_repeat(self, key):
+        self._repeat = int(key)
+        self._refresh_preview()
+
+    def _set_grid(self, checked):
+        self._grid = bool(checked)
+        self._refresh_preview()
+
+    def _repeat_picture(self):
+        return repeat_image(self._current["image"], self._repeat, grid=self._grid)
+
+    def _fullscreen(self):
         if self._current is None:
             return
-        picture = self.host.preview_image(self._current["image"], 3, 2_000_000)
-        half = min(picture.width, picture.height) // 6
-        centre = picture.crop((picture.width // 2 - half, picture.height // 2 - half,
-                               picture.width // 2 + half, picture.height // 2 + half))
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Шов в центре, увеличено")
-        layout = QVBoxLayout(dialog)
-        label = QLabel()
-        label.setPixmap(_qpixmap(centre, 560, 560))
-        layout.addWidget(label)
-        dialog.exec()
+        self._fullscreen_dialog = RepeatFullscreen(self._repeat_picture(), self)
+        self._fullscreen_dialog.exec()
+
+    def _close_fullscreen(self):
+        dialog = getattr(self, "_fullscreen_dialog", None)
+        if dialog is not None:
+            dialog.accept()
 
     def _primary(self):
         status = self._current["seam"]["status"] if self._current else None
-        if status == "fail":
-            if self._mode == "tile":
-                if self._settings["band"] >= 50:
-                    QMessageBox.information(self, "Patterns", "Ширина полосы уже максимальная. Оставьте как есть или выберите другую плитку.")
-                    return
-                self._settings["band"] = min(50, self._settings["band"] + 10)
-                self.band_slider.setValue(self._settings["band"])
-                self._render_current()
-            else:
-                self._reroll()
-                self._render_current()
-        else:
+        if status != "fail":
             self._add_current()
+        elif self._mode == "tile":
+            if self._settings["band"] >= 50:
+                QMessageBox.information(self, "Patterns", "Ширина полосы уже максимальная. Оставьте как есть или выберите другую плитку.")
+                return
+            self._settings["band"] = min(50, self._settings["band"] + 10)
+            self.band_slider.setValue(self._settings["band"])
+            self._render_current()
+        else:
+            self._add_current(forced=True)  # «Оставить как есть (Review)»
 
     def _secondary(self):
         if self._current and self._current["seam"]["status"] == "fail":
             self._add_current(forced=True)  # «Оставить как есть (Review)»
-        else:
-            self._reroll()
-            self._render_current()
 
     def _add_current(self, forced=False):
         if self._current is None:
@@ -687,6 +976,35 @@ class PatternsPage(QWidget):
             self._refresh()
         self.host.render_sheet(payload, done, failed)
 
+    def _live_render(self):
+        if self._step == 1 and not self._busy and self._current is None:
+            self._render_current()
+
+    # ------------------------------------------------------------ manual placement (step 2)
+
+    def _element_edited(self, element_id, values):
+        self._elements = [{**e, **values, "locked": True} if e["id"] == element_id else e for e in self._elements]
+        self._manual = True
+        self._invalidate()
+        self._live_timer.start(50)
+        self._refresh()
+
+    def _element_deleted(self, element_id):
+        if len(self._elements) <= 1:
+            return
+        self._elements = [e for e in self._elements if e["id"] != element_id]
+        self._manual = True
+        self._invalidate()
+        self._live_timer.start(50)
+        self._refresh()
+
+    def _reset_edits(self):
+        self._elements = [{**e, "locked": False} for e in self._elements]
+        self._manual = False
+        self._invalidate(layout=True)
+        self._live_timer.start(50)
+        self._refresh()
+
     # ------------------------------------------------------------ step 5
 
     def _build_export(self):
@@ -805,12 +1123,17 @@ class PatternsPage(QWidget):
         s, size = self._settings, self._canvas()
         reference = self._reference_side()
         centre = s["size_percent"] / 100 * size / reference
-        payload = self._payload(layout=layout, seed=seed, elements=[e for e in self._elements if e.get("locked")])
+        locked = [e for e in self._elements if e.get("locked")]
+        payload = self._payload(layout=layout, seed=seed, elements=locked)
+        wanted = s["count"] - len(locked)  # hand-placed elements are part of the requested count
+        if wanted < 1:
+            self._layout_warnings, self._layout_shortage = (), None
+            return locked
         elements, warnings = self.host.layout_elements(
-            payload, count=s["count"], min_gap=float(s["gap"]), scale_range=(centre * 0.75, centre * 1.25),
+            payload, count=wanted, min_gap=float(s["gap"]), scale_range=(centre * 0.75, centre * 1.25),
             angle_range=(-float(s["angle"]), float(s["angle"])), seed=payload["scene"]["seed"])
         self._layout_warnings = warnings
-        placed = len(elements) - len(payload["scene"]["elements"])
+        placed = len(elements)
         self._layout_shortage = (placed, s["count"]) if warnings and placed < s["count"] else None
         return elements
 
@@ -823,15 +1146,18 @@ class PatternsPage(QWidget):
         self._generation += 1
         if hasattr(self, "stack"):
             self._refresh_light()
+            if self._step == 1:
+                self._live_timer.start(500)  # П3: the sheet on the right follows the settings
 
     def _render_current(self):
         """Lay out (pngs mode) and render the current sheet in the background."""
         if self._busy:
             return
         try:
-            if self._mode == "pngs" and (self._layout_dirty or not self._elements):
+            if self._mode == "pngs" and (self._layout_dirty or (not self._elements and not self._manual)):
                 self._elements = self._relayout()
                 self._layout_dirty = False
+                self._manual = False
             payload = self._payload()
         except ValueError as error:
             self._show_error(str(error))
@@ -842,6 +1168,9 @@ class PatternsPage(QWidget):
 
         def done(result):
             if token != self._generation:
+                self._busy = False
+                if self._step in (1, 2):
+                    self._render_current()  # the settings changed while this sheet was drawn
                 return
             self._busy = False
             self._current = result
@@ -891,7 +1220,7 @@ class PatternsPage(QWidget):
     def _goto(self, step):
         self._step = step
         self._save()
-        if step == 2 and self._current is None:
+        if step in (1, 2) and self._current is None:
             self._render_current()
         if step == 3:
             self._fill_sheets()
@@ -981,46 +1310,48 @@ class PatternsPage(QWidget):
             text = (f"Поставлено {placed} из {requested} элементов: при зазоре {s['gap']} px на листе нет места. "
                     "Уменьшите зазор или размер элементов, либо количество.")
         else:
-            text = "Если места не хватает, покажем, сколько элементов поставлено из запрошенных."
+            text = f"Поставлено {len(self._elements)} из {s['count']} элементов."
         self.layout_note.setText(text + (f" Закреплено: {locked}." if locked else ""))
-        self.layout_note.setStyleSheet("color:#f5b45a;font-weight:bold" if shortage else "")
+        _set_state(self.layout_note, "warning" if shortage else "ok")
+        self.layout_note.setVisible(not tile)
+        self.reset_edits.setVisible(not tile)
+        self.reset_edits.setEnabled(bool(locked) or self._manual)
+        sizes = {a["handle"]["asset_id"]: (a["width"], a["height"]) for a in self._assets}
+        if self._current is not None:
+            self.sheet_editor.set_sheet(self._current["image"], [] if tile else self._elements, sizes,
+                                        editable=not tile and not self._busy)
+        elif not self.sheet_editor._pixmap:
+            self.sheet_editor.set_text("Идёт расчёт…" if self._busy else "")
 
     def _refresh_preview(self):
         result = self._current
         busy = self._busy and self._step == 2
+        self.repeat_chips.set_value(str(self._repeat))
+        self.grid_box.setChecked(self._grid)
         if result is None:
             self.preview_picture.setPixmap(QPixmap())
             self.preview_picture.setText("Идёт расчёт…" if busy else "Нет результата")
             self.seam_status.setText("")
-            self.seam_numbers.setText("")
             self.primary_action.setEnabled(False)
-            self.secondary_action.setEnabled(False)
-            self.zoom_button.setEnabled(False)
+            self.secondary_action.setVisible(False)
+            self.fullscreen_button.setEnabled(False)
             return
-        seam, status = result["seam"], result["seam"]["status"]
-        picture = self.host.preview_image(result["image"], 3, 4_000_000)
-        size = min(self.preview_picture.width(), self.preview_picture.height(), 520)
-        self.preview_picture.setPixmap(_qpixmap(picture, max(size, 380), max(size, 380)))
-        ready = status == "ready"
-        self.preview_title.setText("Проверьте повтор" if ready else "Шов заметен" if status == "fail" else "Шов слабо заметен")
-        self.preview_subtitle.setText("Узор показан 3 × 3. Стык листов находится в центре картинки." if ready
-                                      else "Шов виден при повторе. Исправьте его или оставьте как есть." if status == "fail"
-                                      else "Шов слабо виден при повторе. Можно добавить лист или попробовать ещё раз.")
-        self.seam_status.setText(STATUS_TEXT[status])
+        status = result["seam"]["status"]
+        picture = self._repeat_picture()
+        size = max(min(self.preview_picture.width(), self.preview_picture.height(), 640), 380)
+        self.preview_picture.setPixmap(_qpixmap(picture, size, size))
+        self.seam_status.setText(SEAM_TEXT[status])
         _set_state(self.seam_status, {"ready": "ok", "review": "warning", "fail": "error"}[status])
-        self.seam_numbers.setText(f"По горизонтали: {seam['horizontal']:.2f}\nПо вертикали: {seam['vertical']:.2f}\nПорог Ready: 1.5")
         tile = self._mode == "tile"
         if status == "fail":
-            self.primary_action.setText("Сделать бесшовной" if tile else "Пересобрать с другим seed")
-            self.secondary_action.setText("Оставить как есть (Review)")
-            self.secondary_action.setVisible(True)
+            self.primary_action.setText("Сделать бесшовной" if tile else "Оставить как есть (Review)")
+            self.secondary_action.setVisible(tile)
         else:
-            self.primary_action.setText("Добавить лист в набор")
-            self.secondary_action.setText("Пересобрать с другим seed")
-            self.secondary_action.setVisible(not tile)
+            self.primary_action.setText("Сохранить в набор")
+            self.secondary_action.setVisible(False)
         self.primary_action.setEnabled(not self._busy)
         self.secondary_action.setEnabled(not self._busy)
-        self.zoom_button.setEnabled(True)
+        self.fullscreen_button.setEnabled(True)
 
     def _refresh_set(self):
         _clear(self.set_grid)
