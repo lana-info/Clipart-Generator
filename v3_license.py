@@ -6,12 +6,14 @@ from dataclasses import replace
 from typing import Protocol
 
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -20,6 +22,7 @@ from license_client import (
     LicenseAuthorization,
     LicenseError,
     LicenseUnavailableError,
+    safe_license_error_code,
 )
 from app_identity import APP_NAME
 
@@ -175,13 +178,36 @@ class LicenseDialog(QDialog):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
+        # A safe support code (no key, no personal data) for a failed activation — approved mockup H.
+        self.error_code_label = QLabel()
+        self.error_code_label.setStyleSheet("color:#f5b45a;font-weight:bold")
+        self.error_code_label.setAccessibleName("Код ошибки лицензии")
+        self.error_code_label.hide()
+        layout.addWidget(self.error_code_label)
+        self.copy_error_button = QPushButton("Скопировать код ошибки")
+        self.copy_error_button.clicked.connect(self._copy_error_code)
+        self.copy_error_button.hide()
+        layout.addWidget(self.copy_error_button)
+        self._error_code = ""
+
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Активировать")
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
         self.buttons.accepted.connect(self._activate)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
+
+    def _show_error_code(self, code: str) -> None:
+        self._error_code = code
+        self.error_code_label.setText(f"Код ошибки: {code}" if code else "")
+        self.error_code_label.setVisible(bool(code))
+        self.copy_error_button.setVisible(bool(code))
+
+    def _copy_error_code(self) -> None:
+        if self._error_code:
+            QApplication.clipboard().setText(self._error_code)
 
     def _activate(self) -> None:
         license_key = self.license_key_input.text().strip()
@@ -194,10 +220,12 @@ class LicenseDialog(QDialog):
         except LicenseError as exc:
             self.license_key_input.clear()
             self.status_label.setText(str(exc))
-            QMessageBox.warning(self, "Лицензия", str(exc))
+            self._show_error_code(safe_license_error_code(exc))
+            QMessageBox.warning(self, "Лицензия", f"{exc}\n\nКод ошибки: {self._error_code}")
             return
         finally:
             self.buttons.setEnabled(True)
+        self._show_error_code("")
         self.license_key_input.clear()
         self.status_label.setText(self.gate.status_text)
         QMessageBox.information(
