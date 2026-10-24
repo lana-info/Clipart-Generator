@@ -8,7 +8,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PIL import Image
 from PyQt6.QtCore import QSettings, Qt
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QLabel
 
 from v3_transparency_preview import ClipartTransparencyEditorPage
 
@@ -39,12 +39,49 @@ def test_panels_menu_hides_and_resets(page, app):
     assert files.widget() is page.files_frame and tools.widget() is page.tools_scroll
     names = [action.text() for action in page.panels_button.menu().actions() if action.text()]
     assert names == ["Файлы", "Инструменты", "Сбросить расположение"]
-    files.hide()
+    assert not files.isVisible() and tools.isVisible()  # the file list is out of the way until asked for
+    files.show()
     page.panel_host.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, tools)
     page.reset_panels()
     app.processEvents()
-    assert files.isVisible() and tools.isVisible()
+    assert not files.isVisible() and tools.isVisible()
     assert page.panel_host.dockWidgetArea(tools) == Qt.DockWidgetArea.RightDockWidgetArea
+
+
+def test_review_window_keeps_the_file_panel_it_works_through(page, app):
+    page.insert_file_filter(QLabel("filter"))
+    page.reset_panels()
+    app.processEvents()
+    assert page.panel_docks["files"].isVisible()
+
+
+def test_next_and_previous_file_buttons_and_counter(app, tmp_path, monkeypatch):
+    monkeypatch.setattr(ClipartTransparencyEditorPage, "PANEL_SETTINGS", ("Vibix-test", f"nav-{os.getpid()}"))
+    QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
+    files = []
+    for name in ("a", "b", "c"):
+        path = tmp_path / f"{name}.png"
+        Image.new("RGBA", (64, 64), (200, 120, 90, 255)).save(path)
+        files.append(path)
+    window = ClipartTransparencyEditorPage()
+    window.resize(1120, 780)
+    window.set_files(files)
+    window.show()
+    app.processEvents()
+    assert window.file_counter_label.text() == "1 из 3" and window.prev_file_button.isVisible()
+    window.next_file_button.click()
+    assert window.file_list.currentRow() == 1 and window.file_counter_label.text() == "2 из 3"
+    window.prev_file_button.click()
+    window.prev_file_button.click()
+    assert window.file_list.currentRow() == 2  # wraps around
+    window.close()
+    single = ClipartTransparencyEditorPage()
+    single.set_files(files[:1])
+    single.show()
+    app.processEvents()
+    assert not single.prev_file_button.isVisible() and not single.file_counter_label.isVisible()
+    single.close()
+    QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
 
 
 def test_layout_is_remembered_for_the_next_window(page, app, tmp_path):

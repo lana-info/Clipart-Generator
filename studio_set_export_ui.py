@@ -5,11 +5,11 @@ from threading import Event
 from uuid import uuid4
 
 from PyQt6.QtCore import QEvent, QPoint, QSize, QThread, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QIcon, QImageReader, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QCursor, QFont, QIcon, QImageReader, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QFrame,
-    QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMessageBox, QProgressBar, QPushButton, QStackedWidget,
+    QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
+    QMenu, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QStackedWidget, QWidgetAction,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -77,11 +77,39 @@ class ExportWorker(QThread):
                 self.cleanup_message = ' Архивы сохранены, но очистку рабочих файлов завершить не удалось.'
 
 
+class _CheckerPreview(QLabel):
+    """The picture on a checkerboard, always as large as the free space allows."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._path = ''
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        self.setMinimumSize(160, 160)
+
+    def set_path(self, path):
+        self._path = str(path or '')
+        self._refit()
+
+    def _refit(self):
+        if not self._path:
+            self.setPixmap(QPixmap())
+            return
+        bound = max(min(self.width(), self.height()) - 4, 64)
+        self.setPixmap(SetExportDialog._checker_pixmap(self._path, bound))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._path:
+            self._refit()
+
+
 class SetExportDialog(QDialog):
     busy_changed = pyqtSignal()
     membership_saved = pyqtSignal(object)
     fix_requested = pyqtSignal(str)
     review_requested = pyqtSignal()
+    QUALITY_THUMB = 120
     export_availability_changed = pyqtSignal(bool)
 
     @staticmethod
@@ -127,6 +155,8 @@ class SetExportDialog(QDialog):
             if key in allowed_paths:
                 self.quality_reports[key] = report
         self.worker = None
+        self._viewed_quality = set()
+        self._quality_page_base_text = ''
         self.exported = []
         self._set_columns = []
         self._editing_set_id = None
@@ -150,17 +180,29 @@ class SetExportDialog(QDialog):
             self.export_button.hide()
             self.setWindowFlags(Qt.WindowType.Widget)
 
-        self.delete_intermediates = QCheckBox('Удалить промежуточные файлы после экспорта')
-        self.delete_originals = QCheckBox('Удалить сгенерированные исходники после экспорта')
+        # Rarely needed and destructive, so they live in a menu instead of taking room under the pictures.
+        self.delete_intermediates = QCheckBox('Удалить рабочие файлы после экспорта')
+        self.delete_originals = QCheckBox('Удалить исходные картинки генерации после экспорта')
+        self.delete_intermediates.setToolTip('Файлы, нужные только для обработки, удаляются после создания ZIP.')
+        self.delete_originals.setToolTip('Картинки, полученные от генерации до вырезания, удаляются после создания ZIP.')
+        options_menu = QMenu(self)
         for checkbox in (self.delete_intermediates, self.delete_originals):
             checkbox.setEnabled(workspace is not None)
-            root.addWidget(checkbox)
-
+            action = QWidgetAction(options_menu)
+            action.setDefaultWidget(checkbox)
+            options_menu.addAction(action)
+        self.export_options_button = QPushButton('Параметры экспорта')
+        self.export_options_button.setProperty('v3Button', True)
+        self.export_options_button.setProperty('variant', 'ghost')
+        self.export_options_button.setMenu(options_menu)
+        self.export_options_button.setEnabled(workspace is not None)
         self.status = QLabel('')
         self.status.setTextFormat(Qt.TextFormat.PlainText)
-        self.status.setTextFormat(Qt.TextFormat.PlainText)
         self.status.setWordWrap(True)
-        root.addWidget(self.status)
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.export_options_button)
+        bottom.addWidget(self.status, 1)
+        root.addLayout(bottom)
         # Large, obvious progress for long exports (owner request 2026-10-19).
         self.export_progress = QProgressBar()
         self.export_progress.setMinimumHeight(24)
@@ -267,13 +309,13 @@ class SetExportDialog(QDialog):
         layout = QVBoxLayout(page)
         title = QLabel('Проверка PNG перед экспортом')
         title.setProperty('v3Title', True)
-        layout.addWidget(title)
         self.quality_page_summary_label = QLabel('')
-        self.quality_page_summary_label.setProperty('v3Status', True)
-        self.quality_page_summary_label.setWordWrap(True)
-        layout.addWidget(self.quality_page_summary_label)
-        self._quality_only_problems = True
+        self.quality_page_summary_label.setProperty('v3Small', True)
+        self._quality_only_problems = False  # the owner must see every PNG before publishing; problems are a filter
         filters = QHBoxLayout()
+        filters.addWidget(title)
+        filters.addWidget(self.quality_page_summary_label)
+        filters.addSpacing(12)
         self.quality_filter_problems = QPushButton('')
         self.quality_filter_all = QPushButton('')
         for button, only_problems in ((self.quality_filter_problems, True), (self.quality_filter_all, False)):
@@ -285,7 +327,15 @@ class SetExportDialog(QDialog):
 
         body = QHBoxLayout()
         self.quality_list = QListWidget()
-        self.quality_list.setMinimumWidth(300 if self.embedded else 360)
+        self.quality_list.setViewMode(QListView.ViewMode.IconMode)
+        self.quality_list.setIconSize(QSize(self.QUALITY_THUMB, self.QUALITY_THUMB))
+        self.quality_list.setGridSize(QSize(self.QUALITY_THUMB + 28, self.QUALITY_THUMB + 56))
+        self.quality_list.setResizeMode(QListView.ResizeMode.Adjust)
+        self.quality_list.setMovement(QListView.Movement.Static)
+        self.quality_list.setWordWrap(True)
+        self.quality_list.setSpacing(6)
+        self.quality_list.setUniformItemSizes(True)
+        self.quality_list.setMinimumWidth(330)
         self.quality_list.currentRowChanged.connect(self._quality_selected)
         body.addWidget(self.quality_list, 2)
         detail = QFrame()
@@ -293,18 +343,16 @@ class SetExportDialog(QDialog):
         detail_layout = QVBoxLayout(detail)
         self.quality_issue_title = QLabel('Выберите PNG')
         self.quality_issue_title.setProperty('v3Title', True)
-        self.quality_picture = QLabel()
-        self.quality_picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.quality_picture = _CheckerPreview()
         self.quality_issue_text = QLabel('')
         self.quality_issue_text.setWordWrap(True)
         self.quality_action_text = QLabel('')
         self.quality_action_text.setWordWrap(True)
         self.quality_action_text.setProperty('v3Description', True)
+        detail_layout.addWidget(self.quality_picture, 1)
         detail_layout.addWidget(self.quality_issue_title)
-        detail_layout.addWidget(self.quality_picture)
         detail_layout.addWidget(self.quality_issue_text)
         detail_layout.addWidget(self.quality_action_text)
-        detail_layout.addStretch(1)
         detail_actions = QHBoxLayout()
         self.quality_fix_button = QPushButton('Открыть в проверке прозрачности')
         self.quality_fix_button.setProperty('v3Button', True)
@@ -551,12 +599,15 @@ class SetExportDialog(QDialog):
             report = self.quality_reports.get(key)
             if report is None or (only_problems and report.status == 'ok'):
                 continue
-            if not self._path_is_active(key):
+            active = self._path_is_active(key)
+            if not active:
                 status = 'Исключено из наборов'
             else:
                 status = status_labels[report.status]
-            row = QListWidgetItem(f'{path.name} — {status}')
+            row = QListWidgetItem(path.name if (active and report.status == 'ok') else f'{path.name}\n{status}')
             row.setData(Qt.ItemDataRole.UserRole, key)
+            row.setToolTip(f'{path.name} — {status}')
+            row.setIcon(self._quality_icon(key, report, active, key in self._viewed_quality))
             self.quality_list.addItem(row)
             if key == selected_path:
                 selected_row = self.quality_list.count() - 1
@@ -569,6 +620,42 @@ class SetExportDialog(QDialog):
     def _set_quality_filter(self, only_problems):
         self._quality_only_problems = only_problems
         self._refresh_quality_page()
+
+    def _quality_icon(self, key, report, active, viewed):
+        """Thumbnail on the checkerboard with a status badge (⚠/✕) and a «viewed» tick; excluded files are dimmed."""
+        size = self.QUALITY_THUMB
+        picture = self._checker_pixmap(key, size)
+        canvas = QPixmap(size, size)
+        canvas.fill(QColor('#1b2636'))
+        painter = QPainter(canvas)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not picture.isNull():
+            painter.setOpacity(1.0 if active else 0.35)
+            painter.drawPixmap((size - picture.width()) // 2, (size - picture.height()) // 2, picture)
+            painter.setOpacity(1.0)
+        font = QFont(painter.font())
+        font.setPixelSize(13)
+        font.setBold(True)
+        painter.setFont(font)
+
+        def badge(x, y, fill, glyph, ink):
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(fill))
+            painter.drawEllipse(x, y, 22, 22)
+            painter.setPen(QColor(ink))
+            painter.drawText(x, y, 22, 22, int(Qt.AlignmentFlag.AlignCenter), glyph)
+
+        if viewed:
+            badge(size - 25, 3, '#2dd4bf', '✓', '#06201c')
+        if active and report.status == 'review':
+            badge(3, size - 25, '#f59e0b', '!', '#1f1300')
+        elif active and report.status == 'block':
+            badge(3, size - 25, '#f87171', '✕', '#2a0a0a')
+        painter.end()
+        icon = QIcon()
+        for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
+            icon.addPixmap(canvas, mode)  # no highlight tint over the picture itself: the selection is drawn on the cell
+        return icon
 
     @staticmethod
     def _checker_pixmap(path, bound=220):
@@ -589,25 +676,67 @@ class SetExportDialog(QDialog):
         key = str(item.data(Qt.ItemDataRole.UserRole) or '') if item is not None else ''
         report = self.quality_reports.get(key)
         active = bool(key and self._path_is_active(key))
-        self.quality_picture.setPixmap(self._checker_pixmap(key) if report is not None else QPixmap())
+        self.quality_picture.set_path(key if report is not None else '')
+        if report is not None:
+            self._mark_quality_viewed(key, item, report, active)
         if report is None:
             self.quality_issue_title.setText('Выберите PNG')
+            self.quality_issue_title.show()
             self.quality_issue_text.clear()
             self.quality_action_text.clear()
+            self.quality_issue_text.hide()
+            self.quality_action_text.hide()
             self.quality_fix_button.setEnabled(False)
             self.quality_exclude_button.setEnabled(False)
             return
-        title = {'ok': 'Готово', 'review': 'Проверьте края', 'block': 'Не экспортировать'}[report.status]
+        title = {'ok': '', 'review': 'Проверьте края', 'block': 'Не экспортировать'}[report.status]
         if not active:
             title = 'Исключено из наборов'
         self.quality_issue_title.setText(title)
-        messages = '\n'.join(f'• {issue.message}' for issue in report.issues) or 'Проблем не найдено.'
+        messages = '\n'.join(f'• {issue.message}' for issue in report.issues)
         actions = '\n'.join(f'• {issue.action}' for issue in report.issues if issue.action)
         self.quality_issue_text.setText(messages)
         self.quality_action_text.setText(('Что сделать:\n' + actions) if actions else '')
-        actionable = active and report.status in {'review', 'block'} and self.worker is None
-        self.quality_fix_button.setEnabled(actionable)
-        self.quality_exclude_button.setEnabled(actionable)
+        for label in (self.quality_issue_title, self.quality_issue_text, self.quality_action_text):
+            label.setVisible(bool(label.text()))
+        self.quality_fix_button.setEnabled(active and self.worker is None)
+        self.quality_exclude_button.setEnabled(active and self.worker is None)
+
+    def _mark_quality_viewed(self, key, item, report, active):
+        if key in self._viewed_quality:
+            return
+        self._viewed_quality.add(key)
+        item.setIcon(self._quality_icon(key, report, active, True))
+        self._set_quality_page_text(self._quality_page_base_text)
+
+    def _viewed_counts(self):
+        keys = [str(path) for path in self.paths if str(path) in self.quality_reports and self._path_is_active(path)]
+        return sum(key in self._viewed_quality for key in keys), len(keys)
+
+    def _set_quality_page_text(self, base):
+        self._quality_page_base_text = base
+        viewed, total = self._viewed_counts()
+        counter = f'Просмотрено {viewed} из {total}' if total else ''
+        self.quality_page_summary_label.setText(' · '.join(part for part in (counter, base) if part))
+
+    def _confirm_unviewed(self, viewed, total):
+        """True = create the sets anyway; False = go back and look at the rest."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle('Не все PNG просмотрены')
+        box.setText(f'Просмотрено {viewed} из {total}. Всё равно создать наборы?')
+        review = box.addButton('Просмотреть оставшиеся', QMessageBox.ButtonRole.AcceptRole)
+        create = box.addButton('Создать', QMessageBox.ButtonRole.DestructiveRole)
+        box.setDefaultButton(review)
+        box.exec()
+        return box.clickedButton() is create
+
+    def _show_first_unviewed(self):
+        self._show_quality_review()
+        for row in range(self.quality_list.count()):
+            if str(self.quality_list.item(row).data(Qt.ItemDataRole.UserRole) or '') not in self._viewed_quality:
+                self.quality_list.setCurrentRow(row)
+                break
 
     def _show_quality_review(self):
         self._refresh_quality_page()
@@ -622,7 +751,7 @@ class SetExportDialog(QDialog):
             return
         path = str(item.data(Qt.ItemDataRole.UserRole) or '')
         report = self.quality_reports.get(path)
-        if not path or report is None or report.status == 'ok' or not self._path_is_active(path):
+        if not path or report is None or not self._path_is_active(path):
             return
         if not self.embedded:
             self.done(QDialog.DialogCode.Rejected)
@@ -636,7 +765,7 @@ class SetExportDialog(QDialog):
             return
         path = str(item.data(Qt.ItemDataRole.UserRole) or '')
         report = self.quality_reports.get(path)
-        if not path or report is None or report.status == 'ok':
+        if not path or report is None:
             return
         from studio_export_membership import validate_export_membership
         value = validate_export_membership(self.saved_membership)
@@ -739,16 +868,14 @@ class SetExportDialog(QDialog):
             )
             self.quality_summary_label.setText(quality_text)
             total = sum(str(path) in self.quality_reports for path in self.paths)
-            page_text = f'Нужно посмотреть: {quality_issue_count} из {total}. Остальные — готовы.'
-            if block_count:
-                page_text += f' Блокирует экспорт: {block_count}.'
-            self.quality_page_summary_label.setText(page_text)
+            page_text = f'Блокирует экспорт: {block_count}' if block_count else ''
+            self._set_quality_page_text(page_text)
             self.quality_panel.setProperty('state', 'error' if block_count else 'warning')
             self.quality_panel.style().unpolish(self.quality_panel)
             self.quality_panel.style().polish(self.quality_panel)
         else:
             self.quality_summary_label.clear()
-            self.quality_page_summary_label.setText('Проблем не найдено.')
+            self._set_quality_page_text('')
         export_enabled = bool(groups) and not self._blocking_review_issues() and not block_count and self.worker is None
         self.export_button.setEnabled(export_enabled)
         self.quality_export_button.setEnabled(export_enabled)
@@ -931,6 +1058,10 @@ class SetExportDialog(QDialog):
                 raise ValueError('Исправьте или исключите PNG, которые блокируют экспорт')
         except ValueError as exc:
             self.status.setText(str(exc))
+            return
+        viewed, total = self._viewed_counts()
+        if self.quality_reports and viewed < total and not self._confirm_unviewed(viewed, total):
+            self._show_first_unviewed()
             return
         self._translation_notice = ''
         translator = self._choose_translation(groups)
