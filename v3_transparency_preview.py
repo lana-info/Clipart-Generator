@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageChops, UnidentifiedImageError
-from PyQt6.QtCore import QEvent, QEventLoop, QPoint, QPointF, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QEventLoop, QPoint, QPointF, QSettings, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
     QComboBox,
+    QDockWidget,
     QFrame,
     QFormLayout,
     QGraphicsPixmapItem,
@@ -45,6 +46,8 @@ from PyQt6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -2233,12 +2236,24 @@ class ClipartTransparencyEditorPage(QWidget):
         root.setSpacing(10)
         self.title_label = QLabel("Проверка и корректировка прозрачности")
         self.title_label.setProperty("v3Title", True)
-        root.addWidget(self.title_label)
+        title_row = QHBoxLayout()
+        title_row.addWidget(self.title_label, 1)
+        # «Панели ▾»: show/hide «Файлы» and «Инструменты», reset the layout (approved mockup photoshop-panels).
+        self.panels_button = QToolButton()
+        self.panels_button.setText("Панели ▾")
+        self.panels_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.panels_button.setStyleSheet("QToolButton {color:#e4edf6;font-weight:600;padding:4px 10px;"
+                                         "border:1px solid #3b4b60;border-radius:6px;} "
+                                         "QToolButton::menu-indicator {image:none;}")
+        title_row.addWidget(self.panels_button)
+        root.addLayout(title_row)
 
-        body = QHBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(12)
-        root.addLayout(body, 1)
+        # Panels live in an inner main window: the picture is the central widget, the panels are docks
+        # that can be moved to either side, resized, collapsed, detached or hidden.
+        self.panel_host = QMainWindow()
+        self.panel_host.setWindowFlags(Qt.WindowType.Widget)
+        self.panel_host.setDockOptions(QMainWindow.DockOption.AnimatedDocks | QMainWindow.DockOption.AllowNestedDocks)
+        root.addWidget(self.panel_host, 1)
 
         canvas_frame = QFrame()
         canvas_frame.setProperty("v3Card", True)
@@ -2275,23 +2290,14 @@ class ClipartTransparencyEditorPage(QWidget):
         busy_layout.addWidget(self.cancel_job_button)
         canvas_layout.addWidget(self.busy_bar, 1, 0)
         self.busy_bar.hide()
-        body.addWidget(canvas_frame, 1)
-
-        self.right_panel = QWidget()
-        self.right_panel.setFixedWidth(276)
-        right = QVBoxLayout(self.right_panel)
-        right.setContentsMargins(0, 0, 0, 0)
-        right.setSpacing(10)
-        body.addWidget(self.right_panel)
+        self.panel_host.setCentralWidget(canvas_frame)
 
         files_frame = self.files_frame = QFrame()
         files_frame.setProperty("v3Card", True)
         files_layout = QVBoxLayout(files_frame)
         files_layout.setContentsMargins(10, 8, 10, 8)
         files_layout.setSpacing(6)
-        files_title = QLabel("Файлы")
-        files_title.setProperty("v3Status", True)
-        files_layout.addWidget(files_title)
+        # The panel title bar already says «Файлы».
         self.file_list = QListWidget()
         self.file_list.setVerticalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAsNeeded
@@ -2302,7 +2308,6 @@ class ClipartTransparencyEditorPage(QWidget):
         self.file_list.currentRowChanged.connect(self._select_file)
         self.file_list.setAccessibleName("Файлы для проверки прозрачности")
         files_layout.addWidget(self.file_list, 1)
-        right.addWidget(files_frame, 2)
 
         tools_frame = QFrame()
         tools_frame.setProperty("v3Card", True)
@@ -2316,9 +2321,15 @@ class ClipartTransparencyEditorPage(QWidget):
         tools_layout.setContentsMargins(10, 8, 10, 8)
         tools_layout.setSpacing(6)
 
-        tools_layout.addWidget(self._small_label("Масштаб"))
-        zoom_grid = QGridLayout()
-        zoom_grid.setSpacing(4)
+        self.zoom_bar = QFrame()
+        self.zoom_bar.setStyleSheet("QFrame {background: rgba(22,32,46,235); border: 1px solid #2b3a4e; "
+                                    "border-radius: 8px;} QToolButton {color: #e4edf6; padding: 3px 8px; "
+                                    "font-weight: 600; border: none;} QToolButton::menu-indicator {image: none;} "
+                                    "QLabel {color: #74869a; border: none;}")
+        zoom_row = QHBoxLayout(self.zoom_bar)
+        zoom_row.setContentsMargins(6, 3, 6, 3)
+        zoom_row.setSpacing(2)
+        zoom_grid = QGridLayout()  # the checkable zoom buttons are kept (hidden) as the zoom state
         self.zoom_buttons: dict[str | int, QPushButton] = {}
         for index, (key, text) in enumerate(
             (
@@ -2344,7 +2355,32 @@ class ClipartTransparencyEditorPage(QWidget):
             self.zoom_buttons[key] = button
             zoom_grid.addWidget(button, index // 6, index % 6)
         self.zoom_buttons["fit"].setChecked(True)
-        tools_layout.addLayout(zoom_grid)
+        for button in self.zoom_buttons.values():
+            button.setParent(self.zoom_bar)
+            button.hide()
+        zoom_out = QToolButton()
+        zoom_out.setText("−")
+        zoom_out.setToolTip("Уменьшить")
+        zoom_out.clicked.connect(lambda: self._cycle_zoom(-1))
+        self.zoom_menu_button = QToolButton()
+        self.zoom_menu_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        zoom_menu = QMenu(self.zoom_menu_button)
+        for key, button in self.zoom_buttons.items():
+            action = zoom_menu.addAction("По размеру" if key == "fit" else f"{key} %")
+            action.triggered.connect(lambda _checked=False, target=button: target.click())
+        self.zoom_menu_button.setMenu(zoom_menu)
+        zoom_in = QToolButton()
+        zoom_in.setText("+")
+        zoom_in.setToolTip("Увеличить")
+        zoom_in.clicked.connect(lambda: self._cycle_zoom(1))
+        zoom_fit = QToolButton()
+        zoom_fit.setText("По размеру")
+        zoom_fit.clicked.connect(lambda: self.zoom_buttons["fit"].click())
+        for widget in (zoom_out, self.zoom_menu_button, zoom_in, zoom_fit):
+            zoom_row.addWidget(widget)
+        zoom_row.addWidget(QLabel("Ctrl + колесо"))
+        canvas_layout.addWidget(self.zoom_bar, 0, 0, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        self._update_zoom_label("fit")
 
         tools_layout.addWidget(self._small_label('Край'))
         edge_grid = QGridLayout()
@@ -2612,7 +2648,7 @@ class ClipartTransparencyEditorPage(QWidget):
         self.tools_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.tools_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.tools_scroll.setWidget(tools_frame)
-        right.addWidget(self.tools_scroll, 3)
+        self._build_panels(files_frame)
 
         self.canvas.document_changed.connect(self._refresh_history_buttons)
         self.canvas.point_hint_changed.connect(self._refresh_local_buttons)
@@ -2879,6 +2915,110 @@ class ClipartTransparencyEditorPage(QWidget):
         for key, button in self.zoom_buttons.items():
             button.setChecked(key == value)
         self.canvas.set_zoom(None if value == "fit" else int(value))
+        self._update_zoom_label(value)
+
+    def _update_zoom_label(self, value) -> None:
+        if value != "fit":
+            self.zoom_menu_button.setText(f"{value} % ▾")
+            return
+        # «По размеру» is its own button; the menu shows the real scale once the picture is fitted.
+        def fitted():
+            try:
+                if self.zoom_buttons["fit"].isChecked():
+                    self.zoom_menu_button.setText(f"{round(self.canvas.transform().m11() * 100)} % ▾")
+            except RuntimeError:  # the editor was closed before the timer fired
+                pass
+        self.zoom_menu_button.setText("— % ▾")
+        QTimer.singleShot(0, fitted)
+
+    # --- panels «Файлы» / «Инструменты» (approved mockup docs/ui/3.2/photoshop-panels/) -------------
+
+    PANEL_SETTINGS = ("Vibix", "transparency-panels")
+
+    def _build_panels(self, files_frame) -> None:
+        self.panel_docks: dict[str, QDockWidget] = {}
+        for key, title, widget in (("files", "Файлы", files_frame), ("tools", "Инструменты", self.tools_scroll)):
+            dock = QDockWidget(title, self.panel_host)
+            dock.setObjectName(f"transparency-{key}")
+            dock.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable
+                             | QDockWidget.DockWidgetFeature.DockWidgetFloatable
+                             | QDockWidget.DockWidgetFeature.DockWidgetClosable)
+            dock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+            dock.setTitleBarWidget(self._panel_title_bar(title, dock))
+            dock.setWidget(widget)
+            dock.setMinimumWidth(240)
+            self.panel_host.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+            self.panel_docks[key] = dock
+        self.panel_host.resizeDocks([self.panel_docks["files"], self.panel_docks["tools"]], [2, 3],
+                                    Qt.Orientation.Vertical)
+        self.panel_host.resizeDocks([self.panel_docks["tools"]], [276], Qt.Orientation.Horizontal)
+        # Kept name: other code checks whether the tools are on screen.
+        self.right_panel = self.panel_docks["tools"]
+        menu = QMenu(self.panels_button)
+        for dock in self.panel_docks.values():
+            menu.addAction(dock.toggleViewAction())
+        menu.addSeparator()
+        menu.addAction("Сбросить расположение", self.reset_panels)
+        self.panels_button.setMenu(menu)
+        self._default_panel_state = self.panel_host.saveState()
+        self._panels_restored = False
+        self._panels_before_focus = None
+
+    @staticmethod
+    def _panel_title_bar(title: str, dock: QDockWidget) -> QFrame:
+        bar = QFrame()
+        bar.setStyleSheet("QFrame {background:#1b2636; border-bottom:1px solid #2b3a4e;} "
+                          "QToolButton {color:#a6b5c8; padding:2px 6px; border:none;} QLabel {border:none;}")
+        row = QHBoxLayout(bar)
+        row.setContentsMargins(10, 3, 4, 3)
+        grip = QLabel("⋮⋮")
+        grip.setStyleSheet("color:#5d6f84")
+        grip.setToolTip("Перетащите панель")
+        row.addWidget(grip)
+        name = QLabel(title)
+        name.setStyleSheet("color:#e4edf6; font-weight:bold")
+        row.addWidget(name, 1)
+
+        def collapse():
+            content = dock.widget()
+            content.setVisible(not content.isVisible())
+            collapse_button.setText("▸" if not content.isVisible() else "▾")
+
+        collapse_button = QToolButton()
+        collapse_button.setText("▾")
+        collapse_button.setToolTip("Свернуть")
+        collapse_button.clicked.connect(collapse)
+        float_button = QToolButton()
+        float_button.setText("⧉")
+        float_button.setToolTip("Открепить окном")
+        float_button.clicked.connect(lambda: dock.setFloating(not dock.isFloating()))
+        close_button = QToolButton()
+        close_button.setText("✕")
+        close_button.setToolTip("Убрать")
+        close_button.clicked.connect(dock.hide)
+        for button in (collapse_button, float_button, close_button):
+            row.addWidget(button)
+        return bar
+
+    def reset_panels(self) -> None:
+        for dock in self.panel_docks.values():
+            dock.setFloating(False)
+            dock.widget().show()
+        self.panel_host.restoreState(self._default_panel_state)
+        for dock in self.panel_docks.values():
+            dock.show()
+
+    def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+        super().showEvent(event)
+        if not self._panels_restored:
+            self._panels_restored = True
+            saved = QSettings(*self.PANEL_SETTINGS).value("state")
+            if saved:
+                self.panel_host.restoreState(saved)
+
+    def _remember_panels(self) -> None:
+        if not self._focus_mode:
+            QSettings(*self.PANEL_SETTINGS).setValue("state", self.panel_host.saveState())
 
     def _set_action(self, action: str) -> None:
         self.canvas.brush_action = action
@@ -3295,6 +3435,7 @@ class ClipartTransparencyEditorPage(QWidget):
     def hideEvent(self, event):
         self._save_after_contour = False
         self.canvas.cancel_contour()
+        self._remember_panels()
         super().hideEvent(event)
 
     def closeEvent(self, event):
@@ -3304,8 +3445,15 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def toggle_focus_mode(self) -> None:
         self._focus_mode = not self._focus_mode
-        self.right_panel.setVisible(not self._focus_mode)
+        if self._focus_mode:
+            self._panels_before_focus = {key: dock.isVisible() for key, dock in self.panel_docks.items()}
+            for dock in self.panel_docks.values():
+                dock.hide()
+        else:
+            for key, dock in self.panel_docks.items():
+                dock.setVisible((self._panels_before_focus or {}).get(key, True))
         self.title_label.setVisible(not self._focus_mode)
+        self.panels_button.setVisible(not self._focus_mode)
         self.focus_button.setText("⛶" if not self._focus_mode else "×")
         self.focus_button.setToolTip(
             "Развернуть изображение" if not self._focus_mode else "Вернуть обычный вид"
