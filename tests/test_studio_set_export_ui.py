@@ -594,7 +594,7 @@ def test_quality_review_warning_explains_problem_without_blocking_export(images)
     dialog = SetExportDialog([images[0]], membership=membership, quality_reports=[report])
     assert dialog.quality_panel.isVisible() or not dialog.isVisible()
     assert '1 нужно проверить' in dialog.quality_summary_label.text()
-    assert '1 нужно проверить' in dialog.quality_page_summary_label.text()
+    assert 'Нужно посмотреть: 1 из 1' in dialog.quality_page_summary_label.text()
     assert dialog.export_button.isEnabled()
     assert dialog.quality_export_button.isEnabled()
     dialog._show_quality_review()
@@ -643,11 +643,11 @@ def test_quality_summary_clears_stale_blocker_text_after_exclusion(images):
     )
     dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[blocked])
     dialog._show_quality_review()
-    assert '1 блокирует экспорт' in dialog.quality_page_summary_label.text()
+    assert 'Блокирует экспорт: 1' in dialog.quality_page_summary_label.text()
     dialog.quality_list.setCurrentRow(0)
     dialog.quality_exclude_button.click()
-    assert 'блокирует экспорт' not in dialog.quality_page_summary_label.text()
-    assert 'Проблем, блокирующих экспорт, нет' in dialog.quality_page_summary_label.text()
+    assert 'Блокирует экспорт' not in dialog.quality_page_summary_label.text()
+    assert 'Проблем не найдено' in dialog.quality_page_summary_label.text()
     dialog.reject()
 
 
@@ -810,4 +810,25 @@ def test_translation_choice_asks_once_and_honours_buttons(images, monkeypatch):
         monkeypatch.setattr(QMessageBox, 'exec', fake_exec)
         monkeypatch.setattr(QMessageBox, 'clickedButton', lambda box: getattr(box, '_clicked', None))
         assert dialog._choose_translation(groups) is expected
+    dialog.reject()
+
+
+def test_png_check_screen_filter_picture_and_single_export_button(images):
+    from studio_alpha_qc import AlphaQcIssue, AlphaQcReport
+    membership = _membership_for_sets(images[:2], ['Мини'])
+    ok = AlphaQcReport(str(images[0].resolve()), 'ok', (), width=32, height=32)
+    review = AlphaQcReport(
+        str(images[1].resolve()), 'review',
+        (AlphaQcIssue('touches_edge', 'review', 'Видимые пиксели доходят до края холста.', 'Проверьте края.'),),
+        width=32, height=32,
+    )
+    dialog = SetExportDialog(images[:2], membership=membership, quality_reports=[ok, review])
+    dialog._show_quality_review()
+    assert dialog.quality_filter_problems.text() == 'Нужно посмотреть (1)' and dialog.quality_filter_all.text() == 'Все (2)'
+    assert dialog.quality_list.count() == 1 and dialog.quality_list.currentRow() == 0  # the problem file is selected at once
+    assert not dialog.quality_picture.pixmap().isNull()
+    assert dialog.quality_fix_button.text() == 'Открыть в проверке прозрачности'
+    assert dialog.quality_export_button.isHidden()
+    dialog.quality_filter_all.click()
+    assert dialog.quality_list.count() == 2
     dialog.reject()

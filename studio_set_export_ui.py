@@ -5,7 +5,7 @@ from threading import Event
 from uuid import uuid4
 
 from PyQt6.QtCore import QEvent, QPoint, QSize, QThread, Qt, pyqtSignal
-from PyQt6.QtGui import QCursor, QIcon, QImageReader, QPixmap
+from PyQt6.QtGui import QColor, QCursor, QIcon, QImageReader, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QFrame,
     QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
@@ -265,20 +265,23 @@ class SetExportDialog(QDialog):
     def _build_quality_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
-        title = QLabel('Проверка качества PNG')
+        title = QLabel('Проверка PNG перед экспортом')
         title.setProperty('v3Title', True)
         layout.addWidget(title)
-        note = QLabel(
-            'Проверка выполняется локально и не изменяет PNG. '
-            'Выберите файл, чтобы увидеть причину и рекомендуемое действие.'
-        )
-        note.setProperty('v3Description', True)
-        note.setWordWrap(True)
-        layout.addWidget(note)
         self.quality_page_summary_label = QLabel('')
         self.quality_page_summary_label.setProperty('v3Status', True)
         self.quality_page_summary_label.setWordWrap(True)
         layout.addWidget(self.quality_page_summary_label)
+        self._quality_only_problems = True
+        filters = QHBoxLayout()
+        self.quality_filter_problems = QPushButton('')
+        self.quality_filter_all = QPushButton('')
+        for button, only_problems in ((self.quality_filter_problems, True), (self.quality_filter_all, False)):
+            button.setProperty('v3Button', True)
+            button.clicked.connect(lambda _=False, value=only_problems: self._set_quality_filter(value))
+            filters.addWidget(button)
+        filters.addStretch(1)
+        layout.addLayout(filters)
 
         body = QHBoxLayout()
         self.quality_list = QListWidget()
@@ -290,17 +293,20 @@ class SetExportDialog(QDialog):
         detail_layout = QVBoxLayout(detail)
         self.quality_issue_title = QLabel('Выберите PNG')
         self.quality_issue_title.setProperty('v3Title', True)
+        self.quality_picture = QLabel()
+        self.quality_picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.quality_issue_text = QLabel('')
         self.quality_issue_text.setWordWrap(True)
         self.quality_action_text = QLabel('')
         self.quality_action_text.setWordWrap(True)
         self.quality_action_text.setProperty('v3Description', True)
         detail_layout.addWidget(self.quality_issue_title)
+        detail_layout.addWidget(self.quality_picture)
         detail_layout.addWidget(self.quality_issue_text)
         detail_layout.addWidget(self.quality_action_text)
         detail_layout.addStretch(1)
         detail_actions = QHBoxLayout()
-        self.quality_fix_button = QPushButton('Проверить / исправить PNG')
+        self.quality_fix_button = QPushButton('Открыть в проверке прозрачности')
         self.quality_fix_button.setProperty('v3Button', True)
         self.quality_fix_button.setProperty('variant', 'primary')
         self.quality_fix_button.clicked.connect(self._request_quality_fix)
@@ -315,7 +321,7 @@ class SetExportDialog(QDialog):
         layout.addLayout(body, 1)
 
         footer = QHBoxLayout()
-        self.quality_back_button = QPushButton('К наборам')
+        self.quality_back_button = QPushButton('← К наборам')
         self.quality_back_button.setProperty('v3Button', True)
         self.quality_back_button.setProperty('variant', 'secondary')
         self.quality_back_button.clicked.connect(self._show_summary)
@@ -325,6 +331,7 @@ class SetExportDialog(QDialog):
         self.quality_export_button.setProperty('v3Button', True)
         self.quality_export_button.setProperty('variant', 'primary')
         self.quality_export_button.clicked.connect(self._export)
+        self.quality_export_button.hide()  # the one «Создать ZIP-наборы» is in the window footer
         footer.addWidget(self.quality_export_button)
         layout.addLayout(footer)
         return page
@@ -527,10 +534,22 @@ class SetExportDialog(QDialog):
         self.quality_list.clear()
         selected_row = -1
         status_labels = {'ok': 'Готово', 'review': 'Проверьте края', 'block': 'Не экспортировать'}
+        total = sum(str(path) in self.quality_reports for path in self.paths)
+        problems = sum(
+            self.quality_reports[str(path)].status != 'ok'
+            for path in self.paths if str(path) in self.quality_reports
+        )
+        self.quality_filter_problems.setText(f'Нужно посмотреть ({problems})')
+        self.quality_filter_all.setText(f'Все ({total})')
+        only_problems = self._quality_only_problems and problems > 0
+        for button, active in ((self.quality_filter_problems, only_problems), (self.quality_filter_all, not only_problems)):
+            button.setProperty('variant', 'primary' if active else 'secondary')
+            button.style().unpolish(button)
+            button.style().polish(button)
         for path in self.paths:
             key = str(path)
             report = self.quality_reports.get(key)
-            if report is None:
+            if report is None or (only_problems and report.status == 'ok'):
                 continue
             if not self._path_is_active(key):
                 status = 'Исключено из наборов'
@@ -547,11 +566,30 @@ class SetExportDialog(QDialog):
         else:
             self._quality_selected(-1)
 
+    def _set_quality_filter(self, only_problems):
+        self._quality_only_problems = only_problems
+        self._refresh_quality_page()
+
+    @staticmethod
+    def _checker_pixmap(path, bound=220):
+        picture = SetExportDialog._scaled_pixmap(path, bound)
+        if picture.isNull():
+            return picture
+        canvas = QPixmap(picture.size())
+        painter = QPainter(canvas)
+        for y in range(0, canvas.height(), 14):
+            for x in range(0, canvas.width(), 14):
+                painter.fillRect(x, y, 14, 14, QColor('#d6dce4' if (x // 14 + y // 14) % 2 else '#ffffff'))
+        painter.drawPixmap(0, 0, picture)
+        painter.end()
+        return canvas
+
     def _quality_selected(self, row):
         item = self.quality_list.item(row) if 0 <= row < self.quality_list.count() else None
         key = str(item.data(Qt.ItemDataRole.UserRole) or '') if item is not None else ''
         report = self.quality_reports.get(key)
         active = bool(key and self._path_is_active(key))
+        self.quality_picture.setPixmap(self._checker_pixmap(key) if report is not None else QPixmap())
         if report is None:
             self.quality_issue_title.setText('Выберите PNG')
             self.quality_issue_text.clear()
@@ -700,15 +738,17 @@ class SetExportDialog(QDialog):
                 'Файлы не изменялись.'
             )
             self.quality_summary_label.setText(quality_text)
-            self.quality_page_summary_label.setText(quality_text)
+            total = sum(str(path) in self.quality_reports for path in self.paths)
+            page_text = f'Нужно посмотреть: {quality_issue_count} из {total}. Остальные — готовы.'
+            if block_count:
+                page_text += f' Блокирует экспорт: {block_count}.'
+            self.quality_page_summary_label.setText(page_text)
             self.quality_panel.setProperty('state', 'error' if block_count else 'warning')
             self.quality_panel.style().unpolish(self.quality_panel)
             self.quality_panel.style().polish(self.quality_panel)
         else:
             self.quality_summary_label.clear()
-            self.quality_page_summary_label.setText(
-                'Автопроверка PNG: Проблем, блокирующих экспорт, нет.'
-            )
+            self.quality_page_summary_label.setText('Проблем не найдено.')
         export_enabled = bool(groups) and not self._blocking_review_issues() and not block_count and self.worker is None
         self.export_button.setEnabled(export_enabled)
         self.quality_export_button.setEnabled(export_enabled)
