@@ -367,6 +367,59 @@ QTabBar::tab:hover:!selected {{
 QAbstractScrollArea::corner {{
     background: transparent;
 }}
+QLabel[v3Section="true"] {{
+    font-size: {tokens.font_size_title - 2}px;
+    font-weight: {tokens.font_weight_bold};
+}}
+QLabel[v3CardTitle="true"] {{
+    font-weight: {tokens.font_weight_bold};
+}}
+QLabel[v3StylePreview="true"] {{
+    background: #ffffff;
+    border-radius: 6px;
+}}
+QPushButton[v3StyleCard="true"] {{
+    background: {tokens.surface};
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_card + 2}px;
+    text-align: left;
+    padding: 0;
+    min-height: 0;
+}}
+QPushButton[v3StyleCard="true"]:hover {{
+    border-color: {tokens.text_muted};
+}}
+QPushButton[v3StyleCard="true"]:checked {{
+    background: {tokens.accent_soft};
+    border: 2px solid {tokens.accent};
+}}
+QPushButton[v3StyleCard="true"]:focus {{
+    border: 2px solid {tokens.focus};
+}}
+QPushButton[v3Chip="true"] {{
+    background: transparent;
+    color: {tokens.text};
+    border: 1px solid {tokens.border};
+    border-radius: 15px;
+    min-height: 30px;
+    padding: 2px 14px;
+}}
+QPushButton[v3Chip="true"]:hover {{
+    border-color: {tokens.text_muted};
+}}
+QPushButton[v3Chip="true"]:checked {{
+    background: {tokens.accent_soft};
+    color: {tokens.accent};
+    border: 1px solid {tokens.accent};
+    font-weight: {tokens.font_weight_medium};
+}}
+QPushButton[v3Chip="true"]:focus {{
+    border: 2px solid {tokens.focus};
+}}
+QPushButton[v3Chip="true"]:disabled {{
+    color: {tokens.disabled};
+    border-color: {tokens.disabled_soft};
+}}
 QFrame[v3Divider="true"] {{
     background: {tokens.border};
     border: none;

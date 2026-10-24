@@ -184,8 +184,9 @@ class ClipartBuilderDialog(QDialog):
             if not field.currentText():
                 field.setCurrentIndex(-1)
 
-        style_library_group = QGroupBox("Библиотека базовых стилей")
-        style_library_layout = QVBoxLayout(style_library_group)
+        style_library_group = self._section("Библиотека базовых стилей")
+        style_library_layout = QVBoxLayout(style_library_group.body)
+        style_library_layout.setContentsMargins(0, 0, 0, 0)
         self.style_category = QComboBox()
         self.style_category.addItems(["Все", *style_categories()])
         self.style_category.currentTextChanged.connect(self._refresh_style_library)
@@ -195,12 +196,14 @@ class ClipartBuilderDialog(QDialog):
         style_library_layout.addWidget(self.style_library_host)
         layout.addWidget(style_library_group)
 
-        modifier_group = QGroupBox("Характер стиля · до двух характеристик")
-        modifier_layout = QGridLayout(modifier_group)
+        modifier_group = self._section("Характер стиля", "До двух характеристик")
+        modifier_layout = QGridLayout(modifier_group.body)
+        modifier_layout.setContentsMargins(0, 0, 0, 0)
         self.style_modifier_buttons = {}
         for index, modifier in enumerate(all_style_modifiers()):
             button = QPushButton(modifier.title)
             button.setCheckable(True)
+            button.setProperty('v3Chip', True)
             button.setAccessibleName(f"Характер стиля: {modifier.title}")
             button.toggled.connect(self._sync_style_modifiers)
             self.style_modifier_buttons[modifier.key] = button
@@ -219,8 +222,9 @@ class ClipartBuilderDialog(QDialog):
         layout.addWidget(custom_style_hint)
         self.mood.hide()
 
-        extra = QGroupBox("Дополнительные параметры")
-        extra_form = QFormLayout(extra)
+        extra = self._section("Дополнительные параметры")
+        extra_form = QFormLayout(extra.body)
+        extra_form.setContentsMargins(0, 0, 0, 0)
         for label, field in (("Художественная линия", self.line),
                              ("Детализация", self.detail)):
             field.setAccessibleName(label)
@@ -244,8 +248,9 @@ class ClipartBuilderDialog(QDialog):
         self.recommended_palette_grid = QGridLayout(recommended_group)
         layout.addWidget(recommended_group)
 
-        library_group = QGroupBox("Библиотека палитр")
-        library_layout = QVBoxLayout(library_group)
+        library_group = self._section("Библиотека палитр")
+        library_layout = QVBoxLayout(library_group.body)
+        library_layout.setContentsMargins(0, 0, 0, 0)
         self.palette_category = QComboBox()
         self.palette_category.addItems(["Все", *palette_categories()])
         self.palette_category.currentTextChanged.connect(self._refresh_palette_library)
@@ -281,40 +286,66 @@ class ClipartBuilderDialog(QDialog):
         self._refresh_palette_library()
         layout.addStretch()
 
+    @staticmethod
+    def _section(title, hint=""):
+        """Plain heading + body instead of a framed group box; the body is accessible by its title."""
+        box = QWidget()
+        outer = QVBoxLayout(box)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(8)
+        head = QHBoxLayout()
+        label = QLabel(title)
+        label.setProperty('v3Section', True)
+        head.addWidget(label)
+        if hint:
+            note = QLabel(hint)
+            note.setProperty('v3Small', True)
+            head.addWidget(note)
+        head.addStretch()
+        outer.addLayout(head)
+        box.body = QWidget()
+        box.body.setAccessibleName(title)
+        outer.addWidget(box.body)
+        return box
+
     def _style_card(self, profile, grid, index, target):
-        card = QFrame()
-        card.setProperty('v3Card', True)
-        card_layout = QVBoxLayout(card)
         button = QPushButton()
         button.setCheckable(True)
+        button.setProperty('v3StyleCard', True)
         button.setAccessibleName(profile.title)
         button.setToolTip(profile.title)
-        button.setFixedHeight(92)
+        button.setFixedHeight(104)
         content = QHBoxLayout(button)
-        content.setContentsMargins(5, 5, 5, 5)
+        content.setContentsMargins(10, 10, 14, 10)
+        content.setSpacing(12)
         preview = QLabel()
-        preview.setFixedSize(80, 80)
+        preview.setProperty('v3StylePreview', True)
+        preview.setFixedSize(84, 84)
         preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         pixmap = QPixmap(str(style_preview_path(profile.key)))
         if not pixmap.isNull():
-            preview.setPixmap(pixmap.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio,
+            preview.setPixmap(pixmap.scaled(84, 84, Qt.AspectRatioMode.KeepAspectRatio,
                                             Qt.TransformationMode.SmoothTransformation))
         content.addWidget(preview)
+        text = QVBoxLayout()
+        text.setSpacing(4)
+        text.addStretch()
         title = QLabel(profile.title)
+        title.setProperty('v3CardTitle', True)
         title.setWordWrap(True)
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        content.addWidget(title, 1)
-        button.clicked.connect(lambda checked=False, key=profile.key: self._select_style_profile(key))
-        card_layout.addWidget(button)
         detail = QLabel(" · ".join(profile.best_for[:3]))
-        detail.setWordWrap(True)
         detail.setProperty('v3Small', True)
-        card_layout.addWidget(detail)
-        grid.addWidget(card, index // self._card_columns, index % self._card_columns)
+        detail.setWordWrap(True)
+        for label in (title, detail):
+            label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            text.addWidget(label)
+        text.addStretch()
+        content.addLayout(text, 1)
+        button.clicked.connect(lambda checked=False, key=profile.key: self._select_style_profile(key))
+        grid.addWidget(button, index // self._card_columns, index % self._card_columns)
         target.append(dict(key=profile.key, title=profile.title, category=profile.category,
-                           best_for=list(profile.best_for), button=button, preview=preview, widget=card))
+                           best_for=list(profile.best_for), button=button, preview=preview, widget=button))
 
     def _refresh_style_library(self, *_):
         if not hasattr(self, 'style_library_grid'):
