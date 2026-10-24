@@ -539,18 +539,48 @@ class TransparencyPreviewWidgetTests(unittest.TestCase):
             page.back_requested.connect(lambda: requested.append(True))
 
             with patch(
-                "v3_transparency_preview.QMessageBox.warning",
+                "v3_transparency_preview.QMessageBox.exec",
                 return_value=QMessageBox.StandardButton.Cancel,
             ):
                 page._back_clicked()
             self.assertEqual(requested, [])
 
             with patch(
-                "v3_transparency_preview.QMessageBox.warning",
+                "v3_transparency_preview.QMessageBox.exec",
                 return_value=QMessageBox.StandardButton.Discard,
             ):
                 page._back_clicked()
             self.assertEqual(requested, [True])
+            page.deleteLater()
+
+    def test_back_after_pen_apply_and_save_asks_nothing_and_buttons_are_russian(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ready.png"
+            Image.new("RGBA", (16, 16), (10, 20, 30, 255)).save(path)
+            page = ClipartTransparencyEditorPage()
+            page.set_files((path,))
+            stale = __import__("v3_transparency_preview").InlineContour()
+            stale.add_point((1, 1))  # draft left behind by an undo before the contour was applied
+            page._draft_contours[path] = stale
+            requested = []
+            page.back_requested.connect(lambda: requested.append(True))
+            with patch("v3_transparency_preview.QMessageBox.exec") as ask:
+                page._back_clicked()
+            ask.assert_not_called()
+            self.assertEqual(requested, [True])
+
+            page.document.begin_stroke()
+            page.document.extend_stroke(((8, 8),), radius=2, action="remove", hardness=100)
+            page.document.end_stroke()
+            seen = []
+
+            def record(box):
+                seen.extend(b.text() for b in box.buttons())
+                return QMessageBox.StandardButton.Cancel
+
+            with patch.object(QMessageBox, "exec", record):
+                page._back_clicked()
+            self.assertEqual(sorted(seen), ["Не сохранять", "Остаться"])
             page.deleteLater()
 
 

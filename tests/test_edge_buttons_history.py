@@ -209,11 +209,11 @@ def test_back_requires_explicit_discard_of_immediate_changes(page):
     doc = page.document
     click(page, page.edge_buttons['harder'])
     changed = doc.mask.tobytes()
-    with patch.object(QMessageBox, 'warning', return_value=QMessageBox.StandardButton.Cancel) as warning:
+    with patch.object(QMessageBox, 'exec', return_value=QMessageBox.StandardButton.Cancel) as warning:
         page._back_clicked()
         warning.assert_called_once()
     assert page.document.mask.tobytes() == changed
-    with patch.object(QMessageBox, 'warning', return_value=QMessageBox.StandardButton.Discard):
+    with patch.object(QMessageBox, 'exec', return_value=QMessageBox.StandardButton.Discard):
         page._back_clicked()
     assert page._document is None and not page._draft_masks
 
