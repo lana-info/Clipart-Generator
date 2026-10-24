@@ -5,7 +5,7 @@ import sys
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPainter, QPixmap
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
+    QComboBox, QDialog, QTabWidget, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QAbstractSpinBox, QStackedWidget,
     QVBoxLayout, QWidget, QFrame, QSizePolicy,
 )
@@ -161,7 +161,21 @@ class ClipartBuilderDialog(QDialog):
         layout.addStretch()
 
     def _style(self):
-        layout = self._page()
+        page = QWidget()
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(8)
+        self.style_tabs = QTabWidget()
+        style_layout = self._tab_layout(self.style_tabs, "Стиль")
+        palette_layout = self._tab_layout(self.style_tabs, "Палитра")
+        fine_layout = self._tab_layout(self.style_tabs, "Тонкая настройка")
+        page_layout.addWidget(self.style_tabs, 1)
+        self.style_summary = QLabel()
+        self.style_summary.setProperty('v3Summary', True)
+        self.style_summary.setWordWrap(True)
+        self.style_summary.setAccessibleName("Сводка выбора")
+        page_layout.addWidget(self.style_summary)
+        self.pages.addWidget(page)
         generator = self.data.prompt_generator
         self.technique = combo(["", *(profile.title for profile in all_style_profiles())])
         self.technique.setCurrentText(generator.style)
@@ -194,7 +208,7 @@ class ClipartBuilderDialog(QDialog):
         self.style_library_host = QWidget()
         self.style_library_grid = QGridLayout(self.style_library_host)
         style_library_layout.addWidget(self.style_library_host)
-        layout.addWidget(style_library_group)
+        style_layout.addWidget(style_library_group)
 
         modifier_group = self._section("Характер стиля", "До двух характеристик")
         modifier_layout = QGridLayout(modifier_group.body)
@@ -208,18 +222,18 @@ class ClipartBuilderDialog(QDialog):
             button.toggled.connect(self._sync_style_modifiers)
             self.style_modifier_buttons[modifier.key] = button
             modifier_layout.addWidget(button, index // 4, index % 4)
-        layout.addWidget(modifier_group)
+        style_layout.addWidget(modifier_group)
 
         custom_style = QHBoxLayout()
         custom_style.addWidget(QLabel("Свой стиль"))
         self.technique.setAccessibleName("Свой стиль")
         self.technique.lineEdit().setPlaceholderText("Например: линогравюра с зернистой фактурой")
         custom_style.addWidget(self.technique, 1)
-        layout.addLayout(custom_style)
+        fine_layout.addLayout(custom_style)
         custom_style_hint = QLabel("Если готовый стиль не подходит, опишите технику своими словами.")
         custom_style_hint.setProperty('v3Small', True)
         custom_style_hint.setWordWrap(True)
-        layout.addWidget(custom_style_hint)
+        fine_layout.addWidget(custom_style_hint)
         self.mood.hide()
 
         extra = self._section("Дополнительные параметры")
@@ -229,7 +243,7 @@ class ClipartBuilderDialog(QDialog):
                              ("Детализация", self.detail)):
             field.setAccessibleName(label)
             extra_form.addRow(label, field)
-        layout.addWidget(extra)
+        fine_layout.addWidget(extra)
 
         self.palette = QLineEdit(generator.palette)
         self.palette.setMaxLength(4000)
@@ -238,15 +252,15 @@ class ClipartBuilderDialog(QDialog):
 
         recommended_title = QLabel("Рекомендуем палитру для вашей темы")
         recommended_title.setStyleSheet("font-size:16px;font-weight:600")
-        layout.addWidget(recommended_title)
+        palette_layout.addWidget(recommended_title)
         palette_hint = QLabel("Подбор по словам в теме и поводе. Измените их на шаге 1, чтобы увидеть другие варианты.")
         palette_hint.setWordWrap(True)
         palette_hint.setProperty('v3Small', True)
-        layout.addWidget(palette_hint)
+        palette_layout.addWidget(palette_hint)
         recommended_group = QFrame()
         recommended_group.setProperty('v3Card', True)
         self.recommended_palette_grid = QGridLayout(recommended_group)
-        layout.addWidget(recommended_group)
+        palette_layout.addWidget(recommended_group)
 
         library_group = self._section("Библиотека палитр")
         library_layout = QVBoxLayout(library_group.body)
@@ -258,7 +272,7 @@ class ClipartBuilderDialog(QDialog):
         self.palette_library_host = QWidget()
         self.palette_library_grid = QGridLayout(self.palette_library_host)
         library_layout.addWidget(self.palette_library_host)
-        layout.addWidget(library_group)
+        palette_layout.addWidget(library_group)
 
         custom = QHBoxLayout()
         custom.addWidget(QLabel("Своя палитра"))
@@ -266,7 +280,7 @@ class ClipartBuilderDialog(QDialog):
         self.palette_reference_button = QPushButton("Взять из референса")
         self.palette_reference_button.clicked.connect(self._go_to_references)
         custom.addWidget(self.palette_reference_button)
-        layout.addLayout(custom)
+        palette_layout.addLayout(custom)
 
         self.style_cards = []
         self.technique.currentTextChanged.connect(self._refresh_style_card_checks)
@@ -284,7 +298,39 @@ class ClipartBuilderDialog(QDialog):
         self._refresh_style_library()
         self._refresh_palette_recommendations()
         self._refresh_palette_library()
-        layout.addStretch()
+        for tab_layout in (style_layout, palette_layout, fine_layout):
+            tab_layout.addStretch()
+        for field in (self.technique, self.line, self.detail):
+            field.currentTextChanged.connect(self._refresh_style_summary)
+        self.palette.textChanged.connect(self._refresh_style_summary)
+        self._refresh_style_summary()
+
+    def _tab_layout(self, tabs, title):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setSpacing(16)
+        scroll.setWidget(content)
+        tabs.addTab(scroll, title)
+        return layout
+
+    def _refresh_style_summary(self, *_):
+        if not hasattr(self, 'style_summary') or not hasattr(self, 'style_modifier_buttons'):
+            return
+        parts = [f"Стиль: {self.technique.currentText().strip() or 'не выбран'}"]
+        characters = [button.text() for button in self.style_modifier_buttons.values() if button.isChecked()]
+        if characters:
+            parts.append("Характер: " + ", ".join(characters))
+        colors = self.palette.text().strip()
+        preset = next((item for item in all_palette_presets()
+                       if ' '.join(item.colors).casefold() == colors.casefold()), None)
+        parts.append("Палитра: " + (preset.title if preset else "своя" if colors else "не выбрана"))
+        for label, field in (("Линия", self.line), ("Детализация", self.detail)):
+            if field.currentText().strip():
+                parts.append(f"{label}: {field.currentText().strip()}")
+        self.style_summary.setText("  ·  ".join(parts))
 
     @staticmethod
     def _section(title, hint=""):
@@ -411,6 +457,7 @@ class ClipartBuilderDialog(QDialog):
         self.mood.setCurrentText(', '.join(modifier.title for modifier in selected))
         for button in self.style_modifier_buttons.values():
             button.setEnabled(button.isChecked() or len(selected) < 2)
+        self._refresh_style_summary()
 
     @staticmethod
     def _clear_layout(layout):

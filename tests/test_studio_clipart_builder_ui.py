@@ -52,8 +52,27 @@ class BuilderTests(unittest.TestCase):
         dialog.pages.setCurrentIndex(1)
         dialog.show()
         self.app.processEvents()
-        page = dialog.pages.currentWidget()
-        self.assertEqual(page.horizontalScrollBar().maximum(), 0)
+        for index in range(dialog.style_tabs.count()):
+            dialog.style_tabs.setCurrentIndex(index)
+            self.app.processEvents()
+            scroll = dialog.style_tabs.currentWidget()
+            self.assertEqual(scroll.horizontalScrollBar().maximum(), 0, dialog.style_tabs.tabText(index))
+        dialog.close()
+
+    def test_style_page_has_three_tabs_and_a_live_summary(self):
+        dialog = ClipartBuilderDialog(ProjectState().clipart)
+        self.assertEqual([dialog.style_tabs.tabText(i) for i in range(dialog.style_tabs.count())],
+                         ["Стиль", "Палитра", "Тонкая настройка"])
+        self.assertIn("Стиль: не выбран", dialog.style_summary.text())
+        self.assertIn("Палитра: не выбрана", dialog.style_summary.text())
+        dialog._select_style_profile(dialog.style_cards[0]["key"])
+        self.assertIn(f"Стиль: {dialog.style_cards[0]['title']}", dialog.style_summary.text())
+        dialog.style_modifier_buttons["gentle"].setChecked(True)
+        self.assertIn("Характер: Нежный", dialog.style_summary.text())
+        dialog.palette_cards[0]["button"].click()
+        self.assertNotIn("Палитра: не выбрана", dialog.style_summary.text())
+        dialog.palette.clear()
+        self.assertIn("Палитра: не выбрана", dialog.style_summary.text())
         dialog.close()
 
     def test_style_library_all_view_contains_every_profile(self):

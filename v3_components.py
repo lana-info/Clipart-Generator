@@ -371,6 +371,12 @@ QLabel[v3Section="true"] {{
     font-size: {tokens.font_size_title - 2}px;
     font-weight: {tokens.font_weight_bold};
 }}
+QLabel[v3Summary="true"] {{
+    background: {tokens.surface_muted};
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_card}px;
+    padding: {tokens.space_2}px {tokens.space_3}px;
+}}
 QLabel[v3CardTitle="true"] {{
     font-weight: {tokens.font_weight_bold};
 }}

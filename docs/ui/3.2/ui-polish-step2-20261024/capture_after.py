@@ -33,15 +33,13 @@ with TemporaryDirectory() as t:
     v.shell.go_next(); app.processEvents()
     b = c.brief
     app.processEvents()
-    def scroll_area():
-        return next(s for s in b.findChildren(QScrollArea) if s.isVisible())
     def shot(n): app.processEvents(); v.grab().save(f"{out}/{n}.png")
-    shot("step-2-after-default")
-    first = b.style_cards[1]["key"]
-    b._select_style_profile(first)
+    shot("step-2-tabs-default")
+    b._select_style_profile(b.style_cards[1]["key"])
     keys = list(b.style_modifier_buttons)
     for k in keys[:2]: b.style_modifier_buttons[k].setChecked(True)
-    app.processEvents(); shot("step-2-after-selected")
-    sa = scroll_area(); sa.ensureWidgetVisible(b.style_modifier_buttons[keys[0]], 20, 200); app.processEvents(); shot("step-2-after-chips")
+    shot("step-2-tabs-style")
+    b.palette_cards[0]["button"].click(); b.style_tabs.setCurrentIndex(1); shot("step-2-tabs-palette")
+    b.style_tabs.setCurrentIndex(2); shot("step-2-tabs-fine")
     c.save_timer.stop(); v.close()
 print("done")
