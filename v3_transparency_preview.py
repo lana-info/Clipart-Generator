@@ -2923,8 +2923,11 @@ class ClipartTransparencyEditorPage(QWidget):
             return
         # «По размеру» is its own button; the menu shows the real scale once the picture is fitted.
         def fitted():
-            if self.zoom_buttons["fit"].isChecked():
-                self.zoom_menu_button.setText(f"{round(self.canvas.transform().m11() * 100)} % ▾")
+            try:
+                if self.zoom_buttons["fit"].isChecked():
+                    self.zoom_menu_button.setText(f"{round(self.canvas.transform().m11() * 100)} % ▾")
+            except RuntimeError:  # the editor was closed before the timer fired
+                pass
         self.zoom_menu_button.setText("— % ▾")
         QTimer.singleShot(0, fitted)
 

@@ -3315,3 +3315,9 @@ test_build_retains_shared_imports_used_by_signed_workflows — ожидает `g
   для подписанного модуля «Обработка». Решение: свой предел `FAL_LOCAL_FILE_MAX_BYTES` (тест сверяет его с ядром) и
   проверка прозрачности через Pillow.
 - Проверка: FalInputSizeTests (2 теста) + сверка предела, tests/test_v3_processing_flow.py, полный прогон.
+
+## 2026-10-24 — Падение (Aborted) при закрытии окна прозрачности из-за отложенной подписи масштаба
+
+- Причина: `_update_zoom_label` ставил `QTimer.singleShot(0, …)`, который обращался к уже удалённой кнопке «Вписать» после закрытия редактора; PyQt завершал процесс.
+- Решение: обращение обёрнуто в `try/except RuntimeError`.
+- Проверка: `tests/test_direct_transparency_entry.py`, `tests/test_transparency_panels.py` (22 passed); полный прогон ниже.
