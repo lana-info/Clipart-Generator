@@ -594,7 +594,9 @@ def test_quality_review_warning_explains_problem_without_blocking_export(images)
     dialog = SetExportDialog([images[0]], membership=membership, quality_reports=[report])
     assert dialog.quality_panel.isVisible() or not dialog.isVisible()
     assert '1 нужно проверить' in dialog.quality_summary_label.text()
-    assert 'Нужно посмотреть: 1 из 1' in dialog.quality_page_summary_label.text()
+    dialog._refresh_quality_page()
+    assert dialog.quality_filter_problems.text() == 'Нужно посмотреть (1)'
+    assert 'Просмотрено' in dialog.quality_page_summary_label.text()
     assert dialog.export_button.isEnabled()
     assert dialog.quality_export_button.isEnabled()
     dialog._show_quality_review()
@@ -647,7 +649,7 @@ def test_quality_summary_clears_stale_blocker_text_after_exclusion(images):
     dialog.quality_list.setCurrentRow(0)
     dialog.quality_exclude_button.click()
     assert 'Блокирует экспорт' not in dialog.quality_page_summary_label.text()
-    assert 'Проблем не найдено' in dialog.quality_page_summary_label.text()
+    assert dialog.quality_page_summary_label.text() == ''  # nothing left to look at
     dialog.reject()
 
 
@@ -842,10 +844,10 @@ def test_png_check_screen_counts_viewed_files_and_asks_before_exporting_unviewed
     reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
     dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
     dialog._show_quality_review()
-    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 1 из 3.')  # the first file is open at once
+    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 1 из 3')  # the first file is open at once
     assert not dialog.quality_list.item(0).icon().isNull()
     dialog.quality_list.setCurrentRow(1)
-    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 2 из 3.')
+    assert dialog.quality_page_summary_label.text().startswith('Просмотрено 2 из 3')
     asked = []
     monkeypatch.setattr(dialog, '_confirm_unviewed', lambda viewed, total: asked.append((viewed, total)) or False)
     dialog._export()

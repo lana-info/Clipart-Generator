@@ -26,10 +26,12 @@ from PyQt6.QtGui import (
     QCursor,
     QIcon,
     QImage,
+    QKeySequence,
     QPainter,
     QPainterPath,
     QPen,
     QPixmap,
+    QShortcut,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -2329,6 +2331,24 @@ class ClipartTransparencyEditorPage(QWidget):
         zoom_row = QHBoxLayout(self.zoom_bar)
         zoom_row.setContentsMargins(6, 3, 6, 3)
         zoom_row.setSpacing(2)
+        # Previous / next file: the file panel is hidden by default, so moving along the files lives here.
+        self.prev_file_button = QToolButton()
+        self.prev_file_button.setText("‹")
+        self.prev_file_button.setToolTip("Предыдущий")
+        self.prev_file_button.setAccessibleName("Предыдущий файл")
+        self.prev_file_button.clicked.connect(lambda: self._step_file(-1))
+        self.file_counter_label = QLabel("")
+        self.file_counter_label.setStyleSheet("color: #e4edf6; font-weight: 600; padding: 0 4px;")
+        self.next_file_button = QToolButton()
+        self.next_file_button.setText("›")
+        self.next_file_button.setToolTip("Следующий")
+        self.next_file_button.setAccessibleName("Следующий файл")
+        self.next_file_button.clicked.connect(lambda: self._step_file(1))
+        self.file_nav_separator = QFrame()
+        self.file_nav_separator.setFixedWidth(1)
+        self.file_nav_separator.setStyleSheet("background: #2b3a4e; border: none;")
+        for widget in (self.prev_file_button, self.file_counter_label, self.next_file_button, self.file_nav_separator):
+            zoom_row.addWidget(widget)
         zoom_grid = QGridLayout()  # the checkable zoom buttons are kept (hidden) as the zoom state
         self.zoom_buttons: dict[str | int, QPushButton] = {}
         for index, (key, text) in enumerate(
@@ -2767,6 +2787,7 @@ class ClipartTransparencyEditorPage(QWidget):
         else:
             self.canvas.set_document(None)
         self._refresh_history_buttons()
+        self._update_file_nav()
         if invalid_copy:
             self._show_contour_status("Сохранённая копия не читается. Открыт исходный PNG; копия сохранена на диске.")
 
@@ -2781,6 +2802,10 @@ class ClipartTransparencyEditorPage(QWidget):
 
     def insert_file_filter(self, widget: QWidget) -> None:
         self.files_frame.layout().insertWidget(1, widget)
+        # The review window works through this list (filter, marks, notes), so there it stays on screen.
+        self._files_panel_default_visible = True
+        self.panel_docks["files"].show()
+        self._default_panel_state = self.panel_host.saveState()
 
     def set_file_annotations(self, rows) -> None:
         """rows[i] = (colour, text, dimmed, hidden) or None for file i."""
@@ -2806,6 +2831,7 @@ class ClipartTransparencyEditorPage(QWidget):
             item.setIcon(QIcon(pixmap))
             item.setForeground(QColor("#74869a" if dimmed else "#e4edf6"))
             item.setHidden(bool(hidden) and index != self.file_list.currentRow())
+        self._update_file_nav()
 
     def set_canvas_notice(self, title: str | None, text: str = "") -> None:
         notice = getattr(self, "_canvas_notice", None)
@@ -2846,7 +2872,28 @@ class ClipartTransparencyEditorPage(QWidget):
         if self.current_path in (old, Path(new_path) if new_path is not None else old):
             self._select_file(self.file_list.currentRow())
 
+    def _visible_file_rows(self) -> list[int]:
+        return [row for row in range(self.file_list.count()) if not self.file_list.item(row).isHidden()]
+
+    def _step_file(self, delta: int) -> None:
+        rows = self._visible_file_rows()
+        current = self.file_list.currentRow()
+        if len(rows) < 2 or current not in rows:
+            return
+        target = rows[(rows.index(current) + delta) % len(rows)]
+        self.file_list.setCurrentRow(target)
+
+    def _update_file_nav(self) -> None:
+        rows = self._visible_file_rows()
+        current = self.file_list.currentRow()
+        show = len(rows) > 1 and current in rows
+        for widget in (self.prev_file_button, self.file_counter_label, self.next_file_button, self.file_nav_separator):
+            widget.setVisible(show)
+        if show:
+            self.file_counter_label.setText(f"{rows.index(current) + 1} из {len(rows)}")
+
     def _select_file(self, row: int) -> None:
+        self._update_file_nav()
         self._stash_current_document()
         self._document = None
         self._loaded_path = None
@@ -2952,6 +2999,13 @@ class ClipartTransparencyEditorPage(QWidget):
         self.panel_host.resizeDocks([self.panel_docks["files"], self.panel_docks["tools"]], [2, 3],
                                     Qt.Orientation.Vertical)
         self.panel_host.resizeDocks([self.panel_docks["tools"]], [276], Qt.Orientation.Horizontal)
+        # Moving along the files is done with ‹ › under the picture, so the list is out of the way until asked for
+        # («Панели ▾»); the review window, which filters and annotates that list, shows it again.
+        self.panel_docks["files"].hide()
+        for key, delta in ((Qt.Key.Key_PageUp, -1), (Qt.Key.Key_PageDown, 1)):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(lambda step=delta: self._step_file(step))
         # Kept name: other code checks whether the tools are on screen.
         self.right_panel = self.panel_docks["tools"]
         menu = QMenu(self.panels_button)
@@ -2960,6 +3014,7 @@ class ClipartTransparencyEditorPage(QWidget):
         menu.addSeparator()
         menu.addAction("Сбросить расположение", self.reset_panels)
         self.panels_button.setMenu(menu)
+        self._files_panel_default_visible = False
         self._default_panel_state = self.panel_host.saveState()
         self._panels_restored = False
         self._panels_before_focus = None
@@ -3005,8 +3060,8 @@ class ClipartTransparencyEditorPage(QWidget):
             dock.setFloating(False)
             dock.widget().show()
         self.panel_host.restoreState(self._default_panel_state)
-        for dock in self.panel_docks.values():
-            dock.show()
+        self.panel_docks["tools"].show()
+        self.panel_docks["files"].setVisible(self._files_panel_default_visible)
 
     def showEvent(self, event) -> None:  # type: ignore[no-untyped-def]
         super().showEvent(event)
