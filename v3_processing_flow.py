@@ -1311,9 +1311,15 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
     def validation_issues(self) -> tuple[str, ...]:
         issues = list(self.files_page.validation_issues())
         issues.extend(self.pipeline_page.validation_issues())
+        if getattr(self, "fal_input_too_large", False):
+            issues.append("fal_input_too_large")
         return tuple(issues)
 
-    def set_preflight_status(self, text: str, *, ready: bool) -> None:
+    def set_preflight_status(self, text: str, *, ready: bool, blocking: bool = False) -> None:
+        # A blocking problem (the run cannot start) is a red card, as in the approved mockup D.
+        self.requirements_label.setStyleSheet(
+            "QLabel{background:rgba(120,30,40,90);border:1px solid #f06e6e;border-radius:8px;"
+            "padding:10px;color:#ffd9d9}" if blocking and not ready else "")
         if ready:
             self.requirements_label.clear()
             self.requirements_label.setVisible(False)
@@ -1337,6 +1343,60 @@ class ProcessingReviewRunPage(_ScrollableStepPage):
         self.run_status_label.setAccessibleName(message)
         self.run_status_label.style().unpolish(self.run_status_label)
         self.run_status_label.style().polish(self.run_status_label)
+
+
+# Same limit as the Fal.ai upload in Core (fal_provider.FAL_FILE_INPUT_MAX_BYTES); kept here so the
+# processing module needs no new Core import (dependency allowlist).
+FAL_LOCAL_FILE_MAX_BYTES = 8 * 1024 * 1024
+
+
+def _has_transparency(path) -> bool:
+    try:
+        with Image.open(path) as image:
+            if "A" not in image.getbands():
+                return False
+            low, _high = image.getchannel("A").getextrema()
+            return low < 255
+    except (OSError, UnidentifiedImageError, ValueError):
+        return False
+
+
+class FalInputTooLarge(ProcessingFlowError):
+    """Some sources are over the Fal.ai upload limit; the whole batch must not start (approved mockup D)."""
+
+
+def validate_fal_input_sizes(operations: ImageOperationData, paths: Sequence[str]) -> None:
+    """Fal.ai takes local files up to 8 MB. Check the sources it would receive before anything is paid."""
+    if operations.upscale_before:
+        if operations.upscale_before_provider != "fal":
+            return  # the next stages get the upscaler's result, not the source file
+        alpha_exempt = False
+    elif operations.remove_background and operations.remove_background_provider == "fal":
+        alpha_exempt = True  # a source that already has transparency skips the remover
+    else:
+        return
+    oversized: list[tuple[str, int]] = []
+    for path in paths:
+        try:
+            size = Path(path).stat().st_size
+        except OSError as error:
+            raise ProcessingFlowError(f"Файл недоступен: {Path(path).name or 'неизвестный файл'}") from error
+        if size <= FAL_LOCAL_FILE_MAX_BYTES:
+            continue
+        if alpha_exempt and _has_transparency(path):
+            continue
+        oversized.append((Path(path).name or "неизвестный файл", size))
+    if not oversized:
+        return
+    count = len(oversized)
+    files = "файл" if count % 10 == 1 and count % 100 != 11 else (
+        "файла" if count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14) else "файлов")
+    lines = [f"Запуск остановлен: {count} {files} больше 8 МБ — Fal.ai их не примет."]
+    lines += [f"  • {name} — " + f"{size / (1024 * 1024):.1f}".replace(".", ",") + " МБ" for name, size in oversized[:5]]
+    if count > 5:
+        lines.append(f"  • и ещё {count - 5}")
+    lines.append("Уменьшите их, уберите из списка или выберите другой способ.")
+    raise FalInputTooLarge("\n".join(lines))
 
 
 def build_processing_run_request(
@@ -1374,6 +1434,7 @@ def build_processing_run_request(
     for path in _processing_data(state).selected_files:
         inspect_local_image(path, decode_pixels=False)
     validate_processing_providers(_processing_data(state).operations)
+    validate_fal_input_sizes(_processing_data(state).operations, _processing_data(state).selected_files)
     if uses_external_processing(_processing_data(state).operations) and not external_transfer_consent:
         raise ProcessingFlowError(
             "Подтвердите разрешение на передачу файлов внешнему провайдеру"
@@ -1660,9 +1721,18 @@ class ProcessingFlowController(QObject):
                     "Укажите в настройках: " + ", ".join(missing)
                 )
         except Exception as error:
-            self.review_page.set_preflight_status(str(error), ready=False)
+            self.review_page.set_preflight_status(
+                str(error), ready=False, blocking=isinstance(error, FalInputTooLarge))
+            # Files Fal.ai cannot take: the whole batch must not start (approved mockup D).
+            self._set_fal_size_block(isinstance(error, FalInputTooLarge))
             return
+        self._set_fal_size_block(False)
         self.review_page.set_preflight_status("Запуск готов.", ready=True)
+
+    def _set_fal_size_block(self, blocked: bool) -> None:
+        if getattr(self.review_page, "fal_input_too_large", False) != blocked:
+            self.review_page.fal_input_too_large = blocked
+            self.shell.refresh()  # the footer makes «Запустить» unavailable while blocked
 
     def _run_requested(self, mode: str) -> None:
         if mode == ProjectMode.PROCESSING.value:

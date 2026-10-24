@@ -207,3 +207,41 @@ class OnlineLicenseGateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LicenseDialogErrorCodeTests(unittest.TestCase):
+    """Approved mockup H: a failed activation shows a safe support code that can be copied."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_failed_activation_shows_and_copies_safe_code(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QMessageBox
+        from v3_license import LicenseDialog
+        failure = LicenseError("Не удалось связаться с сервером лицензий", code="license_ssl_verification")
+        dialog = LicenseDialog(OnlineLicenseGate(FakeClient(failure=failure)))
+        dialog.show()
+        dialog.license_key_input.setText("SECRET-KEY-123")
+        with patch.object(QMessageBox, "warning") as warning:
+            dialog._activate()
+        self.assertEqual(dialog.error_code_label.text(), "Код ошибки: license_ssl_verification")
+        self.assertTrue(dialog.copy_error_button.isVisible())
+        self.assertIn("license_ssl_verification", warning.call_args.args[2])
+        self.assertNotIn("SECRET", dialog.error_code_label.text() + warning.call_args.args[2])
+        dialog.copy_error_button.click()
+        self.assertEqual(QApplication.clipboard().text(), "license_ssl_verification")
+        dialog.close()
+
+    def test_unknown_code_is_reduced_to_generic(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QMessageBox
+        from v3_license import LicenseDialog
+        failure = LicenseError("Ошибка", code="user@example.com-key-abc")
+        dialog = LicenseDialog(OnlineLicenseGate(FakeClient(failure=failure)))
+        dialog.license_key_input.setText("x")
+        with patch.object(QMessageBox, "warning"):
+            dialog._activate()
+        self.assertEqual(dialog.error_code_label.text(), "Код ошибки: license_error")
+        dialog.close()
