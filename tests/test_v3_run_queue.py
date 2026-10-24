@@ -2271,3 +2271,70 @@ class AutoRecoveredItemTests(unittest.TestCase):
             self.assertIs(item.status, RunItemStatus.SUCCEEDED)
             self.assertEqual(item.recovery_attempts, 3)
             self.assertIn("3-й попытки", item.short_message)
+
+
+class ProblemFilesListTests(unittest.TestCase):
+    """Approved mockup C (docs/ui/3.2/legacy-3.1-ports/): failed and stopped files, copy or save as text."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_button_counts_problem_files_and_report_has_no_paths(self):
+        from v3_run_queue import ProblemFilesDialog, problem_file_rows
+        with tempfile.TemporaryDirectory(prefix="v3-problem-files-") as temp:
+            sources = []
+            for name in ("a.png", "b.png", "c.png"):
+                path = Path(temp) / name
+                Image.new("RGBA", (8, 8), (1, 2, 3, 255)).save(path)
+                sources.append(path)
+            request = processing_request(temp, sources)
+            request.settings["output_dir"] = temp
+            session = RunQueueSession(request, ProjectMode.PROCESSING)
+            output = Path(temp) / "a_ready.png"
+            Image.new("RGBA", (8, 8), (1, 2, 3, 255)).save(output)
+            event = lambda index, status, **values: session.handle_item_progress(
+                {"item_index": index, "total_items": 3, "stage": values.pop("stage", "export"), "status": status, **values})
+            event(1, "succeeded", output_path=str(output))
+            event(2, "stage_failed", stage="background_removal")
+            event(2, "failed", stage="background_removal", message="Файл больше 8 МБ")
+            event(3, "cancelled", message="Остановлено")
+            session.handle_finished()
+            state = ProjectState(mode=ProjectMode.PROCESSING, common=CommonProjectData(work_dir=temp))
+            page = RunResultsPage(state)
+            page.set_session(session)
+            page.show()
+            self.app.processEvents()
+            self.assertTrue(page.problem_files_button.isVisible())
+            self.assertEqual(page.problem_files_button.text(), "Проблемные файлы (2)")
+            rows = problem_file_rows(session)
+            self.assertEqual([(r[0], r[1], r[2]) for r in rows],
+                             [("Ошибка", "b.png", "Удаление фона"), ("Остановлен", "c.png", "—")])
+            dialog = ProblemFilesDialog(rows, 3, page)
+            self.assertNotIn(temp, dialog.report)
+            self.assertTrue(dialog.report.startswith("Проблемные файлы — 2 из 3"))
+            dialog.copy_report()
+            self.assertEqual(QApplication.clipboard().text(), dialog.report)
+            saved = Path(temp) / "list.txt"
+            self.assertTrue(dialog.save_report(str(saved)))
+            self.assertEqual(saved.read_text(encoding="utf-8"), dialog.report)
+            page.close()
+
+    def test_button_hidden_when_everything_succeeded(self):
+        with tempfile.TemporaryDirectory(prefix="v3-problem-files-ok-") as temp:
+            source = Path(temp) / "a.png"
+            Image.new("RGBA", (8, 8), (1, 2, 3, 255)).save(source)
+            request = processing_request(temp, [source])
+            request.settings["output_dir"] = temp
+            session = RunQueueSession(request, ProjectMode.PROCESSING)
+            output = Path(temp) / "a_ready.png"
+            Image.new("RGBA", (8, 8), (1, 2, 3, 255)).save(output)
+            session.handle_item_progress({"item_index": 1, "total_items": 1, "stage": "export",
+                                          "status": "succeeded", "output_path": str(output)})
+            session.handle_finished()
+            page = RunResultsPage(ProjectState(mode=ProjectMode.PROCESSING, common=CommonProjectData(work_dir=temp)))
+            page.set_session(session)
+            page.show()
+            self.app.processEvents()
+            self.assertFalse(page.problem_files_button.isVisible())
+            page.close()
