@@ -19,6 +19,7 @@ from v3_components import (
     FormCard,
     V3Button,
     V3DesignTokens,
+    V3StepLabel,
     V3_WINDOW_MINIMUM_SIZE,
     apply_v3_theme,
 )
@@ -575,15 +576,7 @@ class AppShell(QWidget):
                 self.steps_layout.addWidget(label)
                 self.step_labels.append(label)
                 continue
-            label = QLabel(f"{marker} {index + 1}. {STEP_TITLES[step]}")
-            label.setWordWrap(True)
-            if status in {"Текущий", "Пройден"}:
-                label.setProperty("v3Selection", True)
-            elif status == "Ошибка":
-                label.setProperty("v3Status", True)
-                label.setProperty("state", "error")
-            else:
-                label.setProperty("v3Description", True)
+            label = V3StepLabel(f"{marker} {index + 1}. {STEP_TITLES[step]}", self.tokens)
             label.setAccessibleName(f"{STEP_TITLES[step]}: {status}")
             self.steps_layout.addWidget(label)
             label.show()

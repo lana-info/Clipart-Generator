@@ -215,11 +215,18 @@ def _review_action_icon(kind: str) -> QIcon:
     return QIcon(pixmap)
 
 
+def _review_action_divider() -> QFrame:
+    divider = QFrame()
+    divider.setProperty("v3Divider", True)
+    divider.setFixedSize(1, 28)
+    return divider
+
+
 def _compact_review_action_button(kind: str, label: str) -> V3Button:
     button = V3Button("", ButtonVariant.SECONDARY)
     button.setIcon(_review_action_icon(kind))
-    button.setIconSize(QSize(26, 26))
-    button.setFixedSize(50, 40)
+    button.setIconSize(QSize(24, 24))
+    button.setFixedSize(42, 38)
     button.setToolTip(label)
     button.setAccessibleName(label)
     return button
@@ -1342,6 +1349,9 @@ class PromptReviewPage(ScrollableStepPage):
             "Редактируйте текст и референсы, удаляйте и меняйте порядок строк.",
             tokens=tokens,
         )
+        # The step title already names this screen; keep the card name for assistive tech only.
+        self.card.title_label.hide()
+        self.card.description_label.hide()
         self.state = state
         self.data = data
         self.changed = changed
@@ -1377,6 +1387,9 @@ class PromptReviewPage(ScrollableStepPage):
         self.table = _PromptReviewTable(0, 2)
         self.table.setHorizontalHeaderLabels(["Промпт", "Референсы"])
         self.table.setAccessibleName("Таблица промптов")
+        self.table.setObjectName("promptReviewTable")
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().setDefaultSectionSize(60)
         self.table.setMinimumHeight(360)
         self.table.setMaximumHeight(520)
         self.table.horizontalHeader().setStretchLastSection(False)
@@ -1397,13 +1410,12 @@ class PromptReviewPage(ScrollableStepPage):
         self.table.itemChanged.connect(self._table_changed)
         self.table.model().rowsMoved.connect(self._rows_moved)
         self.search_edit.textChanged.connect(self._apply_search)
-        self.add_widget(self.table)
 
         prompt_actions = QWidget()
         action_layout = QHBoxLayout(prompt_actions)
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setSpacing(tokens.space_2)
-        prompt_actions_label = QLabel("Промпты:")
+        prompt_actions_label = QLabel("Промпты")
         prompt_actions_label.setProperty("v3Small", True)
         action_layout.addWidget(prompt_actions_label)
         self.add_button = _compact_review_action_button(
@@ -1430,8 +1442,8 @@ class PromptReviewPage(ScrollableStepPage):
         ):
             action_layout.addWidget(button)
 
-        action_layout.addSpacing(tokens.space_4)
-        references_actions_label = QLabel("Референсы:")
+        action_layout.addWidget(_review_action_divider())
+        references_actions_label = QLabel("Референсы")
         references_actions_label.setProperty("v3Small", True)
         action_layout.addWidget(references_actions_label)
         self.add_refs_button = _compact_review_action_button(
@@ -1456,14 +1468,11 @@ class PromptReviewPage(ScrollableStepPage):
             self.delete_refs_button,
         ):
             action_layout.addWidget(button)
-        action_layout.addSpacing(tokens.space_4)
-        self.export_actions_label = QLabel("Экспорт:")
-        self.export_actions_label.setProperty("v3Small", True)
-        action_layout.addWidget(self.export_actions_label)
-        self.export_csv_button = V3Button("CSV", ButtonVariant.PRIMARY)
+        action_layout.addWidget(_review_action_divider())
+        self.export_csv_button = V3Button("Экспорт CSV", ButtonVariant.SECONDARY)
         self.export_csv_button.setIcon(_review_action_icon("prompt_export"))
         self.export_csv_button.setIconSize(QSize(22, 22))
-        self.export_csv_button.setFixedHeight(40)
+        self.export_csv_button.setFixedHeight(38)
         self.export_csv_button.setToolTip("Экспортировать все строки в CSV")
         self.export_csv_button.setAccessibleName(
             "Экспортировать все строки в CSV"
@@ -1471,6 +1480,7 @@ class PromptReviewPage(ScrollableStepPage):
         action_layout.addWidget(self.export_csv_button)
         action_layout.addStretch()
         self.add_widget(prompt_actions)
+        self.add_widget(self.table)
         self.issues_label = QLabel()
         self.issues_label.setWordWrap(True)
         self.issues_label.setProperty("v3Small", True)

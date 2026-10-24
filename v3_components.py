@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import re
 import sys
 
-from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
+from PyQt6.QtCore import QPointF, QRect, QRectF, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap, QPolygonF
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtWidgets import (
     QApplication,
@@ -33,6 +34,7 @@ class V3DesignTokens:
     accent: str = "#2dd4bf"
     accent_hover: str = "#14b8a6"
     accent_soft: str = "#12363f"
+    on_accent: str = "#06201c"
     focus: str = "#60a5fa"
     warning: str = "#f59e0b"
     warning_soft: str = "#4a2f0f"
@@ -119,6 +121,112 @@ class _AspectRatioPixmapLabel(QLabel):
                 )
             )
         super().resizeEvent(event)
+
+
+class V3StepLabel(QLabel):
+    """Sidebar step row. The text keeps the "<marker> <n>. <title>" contract;
+    painting renders the marker as a status badge so state is not colour-only."""
+
+    _PATTERN = re.compile(r"^([✓●○✕])\s*(\d+)\.\s*(.*)$", re.S)
+    _BADGE = 22
+    _PAD_X = 10
+    _PAD_Y = 8
+    _GAP = 10
+
+    def __init__(self, text: str = "", tokens: V3DesignTokens = DEFAULT_TOKENS) -> None:
+        super().__init__(text)
+        self._tokens = tokens
+        self.setWordWrap(True)
+
+    def _parts(self) -> tuple[str, str, str] | None:
+        match = self._PATTERN.match(self.text())
+        return match.groups() if match else None
+
+    def _title_width(self, width: int) -> int:
+        return max(width - 2 * self._PAD_X - self._BADGE - self._GAP, 40)
+
+    def _title_font(self, marker: str) -> QFont:
+        font = QFont(self.font())
+        font.setWeight(QFont.Weight.Bold if marker == "●" else QFont.Weight.Medium if marker in "✓✕" else QFont.Weight.Normal)
+        return font
+
+    def _title_height(self, title: str, marker: str, width: int) -> int:
+        rect = QFontMetrics(self._title_font(marker), self).boundingRect(
+            QRect(0, 0, self._title_width(width) - 8, 10000),  # safety margin: never measure wider than painted
+            int(Qt.AlignmentFlag.AlignLeft) | int(Qt.TextFlag.TextWordWrap),
+            title,
+        )
+        return rect.height()
+
+    def hasHeightForWidth(self) -> bool:
+        return self._parts() is not None
+
+    def heightForWidth(self, width: int) -> int:
+        parts = self._parts()
+        if parts is None:
+            return super().heightForWidth(width)
+        return max(self._BADGE, self._title_height(parts[2], parts[0], width)) + 2 * self._PAD_Y
+
+    def sizeHint(self) -> QSize:
+        hint = super().sizeHint()
+        parts = self._parts()
+        if parts is not None:
+            hint.setHeight(self.heightForWidth(self.width() if self.width() > 100 else 208))
+        return hint
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self.updateGeometry()
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        if self._parts() is not None:
+            hint.setHeight(self._BADGE + 2 * self._PAD_Y)
+        return hint
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt API
+        parts = self._parts()
+        if parts is None:
+            super().paintEvent(event)
+            return
+        marker, number, title = parts
+        t = self._tokens
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if marker == "●":
+            row = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(t.surface_muted))
+            painter.drawRoundedRect(row, 6, 6)
+            painter.setBrush(QColor(t.accent))
+            painter.drawRoundedRect(QRectF(row.left(), row.top() + 6, 3, row.height() - 12), 1.5, 1.5)
+        badge = QRectF(self._PAD_X, self._PAD_Y, self._BADGE, self._BADGE)
+        fill, edge, glyph, text_color = {
+            "✓": (t.accent_soft, t.accent, "✓", t.text),
+            "●": (t.accent, t.accent, number, t.text),
+            "○": (None, t.border, number, t.text_muted),
+            "✕": (t.error_soft, t.error, "✕", t.error),
+        }[marker]
+        glyph_color = {"✓": t.accent, "●": t.on_accent, "○": t.text_muted, "✕": t.error}[marker]
+        painter.setPen(QPen(QColor(edge), 1))
+        painter.setBrush(QColor(fill) if fill else Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(badge.adjusted(0.5, 0.5, -0.5, -0.5))
+        glyph_font = QFont(self.font())
+        glyph_font.setPixelSize(12)
+        glyph_font.setWeight(QFont.Weight.Bold)
+        painter.setFont(glyph_font)
+        painter.setPen(QColor(glyph_color))
+        painter.drawText(badge, int(Qt.AlignmentFlag.AlignCenter), glyph)
+        painter.setFont(self._title_font(marker))
+        painter.setPen(QColor(text_color))
+        text_left = self._PAD_X + self._BADGE + self._GAP
+        text_rect = QRect(text_left, self._PAD_Y, self._title_width(self.width()), self.height() - 2 * self._PAD_Y)
+        painter.drawText(
+            text_rect,
+            int(Qt.AlignmentFlag.AlignLeft) | int(Qt.AlignmentFlag.AlignTop) | int(Qt.TextFlag.TextWordWrap),
+            title,
+        )
+        painter.end()
 
 
 class ButtonVariant(str, Enum):
@@ -229,6 +337,49 @@ QLabel {{
     color: {tokens.text};
     background: transparent;
     border: none;
+}}
+QTabWidget::pane {{
+    border: 1px solid {tokens.border};
+    border-radius: {tokens.radius_card}px;
+    top: -1px;
+    background: {tokens.surface};
+}}
+QTabBar {{
+    background: transparent;
+}}
+QTabBar::tab {{
+    background: transparent;
+    color: {tokens.text_muted};
+    padding: {tokens.space_2 + 1}px {tokens.space_4 + 2}px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    font-weight: {tokens.font_weight_medium};
+    margin-right: 2px;
+}}
+QTabBar::tab:selected {{
+    color: {tokens.text};
+    border-bottom: 2px solid {tokens.accent};
+}}
+QTabBar::tab:hover:!selected {{
+    color: {tokens.text};
+    background: {tokens.surface_muted};
+}}
+QAbstractScrollArea::corner {{
+    background: transparent;
+}}
+QFrame[v3Divider="true"] {{
+    background: {tokens.border};
+    border: none;
+    min-width: 1px;
+    max-width: 1px;
+}}
+QTableWidget#promptReviewTable::item {{
+    padding: {tokens.space_2 - 2}px {tokens.space_3}px;
+    border-bottom: 1px solid {tokens.border};
+}}
+QTableWidget#promptReviewTable::item:selected {{
+    background: {tokens.accent_soft};
+    color: {tokens.text};
 }}
 QGroupBox {{
     color: {tokens.text};

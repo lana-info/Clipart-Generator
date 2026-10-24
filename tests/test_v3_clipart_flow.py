@@ -405,9 +405,8 @@ class V3ClipartFlowTests(unittest.TestCase):
         state.clipart.prompts = [PromptEntry("Fox")]
         page = ClipartPromptReviewPage(state, lambda: None)
 
-        self.assertEqual(page.export_actions_label.text(), "Экспорт:")
-        self.assertEqual(page.export_csv_button.text(), "CSV")
-        self.assertEqual(page.export_csv_button.property("variant"), "primary")
+        self.assertEqual(page.export_csv_button.text(), "Экспорт CSV")
+        self.assertEqual(page.export_csv_button.property("variant"), "secondary")
         self.assertEqual(
             page.export_csv_button.toolTip(),
             "Экспортировать все строки в CSV",
