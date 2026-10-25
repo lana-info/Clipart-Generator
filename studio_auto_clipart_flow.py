@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from studio_clipart_builder_ui import ClipartBuilderDialog
+from v3_components import ButtonVariant, V3Button
 from studio_clipart_versions import restore_review, review_fields
 from studio_clipart_objects import attach_reference_guidance, compile_objects, fill_recipe, validate_objects
 from studio_clipart_recipe import ClipartRecipe, ROLES
@@ -330,6 +331,7 @@ class AutoClipartFlowController(ClipartFlowController):
         self.review = ImageReview(self) if review_supported() else None
         if self.review is not None:
             self.review.install_results_page()
+        self._install_recovery()
         # The separate export step owns collection delivery, not the result toolbar.
         self.run_queue.page.results_extension.export_action_label = ""
         self.run_queue.page.refresh_from_state()
@@ -1016,6 +1018,74 @@ class AutoClipartFlowController(ClipartFlowController):
         ]
         self.shell.state_changed.emit()
         self.shell.refresh()
+
+    # --- reconnect finished pictures that lie in the result folder (owner 2026-10-25) -------------------
+
+    def _install_recovery(self):
+        page = self.run_queue.page
+        row = QWidget()
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        self.recover_button = V3Button("Вернуть готовые файлы", ButtonVariant.PRIMARY)
+        self.recover_button.setToolTip(
+            "Подключить PNG, которые уже лежат в папке результата, к этому набору. "
+            "Новая генерация не запускается, платных запросов нет.")
+        self.recover_button.clicked.connect(self.recover_results)
+        row_layout.addWidget(self.recover_button)
+        row_layout.addStretch(1)
+        row.hide()
+        page.action_bar.layout().insertWidget(0, row)
+        self.recover_row = row
+        previous = getattr(page, "review_refresh", None)
+
+        def refresh():
+            if previous is not None:
+                previous()
+            self._refresh_recovery()
+        page.review_refresh = refresh
+
+    def _recoverable_outputs(self):
+        from studio_clipart_recovery import recoverable
+        from v3_run_queue import RunItemStatus
+        session = self.run_queue.session
+        if session is None or session.running:
+            return {}
+        prompts = [PromptEntry.from_value(item.payload).to_dict() for item in session.items]
+        return recoverable(
+            session.items, prompts, self.shell.state.data.automatic.get("previous_runs", []),
+            session.output_dir, is_done=lambda item: item.status is RunItemStatus.SUCCEEDED and bool(item.output_path))
+
+    def _refresh_recovery(self):
+        found = self._recoverable_outputs() if hasattr(self, "recover_row") else {}
+        self.recover_row.setVisible(bool(found))
+        if found:
+            self.recover_button.setText(f"Вернуть готовые файлы ({len(found)})")
+
+    def recover_results(self):
+        session = self.run_queue.session
+        found = self._recoverable_outputs()
+        if session is None or not found or self.is_busy():
+            return
+        page = self.run_queue.page
+        if QMessageBox.question(
+                page, "Вернуть готовые файлы",
+                f"В папке результата найдено готовых PNG: {len(found)}.\n\nПодключить их к набору? "
+                "Новая генерация не запускается, платных запросов нет, файлы не изменяются.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes) != QMessageBox.StandardButton.Yes:
+            return
+        from v3_run_queue import RunItemStatus
+        for index, path in found.items():
+            item = session.items[index]
+            item.status = RunItemStatus.SUCCEEDED
+            item.output_path = str(path)
+            item.editor_output_path = ""
+            item.attempts = max(1, item.attempts)
+            item.short_message = "Файл найден в папке результата."
+            item.review_mark, item.review_checked = "ok", False
+        session.changed.emit()
+        self._save_run()
+        page.refresh_from_state()
 
     def _restore_run(self):
         self._ensure_delivery_operations()

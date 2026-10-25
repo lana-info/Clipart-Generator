@@ -1202,3 +1202,40 @@ def test_launch_confirmation_is_short_structured_and_readable():
     assert "Создать изображения: 5 объектов?" in launch_confirmation_html(object_count=5, models=["a"], cost=known)
     assert "Создать изображения: 22 объекта?" in launch_confirmation_html(object_count=22, models=["a"], cost=known)
     assert "<b>Модели:</b> a, b" in launch_confirmation_html(object_count=2, models=["a", "b"], cost=known)
+
+
+def test_ready_files_in_the_result_folder_can_be_reconnected_without_generation(workspace, monkeypatch):
+    """Owner 2026-10-25: a new run was started and stopped, the old results vanished from the project, but the
+    PNG files were still in the result folder."""
+    view, controller, _, worker = workspace
+    controller.brief.total.setValue(6)
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    for number in (1, 2, 4):
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        ImageDraw.Draw(image).ellipse((8, 8, 55, 55), fill=(120, 80, 40, 255))
+        image.save(session.output_dir / f'flower_{number:02d}_ready.png')
+    for item in session.items:
+        item.status = RunItemStatus.CANCELLED
+        item.short_message = 'Не выполнялся после остановки.'
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._save_run()
+    controller.save_timer.stop()
+    assert controller.recover_row.isVisibleTo(controller.run_queue.page) or not controller.run_queue.page.isVisible()
+    assert controller._recoverable_outputs().keys() == {0, 1, 3}
+    asked = []
+    monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: asked.append(args[2]) or QMessageBox.StandardButton.Yes)
+    controller.recover_results()
+    assert 'найдено готовых PNG: 3' in asked[0] and 'платных запросов нет' in asked[0]
+    done = [item for item in session.items if item.status is RunItemStatus.SUCCEEDED]
+    assert [Path(item.output_path).name for item in done] == [
+        'flower_01_ready.png', 'flower_02_ready.png', 'flower_04_ready.png']
+    assert all(not item.review_checked for item in done)  # still «Не проверено»
+    assert len(controller.run_queue.page._export_paths()) == 3
+    assert controller._recoverable_outputs() == {}
+    controller.recover_results()  # nothing left: no second question
+    assert len(asked) == 1
+    worker.assert_not_called()
