@@ -1,4 +1,5 @@
 """UI-to-worker DPI and actual editor-to-export regressions."""
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from zipfile import ZipFile
@@ -77,7 +78,14 @@ def test_actual_editor_save_rechecks_blocked_and_accepted_export(tmp_path, monke
     controller = SimpleNamespace(run_queue=SimpleNamespace(page=page, session=session), review=None,
         shell=SimpleNamespace(state=SimpleNamespace(data=state.clipart), refresh=lambda: None),
         export_panel=None, export_page=export_page, export_empty=empty)
-    refresh = lambda: AutoClipartFlowController._refresh_export(controller)
+    def refresh():
+        AutoClipartFlowController._refresh_export(controller)
+        panel = controller.export_panel
+        deadline = time.monotonic() + 20
+        while panel is not None and panel._qc_pending and time.monotonic() < deadline:
+            QApplication.processEvents()
+            time.sleep(0.01)
+        QApplication.processEvents()
     refresh()
     state.clipart.export_membership = controller.export_panel.saved_membership
     assert not controller.export_panel.export_button.isEnabled()

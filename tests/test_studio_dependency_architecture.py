@@ -88,6 +88,8 @@ LEGACY_ALLOWED_EDGES: frozenset[tuple[str, str]] = frozenset({
     ('studio_set_export', 'studio_delivery'),
     # Export invokes the shared, hash-bound rough-file ownership service only
     # after verified publication. Core owns files; Clipart owns the opt-in UI.
+    # The PNG check offers the same preview backgrounds as the transparency editor.
+    ('studio_set_export_ui', 'background_preview'),
     ('studio_set_export_ui', 'studio_working_files'),
     ('studio_text_client', 'studio_text_errors'),
     ('v3_clipart_flow', 'chroma_key'),
