@@ -291,7 +291,7 @@ def test_results_list_shows_marks_and_filters_rows(tmp_path):
     page.queue.row_visible = lambda item: visible(item, "deleted")
     page.set_session(session)
     assert "Удалено · ✎ не подходит" in page.queue.item(1).text()
-    assert page.queue.item(0).text().endswith("Ок")
+    assert page.queue.item(0).text().endswith("Не проверено")  # «Ок» only after the owner looked
     assert page.queue.item(0).isHidden() and not page.queue.item(1).isHidden()
     page.deleteLater()
 
@@ -397,7 +397,8 @@ def test_results_bar_counts_marked_and_trash(tmp_path):
     flow.run_queue.page.refresh_from_state()
     assert review.recreate_button.text() == "Пересоздать помеченные (1)"
     assert review.trash_button.text() == "Корзина (1)"
-    assert review.results_filter.itemText(1) == "Помеченные (2)"
+    assert review.results_filter.itemText(1).startswith("Не проверено")
+    assert review.results_filter.itemText(2) == "Помеченные (2)"
     editor.deleteLater()
 
 
@@ -476,3 +477,35 @@ def test_marked_filter_keeps_every_row_and_the_filter_bar_during_a_run(tmp_path)
     assert review.results_filter.isEnabled()
     assert sum(not page.queue.item(row).isHidden() for row in range(page.queue.count())) == 1  # only the marked one
     editor.deleteLater()
+
+
+def test_a_new_or_regenerated_picture_is_unchecked_until_the_owner_marks_it_ok(tmp_path):
+    """Owner 2026-10-25: «Ок» must not be on every picture by default; regenerated ones must be looked at again."""
+    from studio_clipart_review_ui import annotation, mark_state, visible
+    review, editor, session, flow = open_review(tmp_path)
+    item = session.items[0]
+    assert item.review_mark == "ok" and not item.review_checked and mark_state(item) == "unchecked"
+    assert annotation(item)[1] == "Не проверено" and visible(item, "unchecked") and not visible(item, "marked")
+    review.strip.mark_buttons["ok"].click()
+    assert item.review_checked and mark_state(item) == "ok" and not visible(item, "unchecked")
+    assert annotation(item)[1] == "Ок"
+    keep_version(item, session.output_dir, now=NOW)  # what regeneration does to the replaced picture
+    assert item.review_mark == "ok" and not item.review_checked and mark_state(item) == "unchecked"
+    editor.deleteLater()
+
+
+def test_checked_flag_is_saved_and_restored_and_validated():
+    from types import SimpleNamespace
+    from studio_clipart_versions import restore_review, review_fields, validate_review_row
+    item = SimpleNamespace(review_mark="ok", review_checked=True, review_note="", versions=[])
+    row = review_fields(item)
+    assert row == {"review_checked": True}
+    validate_review_row(row)
+    restored = SimpleNamespace(review_mark="x", review_checked=False, review_note="x", versions=[])
+    restore_review(restored, row)
+    assert restored.review_checked is True and restored.review_mark == "ok"
+    restore_review(restored, {})  # an older project: nothing was ever confirmed
+    assert restored.review_checked is False
+    import pytest
+    with pytest.raises(ValueError):
+        validate_review_row({"review_checked": "yes"})

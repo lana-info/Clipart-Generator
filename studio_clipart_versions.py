@@ -27,6 +27,8 @@ def validate_review_row(row: dict) -> None:
     mark = row.get("review_mark", "ok")
     if mark not in MARKS:
         raise ValueError("Неверная метка картинки")
+    if not isinstance(row.get("review_checked", False), bool):
+        raise ValueError("Неверная отметка проверки картинки")
     note = row.get("review_note", "")
     if not isinstance(note, str) or len(note) > MAX_NOTE:
         raise ValueError("Неверная заметка картинки")
@@ -53,6 +55,8 @@ def review_fields(item) -> dict:
     fields = {}
     if getattr(item, "review_mark", "ok") != "ok":
         fields["review_mark"] = item.review_mark
+    if getattr(item, "review_checked", False):
+        fields["review_checked"] = True
     if getattr(item, "review_note", ""):
         fields["review_note"] = item.review_note
     if getattr(item, "versions", None):
@@ -62,6 +66,7 @@ def review_fields(item) -> dict:
 
 def restore_review(item, row: dict) -> None:
     item.review_mark = row.get("review_mark", "ok")
+    item.review_checked = bool(row.get("review_checked", False))
     item.review_note = row.get("review_note", "")
     item.versions = [dict(entry) for entry in row.get("versions", [])]
 
@@ -111,6 +116,7 @@ def keep_version(item, output_dir, prompt: str = "", *, now: datetime | None = N
         "created": (now or datetime.now()).isoformat(timespec="seconds"),
     })
     item.review_mark = "ok"
+    item.review_checked = False  # a replaced picture has to be looked at again
     item.review_note = ""
     return True
 
@@ -146,6 +152,7 @@ def restore_version(item, index: int, output_dir, prompt: str = "", *,
     source.unlink()
     item.output_path = str(target.resolve())
     item.review_mark = "ok"
+    item.review_checked = False
     item.review_note = ""
     return Path(restored["path"])
 
