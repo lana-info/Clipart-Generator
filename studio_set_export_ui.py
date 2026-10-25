@@ -338,8 +338,8 @@ class SetExportDialog(QDialog):
             worker.stop()
             worker.wait(5000)
 
-    def _set_quality_background(self, _index=0):
-        self._quality_background = self.quality_background_combo.currentData() or 'checkerboard'
+    def _set_quality_background(self, value='checkerboard'):
+        self._quality_background = value
         self.quality_picture.set_background(self._quality_background)
         self._refresh_quality_page()
 
@@ -443,13 +443,19 @@ class SetExportDialog(QDialog):
             button.clicked.connect(lambda _=False, value=only_problems: self._set_quality_filter(value))
             filters.addWidget(button)
         filters.addStretch(1)
-        self.quality_background_combo = QComboBox()
-        self.quality_background_combo.setAccessibleName('Цвет фона предпросмотра')
-        for label, value in PREVIEW_BACKGROUND_OPTIONS:
-            self.quality_background_combo.addItem(label, value)
-        self.quality_background_combo.currentIndexChanged.connect(self._set_quality_background)
         filters.addWidget(QLabel('Фон'))
-        filters.addWidget(self.quality_background_combo)
+        self.quality_background_buttons = {}
+        for label, value in PREVIEW_BACKGROUND_OPTIONS:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setAutoExclusive(True)
+            button.setProperty('v3Chip', True)
+            button.setAccessibleName(f'Фон: {label}')
+            button.setToolTip(f'Подставить фон «{label}» под PNG')
+            button.setChecked(value == 'checkerboard')
+            button.clicked.connect(lambda _=False, v=value: self._set_quality_background(v))
+            self.quality_background_buttons[value] = button
+            filters.addWidget(button)
         layout.addLayout(filters)
 
         body = QHBoxLayout()

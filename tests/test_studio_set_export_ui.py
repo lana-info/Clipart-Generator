@@ -916,7 +916,9 @@ def test_png_check_loads_one_by_one_off_ui_thread_and_gates_export(tmp_path):
     assert dialog._qc_pending == 0 and len(dialog.quality_reports) == 3
     assert all(thread is not threading.main_thread() for thread in threads)
     assert dialog.export_button.isEnabled()
-    dialog.quality_background_combo.setCurrentIndex(1)  # black
+    dialog.quality_background_buttons['#000000'].click()  # black
+    assert dialog.quality_background_buttons['#000000'].isChecked()
+    assert not dialog.quality_background_buttons['checkerboard'].isChecked()
     assert dialog._quality_background == '#000000'
     assert dialog.quality_picture._background == '#000000'
     dialog._stop_png_check()
