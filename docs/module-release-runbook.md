@@ -566,3 +566,7 @@ owner's explicit command; drafts are invisible to users. Claude Code allows the
 tool through the rule `Bash(bash "/root/projects/Clipart Generator/ops/release-tool.sh" *)`
 in `~/.claude/settings.json` (the quoted form is required: the unquoted rule did
 not match and the auto-mode classifier blocked the call).
+
+## Подсказка: загрузка patterns через ops/release-tool.sh (2026-10-25)
+
+`ops/release_inspect.py` берёт исходник из `VIBIX_SRC` (по умолчанию старый piapi-status-polling-worktree, где patterns не в списке официальных). Для актуальных модулей: `VIBIX_SRC=<актуальный checkout> PLATFORM=<платформа> bash ops/release-tool.sh upload-module <zip> <studio_version> --yes`. Загрузка и публикация через release-tool не требуют пароля администратора и TOTP; подпись модулей — ключ в /root/.local/share/vibix-studio-signing/publisher-v1.pem (путь из этого файла, не печатать).
