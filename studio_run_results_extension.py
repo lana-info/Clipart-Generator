@@ -31,6 +31,7 @@ class RunResultsExtension(Protocol):
         on_membership_saved: Callable[[Any], None],
         on_fix_requested: Callable[[str], None],
         workspace: Path | None = None, embedded: bool = False,
+        quality_loader: Callable[[Path], Any] | None = None,
     ) -> Any | None: ...
 
     def open_export_dialog(

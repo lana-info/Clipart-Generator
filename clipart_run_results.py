@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from result_background_policy import keeps_background
 import studio_alpha_qc
@@ -235,6 +235,7 @@ class ClipartRunResultsExtension:
         review_issues: Sequence[dict[str, Any]], quality_reports: Sequence[Any],
         on_membership_saved, on_fix_requested,
         workspace: Path | None = None, embedded: bool = False,
+        quality_loader: Callable[[Path], Any] | None = None,
     ) -> Any | None:
         if not self.collections_enabled:
             return None
@@ -244,7 +245,7 @@ class ClipartRunResultsExtension:
             review_issues=review_issues, quality_reports=quality_reports,
             workspace=workspace, embedded=embedded,
             project_name=str(getattr(getattr(state, 'common', None), 'project_name', '') or ''),
-            name_translator=_name_translator(),
+            name_translator=_name_translator(), quality_loader=quality_loader,
         )
         view.membership_saved.connect(on_membership_saved)
         view.fix_requested.connect(on_fix_requested)
