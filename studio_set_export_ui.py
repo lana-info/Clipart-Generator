@@ -108,6 +108,7 @@ class SetExportDialog(QDialog):
     busy_changed = pyqtSignal()
     membership_saved = pyqtSignal(object)
     fix_requested = pyqtSignal(str)
+    mark_requested = pyqtSignal(str, str)  # (png path, review mark) — same marks as on the results step
     review_requested = pyqtSignal()
     QUALITY_THUMB = 120
     export_availability_changed = pyqtSignal(bool)
@@ -156,6 +157,8 @@ class SetExportDialog(QDialog):
                 self.quality_reports[key] = report
         self.worker = None
         self._viewed_quality = set()
+        self._marks = {}
+        self._marks_enabled = False
         self._quality_page_base_text = ''
         self.exported = []
         self._set_columns = []
@@ -350,6 +353,22 @@ class SetExportDialog(QDialog):
         self.quality_action_text.setWordWrap(True)
         self.quality_action_text.setProperty('v3Description', True)
         detail_layout.addWidget(self.quality_picture, 1)
+        # Quick marks (the same as on the results step); shown only when the owner flow can store them.
+        self.quality_marks_row = QWidget()
+        marks_layout = QHBoxLayout(self.quality_marks_row)
+        marks_layout.setContentsMargins(0, 0, 0, 0)
+        self.quality_mark_buttons = {}
+        for key, label in (('ok', 'Ок'), ('bad_generation', 'Брак генерации'), ('bad_cutout', 'Брак вырезания')):
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setProperty('v3Chip', True)
+            button.setAccessibleName(f'Метка: {label}')
+            button.clicked.connect(lambda _=False, mark=key: self._quality_mark_clicked(mark))
+            self.quality_mark_buttons[key] = button
+            marks_layout.addWidget(button)
+        marks_layout.addStretch(1)
+        self.quality_marks_row.hide()
+        detail_layout.addWidget(self.quality_marks_row)
         detail_layout.addWidget(self.quality_issue_title)
         detail_layout.addWidget(self.quality_issue_text)
         detail_layout.addWidget(self.quality_action_text)
@@ -604,7 +623,10 @@ class SetExportDialog(QDialog):
                 status = 'Исключено из наборов'
             else:
                 status = status_labels[report.status]
-            row = QListWidgetItem(path.name if (active and report.status == 'ok') else f'{path.name}\n{status}')
+            mark = {'bad_generation': 'Брак генерации', 'bad_cutout': 'Брак вырезания'}.get(self._marks.get(key, ''), '')
+            if mark and active:
+                status = mark if report.status == 'ok' else f'{status} · {mark}'
+            row = QListWidgetItem(path.name if (active and report.status == 'ok' and not mark) else f'{path.name}\n{status}')
             row.setData(Qt.ItemDataRole.UserRole, key)
             row.setToolTip(f'{path.name} — {status}')
             row.setIcon(self._quality_icon(key, report, active, key in self._viewed_quality))
@@ -679,6 +701,7 @@ class SetExportDialog(QDialog):
         self.quality_picture.set_path(key if report is not None else '')
         if report is not None:
             self._mark_quality_viewed(key, item, report, active)
+        self._sync_mark_buttons(key)
         if report is None:
             self.quality_issue_title.setText('Выберите PNG')
             self.quality_issue_title.show()
@@ -701,6 +724,32 @@ class SetExportDialog(QDialog):
             label.setVisible(bool(label.text()))
         self.quality_fix_button.setEnabled(active and self.worker is None)
         self.quality_exclude_button.setEnabled(active and self.worker is None)
+
+    def enable_marks(self, marks):
+        """Show the quick marks; ``marks`` maps a PNG path to its current mark."""
+        self._marks = {str(Path(path).resolve()): mark for path, mark in dict(marks).items()}
+        self._marks_enabled = True
+        self._sync_mark_buttons(self._current_quality_key())
+
+    def _current_quality_key(self):
+        item = self.quality_list.currentItem()
+        return str(item.data(Qt.ItemDataRole.UserRole) or '') if item is not None else ''
+
+    def _sync_mark_buttons(self, key):
+        known = self._marks_enabled and key in self._marks
+        self.quality_marks_row.setVisible(known)
+        for mark, button in self.quality_mark_buttons.items():
+            button.setChecked(known and self._marks.get(key) == mark)
+            button.setEnabled(known and self.worker is None)
+
+    def _quality_mark_clicked(self, mark):
+        key = self._current_quality_key()
+        if not key or key not in self._marks:
+            return
+        self._marks[key] = mark
+        self.mark_requested.emit(key, mark)
+        self._sync_mark_buttons(key)
+        self._refresh_quality_page()
 
     def _mark_quality_viewed(self, key, item, report, active):
         if key in self._viewed_quality:

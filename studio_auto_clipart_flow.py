@@ -621,6 +621,9 @@ class AutoClipartFlowController(ClipartFlowController):
         panel.busy_changed.connect(self.shell.refresh)
         panel.export_availability_changed.connect(lambda _enabled: self.shell.refresh())
         panel.review_requested.connect(lambda: self._select_step(StepId.RESULTS))
+        if self.review is not None:
+            panel.enable_marks(self.review.marks_by_path())
+            panel.mark_requested.connect(self.review.mark_output)
 
     def navigate(self, direction):
         if self.is_busy():

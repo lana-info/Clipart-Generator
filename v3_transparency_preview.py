@@ -26,6 +26,7 @@ from PyQt6.QtGui import (
     QCursor,
     QIcon,
     QImage,
+    QImageReader,
     QKeySequence,
     QPainter,
     QPainterPath,
@@ -46,6 +47,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -2294,6 +2296,24 @@ class ClipartTransparencyEditorPage(QWidget):
         self.busy_bar.hide()
         self.panel_host.setCentralWidget(canvas_frame)
 
+        # A row of thumbnails under the picture: the quick way along the files while the «Файлы» panel is hidden.
+        self.file_strip = QListWidget()
+        self.file_strip.setViewMode(QListView.ViewMode.IconMode)
+        self.file_strip.setFlow(QListView.Flow.LeftToRight)
+        self.file_strip.setWrapping(False)
+        self.file_strip.setMovement(QListView.Movement.Static)
+        self.file_strip.setResizeMode(QListView.ResizeMode.Adjust)
+        self.file_strip.setIconSize(QSize(56, 56))
+        self.file_strip.setGridSize(QSize(68, 68))
+        self.file_strip.setSpacing(2)
+        self.file_strip.setUniformItemSizes(True)
+        self.file_strip.setFixedHeight(86)
+        self.file_strip.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.file_strip.setAccessibleName("Миниатюры файлов")
+        self.file_strip.currentRowChanged.connect(self._strip_row_changed)
+        self.file_strip.hide()
+        canvas_layout.addWidget(self.file_strip, 3, 0)
+
         files_frame = self.files_frame = QFrame()
         files_frame.setProperty("v3Card", True)
         files_layout = QVBoxLayout(files_frame)
@@ -2777,8 +2797,14 @@ class ClipartTransparencyEditorPage(QWidget):
         self._loaded_path = None
         self.file_list.blockSignals(True)
         self.file_list.clear()
+        self.file_strip.blockSignals(True)
+        self.file_strip.clear()
         for path in self._paths:
             self.file_list.addItem(QListWidgetItem(path.name))
+            strip_item = QListWidgetItem(self._strip_icon(path), "")
+            strip_item.setToolTip(path.name)
+            self.file_strip.addItem(strip_item)
+        self.file_strip.blockSignals(False)
         self.file_list.blockSignals(False)
         if self._paths:
             self.file_list.setCurrentRow(
@@ -2869,6 +2895,10 @@ class ClipartTransparencyEditorPage(QWidget):
             item = self.file_list.item(index)
             if item is not None:
                 item.setText(Path(new_path).name)
+            strip_item = self.file_strip.item(index)
+            if strip_item is not None:
+                strip_item.setIcon(self._strip_icon(Path(new_path)))
+                strip_item.setToolTip(Path(new_path).name)
         if self.current_path in (old, Path(new_path) if new_path is not None else old):
             self._select_file(self.file_list.currentRow())
 
@@ -2891,6 +2921,48 @@ class ClipartTransparencyEditorPage(QWidget):
             widget.setVisible(show)
         if show:
             self.file_counter_label.setText(f"{rows.index(current) + 1} из {len(rows)}")
+        self._sync_file_strip(rows, current, show)
+
+    def _sync_file_strip(self, rows: list[int], current: int, show: bool) -> None:
+        dock = getattr(self, "panel_docks", {}).get("files")
+        files_panel_shown = dock is not None and not dock.isHidden()
+        self.file_strip.setVisible(bool(show and not files_panel_shown))
+        if self.file_strip.count() != self.file_list.count():
+            return
+        self.file_strip.blockSignals(True)
+        for row in range(self.file_strip.count()):
+            self.file_strip.item(row).setHidden(self.file_list.item(row).isHidden())
+        if 0 <= current < self.file_strip.count():
+            self.file_strip.setCurrentRow(current)
+            self.file_strip.scrollToItem(self.file_strip.item(current))
+        self.file_strip.blockSignals(False)
+
+    def _strip_row_changed(self, row: int) -> None:
+        if 0 <= row < self.file_list.count() and row != self.file_list.currentRow():
+            self.file_list.setCurrentRow(row)
+
+    @staticmethod
+    def _strip_icon(path: Path) -> QIcon:
+        reader = QImageReader(str(path))
+        reader.setAutoTransform(True)
+        size = reader.size()
+        pixmap = QPixmap(56, 56)
+        pixmap.fill(QColor("#ffffff"))
+        painter = QPainter(pixmap)
+        for y in range(0, 56, 8):
+            for x in range(0, 56, 8):
+                if (x // 8 + y // 8) % 2:
+                    painter.fillRect(x, y, 8, 8, QColor("#d6dce4"))
+        if size.isValid() and size.width() * size.height() <= 100_000_000:
+            reader.setScaledSize(size.scaled(QSize(56, 56), Qt.AspectRatioMode.KeepAspectRatio))
+            picture = QPixmap.fromImage(reader.read())
+            if not picture.isNull():
+                painter.drawPixmap((56 - picture.width()) // 2, (56 - picture.height()) // 2, picture)
+        painter.end()
+        icon = QIcon()
+        for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
+            icon.addPixmap(pixmap, mode)
+        return icon
 
     def _select_file(self, row: int) -> None:
         self._update_file_nav()
@@ -3002,6 +3074,7 @@ class ClipartTransparencyEditorPage(QWidget):
         # Moving along the files is done with ‹ › under the picture, so the list is out of the way until asked for
         # («Панели ▾»); the review window, which filters and annotates that list, shows it again.
         self.panel_docks["files"].hide()
+        self.panel_docks["files"].visibilityChanged.connect(lambda _visible: self._update_file_nav())
         for key, delta in ((Qt.Key.Key_PageUp, -1), (Qt.Key.Key_PageDown, 1)):
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)

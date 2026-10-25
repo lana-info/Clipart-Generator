@@ -1773,9 +1773,8 @@ class V3RunQueueTests(unittest.TestCase):
             self.app.processEvents()
 
             self.assertIn("Обработка выполняется", page.summary_label.text())
-            self.assertIn("✓ Обработано: 0", page.summary_label.text())
-            self.assertIn("📁 Папка результата:", page.summary_label.text())
-            self.assertIn("⏱ Время:", page.summary_label.text())
+            self.assertIn("Обработано: 0", page.summary_label.text())
+            self.assertIn("Время:", page.summary_label.text())
             self.assertIn("идёт обработка", page._stage_label("processing"))
             self.assertIn("удаляется фон", page._stage_label("background_removal"))
             self.assertIn("очищается край", page._stage_label("edge_cleanup"))

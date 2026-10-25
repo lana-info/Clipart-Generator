@@ -523,6 +523,9 @@ class ImageReview:
             f"удалено {counts['deleted']}." if len(items) - counts["ok"] else
             "Двойной щелчок по строке открывает проверку PNG: там ставятся метки и заметки.")
         self.recreate_button.setText(f"Пересоздать помеченные ({marked})")
+        # Paid regeneration is the main action only when something is marked; otherwise it must not compete with
+        # the transparency check.
+        self.recreate_button.set_variant(ButtonVariant.PRIMARY if marked else ButtonVariant.SECONDARY)
         self.recreate_button.setEnabled(bool(marked) and not self.flow.is_busy())
         deleted, versions = trash_paths(items, session.output_dir)
         self.trash_button.setText(f"Корзина ({len(deleted) + len(versions)})")
@@ -760,6 +763,24 @@ class ImageReview:
         else:
             strip.show_state(mark, history=history, status=(
                 "Картинка в порядке. Поставьте метку, если что-то не так — менять ничего не нужно."))
+
+    def marks_by_path(self):
+        """{resolved output path: review mark} for the PNG-check screen of the export step."""
+        if self.session is None:
+            return {}
+        return {str(Path(item.output_path).resolve()): item.review_mark
+                for item in self.session.items if item.output_path}
+
+    def mark_output(self, path, mark):
+        """Mark a picture by its file (used from the PNG-check screen); same data as the marks on the results step."""
+        if self.session is None or mark not in MARK_LABEL or self._job is not None:
+            return
+        target = str(Path(path).resolve())
+        for item in self.session.items:
+            if item.output_path and str(Path(item.output_path).resolve()) == target:
+                item.review_mark = mark
+                self._save()
+                return
 
     def _set_mark(self, mark):
         row, index = self._current()

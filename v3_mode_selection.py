@@ -163,9 +163,9 @@ class ModeSelectionScreen(QWidget):
         account_layout = QHBoxLayout(self.account_card)
         account_layout.setContentsMargins(
             tokens.space_4,
-            tokens.space_3,
+            tokens.space_2 - 2,  # the captioned icon buttons are 48 px high; the header must not grow
             tokens.space_4,
-            tokens.space_3,
+            tokens.space_2 - 2,
         )
         account_layout.setSpacing(tokens.space_3)
 
@@ -193,12 +193,12 @@ class ModeSelectionScreen(QWidget):
         account_layout.addWidget(self.active_module_label, 2)
         # Buttons, left to right: Home, Continue, API, Diagnostics, Updates, License (last, in the corner).
         self.studio_home_button = V3Button("Главная Studio", ButtonVariant.SECONDARY)
-        make_icon_button(self.studio_home_button, "home", "Главная Studio", size=(48, 40))
+        make_icon_button(self.studio_home_button, "home", "Главная Studio", size=(48, 40), caption="Главная")
         self.studio_home_button.hide()
         account_layout.addWidget(self.studio_home_button)
         # Always-visible "Продолжить": the host fills it with saved projects.
         self.header_continue_button = V3Button("Продолжить", ButtonVariant.GHOST)
-        make_icon_button(self.header_continue_button, "folder", "Продолжить")
+        make_icon_button(self.header_continue_button, "folder", "Продолжить", caption="Проекты")
         self.header_continue_button.clicked.connect(self.header_continue_requested.emit)
         account_layout.addWidget(self.header_continue_button)
         self.api_settings_button = V3Button("API", ButtonVariant.GHOST)
@@ -211,15 +211,15 @@ class ModeSelectionScreen(QWidget):
         self.api_settings_button.clicked.connect(self.api_settings_requested.emit)
         account_layout.addWidget(self.api_settings_button)
         self.diagnostics_button = V3Button("Диагностика", ButtonVariant.GHOST)
-        make_icon_button(self.diagnostics_button, "pulse", "Диагностика")
+        make_icon_button(self.diagnostics_button, "pulse", "Диагностика", caption="Диагностика")
         self.diagnostics_button.clicked.connect(self.diagnostics_requested.emit)
         account_layout.addWidget(self.diagnostics_button)
         self.module_updates_button = V3Button("Обновления модулей", ButtonVariant.GHOST)
-        make_icon_button(self.module_updates_button, "update", "Обновления модулей")
+        make_icon_button(self.module_updates_button, "update", "Обновления модулей", caption="Обновления")
         self.module_updates_button.clicked.connect(self.module_updates_requested.emit)
         account_layout.addWidget(self.module_updates_button)
         self.license_button = V3Button("Лицензия", ButtonVariant.GHOST)
-        make_icon_button(self.license_button, "key", "Лицензия")
+        make_icon_button(self.license_button, "key", "Лицензия", caption="Лицензия")
         self.license_button.clicked.connect(self.license_requested.emit)
         account_layout.addWidget(self.license_button)
         for header_button in (self.studio_home_button, self.header_continue_button,
