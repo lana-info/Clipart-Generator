@@ -5,14 +5,15 @@ from threading import Event
 from uuid import uuid4
 
 from PyQt6.QtCore import QEvent, QPoint, QSize, QThread, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QCursor, QFont, QIcon, QImageReader, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QCursor, QFont, QIcon, QImage, QImageReader, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QDialog, QFileDialog, QFrame,
     QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem,
-    QMenu, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QStackedWidget, QWidgetAction,
+    QComboBox, QMenu, QMessageBox, QProgressBar, QPushButton, QSizePolicy, QStackedWidget, QWidgetAction,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
+from background_preview import PREVIEW_BACKGROUND_OPTIONS
 from studio_set_export import export_clipart_sets, ExportCancelled
 from v3_components import apply_v3_theme
 
@@ -77,12 +78,63 @@ class ExportWorker(QThread):
                 self.cleanup_message = ' Архивы сохранены, но очистку рабочих файлов завершить не удалось.'
 
 
+_THUMB_CACHE = OrderedDict()
+_THUMB_CACHE_LIMIT = 600
+PRIME_BOUND = 120
+
+
+def _file_stamp(path):
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return None
+    return (str(path), stat.st_size, stat.st_mtime_ns)
+
+
+def _read_scaled_image(path, bound):
+    """Thread-safe: decode a PNG scaled to ``bound``; an empty image when it is unusable."""
+    reader = QImageReader(str(path))
+    reader.setAutoTransform(True)
+    size = reader.size()
+    if not size.isValid() or size.width() * size.height() > 100_000_000:
+        return QImage()
+    reader.setScaledSize(size.scaled(QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio))
+    return reader.read()
+
+
+class _PngCheckWorker(QThread):
+    """Loads thumbnails and the transparency check one PNG at a time, off the UI thread."""
+    item_ready = pyqtSignal(str, QImage, object)  # path, thumbnail, report or None
+
+    def __init__(self, paths, loader, parent=None):
+        super().__init__(parent)
+        self.paths, self.loader = list(paths), loader
+        self._stop = Event()
+
+    def stop(self):
+        self._stop.set()
+
+    def run(self):
+        for path in self.paths:
+            if self._stop.is_set():
+                return
+            image = _read_scaled_image(path, PRIME_BOUND)
+            try:
+                report = self.loader(path)
+            except Exception:
+                report = None
+            if self._stop.is_set():
+                return
+            self.item_ready.emit(str(path), image, report)
+
+
 class _CheckerPreview(QLabel):
     """The picture on a checkerboard, always as large as the free space allows."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._path = ''
+        self._background = 'checkerboard'
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         self.setMinimumSize(160, 160)
@@ -91,12 +143,16 @@ class _CheckerPreview(QLabel):
         self._path = str(path or '')
         self._refit()
 
+    def set_background(self, background):
+        self._background = background
+        self._refit()
+
     def _refit(self):
         if not self._path:
             self.setPixmap(QPixmap())
             return
         bound = max(min(self.width(), self.height()) - 4, 64)
-        self.setPixmap(SetExportDialog._checker_pixmap(self._path, bound))
+        self.setPixmap(SetExportDialog._checker_pixmap(self._path, bound, self._background))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -114,19 +170,46 @@ class SetExportDialog(QDialog):
     export_availability_changed = pyqtSignal(bool)
 
     @staticmethod
-    def _scaled_pixmap(path, bound):
-        reader = QImageReader(str(path))
-        reader.setAutoTransform(True)
-        size = reader.size()
-        if not size.isValid() or size.width() * size.height() > 100_000_000:
+    def _prime_pixmap(path, image):
+        """Store a thumbnail decoded by the worker thread (call from the UI thread only)."""
+        stamp = _file_stamp(path)
+        if stamp is not None and not image.isNull():
+            _THUMB_CACHE[(stamp, PRIME_BOUND)] = QPixmap.fromImage(image)
+            while len(_THUMB_CACHE) > _THUMB_CACHE_LIMIT:
+                _THUMB_CACHE.popitem(last=False)
+
+    @staticmethod
+    def _primed_pixmap(path, bound):
+        """A cached thumbnail scaled down, or an empty pixmap; never touches the file's pixels."""
+        stamp = _file_stamp(path)
+        primed = _THUMB_CACHE.get((stamp, PRIME_BOUND)) if stamp is not None else None
+        if primed is None:
             return QPixmap()
-        reader.setScaledSize(size.scaled(
-            QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio,
-        ))
-        return QPixmap.fromImage(reader.read())
+        return primed.scaled(QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
+
+    @staticmethod
+    def _scaled_pixmap(path, bound):
+        stamp = _file_stamp(path)
+        key = (stamp, bound)
+        if stamp is not None and key in _THUMB_CACHE:
+            return _THUMB_CACHE[key]
+        primed = _THUMB_CACHE.get((stamp, PRIME_BOUND)) if stamp is not None else None
+        if primed is not None and bound <= PRIME_BOUND:
+            picture = primed.scaled(
+                QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation)
+        else:
+            picture = QPixmap.fromImage(_read_scaled_image(path, bound))
+        if stamp is not None and not picture.isNull():
+            _THUMB_CACHE[key] = picture
+            while len(_THUMB_CACHE) > _THUMB_CACHE_LIMIT:
+                _THUMB_CACHE.popitem(last=False)
+        return picture
 
     def __init__(self, paths, parent=None, *, membership=None, review_issues=None, quality_reports=None,
-                 workspace=None, embedded=False, project_name='', name_translator=None):
+                 workspace=None, embedded=False, project_name='', name_translator=None,
+                 quality_loader=None):
         super().__init__(parent)
         self.project_name = str(project_name or '')
         self.name_translator = name_translator
@@ -156,6 +239,11 @@ class SetExportDialog(QDialog):
             if key in allowed_paths:
                 self.quality_reports[key] = report
         self.worker = None
+        self._quality_background = 'checkerboard'
+        self._quality_loader = quality_loader
+        self._check_worker = None
+        self._qc_pending = 0
+        self._qc_total = 0
         self._viewed_quality = set()
         self._marks = {}
         self._marks_enabled = False
@@ -224,7 +312,46 @@ class SetExportDialog(QDialog):
         )
         self.preview_popup.hide()
         self._resolve_review_issues(self.saved_membership)
+        if quality_loader is not None and self.paths:
+            self._qc_total = self._qc_pending = len(self.paths)
         self._refresh_summary()
+        self._start_png_check()
+
+    def _start_png_check(self):
+        if not self._qc_pending:
+            return
+        self._check_worker = _PngCheckWorker(self.paths, self._quality_loader, self)
+        self._check_worker.item_ready.connect(self._png_checked)
+        self._check_worker.finished.connect(self._png_check_finished)
+        self._check_worker.start()
+
+    def _png_checked(self, path, image, report):
+        """One PNG finished: its thumbnail and verdict appear at once, the rest keep loading."""
+        self._qc_pending = max(0, self._qc_pending - 1)
+        self._prime_pixmap(path, image)
+        if report is not None and str(getattr(report, 'status', '')) in {'ok', 'review', 'block'}:
+            self.quality_reports[str(Path(path).resolve())] = report
+        done = self._qc_total - self._qc_pending
+        if not self._qc_pending or done % 5 == 0:
+            self._refresh_summary(rebuild=not self._qc_pending)
+            if self.stack.currentWidget() is self.quality_page:
+                self._refresh_quality_page()
+
+    def _png_check_finished(self):
+        if self._qc_pending:  # the worker stopped early (closed or crashed): never leave export blocked silently
+            self._qc_pending = 0
+            self._refresh_summary()
+
+    def _stop_png_check(self):
+        worker = self._check_worker
+        if worker is not None and worker.isRunning():
+            worker.stop()
+            worker.wait(5000)
+
+    def _set_quality_background(self, value='checkerboard'):
+        self._quality_background = value
+        self.quality_picture.set_background(self._quality_background)
+        self._refresh_quality_page()
 
     def _build_summary_page(self):
         page = QWidget()
@@ -326,6 +453,19 @@ class SetExportDialog(QDialog):
             button.clicked.connect(lambda _=False, value=only_problems: self._set_quality_filter(value))
             filters.addWidget(button)
         filters.addStretch(1)
+        filters.addWidget(QLabel('Фон'))
+        self.quality_background_buttons = {}
+        for label, value in PREVIEW_BACKGROUND_OPTIONS:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.setAutoExclusive(True)
+            button.setProperty('v3Chip', True)
+            button.setAccessibleName(f'Фон: {label}')
+            button.setToolTip(f'Подставить фон «{label}» под PNG')
+            button.setChecked(value == 'checkerboard')
+            button.clicked.connect(lambda _=False, v=value: self._set_quality_background(v))
+            self.quality_background_buttons[value] = button
+            filters.addWidget(button)
         layout.addLayout(filters)
 
         body = QHBoxLayout()
@@ -502,7 +642,9 @@ class SetExportDialog(QDialog):
             for row, path in enumerate(self.paths):
                 name = QTableWidgetItem(path.name)
                 name.setToolTip(path.name)
-                pixmap = self._scaled_pixmap(path, 44)
+                # Background mode: never decode a PNG here; icons appear once the worker primed them.
+                pixmap = (self._scaled_pixmap(path, 44) if self._quality_loader is None or not self._qc_pending
+                          else self._primed_pixmap(path, 44))
                 if not pixmap.isNull():
                     name.setIcon(QIcon(pixmap))
                 name.setData(Qt.ItemDataRole.UserRole, str(path))
@@ -646,7 +788,7 @@ class SetExportDialog(QDialog):
     def _quality_icon(self, key, report, active, viewed):
         """Thumbnail on the checkerboard with a status badge (⚠/✕) and a «viewed» tick; excluded files are dimmed."""
         size = self.QUALITY_THUMB
-        picture = self._checker_pixmap(key, size)
+        picture = self._checker_pixmap(key, size, self._quality_background)
         canvas = QPixmap(size, size)
         canvas.fill(QColor('#1b2636'))
         painter = QPainter(canvas)
@@ -680,15 +822,18 @@ class SetExportDialog(QDialog):
         return icon
 
     @staticmethod
-    def _checker_pixmap(path, bound=220):
+    def _checker_pixmap(path, bound=220, background='checkerboard'):
         picture = SetExportDialog._scaled_pixmap(path, bound)
         if picture.isNull():
             return picture
         canvas = QPixmap(picture.size())
         painter = QPainter(canvas)
-        for y in range(0, canvas.height(), 14):
-            for x in range(0, canvas.width(), 14):
-                painter.fillRect(x, y, 14, 14, QColor('#d6dce4' if (x // 14 + y // 14) % 2 else '#ffffff'))
+        if background == 'checkerboard':
+            for y in range(0, canvas.height(), 14):
+                for x in range(0, canvas.width(), 14):
+                    painter.fillRect(x, y, 14, 14, QColor('#d6dce4' if (x // 14 + y // 14) % 2 else '#ffffff'))
+        else:
+            painter.fillRect(canvas.rect(), QColor(background))
         painter.drawPixmap(0, 0, picture)
         painter.end()
         return canvas
@@ -904,8 +1049,14 @@ class SetExportDialog(QDialog):
         )
         block_count = len(self._active_quality_blockers())
         quality_issue_count = review_count + block_count
-        self.quality_panel.setVisible(quality_issue_count > 0)
-        if quality_issue_count:
+        self.quality_panel.setVisible(quality_issue_count > 0 or self._qc_pending > 0)
+        if self._qc_pending:
+            done = self._qc_total - self._qc_pending
+            self.quality_summary_label.setText(f'Проверка PNG: {done} из {self._qc_total}…')
+            self.quality_panel.setProperty('state', 'warning')
+            self.quality_panel.style().unpolish(self.quality_panel)
+            self.quality_panel.style().polish(self.quality_panel)
+        elif quality_issue_count:
             parts = []
             if review_count:
                 parts.append(f'{review_count} нужно проверить')
@@ -925,7 +1076,8 @@ class SetExportDialog(QDialog):
         else:
             self.quality_summary_label.clear()
             self._set_quality_page_text('')
-        export_enabled = bool(groups) and not self._blocking_review_issues() and not block_count and self.worker is None
+        export_enabled = (bool(groups) and not self._blocking_review_issues() and not block_count
+                          and not self._qc_pending and self.worker is None)
         self.export_button.setEnabled(export_enabled)
         self.quality_export_button.setEnabled(export_enabled)
         self.export_availability_changed.emit(export_enabled)
@@ -1221,6 +1373,7 @@ class SetExportDialog(QDialog):
                 'Отменяю экспорт и удаляю временные файлы. Дождитесь завершения.'
             )
             return
+        self._stop_png_check()
         self._hide_preview()
         super().reject()
 
@@ -1229,5 +1382,6 @@ class SetExportDialog(QDialog):
             self.reject()
             event.ignore()
         else:
+            self._stop_png_check()
             self._hide_preview()
             super().closeEvent(event)

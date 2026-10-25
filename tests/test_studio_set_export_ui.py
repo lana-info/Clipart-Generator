@@ -883,3 +883,43 @@ def test_png_check_screen_hides_quick_marks_when_the_flow_has_none(images):
     dialog._show_quality_review()
     assert dialog.quality_marks_row.isHidden()
     dialog.reject()
+
+
+def test_png_check_loads_one_by_one_off_ui_thread_and_gates_export(tmp_path):
+    from PIL import Image
+    from PyQt6.QtCore import QCoreApplication
+    from studio_alpha_qc import inspect_alpha_png
+    from studio_set_export_ui import SetExportDialog
+    import threading
+    import time
+
+    app = QApplication.instance() or QApplication([])
+    paths = []
+    for index in range(3):
+        path = tmp_path / f'item_{index}.png'
+        image = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+        image.paste((200, 50, 50, 255), (20, 20, 44, 44))
+        image.save(path)
+        paths.append(path)
+    threads = []
+
+    def loader(path):
+        threads.append(threading.current_thread())
+        return inspect_alpha_png(path)
+
+    dialog = SetExportDialog(paths, embedded=True, quality_loader=loader)
+    assert not dialog.export_button.isEnabled()  # verdicts unknown yet
+    deadline = time.monotonic() + 15
+    while dialog._qc_pending and time.monotonic() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.01)
+    assert dialog._qc_pending == 0 and len(dialog.quality_reports) == 3
+    assert all(thread is not threading.main_thread() for thread in threads)
+    assert dialog.export_button.isEnabled()
+    dialog.quality_background_buttons['#000000'].click()  # black
+    assert dialog.quality_background_buttons['#000000'].isChecked()
+    assert not dialog.quality_background_buttons['checkerboard'].isChecked()
+    assert dialog._quality_background == '#000000'
+    assert dialog.quality_picture._background == '#000000'
+    dialog._stop_png_check()
+    app.processEvents()

@@ -39,6 +39,18 @@ class FixtureWorker(QObject):
         return self.running
 
 
+
+def wait_png_check(panel, timeout=20):
+    """The export panel checks PNGs one by one in the background; export opens when it ends."""
+    import time
+    deadline = time.monotonic() + timeout
+    while panel._qc_pending and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(0.01)
+    assert not panel._qc_pending
+    QApplication.processEvents()
+
+
 @pytest.fixture(scope="module", autouse=True)
 def app():
     app = QApplication.instance() or QApplication([])
@@ -194,6 +206,7 @@ def test_cancelled_slots_do_not_block_ready_export_after_reopen(workspace, monke
     resumed.save_timer.stop()
     assert all(item.status is RunItemStatus.CANCELLED for item in resumed.run_queue.session.items[1:])
     resumed._refresh_export()
+    wait_png_check(resumed.export_panel)
     assert resumed.export_panel.review_issues == []
     assert resumed.export_panel.export_button.isEnabled()
     assert resumed.export_panel.groups()[0]['images'] == [output.resolve()]
@@ -395,6 +408,7 @@ def test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance(wor
     assert retained.items[0].output_path == str(output)
     assert retained.items[0].paid_completed_stages == ('upscale_after',)
     resumed._refresh_export()
+    wait_png_check(resumed.export_panel)
     assert resumed.export_panel.review_issues == []
     assert resumed.export_panel.export_button.isEnabled()
     resumed.flush()
@@ -404,6 +418,7 @@ def test_replan_reuses_ready_output_only_with_confirmed_unchanged_provenance(wor
     assert reopened.shell.state.current_step is StepId.RESULTS
     view.shell.next_button.click()
     assert reopened.shell.state.current_step is StepId.TRANSPARENCY
+    wait_png_check(reopened.export_panel)
     export_folder = tmp_path / 'replanned-archives'
     export_folder.mkdir()
     monkeypatch.setattr(QFileDialog, 'getExistingDirectory', lambda *args: str(export_folder))
@@ -759,6 +774,7 @@ def test_confirmed_run_progress_results_export_and_resume(workspace, monkeypatch
     assert not session.running
     controller.navigate(1)
     assert view.project_state.current_step is StepId.TRANSPARENCY
+    wait_png_check(controller.export_panel)
     assert view.shell.next_button.isEnabled()
     paths = controller.run_queue.page._export_paths()
     assert paths == [output] or paths == (output,)
@@ -1239,3 +1255,30 @@ def test_ready_files_in_the_result_folder_can_be_reconnected_without_generation(
     controller.recover_results()  # nothing left: no second question
     assert len(asked) == 1
     worker.assert_not_called()
+
+
+def test_results_png_check_button_opens_png_check_before_export(workspace):
+    view, controller, _, _ = workspace
+    prepare_launch(controller)
+    session = RunQueueSession(build_clipart_run_request(controller.shell.state), controller.shell.state.mode)
+    session.output_dir.mkdir(parents=True, exist_ok=True)
+    path = session.output_dir / 'duck_birthday_01.png'
+    image = Image.new('RGBA', (96, 96), (0, 0, 0, 0))
+    ImageDraw.Draw(image).ellipse((12, 12, 83, 83), fill=(240, 200, 140, 255))
+    image.save(path)
+    session.items[0].status = RunItemStatus.SUCCEEDED
+    session.items[0].output_path = str(path)
+    for item in session.items[1:]:
+        item.status = RunItemStatus.FAILED
+    session.handle_finished()
+    controller.run_queue.session = session
+    controller.run_queue.page.set_session(session)
+    controller._select_step(StepId.RESULTS)
+    button = controller.run_queue.page.check_transparency_button
+    assert button.text() == "Проверка PNG"
+    controller._open_png_check()
+    assert view.project_state.current_step is StepId.TRANSPARENCY
+    panel = controller.export_panel
+    wait_png_check(panel)
+    assert panel.stack.currentWidget() is panel.quality_page
+    assert panel.quality_list.count() == 1

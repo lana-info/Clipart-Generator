@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 from PyQt6.QtCore import QEventLoop, QTimer, Qt
 from PyQt6.QtWidgets import QFileDialog
 
-from tests.test_auto_clipart_workflow import app, workspace, prepare_launch
+from tests.test_auto_clipart_workflow import app, workspace, prepare_launch, wait_png_check
 from v3_clipart_flow import build_clipart_run_request
 from v3_project_state import StepId
 from v3_run_queue import RunItemStatus, RunQueueSession
@@ -45,6 +45,7 @@ def test_legacy_failed_jobs_export_ready_png_without_erasing_saved_work(workspac
     assert not panel.export_button.isVisible()  # One export action in the footer.
     panel.table.item(0, 1).setCheckState(Qt.CheckState.Unchecked)
     panel.ready_only.setChecked(True)
+    wait_png_check(panel)
     assert view.shell.next_button.isEnabled()
     before = path.read_bytes()
     selected_groups = panel.groups()

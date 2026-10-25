@@ -334,6 +334,13 @@ class AutoClipartFlowController(ClipartFlowController):
         self._install_recovery()
         # The separate export step owns collection delivery, not the result toolbar.
         self.run_queue.page.results_extension.export_action_label = ""
+        # Here the toolbar button opens the PNG check before export (from it a file can be opened in
+        # the transparency editor); the shared button keeps its editor-only meaning in other modules.
+        check_button = self.run_queue.page.check_transparency_button
+        check_button.clicked.disconnect()
+        check_button.clicked.connect(self._open_png_check)
+        check_button.setText("Проверка PNG")
+        check_button.setToolTip("Просмотреть готовые PNG перед экспортом и при необходимости открыть проверку прозрачности")
         self.run_queue.page.refresh_from_state()
         self.export_page = QWidget()
         layout = QVBoxLayout(self.export_page)
@@ -596,6 +603,7 @@ class AutoClipartFlowController(ClipartFlowController):
                 and getattr(existing, '_review_issues', None) == review_issues:
             return
         if existing is not None:
+            existing._stop_png_check()
             existing.hide()
             self.export_page.layout().removeWidget(existing)
             existing.deleteLater()
@@ -608,9 +616,10 @@ class AutoClipartFlowController(ClipartFlowController):
         panel = extension.create_export_view(
             self.export_page, self.shell.state, paths,
             review_issues=review_issues,
-            quality_reports=page._alpha_qc_reports(paths),
+            quality_reports=(),
             workspace=session.workspace_root if session is not None else None,
             embedded=True,
+            quality_loader=lambda path: next(iter(page._alpha_qc_reports([path])), None),
             on_membership_saved=page._save_export_membership,
             on_fix_requested=page._request_quality_fix,
         )
@@ -747,6 +756,13 @@ class AutoClipartFlowController(ClipartFlowController):
             self._select_step(route[index + 1])
         except (ValueError, OSError, RuntimeError) as error:
             QMessageBox.warning(self.brief, "Clipart", str(error)[:500])
+
+    def _open_png_check(self):
+        if self.is_busy() or self.run_queue.session is None or self.run_queue.session.running:
+            return
+        self._select_step(StepId.TRANSPARENCY)
+        if self.export_panel is not None:
+            self.export_panel._show_quality_review()
 
     def _open_transparency_editor(self, item_index):
         # Editing is a local dialog, not the eighth (export) workflow page.
