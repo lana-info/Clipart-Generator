@@ -855,3 +855,31 @@ def test_png_check_screen_counts_viewed_files_and_asks_before_exporting_unviewed
     assert dialog.quality_list.currentRow() == 2  # sent to the first file not yet looked at
     assert dialog.worker is None
     dialog.reject()
+
+
+def test_png_check_screen_quick_marks_use_the_results_step_marks(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images, ['Мини'])
+    reports = [AlphaQcReport(str(path.resolve()), 'ok', (), width=32, height=32) for path in images]
+    dialog = SetExportDialog(images, membership=membership, quality_reports=reports)
+    dialog.enable_marks({str(path.resolve()): 'ok' for path in images})
+    dialog._show_quality_review()
+    sent = []
+    dialog.mark_requested.connect(lambda path, mark: sent.append((path, mark)))
+    assert not dialog.quality_marks_row.isHidden()
+    assert dialog.quality_mark_buttons['ok'].isChecked()
+    dialog.quality_mark_buttons['bad_cutout'].click()
+    assert sent == [(str(images[0].resolve()), 'bad_cutout')]
+    assert dialog.quality_mark_buttons['bad_cutout'].isChecked() and not dialog.quality_mark_buttons['ok'].isChecked()
+    assert 'Брак вырезания' in dialog.quality_list.item(0).text()
+    dialog.reject()
+
+
+def test_png_check_screen_hides_quick_marks_when_the_flow_has_none(images):
+    from studio_alpha_qc import AlphaQcReport
+    membership = _membership_for_sets(images[:1], ['Мини'])
+    dialog = SetExportDialog(images[:1], membership=membership,
+                             quality_reports=[AlphaQcReport(str(images[0].resolve()), 'ok', (), width=32, height=32)])
+    dialog._show_quality_review()
+    assert dialog.quality_marks_row.isHidden()
+    dialog.reject()

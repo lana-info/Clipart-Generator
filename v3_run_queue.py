@@ -1945,13 +1945,15 @@ class RunResultsPage(QWidget):
         )
         self.scroll_area.setWidget(self.card)
         self.setAccessibleName("Выполнение и результаты")
+        # The subtitle only repeated what is on the screen; the title is shortened (owner 2026-10-25).
+        self.card.title_label.setText("Результаты")
+        self.card.description_label.hide()
 
         self.summary_label = QLabel("Запуск ещё не начат.")
         self.summary_label.setWordWrap(True)
         self.summary_label.setProperty("v3Status", True)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
-        self.progress_bar.setMaximumWidth(520)
         self.current_label = QLabel("Текущий файл: —")
         self.current_label.setWordWrap(True)
         self.queue = RunQueue(tokens=tokens)
@@ -1994,6 +1996,7 @@ class RunResultsPage(QWidget):
         )
         self.technical_note.setWordWrap(True)
         self.technical_note.setProperty("v3Small", True)
+        self.technical_note.hide()  # the «Диагностика» button is in the header; the hint only took room
         for label in (
             self.processing_label,
             self.stages_label,
@@ -2187,6 +2190,7 @@ class RunResultsPage(QWidget):
         self.progress_bar.setRange(0, 0 if session.running and session.activity_indeterminate else 100)
         if not (session.running and session.activity_indeterminate):
             self.progress_bar.setValue(session.progress_percent)
+        self.progress_bar.setVisible(bool(session.running))
         current = (
             session.items[session.current_index]
             if session.current_index is not None
@@ -2198,6 +2202,7 @@ class RunResultsPage(QWidget):
             if current is not None and session.running
             else "Текущий файл: —"
         )
+        self.current_label.setVisible(bool(session.running))
         row = self.queue.currentRow()
         self.queue.refresh_items(session.items)
         if row >= 0:
@@ -2232,6 +2237,7 @@ class RunResultsPage(QWidget):
         self.retry_button.setEnabled(retry_visible)
         self.finish_button.setEnabled(finish_visible)
         self.open_folder_button.setEnabled(session.output_dir.is_dir())
+        self.open_folder_button.setToolTip(f"Папка: {session.output_dir}")
         self._selection_changed(self.queue.currentRow())
         self._refresh_review()
         self._show_completion_if_needed(session)
@@ -2401,14 +2407,16 @@ class RunResultsPage(QWidget):
             heading = "Обработка завершена не полностью"
         else:
             heading = "Обработка завершена успешно"
+        # The folder path is on the «Открыть папку с результатами» button; the numbers stay in one line, and
+        # «завершена успешно» is not repeated: no heading means everything went well.
+        head = "" if heading == "Обработка завершена успешно" else f"{heading}\n"
         return (
-            f"{heading}\n"
-            f"✓ Обработано: {counts['succeeded']}   "
-            f"⚠ Ошибки: {counts['failed']}   "
-            f"⏭ Пропущено: {counts['cancelled']}   "
-            f"Всего: {len(session.items)}\n"
-            f"📁 Папка результата: {session.output_dir}\n"
-            f"⏱ Время: {format_elapsed_duration(session.elapsed_seconds)}"
+            f"{head}"
+            f"Обработано: {counts['succeeded']}   "
+            f"Ошибки: {counts['failed']}   "
+            f"Пропущено: {counts['cancelled']}   "
+            f"Всего: {len(session.items)}   "
+            f"Время: {format_elapsed_duration(session.elapsed_seconds)}"
         )
 
     def _selected_item(self, row: int) -> RunItem | None:
@@ -2491,6 +2499,7 @@ class RunResultsPage(QWidget):
                 "Ожидание запуска",
                 RunItemStatus.PENDING,
             )
+            self.processing_label.hide()
             self.stages_label.setText("Этапы: ещё не начаты")
             self.file_hints_label.setText("Дополнительные сведения доступны в центре проверки")
             self.pixel_evidence_label.setText("Проверка пикселей: не выполнялась")
@@ -2550,6 +2559,8 @@ class RunResultsPage(QWidget):
             f"{icon} {title}\n{detail}",
             item.status,
         )
+        # The list row already says «готово»; the line is kept for problems, where the reason matters.
+        self.processing_label.setVisible(item.status in {RunItemStatus.FAILED, RunItemStatus.CANCELLED})
         stage_text = ", ".join(
             f"{name}={status}"
             for name, status in sorted(item.stage_statuses.items())

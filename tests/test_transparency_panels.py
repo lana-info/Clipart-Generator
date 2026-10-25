@@ -115,3 +115,29 @@ def test_zoom_bar_on_the_picture(page, app):
     page.zoom_menu_button.menu().actions()[0].trigger()
     app.processEvents()
     assert page.zoom_buttons["fit"].isChecked() and page.zoom_menu_button.text().endswith(" % ▾")
+
+
+def test_thumbnail_strip_follows_the_files_when_the_file_panel_is_hidden(app, tmp_path, monkeypatch):
+    monkeypatch.setattr(ClipartTransparencyEditorPage, "PANEL_SETTINGS", ("Vibix-test", f"strip-{os.getpid()}"))
+    QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
+    files = []
+    for name in ("a", "b", "c"):
+        path = tmp_path / f"{name}.png"
+        Image.new("RGBA", (64, 64), (200, 120, 90, 255)).save(path)
+        files.append(path)
+    window = ClipartTransparencyEditorPage()
+    window.resize(1120, 780)
+    window.set_files(files)
+    window.show()
+    app.processEvents()
+    assert window.file_strip.isVisible() and window.file_strip.count() == 3
+    assert not window.file_strip.item(0).icon().isNull()
+    window.file_strip.setCurrentRow(2)  # a click on the third thumbnail
+    assert window.file_list.currentRow() == 2 and window.file_counter_label.text() == "3 из 3"
+    window.next_file_button.click()
+    assert window.file_strip.currentRow() == 0
+    window.panel_docks["files"].show()
+    app.processEvents()
+    assert not window.file_strip.isVisible()  # the file panel shows the same files already
+    window.close()
+    QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
