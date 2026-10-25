@@ -33,7 +33,18 @@ MARKS = (
 MARK_LABEL = {key: label for key, label, _ in MARKS}
 LIST_LABEL = dict(MARK_LABEL, deleted="Удалено")
 MARK_COLOR = {key: colour for key, _, colour in MARKS}
-FILTERS = (("all", "Все"), ("marked", "Помеченные"), ("deleted", "Удалённые"))
+FILTERS = (("all", "Все"), ("unchecked", "Не проверено"), ("marked", "Помеченные"), ("deleted", "Удалённые"))
+UNCHECKED = "#8393a7"
+MARK_COLOR["unchecked"] = UNCHECKED
+LIST_LABEL["unchecked"] = "Не проверено"
+
+
+def mark_state(item) -> str:
+    """The mark as the owner sees it: «Ок» only once she has looked; otherwise «Не проверено»."""
+    mark = item.review_mark
+    if mark == "ok" and not getattr(item, "review_checked", False):
+        return "unchecked"
+    return mark
 
 # (key, label, worker setting overrides). Paid status comes from the provider registry.
 CUTOUT_METHODS = (
@@ -58,6 +69,7 @@ def review_supported() -> bool:
     from v3_run_queue import RunItem, RunQueueSession, RunQueueSupport
     from v3_transparency_preview import ClipartTransparencyEditorPage
     return ("review_mark" in getattr(RunItem, "__dataclass_fields__", {})
+            and "review_checked" in getattr(RunItem, "__dataclass_fields__", {})
             and hasattr(RunQueueSession, "preview_reprocess")
             and hasattr(RunQueueSupport, "reprocess_selected")
             and hasattr(ClipartTransparencyEditorPage, "add_canvas_footer"))
@@ -69,8 +81,10 @@ def method_is_paid(overrides) -> bool:
 
 def mark_counts(items) -> dict[str, int]:
     counts = {key: 0 for key, _, _ in MARKS}
+    counts["unchecked"] = 0
     for item in items:
-        counts[item.review_mark] = counts.get(item.review_mark, 0) + 1
+        state = mark_state(item)
+        counts[state] = counts.get(state, 0) + 1
     return counts
 
 
@@ -78,15 +92,18 @@ def annotation(item):
     """(colour, text, dimmed) for a finished item, None while it is not finished."""
     if item.status.value not in _FINISHED:
         return None
-    text = LIST_LABEL[item.review_mark]
+    state = mark_state(item)
+    text = LIST_LABEL[state]
     if item.review_note:
         text += f" · ✎ {item.review_note[:60]}"
-    return MARK_COLOR[item.review_mark], text, item.review_mark == "deleted"
+    return MARK_COLOR[state], text, item.review_mark == "deleted"
 
 
 def visible(item, mode: str) -> bool:
     if mode == "marked":
-        return item.review_mark != "ok"
+        return mark_state(item) in {"bad_generation", "bad_cutout", "deleted"}
+    if mode == "unchecked":
+        return mark_state(item) == "unchecked"
     if mode == "deleted":
         return item.review_mark == "deleted"
     return True
@@ -491,9 +508,9 @@ class ImageReview:
 
     def _filter_labels(self, items):
         counts = mark_counts(items)
-        marked = len(items) - counts["ok"]
-        return {"all": f"Все ({len(items)})", "marked": f"Помеченные ({marked})",
-                "deleted": f"Удалённые ({counts['deleted']})"}
+        marked = counts["bad_generation"] + counts["bad_cutout"] + counts["deleted"]
+        return {"all": f"Все ({len(items)})", "unchecked": f"Не проверено ({counts['unchecked']})",
+                "marked": f"Помеченные ({marked})", "deleted": f"Удалённые ({counts['deleted']})"}
 
     def refresh_results(self):
         self.session_changed()
@@ -520,8 +537,10 @@ class ImageReview:
         marked = counts["bad_generation"] + counts["bad_cutout"]
         self.results_summary.setText(
             f"Помечено: брак генерации {counts['bad_generation']}, брак вырезания {counts['bad_cutout']}, "
-            f"удалено {counts['deleted']}." if len(items) - counts["ok"] else
-            "Двойной щелчок по строке открывает проверку PNG: там ставятся метки и заметки.")
+            f"удалено {counts['deleted']}." if (marked or counts["deleted"]) else
+            (f"Не проверено: {counts['unchecked']}. Двойной щелчок по строке открывает проверку PNG: "
+             "там ставятся «Ок», метки и заметки.") if counts["unchecked"] else
+            "Все картинки проверены.")
         self.recreate_button.setText(f"Пересоздать помеченные ({marked})")
         # Paid regeneration is the main action only when something is marked; otherwise it must not compete with
         # the transparency check.
@@ -710,8 +729,9 @@ class ImageReview:
                 rows.append(None)
                 continue
             item = items[index]
-            text = LIST_LABEL[item.review_mark] + (" · ✎ заметка" if item.review_note else "")
-            rows.append((MARK_COLOR[item.review_mark], text, item.review_mark == "deleted",
+            state = mark_state(item)
+            text = LIST_LABEL[state] + (" · ✎ заметка" if item.review_note else "")
+            rows.append((MARK_COLOR[state], text, item.review_mark == "deleted",
                          not visible(item, self.filter_mode)))
         editor.set_file_annotations(rows)
         self._refresh_strip()
@@ -742,6 +762,7 @@ class ImageReview:
                 status=f"Новый вариант: {method.lower()}. Прежний сохранён как версия {history}.")
             return
         mark = item.review_mark
+        state = mark_state(item)
         if mark == "bad_generation":
             strip.show_state(mark, history=history, actions=(strip.prompt_button,), status=(
                 "Будет создана заново кнопкой «Пересоздать помеченные» на странице результатов. "
@@ -760,6 +781,9 @@ class ImageReview:
         elif mark == "deleted":
             strip.show_state(mark, history=history, actions=(strip.restore_button,),
                              status="Удалено из набора.")
+        elif state == "unchecked":
+            strip.show_state(None, history=history, status=(
+                "Не проверено. Поставьте «Ок», если всё хорошо, или метку брака."))
         else:
             strip.show_state(mark, history=history, status=(
                 "Картинка в порядке. Поставьте метку, если что-то не так — менять ничего не нужно."))
@@ -768,7 +792,7 @@ class ImageReview:
         """{resolved output path: review mark} for the PNG-check screen of the export step."""
         if self.session is None:
             return {}
-        return {str(Path(item.output_path).resolve()): item.review_mark
+        return {str(Path(item.output_path).resolve()): mark_state(item)
                 for item in self.session.items if item.output_path}
 
     def mark_output(self, path, mark):
@@ -779,6 +803,7 @@ class ImageReview:
         for item in self.session.items:
             if item.output_path and str(Path(item.output_path).resolve()) == target:
                 item.review_mark = mark
+                item.review_checked = True
                 self._save()
                 return
 
@@ -789,6 +814,7 @@ class ImageReview:
         if self._preview_row == row:
             self._keep_preview()
         self.session.items[index].review_mark = mark
+        self.session.items[index].review_checked = True
         self._save()
         self.refresh_editor()
 
@@ -933,6 +959,7 @@ class ImageReview:
         self._preview_row = None
         item = self.session.items[index]
         item.review_mark, item.review_note = "ok", ""
+        item.review_checked = True
         self._save()
         self.refresh_editor()
 

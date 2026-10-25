@@ -142,6 +142,8 @@ class RunItem:
     paid_completed_stages: tuple[str, ...] = field(default=(), repr=False)
     # Owner review (Auto Clipart): mark, note and earlier replaced pictures.
     review_mark: str = field(default="ok", repr=False)
+    # «Ок» counts only after the owner looked at the picture; a new or regenerated one is «Не проверено».
+    review_checked: bool = field(default=False, repr=False)
     review_note: str = field(default="", repr=False)
     versions: list[dict[str, str]] = field(default_factory=list, repr=False)
 
