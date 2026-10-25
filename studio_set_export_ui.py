@@ -179,6 +179,16 @@ class SetExportDialog(QDialog):
                 _THUMB_CACHE.popitem(last=False)
 
     @staticmethod
+    def _primed_pixmap(path, bound):
+        """A cached thumbnail scaled down, or an empty pixmap; never touches the file's pixels."""
+        stamp = _file_stamp(path)
+        primed = _THUMB_CACHE.get((stamp, PRIME_BOUND)) if stamp is not None else None
+        if primed is None:
+            return QPixmap()
+        return primed.scaled(QSize(bound, bound), Qt.AspectRatioMode.KeepAspectRatio,
+                             Qt.TransformationMode.SmoothTransformation)
+
+    @staticmethod
     def _scaled_pixmap(path, bound):
         stamp = _file_stamp(path)
         key = (stamp, bound)
@@ -632,7 +642,9 @@ class SetExportDialog(QDialog):
             for row, path in enumerate(self.paths):
                 name = QTableWidgetItem(path.name)
                 name.setToolTip(path.name)
-                pixmap = self._scaled_pixmap(path, 44)
+                # Background mode: never decode a PNG here; icons appear once the worker primed them.
+                pixmap = (self._scaled_pixmap(path, 44) if self._quality_loader is None or not self._qc_pending
+                          else self._primed_pixmap(path, 44))
                 if not pixmap.isNull():
                     name.setIcon(QIcon(pixmap))
                 name.setData(Qt.ItemDataRole.UserRole, str(path))
