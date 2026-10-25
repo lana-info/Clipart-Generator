@@ -450,3 +450,29 @@ def test_chroma_receipt_follows_the_renamed_picture(tmp_path):
     assert receipt_path(previous).read_text(encoding="utf-8") == "new"
     assert not receipt_path(new).exists()
     editor.deleteLater()
+
+
+def test_marked_filter_keeps_every_row_and_the_filter_bar_during_a_run(tmp_path):
+    """Regression (owner, 2026-10-25): a regenerated picture loses its mark, so with «Помеченные» the list melted to
+    one row during the run and the filter bar disappeared."""
+    review, editor, session, flow = open_review(tmp_path)
+    page = flow.run_queue.page
+    for item in session.items:
+        item.review_mark = "bad_generation"
+    session.items[-1].review_mark = "bad_cutout"
+    review.filter_mode = "marked"
+    page.refresh_from_state()
+    assert not review.results_bar.isHidden() and review.results_filter.isEnabled()
+    assert sum(not page.queue.item(row).isHidden() for row in range(page.queue.count())) == len(session.items)
+    session.running = True
+    for item in session.items[:-1]:
+        item.review_mark = "ok"  # what keep_version does when a picture is replaced
+    page.refresh_from_state()
+    assert not review.results_bar.isHidden()  # the menu stays on screen
+    assert not review.results_filter.isEnabled()
+    assert sum(not page.queue.item(row).isHidden() for row in range(page.queue.count())) == len(session.items)
+    session.running = False
+    page.refresh_from_state()
+    assert review.results_filter.isEnabled()
+    assert sum(not page.queue.item(row).isHidden() for row in range(page.queue.count())) == 1  # only the marked one
+    editor.deleteLater()

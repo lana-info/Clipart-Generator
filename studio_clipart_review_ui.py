@@ -433,7 +433,7 @@ class ImageReview:
         self._installed = True
         page = self.flow.run_queue.page
         page.queue.annotate = annotation
-        page.queue.row_visible = lambda item: visible(item, self.filter_mode)
+        page.queue.row_visible = self._row_visible
         bar = QWidget()
         top = QHBoxLayout(bar)
         top.setContentsMargins(0, 0, 0, 0)
@@ -475,6 +475,14 @@ class ImageReview:
         self.results_actions = actions
         page.review_refresh = self.refresh_results
 
+    def _row_visible(self, item):
+        """While a run is going every row stays in the list: a regenerated picture loses its mark the moment it is
+        replaced, and with the «Помеченные» filter the whole list would melt away under the owner's eyes."""
+        session = self.session
+        if session is not None and session.running:
+            return True
+        return visible(item, self.filter_mode)
+
     def _results_filter_changed(self, _index):
         mode = self.results_filter.currentData()
         if mode and mode != self.filter_mode:
@@ -491,9 +499,10 @@ class ImageReview:
         self.session_changed()
         session = self.session
         idle = session is not None and not session.running
-        self.results_bar.setVisible(idle)
+        # The filter stays on screen during a run (it is only switched off), so it never «disappears».
+        self.results_bar.setVisible(session is not None)
         self.results_actions.setVisible(idle)
-        if not idle:
+        if session is None:
             return
         items = session.items
         labels = self._filter_labels(items)
@@ -503,6 +512,10 @@ class ImageReview:
             self.results_filter.addItem(labels[key], key)
         self.results_filter.setCurrentIndex(self.results_filter.findData(self.filter_mode))
         self.results_filter.blockSignals(False)
+        self.results_filter.setEnabled(idle)
+        self.results_filter.setToolTip("" if idle else "Во время запуска показываются все картинки")
+        if not idle:
+            return
         counts = mark_counts(items)
         marked = counts["bad_generation"] + counts["bad_cutout"]
         self.results_summary.setText(
