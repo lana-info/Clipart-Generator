@@ -138,6 +138,14 @@ class V3StepLabel(QLabel):
         self._tokens = tokens
         self.setWordWrap(True)
 
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt API
+        """A shell may rename a step after the row was created; the row height must follow the new title."""
+        super().setText(text)
+        self.updateGeometry()
+        parent = self.parentWidget()
+        if parent is not None and parent.layout() is not None:
+            parent.layout().invalidate()
+
     def _parts(self) -> tuple[str, str, str] | None:
         match = self._PATTERN.match(self.text())
         return match.groups() if match else None
@@ -565,6 +573,22 @@ QScrollBar::handle:hover:vertical,
 QScrollBar::handle:hover:horizontal {{
     background: {tokens.text_muted};
 }}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {{
+    height: 0;
+    background: none;
+    border: none;
+}}
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {{
+    width: 0;
+    background: none;
+    border: none;
+}}
+QScrollBar::add-page,
+QScrollBar::sub-page {{
+    background: none;
+}}
 QPushButton[v3Button="true"] {{
     min-height: {tokens.control_height}px;
     padding: 0 {tokens.space_4}px;
@@ -790,9 +814,11 @@ def header_icon(kind: str, color: str = "#2dd4bf", size: int = 24) -> QIcon:
 
 
 def make_icon_button(
-    button: "QPushButton", kind: str, label: str, *, size: tuple[int, int] = (40, 36),
+    button: "QPushButton", kind: str, label: str, *, size: tuple[int, int] = (40, 36), caption: str = "",
 ) -> None:
-    """Turn a text button into an icon button; the label stays as tooltip and accessible name."""
+    """Turn a text button into an icon button; the label stays as tooltip and accessible name.
+
+    With ``caption`` a short word is drawn under the icon (V3Button.paintEvent) so the icon is not a riddle."""
     button.setText("")
     button.setIcon(header_icon(kind))
     button.setIconSize(QSize(22, 22) if size[0] <= 40 else QSize(26, 26))
@@ -800,6 +826,10 @@ def make_icon_button(
     button.setToolTip(label)
     button.setAccessibleName(label)
     button.setProperty("iconLabel", label)
+    if caption:
+        button.setProperty("iconCaption", caption)
+        button.setFixedSize(max(size[0], 72), max(size[1], 48))
+        button.setStyleSheet(button.styleSheet() + "QPushButton {padding: 0 0 13px 0;}")
 
 
 class V3Button(QPushButton):
@@ -815,6 +845,23 @@ class V3Button(QPushButton):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.set_variant(variant)
         self.setAccessibleName(text)
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt API
+        super().paintEvent(event)
+        caption = self.property("iconCaption")
+        if not caption:
+            return
+        painter = QPainter(self)
+        font = QFont(self.font())
+        font.setPixelSize(10)
+        painter.setFont(font)
+        painter.setPen(QColor(DEFAULT_TOKENS.text_muted))
+        painter.drawText(
+            QRect(0, self.height() - 16, self.width(), 13),
+            int(Qt.AlignmentFlag.AlignHCenter) | int(Qt.AlignmentFlag.AlignVCenter),
+            str(caption),
+        )
+        painter.end()
 
     @property
     def variant(self) -> ButtonVariant:
