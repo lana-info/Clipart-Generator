@@ -416,11 +416,11 @@ class ProjectsDialog(QDialog):
         self.current_id = current_id
         self.chosen = None
         self.deleted_current = False
-        self.setWindowTitle("Проекты")
+        self.setWindowTitle("Мои наборы")
         self.setMinimumSize(460, 360)
         layout = QVBoxLayout(self)
         self.list = QListWidget()
-        self.list.setAccessibleName("Сохранённые проекты")
+        self.list.setAccessibleName("Сохранённые наборы")
         self.list.itemDoubleClicked.connect(lambda _item: self._open())
         layout.addWidget(self.list, 1)
         row = QHBoxLayout()
@@ -469,13 +469,13 @@ class ProjectsDialog(QDialog):
         if item is None:
             return
         project_id, revision = item.data(Qt.ItemDataRole.UserRole)
-        answer = QMessageBox.question(self, "Patterns", "Удалить проект? Файлы-источники на диске останутся.")
+        answer = QMessageBox.question(self, "Patterns", "Удалить набор? Файлы-источники на диске останутся.")
         if answer != QMessageBox.StandardButton.Yes:
             return
         try:
             self.host.delete_project(project_id, revision)
         except (ValueError, OSError) as error:
-            QMessageBox.warning(self, "Patterns", f"Не удалось удалить проект: {error}")
+            QMessageBox.warning(self, "Patterns", f"Не удалось удалить набор: {error}")
         else:
             if project_id == self.current_id:
                 self.deleted_current = True
@@ -620,7 +620,7 @@ class PatternsPage(QWidget):
         for button in (self.add_files, self.add_folder, self.pick_tile):
             row.addWidget(button)
         row.addStretch()
-        self.projects_button = V3Button("Проекты", ButtonVariant.SECONDARY)
+        self.projects_button = V3Button("Мои наборы", ButtonVariant.SECONDARY)
         self.projects_button.clicked.connect(self._choose_project)
         row.addWidget(self.projects_button)
         layout.addLayout(row)
@@ -1533,7 +1533,7 @@ class PatternsPage(QWidget):
                 raise ValueError("Файлы проекта больше недоступны")
             infos = [{"handle": h, "name": h["filename"], **self.host.asset_info(h)} for h in handles]
         except (ValueError, OSError, KeyError) as error:
-            QMessageBox.warning(self, "Patterns", f"Не удалось открыть проект: {error}")
+            QMessageBox.warning(self, "Patterns", f"Не удалось открыть набор: {error}")
             return False
         self._settings = {**DEFAULTS, **{k: v for k, v in payload["ui"].items() if k in DEFAULTS}}
         self._mode = payload["mode"]
