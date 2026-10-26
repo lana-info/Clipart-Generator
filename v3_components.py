@@ -558,36 +558,44 @@ QCheckBox::indicator:checked,
 QRadioButton::indicator:checked {{
     background: {tokens.accent};
 }}
-QScrollBar:vertical,
+QScrollBar:vertical {{
+    background: {tokens.surface_muted};
+    width: 14px;
+    margin: 0;
+    border-radius: 7px;
+}}
 QScrollBar:horizontal {{
     background: {tokens.surface_muted};
-    width: 10px;
-    height: 10px;
+    height: 14px;
+    margin: 0;
+    border-radius: 7px;
 }}
-QScrollBar::handle:vertical,
-QScrollBar::handle:horizontal {{
-    background: {tokens.border};
+QScrollBar::handle:vertical {{
+    background: {tokens.text_muted};
     border-radius: 5px;
+    min-height: 36px;
+    margin: 2px;
+}}
+QScrollBar::handle:horizontal {{
+    background: {tokens.text_muted};
+    border-radius: 5px;
+    min-width: 36px;
+    margin: 2px;
 }}
 QScrollBar::handle:hover:vertical,
-QScrollBar::handle:hover:horizontal {{
-    background: {tokens.text_muted};
+QScrollBar::handle:hover:horizontal,
+QScrollBar::handle:pressed:vertical,
+QScrollBar::handle:pressed:horizontal {{
+    background: {tokens.accent};
 }}
-QScrollBar::add-line:vertical,
-QScrollBar::sub-line:vertical {{
-    height: 0;
-    background: none;
-    border: none;
-}}
-QScrollBar::add-line:horizontal,
-QScrollBar::sub-line:horizontal {{
+QScrollBar::add-line,
+QScrollBar::sub-line {{
     width: 0;
-    background: none;
-    border: none;
+    height: 0;
 }}
 QScrollBar::add-page,
 QScrollBar::sub-page {{
-    background: none;
+    background: transparent;
 }}
 QPushButton[v3Button="true"] {{
     min-height: {tokens.control_height}px;

@@ -12,6 +12,18 @@ class BuilderTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_character_in_fine_tab_and_fields_limited(self):
+        dialog = ClipartBuilderDialog(ProjectState().clipart)
+        fine = dialog.style_tabs.widget(2)
+        button = next(iter(dialog.style_modifier_buttons.values()))
+        self.assertTrue(fine.isAncestorOf(button))
+        for field in (dialog.technique, dialog.line, dialog.detail,
+                      dialog.style_category, dialog.palette_category):
+            self.assertLessEqual(field.maximumWidth(), 420)
+        for index in range(3):
+            margins = dialog.style_tabs.widget(index).widget().layout().contentsMargins()
+            self.assertGreaterEqual((margins.left(), margins.right()), (16, 16))
+
     def test_edit_save_reopen(self):
         state = ProjectState()
         dialog = ClipartBuilderDialog(state.clipart)
