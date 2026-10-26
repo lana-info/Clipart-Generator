@@ -13,6 +13,7 @@ from update_client import UpdateError
 MAX_CACHE_BYTES = 2 * 1024 * 1024
 MAX_PNG_BYTES = 96 * 1024
 MAX_CARDS = 12
+MAX_MODULE_ORDER = 32
 
 
 def preview_bytes(value):
@@ -74,6 +75,21 @@ def preview_bytes(value):
     return raw
 
 
+def validate_module_order(value):
+    """Owner-defined order of module ids; display only, never an authorization decision."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_MODULE_ORDER:
+        raise ValueError('Invalid module order')
+    clean = []
+    for item in value:
+        if (not isinstance(item, str) or not 1 <= len(item) <= 64 or not item[0].islower() or not item[0].isascii()
+                or any(c not in 'abcdefghijklmnopqrstuvwxyz0123456789_-' for c in item) or item in clean):
+            raise ValueError('Invalid module order')
+        clean.append(item)
+    return clean
+
+
 def validate_upcoming(items):
     if not isinstance(items, list) or len(items) > MAX_CARDS:
         raise ValueError('Invalid upcoming cards')
@@ -101,6 +117,7 @@ def validate_upcoming(items):
 class StudioUpcomingClient:
     def __init__(self, updates, cache_path):
         self.updates, self.cache_path = updates, Path(cache_path)
+        self.module_order = []
 
     def cached(self):
         try:
@@ -109,9 +126,12 @@ class StudioUpcomingClient:
             if len(raw) > MAX_CACHE_BYTES:
                 return None
             payload = json.loads(raw)
-            if set(payload) != {'product_id', 'cards'} or payload['product_id'] != self.updates.license_client.product_id:
+            if (not {'product_id', 'cards'} <= set(payload) <= {'product_id', 'cards', 'module_order'}
+                    or payload['product_id'] != self.updates.license_client.product_id):
                 return None
-            return validate_upcoming(payload['cards'])
+            items = validate_upcoming(payload['cards'])
+            self.module_order = validate_module_order(payload.get('module_order'))
+            return items
         except (OSError, ValueError, KeyError, TypeError, AttributeError, RecursionError):
             return None
 
@@ -121,12 +141,14 @@ class StudioUpcomingClient:
             if not isinstance(payload, dict) or payload.get('protocol') != 'studio-upcoming-v1':
                 raise ValueError('Invalid protocol')
             items = validate_upcoming(payload.get('cards'))
-            raw = json.dumps({'product_id': self.updates.license_client.product_id, 'cards': items},
-                             ensure_ascii=False).encode('utf-8')
+            order = validate_module_order(payload.get('module_order'))
+            raw = json.dumps({'product_id': self.updates.license_client.product_id, 'cards': items,
+                              'module_order': order}, ensure_ascii=False).encode('utf-8')
             if len(raw) > MAX_CACHE_BYTES:
                 raise ValueError('Cache too large')
         except (ValueError, TypeError) as exc:
             raise UpdateError('Неверный формат будущих модулей Studio') from exc
+        self.module_order = order
         temporary = None
         try:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)

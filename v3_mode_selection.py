@@ -309,8 +309,20 @@ class ModeSelectionScreen(QWidget):
         self._layout_module_cards()
         self.refresh_module_update_indicator()
 
+    def set_module_order(self, order) -> None:
+        """Server-defined card order; unknown ids are ignored, unlisted modules keep catalog order at the end."""
+        from studio_upcoming import validate_module_order
+        self._module_order = validate_module_order(list(order) if order is not None else None)
+        self._layout_module_cards()
+
+    def _ordered_cards(self) -> tuple:
+        order = {module_id: index for index, module_id in enumerate(getattr(self, "_module_order", []))}
+        ranked = sorted(enumerate(self.module_cards.items()),
+                        key=lambda item: (order.get(item[1][0], len(order)), item[0]))
+        return tuple(card for _, (_, card) in ranked)
+
     def _layout_module_cards(self) -> None:
-        cards = tuple(self.module_cards.values())
+        cards = self._ordered_cards()
         if not cards:
             return
         maximum = self.catalog_scroll.maximumViewportSize()

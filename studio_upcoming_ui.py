@@ -21,6 +21,7 @@ class StudioUpcomingController(QObject):
         self.client, self.screen = client, screen
         self.worker, self.closed = None, False
         self.screen.set_upcoming_cards(client.cached() or [])
+        self.screen.set_module_order(getattr(client, 'module_order', []))
         self.timer = QTimer(self)
         self.timer.setInterval(10 * 60 * 1000)
         self.timer.timeout.connect(self.refresh)
@@ -42,6 +43,7 @@ class StudioUpcomingController(QObject):
         if not self.closed and not worker.failed:
             try:
                 self.screen.set_upcoming_cards(worker.result)
+                self.screen.set_module_order(getattr(self.client, 'module_order', []))
             except (ValueError, TypeError):
                 pass  # A failed GUI decode must preserve the visible catalogue.
         self.worker = None
