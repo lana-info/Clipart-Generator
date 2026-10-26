@@ -19,6 +19,18 @@ class ProjectLimitTests(unittest.TestCase):
     def test_limit_constant_is_twenty(self):
         self.assertEqual(MAX_SAVED_PROJECTS, 20)
 
+    def test_delete_removes_only_that_project(self):
+        with tempfile.TemporaryDirectory() as temp:
+            store = ProjectStore(Path(temp) / "projects")
+            first = store.create("clipart", "A", {"n": 1}).project_id
+            second = store.create("clipart", "B", {"n": 2}).project_id
+            store.delete(first)
+            self.assertEqual([r.project_id for r in store.recent(limit=None)], [second])
+            with self.assertRaises(ProjectStoreError):
+                store.delete(first)
+            with self.assertRaises(ProjectStoreError):
+                store.delete("../x")
+
     def test_prune_removes_oldest_and_keeps_open_project(self):
         with tempfile.TemporaryDirectory() as temp:
             store = ProjectStore(Path(temp) / "projects")
@@ -171,3 +183,24 @@ class HeaderLayoutTests(unittest.TestCase):
                 self.assertEqual(screen.brand_label.text(), "VIBIX Studio v3.2.32")
             finally:
                 view.close()
+
+
+class MenuDeleteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_delete_from_menu_asks_and_removes(self):
+        from unittest.mock import patch
+        from PyQt6.QtWidgets import QMessageBox
+        with tempfile.TemporaryDirectory() as temp:
+            view = V3ApplicationView(draft_path=Path(temp) / "draft.json")
+            view._project_store = ProjectStore(Path(temp) / "projects")
+            keep = view._project_store.create("clipart", "Keep", {"n": 1}).project_id
+            drop = view._project_store.create("clipart", "Drop", {"n": 2}).project_id
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+                view._delete_saved_project(drop)
+            self.assertEqual(len(view._project_store.recent(limit=None)), 2)
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes):
+                view._delete_saved_project(drop)
+            self.assertEqual([r.project_id for r in view._project_store.recent(limit=None)], [keep])

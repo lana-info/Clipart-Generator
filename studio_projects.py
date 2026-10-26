@@ -125,6 +125,16 @@ class ProjectStore:
         records.sort(key=lambda record: (record.updated_at, record.project_id), reverse=True)
         return records if limit is None else records[:limit]
 
+    def delete(self, project_id: str) -> None:
+        """Remove one saved project; a missing project is an error, other projects are untouched."""
+        path = self._path_for(self._project_id(project_id))
+        try:
+            path.unlink()
+        except FileNotFoundError as exc:
+            raise ProjectStoreError("Project not found") from exc
+        except OSError as exc:
+            raise ProjectStoreError("Project could not be deleted") from exc
+
     def prune(self, limit: int = MAX_SAVED_PROJECTS, *, keep: str | None = None) -> list[str]:
         """Delete the oldest valid projects beyond ``limit``; never the ``keep`` project.
 
