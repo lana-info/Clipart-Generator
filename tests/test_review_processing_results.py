@@ -151,3 +151,17 @@ def test_in_place_editor_save_updates_lineage_and_exports_selected_pixels(tmp_pa
         assert archive.read(pngs[0]) == selected_bytes
     editor.close()
     page.close()
+
+
+
+def test_review_strip_state_without_mark_unchecks_previous_mark():
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from studio_clipart_review_ui import ReviewStrip
+    strip = ReviewStrip()
+    for mark in ("bad_generation", None, "ok", "bad_cutout", None):
+        strip.show_state(mark)
+        lit = [key for key, button in strip.mark_buttons.items() if button.isChecked()]
+        assert lit == ([mark] if mark else [])

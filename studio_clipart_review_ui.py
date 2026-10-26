@@ -198,6 +198,8 @@ class ReviewStrip(QFrame):
         box.addLayout(bottom)
 
     def show_state(self, mark, *, actions=(), status="", history=0, enabled=True):
+        # An exclusive group refuses to uncheck its checked button, so a state without a mark would keep the old one lit.
+        self.mark_group.setExclusive(False)
         for key, button in self.mark_buttons.items():
             button.blockSignals(True)
             button.setChecked(key == mark)
@@ -208,6 +210,7 @@ class ReviewStrip(QFrame):
                 if key == mark else "")
             button.setEnabled(enabled)
             button.blockSignals(False)
+        self.mark_group.setExclusive(True)
         for widget in self.actions:
             widget.setVisible(widget in actions)
         self.status.setText(status)
