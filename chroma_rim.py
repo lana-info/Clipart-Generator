@@ -429,3 +429,47 @@ def reclassify_rim(source, provisional, key):
     repaired[reliable, 3] = np.rint(alpha[reliable]*255).astype(np.uint8)
     pixels[candidate] = repaired
     return Image.fromarray(pixels)
+
+
+def recolour_rim_specks(image: Image.Image, key) -> Image.Image:
+    """Replace the colour of key-tinted dark specks on the subject's rim.
+
+    Key spill leaves opaque grey-violet pixels at the tips of fur and feathers.
+    Alpha is not touched: a rim pixel (within 2.5 px of the solid interior) that
+    is much darker than the nearby light interior and whose colour is pushed
+    towards the measured key takes the local interior colour, if it forms a tiny blob (a long run is a painted
+    stroke). A darker shade of
+    the same hue (a painted outline) and dark paint that is not key-tinted stay.
+    """
+    arr = np.asarray(image.convert("RGBA")).astype(np.float32)
+    alpha = arr[..., 3]
+    rgb = arr[..., :3]
+    solid = (alpha >= 250).astype(np.uint8)
+    depth = cv2.distanceTransform(solid, cv2.DIST_L2, 3)
+    rim = (alpha > 0) & (depth <= 2.5)
+    core = (depth >= 4).astype(np.float32)
+    weight = cv2.blur(core, (15, 15))[..., None]
+    reference = cv2.blur(rgb * core[..., None], (15, 15)) / np.maximum(weight, 1e-3)
+    luma = np.array([0.3, 0.59, 0.11], dtype=np.float32)
+    reference_luma = reference @ luma
+    pixel_luma = rgb @ luma
+    drop = reference_luma - pixel_luma
+    scale = np.clip(pixel_luma / np.maximum(reference_luma, 1.0), 0.0, 1.0)
+    deviation = rgb - reference * scale[..., None]
+    tint = np.asarray(key, dtype=np.float32) - 127.5
+    tint /= max(float(np.linalg.norm(tint)), 1.0)
+    size = np.linalg.norm(deviation, axis=2)
+    key_tinted = (size > 12.0) & ((deviation @ tint) > 0.5 * size)
+    speck = rim & (weight[..., 0] > 0.05) & (reference_luma >= 185.0) & (drop > 60.0) & key_tinted
+    # A painted stroke along the edge is a long run; spill specks sit at single tips.
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(speck.astype(np.uint8), connectivity=8)
+    small = (stats[:, cv2.CC_STAT_AREA] <= 12) & (np.maximum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]) <= 5)
+    small[0] = False
+    speck = small[labels]
+    if not speck.any():
+        return image
+    out = arr.copy()
+    out[..., :3][speck] = reference[speck]
+    result = Image.fromarray(np.clip(out + 0.5, 0, 255).astype(np.uint8), "RGBA")
+    result.info.update(image.info)
+    return result
