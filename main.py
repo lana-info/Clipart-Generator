@@ -2671,8 +2671,13 @@ class WorkerThread(QThread):
         if getattr(self, "_processing_engine", None) is None:
             from chroma_profile import PROFILE_VERSION
             from studio_processing_api import ProcessingEngine
+            def remove_background(image, color, **kwargs):
+                from chroma_key import finish_rim_cleanup
+                result = remove_chroma_key_automatic(image, color, **kwargs)
+                return finish_rim_cleanup(result, kwargs.get("subject_profile", "opaque_clipart"))
+
             self._processing_engine = ProcessingEngine(
-                PROFILE_VERSION, remove_chroma_key_automatic, measure_chroma_background,
+                PROFILE_VERSION, remove_background, measure_chroma_background,
                 subject_profiles=("opaque_clipart", "legacy"),
             )
         return self._processing_engine

@@ -9,7 +9,7 @@ from typing import Final
 import cv2
 import numpy as np
 from PIL import Image
-from chroma_rim import ambiguous_pale_material, mixture_coverage, reclassify_rim, refine_edge_mixture, repair_edge_chroma, suppress_edge_key_spill
+from chroma_rim import ambiguous_pale_material, mixture_coverage, recolour_rim_specks, reclassify_rim, refine_edge_mixture, repair_edge_chroma, suppress_edge_key_spill
 from studio_processing_api import ChromaKeyAmbiguousError, ChromaKeySubjectColorError
 
 
@@ -2211,6 +2211,19 @@ def remove_chroma_key_automatic(
             stage_observer("opaque_edge_cleanup", snapshot)
     return result
 
+
+def finish_rim_cleanup(result: Image.Image, subject_profile: str = "opaque_clipart") -> Image.Image:
+    """Production step after remove_chroma_key_automatic: recolour saturated rim specks.
+
+    It recolours opaque pixels, which remove_chroma_key_automatic promises never
+    to do, so it is a separate step on top of it.
+    """
+    return recolour_rim_specks(result) if subject_profile == "opaque_clipart" else result
+
+
+def remove_chroma_key_with_rim_cleanup(image: Image.Image, key_color: str, **kwargs) -> Image.Image:
+    result = remove_chroma_key_automatic(image, key_color, **kwargs)
+    return finish_rim_cleanup(result, kwargs.get("subject_profile", "opaque_clipart"))
 
 EDGE_SILHOUETTE_STANDARD = (
     "Crisply resolved forms: every element, including small secondary "
