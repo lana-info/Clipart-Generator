@@ -151,9 +151,11 @@ class AdminDraftUploader:
             root = Path(temp)
             snapshot = root / "package.zip"
             snapshot.write_bytes(content)
-            store = ModuleStore(root / "inspection", studio_version=studio_version,
-                                platform=platform, trusted_keys=keys)
-            manifest = store.inspect_package(snapshot)
+            platforms = ("windows-x64", "macos-arm64") if platform == "any" else (platform,)
+            for candidate in platforms:
+                store = ModuleStore(root / "inspection", studio_version=studio_version,
+                                    platform=candidate, trusted_keys=keys)
+                manifest = store.inspect_package(snapshot)
         if manifest["module_id"] not in {**OFFICIAL_WORKFLOW_FILES, **OFFICIAL_COMPONENT_FILES}:
             raise ValueError("Unknown official module")
         payload = {name: manifest[name] for name in (
@@ -221,10 +223,9 @@ def main(argv=None):
             try:
                 uploader.login(args.username, getpass.getpass("Admin password: "), getpass.getpass("TOTP: "))
                 for item in releases:
-                    for platform in item["platforms"]:
-                        print(json.dumps(uploader.upload(
-                            args.set_dir / item["filename"], product_id=args.product,
-                            platform=platform, studio_version=args.studio_version)), flush=True)
+                    print(json.dumps(uploader.upload(
+                        args.set_dir / item["filename"], product_id=args.product,
+                        platform="any", studio_version=args.studio_version)), flush=True)
             finally:
                 uploader.close()
         elif args.command == "init-key":

@@ -387,3 +387,24 @@ def test_composer_download_from_existing_server_then_generate_seven_and_revoke(d
         view.close()
         view.deleteLater()
         QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def test_universal_module_old_client_delivery_on_both_platforms(delivery, tmp_path):
+    bridge, _publish, gate, service, _record = delivery
+    content = prepare_official_workflow_release(
+        source_root=Path(__file__).resolve().parents[1], module_id='clipart', version='1.0.0',
+        studio_min='3.2.0', studio_max_exclusive='4.0.0', platforms=['windows-x64', 'macos-arm64'],
+        key_id='test-publisher', private_key=bridge.test_publisher)
+    row = service.create_release('clipart-generator', '1.0.0', 'stable', 'any', module_id='clipart',
+                                 studio_min='3.2.0', studio_max_exclusive='4.0.0')
+    service.attach_release_artifact(row['id'], io.BytesIO(content), len(content), 'clipart-1.0.0.zip')
+    service.set_release_status(row['id'], 'published')
+    for platform in ('windows-x64', 'macos-arm64'):
+        client = StudioModuleDelivery(root=tmp_path / platform, studio_version='3.2.0',
+            platform=platform, license_client=bridge.updates.license_client, license_gate=gate,
+            trusted_keys={'test-publisher': bridge.test_publisher.public_key().public_bytes_raw()})
+        release = client.check('clipart')
+        assert release.version == '1.0.0'
+        client.install(release)
+        client.activate('clipart', release.version)
+        assert client.has_active_workflow('clipart')

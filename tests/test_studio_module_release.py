@@ -122,3 +122,40 @@ def test_upload_cli_refuses_echoed_password_fallback_without_terminal():
                      "--platform", "windows-x64", "--studio-version", "3.2.0"]) == 1
     prompt.assert_not_called()
     uploader.assert_not_called()
+
+
+def test_universal_upload_checks_both_platforms_before_creating_draft(publisher, tmp_path):
+    path, trust = publisher
+    rows = prepare_release_set(output=tmp_path / 'release', key_path=path, key_id='fixture',
+        trusted_keys=trust, version='1.0.0', studio_min='3.2.0', studio_max_exclusive='3.3.0',
+        platforms=['windows-x64'])
+    uploader = AdminDraftUploader('https://example.com')
+    uploader.csrf = 'fixture'
+    uploader._post = Mock()
+    with pytest.raises(ModulePackageError):
+        uploader.upload(tmp_path / 'release' / rows[0]['filename'], product_id='clipart-generator',
+                        platform='any', studio_version='3.2.0', trusted_keys=trust)
+    uploader._post.assert_not_called()
+
+
+def test_universal_upload_creates_one_verified_draft(publisher, tmp_path):
+    path, trust = publisher
+    rows = prepare_release_set(output=tmp_path / 'release', key_path=path, key_id='fixture',
+        trusted_keys=trust, version='1.0.0', studio_min='3.2.0', studio_max_exclusive='3.3.0',
+        platforms=['windows-x64', 'macos-arm64'])
+    uploader = AdminDraftUploader('https://example.com')
+    uploader.csrf = 'fixture'
+    state = {}
+    def post(endpoint, payload, **kwargs):
+        if endpoint == '/admin/releases':
+            state.update(payload)
+            return {'id': 'draft', 'status': 'draft', **payload}
+        import hashlib
+        return {'id': 'draft', 'status': 'draft', **state,
+                'artifact_sha256': hashlib.sha256(payload).hexdigest(), 'artifact_size': len(payload)}
+    uploader._post = Mock(side_effect=post)
+    result = uploader.upload(tmp_path / 'release' / rows[0]['filename'], product_id='clipart-generator',
+                             platform='any', studio_version='3.2.0', trusted_keys=trust)
+    assert result['status'] == 'draft'
+    assert state['platform'] == 'any'
+    assert uploader._post.call_count == 2
