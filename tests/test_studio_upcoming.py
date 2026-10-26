@@ -69,6 +69,25 @@ def test_order_count_duplicates_and_png_integrity():
             preview_bytes(value)
 
 
+def test_module_order_is_validated_cached_and_optional(tmp_path):
+    updates = Mock()
+    updates.license_client.product_id = 'clipart-generator'
+    client = StudioUpcomingClient(updates, tmp_path / 'upcoming.json')
+    updates._request_manifest.return_value = dict(protocol='studio-upcoming-v1', cards=[], module_order=['patterns', 'clipart'])
+    client.fetch()
+    assert client.module_order == ['patterns', 'clipart']
+    fresh = StudioUpcomingClient(updates, tmp_path / 'upcoming.json')
+    assert fresh.cached() == [] and fresh.module_order == ['patterns', 'clipart']
+    for bad in ('x', [1], ['A'], ['a', 'a'], ['a b'], ['x'] * 2, [f'm{i}' for i in range(33)], ['../x']):
+        updates._request_manifest.return_value = dict(protocol='studio-upcoming-v1', cards=[], module_order=bad)
+        with pytest.raises(UpdateError):
+            client.fetch()
+        assert client.module_order == ['patterns', 'clipart']  # a rejected feed keeps the last order
+    updates._request_manifest.return_value = dict(protocol='studio-upcoming-v1', cards=[])  # older server
+    client.fetch()
+    assert client.module_order == []
+
+
 def test_cache_bound_scope_and_content_validation(tmp_path):
     updates = Mock()
     updates.license_client.product_id = 'clipart-generator'

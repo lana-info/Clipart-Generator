@@ -173,3 +173,34 @@ def test_promotional_refresh_keeps_wide_grid_and_compact_cards():
     assert screen.module_cards == builtins
     assert screen.cards_layout.getItemPosition(4)[:2] == (0, 4)
     screen.close()
+
+
+def test_server_module_order_arranges_cards_and_keeps_rights():
+    app = QApplication.instance() or QApplication([])
+    screen = ModeSelectionScreen()
+    screen.resize(1120, 780)
+    screen.show()
+    names = list(screen.module_cards)
+    assert len(names) >= 3
+
+    def visual():
+        positions = {}
+        for module_id, card_widget in screen.module_cards.items():
+            index = screen.cards_layout.indexOf(card_widget)
+            row, column, _, _ = screen.cards_layout.getItemPosition(index)
+            positions[module_id] = (row, column)
+        return [m for m, _ in sorted(positions.items(), key=lambda item: item[1])]
+    assert visual() == names
+    screen.set_module_order([names[2], 'unknown-module', names[0]])
+    assert visual()[:3] == [names[2], names[0], names[1]]
+    assert list(screen.module_cards) == names  # only presentation changes
+    screen.set_module_order([])
+    assert visual() == names
+    try:
+        screen.set_module_order(['BAD'])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('invalid order accepted')
+    assert visual() == names
+    screen.close()
