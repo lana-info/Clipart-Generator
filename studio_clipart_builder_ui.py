@@ -43,6 +43,10 @@ class PlainNumberSpinBox(QSpinBox):
         event.ignore()
 
 
+FIELD_MAX_WIDTH = 420
+CATEGORY_MAX_WIDTH = 280
+
+
 def combo(values):
     widget = QComboBox()
     widget.setEditable(True)
@@ -179,7 +183,8 @@ class ClipartBuilderDialog(QDialog):
         self.style_category = QComboBox()
         self.style_category.addItems(["Все", *style_categories()])
         self.style_category.currentTextChanged.connect(self._refresh_style_library)
-        style_library_layout.addWidget(self.style_category)
+        self.style_category.setMaximumWidth(CATEGORY_MAX_WIDTH)
+        style_library_layout.addWidget(self.style_category, 0, Qt.AlignmentFlag.AlignLeft)
         self.style_library_host = QWidget()
         self.style_library_grid = QGridLayout(self.style_library_host)
         style_library_layout.addWidget(self.style_library_host)
@@ -197,13 +202,16 @@ class ClipartBuilderDialog(QDialog):
             button.toggled.connect(self._sync_style_modifiers)
             self.style_modifier_buttons[modifier.key] = button
             modifier_layout.addWidget(button, index // 4, index % 4)
-        style_layout.addWidget(modifier_group)
+        fine_layout.addWidget(modifier_group)
 
         custom_style = QHBoxLayout()
         custom_style.addWidget(QLabel("Свой стиль"))
         self.technique.setAccessibleName("Свой стиль")
         self.technique.lineEdit().setPlaceholderText("Например: линогравюра с зернистой фактурой")
-        custom_style.addWidget(self.technique, 1)
+        self.technique.setMinimumWidth(FIELD_MAX_WIDTH)
+        self.technique.setMaximumWidth(FIELD_MAX_WIDTH)
+        custom_style.addWidget(self.technique)
+        custom_style.addStretch()
         fine_layout.addLayout(custom_style)
         custom_style_hint = QLabel("Если готовый стиль не подходит, опишите технику своими словами.")
         custom_style_hint.setProperty('v3Small', True)
@@ -217,6 +225,7 @@ class ClipartBuilderDialog(QDialog):
         for label, field in (("Художественная линия", self.line),
                              ("Детализация", self.detail)):
             field.setAccessibleName(label)
+            field.setMaximumWidth(FIELD_MAX_WIDTH)
             extra_form.addRow(label, field)
         fine_layout.addWidget(extra)
 
@@ -236,7 +245,8 @@ class ClipartBuilderDialog(QDialog):
         self.palette_category = QComboBox()
         self.palette_category.addItems(["Все", *palette_categories()])
         self.palette_category.currentTextChanged.connect(self._refresh_palette_library)
-        library_layout.addWidget(self.palette_category)
+        self.palette_category.setMaximumWidth(CATEGORY_MAX_WIDTH)
+        library_layout.addWidget(self.palette_category, 0, Qt.AlignmentFlag.AlignLeft)
         self.palette_library_host = QWidget()
         self.palette_library_grid = QGridLayout(self.palette_library_host)
         library_layout.addWidget(self.palette_library_host)
@@ -278,7 +288,7 @@ class ClipartBuilderDialog(QDialog):
         scroll.setWidgetResizable(True)
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 12, 0, 0)
+        layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(16)
         scroll.setWidget(content)
         tabs.addTab(scroll, title)
