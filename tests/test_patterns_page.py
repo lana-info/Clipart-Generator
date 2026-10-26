@@ -150,10 +150,32 @@ def test_projects_are_saved_and_restored(runtime, app, tmp_path, dialogs):
     assert page._project_id is not None
     close_page(app, handle, page, host)
     handle, again, host = open_page(runtime, tmp_path, "persist")
+    assert again._assets == [] and again._project_id is None  # a new set starts empty
+    assert [p["name"] for p in host.list_projects()] == ["Сохранённый"]
+    assert again._open_project(host.list_projects()[0]["id"])
     assert len(again._assets) == 3 and again._settings["seed"] == 77 and again._settings["count"] == 9
     assert again._assets[0]["width"] == 200  # sizes come back from the stored files
     assert again.title.text() == "Patterns · Сохранённый"
     close_page(app, handle, again, host)
+
+
+def test_saved_projects_can_be_deleted(runtime, app, tmp_path, dialogs, monkeypatch):
+    from studio_patterns_page import ProjectsDialog
+    handle, page, host = open_page(runtime, tmp_path, "delete")
+    page._add_assets(make_pngs(tmp_path))
+    page._settings.update(set_name="Лишний")
+    page._go_next()
+    project = host.list_projects()[0]
+    dialog = ProjectsDialog(host, page._project_id, page)
+    assert dialog.list.count() == 1
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.No))
+    dialog._delete()
+    assert dialog.list.count() == 1
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes))
+    dialog._delete()
+    assert dialog.list.count() == 0 and dialog.deleted_current
+    assert host.list_projects() == [] and project["id"]
+    close_page(app, handle, page, host)
 
 
 def test_tile_mode_hides_unsupported_choices_and_fails_visibly(runtime, app, tmp_path, dialogs):

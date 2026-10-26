@@ -14,7 +14,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QImage, QKeySequence, QPainter, QPen, QPixmap, QPolygonF, QShortcut
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
-    QLineEdit, QMessageBox, QScrollArea, QSlider, QSpinBox, QStackedWidget, QToolButton, QVBoxLayout, QWidget,
+    QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QScrollArea, QSlider, QSpinBox, QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
 from v3_components import ButtonVariant, DEFAULT_TOKENS, V3Button, apply_v3_theme
 try:  # the module can run in a Studio whose core predates V3StepLabel
@@ -407,6 +407,81 @@ class RepeatFullscreen(QDialog):
             self.accept()
 
 
+class ProjectsDialog(QDialog):
+    """Saved sets: open one or delete the ones that are no longer needed."""
+
+    def __init__(self, host, current_id, parent=None):
+        super().__init__(parent)
+        self.host = host
+        self.current_id = current_id
+        self.chosen = None
+        self.deleted_current = False
+        self.setWindowTitle("Проекты")
+        self.setMinimumSize(460, 360)
+        layout = QVBoxLayout(self)
+        self.list = QListWidget()
+        self.list.setAccessibleName("Сохранённые проекты")
+        self.list.itemDoubleClicked.connect(lambda _item: self._open())
+        layout.addWidget(self.list, 1)
+        row = QHBoxLayout()
+        self.open_button = V3Button("Открыть", ButtonVariant.PRIMARY)
+        self.open_button.clicked.connect(self._open)
+        self.delete_button = V3Button("Удалить", ButtonVariant.SECONDARY)
+        self.delete_button.clicked.connect(self._delete)
+        close = V3Button("Закрыть", ButtonVariant.SECONDARY)
+        close.clicked.connect(self.reject)
+        row.addWidget(self.open_button)
+        row.addWidget(self.delete_button)
+        row.addStretch()
+        row.addWidget(close)
+        layout.addLayout(row)
+        self.list.currentItemChanged.connect(lambda *_: self._buttons())
+        apply_v3_theme(self, DEFAULT_TOKENS)
+        self._reload()
+
+    def _reload(self):
+        self.list.clear()
+        try:
+            projects = self.host.list_projects()
+        except (ValueError, OSError):
+            projects = []
+        for project in projects:
+            item = QListWidgetItem(f"{project['name']} · {str(project['updated_at'])[:16].replace('T', ' ')}")
+            item.setData(Qt.ItemDataRole.UserRole, (project["id"], project["revision"]))
+            self.list.addItem(item)
+        if self.list.count():
+            self.list.setCurrentRow(0)
+        self._buttons()
+
+    def _buttons(self):
+        has = self.list.currentItem() is not None
+        self.open_button.setEnabled(has)
+        self.delete_button.setEnabled(has)
+
+    def _open(self):
+        item = self.list.currentItem()
+        if item is not None:
+            self.chosen = item.data(Qt.ItemDataRole.UserRole)[0]
+            self.accept()
+
+    def _delete(self):
+        item = self.list.currentItem()
+        if item is None:
+            return
+        project_id, revision = item.data(Qt.ItemDataRole.UserRole)
+        answer = QMessageBox.question(self, "Patterns", "Удалить проект? Файлы-источники на диске останутся.")
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.host.delete_project(project_id, revision)
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, "Patterns", f"Не удалось удалить проект: {error}")
+        else:
+            if project_id == self.current_id:
+                self.deleted_current = True
+        self._reload()
+
+
 class PatternsPage(QWidget):
     back_requested = pyqtSignal()
     settings_requested = pyqtSignal()
@@ -437,7 +512,6 @@ class PatternsPage(QWidget):
         self._step = 0
         self._generation = 0
         self._build()
-        self._restore()
         self._refresh()
 
     # ------------------------------------------------------------- building
@@ -546,6 +620,9 @@ class PatternsPage(QWidget):
         for button in (self.add_files, self.add_folder, self.pick_tile):
             row.addWidget(button)
         row.addStretch()
+        self.projects_button = V3Button("Проекты", ButtonVariant.SECONDARY)
+        self.projects_button.clicked.connect(self._choose_project)
+        row.addWidget(self.projects_button)
         layout.addLayout(row)
         self.checks = QVBoxLayout()
         layout.addLayout(self.checks)
@@ -1436,30 +1513,43 @@ class PatternsPage(QWidget):
             return
         self._project_id, self._revision = record["id"], record["revision"]
 
-    def _restore(self):
+    def _choose_project(self):
+        if self._busy:
+            return
+        dialog = ProjectsDialog(self.host, self._project_id, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.chosen:
+            self._open_project(dialog.chosen)
+        elif dialog.deleted_current:
+            self._project_id = self._revision = None
+
+    def _open_project(self, project_id):
         try:
-            projects = self.host.list_projects()
-            if not projects:
-                return
-            record = self.host.load_project(projects[0]["id"])
+            record = self.host.load_project(project_id)
             payload = record["payload"]
             if payload.get("algorithm_version") != self.host.algorithm_version or "ui" not in payload:
-                return
+                raise ValueError("Проект создан в другой версии модуля")
             handles = payload.get("assets", [])
             if not all(self.host.asset_available(h) for h in handles):
-                return
-            self._settings.update({k: v for k, v in payload["ui"].items() if k in DEFAULTS})
-            self._mode = payload["mode"]
+                raise ValueError("Файлы проекта больше недоступны")
             infos = [{"handle": h, "name": h["filename"], **self.host.asset_info(h)} for h in handles]
-            if self._mode == "pngs":
-                self._assets = infos
-                self._elements = list(payload.get("scene", {}).get("elements", []))
-                self._layout_dirty = not self._elements
-            elif infos:
-                self._tile = infos[0]
-            self._project_id, self._revision = record["id"], record["revision"]
-        except (ValueError, OSError, KeyError):
-            self._project_id = self._revision = None
+        except (ValueError, OSError, KeyError) as error:
+            QMessageBox.warning(self, "Patterns", f"Не удалось открыть проект: {error}")
+            return False
+        self._settings = {**DEFAULTS, **{k: v for k, v in payload["ui"].items() if k in DEFAULTS}}
+        self._mode = payload["mode"]
+        self._assets, self._tile = [], None
+        self._elements, self._sheets, self._selected, self._current = [], [], None, None
+        if self._mode == "pngs":
+            self._assets = infos
+            self._elements = list(payload.get("scene", {}).get("elements", []))
+            self._layout_dirty = not self._elements
+        elif infos:
+            self._tile = infos[0]
+        self._project_id, self._revision = record["id"], record["revision"]
+        self._step = 0
+        self._invalidate(layout=self._mode == "pngs" and not self._elements)
+        self._refresh()
+        return True
 
     def confirm_close(self):
         """Work is saved at every step; only a running job needs the user's word."""
