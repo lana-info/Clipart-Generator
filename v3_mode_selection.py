@@ -21,11 +21,14 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QMenu,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from v3_components import (
@@ -1201,12 +1204,9 @@ class V3ApplicationView(QWidget):
             menu.deleteLater()
             QMessageBox.warning(self, "Проекты", "Не удалось прочитать список проектов.")
             return
+        pending_delete: list[str] = []
         for record in records:
-            action = menu.addAction(self._project_menu_label(record).replace("&", "&&"))
-            action.triggered.connect(
-                lambda _checked=False, project_id=record.project_id:
-                self.continue_saved_project(project_id)
-            )
+            menu.addAction(self._project_menu_row(menu, record, pending_delete))
         if not records and self._recent_project is not None:
             state = self._recent_project
             parts = [MODE_TITLES[state.mode]]
@@ -1221,6 +1221,55 @@ class V3ApplicationView(QWidget):
         button = anchor if isinstance(anchor, QWidget) else self.mode_selection.all_projects_button
         menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
         menu.deleteLater()
+        if pending_delete:
+            self._delete_saved_project(pending_delete[0])
+            if self._recent_saved_project_id is not None:
+                self._show_all_projects(anchor)
+
+    def _project_menu_row(self, menu: QMenu, record, pending_delete: list[str]) -> QWidgetAction:
+        row = QWidget(menu)
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 4, 0)
+        layout.setSpacing(0)
+        open_button = QPushButton(self._project_menu_label(record), row)
+        open_button.setFlat(True)
+        open_button.setStyleSheet("text-align:left;padding:6px 12px;border:none;")
+        open_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        open_button.clicked.connect(
+            lambda _checked=False, project_id=record.project_id: (
+                menu.close(), self.continue_saved_project(project_id)))
+        delete_button = QToolButton(row)
+        delete_button.setText("✕")
+        delete_button.setAutoRaise(True)
+        delete_button.setToolTip("Удалить проект")
+        delete_button.setAccessibleName(f"Удалить проект: {record.name}")
+        delete_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        delete_button.clicked.connect(
+            lambda _checked=False, project_id=record.project_id: (
+                pending_delete.append(project_id), menu.close()))
+        layout.addWidget(open_button, 1)
+        layout.addWidget(delete_button)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(row)
+        return action
+
+    def _delete_saved_project(self, project_id: str) -> None:
+        if self._project_store is None:
+            return
+        answer = QMessageBox.question(
+            self, "Проекты", "Удалить проект? Это действие нельзя отменить.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._project_store.delete(project_id)
+        except (OSError, ValueError):
+            QMessageBox.warning(self, "Проекты", "Не удалось удалить проект.")
+            return
+        if self._active_project_id == project_id:
+            self._active_project_id = None
+        self._refresh_saved_projects()
 
     def _load_recent_project(self) -> ProjectState | None:
         path = self._draft_path
