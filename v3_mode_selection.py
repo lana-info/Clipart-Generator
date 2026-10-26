@@ -1235,9 +1235,6 @@ class V3ApplicationView(QWidget):
         open_button.setFlat(True)
         open_button.setStyleSheet("text-align:left;padding:6px 12px;border:none;")
         open_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        open_button.clicked.connect(
-            lambda _checked=False, project_id=record.project_id: (
-                menu.close(), self.continue_saved_project(project_id)))
         delete_button = QToolButton(row)
         delete_button.setText("✕")
         delete_button.setAutoRaise(True)
@@ -1250,7 +1247,12 @@ class V3ApplicationView(QWidget):
         layout.addWidget(open_button, 1)
         layout.addWidget(delete_button)
         action = QWidgetAction(menu)
+        action.setText(self._project_menu_label(record))
         action.setDefaultWidget(row)
+        open_button.clicked.connect(action.trigger)
+        action.triggered.connect(
+            lambda _checked=False, project_id=record.project_id: (
+                menu.close(), self.continue_saved_project(project_id)))
         return action
 
     def _delete_saved_project(self, project_id: str) -> None:
