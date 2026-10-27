@@ -685,6 +685,7 @@ class AutoClipartFlowController(ClipartFlowController):
             panel.mark_requested.connect(self.review.mark_output)
             panel.prompt_requested.connect(lambda path: self.review.edit_prompt_for(path, panel))
             panel.regenerate_requested.connect(self._regenerate_from_png_check)
+            panel.cutout_requested.connect(self._cutout_from_png_check)
 
     def navigate(self, direction):
         if self.is_busy():
@@ -810,6 +811,12 @@ class AutoClipartFlowController(ClipartFlowController):
     def _regenerate_from_png_check(self, path):
         """Start the confirmed paid re-creation of one picture and show its progress on the results step."""
         if self.review is not None and self.review.regenerate_path(path) is not None:
+            self._regen_return = [str(path), False]
+            self._select_step(StepId.RESULTS)
+
+    def _cutout_from_png_check(self, path):
+        """Free local re-cutout of one picture; its progress is shown on the results step, then back to the picture."""
+        if self.review is not None and self.review.cutout_path(path) is not None:
             self._regen_return = [str(path), False]
             self._select_step(StepId.RESULTS)
 

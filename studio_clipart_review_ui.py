@@ -1063,6 +1063,21 @@ class ImageReview:
                 return started
         return None
 
+    def cutout_path(self, path):
+        """«Убрать фон» from the PNG-check screen: one picture through the free local re-cutout (a white or
+        leftover background after a regeneration); the old picture is kept as a version."""
+        session = self.session
+        if session is None or session.running or self._job is not None or self.flow.is_busy():
+            return None
+        target = str(Path(path).resolve())
+        for index, item in enumerate(session.items):
+            if item.output_path and str(Path(item.output_path).resolve()) == target:
+                self._pending_cutout = []
+                started = self.flow.run_queue.reprocess_selected([index], CUTOUT_METHODS[2][2])
+                self._chain_started = False
+                return started
+        return None
+
     def edit_prompt_for(self, path, parent):
         """«Изменить промпт» from the PNG-check screen: the same dialog as in the transparency window."""
         if self.session is None or self._job is not None:

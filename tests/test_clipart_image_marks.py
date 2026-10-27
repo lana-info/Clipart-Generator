@@ -1061,3 +1061,31 @@ def test_png_check_opens_on_the_regenerated_picture_with_cleared_mark(tmp_path):
     assert not dialog.quality_marks_row.isHidden() or dialog.quality_mark_buttons["ok"].isChecked()
     assert dialog.quality_regenerate_button.isHidden()
     dialog.reject()
+
+
+def test_png_check_cutout_button_is_only_for_cutout_defects_and_starts_one_picture(tmp_path):
+    from studio_alpha_qc import AlphaQcReport
+    from studio_set_export_ui import SetExportDialog
+    review, editor, session, flow = open_review(tmp_path)
+    paths = [Path(item.output_path) for item in session.items]
+    reports = [AlphaQcReport(str(path.resolve()), "ok", (), width=8, height=8) for path in paths]
+    dialog = SetExportDialog(paths, quality_reports=reports)
+    dialog.enable_marks({str(paths[0].resolve()): "bad_cutout", str(paths[1].resolve()): "bad_generation"})
+    dialog._show_quality_review()
+    dialog.quality_list.setCurrentRow(0)
+    assert not dialog.quality_cutout_button.isHidden() and dialog.quality_regenerate_button.isHidden()
+    dialog.quality_list.setCurrentRow(1)
+    assert dialog.quality_cutout_button.isHidden()
+    dialog.quality_list.setCurrentRow(0)
+    asked = []
+    dialog.cutout_requested.connect(asked.append)
+    dialog.quality_cutout_button.click()
+    assert asked == [str(paths[0].resolve())]
+    dialog.reject()
+    flow.is_busy = lambda: False
+    flow.run_queue.reprocess_selected = Mock(return_value=object())
+    assert review.cutout_path(paths[1]) is not None
+    flow.run_queue.reprocess_selected.assert_called_once()
+    assert flow.run_queue.reprocess_selected.call_args.args[0] == [1]
+    assert review.cutout_path(tmp_path / "unknown.png") is None
+    editor.deleteLater()

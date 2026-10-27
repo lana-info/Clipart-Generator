@@ -344,6 +344,7 @@ class SetExportDialog(QDialog):
     fix_requested = pyqtSignal(str)
     mark_requested = pyqtSignal(str, str)  # (png path, review mark) — same marks as on the results step
     prompt_requested = pyqtSignal(str)  # «Изменить промпт» for a picture marked as a generation defect
+    cutout_requested = pyqtSignal(str)  # «Убрать фон»: free local re-cutout of the same picture (module runs it)
     regenerate_requested = pyqtSignal(str)  # «Перегенерировать» for the same picture (paid, confirmed by the module)
     review_requested = pyqtSignal()
     QUALITY_THUMB = 120
@@ -730,6 +731,14 @@ class SetExportDialog(QDialog):
         self.quality_regenerate_button.hide()  # next to «Изменить промпт»: only for «Брак генерации»
         action_row.addWidget(self.quality_regenerate_button)
         action_row.addWidget(self.quality_fix_button)
+        self.quality_cutout_button = QPushButton('Убрать фон')
+        self.quality_cutout_button.setProperty('v3Button', True)
+        self.quality_cutout_button.setProperty('variant', 'secondary')
+        self.quality_cutout_button.setToolTip('Заново вырезать фон этой картинки на компьютере: бесплатно, прежняя картинка сохранится как версия')
+        self.quality_cutout_button.clicked.connect(
+            lambda: self.cutout_requested.emit(self._current_quality_key()))
+        self.quality_cutout_button.hide()  # only for «Брак вырезания»
+        action_row.addWidget(self.quality_cutout_button)
         action_row.addStretch(1)
         detail_layout.addLayout(action_row)
         # The issue texts stay out of sight (owner 2026-10-27): problems are shown only as a mark on the picture.
@@ -1139,6 +1148,7 @@ class SetExportDialog(QDialog):
         self.quality_marks_row.setVisible(known)
         self.quality_prompt_button.setVisible(known and self._marks.get(key) == 'bad_generation')
         self.quality_regenerate_button.setVisible(known and self._marks.get(key) == 'bad_generation')
+        self.quality_cutout_button.setVisible(known and self._marks.get(key) == 'bad_cutout')
         for mark, button in self.quality_mark_buttons.items():
             button.setChecked(known and self._marks.get(key) == mark)
             button.setEnabled(known and self.worker is None)
