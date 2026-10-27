@@ -449,7 +449,7 @@ def test_summary_warning_explains_action_and_blocks_export(images):
     assert dialog.issue_panel.isVisible() or not dialog.isVisible()
     assert 'Не завершено: 1' in dialog.issue_text.text()
     assert 'Нужно выбрать вариант: 1' in dialog.issue_text.text()
-    assert dialog.review_now_button.text() == 'Проверить'
+    assert dialog.review_now_button.text() == 'Разобрать неготовые'
     assert not dialog.ready_only.isChecked()
     assert not dialog.export_button.isEnabled()
     dialog.review_now_button.click()
@@ -1114,3 +1114,17 @@ def test_png_check_buttons_fit_a_1120_px_window_in_two_rows(images):
     for button in dialog.quality_mark_buttons.values():
         assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
     dialog.reject()
+
+
+def test_running_png_check_is_one_neutral_line_without_a_second_check_button(images):
+    membership = _membership_for_sets([images[0]], ['Мини'])
+    dialog = SetExportDialog([images[0]], membership=membership)
+    dialog._qc_total = dialog._qc_pending = 4
+    dialog._refresh_summary(rebuild=False)
+    assert dialog.quality_summary_label.text() == 'Автопроверка PNG идёт: 0 из 4…'
+    assert dialog.quality_panel.property('state') == ''
+    assert dialog.review_quality_button.isHidden()
+    dialog._qc_pending = 0
+    dialog._refresh_summary(rebuild=False)
+    assert not dialog.review_quality_button.isHidden() or not dialog.quality_panel.isVisible()
+    dialog.close()

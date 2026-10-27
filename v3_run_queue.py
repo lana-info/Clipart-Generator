@@ -1942,6 +1942,7 @@ class RunResultsPage(QWidget):
         self.results_extension = results_extension
         # Buttons a module does not want in its toolbar; the refresh logic never shows these.
         self.suppressed_buttons: set[str] = set()
+        self.primary_elsewhere = None  # callable: another button of the page is the main action right now
         self.session: RunQueueSession | None = None
         self._completion_dialog: RunCompletionDialog | None = None
         self._completion_shown_at: float | None = None
@@ -2555,13 +2556,14 @@ class RunResultsPage(QWidget):
         # Transparency check is the key next step: it is the highlighted button while
         # shown; "Открыть папку" is then an ordinary one.
         # One main button by situation: unfinished work first, then the transparency check.
-        retry_main = self.retry_button.isVisibleTo(self)
-        check_main = self.check_transparency_button.isVisibleTo(self) and not retry_main
+        elsewhere = bool(self.primary_elsewhere and self.primary_elsewhere())
+        retry_main = self.retry_button.isVisibleTo(self) and not elsewhere
+        check_main = self.check_transparency_button.isVisibleTo(self) and not retry_main and not elsewhere
         self.retry_button.set_variant(ButtonVariant.PRIMARY if retry_main else ButtonVariant.SECONDARY)
         self.check_transparency_button.set_variant(
             ButtonVariant.PRIMARY if check_main else ButtonVariant.SECONDARY)
         self.open_folder_button.set_variant(
-            ButtonVariant.SECONDARY if retry_main or check_main else ButtonVariant.PRIMARY)
+            ButtonVariant.SECONDARY if retry_main or check_main or elsewhere else ButtonVariant.PRIMARY)
         status_titles = {
             RunItemStatus.PENDING: ("Ожидает запуска", "•"),
             RunItemStatus.RUNNING: ("Обработка выполняется", "●"),
