@@ -34,7 +34,7 @@ for i, n in enumerate(names):
 
 
 
-MARKS = {0: "ok", 1: "ok", 2: "bad_generation", 3: "ok", 4: "bad_cutout", 5: "ok", 6: "ok", 7: "ok", 8: "ok", 9: "ok", 10: "ok", 11: "ok"}
+MARKS = {0: "ok", 1: "ok", 2: "bad_generation", 3: "ok", 4: "bad_cutout", 5: "ok", 6: "ok", 7: "ok", 8: "unchecked", 9: "ok", 10: "ok", 11: "ok"}
 EXCLUDED = {10}
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPen
@@ -42,6 +42,7 @@ DOT = {"ok": "#34d399", "bad_generation": "#f59e0b", "bad_cutout": "#a78bfa"}
 
 
 def build(proposed):
+    reports[8] = AlphaQcReport(str(paths[8].resolve()), "review", (AlphaQcIssue("touches_edge", "review", "x", "y"),), 300, 300)
     panel = SetExportDialog(paths, quality_reports=reports, embedded=True, project_name="Гусёнок")
     panel.enable_marks({str(p.resolve()): MARKS[i] for i, p in enumerate(paths)})
     if proposed:
@@ -59,6 +60,10 @@ def build(proposed):
             if idx in EXCLUDED:
                 p.setPen(QPen(QColor("#8ea3b8"), 2)); p.setBrush(QColor("#2b3340")); p.drawEllipse(size - 24, 4, 18, 18)
                 p.drawLine(size - 21, 19, size - 9, 7)
+            elif mark != "ok" and report.status != "ok" and mark not in DOT:
+                p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor("#f59e0b")); p.drawEllipse(size - 24, 4, 18, 18)
+                p.setPen(QColor("#1f1300")); f = QFont(p.font()); f.setPixelSize(13); f.setBold(True); p.setFont(f)
+                p.drawText(size - 24, 4, 18, 18, int(Qt.AlignmentFlag.AlignCenter), "!")
             elif mark in DOT:
                 p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(DOT[mark])); p.drawEllipse(size - 24, 4, 18, 18)
             p.end()
@@ -69,35 +74,40 @@ def build(proposed):
         panel._quality_icon = dot_icon
     panel._show_quality_review()
     panel.quality_list.setCurrentRow(7)
+    swatches = None
     if proposed:
         page = panel.quality_page
-        page.layout().itemAt(0).layout().itemAt(0).widget().hide()          # title
-        panel.quality_page_summary_label.hide()                              # «Просмотрено N из M»
-        fl = page.layout().itemAt(0).layout()
-        for i in range(fl.count()):                                          # drop the «Фон» label and chips from the top row
-            w = fl.itemAt(i).widget()
-            if w is not None and (w in panel.quality_background_buttons.values() or (isinstance(w, QLabel) and w.text() == "Фон")):
+        top = page.layout().itemAt(0).layout()
+        for k in range(top.count()):                       # no title, counter, filter buttons or background chips on top
+            w = top.itemAt(k).widget()
+            if w is not None:
                 w.hide()
-        detail = panel.quality_issue_title.parentWidget().layout()
-        # marks + exclude in one row
-        panel.quality_marks_row.layout().insertWidget(3, panel.quality_exclude_button)
+        for w in (panel.quality_issue_title, panel.quality_issue_text, panel.quality_action_text):
+            w.hide()                                       # no «Проверьте края» and no instructions: the picture gets the room
         panel.quality_exclude_button.setText("Исключить из наборов")
-        # swatches where «Исключить» stood
-        sw = QWidget(); sl = QHBoxLayout(sw); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(8)
+        panel.quality_marks_row.layout().insertWidget(3, panel.quality_exclude_button)
+        panel.quality_fix_button.setText("Редактировать прозрачность")
+        panel.quality_fix_button.setSizePolicy(panel.quality_fix_button.sizePolicy().Policy.Maximum, panel.quality_fix_button.sizePolicy().Policy.Fixed)
+        panel.quality_marks_row.layout().takeAt(panel.quality_marks_row.layout().count() - 1)  # stretch
+        panel.quality_marks_row.layout().addStretch(1)
+        panel.quality_marks_row.layout().addWidget(panel.quality_fix_button)
+        panel.quality_back_button.hide()
+        swatches = QWidget(); sl = QHBoxLayout(swatches); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(8)
         lab = QLabel("Фон"); lab.setProperty("v3Small", True); sl.addWidget(lab)
         for colour in ("#ffffff", "#0b0f19", "#f2f2f2", "#6fbf73", "#E040A0", "#7db7e8"):
             b = QFrame(); b.setFixedSize(26, 26)
             b.setStyleSheet(f"background:{colour}; border:2px solid {'#2dd4bf' if colour == '#ffffff' else '#3b4b60'}; border-radius:5px;")
             sl.addWidget(b)
         sl.addStretch(1)
-        panel.quality_fix_button.setText("Править край")
-        da = panel.quality_fix_button.parentWidget()
-        detail.addWidget(sw)
-        # «К наборам» goes to the window footer
-        panel.quality_back_button.hide()
+        # «Параметры экспорта» moved to the export step: the row below the panel now holds the background choice
+        for w in panel.findChildren(QWidget):
+            if hasattr(w, "text") and callable(w.text) and "Параметры экспорта" in str(w.text()):
+                w.hide()
     frame = QWidget(); apply_v3_theme(frame)
     lay = QVBoxLayout(frame); lay.setContentsMargins(16, 12, 16, 12)
     lay.addWidget(panel, 1)
+    if swatches is not None:
+        lay.addWidget(swatches)
     foot = QFrame(); foot.setProperty("v3Card", True); fl2 = QHBoxLayout(foot)
     if proposed:
         fl2.addWidget(V3Button("← К наборам", ButtonVariant.SECONDARY))
