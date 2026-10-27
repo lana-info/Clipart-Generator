@@ -785,3 +785,21 @@ def test_only_the_marked_button_is_drawn_lit_after_any_sequence_of_clicks(tmp_pa
                 else:
                     assert drawn == plain[key], f"{key} is still drawn lit after {chosen} was chosen"
     editor.deleteLater()
+
+
+def test_rating_strip_is_a_panel_in_the_panels_menu(tmp_path):
+    from PyQt6.QtCore import QSettings
+    from v3_transparency_preview import ClipartTransparencyEditorPage
+    QSettings(*ClipartTransparencyEditorPage.PANEL_SETTINGS).clear()
+    review, editor, session, flow = open_review(tmp_path)
+    editor.show()
+    QApplication.processEvents()
+    dock = editor.panel_docks["rating"]
+    assert dock.widget() is review.strip and dock.isVisible()
+    assert "Оценка" in [action.text() for action in editor.panels_button.menu().actions()]
+    dock.hide()
+    assert not dock.isVisible()
+    editor.reset_panels()
+    assert dock.isVisible()
+    assert dock.geometry().bottom() < editor.panel_docks["preview"].geometry().bottom()  # above the thumbnails
+    editor.deleteLater()
